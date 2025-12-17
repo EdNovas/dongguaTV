@@ -1314,8 +1314,10 @@
 <body>
     <!-- Initial Loading Screen (Buffer) -->
     <div id="app-loader" class="app-loader">
-        <div class="loader-logo">E视界 <span
-                style="font-size:1.2rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span></div>
+        <div class="loader-logo" style="display: flex; align-items: center; justify-content: center;"><img
+                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;">视界
+            <span style="font-size:1.2rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span>
+        </div>
         <div class="loader-spinner"></div>
     </div>
 
@@ -1323,8 +1325,10 @@
     <div id="password-screen" class="password-screen" style="display: none;">
         <div class="password-container">
             <div class="password-logo">
-                <div class="password-logo-text">E视界 <span
-                        style="font-size:1rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span></div>
+                <div class="password-logo-text" style="display: flex; align-items: center; justify-content: center;">
+                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;">视界 <span
+                        style="font-size:1rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span>
+                </div>
                 <div class="password-logo-subtitle"><i class="fas fa-lock"></i> 需要密码才能访问</div>
             </div>
 
@@ -1358,8 +1362,9 @@
     <div id="app" v-cloak>
 
         <nav class="navbar-custom" :class="{ 'scrolled': scrollY > 50 }" v-show="!searched">
-            <div class="brand" @click="goHome" style="cursor: pointer;">E视界 <span
-                    style="font-size:12px; color:#666; font-weight:normal;">MAX</span></div>
+            <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
+                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">视界 <span
+                    style="font-size:12px; color:#666; font-weight:normal; margin-left: 2px;">MAX</span></div>
         </nav>
 
         <!-- Back to Top Button -->
@@ -2093,7 +2098,15 @@
                 },
                 // 切换榜单展开/收起状态
                 toggleRowExpand(key) {
-                    this.expandedRows[key] = !this.expandedRows[key];
+                    const isExpanding = !this.expandedRows[key];
+                    console.log(`[DEBUG toggleRowExpand] key=${key}, isExpanding=${isExpanding}, viewPages[key] before=`, this.viewPages[key]);
+                    this.expandedRows = { ...this.expandedRows, [key]: isExpanding };
+                    // 展开时初始化页码为 1（使用响应式方式）
+                    if (isExpanding && this.viewPages[key] === undefined) {
+                        this.viewPages = { ...this.viewPages, [key]: 1 };
+                        console.log(`[DEBUG toggleRowExpand] Initialized viewPages[${key}] = 1`);
+                    }
+                    console.log(`[DEBUG toggleRowExpand] viewPages[key] after=`, this.viewPages[key]);
                 },
                 // 滚动到指定区域
                 scrollToSection(refName) {
@@ -2122,13 +2135,26 @@
 
                 // 切换查看页（带节流保护）
                 changeViewPage(key, delta) {
-                    if (!this.viewPages[key]) this.viewPages[key] = 1;
-                    const newPage = this.viewPages[key] + delta;
+                    console.log(`[DEBUG changeViewPage] START: key=${key}, delta=${delta}`);
+                    console.log(`[DEBUG changeViewPage] viewPages[key] BEFORE =`, this.viewPages[key]);
+
+                    // 确保初始值存在（使用响应式方式）
+                    if (this.viewPages[key] === undefined) {
+                        console.log(`[DEBUG changeViewPage] viewPages[${key}] is undefined, initializing to 1`);
+                        this.viewPages = { ...this.viewPages, [key]: 1 };
+                    }
+
+                    const currentPage = this.viewPages[key];
+                    const newPage = currentPage + delta;
                     const totalPages = this.getTotalViewPages(key);
+
+                    console.log(`[DEBUG changeViewPage] currentPage=${currentPage}, newPage=${newPage}, totalPages=${totalPages}`);
 
                     // 本地翻页（不需要 API）可以立即执行
                     if (newPage >= 1 && newPage <= totalPages) {
-                        this.viewPages[key] = newPage;
+                        console.log(`[DEBUG changeViewPage] Condition passed, setting viewPages[${key}] = ${newPage}`);
+                        this.viewPages = { ...this.viewPages, [key]: newPage };
+                        console.log(`[DEBUG changeViewPage] viewPages[key] AFTER =`, this.viewPages[key]);
                         // 翻页后滚动到分类标题位置（预留顶部导航栏 80px 空间）
                         this.$nextTick(() => {
                             const sectionRef = this.$refs[key + '-section'];
@@ -2138,6 +2164,16 @@
                                 window.scrollTo({ top: top, behavior: 'smooth' });
                             }
                         });
+                    } else {
+                        console.log(`[DEBUG changeViewPage] Condition FAILED: newPage=${newPage}, totalPages=${totalPages}`);
+
+                        // 如果是因为数据还没加载完导致翻页失败，记录目标页码
+                        // 等数据加载完成后自动翻页
+                        if (newPage > totalPages && this.rowConfigs[key].page < (this.rowConfigs[key].totalPages || 999)) {
+                            console.log(`[DEBUG changeViewPage] Setting pending page for ${key}: ${newPage}`);
+                            this._pendingPage = this._pendingPage || {};
+                            this._pendingPage[key] = newPage;
+                        }
                     }
 
                     // 如果需要加载更多数据，添加节流保护（500ms 间隔）
@@ -2149,7 +2185,22 @@
                         }
                         // 设置加载锁
                         this.pageLoadingKeys[key] = true;
-                        this.fetchRow(key, true);
+
+                        // 加载更多数据，并在完成后检查是否需要自动翻页
+                        this.fetchRow(key, true).then(() => {
+                            // 检查是否有待执行的翻页
+                            if (this._pendingPage && this._pendingPage[key]) {
+                                const pendingPage = this._pendingPage[key];
+                                const newTotalPages = this.getTotalViewPages(key);
+                                console.log(`[DEBUG] Data loaded, checking pending page ${pendingPage}, new totalPages=${newTotalPages}`);
+                                if (pendingPage <= newTotalPages) {
+                                    console.log(`[DEBUG] Auto-flipping to page ${pendingPage}`);
+                                    this.viewPages = { ...this.viewPages, [key]: pendingPage };
+                                }
+                                delete this._pendingPage[key];
+                            }
+                        });
+
                         // 500ms 后解锁
                         setTimeout(() => {
                             this.pageLoadingKeys[key] = false;
@@ -2270,19 +2321,19 @@
                 // 加载单个榜单数据
                 fetchRow(key, loadMore = false) {
                     const config = this.rowConfigs[key];
-                    if (!config) return;
+                    if (!config) return Promise.resolve();
 
                     if (loadMore) {
                         // 检查是否已到达 API 返回的总页数
                         if (config.totalPages && config.page >= config.totalPages) {
                             console.log(`[${key}] 已加载全部 ${config.totalPages} 页`);
-                            return;
+                            return Promise.resolve();
                         }
                         config.page++;
                     }
 
                     const url = `${TMDB_BASE_URL}${config.path}?api_key=${TMDB_API_KEY}&language=zh-CN&page=${config.page}&${config.params}`;
-                    fetch(url)
+                    return fetch(url)
                         .then(res => res.json())
                         .then(data => {
                             if (data.results) {

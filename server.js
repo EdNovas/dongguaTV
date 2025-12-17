@@ -354,16 +354,27 @@ function cleanCacheIfNeeded() {
 app.get('/api/auth/check', (req, res) => {
     // 简单检查 header 中的 token (示例：实际需更强验证)
     // 这里简单返回是否需要密码
-    res.json({ needsPassword: !!ACCESS_PASSWORD });
+    res.json({ requirePassword: !!ACCESS_PASSWORD });
 });
 
 // 6. 验证密码 API
 app.post('/api/auth/verify', (req, res) => {
-    const { password } = req.body;
+    const { password, passwordHash } = req.body;
     if (!ACCESS_PASSWORD) return res.json({ success: true });
 
-    const hash = crypto.createHash('sha256').update(password).digest('hex');
-    if (hash === PASSWORD_HASH) {
+    // 支持两种验证方式：
+    // 1. 前端发送原始密码 (password) - 后端哈希后比较
+    // 2. 前端发送哈希值 (passwordHash) - 直接比较
+    let inputHash;
+    if (passwordHash) {
+        inputHash = passwordHash;
+    } else if (password) {
+        inputHash = crypto.createHash('sha256').update(password).digest('hex');
+    } else {
+        return res.json({ success: false });
+    }
+
+    if (inputHash === PASSWORD_HASH) {
         res.json({ success: true, token: 'session_token_placeholder' });
     } else {
         res.json({ success: false });
