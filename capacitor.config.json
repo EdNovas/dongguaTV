@@ -1,9 +1,9 @@
 ﻿{
     "appId": "com.ednovas.donguatv",
-    "appName": "E视界",
+    "appName": "呆蜜雪",
     "webDir": "public",
     "server": {
-        "url": "https://ednovas.video",
+        "url": "http://movie.netflixcn.de",
         "cleartext": true
     },
     "plugins": {
@@ -13,4 +13,5 @@
             "backgroundColor": "#000000"
         }
     }
+
 }
