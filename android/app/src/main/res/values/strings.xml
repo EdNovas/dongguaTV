@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">E视界</string>
-    <string name="title_activity_main">E视界</string>
+    <string name="app_name">大冬瓜</string>
+    <string name="title_activity_main">大冬瓜</string>
     <string name="package_name">com.ednovas.donguatv</string>
     <string name="custom_url_scheme">com.ednovas.donguatv</string>
 </resources>

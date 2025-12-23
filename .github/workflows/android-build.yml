@@ -192,7 +192,7 @@ jobs:
             
             | 文件 | 说明 |
             |------|------|
-            | `大冬瓜-${{ steps.version.outputs.VERSION }}-universal.apk` | 通用版 (支持所有设备) |
+            | `大冬瓜 -${{ steps.version.outputs.VERSION }}-universal.apk` | 通用版 (支持所有设备) |
             
             ### 🖥️ 支持的 CPU 架构
             - ✅ `armeabi-v7a` (ARM 32位 - 旧手机/盒子)
