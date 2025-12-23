@@ -1,9 +1,9 @@
 ﻿{
     "appId": "com.ednovas.donguatv",
-    "appName": "E视界",
+    "appName": "大冬瓜",
     "webDir": "public",
     "server": {
-        "url": "https://ednovas.video",
+        "url": "https://donggua.374264.xyz",
         "cleartext": true
     },
     "plugins": {
