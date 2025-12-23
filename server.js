@@ -434,6 +434,38 @@ app.post('/api/history/push', (req, res) => {
     }
 });
 
+// 清除用户历史记录 (服务器端)
+app.post('/api/history/clear', (req, res) => {
+    const { token } = req.body;
+
+    if (!token) {
+        return res.status(400).json({ error: 'Missing token' });
+    }
+
+    // 验证 token
+    const userInfo = PASSWORD_HASH_MAP[token];
+    if (!userInfo) {
+        return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // 从 SQLite 删除该用户的所有历史
+    if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
+        return res.json({ success: true, message: 'SQLite not available' });
+    }
+
+    try {
+        const deleteStmt = cacheManager.db.prepare(`
+            DELETE FROM user_history WHERE user_token = ?
+        `);
+        const result = deleteStmt.run(token);
+        console.log(`[History Clear] 用户 ${token.substring(0, 8)}... 删除了 ${result.changes} 条记录`);
+        res.json({ success: true, deleted: result.changes });
+    } catch (e) {
+        console.error('[History Clear Error]', e.message);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // TMDB 通用代理与缓存 API
 const TMDB_CACHE_TTL = 3600 * 10; // 缓存 10 小时
 app.get('/api/tmdb-proxy', async (req, res) => {

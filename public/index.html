@@ -3699,12 +3699,24 @@
                 },
 
                 // 清除观看历史
-                clearWatchHistory() {
+                async clearWatchHistory() {
                     if (confirm('确定要清除所有观看历史吗？')) {
                         this.watchHistory = [];
                         localStorage.removeItem('donggua_watch_history');
-                        // 立即同步到服务器
-                        this.pushHistoryToServer(true);
+
+                        // 清除服务器端历史
+                        if (this.syncEnabled && this.syncToken) {
+                            try {
+                                await fetch('/api/history/clear', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ token: this.syncToken })
+                                });
+                                console.log('[同步] 服务器历史已清除');
+                            } catch (e) {
+                                console.error('[同步] 清除服务器历史失败:', e);
+                            }
+                        }
                         console.log('[观看历史] 已清除');
                     }
                 },
