@@ -1539,10 +1539,30 @@
             aspect-ratio: 2/3;
             border-radius: 6px;
             overflow: hidden;
-            background: #222;
+            background: linear-gradient(110deg, #1a1a1a 8%, #2a2a2a 18%, #1a1a1a 33%);
+            background-size: 200% 100%;
+            animation: skeleton-shimmer 1.5s infinite ease-in-out;
             position: relative;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
             border: 1px solid var(--border);
+        }
+
+        /* 骨架屏闪烁动画 */
+        @keyframes skeleton-shimmer {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+        /* 图片加载完成后停止动画 */
+        .poster-wrap:has(img.loaded),
+        .poster-wrap.img-loaded {
+            animation: none;
+            background: #222;
         }
 
         .poster-wrap img {
@@ -1550,13 +1570,18 @@
             height: 100%;
             object-fit: cover;
             /* 性能优化：图片加载动画 */
-            transition: opacity 0.3s ease;
-            opacity: 1;
+            transition: opacity 0.4s ease;
+            opacity: 0;
             /* 图片解码优化 */
             image-rendering: -webkit-optimize-contrast;
         }
 
-        /* 图片加载前的骨架屏效果 */
+        /* 图片加载完成 */
+        .poster-wrap img.loaded {
+            opacity: 1;
+        }
+
+        /* 兜底：加载失败或无src时隐藏 */
         .poster-wrap img[src=""],
         .poster-wrap img:not([src]) {
             opacity: 0;
@@ -2552,7 +2577,8 @@
                             </div>
                             <div class="poster-wrap" @click="playFromHistory(item)">
                                 <img :src="item.poster" :alt="item.name"
-                                    @error="$event.target.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27150%27 height=%27225%27%3E%3Crect fill=%27%23333%27 width=%27150%27 height=%27225%27/%3E%3C/svg%3E'"
+                                    @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')"
+                                    @error="$event.target.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27150%27 height=%27225%27%3E%3Crect fill=%27%23333%27 width=%27150%27 height=%27225%27/%3E%3C/svg%3E'; $event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')"
                                     loading="lazy">
                                 <!-- 进度条 -->
                                 <div
@@ -2627,7 +2653,8 @@
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
                                 @click="autoSearch(item.title || item.name)">
                                 <div class="poster-wrap">
-                                    <img :src="getPosterUrl(item.poster_path)" loading="lazy">
+                                    <img :src="getPosterUrl(item.poster_path)" loading="lazy"
+                                        @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                     <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                         item.vote_average
                                         ? item.vote_average.toFixed(1) : 'N/A' }}</div>
@@ -2646,7 +2673,8 @@
                         <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id"
                             @click="autoSearch(item.title || item.name)">
                             <div class="poster-wrap">
-                                <img :src="getPosterUrl(item.poster_path)">
+                                <img :src="getPosterUrl(item.poster_path)"
+                                    @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                 <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average
                                     ? item.vote_average.toFixed(1) : 'N/A' }}</div>
                             </div>
@@ -2691,7 +2719,9 @@
                 <div class="result-card" v-for="group in groupedList" :key="group.name" @click="openDetail(group)">
                     <div class="poster-wrap">
                         <img v-if="!isFallback(group.name)" :src="finalPoster(group)" :key="finalPoster(group)"
-                            referrerpolicy="no-referrer" @error="handleImgError(group.name)" loading="lazy">
+                            referrerpolicy="no-referrer" loading="lazy"
+                            @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')"
+                            @error="handleImgError(group.name); $event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                         <div v-else class="poster-fallback">
                             <i class="fas fa-film mb-2 opacity-50"></i>
                             <div style="font-size:12px; color:#999">{{ group.name }}</div>
