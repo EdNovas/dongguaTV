@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       server_url:
-        description: 'Server URL (e.g. https://your-site.com)'
+        description: 'Server URL (e.g. http://192.168.2.169:15774)'
         required: true
         default: 'https://ednovas.video'
       app_name:
