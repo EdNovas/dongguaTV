@@ -1,6 +1,10 @@
 {
     "sites": [
-    { key: "ffzy", name: "非凡影视", api: "https://api.ffzyapi.com/api.php/provide/vod", active: true },
+    { 
+        key: "ffzy",
+        name: "非凡影视", 
+        api: "https://api.ffzyapi.com/api.php/provide/vod",
+        active: true },
     { key: "bfzy", name: "暴风资源", api: "https://bfzyapi.com/api.php/provide/vod", active: true },
     { key: "dyttzy", name: "电影天堂", api: "http://caiji.dyttzyapi.com/api.php/provide/vod", active: true },
     { key: "tyyszy", name: "天涯资源", api: "https://tyyszy.com/api.php/provide/vod", active: true },
