@@ -6,7 +6,7 @@ on:
       - 'v*.*.*'  # 只在推送版本标签时触发
   workflow_dispatch:
     inputs:
-      server_url:
+      server_url:http://192.168.31.121:3600/
         description: 'Server URL (e.g. https://your-site.com)'
         required: true
         default: 'https://ednovas.video'
