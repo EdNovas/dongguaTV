@@ -223,6 +223,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          tag_name: ${{ steps.version.outputs.VERSION }}
           name: "大冬瓜 ${{ steps.version.outputs.VERSION }}"
           body: |
             ## 📦 大冬瓜 ${{ steps.version.outputs.VERSION }}
@@ -246,7 +247,7 @@ jobs:
             - ✅ 智能投影仪
             
             ### 🌐 内置服务器
-           
+            - 默认连接: `${{ github.event.inputs.server_url || 'https://ednovas.video' }}`
             
             ---
             

@@ -96,17 +96,24 @@ function isMainlyEnglish(text) {
 /**
  * 通过 TMDB 搜索获取影片的中文名称
  * 利用 TMDB 的多语言支持，查询英文标题对应的中文翻译
+ * 注意：会自动使用 TMDB_PROXY_URL 代理（如果配置）
  * @param {string} englishTitle - 英文标题
  * @returns {Promise<string[]>} - 找到的中文标题数组
  */
 async function fetchChineseTitleFromTMDB(englishTitle) {
     const TMDB_API_KEY = process.env.TMDB_API_KEY;
+    const TMDB_PROXY_URL = process.env['TMDB_PROXY_URL'];
     if (!TMDB_API_KEY) return [];
+
+    // 构建 TMDB API 基础 URL（支持代理）
+    const TMDB_BASE = TMDB_PROXY_URL
+        ? TMDB_PROXY_URL.replace(/\/$/, '')  // 移除末尾斜杠
+        : 'https://api.themoviedb.org';
 
     try {
         // 先用英文搜索找到影片 ID
-        const searchUrl = `https://api.themoviedb.org/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(englishTitle)}&language=en-US`;
-        const searchResponse = await axios.get(searchUrl, { timeout: 5000 });
+        const searchUrl = `${TMDB_BASE}/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(englishTitle)}&language=en-US`;
+        const searchResponse = await axios.get(searchUrl, { timeout: 8000 });
 
         if (!searchResponse.data.results || searchResponse.data.results.length === 0) {
             return [];
@@ -121,8 +128,8 @@ async function fetchChineseTitleFromTMDB(englishTitle) {
         }
 
         // 用中文语言获取详情，TMDB 会返回中文标题
-        const detailUrl = `https://api.themoviedb.org/3/${mediaType}/${id}?api_key=${TMDB_API_KEY}&language=zh-CN`;
-        const detailResponse = await axios.get(detailUrl, { timeout: 5000 });
+        const detailUrl = `${TMDB_BASE}/3/${mediaType}/${id}?api_key=${TMDB_API_KEY}&language=zh-CN`;
+        const detailResponse = await axios.get(detailUrl, { timeout: 8000 });
 
         const chineseTitles = [];
         const chineseTitle = detailResponse.data.title || detailResponse.data.name;
@@ -132,10 +139,10 @@ async function fetchChineseTitleFromTMDB(englishTitle) {
             console.log(`[TMDB Translation] "${englishTitle}" => "${chineseTitle}"`);
         }
 
-        // 尝试获取更多别名（alternative_titles）
+        // 尝试获取更多别名（alternative_titles）- 使用较短超时，失败不影响主流程
         try {
-            const altUrl = `https://api.themoviedb.org/3/${mediaType}/${id}/alternative_titles?api_key=${TMDB_API_KEY}`;
-            const altResponse = await axios.get(altUrl, { timeout: 3000 });
+            const altUrl = `${TMDB_BASE}/3/${mediaType}/${id}/alternative_titles?api_key=${TMDB_API_KEY}`;
+            const altResponse = await axios.get(altUrl, { timeout: 5000 });
 
             // 电影用 titles，电视剧用 results
             const alternatives = altResponse.data.titles || altResponse.data.results || [];
@@ -155,7 +162,10 @@ async function fetchChineseTitleFromTMDB(englishTitle) {
 
         return chineseTitles;
     } catch (error) {
-        console.error(`[TMDB Translation Error] ${englishTitle}:`, error.message);
+        // 翻译失败不阻塞搜索，静默返回空数组
+        if (error.code !== 'ECONNABORTED') {
+            console.error(`[TMDB Translation Error] ${englishTitle}:`, error.message);
+        }
         return [];
     }
 }
@@ -779,14 +789,19 @@ app.get('/api/tmdb-proxy', async (req, res) => {
     }
 
     try {
-        const TMDB_BASE = 'https://api.themoviedb.org/3';
+        // 优先使用 TMDB_PROXY_URL 代理，没有配置则直连
+        const TMDB_PROXY_URL = process.env['TMDB_PROXY_URL'];
+        const TMDB_BASE = TMDB_PROXY_URL
+            ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/3`  // 移除末尾斜杠并添加 /3
+            : 'https://api.themoviedb.org/3';
+
         const response = await axios.get(`${TMDB_BASE}${tmdbPath}`, {
             params: {
                 ...params,
                 api_key: TMDB_API_KEY,
                 language: 'zh-CN'
             },
-            timeout: 10000
+            timeout: 15000  // 增加超时时间到 15 秒（代理可能较慢）
         });
 
         // 缓存结果
