@@ -1,0 +1,15 @@
+# E视界 (DongguaTV) - 流媒体聚合播放器
+# https://ednovas.video
+
+User-agent: *
+Allow: /
+
+# 不索引 API 端点
+Disallow: /api/
+Disallow: /libs/
+
+# 站点地图
+Sitemap: https://ednovas.video/sitemap.xml
+
+# 爬虫延迟（可选，防止过度请求）
+Crawl-delay: 1

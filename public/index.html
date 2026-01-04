@@ -6,7 +6,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <!-- 核心：不发送 Referrer -->
     <meta name="referrer" content="no-referrer">
-    <title>大冬瓜</title>
+    <title>大冬瓜 - 免费在线观看电影电视剧 | 高清影视聚合播放器</title>
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="大冬瓜是一个现代化的流媒体聚合播放器，免费在线观看最新电影、电视剧、综艺、动漫。支持多线路切换、智能测速、4K高清播放。">
+    <meta name="keywords" content="在线观看,免费电影,电视剧,综艺,动漫,高清视频,流媒体,影视聚合,大冬瓜">
+    <meta name="author" content="大冬瓜">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://ednovas.video/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://ednovas.video/">
+    <meta property="og:title" content="大冬瓜 - 免费在线观看电影电视剧">
+    <meta property="og:description" content="现代化流媒体聚合播放器，免费观看最新电影、电视剧、综艺、动漫。">
+    <meta property="og:image" content="https://ednovas.video/icons/icon-512.png">
+    <meta property="og:locale" content="zh_CN">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="大冬瓜 - 免费在线观看电影电视剧">
+    <meta name="twitter:description" content="现代化流媒体聚合播放器，免费观看最新电影、电视剧、综艺、动漫。">
+    <meta name="twitter:image" content="https://ednovas.video/icons/icon-512.png">
 
     <!-- 兼容性检测 (必须在所有脚本之前) -->
     <script>
@@ -4194,29 +4215,57 @@
                     };
 
                     try {
-                        // 1. 优先使用 Cloudflare Trace (稳定、无速率限制)
-                        const res = await fetchWithTimeout('https://www.cloudflare.com/cdn-cgi/trace', 3000);
+                        // 1. 优先使用 ip.sb (国内访问稳定，无速率限制，返回标准 JSON)
+                        const res = await fetchWithTimeout('https://api.ip.sb/geoip', 3000);
                         if (res.ok) {
-                            const text = await res.text();
-                            const matches = text.match(/loc=([A-Z]+)/);
-                            if (matches && matches[1] === 'CN') isCN = true;
+                            const data = await res.json();
+                            // 检查是否是中国大陆 (country_code = CN)
+                            // ip.sb 返回: { "country_code": "CN", "country": "China", ... }
+                            if (data.country_code === 'CN') {
+                                // 排除港澳台 (根据 region 或 city 判断)
+                                const excludeRegions = ['Hong Kong', 'Macau', 'Taiwan', '香港', '澳门', '台湾'];
+                                const region = data.region || data.city || '';
+                                if (!excludeRegions.some(r => region.includes(r))) {
+                                    isCN = true;
+                                }
+                            }
                         } else {
-                            throw new Error('CF Trace Status: ' + res.status);
+                            throw new Error('ip.sb Status: ' + res.status);
                         }
                     } catch (e) {
-                        // 2. 降级到 ipapi.co (有速率限制，仅作为备选)
-                        console.log('[IP检测] CF Trace 失败，尝试 ipapi.co...', e.message || e);
+                        // 2. 备选：pv.sohu.com（搜狐，国内速度快）
+                        console.log('[IP检测] ip.sb 失败，尝试搜狐接口...', e.message || e);
                         try {
-                            const res = await fetchWithTimeout('https://ipapi.co/json/', 3000);
+                            const res = await fetchWithTimeout('https://pv.sohu.com/cityjson?ie=utf-8', 3000);
                             if (res.ok) {
-                                const data = await res.json();
-                                if (data.country_code === 'CN') isCN = true;
+                                const text = await res.text();
+                                // 响应格式: var returnCitySN = {"cip": "x.x.x.x", "cid": "...", "cname": "北京市"};
+                                const match = text.match(/cname\s*:\s*["']([^"']+)["']/);
+                                if (match) {
+                                    // 只要 cname 有值就认为是国内（搜狐接口只返回国内城市）
+                                    // 排除港澳台
+                                    const city = match[1];
+                                    const excludeRegions = ['香港', '澳门', '台湾'];
+                                    if (!excludeRegions.some(r => city.includes(r))) {
+                                        isCN = true;
+                                    }
+                                }
                             } else {
-                                console.warn('[IP检测] ipapi.co 响应异常:', res.status);
+                                console.warn('[IP检测] 搜狐接口响应异常:', res.status);
                             }
                         } catch (e2) {
-                            // 即使检测失败也不阻塞，继续执行
-                            console.warn('[IP检测] 所有接口均失败，跳过自动切换');
+                            // 3. 最终备选：Cloudflare Trace（国外用户）
+                            console.log('[IP检测] 搜狐接口失败，尝试 Cloudflare...', e2.message || e2);
+                            try {
+                                const res = await fetchWithTimeout('https://www.cloudflare.com/cdn-cgi/trace', 3000);
+                                if (res.ok) {
+                                    const text = await res.text();
+                                    const matches = text.match(/loc=([A-Z]+)/);
+                                    if (matches && matches[1] === 'CN') isCN = true;
+                                }
+                            } catch (e3) {
+                                console.warn('[IP检测] 所有接口均失败，跳过自动切换');
+                            }
                         }
                     }
 

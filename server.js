@@ -74,6 +74,68 @@ const proxyRequiredSites = new Map();
 const PROXY_MEMORY_TTL = 24 * 60 * 60 * 1000; // 24小时后重新尝试直连
 const SLOW_THRESHOLD_MS = 1500; // 直连延迟超过此值视为慢速，尝试代理
 
+// IP 地理位置缓存 (避免频繁调用外部 API)
+const ipLocationCache = new Map();
+const IP_CACHE_TTL = 3600 * 1000; // 缓存1小时
+
+/**
+ * 获取请求者的真实 IP 地址
+ * 支持 Cloudflare, Nginx 等反向代理
+ */
+function getClientIP(req) {
+    return req.headers['cf-connecting-ip'] ||  // Cloudflare
+        req.headers['x-real-ip'] ||          // Nginx
+        (req.headers['x-forwarded-for'] || '').split(',')[0].trim() ||
+        req.socket?.remoteAddress ||
+        '';
+}
+
+/**
+ * 检测 IP 是否来自中国大陆
+ * 使用 ip.sb API，带缓存
+ * @param {string} ip - IP 地址
+ * @returns {Promise<boolean>} - 是否是中国大陆 IP
+ */
+async function isChineseIP(ip) {
+    if (!ip || ip === '127.0.0.1' || ip === '::1') {
+        return false; // 本地 IP 不认为是国内
+    }
+
+    // 检查缓存
+    const cached = ipLocationCache.get(ip);
+    if (cached && (Date.now() - cached.time < IP_CACHE_TTL)) {
+        return cached.isCN;
+    }
+
+    try {
+        const response = await axios.get(`https://api.ip.sb/geoip/${ip}`, {
+            timeout: 3000,
+            headers: { 'User-Agent': 'DongguaTV/1.0' }
+        });
+
+        const data = response.data;
+        // 检查是否是中国大陆 (排除港澳台)
+        let isCN = false;
+        if (data.country_code === 'CN') {
+            const excludeRegions = ['Hong Kong', 'Macau', 'Taiwan', '香港', '澳门', '台湾'];
+            const region = data.region || data.city || '';
+            if (!excludeRegions.some(r => region.includes(r))) {
+                isCN = true;
+            }
+        }
+
+        // 缓存结果
+        ipLocationCache.set(ip, { isCN, time: Date.now() });
+        console.log(`[IP Detection] ${ip} -> ${isCN ? '中国大陆' : '海外'}`);
+        return isCN;
+
+    } catch (error) {
+        // API 调用失败，默认不使用代理
+        console.error(`[IP Detection Error] ${ip}:`, error.message);
+        return false;
+    }
+}
+
 /**
  * 检测字符串是否主要包含英文字符（用于判断是否需要翻译）
  * @param {string} text - 待检测文本
@@ -106,13 +168,14 @@ async function fetchChineseTitleFromTMDB(englishTitle) {
     if (!TMDB_API_KEY) return [];
 
     // 构建 TMDB API 基础 URL（支持代理）
+    // cloudflare-tmdb-proxy.js 需要 /api/3/ 前缀
     const TMDB_BASE = TMDB_PROXY_URL
-        ? TMDB_PROXY_URL.replace(/\/$/, '')  // 移除末尾斜杠
-        : 'https://api.themoviedb.org';
+        ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/api/3`  // 代理需要 /api/3 前缀
+        : 'https://api.themoviedb.org/3';
 
     try {
         // 先用英文搜索找到影片 ID
-        const searchUrl = `${TMDB_BASE}/3/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(englishTitle)}&language=en-US`;
+        const searchUrl = `${TMDB_BASE}/search/multi?api_key=${TMDB_API_KEY}&query=${encodeURIComponent(englishTitle)}&language=en-US`;
         const searchResponse = await axios.get(searchUrl, { timeout: 8000 });
 
         if (!searchResponse.data.results || searchResponse.data.results.length === 0) {
@@ -128,7 +191,7 @@ async function fetchChineseTitleFromTMDB(englishTitle) {
         }
 
         // 用中文语言获取详情，TMDB 会返回中文标题
-        const detailUrl = `${TMDB_BASE}/3/${mediaType}/${id}?api_key=${TMDB_API_KEY}&language=zh-CN`;
+        const detailUrl = `${TMDB_BASE}/${mediaType}/${id}?api_key=${TMDB_API_KEY}&language=zh-CN`;
         const detailResponse = await axios.get(detailUrl, { timeout: 8000 });
 
         const chineseTitles = [];
@@ -141,7 +204,7 @@ async function fetchChineseTitleFromTMDB(englishTitle) {
 
         // 尝试获取更多别名（alternative_titles）- 使用较短超时，失败不影响主流程
         try {
-            const altUrl = `${TMDB_BASE}/3/${mediaType}/${id}/alternative_titles?api_key=${TMDB_API_KEY}`;
+            const altUrl = `${TMDB_BASE}/${mediaType}/${id}/alternative_titles?api_key=${TMDB_API_KEY}`;
             const altResponse = await axios.get(altUrl, { timeout: 5000 });
 
             // 电影用 titles，电视剧用 results
@@ -789,13 +852,24 @@ app.get('/api/tmdb-proxy', async (req, res) => {
     }
 
     try {
-        // 优先使用 TMDB_PROXY_URL 代理，没有配置则直连
+        // 获取用户 IP 并判断是否来自中国大陆
+        const clientIP = getClientIP(req);
         const TMDB_PROXY_URL = process.env['TMDB_PROXY_URL'];
-        const TMDB_BASE = TMDB_PROXY_URL
-            ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/3`  // 移除末尾斜杠并添加 /3
-            : 'https://api.themoviedb.org/3';
 
-        const response = await axios.get(`${TMDB_BASE}${tmdbPath}`, {
+        // 只有配置了代理 URL 且用户来自中国大陆时，才使用代理
+        let useProxy = false;
+        if (TMDB_PROXY_URL) {
+            useProxy = await isChineseIP(clientIP);
+        }
+
+        const TMDB_BASE = useProxy
+            ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/api/3`  // 代理需要 /api/3 前缀
+            : 'https://api.themoviedb.org/3';  // 海外用户直连官方 API
+
+        // tmdbPath 格式如 /trending/all/week, /discover/movie 等
+        const finalUrl = `${TMDB_BASE}${tmdbPath}`;
+
+        const response = await axios.get(finalUrl, {
             params: {
                 ...params,
                 api_key: TMDB_API_KEY,
@@ -1305,6 +1379,225 @@ app.post('/api/auth/verify', (req, res) => {
     } else {
         res.json({ success: false });
     }
+});
+
+// ==================== SEO 优化：影片详情页 ====================
+
+/**
+ * 生成 SEO 友好的影片/剧集详情页
+ * 路由格式：/movie/:id 或 /tv/:id
+ * 包含完整的 meta 标签和 JSON-LD 结构化数据
+ */
+app.get('/movie/:id', async (req, res) => {
+    await renderMediaPage(req, res, 'movie');
+});
+
+app.get('/tv/:id', async (req, res) => {
+    await renderMediaPage(req, res, 'tv');
+});
+
+async function renderMediaPage(req, res, mediaType) {
+    const id = req.params.id;
+    const TMDB_API_KEY = process.env.TMDB_API_KEY;
+
+    if (!TMDB_API_KEY) {
+        return res.redirect('/');
+    }
+
+    try {
+        // 服务器端调用：根据 SERVER_IN_CHINA 环境变量决定是否使用代理
+        const TMDB_PROXY_URL = process.env['TMDB_PROXY_URL'];
+        const serverInChina = process.env['SERVER_IN_CHINA'] === 'true';
+
+        const baseUrl = (TMDB_PROXY_URL && serverInChina)
+            ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/api/3`  // 国内服务器使用代理
+            : 'https://api.themoviedb.org/3';  // 海外服务器直连
+
+        const detailUrl = `${baseUrl}/${mediaType}/${id}?api_key=${TMDB_API_KEY}&language=zh-CN`;
+
+        const response = await axios.get(detailUrl, { timeout: 10000 });
+        const data = response.data;
+
+        const title = data.title || data.name || '未知影片';
+        const overview = data.overview || '暂无简介';
+        const posterPath = data.poster_path ? `https://image.tmdb.org/t/p/w500${data.poster_path}` : '';
+        const backdropPath = data.backdrop_path ? `https://image.tmdb.org/t/p/original${data.backdrop_path}` : '';
+        const releaseDate = data.release_date || data.first_air_date || '';
+        const year = releaseDate ? releaseDate.split('-')[0] : '';
+        const rating = data.vote_average ? data.vote_average.toFixed(1) : 'N/A';
+        const genres = (data.genres || []).map(g => g.name).join(', ');
+        const runtime = data.runtime || (data.episode_run_time && data.episode_run_time[0]) || 0;
+        const siteUrl = process.env.SITE_URL || 'https://ednovas.video';
+
+        // JSON-LD 结构化数据（让 Google 理解这是电影/电视剧）
+        const jsonLd = {
+            "@context": "https://schema.org",
+            "@type": mediaType === 'movie' ? "Movie" : "TVSeries",
+            "name": title,
+            "description": overview,
+            "image": posterPath,
+            "datePublished": releaseDate,
+            "aggregateRating": data.vote_average ? {
+                "@type": "AggregateRating",
+                "ratingValue": rating,
+                "bestRating": "10",
+                "ratingCount": data.vote_count || 0
+            } : undefined,
+            "genre": genres
+        };
+
+        // 生成完整的 HTML 页面
+        const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title} (${year}) - 在线观看 | E视界</title>
+    <meta name="description" content="${overview.substring(0, 160)}">
+    <meta name="keywords" content="${title},${year},在线观看,免费电影,高清${mediaType === 'movie' ? '电影' : '电视剧'}">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="${siteUrl}/${mediaType}/${id}">
+    
+    <!-- Open Graph -->
+    <meta property="og:type" content="${mediaType === 'movie' ? 'video.movie' : 'video.tv_show'}">
+    <meta property="og:url" content="${siteUrl}/${mediaType}/${id}">
+    <meta property="og:title" content="${title} (${year}) - 在线观看">
+    <meta property="og:description" content="${overview.substring(0, 200)}">
+    <meta property="og:image" content="${posterPath}">
+    <meta property="og:locale" content="zh_CN">
+    
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="${title} (${year})">
+    <meta name="twitter:description" content="${overview.substring(0, 200)}">
+    <meta name="twitter:image" content="${backdropPath || posterPath}">
+    
+    <!-- JSON-LD 结构化数据 -->
+    <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
+    
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #141414; color: #fff; min-height: 100vh; }
+        .hero { position: relative; height: 60vh; background-size: cover; background-position: center; }
+        .hero::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, #141414 0%, transparent 50%, rgba(0,0,0,0.5) 100%); }
+        .content { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 20px; margin-top: -200px; display: flex; gap: 40px; }
+        .poster { width: 300px; flex-shrink: 0; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .info { flex: 1; }
+        h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .meta { color: #aaa; margin-bottom: 20px; }
+        .meta span { margin-right: 20px; }
+        .rating { color: #ffd700; }
+        .overview { line-height: 1.8; color: #ccc; margin-bottom: 30px; }
+        .btn-play { background: #e50914; color: #fff; border: none; padding: 15px 40px; font-size: 1.2rem; border-radius: 5px; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-play:hover { background: #f40612; }
+        @media (max-width: 768px) { .content { flex-direction: column; margin-top: -100px; } .poster { width: 200px; margin: 0 auto; } h1 { font-size: 1.5rem; text-align: center; } }
+    </style>
+</head>
+<body>
+    <div class="hero" style="background-image: url('${backdropPath}')"></div>
+    <div class="content">
+        ${posterPath ? `<img src="${posterPath}" alt="${title}" class="poster">` : ''}
+        <div class="info">
+            <h1>${title}</h1>
+            <div class="meta">
+                <span>${year}</span>
+                ${runtime ? `<span>${runtime} 分钟</span>` : ''}
+                <span class="rating">★ ${rating}</span>
+                ${genres ? `<span>${genres}</span>` : ''}
+            </div>
+            <p class="overview">${overview}</p>
+            <a href="/?search=${encodeURIComponent(title)}" class="btn-play">▶ 立即观看</a>
+        </div>
+    </div>
+    
+    <!-- 自动跳转到主站搜索 (3秒后) -->
+    <script>
+        // 用户点击播放按钮或等待3秒后跳转到主站
+        setTimeout(function() {
+            // 不自动跳转，让用户主动点击
+        }, 3000);
+    </script>
+</body>
+</html>`;
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=86400'); // 缓存1天
+        res.send(html);
+
+    } catch (error) {
+        console.error(`[SEO Page Error] ${mediaType}/${id}:`, error.message);
+        res.redirect('/');
+    }
+}
+
+/**
+ * 动态生成 sitemap.xml
+ * 包含热门电影和电视剧的 URL
+ */
+app.get('/sitemap.xml', async (req, res) => {
+    const TMDB_API_KEY = process.env.TMDB_API_KEY;
+    const siteUrl = process.env.SITE_URL || 'https://ednovas.video';
+    const today = new Date().toISOString().split('T')[0];
+
+    let urls = [
+        // 首页
+        `<url><loc>${siteUrl}/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>`
+    ];
+
+    if (TMDB_API_KEY) {
+        try {
+            // 服务器端调用：根据 SERVER_IN_CHINA 环境变量决定是否使用代理
+            // 如果服务器在国内，设置 SERVER_IN_CHINA=true
+            const TMDB_PROXY_URL = process.env['TMDB_PROXY_URL'];
+            const serverInChina = process.env['SERVER_IN_CHINA'] === 'true';
+
+            const baseUrl = (TMDB_PROXY_URL && serverInChina)
+                ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/api/3`  // 国内服务器使用代理
+                : 'https://api.themoviedb.org/3';  // 海外服务器直连
+
+            // 获取热门电影 (前 40 部)
+            const movieUrl = `${baseUrl}/movie/popular?api_key=${TMDB_API_KEY}&language=zh-CN&page=1`;
+            const movieUrl2 = `${baseUrl}/movie/popular?api_key=${TMDB_API_KEY}&language=zh-CN&page=2`;
+
+            const [movieRes1, movieRes2] = await Promise.all([
+                axios.get(movieUrl, { timeout: 10000 }).catch(() => ({ data: { results: [] } })),
+                axios.get(movieUrl2, { timeout: 10000 }).catch(() => ({ data: { results: [] } }))
+            ]);
+
+            const movies = [...(movieRes1.data.results || []), ...(movieRes2.data.results || [])];
+            movies.forEach(m => {
+                urls.push(`<url><loc>${siteUrl}/movie/${m.id}</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`);
+            });
+
+            // 获取热门电视剧 (前 40 部)
+            const tvUrl = `${baseUrl}/tv/popular?api_key=${TMDB_API_KEY}&language=zh-CN&page=1`;
+            const tvUrl2 = `${baseUrl}/tv/popular?api_key=${TMDB_API_KEY}&language=zh-CN&page=2`;
+
+            const [tvRes1, tvRes2] = await Promise.all([
+                axios.get(tvUrl, { timeout: 10000 }).catch(() => ({ data: { results: [] } })),
+                axios.get(tvUrl2, { timeout: 10000 }).catch(() => ({ data: { results: [] } }))
+            ]);
+
+            const tvShows = [...(tvRes1.data.results || []), ...(tvRes2.data.results || [])];
+            tvShows.forEach(t => {
+                urls.push(`<url><loc>${siteUrl}/tv/${t.id}</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>`);
+            });
+
+            console.log(`[Sitemap] Generated with ${movies.length} movies and ${tvShows.length} TV shows`);
+
+        } catch (error) {
+            console.error('[Sitemap Error]', error.message);
+        }
+    }
+
+    const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.join('\n')}
+</urlset>`;
+
+    res.setHeader('Content-Type', 'application/xml');
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // 缓存1小时
+    res.send(sitemap);
 });
 
 // Helper: Get DB data (Local or Remote)
