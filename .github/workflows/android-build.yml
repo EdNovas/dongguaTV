@@ -9,7 +9,7 @@ on:
       server_url:
         description: 'Server URL (e.g. https://your-site.com)'
         required: true
-        default: 'https://ednovas.video'
+        default: 'https://www.740910.xyz:3660'
       app_name:
         description: 'App Name'
         required: true
