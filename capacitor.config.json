@@ -3,7 +3,7 @@
     "appName": "E视界",
     "webDir": "public",
     "server": {
-        "url": "https://ednovas.video",
+        "url": "http://111.0.83.153:3389",
         "cleartext": true
     },
     "plugins": {
@@ -14,4 +14,5 @@
         },
         "ScreenOrientation": {}
     }
+
 }
