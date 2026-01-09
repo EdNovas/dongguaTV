@@ -5,7 +5,7 @@
     "bundledWebRuntime": false,
     "$comment_server": "📺 修改 server.url 即可更改内置网站地址",
     "server": {
-        "url": "https://ednovas.video",
+        "url": "http://111.0.83.153:3389",
         "cleartext": true
     },
     "plugins": {
