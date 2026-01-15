@@ -2,13 +2,13 @@
     "sites": [
         {
             "key": "movieheven",
-            "name": "https://caiji.dyttzyapi.com/api.php/provide/vod",
+            "name": "電影天堂資源",
             "api": "https://caiji.dyttzyapi.com/api.php/provide/vod",
             "active": true
         },
         {
             "key": "happy",
-            "name": "https://cj.rycjapi.com/api.php/provide/vod/",
+            "name": "如意資源",
             "api": "https://cj.rycjapi.com/api.php/provide/vod/",
             "active": true
         }
