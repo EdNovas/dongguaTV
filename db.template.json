@@ -1,15 +1,21 @@
 {
     "sites": [
         {
-            "key": "example1",
-            "name": "示例站点1 (请填写API)",
-            "api": "",
+            "key": "電影天堂資源",
+            "name": "電影天堂資源",
+            "api": "https://caiji.dyttzyapi.com/api.php/provide/vod",
             "active": true
         },
         {
-            "key": "example2",
-            "name": "示例站点2 (请填写API)",
-            "api": "",
+            "key": "如意資源",
+            "name": "如意資源",
+            "api": "https://cj.rycjapi.com/api.php/provide/vod/",
+            "active": true
+        }
+        {
+            "key": "天涯資源",
+            "name": "天涯資源",
+            "api": "https://tyyszy.com/api.php/provide/vod/",
             "active": true
         }
     ]
