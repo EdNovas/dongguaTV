@@ -1,19 +1,19 @@
 {
     "sites": [
         {
-            "key": "電影天堂資源",
+            "key": "movieheven",
             "name": "https://caiji.dyttzyapi.com/api.php/provide/vod",
             "api": "https://caiji.dyttzyapi.com/api.php/provide/vod",
             "active": true
         },
         {
-            "key": "如意資源",
+            "key": "happy",
             "name": "https://cj.rycjapi.com/api.php/provide/vod/",
             "api": "https://cj.rycjapi.com/api.php/provide/vod/",
             "active": true
         }
         {
-            "key": "天涯資源",
+            "key": "clif",
             "name": "天涯資源",
             "api": "https://tyyszy.com/api.php/provide/vod/",
             "active": true
