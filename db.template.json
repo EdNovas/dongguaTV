@@ -2,13 +2,13 @@
     "sites": [
         {
             "key": "電影天堂資源",
-            "name": "電影天堂資源",
+            "name": "https://caiji.dyttzyapi.com/api.php/provide/vod",
             "api": "https://caiji.dyttzyapi.com/api.php/provide/vod",
             "active": true
         },
         {
             "key": "如意資源",
-            "name": "如意資源",
+            "name": "https://cj.rycjapi.com/api.php/provide/vod/",
             "api": "https://cj.rycjapi.com/api.php/provide/vod/",
             "active": true
         }
