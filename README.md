@@ -721,9 +721,23 @@ docker run -d -p 3000:3000 \
 
 1. **Settings → Environment Variables** 中添加以下变量：
    - `TMDB_API_KEY` - TMDb API 密钥（**必填**）
-   - `REMOTE_DB_URL` - 远程站点配置 JSON 地址（**Vercel 必填**，因为无法读取本地 db.json）
+   - `REMOTE_DB_URL` - 远程站点配置 JSON 地址（二选一）
+   - `SITES_JSON` - 直接嵌入站点配置 JSON（二选一，推荐！避免远程拉取问题）
    - `ACCESS_PASSWORD` - 访问密码（可选）
    - `TMDB_PROXY_URL` - 大陆用户反代地址（可选）
+
+   > **💡 SITES_JSON 使用方法**（推荐）：
+   > 
+   > 如果 `REMOTE_DB_URL` 无法正常工作，可以直接将 db.json 内容或 Base64 编码后填入 `SITES_JSON`：
+   > 
+   > **方式一：直接 JSON（适合站点少的情况）**
+   > ```
+   > SITES_JSON={"sites":[{"key":"ffzy","name":"非凡影视","api":"https://api.ffzyapi.com/api.php/provide/vod/"}]}
+   > ```
+   > 
+   > **方式二：Base64 编码（推荐，避免 JSON 特殊字符问题）**
+   > 1. 在线工具 [base64encode.org](https://www.base64encode.org) 将 db.json 内容编码
+   > 2. 将编码后的字符串填入 `SITES_JSON`
 
 2. **环境变量不生效？** 请按以下步骤排查：
 
