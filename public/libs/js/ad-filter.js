@@ -402,8 +402,12 @@
                 linesToRemove.add(seg.urlLineIndex);  // URL 行
             });
 
-            // 同时移除相关的 DISCONTINUITY 标签
+            // 智能移除广告分段和 DISCONTINUITY 标签
+            // 关键：当广告位于两段内容之间时，保留一个 DISCONTINUITY 标签
+            // 防止 HLS.js 遇到未标记的时间戳跳跃触发 MEDIA_ERROR
             const filteredLines = [];
+            let hadContentBefore = false;  // 在当前位置之前是否有内容分段
+            let removedAdGroup = false;    // 是否刚移除了一组广告
 
             for (let i = 0; i < parsed.lines.length; i++) {
                 const line = parsed.lines[i];
@@ -420,7 +424,6 @@
                         }
                         if (nextLine && !nextLine.startsWith('#')) {
                             hasSegments = true;
-                            // 这是一个分段 URL
                             const segIdx = parsed.segments.findIndex(s => s.url === nextLine);
                             if (segIdx >= 0 && !adIndices.has(segIdx)) {
                                 allAds = false;
@@ -430,17 +433,64 @@
                     }
 
                     if (hasSegments && allAds) {
-                        // 跳过这个 DISCONTINUITY（它后面全是广告）
+                        // 这个 DISCONTINUITY 后面全是广告，标记移除
+                        removedAdGroup = true;
+                        continue;
+                    }
+
+                    // 如果之前移除了广告且前后都有内容，保留这个 DISCONTINUITY
+                    if (removedAdGroup && hadContentBefore) {
+                        filteredLines.push(line);
+                        removedAdGroup = false;
                         continue;
                     }
                 }
 
                 if (!linesToRemove.has(i)) {
                     filteredLines.push(line);
+                    // 跟踪是否已输出过内容分段
+                    if (line && !line.startsWith('#')) {
+                        const segIdx = parsed.segments.findIndex(s => s.url === line);
+                        if (segIdx >= 0 && !adIndices.has(segIdx)) {
+                            hadContentBefore = true;
+                        }
+                    }
                 }
             }
 
-            const filtered = filteredLines.join('\n');
+            // 最终清理：移除连续的多余 DISCONTINUITY 标签
+            const cleanedLines = [];
+            for (let i = 0; i < filteredLines.length; i++) {
+                const line = filteredLines[i];
+                if (line.startsWith('#EXT-X-DISCONTINUITY')) {
+                    // 如果下一个非空行也是 DISCONTINUITY 或 ENDLIST，跳过当前
+                    let nextNonEmpty = '';
+                    for (let j = i + 1; j < filteredLines.length; j++) {
+                        if (filteredLines[j].trim()) {
+                            nextNonEmpty = filteredLines[j];
+                            break;
+                        }
+                    }
+                    if (nextNonEmpty.startsWith('#EXT-X-DISCONTINUITY') || nextNonEmpty.startsWith('#EXT-X-ENDLIST') || !nextNonEmpty) {
+                        continue; // 跳过多余的 DISCONTINUITY
+                    }
+                }
+                cleanedLines.push(line);
+            }
+            // 也移除开头的 DISCONTINUITY（第一个分段前不需要）
+            const finalLines = [];
+            let foundFirstSegment = false;
+            for (const line of cleanedLines) {
+                if (!foundFirstSegment && line.startsWith('#EXT-X-DISCONTINUITY')) {
+                    continue; // 跳过第一个分段之前的 DISCONTINUITY
+                }
+                if (line.startsWith('#EXTINF:')) {
+                    foundFirstSegment = true;
+                }
+                finalLines.push(line);
+            }
+
+            const filtered = finalLines.join('\n');
 
             // 更新统计
             stats.totalAdsFiltered += adIndices.size;
