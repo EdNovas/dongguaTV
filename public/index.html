@@ -6619,7 +6619,9 @@
                                             window._hlsInstance = null;
                                         }
                                         // 使用广告过滤 loader 创建 HLS 实例
-                                        var hlsConfig = {};
+                                        var hlsConfig = {
+                                            backBufferLength: 30,   // 限制后向缓冲区，帮助 GC 旧编解码器数据
+                                        };
                                         if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
                                             hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
                                             console.log('[播放器] 🛡️ 已启用广告过滤 loader');
@@ -6641,7 +6643,8 @@
                                                     case Hls.ErrorTypes.MEDIA_ERROR:
                                                         _hlsRecoverAttempts++;
                                                         if (_hlsRecoverAttempts === 1) {
-                                                            console.warn('[HLS] 媒体错误(第1次)，recoverMediaError...');
+                                                            console.warn('[HLS] 媒体错误(第1次)，swapAudioCodec + recoverMediaError...');
+                                                            currentHls.swapAudioCodec();
                                                             currentHls.recoverMediaError();
                                                         } else if (_hlsRecoverAttempts === 2) {
                                                             console.warn('[HLS] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');
@@ -7662,7 +7665,9 @@
                                         window._hlsInstance.destroy();
                                         window._hlsInstance = null;
                                     }
-                                    var hlsConfig = {};
+                                    var hlsConfig = {
+                                        backBufferLength: 30,   // 限制后向缓冲区，帮助 GC 旧编解码器数据
+                                    };
                                     if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
                                         hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
                                         console.log('[播放器] 🛡️ 已启用广告过滤 loader (切换)');
@@ -7683,7 +7688,8 @@
                                                 case Hls.ErrorTypes.MEDIA_ERROR:
                                                     _hlsRecoverAttempts2++;
                                                     if (_hlsRecoverAttempts2 === 1) {
-                                                        console.warn('[HLS-切换] 媒体错误(第1次)，recoverMediaError...');
+                                                        console.warn('[HLS-切换] 媒体错误(第1次)，swapAudioCodec + recoverMediaError...');
+                                                        currentHls.swapAudioCodec();
                                                         currentHls.recoverMediaError();
                                                     } else if (_hlsRecoverAttempts2 === 2) {
                                                         console.warn('[HLS-切换] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');

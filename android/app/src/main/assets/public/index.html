@@ -6619,7 +6619,9 @@
                                             window._hlsInstance = null;
                                         }
                                         // 使用广告过滤 loader 创建 HLS 实例
-                                        var hlsConfig = {};
+                                        var hlsConfig = {
+                                            backBufferLength: 30,   // 限制后向缓冲区，帮助 GC 旧编解码器数据
+                                        };
                                         if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
                                             hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
                                             console.log('[播放器] 🛡️ 已启用广告过滤 loader');
@@ -6645,7 +6647,11 @@
                                                             currentHls.swapAudioCodec();
                                                             currentHls.recoverMediaError();
                                                         } else if (_hlsRecoverAttempts === 2) {
-                                                            console.warn('[HLS] 媒体错误(第2次)，重建 HLS 实例...');
+                                                            console.warn('[HLS] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');
+                                                            currentHls.swapAudioCodec();
+                                                            currentHls.recoverMediaError();
+                                                        } else if (_hlsRecoverAttempts === 3) {
+                                                            console.warn('[HLS] 媒体错误(第3次)，重建 HLS 实例...');
                                                             var savedSrc = video.src;
                                                             currentHls.destroy();
                                                             var freshHls = new Hls(hlsConfig);
@@ -7659,7 +7665,9 @@
                                         window._hlsInstance.destroy();
                                         window._hlsInstance = null;
                                     }
-                                    var hlsConfig = {};
+                                    var hlsConfig = {
+                                        backBufferLength: 30,   // 限制后向缓冲区，帮助 GC 旧编解码器数据
+                                    };
                                     if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
                                         hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
                                         console.log('[播放器] 🛡️ 已启用广告过滤 loader (切换)');
@@ -7684,7 +7692,11 @@
                                                         currentHls.swapAudioCodec();
                                                         currentHls.recoverMediaError();
                                                     } else if (_hlsRecoverAttempts2 === 2) {
-                                                        console.warn('[HLS-切换] 媒体错误(第2次)，重建 HLS 实例...');
+                                                        console.warn('[HLS-切换] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');
+                                                        currentHls.swapAudioCodec();
+                                                        currentHls.recoverMediaError();
+                                                    } else if (_hlsRecoverAttempts2 === 3) {
+                                                        console.warn('[HLS-切换] 媒体错误(第3次)，重建 HLS 实例...');
                                                         var savedSrc2 = video.src;
                                                         currentHls.destroy();
                                                         var freshHls2 = new Hls(hlsConfig);
