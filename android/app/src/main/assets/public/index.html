@@ -6619,9 +6619,7 @@
                                             window._hlsInstance = null;
                                         }
                                         // 使用广告过滤 loader 创建 HLS 实例
-                                        var hlsConfig = {
-                                            backBufferLength: 30,   // 限制后向缓冲区，帮助 GC 旧编解码器数据
-                                        };
+                                        var hlsConfig = {};
                                         if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
                                             hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
                                             console.log('[播放器] 🛡️ 已启用广告过滤 loader');
@@ -6629,60 +6627,25 @@
                                         var hls = new Hls(hlsConfig);
                                         hls.loadSource(video.src);
                                         hls.attachMedia(video);
-                                        // HLS 错误恢复 — 渐进式策略，防止 recoverMediaError 导致音频异常
-                                        var _hlsRecoverAttempts = 0;
-                                        var _hlsRef = { instance: hls };  // 包装引用，确保闭包中始终访问最新实例
-                                        function _hlsErrorHandler(event, data) {
+                                        // HLS 错误恢复
+                                        hls.on(Hls.Events.ERROR, function(event, data) {
                                             if (data.fatal) {
-                                                var currentHls = _hlsRef.instance;
                                                 switch (data.type) {
                                                     case Hls.ErrorTypes.NETWORK_ERROR:
                                                         console.warn('[HLS] 网络错误，尝试恢复...');
-                                                        currentHls.startLoad();
+                                                        hls.startLoad();
                                                         break;
                                                     case Hls.ErrorTypes.MEDIA_ERROR:
-                                                        _hlsRecoverAttempts++;
-                                                        if (_hlsRecoverAttempts === 1) {
-                                                            console.warn('[HLS] 媒体错误(第1次)，swapAudioCodec + recoverMediaError...');
-                                                            currentHls.swapAudioCodec();
-                                                            currentHls.recoverMediaError();
-                                                        } else if (_hlsRecoverAttempts === 2) {
-                                                            console.warn('[HLS] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');
-                                                            currentHls.swapAudioCodec();
-                                                            currentHls.recoverMediaError();
-                                                        } else if (_hlsRecoverAttempts === 3) {
-                                                            console.warn('[HLS] 媒体错误(第3次)，重建 HLS 实例...');
-                                                            var savedSrc = video.src;
-                                                            currentHls.destroy();
-                                                            var freshHls = new Hls(hlsConfig);
-                                                            freshHls.loadSource(savedSrc);
-                                                            freshHls.attachMedia(video);
-                                                            freshHls.on(Hls.Events.ERROR, _hlsErrorHandler);
-                                                            _hlsRef.instance = freshHls;
-                                                            window._hlsInstance = freshHls;
-                                                            _hlsRecoverAttempts = 0;
-                                                        } else {
-                                                            console.error('[HLS] 媒体错误多次恢复失败');
-                                                            currentHls.destroy();
-                                                        }
-                                                        // 恢复后重置 DPlayer 控制栏状态
-                                                        try {
-                                                            var cont = document.getElementById('dplayer');
-                                                            if (cont) {
-                                                                cont.classList.remove('dplayer-hide-controller');
-                                                                var ctrl = cont.querySelector('.dplayer-controller');
-                                                                if (ctrl) ctrl.classList.remove('dplayer-controller-show');
-                                                            }
-                                                        } catch(e) {}
+                                                        console.warn('[HLS] 媒体错误，尝试恢复...');
+                                                        hls.recoverMediaError();
                                                         break;
                                                     default:
                                                         console.error('[HLS] 致命错误，无法恢复');
-                                                        currentHls.destroy();
+                                                        hls.destroy();
                                                         break;
                                                 }
                                             }
-                                        }
-                                        hls.on(Hls.Events.ERROR, _hlsErrorHandler);
+                                        });
                                         window._hlsInstance = hls;
                                     }
                                 }
@@ -7665,9 +7628,7 @@
                                         window._hlsInstance.destroy();
                                         window._hlsInstance = null;
                                     }
-                                    var hlsConfig = {
-                                        backBufferLength: 30,   // 限制后向缓冲区，帮助 GC 旧编解码器数据
-                                    };
+                                    var hlsConfig = {};
                                     if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
                                         hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
                                         console.log('[播放器] 🛡️ 已启用广告过滤 loader (切换)');
@@ -7675,58 +7636,21 @@
                                     var hls = new Hls(hlsConfig);
                                     hls.loadSource(video.src);
                                     hls.attachMedia(video);
-                                    // HLS 错误恢复 — 渐进式策略
-                                    var _hlsRecoverAttempts2 = 0;
-                                    var _hlsRef2 = { instance: hls };
-                                    function _hlsErrorHandler2(event, data) {
+                                    hls.on(Hls.Events.ERROR, function(event, data) {
                                         if (data.fatal) {
-                                            var currentHls = _hlsRef2.instance;
                                             switch (data.type) {
                                                 case Hls.ErrorTypes.NETWORK_ERROR:
-                                                    currentHls.startLoad();
+                                                    hls.startLoad();
                                                     break;
                                                 case Hls.ErrorTypes.MEDIA_ERROR:
-                                                    _hlsRecoverAttempts2++;
-                                                    if (_hlsRecoverAttempts2 === 1) {
-                                                        console.warn('[HLS-切换] 媒体错误(第1次)，swapAudioCodec + recoverMediaError...');
-                                                        currentHls.swapAudioCodec();
-                                                        currentHls.recoverMediaError();
-                                                    } else if (_hlsRecoverAttempts2 === 2) {
-                                                        console.warn('[HLS-切换] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');
-                                                        currentHls.swapAudioCodec();
-                                                        currentHls.recoverMediaError();
-                                                    } else if (_hlsRecoverAttempts2 === 3) {
-                                                        console.warn('[HLS-切换] 媒体错误(第3次)，重建 HLS 实例...');
-                                                        var savedSrc2 = video.src;
-                                                        currentHls.destroy();
-                                                        var freshHls2 = new Hls(hlsConfig);
-                                                        freshHls2.loadSource(savedSrc2);
-                                                        freshHls2.attachMedia(video);
-                                                        freshHls2.on(Hls.Events.ERROR, _hlsErrorHandler2);
-                                                        _hlsRef2.instance = freshHls2;
-                                                        window._hlsInstance = freshHls2;
-                                                        _hlsRecoverAttempts2 = 0;
-                                                    } else {
-                                                        console.error('[HLS-切换] 媒体错误多次恢复失败');
-                                                        currentHls.destroy();
-                                                    }
-                                                    // 恢复后重置 DPlayer 控制栏状态
-                                                    try {
-                                                        var cont2 = document.getElementById('dplayer');
-                                                        if (cont2) {
-                                                            cont2.classList.remove('dplayer-hide-controller');
-                                                            var ctrl2 = cont2.querySelector('.dplayer-controller');
-                                                            if (ctrl2) ctrl2.classList.remove('dplayer-controller-show');
-                                                        }
-                                                    } catch(e) {}
+                                                    hls.recoverMediaError();
                                                     break;
                                                 default:
-                                                    currentHls.destroy();
+                                                    hls.destroy();
                                                     break;
                                             }
                                         }
-                                    }
-                                    hls.on(Hls.Events.ERROR, _hlsErrorHandler2);
+                                    });
                                     window._hlsInstance = hls;
                                 }
                             }
