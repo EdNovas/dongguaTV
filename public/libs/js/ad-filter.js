@@ -490,7 +490,13 @@
                 finalLines.push(line);
             }
 
-            const filtered = finalLines.join('\n');
+            // 🔧 移除所有剩余的 DISCONTINUITY 标签
+            // 广告移除后内容组之间不需要 DISCONTINUITY，
+            // 且 HLS.js 在 DISCONTINUITY 处有音频采样率重置 bug 导致声音低沉
+            const noDiscoLines = finalLines.filter(line => 
+                !line.startsWith('#EXT-X-DISCONTINUITY')
+            );
+            const filtered = noDiscoLines.join('\n');
 
             // 更新统计
             stats.totalAdsFiltered += adIndices.size;
