@@ -352,6 +352,87 @@
     }
 
     /**
+     * 检测广告时间段（用于跳过模式）
+     * 分析 M3U8 内容，返回广告在播放时间轴上的起止时间
+     * @param {string} content - 原始 M3U8 内容
+     * @returns {Object} { adRanges: [{start, end, duration}], adsRemoved: number, adsDuration: number }
+     */
+    function detectAdTimeRanges(content) {
+        if (!AD_FILTER_CONFIG.enabled || !AD_FILTER_CONFIG.skipDiscontinuityAds) {
+            return { adRanges: [], adsRemoved: 0, adsDuration: 0 };
+        }
+
+        // 主播放列表不处理
+        if (content.includes('#EXT-X-STREAM-INF')) {
+            return { adRanges: [], adsRemoved: 0, adsDuration: 0 };
+        }
+
+        if (!content.includes('#EXT-X-DISCONTINUITY')) {
+            return { adRanges: [], adsRemoved: 0, adsDuration: 0 };
+        }
+
+        try {
+            const parsed = parseM3U8(content);
+            const adIndices = detectAdSegments(parsed.segments);
+
+            if (adIndices.size === 0) {
+                return { adRanges: [], adsRemoved: 0, adsDuration: 0 };
+            }
+
+            // 计算每个分段在时间轴上的累积起始时间
+            const adRanges = [];
+            let cumulativeTime = 0;
+            let currentRangeStart = -1;
+            let currentRangeEnd = -1;
+
+            for (let i = 0; i < parsed.segments.length; i++) {
+                const seg = parsed.segments[i];
+                if (adIndices.has(i)) {
+                    if (currentRangeStart < 0) {
+                        currentRangeStart = cumulativeTime;
+                    }
+                    currentRangeEnd = cumulativeTime + seg.duration;
+                } else {
+                    // 当前分段不是广告，如果之前有广告段，关闭该 range
+                    if (currentRangeStart >= 0) {
+                        adRanges.push({
+                            start: currentRangeStart,
+                            end: currentRangeEnd,
+                            duration: currentRangeEnd - currentRangeStart
+                        });
+                        currentRangeStart = -1;
+                        currentRangeEnd = -1;
+                    }
+                }
+                cumulativeTime += seg.duration;
+            }
+            // 处理最后一个 range（如果广告在末尾）
+            if (currentRangeStart >= 0) {
+                adRanges.push({
+                    start: currentRangeStart,
+                    end: currentRangeEnd,
+                    duration: currentRangeEnd - currentRangeStart
+                });
+            }
+
+            let adsDuration = 0;
+            adIndices.forEach(idx => {
+                adsDuration += parsed.segments[idx].duration;
+            });
+
+            // 记录检测到的广告时间段
+            for (const range of adRanges) {
+                log(`📍 广告时间段: ${range.start.toFixed(1)}s - ${range.end.toFixed(1)}s (${range.duration.toFixed(1)}秒)`);
+            }
+
+            return { adRanges, adsRemoved: adIndices.size, adsDuration };
+        } catch (e) {
+            console.error('[广告过滤] detectAdTimeRanges 错误:', e);
+            return { adRanges: [], adsRemoved: 0, adsDuration: 0 };
+        }
+    }
+
+    /**
      * 过滤 M3U8 内容，移除广告分段
      * @param {string} content - 原始 M3U8 内容
      * @returns {Object} { filtered: string, adsRemoved: number, adsDuration: number }
@@ -520,9 +601,6 @@
     /**
      * 拦截 HLS.js 的 loader，过滤 M3U8 响应
      */
-    // 模块级变量：存储过滤 loader 类，供外部通过 getFilteredLoaderClass() 获取
-    var _filteredLoaderClass = null;
-
     function hookHlsLoader() {
         if (typeof Hls === 'undefined') {
             log('HLS.js 未加载，延迟挂钩...');
@@ -534,51 +612,59 @@
         const OriginalLoader = Hls.DefaultConfig.loader;
 
         // 创建过滤 loader
-        function createFilteredLoader(BaseLoader) {
-            class FilteredLoader extends BaseLoader {
-                constructor(config) {
-                    super(config);
-                }
+        class FilteredLoader extends OriginalLoader {
+            constructor(config) {
+                super(config);
+            }
 
-                load(context, config, callbacks) {
-                    const originalOnSuccess = callbacks.onSuccess;
+            load(context, config, callbacks) {
+                const originalOnSuccess = callbacks.onSuccess;
 
-                    callbacks.onSuccess = (response, stats, context, networkDetails) => {
-                        // 处理所有 m3u8 类型的请求
+                callbacks.onSuccess = (response, stats, context, networkDetails) => {
+                    // 只处理 m3u8 文件（manifest 或 level）
+                    if (context.type === 'manifest') {
+                        // 新视频加载时重置广告时间段
+                        window._adSkipRanges = null;
+                    }
+                    if (context.type === 'manifest' || context.type === 'level') {
                         if (typeof response.data === 'string' && response.data.includes('#EXTM3U')) {
-                            log(`🔍 拦截到 m3u8 请求, type=${context.type}, url=${(context.url || '').substring(0, 80)}...`);
-                            const result = filterM3U8(response.data);
-                            if (result.adsRemoved > 0) {
-                                response.data = result.filtered;
+                            // 🔧 跳过模式：分析广告时间段但不修改 M3U8
+                            // 避免修改流结构导致 HLS.js 音频 codec 问题
+                            const result = detectAdTimeRanges(response.data);
+                            if (result.adRanges.length > 0) {
+                                // 存储广告时间段供播放器跳过
+                                window._adSkipRanges = result.adRanges;
+                                log(`🎯 检测到 ${result.adRanges.length} 个广告时间段，总时长 ${result.adsDuration.toFixed(0)}秒 (跳过模式)`);
 
-                                // 显示过滤通知
+                                // 显示通知
                                 if (AD_FILTER_CONFIG.showNotification) {
                                     setTimeout(() => {
                                         if (window.dp && window.dp.notice) {
-                                            window.dp.notice(`🛡️ 已过滤 ${result.adsRemoved} 个广告 (${result.adsDuration.toFixed(0)}秒)`, 3000);
+                                            window.dp.notice(`🛡️ 检测到 ${result.adRanges.length} 个广告 (${result.adsDuration.toFixed(0)}秒) - 自动跳过`, 3000);
                                         }
                                     }, 1000);
                                 }
+
+                                // 更新统计
+                                stats.totalAdsFiltered += result.adsRemoved;
+                                stats.totalAdDuration += result.adsDuration;
+                                stats.sessionsFiltered++;
                             }
+                            // ⚠️ 不修改 response.data — 保持原始 M3U8 完整
                         }
+                    }
 
-                        originalOnSuccess(response, stats, context, networkDetails);
-                    };
+                    originalOnSuccess(response, stats, context, networkDetails);
+                };
 
-                    super.load(context, config, callbacks);
-                }
+                super.load(context, config, callbacks);
             }
-            return FilteredLoader;
         }
 
-        // 存储过滤 loader 类供外部使用 (customType 模式)
-        _filteredLoaderClass = createFilteredLoader(OriginalLoader);
-
-        // 同时替换默认 loader (兜底)
-        Hls.DefaultConfig.loader = _filteredLoaderClass;
+        // 替换默认 loader
+        Hls.DefaultConfig.loader = FilteredLoader;
 
         log('✅ HLS.js 广告过滤 loader 已安装');
-        log('📊 配置: 启用=' + AD_FILTER_CONFIG.enabled + ', DISCONTINUITY过滤=' + AD_FILTER_CONFIG.skipDiscontinuityAds);
     }
 
     /**
@@ -593,6 +679,7 @@
 
                 let lastKnownGoodTime = 0;
                 let adDetected = false;
+                let _skipCooldown = false;  // 防止重复跳过
 
                 // 配置的开头跳过
                 if (AD_FILTER_CONFIG.skipFirstSegments && AD_FILTER_CONFIG.firstSegmentSkipDuration > 0) {
@@ -604,25 +691,34 @@
                     });
                 }
 
-                // 监听时间更新，检测异常跳转（可能的广告插入）
+                // 🔧 广告自动跳过：到达广告时间点就直接跳转
                 window.dp.video.addEventListener('timeupdate', function () {
                     const video = window.dp.video;
-                    if (!video) return;
+                    if (!video || _skipCooldown) return;
 
-                    // 如果视频突然跳到开头附近（可能是广告插入点）
-                    // 并且之前已经播放了一段时间，可能是广告
-                    if (lastKnownGoodTime > 30 && video.currentTime < 5) {
-                        if (!adDetected) {
-                            adDetected = true;
-                            log('⚠️ 检测到可能的中途广告跳转');
+                    const currentTime = video.currentTime;
+                    const ranges = window._adSkipRanges;
+
+                    if (ranges && ranges.length > 0) {
+                        for (const range of ranges) {
+                            if (currentTime >= range.start && currentTime < range.end) {
+                                const skipTo = range.end;
+                                log(`⏭️ 广告跳转: ${currentTime.toFixed(1)}s → ${skipTo.toFixed(1)}s`);
+                                _skipCooldown = true;
+                                video.currentTime = skipTo;
+
+                                if (window.dp && window.dp.notice) {
+                                    window.dp.notice(`⏭️ 已跳过 ${range.duration.toFixed(0)}秒广告`, 2000);
+                                }
+
+                                setTimeout(() => { _skipCooldown = false; }, 3000);
+                                break;
+                            }
                         }
-                    } else if (video.currentTime > 10) {
-                        lastKnownGoodTime = video.currentTime;
-                        adDetected = false;
                     }
                 });
 
-                log('✅ 时间跳过检测已启用');
+                log('✅ 广告跳过检测已启用 (跳过模式)');
             }
         }, 500);
     }
@@ -802,9 +898,7 @@
             AD_FILTER_CONFIG.firstSegmentSkipDuration = seconds;
         },
         // 导出 initUI 供外部调用 (如 index.html 中的设置菜单监听)
-        initUI: injectAdFilterUI,
-        // 🎯 导出过滤 loader 类供 DPlayer customType 使用
-        getFilteredLoaderClass: () => _filteredLoaderClass
+        initUI: injectAdFilterUI
     };
 
     // 初始化
