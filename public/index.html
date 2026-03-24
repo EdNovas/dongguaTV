@@ -6644,9 +6644,16 @@
                                                             console.warn('[HLS] 媒体错误(第1次)，recoverMediaError...');
                                                             currentHls.recoverMediaError();
                                                         } else if (_hlsRecoverAttempts === 2) {
-                                                            console.warn('[HLS] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');
-                                                            currentHls.swapAudioCodec();
-                                                            currentHls.recoverMediaError();
+                                                            console.warn('[HLS] 媒体错误(第2次)，直接重建 HLS 实例...');
+                                                            var savedSrc = video.src;
+                                                            currentHls.destroy();
+                                                            var freshHls = new Hls(hlsConfig);
+                                                            freshHls.loadSource(savedSrc);
+                                                            freshHls.attachMedia(video);
+                                                            freshHls.on(Hls.Events.ERROR, _hlsErrorHandler);
+                                                            _hlsRef.instance = freshHls;
+                                                            window._hlsInstance = freshHls;
+                                                            _hlsRecoverAttempts = 0;
                                                         } else if (_hlsRecoverAttempts === 3) {
                                                             console.warn('[HLS] 媒体错误(第3次)，重建 HLS 实例...');
                                                             var savedSrc = video.src;
@@ -7686,9 +7693,16 @@
                                                         console.warn('[HLS-切换] 媒体错误(第1次)，recoverMediaError...');
                                                         currentHls.recoverMediaError();
                                                     } else if (_hlsRecoverAttempts2 === 2) {
-                                                        console.warn('[HLS-切换] 媒体错误(第2次)，swapAudioCodec + recoverMediaError...');
-                                                        currentHls.swapAudioCodec();
-                                                        currentHls.recoverMediaError();
+                                                        console.warn('[HLS-切换] 媒体错误(第2次)，直接重建 HLS 实例...');
+                                                        var savedSrc2 = video.src;
+                                                        currentHls.destroy();
+                                                        var freshHls2 = new Hls(hlsConfig);
+                                                        freshHls2.loadSource(savedSrc2);
+                                                        freshHls2.attachMedia(video);
+                                                        freshHls2.on(Hls.Events.ERROR, _hlsErrorHandler2);
+                                                        _hlsRef2.instance = freshHls2;
+                                                        window._hlsInstance = freshHls2;
+                                                        _hlsRecoverAttempts2 = 0;
                                                     } else if (_hlsRecoverAttempts2 === 3) {
                                                         console.warn('[HLS-切换] 媒体错误(第3次)，重建 HLS 实例...');
                                                         var savedSrc2 = video.src;
