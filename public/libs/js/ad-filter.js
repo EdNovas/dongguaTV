@@ -599,72 +599,97 @@
     }
 
     /**
-     * 拦截 HLS.js 的 loader，过滤 M3U8 响应
+     * 独立分析 M3U8 流地址，检测广告时间段
+     * 完全不干扰 HLS.js —— 通过 fetch() 独立下载并解析 M3U8
      */
-    function hookHlsLoader() {
-        if (typeof Hls === 'undefined') {
-            log('HLS.js 未加载，延迟挂钩...');
-            setTimeout(hookHlsLoader, 100);
-            return;
-        }
-
-        // 保存原始 loader
-        const OriginalLoader = Hls.DefaultConfig.loader;
-
-        // 创建过滤 loader
-        class FilteredLoader extends OriginalLoader {
-            constructor(config) {
-                super(config);
+    async function analyzeStreamUrl(url) {
+        if (!AD_FILTER_CONFIG.enabled) return;
+        
+        // 重置广告时间段
+        window._adSkipRanges = null;
+        
+        try {
+            log(`🔍 独立分析 M3U8: ${url.substring(0, 80)}...`);
+            
+            // 1. 获取主播放列表
+            const masterResp = await fetch(url);
+            if (!masterResp.ok) {
+                log(`❌ 获取 M3U8 失败: ${masterResp.status}`);
+                return;
             }
-
-            load(context, config, callbacks) {
-                const originalOnSuccess = callbacks.onSuccess;
-
-                callbacks.onSuccess = (response, stats, context, networkDetails) => {
-                    // 只处理 m3u8 文件（manifest 或 level）
-                    if (context.type === 'manifest') {
-                        // 新视频加载时重置广告时间段
-                        window._adSkipRanges = null;
-                    }
-                    if (context.type === 'manifest' || context.type === 'level') {
-                        if (typeof response.data === 'string' && response.data.includes('#EXTM3U')) {
-                            // 🔧 跳过模式：分析广告时间段但不修改 M3U8
-                            // 避免修改流结构导致 HLS.js 音频 codec 问题
-                            const result = detectAdTimeRanges(response.data);
-                            if (result.adRanges.length > 0) {
-                                // 存储广告时间段供播放器跳过
-                                window._adSkipRanges = result.adRanges;
-                                log(`🎯 检测到 ${result.adRanges.length} 个广告时间段，总时长 ${result.adsDuration.toFixed(0)}秒 (跳过模式)`);
-
-                                // 显示通知
-                                if (AD_FILTER_CONFIG.showNotification) {
-                                    setTimeout(() => {
-                                        if (window.dp && window.dp.notice) {
-                                            window.dp.notice(`🛡️ 检测到 ${result.adRanges.length} 个广告 (${result.adsDuration.toFixed(0)}秒) - 自动跳过`, 3000);
-                                        }
-                                    }, 1000);
-                                }
-
-                                // 更新统计
-                                stats.totalAdsFiltered += result.adsRemoved;
-                                stats.totalAdDuration += result.adsDuration;
-                                stats.sessionsFiltered++;
+            const masterText = await masterResp.text();
+            
+            // 2. 判断是主播放列表还是直接的分段列表
+            let levelText = masterText;
+            
+            if (masterText.includes('#EXT-X-STREAM-INF')) {
+                // 是主播放列表，需要提取 level URL
+                const lines = masterText.split('\n');
+                let levelUrl = null;
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].startsWith('#EXT-X-STREAM-INF')) {
+                        // 下一行是 level URL
+                        for (let j = i + 1; j < lines.length; j++) {
+                            const nextLine = lines[j].trim();
+                            if (nextLine && !nextLine.startsWith('#')) {
+                                levelUrl = nextLine;
+                                break;
                             }
-                            // ⚠️ 不修改 response.data — 保持原始 M3U8 完整
                         }
+                        break;  // 只取第一个 variant
                     }
-
-                    originalOnSuccess(response, stats, context, networkDetails);
-                };
-
-                super.load(context, config, callbacks);
+                }
+                
+                if (!levelUrl) {
+                    log('❌ 未找到 level URL');
+                    return;
+                }
+                
+                // 处理相对路径
+                if (!levelUrl.startsWith('http')) {
+                    const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+                    levelUrl = baseUrl + levelUrl;
+                }
+                
+                log(`🔍 获取 level 播放列表: ${levelUrl.substring(0, 80)}...`);
+                const levelResp = await fetch(levelUrl);
+                if (!levelResp.ok) {
+                    log(`❌ 获取 level M3U8 失败: ${levelResp.status}`);
+                    return;
+                }
+                levelText = await levelResp.text();
             }
+            
+            // 3. 分析 level 播放列表，检测广告时间段
+            const result = detectAdTimeRanges(levelText);
+            
+            if (result.adRanges.length > 0) {
+                window._adSkipRanges = result.adRanges;
+                log(`🎯 检测到 ${result.adRanges.length} 个广告时间段，总时长 ${result.adsDuration.toFixed(0)}秒`);
+                result.adRanges.forEach((range, i) => {
+                    log(`   广告 #${i + 1}: ${range.start.toFixed(1)}s ~ ${range.end.toFixed(1)}s (${(range.end - range.start).toFixed(1)}s)`);
+                });
+                
+                // 显示通知
+                if (AD_FILTER_CONFIG.showNotification) {
+                    setTimeout(() => {
+                        if (window.dp && window.dp.notice) {
+                            window.dp.notice(`🛡️ 检测到 ${result.adRanges.length} 个广告 (${result.adsDuration.toFixed(0)}秒) - 自动跳过`, 3000);
+                        }
+                    }, 1000);
+                }
+                
+                // 更新统计
+                stats.totalAdsFiltered += result.adsRemoved;
+                stats.totalAdDuration += result.adsDuration;
+                stats.sessionsFiltered++;
+            } else {
+                log('✅ 未检测到广告');
+            }
+            
+        } catch (e) {
+            console.error('[广告过滤] analyzeStreamUrl 错误:', e);
         }
-
-        // 替换默认 loader
-        Hls.DefaultConfig.loader = FilteredLoader;
-
-        log('✅ HLS.js 广告过滤 loader 已安装');
     }
 
     /**
@@ -898,13 +923,15 @@
             AD_FILTER_CONFIG.firstSegmentSkipDuration = seconds;
         },
         // 导出 initUI 供外部调用 (如 index.html 中的设置菜单监听)
-        initUI: injectAdFilterUI
+        initUI: injectAdFilterUI,
+        // 独立分析 M3U8 流地址（由 index.html 在 HLS 加载后调用）
+        analyzeStreamUrl
     };
 
     // 初始化
     log('🚀 广告过滤模块 v2.0 加载中...');
     loadSettings();
-    hookHlsLoader();
+    // 注意：analyzeStreamUrl 由 index.html 在 HLS 加载视频时调用，不在此处自动执行
     setupTimeBasedSkip();
     createSettingsUI();
 

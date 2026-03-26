@@ -3491,10 +3491,19 @@
 
                     <!-- 线路选择 -->
                     <div class="mb-4">
-                        <div class="panel-title">
+                        <div class="panel-title" style="display: flex; align-items: center;">
                             切换线路
-                            <span v-if="isTestingSources" style="font-size: 12px; color: #888; font-weight: normal;">
+                            <span v-if="isTestingSources" style="font-size: 12px; color: #888; font-weight: normal; margin-left: 10px;">
                                 <i class="fas fa-spinner fa-spin"></i> 正在测速...
+                            </span>
+                            <span v-else @click="refreshSources"
+                                style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
+                                :style="{ opacity: refreshingSources ? 0.5 : 1, pointerEvents: refreshingSources ? 'none' : 'auto' }"
+                                @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
+                                @mouseleave="$event.target.style.color='#888'; $event.target.style.borderColor='#444'">
+                                <i :class="['fas', refreshingSources ? 'fa-spinner fa-spin' : 'fa-sync-alt']"
+                                    style="margin-right: 4px;"></i>
+                                {{ refreshingSources ? '刷新中...' : '刷新线路' }}
                             </span>
                         </div>
 
@@ -4187,6 +4196,7 @@
                     searchTimer: null,  // 防抖搜索定时器
                     isTestingSources: false,  // 正在测速状态
                     refreshingEpisodes: false,  // 刷新集数中
+                    refreshingSources: false,  // 刷新线路中
                     showInfoModal: false,  // 电影详情弹窗
                     infoModalData: null,   // 弹窗数据
                     TMDB_IMG_URL: TMDB_IMG_URL,  // 模板中使用
@@ -5309,8 +5319,9 @@
                                 await this.$nextTick();
                                 if (targetEpisode && targetEpisode.url) {
                                     this.play(targetEpisode.url, bestSource.site_name);
-                                    // 后台自动刷新集数（不阻塞播放）
+                                    // 后台自动刷新集数和线路（不阻塞播放）
                                     this.refreshEpisodes();
+                                    this.refreshSources();
                                     return;
                                 }
                             }
@@ -6532,6 +6543,114 @@
                     this.refreshingEpisodes = false;
                 },
 
+                // 🔄 强制刷新线路列表（重新测速）
+                async refreshSources() {
+                    if (!this.currentGroup || !this.currentGroup.sources || this.isTestingSources) return;
+                    this.refreshingSources = true;
+                    this.isTestingSources = true;
+                    console.log('[刷新线路] 开始重新测速...');
+
+                    try {
+                        // 重置所有 source 的延迟和测速类型
+                        this.currentGroup.sources.forEach(s => {
+                            s.latency = undefined;
+                            s._testType = undefined;
+                            s._cachedDetail = undefined;
+                        });
+
+                        const sources = this.currentGroup.sources;
+                        const FAST_THRESHOLD = 600;
+                        const SLOW_THRESHOLD = 1500;
+
+                        // 并行测速所有线路
+                        const latencyPromises = sources.map(async (source) => {
+                            try {
+                                // 1. 获取详情
+                                const detailRes = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}&nocache=1`);
+                                const detailData = await detailRes.json();
+                                if (!detailData.list || detailData.list.length === 0) {
+                                    source.latency = 9999;
+                                    return source;
+                                }
+                                const detail = detailData.list[0];
+                                source._cachedDetail = detail;
+                                source.vod_play_url = detail.vod_play_url;
+
+                                // 2. 提取视频URL进行测速
+                                let playUrl = detail.vod_play_url || '';
+                                if (playUrl.includes('$$$')) {
+                                    const sets = playUrl.split('$$$');
+                                    playUrl = sets.find(s => s.toLowerCase().includes('m3u8')) || sets[0];
+                                }
+                                const firstEp = playUrl.split('#')[0];
+                                const parts = firstEp.split('$');
+                                const videoUrl = parts.length > 1 ? parts[1] : parts[0];
+
+                                if (!videoUrl || !videoUrl.startsWith('http')) {
+                                    source.latency = 9999;
+                                    return source;
+                                }
+
+                                // 3. 混合内容检查
+                                if (window.location.protocol === 'https:' && videoUrl.startsWith('http:')) {
+                                    const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                    const checkData = await checkRes.json();
+                                    source.latency = checkData.latency;
+                                    source._testType = 'server';
+                                    return source;
+                                }
+
+                                // 4. 用户端直接测速
+                                const startTime = Date.now();
+                                const controller = new AbortController();
+                                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                                try {
+                                    const testRes = await fetch(videoUrl, { method: 'GET', cache: 'no-cache', signal: controller.signal });
+                                    clearTimeout(timeoutId);
+                                    if (testRes.ok || testRes.type === 'opaque') {
+                                        source.latency = Date.now() - startTime;
+                                        source._testType = 'direct';
+                                    } else {
+                                        const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                        const checkData = await checkRes.json();
+                                        source.latency = checkData.latency;
+                                        source._testType = 'server';
+                                    }
+                                } catch (fetchErr) {
+                                    clearTimeout(timeoutId);
+                                    // 回退到服务器端测速
+                                    try {
+                                        const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                        const checkData = await checkRes.json();
+                                        source.latency = checkData.latency;
+                                        source._testType = 'server';
+                                    } catch (e) {
+                                        source.latency = 9999;
+                                    }
+                                }
+                            } catch (e) {
+                                source.latency = 9999;
+                            }
+                            return source;
+                        });
+
+                        await Promise.all(latencyPromises);
+
+                        // 按延迟排序
+                        this.currentGroup.sources.sort((a, b) => {
+                            const latA = typeof a.latency === 'number' ? a.latency : 9999;
+                            const latB = typeof b.latency === 'number' ? b.latency : 9999;
+                            return latA - latB;
+                        });
+
+                        console.log('[刷新线路] 完成，最快线路:', this.currentGroup.sources[0]?.site_name, this.currentGroup.sources[0]?.latency + 'ms');
+                    } catch (e) {
+                        console.error('[刷新线路] 失败:', e);
+                    }
+                    this.isTestingSources = false;
+                    this.refreshingSources = false;
+                },
+
                 // 解析剧集列表，尝试匹配指定集数
                 parseEpisodes(urlStr, targetEpName) {
                     let playSource = urlStr;
@@ -6618,14 +6737,14 @@
                                             window._hlsInstance.destroy();
                                             window._hlsInstance = null;
                                         }
-                                        // 使用广告过滤 loader 创建 HLS 实例
-                                        var hlsConfig = {};
-                                        if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
-                                            hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
-                                            console.log('[播放器] 🛡️ 已启用广告过滤 loader');
-                                        }
-                                        var hls = new Hls(hlsConfig);
+                                        // 创建 HLS 实例（零修改，不使用自定义 loader）
+                                        var hls = new Hls({});
                                         hls.loadSource(video.src);
+                                        // 独立分析 M3U8 检测广告位置（不干扰 HLS.js）
+                                        if (window.AdFilter && window.AdFilter.analyzeStreamUrl) {
+                                            window.AdFilter.analyzeStreamUrl(video.src);
+                                            console.log('[播放器] 🛡️ 已启动独立广告检测');
+                                        }
                                         hls.attachMedia(video);
                                         // HLS 错误恢复 — 渐进式策略，防止 recoverMediaError 导致音频异常
                                         var _hlsRecoverAttempts = 0;
@@ -6647,7 +6766,7 @@
                                                             console.warn('[HLS] 媒体错误(第2次)，直接重建 HLS 实例...');
                                                             var savedSrc = video.src;
                                                             currentHls.destroy();
-                                                            var freshHls = new Hls(hlsConfig);
+                                                            var freshHls = new Hls({});
                                                             freshHls.loadSource(savedSrc);
                                                             freshHls.attachMedia(video);
                                                             freshHls.on(Hls.Events.ERROR, _hlsErrorHandler);
@@ -6658,7 +6777,7 @@
                                                             console.warn('[HLS] 媒体错误(第3次)，重建 HLS 实例...');
                                                             var savedSrc = video.src;
                                                             currentHls.destroy();
-                                                            var freshHls = new Hls(hlsConfig);
+                                                            var freshHls = new Hls({});
                                                             freshHls.loadSource(savedSrc);
                                                             freshHls.attachMedia(video);
                                                             freshHls.on(Hls.Events.ERROR, _hlsErrorHandler);
@@ -7669,13 +7788,14 @@
                                         window._hlsInstance.destroy();
                                         window._hlsInstance = null;
                                     }
-                                    var hlsConfig = {};
-                                    if (window.AdFilter && window.AdFilter.getFilteredLoaderClass) {
-                                        hlsConfig.loader = window.AdFilter.getFilteredLoaderClass();
-                                        console.log('[播放器] 🛡️ 已启用广告过滤 loader (切换)');
-                                    }
-                                    var hls = new Hls(hlsConfig);
+                                    // 创建 HLS 实例（零修改，不使用自定义 loader）
+                                    var hls = new Hls({});
                                     hls.loadSource(video.src);
+                                    // 独立分析 M3U8 检测广告位置（不干扰 HLS.js）
+                                    if (window.AdFilter && window.AdFilter.analyzeStreamUrl) {
+                                        window.AdFilter.analyzeStreamUrl(video.src);
+                                        console.log('[播放器] 🛡️ 已启动独立广告检测 (切换)');
+                                    }
                                     hls.attachMedia(video);
                                     // HLS 错误恢复 — 渐进式策略
                                     var _hlsRecoverAttempts2 = 0;
@@ -7696,7 +7816,7 @@
                                                         console.warn('[HLS-切换] 媒体错误(第2次)，直接重建 HLS 实例...');
                                                         var savedSrc2 = video.src;
                                                         currentHls.destroy();
-                                                        var freshHls2 = new Hls(hlsConfig);
+                                                        var freshHls2 = new Hls({});
                                                         freshHls2.loadSource(savedSrc2);
                                                         freshHls2.attachMedia(video);
                                                         freshHls2.on(Hls.Events.ERROR, _hlsErrorHandler2);
@@ -7707,7 +7827,7 @@
                                                         console.warn('[HLS-切换] 媒体错误(第3次)，重建 HLS 实例...');
                                                         var savedSrc2 = video.src;
                                                         currentHls.destroy();
-                                                        var freshHls2 = new Hls(hlsConfig);
+                                                        var freshHls2 = new Hls({});
                                                         freshHls2.loadSource(savedSrc2);
                                                         freshHls2.attachMedia(video);
                                                         freshHls2.on(Hls.Events.ERROR, _hlsErrorHandler2);
