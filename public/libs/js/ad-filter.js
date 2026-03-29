@@ -664,8 +664,15 @@
                 
                 // 处理相对路径
                 if (!levelUrl.startsWith('http')) {
-                    const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
-                    levelUrl = baseUrl + levelUrl;
+                    if (levelUrl.startsWith('/')) {
+                        // 绝对路径：使用 origin + path
+                        const urlObj = new URL(url);
+                        levelUrl = urlObj.origin + levelUrl;
+                    } else {
+                        // 相对路径：拼接到当前目录
+                        const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+                        levelUrl = baseUrl + levelUrl;
+                    }
                 }
                 
                 console.log(`[广告过滤] 🔍 获取 level 播放列表: ${levelUrl.substring(0, 100)}...`);
