@@ -5319,9 +5319,8 @@
                                 await this.$nextTick();
                                 if (targetEpisode && targetEpisode.url) {
                                     this.play(targetEpisode.url, bestSource.site_name);
-                                    // 后台自动刷新集数和线路（不阻塞播放）
+                                    // 后台自动刷新集数（不阻塞播放）
                                     this.refreshEpisodes();
-                                    this.refreshSources();
                                     return;
                                 }
                             }
