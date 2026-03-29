@@ -309,6 +309,11 @@
                 continue;
             }
 
+            // 跳过时长超过广告上限的组（这些是内容组，不是广告）
+            if (groupDuration > AD_FILTER_CONFIG.maxAdDuration) {
+                continue;
+            }
+
             // 广告特征检测:
             // 1. 总时长在广告范围内（3-120秒）
             // 2. 分段数较少（通常 < 15）
@@ -320,8 +325,9 @@
             const isAdByRatio = groupDuration < maxDuration * 0.1;  // 时长不到主内容的 10%
 
             // 计算该组在整个视频中的位置
+            const gKeyIndex = groupKeys.indexOf(gKey);
             let positionBefore = 0;
-            for (let i = 0; i < groupKeys.indexOf(gKey); i++) {
+            for (let i = 0; i < gKeyIndex; i++) {
                 positionBefore += groupDurations[groupKeys[i]];
             }
             const positionPercent = totalDuration > 0 ? (positionBefore / totalDuration * 100) : 0;
@@ -330,20 +336,17 @@
             const isAtStart = positionBefore < 10;  // 开头10秒内
             const isAtEnd = positionPercent > 90;   // 结尾10%
 
-            // 新增：中间位置广告检测（针对 1080 资源站等中插广告）
-            // 策略：只要不是主内容组，且时长在广告范围内，就认为是广告
-            // 理由：正常 M3U8 不会有多个 discontinuity 分组，如果有，非主内容的短分组大概率是广告
-            const isMidAd = isAdByDuration && isAdBySegmentCount && (groupDuration / totalDuration) < 0.1;
-
             // 调试日志
             log(`  💡 组 #${gKey} 分析: 时长${groupDuration.toFixed(1)}秒, 位置${positionBefore.toFixed(0)}秒(${positionPercent.toFixed(0)}%), ` +
                 `符合时长=${isAdByDuration}, 符合分段数=${isAdBySegmentCount}, 符合比例=${isAdByRatio}, ` +
-                `开头=${isAtStart}, 结尾=${isAtEnd}, 中插广告=${isMidAd}`);
+                `开头=${isAtStart}, 结尾=${isAtEnd}`);
 
             // 判断条件：满足广告时长范围 + 分段数条件，直接过滤
-            // 因为正常视频不会出现多个 discontinuity 分组，非主内容的分组就是广告
+            // 广告是动态插入的，CDN 每次播放时在 DISCONTINUITY 点插入不同的广告
+            // 非主内容的短分组就是广告
             if (isAdByDuration && isAdBySegmentCount) {
-                log(`🎯 检测到广告组 #${gKey}: ${group.length} 分段, ${groupDuration.toFixed(1)}秒, 位置: ${positionBefore.toFixed(0)}秒`);
+                log(`🎯 检测到广告组 #${gKey}: ${group.length} 分段, ${groupDuration.toFixed(1)}秒, 位置: ${positionBefore.toFixed(0)}秒` +
+                    (isAtStart ? ' [片头]' : '') + (isAtEnd ? ' [片尾]' : ''));
                 group.forEach(seg => adSegmentIndices.add(seg.index));
             }
         }
@@ -753,10 +756,15 @@
                     const ranges = window._adSkipRanges;
 
                     if (ranges && ranges.length > 0) {
+                        // 动态广告插入可能导致实际播放时间与 M3U8 分析时间有偏差
+                        // 提前 5 秒开始检测，确保不会因为计时偏差漏过广告
+                        const TOLERANCE = 5;
                         for (const range of ranges) {
-                            if (currentTime >= range.start && currentTime < range.end) {
-                                const skipTo = range.end;
-                                console.log(`[广告过滤] ⏭️ 广告跳转: ${currentTime.toFixed(1)}s → ${skipTo.toFixed(1)}s`);
+                            if (currentTime >= (range.start - TOLERANCE) && currentTime < range.end) {
+                                const skipTo = range.end + 1; // +1s 确保跳过广告结束边界
+                                const mins = Math.floor(currentTime / 60);
+                                const secs = Math.floor(currentTime % 60);
+                                console.log(`[广告过滤] ⏭️ 广告跳转: ${mins}分${secs}秒 (${currentTime.toFixed(1)}s) → ${skipTo.toFixed(1)}s`);
                                 _skipCooldown = true;
                                 video.currentTime = skipTo;
 
