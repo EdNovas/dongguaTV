@@ -129,7 +129,7 @@
 
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js" defer></script>
-    <script data-cfasync="false" src="libs/js/ad-filter.js?v=2.6" defer></script>
+    <script data-cfasync="false" src="libs/js/ad-filter.js?v=3.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
 
@@ -6765,11 +6765,8 @@
                             ]
                         });
 
-                        // 🛡️ 独立广告检测（不修改 HLS.js，仅分析 M3U8）
-                        if (window.AdFilter && window.AdFilter.analyzeStreamUrl) {
-                            window.AdFilter.analyzeStreamUrl(finalUrl);
-                            console.log('[播放器] 🛡️ 已启动独立广告检测');
-                        }
+                        // 🛡️ 广告过滤通过 XHR 拦截器自动工作（ad-filter.js installXHRInterceptor）
+                        // 无需手动调用，HLS.js 请求 M3U8 时自动过滤广告分段
 
                         // 监听倍速变化，更新 UI
                         if (dp.video) {
