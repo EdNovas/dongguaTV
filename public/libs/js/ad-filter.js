@@ -605,99 +605,104 @@
      * 安装 XHR 拦截器 —— 核心广告过滤机制
      * 
      * HLS.js 使用 XMLHttpRequest 获取 M3U8 播放列表。
-     * 我们通过覆写 responseText/response 的 getter，
-     * 在 HLS.js 读取响应时自动 strip 掉广告分段。
+     * 我们在 open() 中检测 .m3u8 请求，然后用 Object.defineProperty
+     * 在该 XHR 实例上 shadow responseText/response 属性。
      * 
-     * 原理：不修改事件回调，而是修改数据本身。
-     * 无论 HLS.js 用 onload 还是 addEventListener，
-     * 读取 xhr.responseText 时拿到的就是过滤后的内容。
+     * 当 HLS.js 的回调读取 xhr.responseText 时，会自动获得过滤后的内容。
+     * 这样无论 HLS.js 用 onload、onreadystatechange 还是 addEventListener，
+     * 都能获得过滤后的 M3U8。
      */
     function installXHRInterceptor() {
         if (window._adFilterXHRInstalled) return;
         window._adFilterXHRInstalled = true;
 
-        const _origOpen = XMLHttpRequest.prototype.open;
+        // 保存原始 responseText/response 的 getter
+        const responseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
+        const responseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
+        const originalOpen = XMLHttpRequest.prototype.open;
 
-        // 1. 拦截 open() 记录请求 URL
-        XMLHttpRequest.prototype.open = function (method, url, ...args) {
-            this._adFilterUrl = (typeof url === 'string') ? url : '';
-            return _origOpen.call(this, method, url, ...args);
-        };
+        XMLHttpRequest.prototype.open = function (method, url) {
+            // 保存 URL 用于检测
+            this._adFilterUrl = url;
 
-        // 2. 覆写 responseText getter（在原型上）
-        //    HLS.js 读取 xhr.responseText 时，自动返回过滤后的内容
-        const _origResponseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
-        const _origResponseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
+            // 检测 .m3u8 请求
+            const isM3U8 = typeof url === 'string' && /\.m3u8/i.test(url);
 
-        if (_origResponseTextDesc && _origResponseTextDesc.get) {
-            Object.defineProperty(XMLHttpRequest.prototype, 'responseText', {
-                get: function () {
-                    const rawText = _origResponseTextDesc.get.call(this);
-                    return _filterIfM3U8(this, rawText);
-                },
-                configurable: true
-            });
-        }
+            if (isM3U8 && AD_FILTER_CONFIG.enabled) {
+                var _filteredCache = null;
+                var _lastRawText = null;
+                var xhr = this;
 
-        if (_origResponseDesc && _origResponseDesc.get) {
-            Object.defineProperty(XMLHttpRequest.prototype, 'response', {
-                get: function () {
-                    const rawResponse = _origResponseDesc.get.call(this);
-                    // response 可能是 string 也可能是其他类型
-                    if (typeof rawResponse === 'string') {
-                        return _filterIfM3U8(this, rawResponse);
+                // 核心：获取原始 responseText，过滤广告，缓存结果
+                var getFilteredText = function() {
+                    var rawText = responseTextDesc.get.call(xhr);
+                    if (!rawText || xhr.readyState !== 4) return rawText;
+
+                    // 缓存命中
+                    if (rawText === _lastRawText && _filteredCache !== null) {
+                        return _filteredCache;
                     }
-                    return rawResponse;
-                },
-                configurable: true
-            });
-        }
+                    _lastRawText = rawText;
 
-        /**
-         * 内部：判断是否为 M3U8 响应并过滤
-         */
-        function _filterIfM3U8(xhr, text) {
-            if (!text || !AD_FILTER_CONFIG.enabled) return text;
+                    // 跳过 master playlist
+                    if (rawText.indexOf('#EXT-X-STREAM-INF') !== -1) {
+                        _filteredCache = rawText;
+                        return rawText;
+                    }
 
-            const url = xhr._adFilterUrl || '';
-            const isM3U8 = /\.m3u8(\?.*)?$/i.test(url);
-            if (!isM3U8) return text;
+                    // 跳过没有 DISCONTINUITY 的播放列表
+                    if (rawText.indexOf('#EXT-X-DISCONTINUITY') === -1) {
+                        _filteredCache = rawText;
+                        return rawText;
+                    }
 
-            // 跳过 master playlist
-            if (text.includes('#EXT-X-STREAM-INF')) return text;
+                    try {
+                        var result = filterM3U8(rawText);
+                        if (result.adsRemoved > 0) {
+                            console.log('[广告过滤] 🎯 已从 M3U8 中移除 ' + result.adsRemoved + ' 个广告分段 (' + result.adsDuration.toFixed(0) + '秒)');
+                            console.log('[广告过滤] 📄 M3U8: ' + rawText.length + ' → ' + result.filtered.length + ' 字符');
+                            _filteredCache = result.filtered;
 
-            // 跳过没有 DISCONTINUITY 的（无广告）
-            if (!text.includes('#EXT-X-DISCONTINUITY')) return text;
-
-            // 使用缓存避免重复过滤同一响应
-            if (xhr._adFilterCache) return xhr._adFilterCache;
-
-            try {
-                const result = filterM3U8(text);
-
-                if (result.adsRemoved > 0) {
-                    console.log(`[广告过滤] 🎯 已从 M3U8 中移除 ${result.adsRemoved} 个广告分段 (${result.adsDuration.toFixed(0)}秒)`);
-                    console.log(`[广告过滤] 📄 M3U8 过滤: ${text.length} → ${result.filtered.length} 字符`);
-
-                    xhr._adFilterCache = result.filtered;
-
-                    // 播放器通知
-                    if (AD_FILTER_CONFIG.showNotification) {
-                        setTimeout(() => {
-                            if (window.dp && window.dp.notice) {
-                                window.dp.notice(`🛡️ 已过滤 ${result.adsRemoved} 个广告分段 (${result.adsDuration.toFixed(0)}秒)`, 3000);
+                            // 播放器通知（只通知一次）
+                            if (AD_FILTER_CONFIG.showNotification && !xhr._adNotified) {
+                                xhr._adNotified = true;
+                                setTimeout(function() {
+                                    if (window.dp && window.dp.notice) {
+                                        window.dp.notice('🛡️ 已过滤 ' + result.adsRemoved + ' 个广告 (' + result.adsDuration.toFixed(0) + '秒)', 3000);
+                                    }
+                                }, 1500);
                             }
-                        }, 1000);
+                        } else {
+                            _filteredCache = rawText;
+                        }
+                    } catch (e) {
+                        console.error('[广告过滤] M3U8 过滤错误:', e);
+                        _filteredCache = rawText;
                     }
 
-                    return result.filtered;
-                }
-            } catch (e) {
-                console.error('[广告过滤] M3U8 过滤错误:', e);
+                    return _filteredCache;
+                };
+
+                // 在实例上 shadow responseText 和 response 属性
+                Object.defineProperty(this, 'responseText', {
+                    get: getFilteredText,
+                    configurable: true
+                });
+
+                Object.defineProperty(this, 'response', {
+                    get: function () {
+                        var rt = xhr.responseType;
+                        if (rt === '' || rt === 'text') {
+                            return getFilteredText();
+                        }
+                        return responseDesc.get.call(xhr);
+                    },
+                    configurable: true
+                });
             }
 
-            return text;
-        }
+            return originalOpen.apply(this, arguments);
+        };
 
         console.log('[广告过滤] ✅ XHR 拦截器已安装 — M3U8 广告将在加载时自动过滤');
     }
