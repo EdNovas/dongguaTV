@@ -329,11 +329,15 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
     }
 
     // 输出保留的分段组（TS 分段直连 CDN，不走代理）
-    for (const g of keptGroups) {
+    // 组与组之间保留 DISCONTINUITY，告知解码器重置时间戳（防止音画不同步）
+    for (let gi = 0; gi < keptGroups.length; gi++) {
+        if (gi > 0) {
+            output.push('#EXT-X-DISCONTINUITY');
+        }
+        const g = keptGroups[gi];
         for (const line of g.segments) {
             const trimmed = line.trim();
             if (trimmed === '' || trimmed.startsWith('#')) {
-                // 标签行 → URI="" 中的 key 文件仍走代理
                 if (trimmed.includes('URI="')) {
                     output.push(line.replace(/URI="([^"]+)"/g, (match, uri) => {
                         const absoluteUrl = resolveUrl(uri, baseOrigin, basePath);
@@ -343,7 +347,6 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
                     output.push(line);
                 }
             } else {
-                // TS/媒体 URL → 直连 CDN（不走代理，提升速度）
                 const absoluteUrl = resolveUrl(trimmed, baseOrigin, basePath);
                 output.push(absoluteUrl);
             }
