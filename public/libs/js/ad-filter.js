@@ -730,8 +730,6 @@
             if (window.dp && window.dp.video) {
                 clearInterval(checkPlayer);
 
-                let lastKnownGoodTime = 0;
-                let adDetected = false;
                 let _skipCooldown = false;  // 防止重复跳过
 
                 // 配置的开头跳过
@@ -744,10 +742,12 @@
                     });
                 }
 
-                // 🔧 广告自动跳过：到达广告时间点就直接跳转
-                window.dp.video.addEventListener('timeupdate', function () {
+                // 🔧 广告自动跳过：使用 dp.on('timeupdate') 而不是 video.addEventListener
+                // dp.on 在 switchVideo 后仍然有效，video.addEventListener 会随 video 元素被替换而丢失
+                window.dp.on('timeupdate', function () {
+                    if (!AD_FILTER_CONFIG.enabled || _skipCooldown) return;
                     const video = window.dp.video;
-                    if (!video || _skipCooldown) return;
+                    if (!video) return;
 
                     const currentTime = video.currentTime;
                     const ranges = window._adSkipRanges;
@@ -756,7 +756,7 @@
                         for (const range of ranges) {
                             if (currentTime >= range.start && currentTime < range.end) {
                                 const skipTo = range.end;
-                                log(`⏭️ 广告跳转: ${currentTime.toFixed(1)}s → ${skipTo.toFixed(1)}s`);
+                                console.log(`[广告过滤] ⏭️ 广告跳转: ${currentTime.toFixed(1)}s → ${skipTo.toFixed(1)}s`);
                                 _skipCooldown = true;
                                 video.currentTime = skipTo;
 
@@ -771,7 +771,7 @@
                     }
                 });
 
-                log('✅ 广告跳过检测已启用 (跳过模式)');
+                console.log('[广告过滤] ✅ 广告跳过检测已启用 (dp.on timeupdate)');
             }
         }, 500);
     }
