@@ -129,7 +129,7 @@
 
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js" defer></script>
-    <script data-cfasync="false" src="libs/js/ad-filter.js?v=3.1" defer></script>
+    <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
 
@@ -6716,6 +6716,7 @@
                 play(url) {
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
+                    this._proxyRetried = false;    // 重置代理重试标记
 
                     // 🔆 播放时保持屏幕常亮
                     this.requestWakeLock();
@@ -6733,17 +6734,45 @@
                         console.log('[播放器] 🌐 使用代理播放:', finalUrl.substring(0, 80) + '...');
                     }
 
-                    const setupErrorHandling = () => {
-                        // 监听播放错误，自动切换到下一个可用线路
-                        dp.on('error', () => {
-                            this.handlePlaybackError();
-                        });
+                    // 🛡️ 广告过滤：通过 Cloudflare Worker 代理过滤 DISCONTINUITY 广告标签
+                    // CF Worker 在边缘节点运行，不会被 CDN 屏蔽
+                    // 仅对直接 M3U8 URL 生效（非已经通过代理的 URL）
+                    let adFilterProxyUsed = false;
+                    const originalUrl = finalUrl;  // 保存原始 URL 供代理失败时回退
+                    const isDirectM3U8 = url && url.includes('.m3u8') && !(this.currentSource && this.currentSource._useProxy);
+                    if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && this.corsProxyUrl) {
+                        finalUrl = this.corsProxyUrl + '/?url=' + encodeURIComponent(finalUrl);
+                        adFilterProxyUsed = true;
+                        console.log('[播放器] 🛡️ 广告过滤: M3U8 路由到 CF Worker 代理');
+                    } else if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && !this.corsProxyUrl) {
+                        console.warn('[播放器] ⚠️ 广告过滤已启用但未配置 CORS_PROXY_URL，无法过滤');
+                    }
 
-                        // 监听 HLS 错误
+                    const setupErrorHandling = () => {
+                        // 统一错误处理函数（dp.error 和 video.error 都会触发）
+                        const handleError = (source) => {
+                            // 正在进行代理回退重试时，忽略所有错误（等待重试结果）
+                            if (this._proxyRetrying) {
+                                console.log('[播放器] ⏳ 代理回退中，忽略错误 (' + source + ')');
+                                return;
+                            }
+                            // 如果使用了广告过滤代理，先回退到直连重试
+                            if (adFilterProxyUsed && !this._proxyRetried) {
+                                this._proxyRetried = true;
+                                this._proxyRetrying = true;
+                                console.log('[播放器] 🛡️ 代理播放失败，回退直连:', originalUrl.substring(0, 60));
+                                dp.switchVideo({ url: originalUrl, type: 'hls' });
+                                // 3秒后解除锁定（足够 switchVideo 完成加载）
+                                setTimeout(() => { this._proxyRetrying = false; }, 3000);
+                                return;
+                            }
+                            this.handlePlaybackError();
+                        };
+
+                        dp.on('error', () => handleError('dp'));
+
                         if (dp.video) {
-                            dp.video.addEventListener('error', () => {
-                                this.handlePlaybackError();
-                            });
+                            dp.video.addEventListener('error', () => handleError('video'));
                         }
                     };
 
@@ -6765,8 +6794,8 @@
                             ]
                         });
 
-                        // 🛡️ 广告过滤通过 XHR 拦截器自动工作（ad-filter.js installXHRInterceptor）
-                        // 无需手动调用，HLS.js 请求 M3U8 时自动过滤广告分段
+                        // 🛡️ 广告过滤通过服务端 M3U8 代理工作（/api/m3u8-proxy）
+                        // M3U8 URL 已在 play() 中路由到代理，DISCONTINUITY 标签在服务端被移除
 
                         // 监听倍速变化，更新 UI
                         if (dp.video) {
@@ -7734,11 +7763,7 @@
                         dp.switchVideo({ url: finalUrl, type: 'hls' });
                         console.log('[进度记忆-切换] switchVideo 已调用' + (finalUrl !== url ? ' (代理模式)' : ''));
 
-                        // 🛡️ 切换视频后重新分析广告（直接使用 M3U8 URL，不依赖 blob src）
-                        if (window.AdFilter && window.AdFilter.analyzeStreamUrl) {
-                            window.AdFilter.analyzeStreamUrl(finalUrl);
-                            console.log('[播放器] 🛡️ 已启动独立广告检测 (切换)');
-                        }
+                        // 🛡️ 广告过滤已在 CF Worker 完成（M3U8 URL 已通过 corsProxyUrl 路由）
 
                         // 恢复新视频的进度
                         const restoreHandler = () => {

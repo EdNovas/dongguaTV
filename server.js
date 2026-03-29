@@ -1028,7 +1028,55 @@ app.get('/api/tmdb-proxy', async (req, res) => {
     }
 });
 
-// M3U8 代理 - 用于广告过滤分析（绕过 CORS 限制）
+// 诊断：测试服务端是否能访问 CDN
+app.get('/api/m3u8-proxy-test', async (req, res) => {
+    const url = req.query.url;
+    if (!url) return res.json({ error: 'Missing url param' });
+
+    const startTime = Date.now();
+    try {
+        const resp = await axios.get(url, {
+            timeout: 8000,
+            responseType: 'text',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                'Accept': '*/*',
+                'Referer': url,
+                'Origin': new URL(url).origin
+            },
+            maxRedirects: 5,
+            validateStatus: () => true  // 不抛出 HTTP 错误
+        });
+        const elapsed = Date.now() - startTime;
+        res.json({
+            ok: true,
+            status: resp.status,
+            statusText: resp.statusText,
+            elapsed: elapsed + 'ms',
+            contentLength: resp.data ? resp.data.length : 0,
+            contentPreview: typeof resp.data === 'string' ? resp.data.substring(0, 300) : 'non-string',
+            headers: {
+                'content-type': resp.headers['content-type'],
+                'server': resp.headers['server']
+            }
+        });
+    } catch (err) {
+        const elapsed = Date.now() - startTime;
+        res.json({
+            ok: false,
+            elapsed: elapsed + 'ms',
+            errorCode: err.code,
+            errorMessage: err.message,
+            errorType: err.constructor.name,
+            response: err.response ? {
+                status: err.response.status,
+                statusText: err.response.statusText
+            } : null
+        });
+    }
+});
+
+// M3U8 代理 + 广告过滤 — 服务端过滤 DISCONTINUITY 广告分段
 app.get('/api/m3u8-proxy', async (req, res) => {
     const url = req.query.url;
     if (!url) {
@@ -1049,21 +1097,155 @@ app.get('/api/m3u8-proxy', async (req, res) => {
     }
 
     try {
-        const response = await axios.get(url, {
-            timeout: 8000,
-            responseType: 'text',
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        // 模拟浏览器请求头（CDN 通常会检查这些）
+        const fetchHeaders = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            'Referer': url,
+            'Origin': new URL(url).origin
+        };
+
+        const fetchM3U8 = async (targetUrl) => {
+            return axios.get(targetUrl, {
+                timeout: 10000,
+                responseType: 'text',
+                headers: fetchHeaders,
+                maxRedirects: 5
+            });
+        };
+
+        const response = await fetchM3U8(url);
+
+        let content = response.data;
+        const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
+
+        // 如果是主播放列表，自动解析第一个变体流
+        if (content.includes('#EXT-X-STREAM-INF')) {
+            const lines = content.split('\n');
+            let variantUrl = '';
+            for (let i = 0; i < lines.length; i++) {
+                if (lines[i].startsWith('#EXT-X-STREAM-INF')) {
+                    for (let j = i + 1; j < lines.length; j++) {
+                        const line = lines[j].trim();
+                        if (line && !line.startsWith('#')) {
+                            variantUrl = line.match(/^https?:\/\//i) ? line : baseUrl + line;
+                            break;
+                        }
+                    }
+                    if (variantUrl) break;
+                }
             }
-        });
-        res.set('Content-Type', 'text/plain; charset=utf-8');
+
+            if (variantUrl) {
+                console.log(`[M3U8 Proxy] 解析主播放列表 → ${variantUrl.substring(0, 80)}...`);
+                const variantResp = await fetchM3U8(variantUrl);
+                content = variantResp.data;
+                // 更新 baseUrl 为变体流的基路径
+                const variantBase = variantUrl.substring(0, variantUrl.lastIndexOf('/') + 1);
+                // 过滤广告并返回
+                const filtered = filterM3U8ServerSide(content, variantBase);
+                res.set('Content-Type', 'application/vnd.apple.mpegurl');
+                res.set('Access-Control-Allow-Origin', '*');
+                res.set('Cache-Control', 'no-cache');
+                return res.send(filtered);
+            }
+        }
+
+        // 媒体播放列表直接过滤
+        const filtered = filterM3U8ServerSide(content, baseUrl);
+        res.set('Content-Type', 'application/vnd.apple.mpegurl');
+        res.set('Access-Control-Allow-Origin', '*');
         res.set('Cache-Control', 'no-cache');
-        res.send(response.data);
+        res.send(filtered);
+
     } catch (err) {
-        console.error(`[M3U8 Proxy] Failed: ${url.substring(0, 80)}`, err.message);
-        res.status(502).json({ error: 'Failed to fetch M3U8', details: err.message });
+        console.warn(`[M3U8 Proxy] 代理失败: ${url.substring(0, 80)} — ${err.message}`);
+        res.set('Access-Control-Allow-Origin', '*');
+        res.status(502).json({ error: 'Proxy fetch failed', message: err.message });
     }
 });
+
+/**
+ * 服务端 M3U8 广告过滤
+ * 策略：
+ * 1. 移除所有 #EXT-X-DISCONTINUITY 标签（广告插入的标记）
+ * 2. 将相对 URL 转换为绝对 URL（因为 HLS.js 会相对于代理 URL 解析）
+ * 参考：https://github.com/eraycc/m3u8-proxy-script
+ */
+function filterM3U8ServerSide(content, baseUrl) {
+    if (!content || !content.includes('#EXTM3U')) {
+        return content;
+    }
+
+    const resolveUrl = (base, relative) => {
+        if (/^https?:\/\//i.test(relative)) return relative;
+        if (relative.startsWith('/')) {
+            try {
+                const u = new URL(base);
+                return `${u.origin}${relative}`;
+            } catch (e) { return base + relative; }
+        }
+        return base + relative;
+    };
+
+    const lines = content.split('\n');
+    const output = [];
+    let removedCount = 0;
+    let isNextLineSegment = false;
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        // 跳过空行
+        if (!line) continue;
+
+        // 移除所有 DISCONTINUITY 标签
+        if (line === '#EXT-X-DISCONTINUITY') {
+            removedCount++;
+            continue;
+        }
+
+        // 处理 EXT-X-KEY（加密流）— 重写 URI 为绝对路径
+        if (line.startsWith('#EXT-X-KEY')) {
+            output.push(line.replace(/URI="([^"]+)"/, (match, uri) => {
+                return `URI="${resolveUrl(baseUrl, uri)}"`;
+            }));
+            continue;
+        }
+
+        // 处理 EXT-X-MAP（初始化段）— 重写 URI 为绝对路径
+        if (line.startsWith('#EXT-X-MAP')) {
+            output.push(line.replace(/URI="([^"]+)"/, (match, uri) => {
+                return `URI="${resolveUrl(baseUrl, uri)}"`;
+            }));
+            continue;
+        }
+
+        // 标记分段行
+        if (line.startsWith('#EXTINF')) {
+            isNextLineSegment = true;
+            output.push(line);
+            continue;
+        }
+
+        // 处理分段 URL — 转换为绝对路径
+        if (isNextLineSegment && !line.startsWith('#')) {
+            output.push(resolveUrl(baseUrl, line));
+            isNextLineSegment = false;
+            continue;
+        }
+
+        // 其他行直接保留
+        output.push(line);
+    }
+
+    if (removedCount > 0) {
+        console.log(`[M3U8 Proxy] 已移除 ${removedCount} 个 DISCONTINUITY 标签`);
+    }
+
+    return output.join('\n');
+}
 
 // 1. 获取站点列表
 app.get('/api/sites', async (req, res) => {

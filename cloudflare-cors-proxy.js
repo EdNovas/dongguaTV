@@ -178,33 +178,226 @@ async function handleProxyRequest(request, targetUrlParam, currentOrigin) {
 }
 
 /**
- * 重写 m3u8 内容，将里面的 URL 改为经过代理的 URL
- * 这样 ts 分片请求也会经过代理，解决防盗链问题
+ * 重写 m3u8 内容：
+ * 1. 过滤 SSAI 广告分段（整组移除）
+ * 2. 将 URL 改为经过代理的 URL（解决防盗链）
+ * 
+ * 广告过滤策略（v2.2 from KI）：
+ *   - 先提取全局 M3U8 头部标签
+ *   - 按 DISCONTINUITY 将分段分成多个"组"
+ *   - 广告组特征：3-120秒 且 <15个分段 → 整组移除
+ *   - 保留所有非广告组（可能有多个主内容组）
  */
 function rewriteM3u8(content, baseUrl, proxyOrigin) {
-    const lines = content.split('\n');
     const baseOrigin = baseUrl.origin;
     const basePath = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf('/') + 1);
+    const lines = content.split('\n');
 
-    return lines.map(line => {
-        const trimmedLine = line.trim();
+    // ===== 检查是否是主播放列表（含 #EXT-X-STREAM-INF）=====
+    // 主播放列表不包含广告分段，只做 URL 重写
+    const hasStreamInf = lines.some(l => l.trim().startsWith('#EXT-X-STREAM-INF'));
+    if (hasStreamInf) {
+        return rewriteMasterPlaylist(lines, baseOrigin, basePath, proxyOrigin);
+    }
 
-        // 跳过注释行和空行
-        if (trimmedLine.startsWith('#') || trimmedLine === '') {
-            // 但检查 URI= 属性（如 #EXT-X-KEY 中的加密密钥 URL）
-            if (trimmedLine.includes('URI="')) {
-                return line.replace(/URI="([^"]+)"/g, (match, uri) => {
-                    const absoluteUrl = resolveUrl(uri, baseOrigin, basePath);
-                    return `URI="${proxyOrigin}/?url=${encodeURIComponent(absoluteUrl)}"`;
-                });
-            }
-            return line;
+    // ===== 子播放列表：过滤广告 =====
+
+    // 第一步：提取全局头部标签（在第一个 #EXTINF 或 #EXT-X-DISCONTINUITY 之前的标签）
+    const globalHeaders = [];
+    let bodyStartIdx = 0;
+
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed.startsWith('#EXTINF:') || trimmed === '#EXT-X-DISCONTINUITY') {
+            bodyStartIdx = i;
+            break;
+        }
+        // 跳过广告相关元标签
+        if (trimmed.startsWith('#EXT-X-CUE') || trimmed.startsWith('#EXT-X-DATERANGE') ||
+            trimmed.startsWith('#EXT-X-SCTE35')) {
+            continue;
+        }
+        if (trimmed === '#EXT-X-ENDLIST') continue;
+        if (trimmed === '' && i < 3) { globalHeaders.push(lines[i]); continue; }
+        if (trimmed.startsWith('#') || trimmed === '') {
+            globalHeaders.push(lines[i]);
+        }
+        bodyStartIdx = i + 1;
+    }
+
+    // 第二步：按 DISCONTINUITY 分组
+    const groups = [];
+    let currentGroup = { segments: [], duration: 0, segCount: 0 };
+
+    for (let i = bodyStartIdx; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+
+        // 跳过广告元标签
+        if (trimmed.startsWith('#EXT-X-CUE-OUT') || trimmed.startsWith('#EXT-X-CUE-IN') ||
+            trimmed.startsWith('#EXT-X-CUE') || trimmed.startsWith('#EXT-X-DATERANGE') ||
+            trimmed.startsWith('#EXT-X-SCTE35')) {
+            continue;
         }
 
-        // 处理媒体 URL（ts 分片或子 m3u8）
-        const absoluteUrl = resolveUrl(trimmedLine, baseOrigin, basePath);
-        return `${proxyOrigin}/?url=${encodeURIComponent(absoluteUrl)}`;
-    }).join('\n');
+        // DISCONTINUITY → 推入当前组，开始新组
+        if (trimmed === '#EXT-X-DISCONTINUITY') {
+            if (currentGroup.segCount > 0) {
+                groups.push(currentGroup);
+            }
+            currentGroup = { segments: [], duration: 0, segCount: 0 };
+            continue;
+        }
+
+        // ENDLIST → 跳过（最后统一加）
+        if (trimmed === '#EXT-X-ENDLIST') continue;
+
+        // EXTINF → 分段
+        if (trimmed.startsWith('#EXTINF:')) {
+            const durMatch = trimmed.match(/#EXTINF:([\d.]+)/);
+            const dur = durMatch ? parseFloat(durMatch[1]) : 0;
+            currentGroup.duration += dur;
+            currentGroup.segCount++;
+            currentGroup.segments.push(lines[i]);
+            // 下一行是 URL
+            if (i + 1 < lines.length) {
+                i++;
+                currentGroup.segments.push(lines[i]);
+            }
+            continue;
+        }
+
+        // 空行或其他标签 → 放入当前组
+        if (trimmed !== '') {
+            currentGroup.segments.push(lines[i]);
+        }
+    }
+
+    // 最后一组
+    if (currentGroup.segCount > 0) {
+        groups.push(currentGroup);
+    }
+
+    // 如果只有一组或无组，不需要过滤
+    if (groups.length <= 1) {
+        return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
+    }
+
+    // 第三步：过滤广告组
+    const keptGroups = [];
+    let adsRemoved = 0;
+    let adDuration = 0;
+
+    for (const g of groups) {
+        // 广告特征：3-120秒 且 <15个分段
+        const isAd = g.duration >= 3 && g.duration <= 120 && g.segCount < 15;
+
+        if (isAd) {
+            adsRemoved++;
+            adDuration += g.duration;
+        } else {
+            keptGroups.push(g);
+        }
+    }
+
+    // 如果没有过滤掉任何组，直接做 URL 重写
+    if (adsRemoved === 0) {
+        return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
+    }
+
+    // 第四步：重建 M3U8
+    const output = [];
+
+    // 输出全局头部（跳过 TARGETDURATION，后面重新计算）
+    let maxSegDur = 0;
+    for (const g of keptGroups) {
+        for (const line of g.segments) {
+            const t = line.trim();
+            if (t.startsWith('#EXTINF:')) {
+                const m = t.match(/#EXTINF:([\d.]+)/);
+                if (m) maxSegDur = Math.max(maxSegDur, Math.ceil(parseFloat(m[1])));
+            }
+        }
+    }
+
+    for (const line of globalHeaders) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#EXT-X-TARGETDURATION')) {
+            output.push(`#EXT-X-TARGETDURATION:${maxSegDur || 4}`);
+        } else {
+            output.push(line);
+        }
+    }
+
+    // 输出保留的分段组（TS 分段直连 CDN，不走代理）
+    for (const g of keptGroups) {
+        for (const line of g.segments) {
+            const trimmed = line.trim();
+            if (trimmed === '' || trimmed.startsWith('#')) {
+                // 标签行 → URI="" 中的 key 文件仍走代理
+                if (trimmed.includes('URI="')) {
+                    output.push(line.replace(/URI="([^"]+)"/g, (match, uri) => {
+                        const absoluteUrl = resolveUrl(uri, baseOrigin, basePath);
+                        return `URI="${proxyOrigin}/?url=${encodeURIComponent(absoluteUrl)}"`;
+                    }));
+                } else {
+                    output.push(line);
+                }
+            } else {
+                // TS/媒体 URL → 直连 CDN（不走代理，提升速度）
+                const absoluteUrl = resolveUrl(trimmed, baseOrigin, basePath);
+                output.push(absoluteUrl);
+            }
+        }
+    }
+
+    output.push('#EXT-X-ENDLIST');
+
+    console.log(`[AdFilter] Removed ${adsRemoved} ad groups (${adDuration.toFixed(1)}s), kept ${keptGroups.length} content groups (${groups.length} total)`);
+
+    return output.join('\n');
+}
+
+/**
+ * 主播放列表（含 #EXT-X-STREAM-INF）→ 只做 URL 重写
+ */
+function rewriteMasterPlaylist(lines, baseOrigin, basePath, proxyOrigin) {
+    const output = [];
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed === '' || trimmed.startsWith('#')) {
+            output.push(lines[i]);
+        } else {
+            // 子播放列表 URL → 代理重写
+            const absoluteUrl = resolveUrl(trimmed, baseOrigin, basePath);
+            output.push(`${proxyOrigin}/?url=${encodeURIComponent(absoluteUrl)}`);
+        }
+    }
+    return output.join('\n');
+}
+
+/**
+ * 纯 URL 重写（无广告过滤，TS 直连 CDN）
+ */
+function rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin) {
+    const output = [];
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed === '' || trimmed.startsWith('#')) {
+            if (trimmed.includes('URI="')) {
+                output.push(lines[i].replace(/URI="([^"]+)"/g, (match, uri) => {
+                    const absoluteUrl = resolveUrl(uri, baseOrigin, basePath);
+                    return `URI="${proxyOrigin}/?url=${encodeURIComponent(absoluteUrl)}"`;
+                }));
+            } else {
+                output.push(lines[i]);
+            }
+        } else {
+            // TS/媒体分段 → 直连 CDN
+            const absoluteUrl = resolveUrl(trimmed, baseOrigin, basePath);
+            output.push(absoluteUrl);
+        }
+    }
+    return output.join('\n');
 }
 
 /**

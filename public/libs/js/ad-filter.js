@@ -1,22 +1,22 @@
 /**
- * M3U8 广告过滤模块 v2.0
+ * M3U8 广告过滤模块 v3.1
  * 
- * 基于 M3U8 播放列表分析，自动检测和跳过广告分段
+ * 架构：Cloudflare Worker 边缘代理过滤
+ * M3U8 URL 通过 CORS_PROXY_URL (CF Worker) 路由：
+ *   1. CF Worker 获取原始 M3U8 内容
+ *   2. 移除所有 #EXT-X-DISCONTINUITY 标签（广告插入标记）
+ *   3. 将相对 URL 重写为代理 URL（TS 分片也经过 Worker）
+ *   4. 返回干净的 M3U8 给 HLS.js
  * 
- * 广告检测方法:
- * 1. #EXT-X-DISCONTINUITY 标签后的短分段（通常是广告）
- * 2. 不同域名的分段（混入的广告CDN）
- * 3. 极短分段序列（5-30秒的广告）
- * 4. 基于域名黑名单的分段过滤
+ * 客户端模块负责：
+ * - 提供 isEnabled() 供 play() 函数决定是否路由到代理
+ * - 广告过滤 UI 开关（设置面板中的切换按钮）
+ * - 设置持久化（localStorage）
  * 
- * 测试验证的资源站:
- * - 暴风资源 (p.bvvvvvvvvv1f.com) - 使用 #EXT-X-DISCONTINUITY
- * - 1080资源 (yzzy.play-cdn17.com) - 使用 #EXT-X-DISCONTINUITY  
- * - 魔都资源 (play.modujx10.com) - 使用 #EXT-X-DISCONTINUITY
- * - 豪华资源 (play.hhuus.com) - 无广告（AES-128加密）
+ * 参考：https://github.com/eraycc/m3u8-proxy-script
  * 
  * @author DongguaTV
- * @version 2.0.0
+ * @version 3.1.0
  */
 
 (function () {
@@ -601,111 +601,6 @@
         }
     }
 
-    /**
-     * 安装 XHR 拦截器 —— 核心广告过滤机制
-     * 
-     * HLS.js 使用 XMLHttpRequest 获取 M3U8 播放列表。
-     * 我们在 open() 中检测 .m3u8 请求，然后用 Object.defineProperty
-     * 在该 XHR 实例上 shadow responseText/response 属性。
-     * 
-     * 当 HLS.js 的回调读取 xhr.responseText 时，会自动获得过滤后的内容。
-     * 这样无论 HLS.js 用 onload、onreadystatechange 还是 addEventListener，
-     * 都能获得过滤后的 M3U8。
-     */
-    function installXHRInterceptor() {
-        if (window._adFilterXHRInstalled) return;
-        window._adFilterXHRInstalled = true;
-
-        // 保存原始 responseText/response 的 getter
-        const responseTextDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'responseText');
-        const responseDesc = Object.getOwnPropertyDescriptor(XMLHttpRequest.prototype, 'response');
-        const originalOpen = XMLHttpRequest.prototype.open;
-
-        XMLHttpRequest.prototype.open = function (method, url) {
-            // 保存 URL 用于检测
-            this._adFilterUrl = url;
-
-            // 检测 .m3u8 请求
-            const isM3U8 = typeof url === 'string' && /\.m3u8/i.test(url);
-
-            if (isM3U8 && AD_FILTER_CONFIG.enabled) {
-                var _filteredCache = null;
-                var _lastRawText = null;
-                var xhr = this;
-
-                // 核心：获取原始 responseText，过滤广告，缓存结果
-                var getFilteredText = function() {
-                    var rawText = responseTextDesc.get.call(xhr);
-                    if (!rawText || xhr.readyState !== 4) return rawText;
-
-                    // 缓存命中
-                    if (rawText === _lastRawText && _filteredCache !== null) {
-                        return _filteredCache;
-                    }
-                    _lastRawText = rawText;
-
-                    // 跳过 master playlist
-                    if (rawText.indexOf('#EXT-X-STREAM-INF') !== -1) {
-                        _filteredCache = rawText;
-                        return rawText;
-                    }
-
-                    // 跳过没有 DISCONTINUITY 的播放列表
-                    if (rawText.indexOf('#EXT-X-DISCONTINUITY') === -1) {
-                        _filteredCache = rawText;
-                        return rawText;
-                    }
-
-                    try {
-                        var result = filterM3U8(rawText);
-                        if (result.adsRemoved > 0) {
-                            console.log('[广告过滤] 🎯 已从 M3U8 中移除 ' + result.adsRemoved + ' 个广告分段 (' + result.adsDuration.toFixed(0) + '秒)');
-                            console.log('[广告过滤] 📄 M3U8: ' + rawText.length + ' → ' + result.filtered.length + ' 字符');
-                            _filteredCache = result.filtered;
-
-                            // 播放器通知（只通知一次）
-                            if (AD_FILTER_CONFIG.showNotification && !xhr._adNotified) {
-                                xhr._adNotified = true;
-                                setTimeout(function() {
-                                    if (window.dp && window.dp.notice) {
-                                        window.dp.notice('🛡️ 已过滤 ' + result.adsRemoved + ' 个广告 (' + result.adsDuration.toFixed(0) + '秒)', 3000);
-                                    }
-                                }, 1500);
-                            }
-                        } else {
-                            _filteredCache = rawText;
-                        }
-                    } catch (e) {
-                        console.error('[广告过滤] M3U8 过滤错误:', e);
-                        _filteredCache = rawText;
-                    }
-
-                    return _filteredCache;
-                };
-
-                // 在实例上 shadow responseText 和 response 属性
-                Object.defineProperty(this, 'responseText', {
-                    get: getFilteredText,
-                    configurable: true
-                });
-
-                Object.defineProperty(this, 'response', {
-                    get: function () {
-                        var rt = xhr.responseType;
-                        if (rt === '' || rt === 'text') {
-                            return getFilteredText();
-                        }
-                        return responseDesc.get.call(xhr);
-                    },
-                    configurable: true
-                });
-            }
-
-            return originalOpen.apply(this, arguments);
-        };
-
-        console.log('[广告过滤] ✅ XHR 拦截器已安装 — M3U8 广告将在加载时自动过滤');
-    }
 
     /**
      * 注入广告过滤开关到设置面板 (可从外部调用)
@@ -864,6 +759,7 @@
         filterM3U8,
         parseM3U8,
         isAdDomain,
+        isEnabled: () => AD_FILTER_CONFIG.enabled,
         enable: () => {
             AD_FILTER_CONFIG.enabled = true;
             try { localStorage.setItem('donggua_ad_filter_enabled', 'true'); } catch (e) { }
@@ -881,15 +777,13 @@
             AD_FILTER_CONFIG.skipFirstSegments = seconds > 0;
             AD_FILTER_CONFIG.firstSegmentSkipDuration = seconds;
         },
-        // 导出 initUI 供外部调用 (如 index.html 中的设置菜单监听)
         initUI: injectAdFilterUI
     };
 
     // 初始化
-    log('🚀 广告过滤模块 v2.0 加载中...');
+    log('🚀 广告过滤模块 v3.1 加载中...');
+    log('📡 架构: Cloudflare Worker 边缘代理过滤 (CORS_PROXY_URL)');
     loadSettings();
-    // XHR 拦截器必须在 HLS.js 加载之前安装
-    installXHRInterceptor();
     createSettingsUI();
 
     log(`📊 配置: 启用=${AD_FILTER_CONFIG.enabled}, DISCONTINUITY过滤=${AD_FILTER_CONFIG.skipDiscontinuityAds}`);
