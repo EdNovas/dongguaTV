@@ -614,28 +614,25 @@
         try {
             console.log(`[广告过滤] 🔍 开始分析 M3U8: ${url.substring(0, 100)}...`);
             
-            // 1. 获取主播放列表
-            let masterResp;
-            try {
-                masterResp = await fetch(url, { mode: 'cors' });
-            } catch (fetchErr) {
-                console.warn(`[广告过滤] ⚠️ M3U8 fetch 失败 (可能CORS限制): ${fetchErr.message}`);
-                // 尝试无 CORS 模式
-                try {
-                    masterResp = await fetch(url, { mode: 'no-cors' });
-                    console.warn('[广告过滤] ⚠️ no-cors 模式无法读取响应内容，广告检测跳过');
-                    return;
-                } catch (e2) {
-                    console.warn('[广告过滤] ⚠️ M3U8 完全无法访问，广告检测跳过');
-                    return;
+            // 通过服务端代理获取 M3U8（绕过 CORS 限制）
+            async function fetchM3U8(m3u8Url) {
+                const proxyUrl = `/api/m3u8-proxy?url=${encodeURIComponent(m3u8Url)}`;
+                const resp = await fetch(proxyUrl);
+                if (!resp.ok) {
+                    const errData = await resp.json().catch(() => ({}));
+                    throw new Error(errData.error || `HTTP ${resp.status}`);
                 }
+                return await resp.text();
             }
             
-            if (!masterResp.ok) {
-                console.warn(`[广告过滤] ❌ 获取 M3U8 失败: HTTP ${masterResp.status}`);
+            // 1. 获取主播放列表
+            let masterText;
+            try {
+                masterText = await fetchM3U8(url);
+            } catch (fetchErr) {
+                console.warn(`[广告过滤] ⚠️ M3U8 获取失败: ${fetchErr.message}`);
                 return;
             }
-            const masterText = await masterResp.text();
             console.log(`[广告过滤] 📄 M3U8 内容长度: ${masterText.length} 字符`);
             
             // 2. 判断是主播放列表还是直接的分段列表
@@ -673,14 +670,9 @@
                 
                 console.log(`[广告过滤] 🔍 获取 level 播放列表: ${levelUrl.substring(0, 100)}...`);
                 try {
-                    const levelResp = await fetch(levelUrl);
-                    if (!levelResp.ok) {
-                        console.warn(`[广告过滤] ❌ 获取 level M3U8 失败: HTTP ${levelResp.status}`);
-                        return;
-                    }
-                    levelText = await levelResp.text();
+                    levelText = await fetchM3U8(levelUrl);
                 } catch (levelErr) {
-                    console.warn(`[广告过滤] ⚠️ level M3U8 fetch 失败: ${levelErr.message}`);
+                    console.warn(`[广告过滤] ⚠️ level M3U8 获取失败: ${levelErr.message}`);
                     return;
                 }
             }

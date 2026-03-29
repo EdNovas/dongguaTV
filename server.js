@@ -1028,6 +1028,43 @@ app.get('/api/tmdb-proxy', async (req, res) => {
     }
 });
 
+// M3U8 代理 - 用于广告过滤分析（绕过 CORS 限制）
+app.get('/api/m3u8-proxy', async (req, res) => {
+    const url = req.query.url;
+    if (!url) {
+        return res.status(400).json({ error: 'Missing url parameter' });
+    }
+
+    // 安全检查：只允许 .m3u8 URL
+    try {
+        const parsedUrl = new URL(url);
+        if (!parsedUrl.pathname.endsWith('.m3u8') && !parsedUrl.pathname.includes('.m3u8')) {
+            return res.status(400).json({ error: 'Only .m3u8 URLs are allowed' });
+        }
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            return res.status(400).json({ error: 'Invalid protocol' });
+        }
+    } catch (e) {
+        return res.status(400).json({ error: 'Invalid URL' });
+    }
+
+    try {
+        const response = await axios.get(url, {
+            timeout: 8000,
+            responseType: 'text',
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        res.set('Content-Type', 'text/plain; charset=utf-8');
+        res.set('Cache-Control', 'no-cache');
+        res.send(response.data);
+    } catch (err) {
+        console.error(`[M3U8 Proxy] Failed: ${url.substring(0, 80)}`, err.message);
+        res.status(502).json({ error: 'Failed to fetch M3U8', details: err.message });
+    }
+});
+
 // 1. 获取站点列表
 app.get('/api/sites', async (req, res) => {
     let sitesData = null;
