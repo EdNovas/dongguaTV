@@ -6545,27 +6545,55 @@
 
                 // 🔄 强制刷新线路列表（重新测速）
                 async refreshSources() {
-                    if (!this.currentGroup || !this.currentGroup.sources || this.isTestingSources) return;
+                    if (!this.currentGroup || this.isTestingSources) return;
                     this.refreshingSources = true;
                     this.isTestingSources = true;
-                    console.log('[刷新线路] 开始重新测速...');
+                    console.log('[刷新线路] 开始完整重新搜索...');
 
                     try {
-                        // 重置所有 source 的延迟和测速类型
-                        this.currentGroup.sources.forEach(s => {
-                            s.latency = undefined;
-                            s._testType = undefined;
-                            s._cachedDetail = undefined;
-                        });
+                        const searchName = this.currentGroup.name;
+                        if (!searchName) {
+                            console.error('[刷新线路] 没有视频名称，无法搜索');
+                            return;
+                        }
 
+                        // 记住当前选中的资源站信息和集数
+                        const currentSiteKey = this.currentSource?.site_key;
+                        const currentEpName = this.currentEpisodeName || this.episodeList?.find(ep => ep.url === this.currentUrl)?.name;
+
+                        // 完整重新搜索
+                        const res = await fetch(`/api/search?wd=${encodeURIComponent(searchName)}&nocache=1`);
+                        const data = await res.json();
+
+                        if (!data.list || data.list.length === 0) {
+                            console.log('[刷新线路] 重新搜索未找到结果');
+                            return;
+                        }
+
+                        // 找到同名影片的搜索结果
+                        const matched = data.list.filter(item =>
+                            item.vod_name === searchName || item.vod_name?.trim() === searchName?.trim()
+                        );
+                        const results = matched.length > 0 ? matched : data.list;
+
+                        // 更新资源站列表
+                        this.currentGroup.sources = results.map(item => ({
+                            site_key: item.site_key,
+                            site_name: item.site_name,
+                            vod_id: item.vod_id,
+                            vod_name: item.vod_name,
+                            vod_play_url: item.vod_play_url || '',
+                            latency: undefined,
+                            _testType: undefined,
+                            _cachedDetail: undefined
+                        }));
+
+                        console.log(`[刷新线路] 重新搜索完成，找到 ${this.currentGroup.sources.length} 个资源站`);
+
+                        // 并行测速所有新资源站
                         const sources = this.currentGroup.sources;
-                        const FAST_THRESHOLD = 600;
-                        const SLOW_THRESHOLD = 1500;
-
-                        // 并行测速所有线路
                         const latencyPromises = sources.map(async (source) => {
                             try {
-                                // 1. 获取详情
                                 const detailRes = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}&nocache=1`);
                                 const detailData = await detailRes.json();
                                 if (!detailData.list || detailData.list.length === 0) {
@@ -6576,7 +6604,6 @@
                                 source._cachedDetail = detail;
                                 source.vod_play_url = detail.vod_play_url;
 
-                                // 2. 提取视频URL进行测速
                                 let playUrl = detail.vod_play_url || '';
                                 if (playUrl.includes('$$$')) {
                                     const sets = playUrl.split('$$$');
@@ -6591,7 +6618,6 @@
                                     return source;
                                 }
 
-                                // 3. 混合内容检查
                                 if (window.location.protocol === 'https:' && videoUrl.startsWith('http:')) {
                                     const checkRes = await fetch(`/api/check?key=${source.site_key}`);
                                     const checkData = await checkRes.json();
@@ -6600,7 +6626,6 @@
                                     return source;
                                 }
 
-                                // 4. 用户端直接测速
                                 const startTime = Date.now();
                                 const controller = new AbortController();
                                 const timeoutId = setTimeout(() => controller.abort(), 5000);
@@ -6618,7 +6643,6 @@
                                     }
                                 } catch (fetchErr) {
                                     clearTimeout(timeoutId);
-                                    // 回退到服务器端测速
                                     try {
                                         const checkRes = await fetch(`/api/check?key=${source.site_key}`);
                                         const checkData = await checkRes.json();
@@ -6642,6 +6666,14 @@
                             const latB = typeof b.latency === 'number' ? b.latency : 9999;
                             return latA - latB;
                         });
+
+                        // 尝试恢复之前选中的资源站
+                        if (currentSiteKey) {
+                            const found = this.currentGroup.sources.find(s => s.site_key === currentSiteKey);
+                            if (found) {
+                                console.log('[刷新线路] 恢复之前的资源站:', found.site_name);
+                            }
+                        }
 
                         console.log('[刷新线路] 完成，最快线路:', this.currentGroup.sources[0]?.site_name, this.currentGroup.sources[0]?.latency + 'ms');
                     } catch (e) {
@@ -6736,21 +6768,8 @@
 
                         // 🛡️ 独立广告检测（不修改 HLS.js，仅分析 M3U8）
                         if (window.AdFilter && window.AdFilter.analyzeStreamUrl) {
-                            // 初次加载
                             window.AdFilter.analyzeStreamUrl(finalUrl);
                             console.log('[播放器] 🛡️ 已启动独立广告检测');
-                            // 监听 video src 变化（switchVideo 时自动触发）
-                            if (dp.video) {
-                                let _lastAnalyzedSrc = finalUrl;
-                                dp.on('loadedmetadata', () => {
-                                    const newSrc = dp.video.src || dp.video.currentSrc;
-                                    if (newSrc && newSrc !== _lastAnalyzedSrc) {
-                                        _lastAnalyzedSrc = newSrc;
-                                        window.AdFilter.analyzeStreamUrl(newSrc);
-                                        console.log('[播放器] 🛡️ 已启动独立广告检测 (切换)');
-                                    }
-                                });
-                            }
                         }
 
                         // 监听倍速变化，更新 UI
@@ -7718,6 +7737,12 @@
 
                         dp.switchVideo({ url: finalUrl, type: 'hls' });
                         console.log('[进度记忆-切换] switchVideo 已调用' + (finalUrl !== url ? ' (代理模式)' : ''));
+
+                        // 🛡️ 切换视频后重新分析广告（直接使用 M3U8 URL，不依赖 blob src）
+                        if (window.AdFilter && window.AdFilter.analyzeStreamUrl) {
+                            window.AdFilter.analyzeStreamUrl(finalUrl);
+                            console.log('[播放器] 🛡️ 已启动独立广告检测 (切换)');
+                        }
 
                         // 恢复新视频的进度
                         const restoreHandler = () => {
