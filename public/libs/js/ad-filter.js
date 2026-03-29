@@ -603,27 +603,47 @@
      * 完全不干扰 HLS.js —— 通过 fetch() 独立下载并解析 M3U8
      */
     async function analyzeStreamUrl(url) {
-        if (!AD_FILTER_CONFIG.enabled) return;
+        if (!AD_FILTER_CONFIG.enabled) {
+            console.log('[广告过滤] ⚠️ 广告过滤已禁用，跳过分析');
+            return;
+        }
         
         // 重置广告时间段
         window._adSkipRanges = null;
         
         try {
-            log(`🔍 独立分析 M3U8: ${url.substring(0, 80)}...`);
+            console.log(`[广告过滤] 🔍 开始分析 M3U8: ${url.substring(0, 100)}...`);
             
             // 1. 获取主播放列表
-            const masterResp = await fetch(url);
+            let masterResp;
+            try {
+                masterResp = await fetch(url, { mode: 'cors' });
+            } catch (fetchErr) {
+                console.warn(`[广告过滤] ⚠️ M3U8 fetch 失败 (可能CORS限制): ${fetchErr.message}`);
+                // 尝试无 CORS 模式
+                try {
+                    masterResp = await fetch(url, { mode: 'no-cors' });
+                    console.warn('[广告过滤] ⚠️ no-cors 模式无法读取响应内容，广告检测跳过');
+                    return;
+                } catch (e2) {
+                    console.warn('[广告过滤] ⚠️ M3U8 完全无法访问，广告检测跳过');
+                    return;
+                }
+            }
+            
             if (!masterResp.ok) {
-                log(`❌ 获取 M3U8 失败: ${masterResp.status}`);
+                console.warn(`[广告过滤] ❌ 获取 M3U8 失败: HTTP ${masterResp.status}`);
                 return;
             }
             const masterText = await masterResp.text();
+            console.log(`[广告过滤] 📄 M3U8 内容长度: ${masterText.length} 字符`);
             
             // 2. 判断是主播放列表还是直接的分段列表
             let levelText = masterText;
             
             if (masterText.includes('#EXT-X-STREAM-INF')) {
                 // 是主播放列表，需要提取 level URL
+                console.log('[广告过滤] 📋 检测到主播放列表 (多码率)，提取 level URL...');
                 const lines = masterText.split('\n');
                 let levelUrl = null;
                 for (let i = 0; i < lines.length; i++) {
@@ -641,7 +661,7 @@
                 }
                 
                 if (!levelUrl) {
-                    log('❌ 未找到 level URL');
+                    console.warn('[广告过滤] ❌ 未找到 level URL');
                     return;
                 }
                 
@@ -651,13 +671,18 @@
                     levelUrl = baseUrl + levelUrl;
                 }
                 
-                log(`🔍 获取 level 播放列表: ${levelUrl.substring(0, 80)}...`);
-                const levelResp = await fetch(levelUrl);
-                if (!levelResp.ok) {
-                    log(`❌ 获取 level M3U8 失败: ${levelResp.status}`);
+                console.log(`[广告过滤] 🔍 获取 level 播放列表: ${levelUrl.substring(0, 100)}...`);
+                try {
+                    const levelResp = await fetch(levelUrl);
+                    if (!levelResp.ok) {
+                        console.warn(`[广告过滤] ❌ 获取 level M3U8 失败: HTTP ${levelResp.status}`);
+                        return;
+                    }
+                    levelText = await levelResp.text();
+                } catch (levelErr) {
+                    console.warn(`[广告过滤] ⚠️ level M3U8 fetch 失败: ${levelErr.message}`);
                     return;
                 }
-                levelText = await levelResp.text();
             }
             
             // 3. 分析 level 播放列表，检测广告时间段
@@ -665,9 +690,13 @@
             
             if (result.adRanges.length > 0) {
                 window._adSkipRanges = result.adRanges;
-                log(`🎯 检测到 ${result.adRanges.length} 个广告时间段，总时长 ${result.adsDuration.toFixed(0)}秒`);
+                console.log(`[广告过滤] 🎯 检测到 ${result.adRanges.length} 个广告时间段，总时长 ${result.adsDuration.toFixed(0)}秒`);
                 result.adRanges.forEach((range, i) => {
-                    log(`   广告 #${i + 1}: ${range.start.toFixed(1)}s ~ ${range.end.toFixed(1)}s (${(range.end - range.start).toFixed(1)}s)`);
+                    const startMin = Math.floor(range.start / 60);
+                    const startSec = Math.floor(range.start % 60);
+                    const endMin = Math.floor(range.end / 60);
+                    const endSec = Math.floor(range.end % 60);
+                    console.log(`[广告过滤]    广告 #${i + 1}: ${startMin}分${startSec}秒 ~ ${endMin}分${endSec}秒 (${(range.end - range.start).toFixed(1)}秒)`);
                 });
                 
                 // 显示通知
@@ -684,11 +713,11 @@
                 stats.totalAdDuration += result.adsDuration;
                 stats.sessionsFiltered++;
             } else {
-                log('✅ 未检测到广告');
+                console.log('[广告过滤] ✅ 未检测到广告');
             }
             
         } catch (e) {
-            console.error('[广告过滤] analyzeStreamUrl 错误:', e);
+            console.error('[广告过滤] ❌ analyzeStreamUrl 异常:', e);
         }
     }
 
