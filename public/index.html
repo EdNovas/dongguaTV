@@ -4159,6 +4159,8 @@
         fetchClientPublicIP();
 
         let dp = null;
+        let _lastProgressSaveTime = 0;  // timeupdate 节流时间戳（每15秒保存一次）
+        let _rateChangeHandler = null;      // 倍速变化监听器（防止累积）
 
         // 💾 倍速恢复辅助 — 多次重试确保 HLS.js 不会重置
         function ensurePlaybackSpeed(player) {
@@ -4373,6 +4375,9 @@
                         this.updateHistoryScrollNeeded();
                     }, 150);
                 }, { passive: true });
+
+                // 🔋 timeupdate 事件驱动进度保存，无需 visibilitychange 管理
+                // 视频暂停/标签页隐藏时 timeupdate 自动停止触发
 
                 // 修复：点击任意地方关闭 DPlayer 右键菜单
                 document.addEventListener('click', (e) => {
@@ -5003,6 +5008,8 @@
                         progressTime: Math.round(progress) || 0,
                         progressDuration: Math.round(duration) || 0,
                         watchedAt: new Date().toISOString(),
+                        // 记住用户最后使用的资源站
+                        lastSourceKey: this.currentSource?.site_key || null,
                         // 保存播放所需的数据（用于直接播放）
                         groupData: groupData ? {
                             name: groupData.name,
@@ -5280,8 +5287,18 @@
                         proxySources.sort((a, b) => a.latency - b.latency);
                         otherSources.sort((a, b) => a.latency - b.latency);
 
-                        // 选择最佳资源
-                        let bestSource = directSources[0] || proxySources[0] || otherSources[0] || sourcesWithKey[0];
+                        // 选择最佳资源：优先使用用户上次选择的资源站
+                        let bestSource = null;
+                        if (item.lastSourceKey) {
+                            bestSource = sourcesWithKey.find(s => s.site_key === item.lastSourceKey);
+                            if (bestSource) {
+                                console.log('[观看历史] 恢复上次资源站:', bestSource.site_name);
+                            }
+                        }
+                        // 回退：按延迟排序选最快的
+                        if (!bestSource) {
+                            bestSource = directSources[0] || proxySources[0] || otherSources[0] || sourcesWithKey[0];
+                        }
                         const testTypeLabel = bestSource?._testType === 'direct' ? '🎬直连' : (bestSource?._testType === 'proxy' ? '🔀代理' : '📡服务器');
                         console.log('[观看历史] 选择资源站:', bestSource?.site_name, '延迟:', bestSource?.latency, '类型:', testTypeLabel);
 
@@ -6397,6 +6414,9 @@
                     this.showDetail = false;
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
+
+                    // 🧹 重置进度保存节流（timeupdate 随播放器销毁自动停止）
+                    _lastProgressSaveTime = 0;
 
                     // 释放屏幕常亮
                     this.releaseWakeLock();
@@ -7572,11 +7592,6 @@
                             try {
                                 const currentKey = getProgressKey();
                                 const saved = localStorage.getItem(currentKey);
-                                console.log('[进度记忆] canplay 触发, Key:', currentKey);
-                                console.log('[进度记忆] 存储数据:', saved);
-                                console.log('[进度记忆] 视频时长:', dp.video.duration);
-                                console.log('[进度记忆] 当前时间:', dp.video.currentTime);
-                                console.log('[进度记忆] 是否可seek:', dp.video.seekable.length > 0 ? `是 (${dp.video.seekable.start(0)}-${dp.video.seekable.end(0)})` : '否');
 
                                 if (saved) {
                                     const savedData = JSON.parse(saved);
@@ -7585,42 +7600,15 @@
                                     const now = new Date();
                                     const daysDiff = (now - savedDate) / (1000 * 60 * 60 * 24);
 
-                                    console.log('[进度记忆] 保存时间:', savedTime, '秒');
-                                    console.log('[进度记忆] 保存日期:', savedData.date, `(${daysDiff.toFixed(1)}天前)`);
-
                                     // 只恢复30天内的进度，且进度在有效范围内
                                     const isTimeOK = daysDiff < 30;
                                     const isMinOK = savedTime > 60;  // 至少看过1分钟
                                     const isMaxOK = dp.video.duration && savedTime < dp.video.duration - 120;  // 距离结尾>2分钟
 
-                                    console.log('[进度记忆] 检查: 30天内=' + isTimeOK + ', >1分钟=' + isMinOK + ', <结尾2分钟=' + isMaxOK);
-
                                     if (isTimeOK && isMinOK && isMaxOK) {
-                                        console.log('[进度记忆] ✅ 准备跳转到:', savedTime);
-
-                                        // 记录跳转前的时间
-                                        const beforeSeek = dp.video.currentTime;
-
                                         dp.seek(savedTime);
-
-                                        // 延迟检查跳转是否成功
-                                        setTimeout(() => {
-                                            const afterSeek = dp.video.currentTime;
-                                            console.log('[进度记忆] 跳转结果: 之前=' + beforeSeek.toFixed(1) + ', 目标=' + savedTime + ', 之后=' + afterSeek.toFixed(1));
-
-                                            if (Math.abs(afterSeek - savedTime) < 10) {
-                                                console.log('[进度记忆] ✅ 跳转成功!');
-                                            } else {
-                                                console.log('[进度记忆] ⚠️ 跳转可能失败，视频源可能不支持精确跳转');
-                                            }
-                                        }, 1000);
-
                                         dp.notice(`▶ 已恢复上次观看位置 ${Math.floor(savedTime / 60)}:${String(Math.floor(savedTime % 60)).padStart(2, '0')}`, 3000);
-                                    } else {
-                                        console.log('[进度记忆] ❌ 条件不满足，跳过恢复');
                                     }
-                                } else {
-                                    console.log('[进度记忆] 无保存记录');
                                 }
                             } catch (e) {
                                 console.log('[进度记忆] 恢复失败:', e);
@@ -7642,7 +7630,6 @@
                             const currentEp = this.episodeList?.find(ep => ep.url === this.currentUrl);
                             const episodeName = (this.episodeList?.length > 1 && currentEp) ? currentEp.name : null;
 
-                            console.log('[进度记忆] 当前集数:', episodeName, '当前URL:', this.currentUrl?.substring(0, 30));
 
                             // 如果距离结尾 < 2分钟，视为完播，清除进度
                             if (duration > 0 && currentTime > duration - 120) {
@@ -7657,7 +7644,6 @@
 
                             // 只有播放位置 > 1分钟才保存（防止从头播放的资源覆盖进度）
                             if (currentTime <= 60) {
-                                console.log('[进度记忆] 当前位置 < 1分钟，不保存进度和历史');
                                 return;
                             }
 
@@ -7667,7 +7653,6 @@
                                     date: new Date().toISOString()
                                 };
                                 localStorage.setItem(getProgressKey(), JSON.stringify(data));
-                                console.log('[进度记忆] 保存进度:', currentTime.toFixed(0), '秒, 集数:', episodeName);
 
                                 // 同时更新观看历史（只有进度 > 1分钟才更新，防止覆盖为0）
                                 if (movieName) {
@@ -7678,12 +7663,16 @@
                             }
                         };
 
-                        // 定时保存进度 (每15秒)
-                        const progressSaveInterval = setInterval(() => {
-                            if (dp.video && !dp.video.paused) {
+                        // 📡 基于 timeupdate 事件保存进度（每15秒节流）
+                        // 替代 setInterval：视频暂停时自动停止，无需手动管理定时器
+                        _lastProgressSaveTime = 0;
+                        dp.on('timeupdate', () => {
+                            const now = Date.now();
+                            if (now - _lastProgressSaveTime >= 15000) {
+                                _lastProgressSaveTime = now;
                                 saveProgress(dp.video.currentTime);
                             }
-                        }, 15000);
+                        });
 
                         // 暂停时保存
                         dp.on('pause', () => {
@@ -7755,36 +7744,22 @@
                         };
 
                         const progressKey = getProgressKey();
-                        console.log('[进度记忆-切换] Key:', progressKey);
-                        console.log('[进度记忆-切换] 已保存的数据:', localStorage.getItem(progressKey));
-
                         let progressRestored = false;
 
                         dp.switchVideo({ url: finalUrl, type: 'hls' });
-                        console.log('[进度记忆-切换] switchVideo 已调用' + (finalUrl !== url ? ' (代理模式)' : ''));
 
                         // 🛡️ 广告过滤已在 CF Worker 完成（M3U8 URL 已通过 corsProxyUrl 路由）
 
                         // 恢复新视频的进度
                         const restoreHandler = () => {
-                            console.log('[进度记忆-切换] canplay 事件触发!');
-                            console.log('[进度记忆-切换] progressRestored:', progressRestored);
-
                             // 💾 恢复倍速设置 (每次切换视频都检查)
                             ensurePlaybackSpeed(dp);
 
-                            if (progressRestored) {
-                                console.log('[进度记忆-切换] 已恢复过，跳过');
-                                return;
-                            }
+                            if (progressRestored) return;
                             progressRestored = true;
-
-                            console.log('[进度记忆-切换] 视频时长:', dp.video.duration);
-                            console.log('[进度记忆-切换] 当前时间:', dp.video.currentTime);
 
                             try {
                                 const saved = localStorage.getItem(progressKey);
-                                console.log('[进度记忆-切换] 读取存储:', saved);
 
                                 if (saved) {
                                     const savedData = JSON.parse(saved);
@@ -7792,49 +7767,44 @@
                                     const savedDate = new Date(savedData.date);
                                     const daysDiff = (new Date() - savedDate) / (1000 * 60 * 60 * 24);
 
-                                    console.log('[进度记忆-切换] 保存时间:', savedTime, '天数:', daysDiff.toFixed(1));
-
                                     const isTimeOK = daysDiff < 7;
                                     const isMinOK = savedTime > 10;
                                     const isMaxOK = dp.video.duration && savedTime < dp.video.duration - 30;
 
-                                    console.log('[进度记忆-切换] 检查: 7天内=' + isTimeOK + ', >10秒=' + isMinOK + ', <结尾=' + isMaxOK);
-
                                     if (isTimeOK && isMinOK && isMaxOK) {
                                         setTimeout(() => {
-                                            console.log('[进度记忆-切换] 执行 seek 到:', savedTime);
                                             dp.seek(savedTime);
                                             dp.notice(`▶ 已恢复上次观看位置`, 2000);
-
-                                            setTimeout(() => {
-                                                console.log('[进度记忆-切换] seek后当前时间:', dp.video.currentTime);
-                                            }, 1000);
                                         }, 500);
-                                    } else {
-                                        console.log('[进度记忆-切换] 条件不满足，跳过恢复');
                                     }
-                                } else {
-                                    console.log('[进度记忆-切换] 无保存记录');
                                 }
                             } catch (e) {
                                 console.log('[进度记忆-切换] 恢复失败:', e);
                             }
                         };
 
-                        dp.on('canplay', restoreHandler);
-                        console.log('[进度记忆-切换] canplay 监听器已添加');
+                        // 🧹 先移除旧的 canplay 监听器，防止每次切集累积
+                        // DPlayer 没有 off() 方法，使用原生 removeEventListener
+                        if (window._restoreCanplayHandler && dp.video) {
+                            dp.video.removeEventListener('canplay', window._restoreCanplayHandler);
+                        }
+                        window._restoreCanplayHandler = restoreHandler;
+                        dp.video.addEventListener('canplay', restoreHandler);
 
                         // 💾 重新绑定 ratechange 监听器（switchVideo 后 video 元素会更新）
-                        // 使用 DPlayer 的事件而非直接监听 video，确保兼容性
+                        // 使用命名函数引用，防止每次切集累积匿名监听器
                         setTimeout(() => {
                             if (dp.video) {
-                                dp.video.addEventListener('ratechange', () => {
+                                // 移除旧监听器
+                                if (_rateChangeHandler) {
+                                    dp.video.removeEventListener('ratechange', _rateChangeHandler);
+                                }
+                                // 创建新监听器
+                                _rateChangeHandler = () => {
                                     const speed = dp.video.playbackRate;
-                                    try {
-                                        localStorage.setItem('dplayer_speed', speed);
-                                        console.log('[倍速保存] 切换后保存倍速:', speed + 'x');
-                                    } catch (e) { }
-                                });
+                                    try { localStorage.setItem('dplayer_speed', speed); } catch (e) { }
+                                };
+                                dp.video.addEventListener('ratechange', _rateChangeHandler);
                             }
                         }, 100);
                     }
@@ -8227,8 +8197,8 @@
                         // 立即检查更新
                         reg.update();
 
-                        // 定期检查更新（每30分钟）
-                        setInterval(() => reg.update(), 30 * 60 * 1000);
+                        // 定期检查更新（每天一次）
+                        setInterval(() => reg.update(), 24 * 60 * 60 * 1000);
 
                         // 监听新版本安装
                         reg.addEventListener('updatefound', () => {
