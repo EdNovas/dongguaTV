@@ -282,7 +282,7 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
     }
 
-    // 第三步：过滤广告组
+    // 第三步：过滤广告组（基于 DISCONTINUITY 分组）
     const keptGroups = [];
     let adsRemoved = 0;
     let adDuration = 0;
@@ -297,6 +297,40 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         } else {
             keptGroups.push(g);
         }
+    }
+
+    // 第三步 B：清理组内嵌入的单条广告/追踪分段
+    // 例如：尾部 0.01s 的 unibet666.vip 追踪像素，或中间插入的跨域广告 URL
+    for (const g of keptGroups) {
+        const cleanedSegments = [];
+        for (let i = 0; i < g.segments.length; i++) {
+            const line = g.segments[i];
+            const trimmed = line.trim();
+
+            // 检查 EXTINF + 下一行 URL 的组合
+            if (trimmed.startsWith('#EXTINF:')) {
+                const durMatch = trimmed.match(/#EXTINF:([\d.]+)/);
+                const dur = durMatch ? parseFloat(durMatch[1]) : 0;
+                const nextLine = (i + 1 < g.segments.length) ? g.segments[i + 1].trim() : '';
+
+                // 判断是否为嵌入式广告/追踪分段：
+                // 1) 极短时长 (< 0.5s) 且目标是完整 URL（非相对路径 .ts）
+                // 2) URL 指向已知广告/赌博/追踪域名
+                const isTracker = dur < 0.5 && /^https?:\/\//i.test(nextLine) && !/\.ts(\?|$)/i.test(nextLine);
+                const isAdDomain = /^https?:\/\//i.test(nextLine) && /\.(vip|bet|casino|click|top|xyz|buzz)\//i.test(nextLine);
+
+                if (isTracker || isAdDomain) {
+                    // 跳过这个 EXTINF 和下一行的 URL
+                    adsRemoved++;
+                    adDuration += dur;
+                    i++; // 跳过 URL 行
+                    continue;
+                }
+            }
+
+            cleanedSegments.push(line);
+        }
+        g.segments = cleanedSegments;
     }
 
     // 如果没有过滤掉任何组，直接做 URL 重写
@@ -379,12 +413,30 @@ function rewriteMasterPlaylist(lines, baseOrigin, basePath, proxyOrigin) {
 }
 
 /**
- * 纯 URL 重写（无广告过滤，TS 直连 CDN）
+ * 纯 URL 重写（无 DISCONTINUITY 广告过滤，但仍清理嵌入式追踪分段）
  */
 function rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin) {
     const output = [];
+    let skippedCount = 0;
     for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
+
+        // 检查嵌入式广告/追踪分段
+        if (trimmed.startsWith('#EXTINF:')) {
+            const durMatch = trimmed.match(/#EXTINF:([\d.]+)/);
+            const dur = durMatch ? parseFloat(durMatch[1]) : 0;
+            const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
+
+            const isTracker = dur < 0.5 && /^https?:\/\//i.test(nextLine) && !/\.ts(\?|$)/i.test(nextLine);
+            const isAdDomain = /^https?:\/\//i.test(nextLine) && /\.(vip|bet|casino|click|top|xyz|buzz)\//i.test(nextLine);
+
+            if (isTracker || isAdDomain) {
+                skippedCount++;
+                i++; // 跳过 URL 行
+                continue;
+            }
+        }
+
         if (trimmed === '' || trimmed.startsWith('#')) {
             if (trimmed.includes('URI="')) {
                 output.push(lines[i].replace(/URI="([^"]+)"/g, (match, uri) => {
@@ -399,6 +451,9 @@ function rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin) {
             const absoluteUrl = resolveUrl(trimmed, baseOrigin, basePath);
             output.push(absoluteUrl);
         }
+    }
+    if (skippedCount > 0) {
+        console.log(`[AdFilter] rewriteUrlsOnly: removed ${skippedCount} inline tracker(s)`);
     }
     return output.join('\n');
 }
