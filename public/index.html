@@ -5254,6 +5254,14 @@
                     if (!item || !item.name) return;
                     console.log('[观看历史] 点击播放:', item.name, 'groupData:', !!item.groupData, 'episode:', item.episode);
 
+                    // 🛡️ 切换不同剧集时，销毁旧播放器，防止 Hls.js 残留旧流
+                    const isSwitchingShow = this.currentGroup?.name && this.currentGroup.name !== item.name;
+                    if (isSwitchingShow && dp) {
+                        console.log('[观看历史] 切换到不同剧集，销毁旧播放器实例');
+                        try { dp.destroy(); } catch(e) { console.warn('[观看历史] 销毁播放器异常:', e); }
+                        dp = null;
+                    }
+
                     // 如果有保存的 groupData，直接播放
                     if (item.groupData && item.groupData.sources && item.groupData.sources.length > 0) {
                         console.log('[观看历史] 使用保存的数据直接播放');
@@ -6532,6 +6540,7 @@
                             source.vod_content = detail.vod_content || detail.vod_blurb || '';
                             // 记住当前正在播放的集数
                             const currentEpName = this.episodeList?.find(ep => ep.url === this.currentUrl)?.name;
+                            const oldUrl = this.currentUrl;
                             // 重新解析集数列表（不自动切换集数，仅更新列表）
                             let playSource = detail.vod_play_url || '';
                             if (playSource.includes('$$$')) {
@@ -6544,6 +6553,16 @@
                             });
                             const newCount = this.episodeList.length;
                             console.log(`[刷新集数] 成功，${oldCount} → ${newCount} 集`);
+                            // 🛡️ 如果当前集数的 URL 已更新，自动切换到新 URL
+                            if (currentEpName && oldUrl) {
+                                const updatedEp = this.episodeList.find(ep => ep.name === currentEpName);
+                                if (updatedEp && updatedEp.url && updatedEp.url !== oldUrl) {
+                                    console.log('[刷新集数] 检测到 URL 更新，自动切换播放');
+                                    console.log('[刷新集数] 旧:', oldUrl.substring(0, 60));
+                                    console.log('[刷新集数] 新:', updatedEp.url.substring(0, 60));
+                                    this.play(updatedEp.url);
+                                }
+                            }
                             // 更新历史记录中的数据（防止下次从历史播放又用旧数据）
                             if (this.currentGroup) {
                                 const groupSource = this.currentGroup.sources?.find(s => s.site_key === source.site_key);
