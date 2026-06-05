@@ -282,14 +282,46 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
     }
 
+    // 计算每个分组的主机名（取组内第一个分段 URL 的 host）
+    const hostOfGroup = (g) => {
+        for (const line of g.segments) {
+            const t = line.trim();
+            if (t && !t.startsWith('#')) {
+                try { return new URL(resolveUrl(t, baseOrigin, basePath)).host; }
+                catch { return null; }
+            }
+        }
+        return null;
+    };
+
+    // 主内容主机 = 各主机所有分组的总时长最大者（真实正片通常集中在同一 CDN 主机）。
+    // 用"按主机累计时长"而非"单个最长分组"判定，避免一个超长广告组冒充主内容、
+    // 进而把真正的正片分组当成"不同主机"误删。
+    const hostDurations = {};
+    let mainHost = null, mainHostDur = -1;
+    for (const g of groups) {
+        const h = hostOfGroup(g);
+        if (!h) continue;
+        hostDurations[h] = (hostDurations[h] || 0) + g.duration;
+        if (hostDurations[h] > mainHostDur) { mainHostDur = hostDurations[h]; mainHost = h; }
+    }
+
     // 第三步：过滤广告组（基于 DISCONTINUITY 分组）
-    const keptGroups = [];
+    let keptGroups = [];
     let adsRemoved = 0;
     let adDuration = 0;
 
     for (const g of groups) {
-        // 广告特征：3-120秒 且 <15个分段
-        const isAd = g.duration >= 3 && g.duration <= 120 && g.segCount < 15;
+        const gHost = hostOfGroup(g);
+        const differentHost = gHost && mainHost && gHost !== mainHost;
+        // 时长/分段数符合广告特征：3-120秒 且 <15个分段
+        const durMatch = g.duration >= 3 && g.duration <= 120 && g.segCount < 15;
+
+        // 🛡️ 关键修复（防误删正片）：仅移除"与正片主机不同"的短分组
+        //    —— 这是典型的 SSAI 贴片广告（独立广告 CDN）。
+        //    与正片同主机的短分组（片头/片尾/recap/转场/码率切换）一律保留，
+        //    避免之前"按时长无差别判定"把 ~20 秒正片当广告剪掉。
+        const isAd = durMatch && differentHost;
 
         if (isAd) {
             adsRemoved++;
@@ -313,13 +345,8 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
                 const dur = durMatch ? parseFloat(durMatch[1]) : 0;
                 const nextLine = (i + 1 < g.segments.length) ? g.segments[i + 1].trim() : '';
 
-                // 判断是否为嵌入式广告/追踪分段：
-                // 1) 极短时长 (< 0.5s) 且目标是完整 URL（非相对路径 .ts）
-                // 2) URL 指向已知广告/赌博/追踪域名
-                const isTracker = dur < 0.5 && /^https?:\/\//i.test(nextLine) && !/\.ts(\?|$)/i.test(nextLine);
-                const isAdDomain = /^https?:\/\//i.test(nextLine) && /\.(vip|bet|casino|click|top|xyz|buzz)\//i.test(nextLine);
-
-                if (isTracker || isAdDomain) {
+                // 嵌入式广告/追踪像素（按主机名后缀判定，排除真实媒体，避免误删正片分段）
+                if (isInlineAdSegment(dur, nextLine)) {
                     // 跳过这个 EXTINF 和下一行的 URL
                     adsRemoved++;
                     adDuration += dur;
@@ -332,6 +359,11 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         }
         g.segments = cleanedSegments;
     }
+
+    // 移除清理后已无任何媒体分段的空组，避免重建时产生连续/孤立的 DISCONTINUITY
+    keptGroups = keptGroups.filter(g =>
+        g.segments.some(l => { const t = l.trim(); return t && !t.startsWith('#'); })
+    );
 
     // 如果没有过滤掉任何组，直接做 URL 重写
     if (adsRemoved === 0) {
@@ -427,10 +459,8 @@ function rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin) {
             const dur = durMatch ? parseFloat(durMatch[1]) : 0;
             const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
 
-            const isTracker = dur < 0.5 && /^https?:\/\//i.test(nextLine) && !/\.ts(\?|$)/i.test(nextLine);
-            const isAdDomain = /^https?:\/\//i.test(nextLine) && /\.(vip|bet|casino|click|top|xyz|buzz)\//i.test(nextLine);
-
-            if (isTracker || isAdDomain) {
+            // 嵌入式广告/追踪像素（按主机名后缀判定，排除真实媒体，避免误删正片分段）
+            if (isInlineAdSegment(dur, nextLine)) {
                 skippedCount++;
                 i++; // 跳过 URL 行
                 continue;
@@ -456,6 +486,26 @@ function rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin) {
         console.log(`[AdFilter] rewriteUrlsOnly: removed ${skippedCount} inline tracker(s)`);
     }
     return output.join('\n');
+}
+
+/**
+ * 判断单条分段是否为嵌入式广告/追踪像素（用于组内清理与无分组回退路径）。
+ *  - 极短时长(<0.5s)的非媒体绝对 URL = 追踪像素
+ *  - 主机名后缀命中已知赌博/广告 TLD，且本身不是真实媒体分段
+ * 仅按"主机名后缀"匹配（不按路径子串），并排除 .ts/.m4s/.mp4 等真实媒体，
+ * 避免误删托管在 .top/.xyz 等廉价 TLD 上的正常 CDN 分段。
+ */
+function isInlineAdSegment(dur, nextLine) {
+    if (!/^https?:\/\//i.test(nextLine)) return false;
+    const isMedia = /\.(ts|m4s|mp4|aac|m4a|m3u8|key)(\?|$)/i.test(nextLine);
+    // 极短的非媒体绝对 URL → 追踪像素
+    if (dur < 0.5 && !isMedia) return true;
+    // 真实媒体分段一律放行（即使域名后缀像广告）
+    if (isMedia) return false;
+    try {
+        const host = new URL(nextLine).hostname;
+        return /\.(vip|bet|casino|click|buzz)$/i.test(host);
+    } catch { return false; }
 }
 
 /**

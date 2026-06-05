@@ -4161,6 +4161,10 @@
         let dp = null;
         let _lastProgressSaveTime = 0;  // timeupdate 节流时间戳（每15秒保存一次）
         let _rateChangeHandler = null;      // 倍速变化监听器（防止累积）
+        // 🧭 导航令牌：每次切换剧集/打开/关闭详情时自增，用于作废上一部剧残留的
+        //    异步任务（refreshEpisodes / refreshSources / 测速探测 / 错误回退定时器），
+        //    防止旧剧的回调把内容灌进新剧的播放器（串剧）。
+        let _navSeq = 0;
 
         // 💾 倍速恢复辅助 — 多次重试确保 HLS.js 不会重置
         function ensurePlaybackSpeed(player) {
@@ -4770,15 +4774,42 @@
 
                 // 保存观看历史到 localStorage（并同步到云端）
                 saveWatchHistoryToStorage() {
+                    const store = (payload) => localStorage.setItem('donggua_watch_history', JSON.stringify(payload));
                     try {
-                        localStorage.setItem('donggua_watch_history', JSON.stringify(this.watchHistory));
-
-                        // 如果启用了同步，推送到服务器
-                        if (this.syncEnabled && this.syncToken) {
-                            this.pushHistoryToServer();
-                        }
+                        store(this.watchHistory);
                     } catch (e) {
-                        console.error('[观看历史] 保存失败:', e);
+                        // 🛡️ 配额超限时分级精简，避免静默丢失最新进度（合并完整线路列表后体积变大）
+                        console.warn('[观看历史] 本地存储超限，精简后重试:', e?.name || e);
+                        try {
+                            // 降级1：仅最近 8 条保留完整线路数据，其余去掉体积大的 vod_play_url/vod_content
+                            const slim = this.watchHistory.map((item, idx) => {
+                                if (idx < 8 || !item.groupData) return item;
+                                return {
+                                    ...item,
+                                    groupData: {
+                                        ...item.groupData,
+                                        sources: item.groupData.sources.map(s => ({
+                                            ...s, vod_play_url: '', vod_content: ''
+                                        }))
+                                    }
+                                };
+                            });
+                            store(slim);
+                            console.log('[观看历史] 已精简旧记录线路数据后保存');
+                        } catch (e2) {
+                            try {
+                                // 降级2：仅保留最近 15 条
+                                store(this.watchHistory.slice(0, 15));
+                                console.log('[观看历史] 已仅保留最近 15 条');
+                            } catch (e3) {
+                                console.error('[观看历史] 保存失败（本地存储已满）:', e3);
+                            }
+                        }
+                    }
+
+                    // 同步始终推送完整数据（服务器无本地配额限制）
+                    if (this.syncEnabled && this.syncToken) {
+                        this.pushHistoryToServer();
                     }
                 },
 
@@ -4999,6 +5030,22 @@
                     // 查找是否已存在
                     const existingIndex = this.watchHistory.findIndex(item => item.name === name);
 
+                    // 🔧 修复"历史记录资源列表不齐全"：currentGroup 是详情页打开瞬间的快照，
+                    //    流式搜索后续到达的线路不会并入这个被引用的对象。这里用最新的完整
+                    //    groupedList（反映当前完整 rawList）补齐缺失线路，已测速的线路保留其测速数据。
+                    if (groupData && Array.isArray(groupData.sources)) {
+                        const fresh = this.groupedList.find(g => g.name === name);
+                        if (fresh && fresh.sources.length > groupData.sources.length) {
+                            const existKeys = new Set(groupData.sources.map(s => s.site_key));
+                            const merged = groupData.sources.slice();
+                            fresh.sources.forEach(s => {
+                                if (s.site_key && !existKeys.has(s.site_key)) merged.push(s);
+                            });
+                            console.log('[观看历史] 补齐线路:', existKeys.size, '→', merged.length, '条');
+                            groupData = { ...groupData, sources: merged };
+                        }
+                    }
+
                     const historyItem = {
                         name: name,
                         poster: poster || '',
@@ -5023,7 +5070,10 @@
                                 site_name: s.site_name,
                                 site_key: s.site_key || (s.site_name + '_' + idx),  // 用于匹配高亮
                                 latency: s.latency || 500,  // 默认延迟
-                                _testType: s._testType || null  // 保存测速类型: direct/proxy/server
+                                _testType: s._testType || null,  // 保存测速类型: direct/proxy/server
+                                // 🔧 保留代理标记，否则只能通过代理访问的线路在历史回放时会被当成直连而播放失败
+                                _useProxy: s._useProxy || false,
+                                _proxyUrl: s._proxyUrl || null
                             }))
                         } : null
                     };
@@ -5253,6 +5303,11 @@
                 async playFromHistory(item) {
                     if (!item || !item.name) return;
                     console.log('[观看历史] 点击播放:', item.name, 'groupData:', !!item.groupData, 'episode:', item.episode);
+
+                    // 🧭 进入新剧：自增导航令牌，作废上一部剧残留的异步刷新/测速/回退定时器
+                    _navSeq++;
+                    this.refreshingEpisodes = false;
+                    this.isTestingSources = false;
 
                     // 🛡️ 切换不同剧集时，销毁旧播放器，防止 Hls.js 残留旧流
                     const isSwitchingShow = this.currentGroup?.name && this.currentGroup.name !== item.name;
@@ -6144,11 +6199,16 @@
                     };
                 },
                 async openDetail(group) {
+                    // 🧭 进入新剧详情：自增导航令牌并记录，用于作废本次测速期间被切换走的残留回调
+                    _navSeq++;
+                    const _openSeq = _navSeq;
+                    this.refreshingEpisodes = false;
                     this.currentGroup = group;
                     this.showDetail = true;
                     document.body.classList.add('detail-open');
                     this.isTestingSources = true;  // 开始测速
                     this.currentSource = null;  // 确保清空之前的选择
+                    this.currentUrl = '';        // 清空旧剧 URL，防止残留 refresh 误匹配
                     this.episodeList = [];
 
                     // 真实用户端测速：获取每个线路的视频URL，直接从用户端测试m3u8延迟
@@ -6162,6 +6222,7 @@
 
                     // 检查是否可以提前返回 - 优先用户端测速结果
                     const checkEarlyReturn = () => {
+                        if (_openSeq !== _navSeq) return;  // 🧭 已切换到别的剧，停止自动选源
                         if (hasAutoSelected) return;
 
                         // 优先检查用户端测速(direct)的快速线路
@@ -6179,6 +6240,7 @@
 
                     // 超时自动选择（优先用户端测速，其次服务器端）
                     const earlyReturnTimer = setTimeout(() => {
+                        if (_openSeq !== _navSeq) return;  // 🧭 已切换到别的剧，放弃超时自动选源
                         if (hasAutoSelected) return;
                         hasAutoSelected = true;
 
@@ -6379,6 +6441,8 @@
                     // 等待所有测速完成（后台继续）
                     await Promise.all(latencyPromises);
                     clearTimeout(earlyReturnTimer);
+                    // 🧭 测速期间用户可能已切换到别的剧（此时 isTestingSources 归 B 所有），丢弃本次结果
+                    if (_openSeq !== _navSeq) return;
                     this.isTestingSources = false;  // 测速完成
 
                     // 按延迟排序 (低到高)
@@ -6423,6 +6487,12 @@
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
 
+                    // 🧭 关闭详情：自增导航令牌，作废上一部剧残留的刷新/测速/回退定时器，
+                    //    防止下次打开别的剧时被旧剧的异步回调串剧
+                    _navSeq++;
+                    this.refreshingEpisodes = false;
+                    this.isTestingSources = false;
+
                     // 🧹 重置进度保存节流（timeupdate 随播放器销毁自动停止）
                     _lastProgressSaveTime = 0;
 
@@ -6454,6 +6524,7 @@
                 async switchSource(source) {
                     this.currentSource = source;
                     this.loadingDetail = true;
+                    const mySeq = _navSeq;  // 🧭 记录导航上下文（未缓存的源需 await 详情，期间可能切换剧集）
 
                     // 记住当前集数名称，切换后尝试保留（在清空之前获取！）
                     const previousEpName = this.episodeList?.find(ep => ep.url === this.currentUrl)?.name;
@@ -6483,6 +6554,13 @@
                             }
                         }
 
+                        // 🧭 await 期间用户可能已切换剧集：丢弃过期结果，防止把旧剧灌进当前播放器（串剧）
+                        if (mySeq !== _navSeq) {
+                            console.warn('[切换资源] 上下文已切换，丢弃本次结果');
+                            this.loadingDetail = false;
+                            return;
+                        }
+
                         if (detail) {
                             // 保存简介信息到当前源
                             this.currentSource.vod_content = detail.vod_content || detail.vod_blurb || '';
@@ -6496,6 +6574,10 @@
                 async refreshEpisodes() {
                     if (!this.currentSource || this.refreshingEpisodes) return;
                     this.refreshingEpisodes = true;
+                    // 🧭 记录发起时的导航上下文，await 完成后若用户已切换剧集/资源站则丢弃结果
+                    const mySeq = _navSeq;
+                    const reqSource = this.currentSource;
+                    const reqGroup = this.currentGroup;
                     try {
                         const source = this.currentSource;
                         let vodId = source.vod_id;
@@ -6524,13 +6606,17 @@
 
                         if (!vodId) {
                             console.warn('[刷新集数] 无法获取 vod_id，跳过刷新');
-                            this.refreshingEpisodes = false;
                             return;
                         }
 
                         // 带 nocache 参数，通知服务器跳过缓存
                         const res = await fetch(`/api/detail?site_key=${source.site_key}&id=${vodId}&nocache=1`);
                         const data = await res.json();
+                        // 🧭 await 期间用户可能已切换剧集/资源站：丢弃过期结果，避免串剧与集数列表被旧剧覆盖
+                        if (mySeq !== _navSeq || this.currentSource !== reqSource || this.currentGroup !== reqGroup) {
+                            console.warn('[刷新集数] 上下文已切换，丢弃本次刷新结果（防串剧）');
+                            return;
+                        }
                         if (data.list && data.list.length > 0) {
                             const detail = data.list[0];
                             const oldCount = this.episodeList.length;
@@ -6577,8 +6663,9 @@
                         }
                     } catch (e) {
                         console.error('[刷新集数] 失败:', e);
+                    } finally {
+                        this.refreshingEpisodes = false;
                     }
-                    this.refreshingEpisodes = false;
                 },
 
                 // 🔄 强制刷新线路列表（重新测速）
@@ -6587,6 +6674,9 @@
                     this.refreshingSources = true;
                     this.isTestingSources = true;
                     console.log('[刷新线路] 开始完整重新搜索...');
+                    // 🧭 记录发起时的导航上下文
+                    const mySeq = _navSeq;
+                    const reqGroup = this.currentGroup;
 
                     try {
                         const searchName = this.currentGroup.name;
@@ -6602,6 +6692,12 @@
                         // 完整重新搜索
                         const res = await fetch(`/api/search?wd=${encodeURIComponent(searchName)}&nocache=1`);
                         const data = await res.json();
+
+                        // 🧭 await 期间用户可能已切换剧集：丢弃过期结果，避免覆盖新剧的线路列表（防串剧）
+                        if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
+                            console.warn('[刷新线路] 上下文已切换，丢弃本次结果');
+                            return;
+                        }
 
                         if (!data.list || data.list.length === 0) {
                             console.log('[刷新线路] 重新搜索未找到结果');
@@ -6623,7 +6719,9 @@
                             vod_play_url: item.vod_play_url || '',
                             latency: undefined,
                             _testType: undefined,
-                            _cachedDetail: undefined
+                            _cachedDetail: undefined,
+                            _useProxy: false,
+                            _proxyUrl: null
                         }));
 
                         console.log(`[刷新线路] 重新搜索完成，找到 ${this.currentGroup.sources.length} 个资源站`);
@@ -6698,6 +6796,12 @@
 
                         await Promise.all(latencyPromises);
 
+                        // 🧭 测速期间用户可能已切换剧集：丢弃过期结果
+                        if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
+                            console.warn('[刷新线路] 测速完成时上下文已切换，丢弃');
+                            return;
+                        }
+
                         // 按延迟排序
                         this.currentGroup.sources.sort((a, b) => {
                             const latA = typeof a.latency === 'number' ? a.latency : 9999;
@@ -6716,9 +6820,10 @@
                         console.log('[刷新线路] 完成，最快线路:', this.currentGroup.sources[0]?.site_name, this.currentGroup.sources[0]?.latency + 'ms');
                     } catch (e) {
                         console.error('[刷新线路] 失败:', e);
+                    } finally {
+                        this.isTestingSources = false;
+                        this.refreshingSources = false;
                     }
-                    this.isTestingSources = false;
-                    this.refreshingSources = false;
                 },
 
                 // 解析剧集列表，尝试匹配指定集数
@@ -6756,6 +6861,8 @@
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
+                    const playSeq = _navSeq;       // 🧭 记录本次播放的导航上下文（供错误回退判断串剧）
+                    const isFreshPlayer = !dp;     // ▶ 是否新建播放器（决定如何触发首次播放）
 
                     // 🔆 播放时保持屏幕常亮
                     this.requestWakeLock();
@@ -6790,6 +6897,11 @@
                     const setupErrorHandling = () => {
                         // 统一错误处理函数（dp.error 和 video.error 都会触发）
                         const handleError = (source) => {
+                            // 🧭 已切换到别的剧 → 这是旧剧播放器残留的错误事件，直接忽略，防止把旧流切回当前播放器
+                            if (playSeq !== _navSeq) {
+                                console.log('[播放器] ⏭️ 忽略旧剧残留的错误事件 (' + source + ')');
+                                return;
+                            }
                             // 正在进行代理回退重试时，忽略所有错误（等待重试结果）
                             if (this._proxyRetrying) {
                                 console.log('[播放器] ⏳ 代理回退中，忽略错误 (' + source + ')');
@@ -7442,6 +7554,30 @@
                             }
                         });
 
+                        // 🔄 以"视频真实状态"为准同步中央/移动遮罩图标（修复切换资源后图标反向）
+                        //    dp.on('play') 可能在 HLS 未就绪时被乐观触发，导致图标与实际(暂停)相反；
+                        //    本函数直接读 dp.video.paused，由原生 play/playing/pause 事件与切换后重同步调用。
+                        window._syncPlayOverlays = () => {
+                            if (!dp || !dp.video) return;
+                            const paused = dp.video.paused;
+                            [desktopPlayOverlay, mobilePlayOverlay].forEach((ov) => {
+                                if (!ov) return;
+                                ov.innerHTML = paused ? '<i class="fas fa-play"></i>' : '<i class="fas fa-pause"></i>';
+                                ov.classList.toggle('pause-state', !paused);
+                            });
+                        };
+                        // 绑定到当前 video 元素的原生事件（switchVideo 会换/复用 video 元素，需重绑）。
+                        // remove 再 add，保证幂等，无论元素是否新建都不会重复绑定。
+                        window._bindOverlayVideoEvents = () => {
+                            if (!dp || !dp.video) return;
+                            const v = dp.video;
+                            ['play', 'playing', 'pause', 'ended', 'waiting', 'canplay'].forEach((ev) => {
+                                v.removeEventListener(ev, window._syncPlayOverlays);
+                                v.addEventListener(ev, window._syncPlayOverlays);
+                            });
+                        };
+                        window._bindOverlayVideoEvents();
+
                         // 点击中央按钮事件
                         mobilePlayOverlay.addEventListener('touchend', (e) => {
                             e.preventDefault(); // 阻止冒泡防止触发背景点击
@@ -7767,6 +7903,26 @@
 
                         dp.switchVideo({ url: finalUrl, type: 'hls' });
 
+                        // ▶ 修复"切换资源/集数后不自动播放 + 中央大按钮图标反向"：
+                        //   switchVideo 后 video 元素被替换且 HLS 尚未就绪，立刻 dp.play() 既无法真正播放，
+                        //   又会让 dp.on('play') 乐观地把中央按钮设成⏸而与实际(暂停)相反。
+                        //   改为：重绑遮罩的原生事件 → 等 loadedmetadata 就绪再播放 → 多次按真实状态同步图标。
+                        if (typeof window._bindOverlayVideoEvents === 'function') {
+                            window._bindOverlayVideoEvents();  // 幂等重绑到（可能已替换的）video 元素
+                        }
+                        const playAfterSwitch = () => {
+                            if (playSeq !== _navSeq) return;  // 🧭 已切换到别的剧，放弃
+                            dp.video.removeEventListener('loadedmetadata', playAfterSwitch);
+                            const pr = dp.play();
+                            if (pr && typeof pr.catch === 'function') pr.catch(() => { });
+                            if (typeof window._syncPlayOverlays === 'function') {
+                                window._syncPlayOverlays();
+                                setTimeout(window._syncPlayOverlays, 300);
+                            }
+                        };
+                        if (dp.video && dp.video.readyState >= 1) playAfterSwitch();
+                        else if (dp.video) dp.video.addEventListener('loadedmetadata', playAfterSwitch);
+
                         // 🛡️ 广告过滤已在 CF Worker 完成（M3U8 URL 已通过 corsProxyUrl 路由）
 
                         // 恢复新视频的进度
@@ -7827,7 +7983,8 @@
                             }
                         }, 100);
                     }
-                    dp.play();
+                    // 新建播放器：直接播放；切换资源/集数：由 else 分支的 playAfterSwitch 在就绪后播放
+                    if (isFreshPlayer) dp.play();
 
                     // 📺 TV 模式：自动全屏 + 添加控制栏按钮
                     if (this.isTVMode) {
@@ -8145,6 +8302,9 @@
                     // 避免重复触发
                     if (this.isAutoRetrying || this.playbackErrorCount > 1) return;
 
+                    // 🧭 记录发起时的导航上下文，1.5s 后若已切换剧集则放弃自动切换（防串剧）
+                    const mySeq = _navSeq;
+
                     // 获取当前线路索引
                     const allSources = this.availableSources;
                     const currentIndex = allSources.findIndex(s => s.site_key === this.currentSource?.site_key);
@@ -8167,6 +8327,8 @@
                         setTimeout(() => {
                             this.autoRetryMessage = '';  // 清除提示
                             this.isAutoRetrying = false;
+                            // 🧭 已切换到别的剧 → 放弃对旧剧的自动切源
+                            if (mySeq !== _navSeq) return;
                             this.switchSource(nextSource);
                         }, 1500);  // 显示提示1.5秒后切换
                     } else {
