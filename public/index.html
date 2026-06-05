@@ -144,13 +144,24 @@
         /* ♿ 尊重用户的"减少动态效果"系统偏好：大幅削弱动画/过渡，
            缓解前庭功能障碍/晕动症用户的不适（保留极短时长以不破坏交互反馈） */
         @media (prefers-reduced-motion: reduce) {
-            *, *::before, *::after {
+
+            *,
+            *::before,
+            *::after {
                 animation-duration: 0.01ms !important;
                 animation-iteration-count: 1 !important;
                 transition-duration: 0.01ms !important;
                 scroll-behavior: auto !important;
             }
         }
+        /* 🔗 分享面板社交按钮（YouTube 风格） */
+        .share-soc { background:none; border:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:7px; min-width:62px; color:#bbb; font-size:12px; padding:0; flex:0 0 auto; }
+        .share-soc .ico { width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:23px; color:#fff; transition:transform .15s; }
+        .share-soc:hover .ico { transform:scale(1.08); }
+        .share-soc:hover { color:#fff; }
+        .share-soc-row { display:flex; gap:14px; overflow-x:auto; padding:4px 2px 16px; -webkit-overflow-scrolling:touch; }
+        .share-soc-row::-webkit-scrollbar { height:0; }
+
         :root {
             --bg-color: #141414;
             --panel-bg: #1f1f1f;
@@ -1981,7 +1992,8 @@
 
         .source-pill {
             padding: 8px 16px;
-            min-height: 44px;            /* ♿ 移动端触控目标 ≥44px */
+            min-height: 44px;
+            /* ♿ 移动端触控目标 ≥44px */
             box-sizing: border-box;
             border-radius: 6px;
             background: #2a2a2a;
@@ -2022,7 +2034,8 @@
             border: 1px solid transparent;
             color: #ddd;
             padding: 12px 5px;
-            min-height: 44px;            /* ♿ 移动端触控目标 ≥44px */
+            min-height: 44px;
+            /* ♿ 移动端触控目标 ≥44px */
             box-sizing: border-box;
             display: flex;
             align-items: center;
@@ -3047,12 +3060,17 @@
                 </button>
             </div>
 
-            <!-- 注册引导 -->
-            <div id="register-link" class="login-register-link">
-                <span>还没有账号？</span>
-                <a href="https://domain.ednovas.xyz" target="_blank" rel="noopener noreferrer">
-                    <i class="fas fa-external-link-alt"></i> 注册机场账户
+            <!-- 购买引导 -->
+            <div id="register-link" class="login-register-link" style="text-align:center;">
+                <div style="font-size:13.5px; color:#ccc; line-height:1.8; margin-bottom:14px;">
+                    🎬 本站是 <b style="color:#fff;">机场套餐用户的专属影视福利</b><br>
+                    购买任意套餐 → 用机场账户登录 → 有效期内全站免费畅看
+                </div>
+                <a href="https://ednovas.me" target="_blank" rel="noopener noreferrer"
+                    style="display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg,#e50914,#b00610); color:#fff; padding:13px 30px; border-radius:26px; font-size:15px; font-weight:700; text-decoration:none; box-shadow:0 6px 20px rgba(229,9,20,.4);">
+                    <i class="fas fa-ticket-alt"></i> 购买套餐 · 立即解锁全站影视
                 </a>
+                <div style="font-size:12px; color:#888; margin-top:12px;">已购套餐？用上方「机场账户登录」即可观看</div>
             </div>
         </div>
     </div>
@@ -3131,8 +3149,8 @@
 
                 <!-- 横向滚动 -->
                 <div class="scroll-container">
-                    <button class="scroll-btn left" v-show="historyCanScrollLeft" @click="scrollHistoryRow(-1)" aria-label="向左滚动观看历史"><i
-                            class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <button class="scroll-btn left" v-show="historyCanScrollLeft" @click="scrollHistoryRow(-1)"
+                        aria-label="向左滚动观看历史"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                     <div class="hot-row" ref="watchHistoryRow" @scroll="onHistoryScroll">
                         <div class="history-card" v-for="(item, index) in watchHistory" :key="item.name + index">
                             <!-- 删除按钮 (放在 card 外层避免随缩放移动) -->
@@ -3165,8 +3183,8 @@
                             <div class="movie-date" style="font-size: 11px;">{{ formatWatchTime(item.watchedAt) }}</div>
                         </div>
                     </div>
-                    <button class="scroll-btn right" v-show="historyCanScrollRight" @click="scrollHistoryRow(1)" aria-label="向右滚动观看历史"><i
-                            class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                    <button class="scroll-btn right" v-show="historyCanScrollRight" @click="scrollHistoryRow(1)"
+                        aria-label="向右滚动观看历史"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 </div>
             </div>
 
@@ -3212,8 +3230,8 @@
                 <template v-if="rowLists[key] && rowLists[key].length > 0">
                     <!-- 收起状态：横向滚动 -->
                     <div class="scroll-container" v-show="!expandedRows[key]">
-                        <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]" aria-label="向左滚动"><i
-                                class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                        <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]"
+                            aria-label="向左滚动"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                         <div class="hot-row" :ref="key" @scroll="onRowScroll(key)">
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
                                 @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
@@ -3469,8 +3487,46 @@
 
         <!-- ★★★ 播放详情页 (影院布局) ★★★ -->
         <div class="detail-overlay" :class="{ active: showDetail }">
-            <div class="close-btn" tabindex="1" role="button" aria-label="关闭" @click="closeDetail" @keydown.enter="closeDetail"><i
-                    class="fas fa-times"></i></div>
+            <div class="close-btn" tabindex="1" role="button" aria-label="关闭" @click="closeDetail"
+                @keydown.enter="closeDetail"><i class="fas fa-times"></i></div>
+
+            <!-- 🔗 分享面板 -->
+            <div v-if="showSharePanel" @click.self="showSharePanel = false"
+                style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:2147483500; display:flex; align-items:center; justify-content:center; padding:20px;">
+                <div style="background:#1c1c1e; border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:22px; width:100%; max-width:480px; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
+                        <div style="font-size:16px; font-weight:bold; color:#fff;">
+                            <i class="fas fa-share-alt" style="color:#e50914; margin-right:8px;"></i>分享《{{ currentGroup && currentGroup.name }}》
+                        </div>
+                        <button @click="showSharePanel = false" aria-label="关闭" style="background:none; border:none; color:#888; font-size:22px; line-height:1; cursor:pointer;">&times;</button>
+                    </div>
+
+                    <!-- 社交平台快捷分享 -->
+                    <div class="share-soc-row">
+                        <button class="share-soc" @click="shareTo('wechat')"><span class="ico" style="background:#07c160;"><i class="fab fa-weixin"></i></span><div>微信</div></button>
+                        <button class="share-soc" @click="shareTo('qq')"><span class="ico" style="background:#12b7f5;"><i class="fab fa-qq"></i></span><div>QQ</div></button>
+                        <button class="share-soc" @click="shareTo('telegram')"><span class="ico" style="background:#229ed9;"><i class="fab fa-telegram"></i></span><div>Telegram</div></button>
+                        <button class="share-soc" @click="shareTo('whatsapp')"><span class="ico" style="background:#25d366;"><i class="fab fa-whatsapp"></i></span><div>WhatsApp</div></button>
+                        <button class="share-soc" @click="shareTo('facebook')"><span class="ico" style="background:#1877f2;"><i class="fab fa-facebook-f"></i></span><div>Facebook</div></button>
+                        <button class="share-soc" @click="shareTo('x')"><span class="ico" style="background:#000; border:1px solid #555;"><i class="fab fa-twitter"></i></span><div>X</div></button>
+                        <button class="share-soc" @click="shareTo('instagram')"><span class="ico" style="background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);"><i class="fab fa-instagram"></i></span><div>Instagram</div></button>
+                        <button class="share-soc" @click="shareTo('native')"><span class="ico" style="background:#444;"><i class="fas fa-ellipsis-h"></i></span><div>更多 App</div></button>
+                    </div>
+
+                    <!-- 复制链接 -->
+                    <div style="display:flex; gap:8px; margin-bottom:14px;">
+                        <input readonly :value="shareUrl" onclick="this.select()"
+                            style="flex:1; min-width:0; box-sizing:border-box; background:#2a2a2a; border:1px solid #3a3a3a; color:#ccc; border-radius:10px; padding:11px 12px; font-size:12px;">
+                        <button @click="confirmShare" style="background:linear-gradient(135deg,#e50914,#b00610); color:#fff; border:none; border-radius:10px; padding:11px 20px; font-weight:bold; cursor:pointer; white-space:nowrap;">复制</button>
+                    </div>
+
+                    <!-- 开始时间 -->
+                    <label v-if="shareSeconds > 0" style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#ddd; font-size:13px;">
+                        <input type="checkbox" v-model="shareIncludeTime" style="width:16px; height:16px; accent-color:#e50914;">
+                        <span>开始时间 <b style="color:#fff;">{{ formatSeconds(shareSeconds) }}</b></span>
+                    </label>
+                </div>
+            </div>
 
             <div class="player-layout" v-if="currentGroup">
 
@@ -3482,9 +3538,14 @@
                             正在播放: <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span>
                         </div>
                     </div>
-                    <button class="btn-cast" tabindex="2" @click="castVideo">
-                        <i class="fas fa-tv"></i> 一键投屏
-                    </button>
+                    <div style="display: flex; gap: 10px; align-items: center;">
+                        <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="分享">
+                            <i class="fas fa-share-alt"></i> 分享
+                        </button>
+                        <button class="btn-cast" tabindex="2" @click="castVideo">
+                            <i class="fas fa-tv"></i> 一键投屏
+                        </button>
+                    </div>
                 </div>
 
                 <!-- 2. 中部：超大播放器 -->
@@ -3517,7 +3578,8 @@
                     <div class="mb-4">
                         <div class="panel-title" style="display: flex; align-items: center;">
                             切换线路
-                            <span v-if="isTestingSources" style="font-size: 12px; color: #888; font-weight: normal; margin-left: 10px;">
+                            <span v-if="isTestingSources"
+                                style="font-size: 12px; color: #888; font-weight: normal; margin-left: 10px;">
                                 <i class="fas fa-spinner fa-spin"></i> 正在测速...
                             </span>
                             <span v-else @click="refreshSources"
@@ -4190,6 +4252,20 @@
         //    防止旧剧的回调把内容灌进新剧的播放器（串剧）。
         let _navSeq = 0;
 
+        // 🚦 并发池：逐批执行 worker，限制同时进行的请求数。
+        //    用于测速——测"全部"资源站以保留完整可用列表，但同时最多 limit 个，避免一次性几十个请求打满连接。
+        async function runWithConcurrency(items, limit, worker) {
+            let idx = 0;
+            const n = Math.max(1, Math.min(limit, items.length));
+            const runners = Array.from({ length: n }, async () => {
+                while (idx < items.length) {
+                    const i = idx++;
+                    try { await worker(items[i], i); } catch (e) { /* 单项失败不影响其余 */ }
+                }
+            });
+            await Promise.all(runners);
+        }
+
         // 💾 倍速恢复辅助 — 多次重试确保 HLS.js 不会重置
         function ensurePlaybackSpeed(player) {
             try {
@@ -4228,6 +4304,9 @@
                     refreshingEpisodes: false,  // 刷新集数中
                     refreshingSources: false,  // 刷新线路中
                     showInfoModal: false,  // 电影详情弹窗
+                    showSharePanel: false,   // 分享面板
+                    shareIncludeTime: false, // 是否带"从当前进度开始"
+                    shareSeconds: 0,         // 当前播放秒数（用于带时间分享）
                     infoModalData: null,   // 弹窗数据
                     TMDB_IMG_URL: TMDB_IMG_URL,  // 模板中使用
                     TMDB_BACKDROP_URL: TMDB_BACKDROP_URL,
@@ -4569,6 +4648,17 @@
                 };
             },
             computed: {
+                // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
+                shareUrl() {
+                    if (!this.currentGroup || !this.currentGroup.name) return location.origin + '/';
+                    let u = location.origin + '/?play=' + encodeURIComponent(this.currentGroup.name);
+                    const cur = (this.episodeList && this.episodeList.length > 1)
+                        ? this.episodeList.find(e => e.url === this.currentUrl) : null;
+                    if (cur && cur.name) u += '&ep=' + encodeURIComponent(cur.name);
+                    if (this.shareIncludeTime && this.shareSeconds > 0) u += '&t=' + this.shareSeconds;
+                    return u;
+                },
+                canNativeShare() { return typeof navigator !== 'undefined' && !!navigator.share; },
                 groupedList() {
                     const groups = {};
                     this.rawList.forEach(item => {
@@ -4723,6 +4813,9 @@
 
                     // 5. 加载观看历史
                     this.loadWatchHistory();
+
+                    // 6. 🔗 处理分享深链 ?play=（自动搜索并打开对应剧）
+                    this.handleDeepLink();
                 },
 
                 // ========== 📺 观看历史功能 ==========
@@ -5338,7 +5431,7 @@
                     const isSwitchingShow = this.currentGroup?.name && this.currentGroup.name !== item.name;
                     if (isSwitchingShow && dp) {
                         console.log('[观看历史] 切换到不同剧集，销毁旧播放器实例');
-                        try { dp.destroy(); } catch(e) { console.warn('[观看历史] 销毁播放器异常:', e); }
+                        try { dp.destroy(); } catch (e) { console.warn('[观看历史] 销毁播放器异常:', e); }
                         dp = null;
                     }
 
@@ -5781,38 +5874,190 @@
 
                 getLatencyClass(ms) { return ms < 500 ? 'dot-green' : (ms < 2000 ? 'dot-yellow' : 'dot-red'); },
                 // 投屏功能：纯粹的原生实现
+                // 🔗 打开分享面板（可勾选"从当前进度开始"）
+                openSharePanel() {
+                    if (!this.currentGroup || !this.currentGroup.name) return;
+                    this.shareIncludeTime = false;
+                    this.shareSeconds = (typeof dp !== 'undefined' && dp && dp.video) ? Math.floor(dp.video.currentTime || 0) : 0;
+                    this.showSharePanel = true;
+                },
+                // 执行分享：移动端调系统分享面板，桌面端复制链接
+                async confirmShare() {
+                    const url = this.shareUrl;
+                    const name = (this.currentGroup && this.currentGroup.name) || '';
+                    try {
+                        if (navigator.share) { await navigator.share({ title: name + ' - E视界', text: `一起看《${name}》`, url }); this.showSharePanel = false; return; }
+                    } catch (e) { if (e && e.name === 'AbortError') return; }
+                    let copied = false;
+                    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) { }
+                    if (!copied) {
+                        try {
+                            const ta = document.createElement('textarea');
+                            ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                            document.body.appendChild(ta); ta.select();
+                            copied = document.execCommand('copy'); document.body.removeChild(ta);
+                        } catch (e) { }
+                    }
+                    if (copied) { this.showMiniToast('🔗 链接已复制，粘贴即可分享'); this.showSharePanel = false; }
+                    else window.prompt('复制此链接分享：', url);
+                },
+                // 秒数格式化 mm:ss
+                formatSeconds(s) {
+                    s = Math.floor(s || 0);
+                    const m = Math.floor(s / 60), sec = s % 60;
+                    return m + ':' + String(sec).padStart(2, '0');
+                },
+                // 🔗 分享到指定社交平台
+                shareTo(platform) {
+                    const url = this.shareUrl;
+                    const name = (this.currentGroup && this.currentGroup.name) || '';
+                    const text = `一起看《${name}》`;
+                    const u = encodeURIComponent(url), t = encodeURIComponent(text), tu = encodeURIComponent(text + ' ' + url);
+                    const openWin = (href) => window.open(href, '_blank', 'noopener,noreferrer,width=640,height=620');
+                    switch (platform) {
+                        case 'native':
+                            // 调起系统分享面板（可分享到列表外的任意 App）；桌面端无此能力则复制链接
+                            if (navigator.share) { navigator.share({ title: name + ' - E视界', text, url }).catch(() => { }); return; }
+                            this.confirmShare(); this.showMiniToast('🔗 链接已复制，可粘贴到任意 App 分享'); return;
+                        case 'wechat':
+                            // 微信无网页分享接口：移动端走系统分享面板，桌面端弹二维码扫码
+                            if (navigator.share) { navigator.share({ title: name, text, url }).catch(() => { }); return; }
+                            this.showWechatQR(url); return;
+                        case 'instagram':
+                            // IG 不支持网页带链接分享：移动端系统分享，否则复制
+                            if (navigator.share) { navigator.share({ title: name, text, url }).catch(() => { }); return; }
+                            this.confirmShare(); this.showMiniToast('Instagram 不支持直接分享链接，已复制，去 App 粘贴'); return;
+                        case 'qq': openWin(`https://connect.qq.com/widget/shareqq/index.html?url=${u}&title=${t}&desc=${t}`); return;
+                        case 'telegram': openWin(`https://t.me/share/url?url=${u}&text=${t}`); return;
+                        case 'whatsapp': openWin(`https://api.whatsapp.com/send?text=${tu}`); return;
+                        case 'facebook': openWin(`https://www.facebook.com/sharer/sharer.php?u=${u}`); return;
+                        case 'x': openWin(`https://twitter.com/intent/tweet?url=${u}&text=${t}`); return;
+                    }
+                },
+                // 微信扫码分享弹层（桌面端用；二维码由 qrserver 生成）
+                showWechatQR(url) {
+                    const qr = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=' + encodeURIComponent(url);
+                    const mask = document.createElement('div');
+                    mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2147483550;display:flex;align-items:center;justify-content:center;';
+                    mask.innerHTML = '<div style="background:#fff;border-radius:14px;padding:22px;text-align:center;max-width:280px;">'
+                        + '<div style="color:#222;font-weight:bold;margin-bottom:12px;">微信扫码分享</div>'
+                        + '<img src="' + qr + '" alt="二维码" style="width:220px;height:220px;display:block;border-radius:8px;">'
+                        + '<div style="color:#888;font-size:12px;margin-top:10px;">用微信「扫一扫」打开后转发给好友</div></div>';
+                    mask.addEventListener('click', () => mask.remove());
+                    document.body.appendChild(mask);
+                },
+                // 把当前剧/集写进地址栏（便于收藏/分享），用 replaceState 不污染历史
+                syncShareUrl() {
+                    try {
+                        if (!this.currentGroup || !this.currentGroup.name) return;
+                        let u = '/?play=' + encodeURIComponent(this.currentGroup.name);
+                        const cur = (this.episodeList && this.episodeList.length > 1)
+                            ? this.episodeList.find(e => e.url === this.currentUrl) : null;
+                        if (cur && cur.name) u += '&ep=' + encodeURIComponent(cur.name);
+                        history.replaceState(history.state, '', u);
+                    } catch (e) { }
+                },
+                // 轻量 toast（复制成功等提示）
+                showMiniToast(msg) {
+                    try {
+                        const t = document.createElement('div');
+                        t.textContent = msg;
+                        t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:rgba(0,0,0,0.88);color:#fff;padding:12px 22px;border-radius:24px;z-index:2147483600;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.4);border:1px solid rgba(229,9,20,.4);';
+                        document.body.appendChild(t);
+                        setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 1800);
+                    } catch (e) { }
+                },
+                // 🔗 解析 ?play= 深链：自动搜索并在结果就绪后打开对应剧
+                handleDeepLink() {
+                    try {
+                        const p = new URLSearchParams(location.search);
+                        const playName = p.get('play');
+                        if (!playName) return;
+                        this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, done: false };
+                        console.log('[深链] ?play=', playName, 'ep=', this._deepLink.ep, 't=', this._deepLink.t);
+                        this.autoSearch(playName);
+                    } catch (e) { }
+                },
+                // 搜索完成后定位并打开深链对应的剧（尽力定位集数）
+                tryOpenDeepLink() {
+                    const dl = this._deepLink;
+                    if (!dl || dl.done) return;
+                    const norm = (s) => (s || '').trim();
+                    const group = this.groupedList.find(g => norm(g.name) === norm(dl.name))
+                        || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
+                    if (!group) { dl.done = true; return; }
+                    dl.done = true;
+                    this.openDetail(group);
+                    if (dl.ep) {
+                        let tries = 0;
+                        const tick = () => {
+                            tries++;
+                            const ep = (this.episodeList || []).find(e => e.name === dl.ep);
+                            if (ep && ep.url) { if (this.currentUrl !== ep.url) this.play(ep.url); return; }
+                            if (tries < 20) setTimeout(tick, 300);
+                        };
+                        setTimeout(tick, 600);
+                    }
+                    // 🔗 定位到分享的时间点（等播放器就绪后 seek，覆盖进度恢复）
+                    if (dl.t > 0) {
+                        let st = 0;
+                        const seekTick = () => {
+                            st++;
+                            if (typeof dp !== 'undefined' && dp && dp.video && dp.video.readyState >= 1 && dp.video.duration) {
+                                try { dp.seek(dl.t); dp.notice && dp.notice('▶ 已跳转到分享的时间点'); } catch (e) { }
+                                return;
+                            }
+                            if (st < 40) setTimeout(seekTick, 300);
+                        };
+                        setTimeout(seekTick, 1200);
+                    }
+                },
                 castVideo() {
-                    const videoEl = document.querySelector('.dplayer-video');
+                    const videoEl = (typeof dp !== 'undefined' && dp && dp.video) || document.querySelector('.dplayer-video');
                     if (!videoEl) return alert('请先播放视频');
 
-                    // 🔆 投屏时保持屏幕常亮（重要：防止锁屏导致投屏暂停）
+                    // 🔆 投屏时保持屏幕常亮（防止锁屏导致投屏暂停）
                     this.requestWakeLock();
+                    // 允许 AirPlay / 远程播放（关键：不设此属性 iOS 可能找不到 AirPlay 设备）
+                    try { videoEl.setAttribute('x-webkit-airplay', 'allow'); videoEl.removeAttribute('disableRemotePlayback'); } catch (e) { }
 
-                    // 1. 优先尝试 Remote Playback API (Android Chrome / Edge)
-                    // 关键修复：不再判断 state !== 'disconnected'，只要 API 存在就尝试调用
+                    const ua = navigator.userAgent || '';
+                    const isiOS = /iPhone|iPad|iPod/.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+                    const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|Edg|EdgA|Android|Firefox|FxiOS|OPR|SamsungBrowser/i.test(ua);
+
+                    // 1) 苹果设备 / Safari → 优先 AirPlay（iOS/iPadOS/macOS Safari）
+                    if (videoEl.webkitShowPlaybackTargetPicker && (isiOS || isSafari)) {
+                        try { videoEl.webkitShowPlaybackTargetPicker(); return; }
+                        catch (e) { console.log('[投屏] AirPlay 调用失败:', e); }
+                    }
+
+                    // 2) Chrome / Android / Edge → Remote Playback API（Cast / DLNA / 无线投屏）
                     if (videoEl.remote && typeof videoEl.remote.prompt === 'function') {
                         videoEl.remote.prompt()
-                            .then(() => console.log('[投屏] 呼出投屏菜单成功'))
+                            .then(() => console.log('[投屏] 已呼出投屏菜单'))
                             .catch((err) => {
-                                // 错误处理：
-                                console.log('[投屏] 无法显示投屏菜单:', err);
-                                alert('未找到投屏设备。\n\n请先在手机下拉通知栏 → 点击「投屏/Cast」→ 搜索并连接您的电视，连接成功后再点击一键投屏即可。');
+                                console.log('[投屏] 无设备/已取消:', err && err.name);
+                                // 兜底再试 AirPlay（部分桌面浏览器也支持）
+                                if (videoEl.webkitShowPlaybackTargetPicker) { try { videoEl.webkitShowPlaybackTargetPicker(); return; } catch (e) { } }
+                                if (err && err.name !== 'NotAllowedError') this._castFallback(videoEl);
                             });
                         return;
                     }
 
-                    // 2. 尝试 Safari AirPlay (iOS)
-                    if (videoEl.webkitShowPlaybackTargetPicker) {
-                        videoEl.webkitShowPlaybackTargetPicker();
-                        return;
-                    }
+                    // 3) 非苹果但有 AirPlay API
+                    if (videoEl.webkitShowPlaybackTargetPicker) { try { videoEl.webkitShowPlaybackTargetPicker(); return; } catch (e) { } }
 
-                    // 3. 真·不支持时的回退：仅复制地址
-                    const videoUrl = this.currentUrl || videoEl.src;
-                    if (confirm('您的浏览器不支持直接投屏。\n\n点击确定复制视频地址，可去其他播放器投屏。')) {
-                        navigator.clipboard.writeText(videoUrl)
-                            .then(() => alert('✅ 地址已复制'))
-                            .catch(() => prompt('请手动复制:', videoUrl));
+                    // 4) 都不支持 → 复制直链并指引
+                    this._castFallback(videoEl);
+                },
+                // 投屏兜底：清晰指引 + 复制视频直链
+                _castFallback(videoEl) {
+                    const url = this.currentUrl || (videoEl && videoEl.src) || '';
+                    const tip = '未找到投屏设备，请确认：\n\n① 电视/盒子与手机连同一个 WiFi\n② 安卓：先从手机下拉通知栏开「投屏 / Cast / 无线投屏」搜索并连接电视，再点本按钮\n③ iPhone：从右上角控制中心点「屏幕镜像」连接 AirPlay 设备\n\n点「确定」复制视频直链，可在电视端浏览器/播放器打开。';
+                    if (confirm(tip)) {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(url).then(() => this.showMiniToast('✅ 视频地址已复制')).catch(() => window.prompt('请手动复制视频地址：', url));
+                        } else { window.prompt('请手动复制视频地址：', url); }
                     }
                 },
 
@@ -6213,6 +6458,8 @@
                             this._evtSource.close();
                             this._evtSource = null;
                         }
+                        // 🔗 若是深链触发的搜索，结果就绪后自动打开对应剧
+                        this.$nextTick(() => this.tryOpenDeepLink());
                     });
 
                     this._evtSource.onerror = () => {
@@ -6293,7 +6540,7 @@
                         }
                     }, MAX_WAIT_TIME);
 
-                    const latencyPromises = this.currentGroup.sources.map(async (source) => {
+                    const latencyWorker = async (source) => {
                         source.latency = '...';
                         source._useProxy = false;  // 默认不使用代理
                         try {
@@ -6461,10 +6708,11 @@
                             }
                         }
                         return source;
-                    });
+                    };
 
-                    // 等待所有测速完成（后台继续）
-                    await Promise.all(latencyPromises);
+                    // 🚦 限并发逐批测速：测「全部」资源站以保留完整可用列表，但同时最多 6 个请求；
+                    //    最先测出的快速源由 checkEarlyReturn / 超时定时器提前选中起播，无需等全部完成
+                    await runWithConcurrency(this.currentGroup.sources, 6, latencyWorker);
                     clearTimeout(earlyReturnTimer);
                     // 🧭 测速期间用户可能已切换到别的剧（此时 isTestingSources 归 B 所有），丢弃本次结果
                     if (_openSeq !== _navSeq) return;
@@ -6517,6 +6765,9 @@
                     _navSeq++;
                     this.refreshingEpisodes = false;
                     this.isTestingSources = false;
+
+                    // 🔗 清理地址栏深链参数（回到首页 URL）
+                    try { history.replaceState(history.state, '', location.pathname); } catch (e) { }
 
                     // 🧹 重置进度保存节流（timeupdate 随播放器销毁自动停止）
                     _lastProgressSaveTime = 0;
@@ -6753,7 +7004,7 @@
 
                         // 并行测速所有新资源站
                         const sources = this.currentGroup.sources;
-                        const latencyPromises = sources.map(async (source) => {
+                        const latencyWorker = async (source) => {
                             try {
                                 const detailRes = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}&nocache=1`);
                                 const detailData = await detailRes.json();
@@ -6817,9 +7068,10 @@
                                 source.latency = 9999;
                             }
                             return source;
-                        });
+                        };
 
-                        await Promise.all(latencyPromises);
+                        // 🚦 限并发逐批测速（测全部源、最多 6 并发）
+                        await runWithConcurrency(sources, 6, latencyWorker);
 
                         // 🧭 测速期间用户可能已切换剧集：丢弃过期结果
                         if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
@@ -6888,6 +7140,7 @@
                     this._proxyRetried = false;    // 重置代理重试标记
                     const playSeq = _navSeq;       // 🧭 记录本次播放的导航上下文（供错误回退判断串剧）
                     const isFreshPlayer = !dp;     // ▶ 是否新建播放器（决定如何触发首次播放）
+                    this.syncShareUrl();           // 🔗 把当前剧/集写进地址栏（可收藏/分享/深链）
 
                     // 🔆 播放时保持屏幕常亮
                     this.requestWakeLock();
@@ -7620,6 +7873,8 @@
                         window._bindOverlayVideoEvents = () => {
                             if (!dp || !dp.video) return;
                             const v = dp.video;
+                            // 📺 提前声明允许 AirPlay/远程播放 + 内联播放（否则 iOS 投屏可能搜不到设备）
+                            try { v.setAttribute('x-webkit-airplay', 'allow'); v.setAttribute('playsinline', ''); v.removeAttribute('disableRemotePlayback'); } catch (e) { }
                             ['play', 'playing', 'pause', 'ended', 'waiting', 'canplay'].forEach((ev) => {
                                 v.removeEventListener(ev, window._syncPlayOverlays);
                                 v.addEventListener(ev, window._syncPlayOverlays);

@@ -753,9 +753,75 @@ let robotsTxtTemplate = null;
 
 const DEFAULT_SITE_URL = 'https://ednovas.video';
 
+// 🔗 社交平台抓取卡片的爬虫 UA（微信/Twitter/FB/Telegram/Google 等）
+function isSocialCrawler(req) {
+    const ua = (req.headers['user-agent'] || '').toLowerCase();
+    return /bot|crawl|spider|facebookexternalhit|twitterbot|whatsapp|telegram|slackbot|discordbot|linkedinbot|embedly|pinterest|redditbot|googlebot|bingbot|baiduspider|bytespider|sogou|yisou|360spider|micromessenger|qqbrowser|qq\/|weibo|line-poker|skypeuripreview/i.test(ua);
+}
+
+// 🔗 分享深链富预览页：按剧名输出 OG/Twitter 卡片，再 JS 跳转回 SPA。
+//    只给社交爬虫返回此页；真实用户照常拿 SPA（SPA 自己解析 ?play= 打开剧）。
+async function renderSharePage(req, res, rawName) {
+    const name = String(rawName || '').slice(0, 100);
+    const siteUrl = getSiteUrl(req);
+    let poster = `${siteUrl}/icon.png`;
+    // 尽力用 TMDB 搜一张海报作为卡片大图（失败/超时则用站点图标，不阻塞）
+    try {
+        const TMDB_API_KEY = process.env.TMDB_API_KEY;
+        if (TMDB_API_KEY && name) {
+            const TMDB_PROXY_URL = process.env['TMDB_PROXY_URL'];
+            const serverInChina = process.env['SERVER_IN_CHINA'] === 'true';
+            const base = (TMDB_PROXY_URL && serverInChina) ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/api/3` : 'https://api.themoviedb.org/3';
+            const r = await axios.get(`${base}/search/multi`, { params: { api_key: TMDB_API_KEY, language: 'zh-CN', query: name }, timeout: 2500 });
+            const hit = ((r.data && r.data.results) || []).find(x => x.poster_path || x.backdrop_path);
+            if (hit) poster = `https://image.tmdb.org/t/p/w500${hit.poster_path || hit.backdrop_path}`;
+        }
+    } catch (e) { /* 忽略，用站点图标 */ }
+
+    const eName = escapeHtml(name);
+    const ePoster = escapeHtml(poster);
+    const desc = escapeHtml(`在 E视界 免费在线观看《${name}》，多线路高清播放。`);
+    const playUrl = `${siteUrl}/?play=${encodeURIComponent(name)}`;
+    const spaUrl = `/?play=${encodeURIComponent(name)}&_spa=1`;
+    const html = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${eName} - 在线观看 | E视界</title>
+<meta name="description" content="${desc}">
+<link rel="canonical" href="${escapeHtml(playUrl)}">
+<meta property="og:type" content="video.other">
+<meta property="og:title" content="${eName} - 在线观看">
+<meta property="og:description" content="${desc}">
+<meta property="og:image" content="${ePoster}">
+<meta property="og:url" content="${escapeHtml(playUrl)}">
+<meta property="og:site_name" content="E视界">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${eName} - 在线观看">
+<meta name="twitter:description" content="${desc}">
+<meta name="twitter:image" content="${ePoster}">
+<meta http-equiv="refresh" content="0;url=${escapeHtml(spaUrl)}">
+<script>location.replace(${JSON.stringify(spaUrl)});</script>
+</head>
+<body style="background:#141414;color:#fff;font-family:-apple-system,sans-serif;text-align:center;padding:40px;">
+<h1>${eName}</h1>
+<p>正在进入播放页…若未自动跳转，请 <a href="${escapeHtml(spaUrl)}" style="color:#e50914;">点此进入</a></p>
+</body>
+</html>`;
+    res.set('Cache-Control', 'public, max-age=600');
+    res.type('html').send(html);
+}
+
 // ⚠️ 关键：动态注入站点 URL 到 index.html
 // 自动将 meta 标签中的 ednovas.video 替换为当前访问的网站地址
-app.get(['/', '/index.html'], (req, res) => {
+app.get(['/', '/index.html'], async (req, res) => {
+    // 🔗 分享深链：社交爬虫请求 /?play=剧名 时返回富预览卡片；真实用户(无 bot UA 或带 _spa)照常拿 SPA
+    if (req.query.play && !req.query._spa && isSocialCrawler(req)) {
+        try { return await renderSharePage(req, res, req.query.play); }
+        catch (e) { console.error('[SharePage] error:', e.message); /* 失败则继续返回 SPA */ }
+    }
+
     res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');

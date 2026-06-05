@@ -187,98 +187,16 @@ app.get('/api/config', (req, res) => {
     });
 });
 
-// ========== API: /api/debug ==========
-app.get('/api/debug', async (req, res) => {
-    // 尝试加载远程配置以显示状态
-    let dbStatus = 'not_configured';
-    let sitesCount = 0;
-    let dbError = null;
-
-    // 优先检查嵌入配置
-    if (EMBEDDED_SITES) {
-        dbStatus = 'embedded';
-        sitesCount = EMBEDDED_SITES.sites?.length || 0;
-    } else if (REMOTE_DB_URL) {
-        try {
-            if (remoteDbCache) {
-                dbStatus = 'cached';
-                sitesCount = remoteDbCache.sites?.length || 0;
-            } else {
-                const response = await axios.get(REMOTE_DB_URL, { timeout: 5000 });
-                if (response.data && Array.isArray(response.data.sites)) {
-                    dbStatus = 'loaded';
-                    sitesCount = response.data.sites.length;
-                    // 更新缓存
-                    remoteDbCache = response.data;
-                    remoteDbLastFetch = Date.now();
-                } else {
-                    dbStatus = 'invalid_format';
-                }
-            }
-        } catch (err) {
-            dbStatus = 'fetch_failed';
-            dbError = err.message;
-        }
-    }
-
+// ========== API: /api/debug (健康检查；不再泄露 env 状态/密钥/REMOTE_DB_URL 等敏感信息) ==========
+app.get('/api/debug', (req, res) => {
     res.json({
+        status: 'ok',
         environment: 'Vercel Serverless',
-        node_version: process.version,
-        env_status: {
-            TMDB_API_KEY: TMDB_API_KEY ? 'configured' : 'missing',
-            TMDB_PROXY_URL: TMDB_PROXY_URL ? 'configured' : 'not_set',
-            ACCESS_PASSWORD: ACCESS_PASSWORDS.length > 0 ? `${ACCESS_PASSWORDS.length} password(s)` : 'not_set',
-            REMOTE_DB_URL: REMOTE_DB_URL ? 'configured' : 'not_set',
-            SITES_JSON: EMBEDDED_SITES ? `embedded (${EMBEDDED_SITES.sites?.length} sites)` : 'not_set'
-        },
-        // 新增：原始环境变量检测（帮助诊断配置问题）
-        raw_env_check: {
-            SITES_JSON_exists: !!process.env['SITES_JSON'],
-            SITES_JSON_length: process.env['SITES_JSON']?.length || 0,
-            REMOTE_DB_URL_exists: !!process.env['REMOTE_DB_URL'],
-            REMOTE_DB_URL_length: process.env['REMOTE_DB_URL']?.length || 0
-        },
-        remote_db: {
-            status: dbStatus,
-            sites_count: sitesCount,
-            error: dbError,
-            url_preview: REMOTE_DB_URL ? REMOTE_DB_URL.substring(0, 50) + '...' : null
-        },
-        cache_type: 'memory',
         timestamp: new Date().toISOString()
     });
 });
 
-// ========== API: /api/env-test (直接测试环境变量读取) ==========
-// 这个端点在请求时直接读取 process.env，而不是使用模块加载时的变量
-// 用于诊断 Vercel 环境变量配置问题
-app.get('/api/env-test', (req, res) => {
-    // 直接在请求时读取，而不是用模块级变量
-    const envCheck = {
-        TMDB_API_KEY: process.env.TMDB_API_KEY ? `configured (${process.env.TMDB_API_KEY.length} chars)` : 'NOT_SET',
-        REMOTE_DB_URL: process.env['REMOTE_DB_URL'] ? `configured (${process.env['REMOTE_DB_URL'].length} chars)` : 'NOT_SET',
-        TMDB_PROXY_URL: process.env['TMDB_PROXY_URL'] ? `configured (${process.env['TMDB_PROXY_URL'].length} chars)` : 'NOT_SET',
-        ACCESS_PASSWORD: process.env['ACCESS_PASSWORD'] ? `configured (${process.env['ACCESS_PASSWORD'].length} chars)` : 'NOT_SET',
-        SITES_JSON: process.env['SITES_JSON'] ? `configured (${process.env['SITES_JSON'].length} chars)` : 'NOT_SET'
-    };
-
-    // 列出所有环境变量的 key（不显示值，保护隐私）
-    const allEnvKeys = Object.keys(process.env).filter(k =>
-        !k.startsWith('npm_') &&
-        !k.startsWith('PATH') &&
-        !k.includes('SECRET') &&
-        !k.includes('KEY') &&
-        !k.includes('PASSWORD')
-    ).sort();
-
-    res.json({
-        message: '这是直接在请求时读取的环境变量状态',
-        env_at_request_time: envCheck,
-        all_env_keys_sample: allEnvKeys.slice(0, 30),
-        total_env_count: Object.keys(process.env).length,
-        timestamp: new Date().toISOString()
-    });
-});
+// 注：原 /api/env-test 诊断端点会泄露密码长度、环境变量 key 列表等敏感信息，已移除。
 
 // ========== API: /api/auth/check ==========
 app.get('/api/auth/check', (req, res) => {
@@ -374,8 +292,8 @@ app.get('/api/tmdb-image/:size/:filename', async (req, res) => {
     const { size, filename } = req.params;
     const allowSizes = ['w300', 'w342', 'w500', 'w780', 'w1280', 'original'];
 
-    // 安全检查
-    if (!allowSizes.includes(size) || !/^[a-zA-Z0-9_\-\.]+$/.test(filename)) {
+    // 安全检查：size 走白名单；filename 只允许 TMDB 实际格式 <字母数字>.<jpg/png/webp>，杜绝 '..' 路径穿越
+    if (!allowSizes.includes(size) || !/^[A-Za-z0-9]+\.(jpg|jpeg|png|webp)$/i.test(filename)) {
         return res.status(400).send('Invalid parameters');
     }
 
