@@ -6894,11 +6894,20 @@
                         console.warn('[播放器] ⚠️ 广告过滤已启用但未配置 CORS_PROXY_URL，无法过滤');
                     }
 
+                    // ⚠️ setupErrorHandling 只在首次创建播放器时绑定一次，其闭包会冻结"首个 play()"的局部变量
+                    //   （playSeq / originalUrl / adFilterProxyUsed）。后续切换不会重绑，导致错误处理读到的是旧值：
+                    //    - playSeq 被冻结 → 第一部剧之后所有错误都被误判为"旧剧残留"而吞掉 → 自动换源/代理回退失效；
+                    //    - originalUrl/adFilterProxyUsed 被冻结 → 代理回退切到错误的 URL。
+                    //   解决：把这三个"当前播放上下文"每次 play() 都刷新到 this.*，让那个一次性绑定的处理器读到当前值。
+                    this._activePlaySeq = playSeq;
+                    this._activeOriginalUrl = originalUrl;
+                    this._activeAdFilterProxyUsed = adFilterProxyUsed;
+
                     const setupErrorHandling = () => {
                         // 统一错误处理函数（dp.error 和 video.error 都会触发）
                         const handleError = (source) => {
-                            // 🧭 已切换到别的剧 → 这是旧剧播放器残留的错误事件，直接忽略，防止把旧流切回当前播放器
-                            if (playSeq !== _navSeq) {
+                            // 🧭 用户已切换到别的剧（_navSeq 变化且 this._activePlaySeq 未被新 play() 刷新到）→ 忽略旧错误
+                            if (this._activePlaySeq !== _navSeq) {
                                 console.log('[播放器] ⏭️ 忽略旧剧残留的错误事件 (' + source + ')');
                                 return;
                             }
@@ -6908,11 +6917,21 @@
                                 return;
                             }
                             // 如果使用了广告过滤代理，先回退到直连重试
-                            if (adFilterProxyUsed && !this._proxyRetried) {
+                            if (this._activeAdFilterProxyUsed && !this._proxyRetried) {
                                 this._proxyRetried = true;
                                 this._proxyRetrying = true;
-                                console.log('[播放器] 🛡️ 代理播放失败，回退直连:', originalUrl.substring(0, 60));
-                                dp.switchVideo({ url: originalUrl, type: 'hls' });
+                                const fb = this._activeOriginalUrl;
+                                console.log('[播放器] 🛡️ 代理播放失败，回退直连:', (fb || '').substring(0, 60));
+                                dp.switchVideo({ url: fb, type: 'hls' });
+                                // 回退后等就绪再播放（switchVideo 不会自动播放）
+                                const onMeta = () => {
+                                    dp.video.removeEventListener('loadedmetadata', onMeta);
+                                    const p = dp.play();
+                                    if (p && typeof p.catch === 'function') p.catch(() => { });
+                                    if (typeof window._syncPlayOverlays === 'function') window._syncPlayOverlays();
+                                };
+                                if (dp.video && dp.video.readyState >= 1) onMeta();
+                                else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
                                 // 3秒后解除锁定（足够 switchVideo 完成加载）
                                 setTimeout(() => { this._proxyRetrying = false; }, 3000);
                                 return;
@@ -7565,6 +7584,11 @@
                                 ov.innerHTML = paused ? '<i class="fas fa-play"></i>' : '<i class="fas fa-pause"></i>';
                                 ov.classList.toggle('pause-state', !paused);
                             });
+                            // TV 模式顶部/底部播放键也跟随真实状态（修复遥控或其他方式切换后图标不同步）
+                            const tvTop = document.getElementById('tv-play-pause');
+                            if (tvTop) tvTop.innerHTML = paused ? '▶ 播放' : '⏸ 暂停';
+                            const tvBot = document.getElementById('tv-bottom-play');
+                            if (tvBot) tvBot.innerHTML = paused ? '▶' : '⏸';
                         };
                         // 绑定到当前 video 元素的原生事件（switchVideo 会换/复用 video 元素，需重绑）。
                         // remove 再 add，保证幂等，无论元素是否新建都不会重复绑定。
@@ -7639,6 +7663,8 @@
                                 } else if (isCenter) {
                                     // 中间双击 - 暂停/播放
                                     dp.toggle();
+                                    // 暂停后显示中央按钮以便再次点击续播
+                                    setTimeout(() => updateOverlayState(mobilePlayOverlay), 50);
                                 }
                             } else {
                                 // 第一次点击，等待检测双击
@@ -7901,18 +7927,22 @@
                         const progressKey = getProgressKey();
                         let progressRestored = false;
 
+                        // 注：DPlayer.switchVideo 不会销毁旧 Hls 实例（库层泄漏，待后续更稳妥地处理）。
+                        //    此处不主动 destroy，因为 hls.destroy() 会 detach media 触发 <video> 短暂报错，
+                        //    可能被错误处理误判为"播放失败"而误跳过实际可播的线路。
+
                         dp.switchVideo({ url: finalUrl, type: 'hls' });
 
                         // ▶ 修复"切换资源/集数后不自动播放 + 中央大按钮图标反向"：
-                        //   switchVideo 后 video 元素被替换且 HLS 尚未就绪，立刻 dp.play() 既无法真正播放，
-                        //   又会让 dp.on('play') 乐观地把中央按钮设成⏸而与实际(暂停)相反。
+                        //   switchVideo 会复用同一个 <video> 元素但重置 src，HLS 尚未就绪时立刻 dp.play()
+                        //   既无法真正播放，又会让 dp.on('play') 乐观地把中央按钮设成⏸而与实际(暂停)相反。
                         //   改为：重绑遮罩的原生事件 → 等 loadedmetadata 就绪再播放 → 多次按真实状态同步图标。
                         if (typeof window._bindOverlayVideoEvents === 'function') {
-                            window._bindOverlayVideoEvents();  // 幂等重绑到（可能已替换的）video 元素
+                            window._bindOverlayVideoEvents();  // 幂等重绑（remove 再 add）到复用的 video 元素
                         }
                         const playAfterSwitch = () => {
+                            dp.video.removeEventListener('loadedmetadata', playAfterSwitch);  // 先解绑，避免中途切走时泄漏
                             if (playSeq !== _navSeq) return;  // 🧭 已切换到别的剧，放弃
-                            dp.video.removeEventListener('loadedmetadata', playAfterSwitch);
                             const pr = dp.play();
                             if (pr && typeof pr.catch === 'function') pr.catch(() => { });
                             if (typeof window._syncPlayOverlays === 'function') {
@@ -8305,32 +8335,46 @@
                     // 🧭 记录发起时的导航上下文，1.5s 后若已切换剧集则放弃自动切换（防串剧）
                     const mySeq = _navSeq;
 
-                    // 获取当前线路索引
+                    // 获取当前线路索引（记住失败源，宽限期后用于判定是否真的要跳过）
                     const allSources = this.availableSources;
-                    const currentIndex = allSources.findIndex(s => s.site_key === this.currentSource?.site_key);
+                    const failingSource = this.currentSource;
+                    const currentIndex = allSources.findIndex(s => s.site_key === failingSource?.site_key);
 
-                    // 如果还有下一个线路可用，自动切换
+                    // 如果还有下一个线路可用，给一段宽限期后再决定是否切换
                     if (currentIndex >= 0 && currentIndex < allSources.length - 1) {
                         this.isAutoRetrying = true;
                         const nextSource = allSources[currentIndex + 1];
+                        this.autoRetryMessage = `正在检测 ${failingSource?.site_name} 线路...`;
+                        console.log('[Auto-Failover] 收到错误事件，进入 1.5s 宽限期检测是否真的不可播');
 
-                        // 显示用户提示
-                        this.autoRetryMessage = `${this.currentSource?.site_name} 播放失败，正在尝试 ${nextSource.site_name}`;
-                        console.log(`[Auto-Failover] ${this.autoRetryMessage}`);
-
-                        // 标记当前线路为不可用（设置高延迟）
-                        if (this.currentSource) {
-                            this.currentSource.latency = 9998;  // 标记为用户端不可用
-                        }
-
-                        // 切换到下一个线路
                         setTimeout(() => {
-                            this.autoRetryMessage = '';  // 清除提示
                             this.isAutoRetrying = false;
                             // 🧭 已切换到别的剧 → 放弃对旧剧的自动切源
-                            if (mySeq !== _navSeq) return;
+                            if (mySeq !== _navSeq) { this.autoRetryMessage = ''; return; }
+
+                            // ✅ 关键：宽限期内若该源其实已经能播（只是没自动播放/短暂卡顿/可恢复错误），
+                            //    则不要跳过它——保留为"已加载待播放"，避免把可播放的源误判为失败而跳过。
+                            //    只有真正的 MediaError、或始终无法就绪（无解码帧且无缓冲）才切到下一个源。
+                            // 用户在宽限期内已手动切换线路 → 放弃自动切换，尊重用户选择
+                            const stillSameSource = this.currentSource && this.currentSource.site_key === failingSource?.site_key;
+                            if (!stillSameSource) { this.autoRetryMessage = ''; return; }
+
+                            const v = dp && dp.video;
+                            const isPlayable = v && !v.error && (v.readyState >= 2 || (v.buffered && v.buffered.length > 0));
+                            if (isPlayable) {
+                                console.log('[Auto-Failover] 该源实际可播放（已就绪/有缓冲），取消跳过，保留当前线路');
+                                this.autoRetryMessage = '';
+                                this.playbackErrorCount = 0;  // 允许后续若真正失败再判定
+                                return;
+                            }
+
+                            // 确认不可播 → 标记并切换到下一个线路
+                            this.autoRetryMessage = `${failingSource?.site_name} 播放失败，正在尝试 ${nextSource.site_name}`;
+                            console.log(`[Auto-Failover] ${this.autoRetryMessage}`);
+                            if (failingSource) failingSource.latency = 9998;  // 标记为用户端不可用
                             this.switchSource(nextSource);
-                        }, 1500);  // 显示提示1.5秒后切换
+                            setTimeout(() => { this.autoRetryMessage = ''; }, 1500);
+                        }, 1500);
                     } else {
                         // 没有更多可用线路
                         this.autoRetryMessage = '所有线路均无法播放';
@@ -8358,7 +8402,7 @@
                         this.play(nextEp.url);
 
                         this.$nextTick(() => {
-                            const activeBtn = document.querySelector('.episode-btn.active');
+                            const activeBtn = document.querySelector('.ep-btn.active');
                             if (activeBtn) activeBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
                         });
                     } else {
