@@ -1,6 +1,6 @@
 // Service Worker with Image Caching for dongguaTV
-// v23: Added ad-filter.js to pre-cache list
-const CACHE_VERSION = 'v23';
+// v24: HTML 改为 Stale-While-Revalidate；ad-filter.js 精简(去死代码)
+const CACHE_VERSION = 'v24';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 
@@ -75,24 +75,25 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // 策略2：HTML 页面 - Network First (确保获取最新版本)
+    // 策略2：HTML 页面 - Stale-While-Revalidate（秒开 + 后台更新）
+    // 立即返回缓存(若有)，同时后台拉取最新版写回缓存；新版本由 index.html 的版本检测脚本 + SW 版本号兜底。
+    // 相比原 Network-First：老用户不再每次重下 ~80-150KB(gzip) HTML，回访明显更快。
     if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
         event.respondWith(
-            fetch(event.request)
-                .then(response => {
-                    // 更新缓存
-                    const responseToCache = response.clone();
-                    caches.open(STATIC_CACHE).then(cache => {
-                        cache.put(event.request, responseToCache);
-                    });
-                    return response;
+            caches.open(STATIC_CACHE).then(cache =>
+                cache.match(event.request).then(cached => {
+                    const network = fetch(event.request)
+                        .then(response => {
+                            if (response && response.status === 200) {
+                                cache.put(event.request, response.clone());
+                            }
+                            return response;
+                        })
+                        .catch(() => cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' }));
+                    // 有缓存先秒开，后台 network 静默更新；无缓存则等网络
+                    return cached || network;
                 })
-                .catch(() => {
-                    return caches.match(event.request).then(cached => {
-                        // 确保返回有效的 Response，如果缓存也没有则返回离线页面
-                        return cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
-                    });
-                })
+            )
         );
         return;
     }

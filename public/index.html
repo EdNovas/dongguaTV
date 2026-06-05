@@ -61,7 +61,7 @@
     <!-- SW 版本检测和强制更新（必须在最开头） -->
     <script data-cfasync="false">
         (function () {
-            var REQUIRED_SW_VERSION = 'v23';
+            var REQUIRED_SW_VERSION = 'v24';
             var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
 
             // 如果已经为这个版本清理过，不再重复
@@ -117,6 +117,13 @@
     <link rel="icon" href="icon.png" type="image/png">
     <meta name="theme-color" content="#141414">
 
+    <!-- iOS PWA 支持（iOS 不读 manifest，需要这些 meta 才能添加到主屏并全屏） -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="E视界">
+    <link rel="apple-touch-icon" href="icon.png">
+
     <!-- 关键 CSS (优先加载) -->
     <link href="libs/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="libs/css/fontawesome.min.css">
@@ -134,6 +141,16 @@
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
 
     <style>
+        /* ♿ 尊重用户的"减少动态效果"系统偏好：大幅削弱动画/过渡，
+           缓解前庭功能障碍/晕动症用户的不适（保留极短时长以不破坏交互反馈） */
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
         :root {
             --bg-color: #141414;
             --panel-bg: #1f1f1f;
@@ -1964,6 +1981,8 @@
 
         .source-pill {
             padding: 8px 16px;
+            min-height: 44px;            /* ♿ 移动端触控目标 ≥44px */
+            box-sizing: border-box;
             border-radius: 6px;
             background: #2a2a2a;
             border: 1px solid #333;
@@ -2003,6 +2022,11 @@
             border: 1px solid transparent;
             color: #ddd;
             padding: 12px 5px;
+            min-height: 44px;            /* ♿ 移动端触控目标 ≥44px */
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             text-align: center;
             border-radius: 6px;
             font-size: 14px;
@@ -3107,8 +3131,8 @@
 
                 <!-- 横向滚动 -->
                 <div class="scroll-container">
-                    <button class="scroll-btn left" v-show="historyCanScrollLeft" @click="scrollHistoryRow(-1)"><i
-                            class="fas fa-chevron-left"></i></button>
+                    <button class="scroll-btn left" v-show="historyCanScrollLeft" @click="scrollHistoryRow(-1)" aria-label="向左滚动观看历史"><i
+                            class="fas fa-chevron-left" aria-hidden="true"></i></button>
                     <div class="hot-row" ref="watchHistoryRow" @scroll="onHistoryScroll">
                         <div class="history-card" v-for="(item, index) in watchHistory" :key="item.name + index">
                             <!-- 删除按钮 (放在 card 外层避免随缩放移动) -->
@@ -3141,8 +3165,8 @@
                             <div class="movie-date" style="font-size: 11px;">{{ formatWatchTime(item.watchedAt) }}</div>
                         </div>
                     </div>
-                    <button class="scroll-btn right" v-show="historyCanScrollRight" @click="scrollHistoryRow(1)"><i
-                            class="fas fa-chevron-right"></i></button>
+                    <button class="scroll-btn right" v-show="historyCanScrollRight" @click="scrollHistoryRow(1)" aria-label="向右滚动观看历史"><i
+                            class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 </div>
             </div>
 
@@ -3188,8 +3212,8 @@
                 <template v-if="rowLists[key] && rowLists[key].length > 0">
                     <!-- 收起状态：横向滚动 -->
                     <div class="scroll-container" v-show="!expandedRows[key]">
-                        <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]"><i
-                                class="fas fa-chevron-left"></i></button>
+                        <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]" aria-label="向左滚动"><i
+                                class="fas fa-chevron-left" aria-hidden="true"></i></button>
                         <div class="hot-row" :ref="key" @scroll="onRowScroll(key)">
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
                                 @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
@@ -3206,8 +3230,8 @@
                                 </div>
                             </div>
                         </div>
-                        <button class="scroll-btn right" @click="scrollRow(key, 1)"><i
-                                class="fas fa-chevron-right"></i></button>
+                        <button class="scroll-btn right" @click="scrollRow(key, 1)" aria-label="向右滚动"><i
+                                class="fas fa-chevron-right" aria-hidden="true"></i></button>
                     </div>
                     <!-- 展开状态：分页网格布局 -->
                     <div class="grid-expanded" v-show="expandedRows[key]">
@@ -3445,7 +3469,7 @@
 
         <!-- ★★★ 播放详情页 (影院布局) ★★★ -->
         <div class="detail-overlay" :class="{ active: showDetail }">
-            <div class="close-btn" tabindex="1" @click="closeDetail" @keydown.enter="closeDetail"><i
+            <div class="close-btn" tabindex="1" role="button" aria-label="关闭" @click="closeDetail" @keydown.enter="closeDetail"><i
                     class="fas fa-times"></i></div>
 
             <div class="player-layout" v-if="currentGroup">
@@ -3773,7 +3797,7 @@
         function showPasswordError(message) {
             const errorDiv = document.getElementById('password-error');
             const errorText = document.getElementById('password-error-text');
-            errorText.innerHTML = message;
+            errorText.textContent = message;  // 用 textContent 防止服务器返回的错误信息触发 XSS
             errorDiv.style.display = 'flex';
         }
 
@@ -4552,7 +4576,8 @@
                         if (!groups[name]) groups[name] = { name: name, pic: item.vod_pic, sources: [] };
                         const isDefault = (url) => !url || url.includes('mac_default') || url.includes('nopic');
                         if (isDefault(groups[name].pic) && !isDefault(item.vod_pic)) groups[name].pic = item.vod_pic;
-                        if (isDefault(groups[name].pic)) this.handleImgError(name);
+                        // 注：图片回退(handleImgError)已在搜索 onmessage 中按新到达的项处理，
+                        //     computed 内不再调用，保持纯函数、避免渲染期副作用引发的重渲染抖动。
 
                         groups[name].sources.push({
                             ...item,
@@ -5239,7 +5264,7 @@
                         box-shadow: 0 10px 40px rgba(0,0,0,0.5);
                         border: 1px solid rgba(229, 9, 20, 0.3);
                     `;
-                    toast.innerHTML = message;
+                    toast.textContent = message;  // textContent 防 XSS
                     document.body.appendChild(toast);
 
                     // 延迟刷新以便用户看到提示
@@ -7927,11 +7952,29 @@
                         const progressKey = getProgressKey();
                         let progressRestored = false;
 
-                        // 注：DPlayer.switchVideo 不会销毁旧 Hls 实例（库层泄漏，待后续更稳妥地处理）。
-                        //    此处不主动 destroy，因为 hls.destroy() 会 detach media 触发 <video> 短暂报错，
-                        //    可能被错误处理误判为"播放失败"而误跳过实际可播的线路。
+                        // 🧹 修复 Hls 实例泄漏：DPlayer.switchVideo 会新建 Hls 但不销毁旧的。
+                        //    安全时序——先捕获旧实例，switchVideo 创建新实例后，等"新流真正 playing"
+                        //    再销毁旧的：此时 <video> 已挂上可用的新源，detach 旧实例不会触发"无源"报错，
+                        //    从而既回收泄漏又不会误跳过线路（旧实现是在 switchVideo 前 destroy 才出的问题）。
+                        const _oldHls = (dp.plugins && dp.plugins.hls) || null;
 
                         dp.switchVideo({ url: finalUrl, type: 'hls' });
+
+                        if (_oldHls) {
+                            let _destroyed = false;  // 防止 'playing' 与 5s 兜底重复销毁
+                            const destroyOldHls = () => {
+                                if (_destroyed) return;
+                                _destroyed = true;
+                                if (dp.video) dp.video.removeEventListener('playing', destroyOldHls);
+                                // 仅当它确实是被替换掉的旧实例时才销毁，避免误杀当前实例
+                                if (_oldHls !== (dp.plugins && dp.plugins.hls)) {
+                                    try { _oldHls.destroy(); } catch (e) { }
+                                }
+                            };
+                            if (dp.video) dp.video.addEventListener('playing', destroyOldHls);
+                            // 兜底：5秒后无论是否 playing 都回收（仍只在它非当前实例时）
+                            setTimeout(destroyOldHls, 5000);
+                        }
 
                         // ▶ 修复"切换资源/集数后不自动播放 + 中央大按钮图标反向"：
                         //   switchVideo 会复用同一个 <video> 元素但重置 src，HLS 尚未就绪时立刻 dp.play()

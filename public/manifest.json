@@ -1,17 +1,28 @@
 {
-    "name": "E视界",
+    "name": "E视界 - 免费在线影视聚合播放器",
     "short_name": "E视界",
-    "start_url": "./index.html",
+    "description": "现代化流媒体聚合播放器，免费在线观看电影、电视剧、综艺、动漫，支持多线路切换与智能测速。",
+    "start_url": "/index.html",
     "display": "standalone",
+    "orientation": "any",
     "background_color": "#141414",
     "theme_color": "#141414",
     "scope": "/",
+    "lang": "zh-CN",
+    "dir": "ltr",
+    "categories": ["entertainment", "video"],
     "icons": [
         {
             "src": "icon.png",
             "sizes": "1024x1024",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
+        },
+        {
+            "src": "icon.png",
+            "sizes": "1024x1024",
+            "type": "image/png",
+            "purpose": "maskable"
         }
     ]
 }
