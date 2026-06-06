@@ -1534,9 +1534,11 @@
             display: flex;
             gap: 14px;
             overflow-x: auto;
-            /* overflow-x:auto 会让 overflow-y 计算成 auto(纵向裁剪)，hover 放大的卡片顶部会被切掉。
-               用上/下内边距给放大+发光留出空间，再用等量负 margin 抵消，保持版面位置不变。 */
-            padding-top: 24px;
+            /* overflow-x:auto 会让 overflow-y 计算成 auto(纵向裁剪)，hover 放大的卡片顶部+发光会被切成硬边。
+               (overflow-clip-margin 在 x 为 auto 时对 y 无效，故只能用内边距留白。)
+               顶部留出 38px(放大 1.08 + 发光实际向上延伸约 36px)，让发光自然淡出到透明而非被切一刀；
+               配 margin-top:-24px 适度上移，仅在标题与卡片间多出约 14px 间距，且不与上方标题重叠。 */
+            padding-top: 38px;
             margin-top: -24px;
             padding-bottom: 20px;
             scroll-behavior: smooth;
