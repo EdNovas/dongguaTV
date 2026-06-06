@@ -1938,7 +1938,7 @@
             border: 1px solid #333;
         }
 
-        /* ⏳ 深链/测速加载遮罩：视频起播前的加载指示 */
+        /* ⏳ 深链/测速加载遮罩：视频起播前的加载指示(动态，明确告诉用户在加载而非卡死) */
         .player-loading-overlay {
             position: absolute;
             inset: 0;
@@ -1946,19 +1946,57 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 12px;
-            background: rgba(0, 0, 0, 0.55);
+            gap: 14px;
+            background: rgba(0, 0, 0, 0.6);
             z-index: 15;
         }
 
-        .player-loading-overlay > .fa-spinner {
-            font-size: 34px;
-            color: #e50914;
+        .player-loading-spinner {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 4px solid rgba(229, 9, 20, 0.25);
+            border-top-color: #e50914;
+            animation: dl-spin 0.8s linear infinite;
         }
 
-        .player-loading-overlay > div {
-            font-size: 13px;
-            color: #ccc;
+        @keyframes dl-spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .player-loading-text {
+            font-size: 14px;
+            color: #eee;
+            font-weight: 600;
+        }
+
+        .player-loading-sub {
+            font-size: 12px;
+            color: #9a9a9a;
+        }
+
+        .player-loading-dots i {
+            font-style: normal;
+            opacity: 0.2;
+            animation: dl-blink 1.2s infinite;
+        }
+
+        .player-loading-dots i:nth-child(2) { animation-delay: 0.2s; }
+        .player-loading-dots i:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes dl-blink {
+            0%, 100% { opacity: 0.2; }
+            50% { opacity: 1; }
+        }
+
+        /* 加载指示是功能性反馈：即使用户系统开启了"减少动态效果"，也保持转动，避免被误认为卡死 */
+        @media (prefers-reduced-motion: reduce) {
+            .player-loading-spinner {
+                animation: dl-spin 0.9s linear infinite !important;
+            }
+            .player-loading-dots i {
+                animation: dl-blink 1.2s infinite !important;
+            }
         }
 
         /* 🔒 未登录深链预览：播放器黑屏锁定遮罩 */
@@ -3688,8 +3726,11 @@
                     <!-- ⏳ 深链/测速加载态：视频起播前在播放器区域显示加载指示，避免黑屏空等 -->
                     <div v-if="!previewLocked && !currentUrl && !autoRetryMessage && (deepLinkLoading || isTestingSources || loadingDetail)"
                         class="player-loading-overlay">
-                        <i class="fas fa-spinner fa-spin"></i>
-                        <div>正在为你加载播放线路…</div>
+                        <div class="player-loading-spinner"></div>
+                        <div class="player-loading-text">正在为你加载播放线路<span class="player-loading-dots"><i>.</i><i>.</i><i>.</i></span></div>
+                        <div v-if="deepLinkLoading && deepLinkSourceCount > 0" class="player-loading-sub">已找到 {{ deepLinkSourceCount }} 个线路，正在挑选可播放的最快线路…</div>
+                        <div v-else-if="deepLinkLoading" class="player-loading-sub">正在搜索可用线路…</div>
+                        <div v-else class="player-loading-sub">正在测试各线路可用性…</div>
                     </div>
                     <!-- 🔒 未登录深链预览：黑屏播放器锁定遮罩 -->
                     <div v-if="previewLocked" class="preview-lock-overlay">
@@ -4545,6 +4586,7 @@
                     shareSeconds: 0,         // 当前播放秒数（用于带时间分享）
                     previewLocked: false,    // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
                     deepLinkLoading: false,  // ⏳ 已登录深链：立即显示播放页框架(加载态)，搜索/测速在后台进行，避免先闪搜索结果页
+                    deepLinkSourceCount: 0,  // ⏳ 深链加载帧里展示"已找到 N 个线路"的动态计数
                     infoModalData: null,   // 弹窗数据
                     TMDB_IMG_URL: TMDB_IMG_URL,  // 模板中使用
                     TMDB_BACKDROP_URL: TMDB_BACKDROP_URL,
@@ -6231,28 +6273,26 @@
                         this.episodeList = [];
                         this.currentUrl = '';
                         this.isTestingSources = true;  // 抑制"所有采集站均不可用"提示，显示加载/测速态
+                        this.deepLinkSourceCount = 0;  // 加载帧里展示"已找到 N 个线路"
                         this.showDetail = true;
                         document.body.classList.add('detail-open');
                         this.autoSearch(playName);
-                        // 宽限计时器：~1.5s 后只要已搜到该剧(≥3 个源)就开，不必等最慢站点的 done
+                        // 安全兜底：万一 done/onerror 都不触发(极少)，12s 后用已到的源强制打开，避免一直卡加载
                         if (this._dlGraceTimer) clearTimeout(this._dlGraceTimer);
-                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(3, false), 1500);
+                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(), 12000);
                     } catch (e) { }
                 },
-                // 深链定位打开。不等"全部站点搜完(done)"——那要等最慢的站点；也不在"首个结果"就开——那常只拿到
-                // 一个仅服务器可达、用户端播不了的源。折中：累计到一批源(minSources)就开，openDetail 再从这批里
-                // 选出真正可直连播放的最快线路(它本身一拿到 2 个快速直连源就立即起播，并不等这批全部测完)。
-                //   onmessage 调 (5,false)：流式中攒够 5 个源就开；
-                //   宽限计时器调 (3,false)：~1.5s 后只要有 3 个源也开(慢的话别干等)；
-                //   done 调 (1,true)：搜索结束，有匹配就用完整列表开、无匹配才判失败退出。
-                tryOpenDeepLink(minSources, isFinal) {
+                // 深链定位打开：等搜索"全部完成(done)"拿到【完整】源列表再 openDetail(普通搜索也是看到完整列表才点开)。
+                // 关键：用户端测不了的源(CORS)会全部降级成"服务"——但其中能被 CF Worker 代理拉到的会被标 'proxy'(可播)，
+                // 拉不到的标 'server'(多半播不了)。openDetail 的自动选源已优先 direct>proxy>server，故需完整列表才能选到可播的源。
+                // (早开/只攒一批会漏掉靠后返回的可播源——这正是"分享只有几个源且都播不了"的根因。)
+                tryOpenDeepLink() {
                     const dl = this._deepLink;
                     if (!dl || dl.done) return;
                     const norm = (s) => (s || '').trim();
                     const group = this.groupedList.find(g => norm(g.name) === norm(dl.name))
                         || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
                     if (!group) {
-                        if (!isFinal) return;  // 还没搜到该剧：继续等(流式/宽限)，别误判失败
                         // 搜索结束仍无匹配：退出加载/锁定态，落到已加载的首页/搜索结果，而不是卡在黑屏框架
                         dl.done = true;
                         if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
@@ -6262,8 +6302,6 @@
                         document.body.classList.remove('detail-open');
                         return;
                     }
-                    // 源还不够多且非最终：再等等(更可能等到可直连播放的源)，避免只拿到首个(常仅服务器可达)的源
-                    if (!isFinal && (group.sources ? group.sources.length : 0) < (minSources || 1)) return;
                     dl.done = true;
                     if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
                     // 把目标集数交给 openDetail→switchSource→parseEpisodes 在"首次播放"时直接定位(标准化匹配 第01集↔第16集)，
@@ -6742,8 +6780,13 @@
                                 newItems.forEach(item => {
                                     if (!item.vod_pic || item.vod_pic.includes('mac_default')) this.handleImgError(item.vod_name);
                                 });
-                                // ⏳ 深链：攒够一批源(≥5)就提前打开，不必等所有站点返回
-                                if (this._deepLink && !this._deepLink.done) this.tryOpenDeepLink(5, false);
+                                // ⏳ 深链加载帧：实时更新"已找到 N 个线路"(仅计数反馈，不提前打开——要等完整列表)
+                                if (this._deepLink && !this._deepLink.done) {
+                                    const norm = (s) => (s || '').trim();
+                                    const g = this.groupedList.find(x => norm(x.name) === norm(this._deepLink.name))
+                                        || this.groupedList.find(x => norm(x.name).includes(norm(this._deepLink.name)));
+                                    this.deepLinkSourceCount = (g && g.sources) ? g.sources.length : 0;
+                                }
                             }
                         } catch (err) { }
                     };
@@ -6754,8 +6797,8 @@
                             this._evtSource.close();
                             this._evtSource = null;
                         }
-                        // 🔗 深链：搜索结束(完整源列表已就绪)，最终定位打开；无匹配则判失败退出加载态
-                        this.$nextTick(() => this.tryOpenDeepLink(1, true));
+                        // 🔗 深链：搜索结束(完整源列表已就绪)，定位打开；无匹配则判失败退出加载态
+                        this.$nextTick(() => this.tryOpenDeepLink());
                     });
 
                     this._evtSource.onerror = () => {
@@ -6764,6 +6807,8 @@
                             this._evtSource.close();
                             this._evtSource = null;
                         }
+                        // 🔗 深链：搜索连接中断也用已到的源尝试打开，避免一直卡在加载帧
+                        if (this._deepLink && !this._deepLink.done) this.$nextTick(() => this.tryOpenDeepLink());
                     };
                 },
                 async openDetail(group) {
@@ -6826,7 +6871,19 @@
                             return;
                         }
 
-                        // 没有用户端测速结果，回退到服务器端
+                        // 没有直连：优先"代理可播(proxy)"的源——CF Worker 能拉到、用户端能播；
+                        // 'server' 只是服务器测速通、用户端常播不了(代理 403)，放最后兜底。
+                        let proxySources = this.currentGroup.sources.filter(s =>
+                            s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
+                        );
+                        if (proxySources.length > 0) {
+                            proxySources.sort((a, b) => a.latency - b.latency);
+                            console.log(`[超时返回] 选择代理可播最快的: ${proxySources[0].site_name} (${proxySources[0].latency}ms 🔁)`);
+                            this.switchSource(proxySources[0]);
+                            return;
+                        }
+
+                        // 最后回退到服务器端测速(可能播不了，靠自动换源兜底)
                         const testedSources = this.currentGroup.sources.filter(s =>
                             typeof s.latency === 'number' && s.latency < 9000
                         );
@@ -7044,13 +7101,22 @@
                             console.log(`[测速完成] 选择用户端测速最快的线路: ${directSources[0].site_name} (${directSources[0].latency}ms)`);
                             this.switchSource(directSources[0]);
                         } else {
-                            // 回退到服务器端测速最快的
-                            const fastestAvailable = this.currentGroup.sources.find(s =>
-                                typeof s.latency === 'number' && s.latency < 9000
+                            // 没有直连：优先"代理可播(proxy)"的源(CF Worker 能拉到、用户端能播)；'server' 放最后兜底
+                            const proxySources = this.currentGroup.sources.filter(s =>
+                                s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
                             );
-                            if (fastestAvailable) {
-                                console.log(`[测速完成] 选择服务器测速最快的线路: ${fastestAvailable.site_name} (${fastestAvailable.latency}ms)`);
-                                this.switchSource(fastestAvailable);
+                            if (proxySources.length > 0) {
+                                console.log(`[测速完成] 选择代理可播最快的线路: ${proxySources[0].site_name} (${proxySources[0].latency}ms)`);
+                                this.switchSource(proxySources[0]);
+                            } else {
+                                // 回退到服务器端测速最快的(可能播不了，靠自动换源兜底)
+                                const fastestAvailable = this.currentGroup.sources.find(s =>
+                                    typeof s.latency === 'number' && s.latency < 9000
+                                );
+                                if (fastestAvailable) {
+                                    console.log(`[测速完成] 选择服务器测速最快的线路: ${fastestAvailable.site_name} (${fastestAvailable.latency}ms)`);
+                                    this.switchSource(fastestAvailable);
+                                }
                             }
                         }
                     }
@@ -7519,8 +7585,16 @@
                                 };
                                 if (dp.video && dp.video.readyState >= 1) onMeta();
                                 else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
-                                // 3秒后解除锁定（足够 switchVideo 完成加载）
-                                setTimeout(() => { this._proxyRetrying = false; }, 3000);
+                                // 3秒后解除锁定（足够 switchVideo 完成加载）；若回退直连后仍未起播
+                                //（代理 403 + 直连 CORS/拒连都失败，此时不会再触发 error 事件 → 原先会永久卡黑屏）→ 自动切下一个源
+                                setTimeout(() => {
+                                    this._proxyRetrying = false;
+                                    if (this._activePlaySeq === _navSeq && dp && dp.video &&
+                                        dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
+                                        console.log('[播放器] 代理+直连均失败，自动切换下一个源');
+                                        this.handlePlaybackError();
+                                    }
+                                }, 3000);
                                 return;
                             }
                             this.handlePlaybackError();
