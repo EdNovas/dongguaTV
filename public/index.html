@@ -3060,17 +3060,16 @@
                 </button>
             </div>
 
-            <!-- 购买引导 -->
+            <!-- 购买引导（精简版） -->
             <div id="register-link" class="login-register-link" style="text-align:center;">
-                <div style="font-size:13.5px; color:#ccc; line-height:1.8; margin-bottom:14px;">
-                    🎬 本站是 <b style="color:#fff;">机场套餐用户的专属影视福利</b><br>
-                    购买任意套餐 → 用机场账户登录 → 有效期内全站免费畅看
+                <div style="font-size:12px; color:#aaa; line-height:1.5; margin-bottom:9px;">
+                    🎬 <b style="color:#eee;">机场套餐用户专属影视福利</b>，有效期内全站免费畅看
                 </div>
                 <a href="https://ednovas.me" target="_blank" rel="noopener noreferrer"
-                    style="display:inline-flex; align-items:center; gap:8px; background:linear-gradient(135deg,#e50914,#b00610); color:#fff; padding:13px 30px; border-radius:26px; font-size:15px; font-weight:700; text-decoration:none; box-shadow:0 6px 20px rgba(229,9,20,.4);">
-                    <i class="fas fa-ticket-alt"></i> 购买套餐 · 立即解锁全站影视
+                    style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg,#e50914,#b00610); color:#fff; padding:8px 18px; border-radius:18px; font-size:13px; font-weight:600; text-decoration:none; box-shadow:0 3px 10px rgba(229,9,20,.3);">
+                    <i class="fas fa-ticket-alt"></i> 购买套餐 · 解锁全站
                 </a>
-                <div style="font-size:12px; color:#888; margin-top:12px;">已购套餐？用上方「机场账户登录」即可观看</div>
+                <div style="font-size:11px; color:#777; margin-top:8px;">已购套餐？用上方「机场账户登录」观看</div>
             </div>
         </div>
     </div>
@@ -5882,24 +5881,23 @@
                     this.showSharePanel = true;
                 },
                 // 执行分享：移动端调系统分享面板，桌面端复制链接
-                async confirmShare() {
+                // 纯复制分享链接到剪贴板（返回是否成功；不弹任何 UI）
+                async copyShareLink() {
                     const url = this.shareUrl;
-                    const name = (this.currentGroup && this.currentGroup.name) || '';
+                    try { await navigator.clipboard.writeText(url); return true; } catch (e) { }
                     try {
-                        if (navigator.share) { await navigator.share({ title: name + ' - E视界', text: `一起看《${name}》`, url }); this.showSharePanel = false; return; }
-                    } catch (e) { if (e && e.name === 'AbortError') return; }
-                    let copied = false;
-                    try { await navigator.clipboard.writeText(url); copied = true; } catch (e) { }
-                    if (!copied) {
-                        try {
-                            const ta = document.createElement('textarea');
-                            ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
-                            document.body.appendChild(ta); ta.select();
-                            copied = document.execCommand('copy'); document.body.removeChild(ta);
-                        } catch (e) { }
-                    }
-                    if (copied) { this.showMiniToast('🔗 链接已复制，粘贴即可分享'); this.showSharePanel = false; }
-                    else window.prompt('复制此链接分享：', url);
+                        const ta = document.createElement('textarea');
+                        ta.value = url; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                        document.body.appendChild(ta); ta.select();
+                        const ok = document.execCommand('copy'); document.body.removeChild(ta);
+                        return ok;
+                    } catch (e) { return false; }
+                },
+                // 「复制」按钮：只复制链接，不调系统分享（系统分享由「更多 App」按钮负责）
+                async confirmShare() {
+                    const ok = await this.copyShareLink();
+                    if (ok) this.showMiniToast('🔗 链接已复制');
+                    else window.prompt('复制此链接分享：', this.shareUrl);
                 },
                 // 秒数格式化 mm:ss
                 formatSeconds(s) {
@@ -5918,33 +5916,27 @@
                         case 'native':
                             // 调起系统分享面板（可分享到列表外的任意 App）；桌面端无此能力则复制链接
                             if (navigator.share) { navigator.share({ title: name + ' - E视界', text, url }).catch(() => { }); return; }
-                            this.confirmShare(); this.showMiniToast('🔗 链接已复制，可粘贴到任意 App 分享'); return;
+                            this.copyShareLink().then(() => this.showMiniToast('🔗 链接已复制，可粘贴到任意 App 分享')); return;
                         case 'wechat':
-                            // 微信无网页分享接口：移动端走系统分享面板，桌面端弹二维码扫码
+                            // 微信没有网页直接分享接口（只能微信内 JS-SDK 或扫码/粘贴）：
+                            // 移动端走系统分享面板（可选微信）；桌面端复制链接并提示去微信粘贴（不依赖国外二维码服务）
                             if (navigator.share) { navigator.share({ title: name, text, url }).catch(() => { }); return; }
-                            this.showWechatQR(url); return;
+                            this.copyShareLink().then(() => this.showMiniToast('🔗 链接已复制，打开微信粘贴给好友/群即可分享')); return;
                         case 'instagram':
                             // IG 不支持网页带链接分享：移动端系统分享，否则复制
                             if (navigator.share) { navigator.share({ title: name, text, url }).catch(() => { }); return; }
-                            this.confirmShare(); this.showMiniToast('Instagram 不支持直接分享链接，已复制，去 App 粘贴'); return;
-                        case 'qq': openWin(`https://connect.qq.com/widget/shareqq/index.html?url=${u}&title=${t}&desc=${t}`); return;
+                            this.copyShareLink().then(() => this.showMiniToast('Instagram 不支持直接分享链接，已复制，去 App 粘贴')); return;
+                        case 'qq': {
+                            // QQ 互联官方分享（发送给 QQ 好友/群）
+                            const s = encodeURIComponent(`来 E视界 一起看《${name}》`);
+                            openWin(`https://connect.qq.com/widget/shareqq/index.html?url=${u}&title=${t}&summary=${s}&desc=${s}&source=E视界`);
+                            return;
+                        }
                         case 'telegram': openWin(`https://t.me/share/url?url=${u}&text=${t}`); return;
                         case 'whatsapp': openWin(`https://api.whatsapp.com/send?text=${tu}`); return;
                         case 'facebook': openWin(`https://www.facebook.com/sharer/sharer.php?u=${u}`); return;
                         case 'x': openWin(`https://twitter.com/intent/tweet?url=${u}&text=${t}`); return;
                     }
-                },
-                // 微信扫码分享弹层（桌面端用；二维码由 qrserver 生成）
-                showWechatQR(url) {
-                    const qr = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=' + encodeURIComponent(url);
-                    const mask = document.createElement('div');
-                    mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2147483550;display:flex;align-items:center;justify-content:center;';
-                    mask.innerHTML = '<div style="background:#fff;border-radius:14px;padding:22px;text-align:center;max-width:280px;">'
-                        + '<div style="color:#222;font-weight:bold;margin-bottom:12px;">微信扫码分享</div>'
-                        + '<img src="' + qr + '" alt="二维码" style="width:220px;height:220px;display:block;border-radius:8px;">'
-                        + '<div style="color:#888;font-size:12px;margin-top:10px;">用微信「扫一扫」打开后转发给好友</div></div>';
-                    mask.addEventListener('click', () => mask.remove());
-                    document.body.appendChild(mask);
                 },
                 // 把当前剧/集写进地址栏（便于收藏/分享），用 replaceState 不污染历史
                 syncShareUrl() {
@@ -6712,6 +6704,9 @@
 
                     // 🚦 限并发逐批测速：测「全部」资源站以保留完整可用列表，但同时最多 6 个请求；
                     //    最先测出的快速源由 checkEarlyReturn / 超时定时器提前选中起播，无需等全部完成
+                    // 🔧 关键：测速前先把所有线路标记为"测速中"(latency='...')，否则并发池里尚未轮到的线路
+                    //    会保留初始的 999ms 而被显示出来（懒加载：未测速的不显示，测出结果后再出现）
+                    this.currentGroup.sources.forEach(s => { s.latency = '...'; });
                     await runWithConcurrency(this.currentGroup.sources, 6, latencyWorker);
                     clearTimeout(earlyReturnTimer);
                     // 🧭 测速期间用户可能已切换到别的剧（此时 isTestingSources 归 B 所有），丢弃本次结果

@@ -172,6 +172,41 @@ app.get('/api/sites', async (req, res) => {
     }
 });
 
+// ========== API: /api/check ==========
+// 服务器端测速兜底：客户端直连+代理都失败时(混合内容/CORS)由服务器测资源站 API 延迟。
+// 注：此接口在早期重构中丢失，前端一直调用导致 404 → 服务器测速这条兜底失效，已恢复。
+app.get('/api/check', async (req, res) => {
+    const { key } = req.query;
+    try {
+        let sitesData = EMBEDDED_SITES;
+        if (!sitesData) {
+            const now = Date.now();
+            if (remoteDbCache && now - remoteDbLastFetch < REMOTE_DB_CACHE_TTL) {
+                sitesData = remoteDbCache;
+            } else if (REMOTE_DB_URL) {
+                const response = await axios.get(REMOTE_DB_URL, { timeout: 5000 });
+                if (response.data && Array.isArray(response.data.sites)) {
+                    remoteDbCache = response.data;
+                    remoteDbLastFetch = now;
+                    sitesData = remoteDbCache;
+                }
+            }
+        }
+        const sites = (sitesData && sitesData.sites) || [];
+        const site = sites.find(s => s.key === key);
+        if (!site || !site.api) return res.json({ latency: 9999 });
+        const start = Date.now();
+        try {
+            await axios.get(`${site.api}?ac=list&pg=1`, { timeout: 3000 });
+            return res.json({ latency: Date.now() - start, _testType: 'server' });
+        } catch (e) {
+            return res.json({ latency: 9999 });
+        }
+    } catch (e) {
+        return res.json({ latency: 9999 });
+    }
+});
+
 // ========== API: /api/config ==========
 app.get('/api/config', (req, res) => {
     const userToken = req.query.token || '';
