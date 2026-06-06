@@ -660,7 +660,7 @@ const tvboxService = createTvboxService({
     dataDir: RUNTIME_DATA_DIR,
     httpClient: axios
 });
-const playerManager = new PlayerManager(RUNTIME_DATA_DIR);
+const playerManager = new PlayerManager(RUNTIME_DATA_DIR, axios);
 
 // ========== API 速率限制 ==========
 const rateLimit = require('express-rate-limit');
@@ -1058,10 +1058,19 @@ app.post('/api/player/classify', (req, res) => {
     }
 });
 
-app.post('/api/player/open-mpc', (req, res) => {
+app.post('/api/player/proxy-url', async (req, res) => {
     try {
         const playUrlResult = req.body && (req.body.playUrlResult || req.body);
-        res.json(playerManager.openMpc(playUrlResult));
+        res.json(await playerManager.createProxyUrl(playUrlResult));
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to create proxy URL' });
+    }
+});
+
+app.post('/api/player/open-mpc', async (req, res) => {
+    try {
+        const playUrlResult = req.body && (req.body.playUrlResult || req.body);
+        res.json(await playerManager.openMpc(playUrlResult));
     } catch (error) {
         res.status(400).json({ error: error.message || 'Failed to open MPC' });
     }

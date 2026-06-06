@@ -1,10 +1,12 @@
 const { readPlayerSettings, savePlayerSettings, detectMpcPaths } = require('./externalPlayerConfig');
 const { classifyPlayUrl } = require('./playUrlClassifier');
 const { playWithMpc } = require('./mpcPlayer');
+const { LocalProxy } = require('./localProxy');
 
 class PlayerManager {
-    constructor(dataDir) {
+    constructor(dataDir, httpClient) {
         this.dataDir = dataDir;
+        this.localProxy = new LocalProxy(httpClient);
     }
 
     getSettings() {
@@ -28,13 +30,20 @@ class PlayerManager {
         return classifyPlayUrl(playUrlResult, this.getSettings());
     }
 
-    openMpc(playUrlResult) {
+    async createProxyUrl(playUrlResult) {
+        const settings = this.getSettings();
+        return this.localProxy.register(playUrlResult, settings);
+    }
+
+    async openMpc(playUrlResult) {
         const input = typeof playUrlResult === 'string' ? { url: playUrlResult } : (playUrlResult || {});
         const settings = this.getSettings();
         const classification = classifyPlayUrl(input, settings);
-        playWithMpc(input.url, settings);
+        const proxy = settings.useLocalProxy ? await this.localProxy.register(input, settings) : null;
+        playWithMpc(proxy ? proxy.proxyUrl : input.url, settings);
         return {
             ok: true,
+            proxyUrl: proxy ? proxy.proxyUrl : null,
             recommendedPlayer: classification.recommendedPlayer,
             reason: classification.reason
         };

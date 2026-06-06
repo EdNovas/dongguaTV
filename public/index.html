@@ -3751,6 +3751,14 @@
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
                                 <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> 网盘源用 MPC
                             </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="playerSettings.useLocalProxy" style="accent-color:#e50914;"> 使用本地代理
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                代理端口
+                                <input type="number" v-model.number="playerSettings.localProxyPort" min="1024" max="65535"
+                                    style="width:90px; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:10px; padding:6px 8px; font-size:12px;">
+                            </label>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; margin-top:14px;">
                             <button class="btn-play" @click="savePlayerSettings" :disabled="playerSettingsSaving"
@@ -4376,7 +4384,9 @@
                         useMpcFor4K: true,
                         useMpcForHEVC: true,
                         useMpcForHDR: true,
-                        useMpcForCloudDrive: true
+                        useMpcForCloudDrive: true,
+                        useLocalProxy: true,
+                        localProxyPort: 9979
                     },
                     playerSettingsSaving: false,
                     playerSettingsMessage: '',
