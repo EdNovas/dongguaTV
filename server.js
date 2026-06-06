@@ -14,6 +14,7 @@ const stream = require('stream');
 const { promisify } = require('util');
 const pipeline = promisify(stream.pipeline);
 const { createTvboxService } = require('./server/adapters/tvbox');
+const { createDefaultPluginRuntimeRegistry } = require('./server/adapters/tvbox/pluginRuntime');
 const { PlayerManager } = require('./server/player/playerManager');
 
 const app = express();
@@ -660,6 +661,7 @@ const tvboxService = createTvboxService({
     dataDir: RUNTIME_DATA_DIR,
     httpClient: axios
 });
+const pluginRuntimeRegistry = createDefaultPluginRuntimeRegistry();
 const playerManager = new PlayerManager(RUNTIME_DATA_DIR, axios);
 
 // ========== API 速率限制 ==========
@@ -1032,6 +1034,13 @@ app.post('/api/source-health-check', async (req, res) => {
     } catch (error) {
         sendTvboxError(res, error, 400);
     }
+});
+
+app.get('/api/plugin-runtimes', (req, res) => {
+    res.json({
+        runtimes: pluginRuntimeRegistry.list(),
+        message: 'Plugin-required TVBox sources are identified but not executed in this version.'
+    });
 });
 
 app.get('/api/player/settings', (req, res) => {
