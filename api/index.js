@@ -207,6 +207,86 @@ app.get('/api/check', async (req, res) => {
     }
 });
 
+// ========== API: /api/preview ==========
+// 🔗 分享深链预览：未登录用户打开 /?play=剧名 时，前端用本接口拿 TMDB 简介+海报渲染"锁定框架"
+//   （标题+简介+黑屏播放器+登录提示），全程不碰任何资源站。带内存缓存 + 轻量限流防刷。
+const previewCache = new Map(); // name -> { data, expiry }
+const PREVIEW_CACHE_TTL = 6 * 60 * 60 * 1000;   // 命中缓存 6 小时
+const PREVIEW_MISS_TTL = 10 * 60 * 1000;        // 降级缓存 10 分钟
+const PREVIEW_CACHE_MAX = 2000;
+const previewRate = new Map();                   // ip -> [timestamps] 滑动窗口限流(serverless 内best-effort)
+const PREVIEW_RATE_WINDOW = 60 * 1000;
+const PREVIEW_RATE_MAX = 40;                      // 每 IP 每分钟最多 40 次
+// 全站 TMDB 调用封顶：即使伪造 X-Forwarded-For 绕过单 IP 限流 + 用不同 name 绕过缓存，也无法无限放大 TMDB 调用
+let previewTmdbWindowStart = 0, previewTmdbCount = 0;
+const PREVIEW_TMDB_WINDOW = 60 * 1000;
+const PREVIEW_TMDB_MAX = 300;
+function previewTmdbBudgetOk() {
+    const now = Date.now();
+    if (now - previewTmdbWindowStart > PREVIEW_TMDB_WINDOW) { previewTmdbWindowStart = now; previewTmdbCount = 0; }
+    if (previewTmdbCount >= PREVIEW_TMDB_MAX) return false;
+    previewTmdbCount++;
+    return true;
+}
+app.get('/api/preview', async (req, res) => {
+    // 轻量限流：每 IP 每分钟 40 次
+    try {
+        const ip = getClientIP(req) || req.ip || '0.0.0.0';
+        const now = Date.now();
+        const arr = (previewRate.get(ip) || []).filter(t => now - t < PREVIEW_RATE_WINDOW);
+        if (arr.length >= PREVIEW_RATE_MAX) {
+            return res.status(429).json({ error: '预览请求过于频繁，请稍后再试' });
+        }
+        arr.push(now);
+        previewRate.set(ip, arr);
+        if (previewRate.size > 5000) { const k = previewRate.keys().next().value; if (k !== undefined) previewRate.delete(k); }
+    } catch (e) { /* 限流失败不阻断 */ }
+
+    const name = String(req.query.name || '').slice(0, 100).trim();
+    if (!name) return res.json({ name: '', title: '', synopsis: '', poster: '', year: '' });
+
+    const cached = previewCache.get(name);
+    if (cached && cached.expiry > Date.now()) {
+        res.set('Cache-Control', 'public, max-age=3600');
+        return res.json(cached.data);
+    }
+
+    const data = { name, title: name, synopsis: '', poster: '', year: '' };
+    try {
+        if (TMDB_API_KEY && previewTmdbBudgetOk()) {
+            // 预览为非关键路径：按是否配置代理决定 base，跳过逐请求 geo-IP 查询(可达 3s)，避免拖慢/函数超时
+            const TMDB_BASE = TMDB_PROXY_URL
+                ? `${TMDB_PROXY_URL.replace(/\/$/, '')}/api/3`
+                : 'https://api.themoviedb.org/3';
+            const r = await axios.get(`${TMDB_BASE}/search/multi`, {
+                params: { api_key: TMDB_API_KEY, language: 'zh-CN', query: name },
+                timeout: 2500
+            });
+            const results = (r.data && r.data.results) || [];
+            const hit = results.find(x => (x.poster_path || x.backdrop_path) && x.overview)
+                || results.find(x => x.poster_path || x.backdrop_path)
+                || results[0];
+            if (hit) {
+                data.title = hit.title || hit.name || name;
+                data.synopsis = hit.overview || '';
+                if (hit.poster_path || hit.backdrop_path) data.poster = `https://image.tmdb.org/t/p/w500${hit.poster_path || hit.backdrop_path}`;
+                const d = hit.release_date || hit.first_air_date || '';
+                data.year = d ? String(d).slice(0, 4) : '';
+            }
+        }
+    } catch (e) { /* 忽略，返回降级数据(仅剧名) */ }
+
+    if (previewCache.size >= PREVIEW_CACHE_MAX) {
+        const firstKey = previewCache.keys().next().value;
+        if (firstKey !== undefined) previewCache.delete(firstKey);
+    }
+    const ttl = (data.synopsis || data.poster) ? PREVIEW_CACHE_TTL : PREVIEW_MISS_TTL;
+    previewCache.set(name, { data, expiry: Date.now() + ttl });
+
+    res.set('Cache-Control', 'public, max-age=3600');
+    return res.json(data);
+});
+
 // ========== API: /api/config ==========
 app.get('/api/config', (req, res) => {
     const userToken = req.query.token || '';

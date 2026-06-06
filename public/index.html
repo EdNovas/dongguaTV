@@ -1918,6 +1918,75 @@
             border: 1px solid #333;
         }
 
+        /* 🔒 未登录深链预览：播放器黑屏锁定遮罩 */
+        .preview-lock-overlay {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.85));
+            z-index: 20;
+        }
+
+        .preview-lock-card {
+            text-align: center;
+            padding: 24px;
+            max-width: 360px;
+        }
+
+        .preview-lock-card > .fa-lock {
+            font-size: 40px;
+            color: #e50914;
+            margin-bottom: 14px;
+        }
+
+        .preview-lock-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+
+        .preview-lock-sub {
+            font-size: 12px;
+            color: #bbb;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .preview-lock-btn {
+            background: linear-gradient(135deg, #e50914, #b00610);
+            color: #fff;
+            border: none;
+            border-radius: 22px;
+            padding: 10px 28px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(229, 9, 20, 0.4);
+        }
+
+        .preview-lock-btn:hover {
+            filter: brightness(1.08);
+        }
+
+        /* 🔒 线路/选集锁定占位提示 */
+        .preview-locked-note {
+            font-size: 13px;
+            color: #999;
+            padding: 14px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px dashed #444;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .preview-locked-note .fa-lock {
+            color: #e50914;
+            margin-right: 6px;
+        }
+
         /* 视频信息栏 */
         .video-header {
             display: flex;
@@ -2525,6 +2594,22 @@
             pointer-events: none;
         }
 
+        /* 🔗 深链未登录预览：登录框改半透明浮层，透出背景的播放框架(detail-overlay z-index:9999) */
+        .password-screen.deeplink-mode {
+            background: rgba(8, 8, 12, 0.72);
+            backdrop-filter: blur(6px);
+        }
+
+        #deeplink-login-close {
+            display: none;
+        }
+
+        .password-screen.deeplink-mode #deeplink-login-close {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .password-container {
             background: rgba(30, 30, 40, 0.8);
             backdrop-filter: blur(20px);
@@ -2984,6 +3069,9 @@
 
     <!-- Login Screen (V2Board + Standalone Password) -->
     <div id="password-screen" class="password-screen" style="display: none;">
+        <!-- 🔗 深链预览模式下可关闭登录框，回看背景框架(仅 deeplink-mode 显示) -->
+        <button type="button" id="deeplink-login-close" onclick="dismissDeepLinkLogin()" aria-label="关闭"
+            style="position:absolute; top:18px; right:20px; background:rgba(255,255,255,0.12); border:none; color:#fff; width:40px; height:40px; border-radius:50%; font-size:22px; line-height:1; cursor:pointer; z-index:2;">&times;</button>
         <div class="password-container">
             <div class="password-logo">
                 <div class="password-logo-text" style="display: flex; align-items: center; justify-content: center;">
@@ -3486,7 +3574,7 @@
 
         <!-- ★★★ 播放详情页 (影院布局) ★★★ -->
         <div class="detail-overlay" :class="{ active: showDetail }">
-            <div class="close-btn" tabindex="1" role="button" aria-label="关闭" @click="closeDetail"
+            <div v-if="!previewLocked" class="close-btn" tabindex="1" role="button" aria-label="关闭" @click="closeDetail"
                 @keydown.enter="closeDetail"><i class="fas fa-times"></i></div>
 
             <!-- 🔗 分享面板 -->
@@ -3534,10 +3622,11 @@
                     <div>
                         <h1 class="video-title">{{ currentGroup.name }}</h1>
                         <div class="video-meta">
-                            正在播放: <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span>
+                            <template v-if="previewLocked"><i class="fas fa-lock" style="color:#e50914;"></i> 登录后即可观看</template>
+                            <template v-else>正在播放: <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span></template>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 10px; align-items: center;">
+                    <div v-if="!previewLocked" style="display: flex; gap: 10px; align-items: center;">
                         <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="分享">
                             <i class="fas fa-share-alt"></i> 分享
                         </button>
@@ -3548,8 +3637,18 @@
                 </div>
 
                 <!-- 2. 中部：超大播放器 -->
-                <div class="player-box" style="position: relative;">
+                <div class="player-box" style="position: relative;"
+                    :style="previewLocked && currentGroup && currentGroup.pic ? { backgroundImage: 'url(' + currentGroup.pic + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
+                    <!-- 🔒 未登录深链预览：黑屏播放器锁定遮罩 -->
+                    <div v-if="previewLocked" class="preview-lock-overlay">
+                        <div class="preview-lock-card">
+                            <i class="fas fa-lock"></i>
+                            <div class="preview-lock-title">登录后即可观看</div>
+                            <div class="preview-lock-sub">机场套餐用户专属影视福利 · 有效期内全站免费畅看</div>
+                            <button class="preview-lock-btn" @click="promptLogin">立即登录</button>
+                        </div>
+                    </div>
                     <!-- 自动切换线路提示 -->
                     <div v-if="autoRetryMessage" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
                                background: rgba(0,0,0,0.9); padding: 20px 30px; border-radius: 10px; 
@@ -3569,7 +3668,7 @@
                         <p
                             style="color: #999; font-size: 13px; line-height: 1.7; max-height: 80px; overflow-y: auto; margin: 0;">
                             <span v-if="loadingDetail"><i class="fas fa-spinner fa-spin"></i> 加载中...</span>
-                            <span v-else>{{ stripHtml(currentSource.vod_content) || '暂无简介信息' }}</span>
+                            <span v-else>{{ stripHtml(currentSource.vod_content) || (previewLocked ? '登录后查看完整简介' : '暂无简介信息') }}</span>
                         </p>
                     </div>
 
@@ -3581,7 +3680,7 @@
                                 style="font-size: 12px; color: #888; font-weight: normal; margin-left: 10px;">
                                 <i class="fas fa-spinner fa-spin"></i> 正在测速...
                             </span>
-                            <span v-else @click="refreshSources"
+                            <span v-else-if="!previewLocked" @click="refreshSources"
                                 style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
                                 :style="{ opacity: refreshingSources ? 0.5 : 1, pointerEvents: refreshingSources ? 'none' : 'auto' }"
                                 @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
@@ -3590,6 +3689,11 @@
                                     style="margin-right: 4px;"></i>
                                 {{ refreshingSources ? '刷新中...' : '刷新线路' }}
                             </span>
+                        </div>
+
+                        <!-- 🔒 未登录预览：锁定线路 -->
+                        <div v-if="previewLocked" class="preview-locked-note">
+                            <i class="fas fa-lock"></i> 登录后解锁全部播放线路
                         </div>
 
                         <!-- 测速类型图例 -->
@@ -3663,7 +3767,7 @@
                         </div>
 
                         <!-- 全部不可用提示 -->
-                        <div v-else-if="!isTestingSources && fastSources.length === 0 && slowSources.length === 0"
+                        <div v-else-if="!isTestingSources && !previewLocked && fastSources.length === 0 && slowSources.length === 0"
                             class="text-center py-4"
                             style="background: rgba(255,0,0,0.1); border-radius: 8px; border: 1px solid rgba(255,0,0,0.2);">
                             <i class="fas fa-exclamation-triangle text-warning" style="font-size: 24px;"></i>
@@ -3676,7 +3780,7 @@
                     <div>
                         <div class="panel-title" style="display: flex; align-items: center;">
                             选集播放
-                            <span @click="refreshEpisodes"
+                            <span v-if="!previewLocked" @click="refreshEpisodes"
                                 style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
                                 :style="{ opacity: refreshingEpisodes ? 0.5 : 1, pointerEvents: refreshingEpisodes ? 'none' : 'auto' }"
                                 @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
@@ -3686,15 +3790,21 @@
                                 {{ refreshingEpisodes ? '刷新中...' : '刷新集数' }}
                             </span>
                         </div>
-                        <div v-if="loadingDetail" class="text-center py-5 text-muted"><i
-                                class="fas fa-spinner fa-spin"></i>
-                            加载中...</div>
-                        <div v-else class="ep-grid">
-                            <div v-for="ep in episodeList" class="ep-btn" :class="{ active: currentUrl === ep.url }"
-                                @click="play(ep.url)">
-                                {{ ep.name }}
-                            </div>
+                        <!-- 🔒 未登录预览：锁定选集 -->
+                        <div v-if="previewLocked" class="preview-locked-note">
+                            <i class="fas fa-lock"></i> 登录后解锁选集播放
                         </div>
+                        <template v-else>
+                            <div v-if="loadingDetail" class="text-center py-5 text-muted"><i
+                                    class="fas fa-spinner fa-spin"></i>
+                                加载中...</div>
+                            <div v-else class="ep-grid">
+                                <div v-for="ep in episodeList" class="ep-btn" :class="{ active: currentUrl === ep.url }"
+                                    @click="play(ep.url)">
+                                    {{ ep.name }}
+                                </div>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -3865,7 +3975,9 @@
         // Hide login screen with animation
         function hideLoginScreen() {
             const screen = document.getElementById('password-screen');
+            if (screen._dismissTimer) { clearTimeout(screen._dismissTimer); screen._dismissTimer = null; }
             screen.classList.add('hidden');
+            screen.classList.remove('deeplink-mode');  // 复位深链半透明模式，避免遗留到后续常规登录
             setTimeout(() => {
                 screen.style.display = 'none';
             }, 500);
@@ -4151,7 +4263,15 @@
 
             } catch (e) {
                 console.error('Auth check error:', e);
-                window.startApp && window.startApp();
+                // 容错：保持原有 fail-open(后端异常时放行)，但深链 + 无缓存登录态这一特定情形除外——
+                // 否则会被 fail-open 触发资源站搜索并绕过登录墙(违背"未登录不加载资源站")。该情形改为渲染锁定预览。
+                let hasPlay = false;
+                try { hasPlay = !!new URLSearchParams(location.search).get('play'); } catch (_) { }
+                if (hasPlay && !localStorage.getItem(AUTH_STORAGE_KEY)) {
+                    showLoginScreen();
+                } else {
+                    window.startApp && window.startApp();
+                }
             }
         }
 
@@ -4174,11 +4294,77 @@
             const screen = document.getElementById('password-screen');
 
             if (loader) loader.classList.add('hidden');
+
+            // 🔗 未登录用户打开分享深链 /?play=剧名：先渲染"锁定播放框架"(标题+TMDB简介+黑屏+登录提示)，
+            //    登录框改半透明浮层(透出背景框架)，且全程不加载任何资源站。否则显示常规不透明登录墙。
+            let playName = '';
+            try { playName = new URLSearchParams(location.search).get('play') || ''; } catch (e) { }
+            if (playName) {
+                renderDeepLinkPreview(playName);
+                screen.classList.add('deeplink-mode');
+            } else {
+                screen.classList.remove('deeplink-mode');
+            }
+
+            screen.classList.remove('hidden');
             screen.style.display = 'flex';
 
             // 默认显示 v2board 模式
             switchLoginMode('v2board');
         }
+
+        // 🔒 渲染未登录深链"锁定框架"：先用最小信息(仅剧名)立即出框架，再异步用 TMDB(/api/preview) 补全简介/海报。
+        async function renderDeepLinkPreview(name) {
+            let meta = { name: name, title: name, synopsis: '', poster: '' };
+            const apply = () => {
+                if (window.vueApp && typeof window.vueApp.showDeepLinkPreview === 'function') {
+                    window.vueApp.showDeepLinkPreview(meta);
+                    return true;
+                }
+                return false;
+            };
+            // 等 Vue 实例就绪(通常解析期已挂载)，最多重试 ~2s
+            let tries = 0;
+            const tryApply = () => { if (!apply() && tries++ < 40) setTimeout(tryApply, 50); };
+            tryApply();
+            // 异步取 TMDB 简介/海报覆盖更新(失败则保留最小框架)
+            try {
+                const r = await fetch('/api/preview?name=' + encodeURIComponent(name));
+                if (r.ok) {
+                    const d = await r.json();
+                    meta = { name: name, title: d.title || name, synopsis: d.synopsis || '', poster: d.poster || '' };
+                    apply();
+                }
+            } catch (e) { /* 降级：保留仅剧名的框架 */ }
+        }
+
+        // 🔗 唤起半透明登录浮层(深链锁定框架里的"立即登录"按钮调用)
+        window.showLoginForDeepLink = function () {
+            const screen = document.getElementById('password-screen');
+            if (!screen) return;
+            // 取消可能正在进行的关闭动画定时器，避免"刚点开又被旧定时器隐藏"
+            if (screen._dismissTimer) { clearTimeout(screen._dismissTimer); screen._dismissTimer = null; }
+            screen.classList.add('deeplink-mode');
+            screen.classList.remove('hidden');
+            screen.style.display = 'flex';
+            switchLoginMode('v2board');
+        };
+
+        // 🔗 关闭深链登录浮层(回看背景框架；仅隐藏浮层，不改变登录状态)
+        window.dismissDeepLinkLogin = function () {
+            const screen = document.getElementById('password-screen');
+            if (!screen) return;
+            screen.classList.add('hidden');
+            if (screen._dismissTimer) clearTimeout(screen._dismissTimer);
+            screen._dismissTimer = setTimeout(() => {
+                // 若期间又被重新打开(移除了 hidden)，则不隐藏
+                if (screen.classList.contains('hidden')) screen.style.display = 'none';
+                screen._dismissTimer = null;
+            }, 300);
+        };
+
+        // 供 Vue 方法调用
+        window.showLoginScreen = showLoginScreen;
 
         // Run check when DOM is ready
         document.addEventListener('DOMContentLoaded', () => {
@@ -4306,6 +4492,7 @@
                     showSharePanel: false,   // 分享面板
                     shareIncludeTime: false, // 是否带"从当前进度开始"
                     shareSeconds: 0,         // 当前播放秒数（用于带时间分享）
+                    previewLocked: false,    // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
                     infoModalData: null,   // 弹窗数据
                     TMDB_IMG_URL: TMDB_IMG_URL,  // 模板中使用
                     TMDB_BACKDROP_URL: TMDB_BACKDROP_URL,
@@ -5965,6 +6152,10 @@
                         const p = new URLSearchParams(location.search);
                         const playName = p.get('play');
                         if (!playName) return;
+                        // 🔒 真实(已登录)流程接管：先解除未登录预览的锁定框架，避免搜索期间残留锁定态/无匹配时卡死
+                        this.previewLocked = false;
+                        this.showDetail = false;
+                        document.body.classList.remove('detail-open');
                         this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, done: false };
                         console.log('[深链] ?play=', playName, 'ep=', this._deepLink.ep, 't=', this._deepLink.t);
                         this.autoSearch(playName);
@@ -5977,7 +6168,8 @@
                     const norm = (s) => (s || '').trim();
                     const group = this.groupedList.find(g => norm(g.name) === norm(dl.name))
                         || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
-                    if (!group) { dl.done = true; return; }
+                    // 无匹配：彻底退出预览锁定态，让用户落到已加载的首页/搜索结果，而不是卡在黑屏锁定框架
+                    if (!group) { dl.done = true; this.previewLocked = false; this.showDetail = false; document.body.classList.remove('detail-open'); return; }
                     dl.done = true;
                     this.openDetail(group);
                     if (dl.ep) {
@@ -6003,6 +6195,28 @@
                         };
                         setTimeout(seekTick, 1200);
                     }
+                },
+                // 🔒 未登录用户打开分享深链：只渲染播放页"锁定框架"(标题+简介+黑屏播放器+登录提示)，
+                //    不发起任何资源站请求(搜索/detail/测速/m3u8)。简介与海报来自 TMDB(/api/preview)。
+                //    登录成功后由 handleDeepLink→openDetail 接管真实播放，openDetail 会清掉 previewLocked。
+                showDeepLinkPreview(meta) {
+                    meta = meta || {};
+                    this.previewLocked = true;
+                    this.isTestingSources = false;
+                    this.refreshingEpisodes = false;
+                    this.refreshingSources = false;
+                    this.loadingDetail = false;
+                    this.episodeList = [];
+                    this.currentUrl = '';
+                    this.currentGroup = { name: meta.name || meta.title || '', pic: meta.poster || '', sources: [] };
+                    this.currentSource = { site_name: '', vod_content: meta.synopsis || '' };
+                    this.showDetail = true;
+                    document.body.classList.add('detail-open');
+                },
+                // 🔒 锁定框架内"立即登录"：唤起半透明登录浮层(透出背景框架)
+                promptLogin() {
+                    if (typeof window.showLoginForDeepLink === 'function') window.showLoginForDeepLink();
+                    else if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
                 },
                 castVideo() {
                     const videoEl = (typeof dp !== 'undefined' && dp && dp.video) || document.querySelector('.dplayer-video');
@@ -6466,6 +6680,7 @@
                     // 🧭 进入新剧详情：自增导航令牌并记录，用于作废本次测速期间被切换走的残留回调
                     _navSeq++;
                     const _openSeq = _navSeq;
+                    this.previewLocked = false;  // 🔒 真实流程接管，解除未登录预览锁定态
                     this.refreshingEpisodes = false;
                     this.currentGroup = group;
                     this.showDetail = true;
@@ -6752,6 +6967,7 @@
                 },
                 closeDetail() {
                     this.showDetail = false;
+                    this.previewLocked = false;  // 🔒 退出预览锁定态
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
 
