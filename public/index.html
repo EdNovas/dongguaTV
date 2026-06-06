@@ -6232,26 +6232,38 @@
                         this.showDetail = true;
                         document.body.classList.add('detail-open');
                         this.autoSearch(playName);
+                        // 宽限计时器：~1.5s 后只要已搜到该剧(≥3 个源)就开，不必等最慢站点的 done
+                        if (this._dlGraceTimer) clearTimeout(this._dlGraceTimer);
+                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(3, false), 1500);
                     } catch (e) { }
                 },
-                // 搜索"全部完成(done)"后再定位打开：此时 groupedList 才有完整的源列表，openDetail 才能测全部源并选出
-                // 真正能在用户端直连播放的最快线路。(早开会只拿到首个返回的源——常是仅服务器可达、用户端播不了的源。)
-                tryOpenDeepLink() {
+                // 深链定位打开。不等"全部站点搜完(done)"——那要等最慢的站点；也不在"首个结果"就开——那常只拿到
+                // 一个仅服务器可达、用户端播不了的源。折中：累计到一批源(minSources)就开，openDetail 再从这批里
+                // 选出真正可直连播放的最快线路(它本身一拿到 2 个快速直连源就立即起播，并不等这批全部测完)。
+                //   onmessage 调 (5,false)：流式中攒够 5 个源就开；
+                //   宽限计时器调 (3,false)：~1.5s 后只要有 3 个源也开(慢的话别干等)；
+                //   done 调 (1,true)：搜索结束，有匹配就用完整列表开、无匹配才判失败退出。
+                tryOpenDeepLink(minSources, isFinal) {
                     const dl = this._deepLink;
                     if (!dl || dl.done) return;
                     const norm = (s) => (s || '').trim();
                     const group = this.groupedList.find(g => norm(g.name) === norm(dl.name))
                         || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
                     if (!group) {
-                        // 无匹配：退出加载/锁定态，落到已加载的首页/搜索结果，而不是卡在黑屏框架
+                        if (!isFinal) return;  // 还没搜到该剧：继续等(流式/宽限)，别误判失败
+                        // 搜索结束仍无匹配：退出加载/锁定态，落到已加载的首页/搜索结果，而不是卡在黑屏框架
                         dl.done = true;
+                        if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
                         this.previewLocked = false;
                         this.deepLinkLoading = false;
                         this.showDetail = false;
                         document.body.classList.remove('detail-open');
                         return;
                     }
+                    // 源还不够多且非最终：再等等(更可能等到可直连播放的源)，避免只拿到首个(常仅服务器可达)的源
+                    if (!isFinal && (group.sources ? group.sources.length : 0) < (minSources || 1)) return;
                     dl.done = true;
+                    if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
                     // 把目标集数交给 openDetail→switchSource→parseEpisodes 在"首次播放"时直接定位(标准化匹配 第01集↔第16集)，
                     // 不再用事后 setTimeout 轮询切集(那会与自动起播争用、并导致回到第一集)。
                     this._deepLinkTargetEp = dl.ep || '';
@@ -6728,6 +6740,8 @@
                                 newItems.forEach(item => {
                                     if (!item.vod_pic || item.vod_pic.includes('mac_default')) this.handleImgError(item.vod_name);
                                 });
+                                // ⏳ 深链：攒够一批源(≥5)就提前打开，不必等所有站点返回
+                                if (this._deepLink && !this._deepLink.done) this.tryOpenDeepLink(5, false);
                             }
                         } catch (err) { }
                     };
@@ -6738,8 +6752,8 @@
                             this._evtSource.close();
                             this._evtSource = null;
                         }
-                        // 🔗 若是深链触发的搜索，结果就绪后自动打开对应剧
-                        this.$nextTick(() => this.tryOpenDeepLink());
+                        // 🔗 深链：搜索结束(完整源列表已就绪)，最终定位打开；无匹配则判失败退出加载态
+                        this.$nextTick(() => this.tryOpenDeepLink(1, true));
                     });
 
                     this._evtSource.onerror = () => {
@@ -7045,6 +7059,7 @@
                     this.previewLocked = false;  // 🔒 退出预览锁定态
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
                     this._deepLinkTargetEp = '';  // 清除未消费的深链目标集数，避免串到下一部剧
+                    if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
 
