@@ -1534,6 +1534,10 @@
             display: flex;
             gap: 14px;
             overflow-x: auto;
+            /* overflow-x:auto 会让 overflow-y 计算成 auto(纵向裁剪)，hover 放大的卡片顶部会被切掉。
+               用上/下内边距给放大+发光留出空间，再用等量负 margin 抵消，保持版面位置不变。 */
+            padding-top: 24px;
+            margin-top: -24px;
             padding-bottom: 20px;
             scroll-behavior: smooth;
             /* 添加滚动捕捉，让滚动更自然 */
@@ -6213,9 +6217,10 @@
                         const playName = p.get('play');
                         if (!playName) return;
                         this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, done: false };
+                        this._deepLinkTargetEp = '';  // 每次深链重置目标集数(真正定位在 tryOpenDeepLink→switchSource 完成)
                         console.log('[深链] ?play=', playName, 'ep=', this._deepLink.ep, 't=', this._deepLink.t);
                         // ⏳ 已登录深链：立刻显示"播放页框架(加载态)"盖住后台搜索结果页，避免"先卡在搜索页很久才打开播放页"。
-                        //    搜索流里一旦精确命中该剧即提前打开(不必等所有资源站返回)；openDetail 接管后会清掉 deepLinkLoading。
+                        //    搜索"全部完成"后再 openDetail(拿完整源列表选可直连播放的最快线路)；加载帧覆盖等待期；openDetail 会清掉 deepLinkLoading。
                         this.previewLocked = false;
                         this.deepLinkLoading = true;
                         const prevPic = (this.currentGroup && this.currentGroup.pic) || '';
@@ -6229,17 +6234,16 @@
                         this.autoSearch(playName);
                     } catch (e) { }
                 },
-                // 搜索就绪后定位并打开深链对应的剧（尽力定位集数）。
-                // exactOnly=true：流式过程中只用"精确同名"提前命中即打开(不必等所有资源站返回)；false：最终用精确→子串兜底。
-                tryOpenDeepLink(exactOnly) {
+                // 搜索"全部完成(done)"后再定位打开：此时 groupedList 才有完整的源列表，openDetail 才能测全部源并选出
+                // 真正能在用户端直连播放的最快线路。(早开会只拿到首个返回的源——常是仅服务器可达、用户端播不了的源。)
+                tryOpenDeepLink() {
                     const dl = this._deepLink;
                     if (!dl || dl.done) return;
                     const norm = (s) => (s || '').trim();
-                    let group = this.groupedList.find(g => norm(g.name) === norm(dl.name));
-                    if (!group && !exactOnly) group = this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
+                    const group = this.groupedList.find(g => norm(g.name) === norm(dl.name))
+                        || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
                     if (!group) {
-                        if (exactOnly) return;  // 流式早期未精确命中：继续等后续结果 / 最终 done 再用子串兜底
-                        // 最终仍无匹配：退出加载/锁定态，落到已加载的首页/搜索结果，而不是卡在黑屏框架
+                        // 无匹配：退出加载/锁定态，落到已加载的首页/搜索结果，而不是卡在黑屏框架
                         dl.done = true;
                         this.previewLocked = false;
                         this.deepLinkLoading = false;
@@ -6248,17 +6252,10 @@
                         return;
                     }
                     dl.done = true;
+                    // 把目标集数交给 openDetail→switchSource→parseEpisodes 在"首次播放"时直接定位(标准化匹配 第01集↔第16集)，
+                    // 不再用事后 setTimeout 轮询切集(那会与自动起播争用、并导致回到第一集)。
+                    this._deepLinkTargetEp = dl.ep || '';
                     this.openDetail(group);
-                    if (dl.ep) {
-                        let tries = 0;
-                        const tick = () => {
-                            tries++;
-                            const ep = (this.episodeList || []).find(e => e.name === dl.ep);
-                            if (ep && ep.url) { if (this.currentUrl !== ep.url) this.play(ep.url); return; }
-                            if (tries < 20) setTimeout(tick, 300);
-                        };
-                        setTimeout(tick, 600);
-                    }
                     // 🔗 定位到分享的时间点（等播放器就绪后 seek，覆盖进度恢复）
                     if (dl.t > 0) {
                         let st = 0;
@@ -6731,8 +6728,6 @@
                                 newItems.forEach(item => {
                                     if (!item.vod_pic || item.vod_pic.includes('mac_default')) this.handleImgError(item.vod_name);
                                 });
-                                // ⏳ 深链：目标剧(精确同名)一出现在流式结果里就立刻打开播放，不必等所有资源站返回
-                                if (this._deepLink && !this._deepLink.done) this.tryOpenDeepLink(true);
                             }
                         } catch (err) { }
                     };
@@ -7049,6 +7044,7 @@
                     this.showDetail = false;
                     this.previewLocked = false;  // 🔒 退出预览锁定态
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
+                    this._deepLinkTargetEp = '';  // 清除未消费的深链目标集数，避免串到下一部剧
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
 
@@ -7098,6 +7094,10 @@
                     const previousEpName = this.episodeList?.find(ep => ep.url === this.currentUrl)?.name;
                     console.log('[切换资源] 当前集数:', previousEpName);
 
+                    // 🔗 深链首播：优先定位到分享指定的集数(标准化匹配)；用过即清，之后切源回到"保留当前集"的常规逻辑
+                    const epName = this._deepLinkTargetEp || previousEpName;
+                    this._deepLinkTargetEp = '';
+
                     this.episodeList = [];
 
                     try {
@@ -7105,7 +7105,7 @@
                         // 如果 source 已经有 vod_play_url（来自历史记录），直接使用
                         if (source.vod_play_url) {
                             console.log('[切换资源] 使用已有的 vod_play_url');
-                            this.parseEpisodes(source.vod_play_url, previousEpName);
+                            this.parseEpisodes(source.vod_play_url, epName);
                             this.loadingDetail = false;
                             return;
                         }
@@ -7132,7 +7132,7 @@
                         if (detail) {
                             // 保存简介信息到当前源
                             this.currentSource.vod_content = detail.vod_content || detail.vod_blurb || '';
-                            this.parseEpisodes(detail.vod_play_url, previousEpName);
+                            this.parseEpisodes(detail.vod_play_url, epName);
                         }
                     } catch (e) { console.log('[切换资源] 错误:', e); }
                     this.loadingDetail = false;
