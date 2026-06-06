@@ -2878,6 +2878,274 @@
                 font-size: 12px;
             }
         }
+        /* Windows desktop Apple TV shell */
+        @media (min-width: 992px) {
+            body {
+                padding-bottom: 0;
+                background:
+                    radial-gradient(circle at 72% 8%, rgba(92, 143, 255, 0.18), transparent 28%),
+                    radial-gradient(circle at 18% 18%, rgba(229, 9, 20, 0.13), transparent 30%),
+                    linear-gradient(180deg, #05070c 0%, #0b0d13 48%, #050506 100%);
+            }
+
+            body::-webkit-scrollbar,
+            .appletv-main::-webkit-scrollbar,
+            .hot-row::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+
+            body::-webkit-scrollbar-thumb,
+            .appletv-main::-webkit-scrollbar-thumb,
+            .hot-row::-webkit-scrollbar-thumb {
+                background: rgba(255, 255, 255, 0.16);
+                border-radius: 999px;
+            }
+
+            .appletv-shell {
+                display: grid;
+                grid-template-columns: 104px minmax(0, 1fr);
+                min-height: 100vh;
+            }
+
+            .appletv-sidebar {
+                position: sticky;
+                top: 0;
+                z-index: 1200;
+                height: 100vh;
+                padding: 22px 14px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 10px;
+                background: rgba(12, 14, 20, 0.52);
+                border-right: 1px solid rgba(255, 255, 255, 0.12);
+                backdrop-filter: blur(26px) saturate(150%);
+                -webkit-backdrop-filter: blur(26px) saturate(150%);
+                box-shadow: 16px 0 48px rgba(0, 0, 0, 0.28);
+            }
+
+            .appletv-sidebar-brand {
+                width: 58px;
+                height: 58px;
+                border-radius: 18px;
+                display: grid;
+                place-items: center;
+                margin-bottom: 10px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.14);
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 18px 38px rgba(0, 0, 0, 0.28);
+            }
+
+            .appletv-sidebar-brand img {
+                width: 36px;
+                height: 36px;
+                border-radius: 10px;
+            }
+
+            .appletv-nav-item {
+                width: 74px;
+                height: 62px;
+                border: 0;
+                border-radius: 20px;
+                color: rgba(255, 255, 255, 0.68);
+                background: transparent;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                font-size: 11px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: transform 0.18s ease, background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+            }
+
+            .appletv-nav-item i {
+                font-size: 17px;
+            }
+
+            .appletv-nav-item:hover,
+            .appletv-nav-item:focus-visible,
+            .appletv-nav-item.active {
+                color: #fff;
+                background: rgba(255, 255, 255, 0.13);
+                transform: scale(1.08);
+                outline: none;
+                box-shadow: 0 16px 34px rgba(0, 0, 0, 0.22);
+            }
+
+            .appletv-nav-item.active {
+                background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.09));
+                border: 1px solid rgba(255, 255, 255, 0.16);
+            }
+
+            .appletv-main {
+                min-width: 0;
+                padding-left: 0;
+            }
+
+            .appletv-main .navbar-custom {
+                left: 104px;
+                width: calc(100% - 104px);
+                background: linear-gradient(180deg, rgba(5, 7, 12, 0.86), rgba(5, 7, 12, 0));
+                border-bottom: 0;
+                backdrop-filter: blur(14px);
+                -webkit-backdrop-filter: blur(14px);
+            }
+
+            .appletv-main .carousel-item,
+            .appletv-main .hero-bg {
+                min-height: min(72vh, 720px);
+            }
+
+            .appletv-main .hero-overlay {
+                background: linear-gradient(90deg, rgba(5, 7, 12, 0.92) 0%, rgba(5, 7, 12, 0.58) 38%, rgba(5, 7, 12, 0.08) 72%);
+            }
+
+            .appletv-main .hero-content {
+                max-width: 680px;
+                margin-left: clamp(34px, 5vw, 76px);
+            }
+
+            .appletv-main .hero-title {
+                font-size: clamp(42px, 5vw, 76px);
+                letter-spacing: 0;
+            }
+
+            .appletv-main .search-section {
+                z-index: 1100;
+            }
+
+            .appletv-main .search-box-wrapper {
+                max-width: 760px;
+                border-radius: 24px;
+                background: rgba(255, 255, 255, 0.1);
+                border: 1px solid rgba(255, 255, 255, 0.16);
+                box-shadow: 0 22px 56px rgba(0, 0, 0, 0.34);
+                backdrop-filter: blur(22px);
+                -webkit-backdrop-filter: blur(22px);
+            }
+
+            .appletv-main .section-container,
+            .appletv-main .category-nav-container,
+            .appletv-feature-rail {
+                max-width: none;
+                margin-left: clamp(28px, 4vw, 70px);
+                margin-right: clamp(28px, 4vw, 70px);
+            }
+
+            .appletv-main .section-title {
+                font-size: 1.35rem;
+                letter-spacing: 0;
+            }
+
+            .appletv-main .poster-wrap,
+            .appletv-main .history-card .poster-wrap {
+                border-radius: 18px;
+                box-shadow: 0 18px 40px rgba(0, 0, 0, 0.34);
+            }
+
+            .appletv-main .hot-card,
+            .appletv-main .history-card {
+                transition: transform 0.18s ease, filter 0.18s ease;
+            }
+
+            .appletv-main .hot-card:hover,
+            .appletv-main .history-card:hover {
+                transform: scale(1.075);
+                filter: brightness(1.08);
+                z-index: 4;
+            }
+
+            .appletv-main .category-item {
+                border-radius: 20px;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                backdrop-filter: blur(18px);
+                -webkit-backdrop-filter: blur(18px);
+            }
+
+            .appletv-feature-rail {
+                display: grid;
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 16px;
+                margin-top: 8px;
+                margin-bottom: 36px;
+            }
+
+            .appletv-feature-card {
+                min-height: 126px;
+                border: 1px solid rgba(255, 255, 255, 0.13);
+                border-radius: 24px;
+                color: #fff;
+                background:
+                    linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04)),
+                    rgba(20, 24, 32, 0.68);
+                box-shadow: 0 20px 44px rgba(0, 0, 0, 0.26);
+                backdrop-filter: blur(22px);
+                -webkit-backdrop-filter: blur(22px);
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                padding: 22px;
+                cursor: pointer;
+                transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+            }
+
+            .appletv-feature-card:hover,
+            .appletv-feature-card:focus-visible {
+                transform: scale(1.035);
+                border-color: rgba(255, 255, 255, 0.28);
+                outline: none;
+            }
+
+            .appletv-feature-icon {
+                width: 56px;
+                height: 56px;
+                border-radius: 18px;
+                display: grid;
+                place-items: center;
+                font-size: 22px;
+                background: rgba(255, 255, 255, 0.12);
+            }
+
+            .appletv-feature-title {
+                font-size: 18px;
+                font-weight: 800;
+                line-height: 1.2;
+            }
+
+            .appletv-feature-meta {
+                margin-top: 6px;
+                color: rgba(255, 255, 255, 0.62);
+                font-size: 12px;
+            }
+
+            .appletv-panel-list {
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+                margin-top: 20px;
+            }
+
+            .appletv-panel-item {
+                border-radius: 18px;
+                background: rgba(255, 255, 255, 0.07);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                padding: 16px;
+            }
+        }
+
+        @media (max-width: 991px) {
+            .appletv-sidebar {
+                display: none;
+            }
+
+            .appletv-feature-rail {
+                display: none;
+            }
+        }
     </style>
 </head>
 
@@ -2932,6 +3200,20 @@
     </div>
 
     <div id="app" v-cloak>
+        <div class="appletv-shell">
+            <aside class="appletv-sidebar" aria-label="主导航">
+                <button class="appletv-sidebar-brand" @click="handleAppleNav({ id: 'home', action: 'home' })"
+                    title="冬瓜TV 首页">
+                    <img src="icon.png" alt="冬瓜TV">
+                </button>
+                <button v-for="item in appleNavItems" :key="item.id" class="appletv-nav-item"
+                    :class="{ active: activeAppleNav === item.id }" @click="handleAppleNav(item)" :title="item.label">
+                    <i :class="['fas', item.icon]"></i>
+                    <span>{{ item.label }}</span>
+                </button>
+            </aside>
+
+            <main class="appletv-main">
 
         <nav class="navbar-custom" :class="{ 'scrolled': scrollY > 50 }" v-show="!searched">
             <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
@@ -3054,6 +3336,30 @@
                 </div>
             </div>
             <!-- 动态生成的榜单 Rows -->
+            <div class="appletv-feature-rail">
+                <button class="appletv-feature-card" @click="handleAppleNav({ id: 'live', action: 'live' })">
+                    <span class="appletv-feature-icon"><i class="fas fa-broadcast-tower"></i></span>
+                    <span>
+                        <span class="appletv-feature-title">Live TV</span>
+                        <span class="appletv-feature-meta">直播频道</span>
+                    </span>
+                </button>
+                <button class="appletv-feature-card"
+                    @click="handleAppleNav({ id: 'subscriptions', action: 'subscriptions' })">
+                    <span class="appletv-feature-icon"><i class="fas fa-rss"></i></span>
+                    <span>
+                        <span class="appletv-feature-title">Source Picks</span>
+                        <span class="appletv-feature-meta">订阅源</span>
+                    </span>
+                </button>
+                <button class="appletv-feature-card" @click="handleAppleNav({ id: 'settings', action: 'settings' })">
+                    <span class="appletv-feature-icon"><i class="fas fa-sliders-h"></i></span>
+                    <span>
+                        <span class="appletv-feature-title">Player</span>
+                        <span class="appletv-feature-meta">播放器设置</span>
+                    </span>
+                </button>
+            </div>
             <div class="section-container animate__animated animate__fadeInUp"
                 v-for="(config, key, index) in rowConfigs" :key="key" :ref="key + '-section'" :data-row-key="key"
                 v-show="!(key === 'randomRow' && hideRandomRow)">
@@ -3231,6 +3537,55 @@
         </div>
 
         <!-- 设置弹窗 -->
+        <div class="info-modal-overlay" v-if="showLivePanel" @click.self="showLivePanel = false">
+            <div class="info-modal" style="max-width: 760px;">
+                <button class="info-modal-close" @click="showLivePanel = false"><i class="fas fa-times"></i></button>
+                <div style="padding: 30px;">
+                    <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.55rem;">
+                        <i class="fas fa-broadcast-tower" style="margin-right: 10px; color: #60a5fa;"></i>Live TV
+                    </h2>
+                    <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
+                        直播频道将在 TVBox / M3U / TXT 适配层接入后显示。当前阶段只保留 Windows 桌面入口，不内置任何第三方直播源。
+                    </div>
+                    <div class="appletv-panel-list">
+                        <div class="appletv-panel-item">
+                            <div style="color:#fff; font-weight:700;">M3U / M3U8</div>
+                            <div style="color:#888; font-size:12px; margin-top:6px;">等待订阅解析层提供频道</div>
+                        </div>
+                        <div class="appletv-panel-item">
+                            <div style="color:#fff; font-weight:700;">TXT 分组</div>
+                            <div style="color:#888; font-size:12px; margin-top:6px;">支持规划已预留</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="info-modal-overlay" v-if="showSubscriptionPanel" @click.self="showSubscriptionPanel = false">
+            <div class="info-modal" style="max-width: 820px;">
+                <button class="info-modal-close" @click="showSubscriptionPanel = false"><i
+                        class="fas fa-times"></i></button>
+                <div style="padding: 30px;">
+                    <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.55rem;">
+                        <i class="fas fa-rss" style="margin-right: 10px; color: #f59e0b;"></i>订阅源
+                    </h2>
+                    <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
+                        下一阶段会接入用户自有 TVBox JSON URL、本地 JSON、sites、lives、parses 与 plugin-required 标记。当前版本不硬编码影视源，也不执行 csp_xxx、spider.jar 或 py/js 插件。
+                    </div>
+                    <div class="appletv-panel-list">
+                        <div class="appletv-panel-item">
+                            <div style="color:#fff; font-weight:700;">TVBox JSON</div>
+                            <div style="color:#888; font-size:12px; margin-top:6px;">导入、刷新、启用状态待接入</div>
+                        </div>
+                        <div class="appletv-panel-item">
+                            <div style="color:#fff; font-weight:700;">插件型源</div>
+                            <div style="color:#888; font-size:12px; margin-top:6px;">第一版只识别并标记</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="info-modal-overlay" v-if="showSettingsModal" @click.self="showSettingsModal = false">
             <div class="info-modal" style="max-width: 450px;">
                 <button class="info-modal-close" @click="showSettingsModal = false"><i
@@ -3529,6 +3884,8 @@
             </div>
         </div>
 
+            </main>
+        </div>
     </div>
 
     <!-- Auth Verification Script (runs before Vue) -->
@@ -3847,6 +4204,20 @@
 
                     // 🎛️ 用户偏好设置
                     showSettingsModal: false,  // 设置弹窗显示状态
+                    showSubscriptionPanel: false,
+                    showLivePanel: false,
+                    activeAppleNav: 'home',
+                    appleNavItems: [
+                        { id: 'home', label: '首页', icon: 'fa-home', action: 'home' },
+                        { id: 'search', label: '搜索', icon: 'fa-search', action: 'search' },
+                        { id: 'movie', label: '电影', icon: 'fa-film', action: 'row', rowKey: 'movieRow' },
+                        { id: 'series', label: '剧集', icon: 'fa-tv', action: 'row', rowKey: 'tvRow' },
+                        { id: 'anime', label: '动漫', icon: 'fa-ghost', action: 'row', rowKey: 'animeRow' },
+                        { id: 'variety', label: '综艺', icon: 'fa-microphone-alt', action: 'row', rowKey: 'varietyRow' },
+                        { id: 'live', label: '直播', icon: 'fa-broadcast-tower', action: 'live' },
+                        { id: 'subscriptions', label: '订阅源', icon: 'fa-rss', action: 'subscriptions' },
+                        { id: 'settings', label: '设置', icon: 'fa-cog', action: 'settings' }
+                    ],
                     hideRandomRow: (function () { try { return localStorage.getItem('donggua_hide_random') === 'true'; } catch (e) { return false; } })(),  // 隐藏随机盲盒
                     filterNsfw: (function () { try { return localStorage.getItem('donggua_filter_nsfw') !== 'false'; } catch (e) { return true; } })(),  // 过滤 NSFW 内容（默认开启）
 
@@ -4211,6 +4582,66 @@
                 }
             },
             methods: {
+                handleAppleNav(item) {
+                    if (!item) return;
+                    this.activeAppleNav = item.id || 'home';
+                    this.showLivePanel = false;
+                    this.showSubscriptionPanel = false;
+
+                    if (item.action === 'home') {
+                        this.goHome();
+                        return;
+                    }
+
+                    if (item.action === 'search') {
+                        this.focusAppleSearch();
+                        return;
+                    }
+
+                    if (item.action === 'row') {
+                        this.scrollToAppleRow(item.rowKey);
+                        return;
+                    }
+
+                    if (item.action === 'live') {
+                        this.showLivePanel = true;
+                        return;
+                    }
+
+                    if (item.action === 'subscriptions') {
+                        this.showSubscriptionPanel = true;
+                        return;
+                    }
+
+                    if (item.action === 'settings') {
+                        this.showSettingsModal = true;
+                    }
+                },
+
+                focusAppleSearch() {
+                    this.showDetail = false;
+                    this.$nextTick(() => {
+                        const search = document.querySelector('.search-input');
+                        if (search) {
+                            search.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            setTimeout(() => search.focus(), 180);
+                        }
+                    });
+                },
+
+                scrollToAppleRow(rowKey) {
+                    if (!rowKey) return;
+                    this.showDetail = false;
+                    this.searched = false;
+                    this.rawList = [];
+                    this.$nextTick(() => {
+                        const section = document.querySelector(`[data-row-key="${rowKey}"]`);
+                        if (section) {
+                            section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    });
+                },
+
                 async initApp() {
                     // 防止重复初始化
                     if (this._appInitialized) return;
