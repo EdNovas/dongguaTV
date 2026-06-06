@@ -3521,7 +3521,7 @@
                     <span>开启 TV 模式</span>
                 </div>
                 <!-- 设置按钮 -->
-                <div class="tv-mode-toggle" @click="showSettingsModal = true" title="偏好设置">
+                <div class="tv-mode-toggle" @click="showSettingsModal = true; loadPlayerSettings()" title="偏好设置">
                     <i class="fas fa-cog"></i>
                     <span>偏好设置</span>
                 </div>
@@ -3721,6 +3721,47 @@
                         </label>
                     </div>
 
+                    <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
+                            <i class="fas fa-external-link-alt" style="color:#60a5fa; margin-right:8px;"></i>MPC 外部播放器
+                        </div>
+                        <div style="display:flex; gap:8px;">
+                            <input v-model="playerSettings.mpcExePath" type="text" placeholder="MPC-HC / MPC-BE exe 路径"
+                                style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                            <button class="btn-info" @click="detectMpcPath" style="border:0; padding:8px 12px;">
+                                <i class="fas fa-search"></i>
+                            </button>
+                        </div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="playerSettings.fullscreenOnStart" style="accent-color:#e50914;"> 全屏启动
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="playerSettings.closeMpcAfterPlayback" style="accent-color:#e50914;"> 播完关闭
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="playerSettings.useMpcFor4K" style="accent-color:#e50914;"> 4K 用 MPC
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="playerSettings.useMpcForHEVC" style="accent-color:#e50914;"> HEVC 用 MPC
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="playerSettings.useMpcForHDR" style="accent-color:#e50914;"> HDR 用 MPC
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> 网盘源用 MPC
+                            </label>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px; margin-top:14px;">
+                            <button class="btn-play" @click="savePlayerSettings" :disabled="playerSettingsSaving"
+                                style="border:0; padding:9px 16px; font-size:13px;">
+                                <i :class="['fas', playerSettingsSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i>
+                                保存播放器
+                            </button>
+                            <span v-if="playerSettingsMessage" style="color:#aaa; font-size:12px;">{{ playerSettingsMessage }}</span>
+                        </div>
+                    </div>
+
                     <!-- 提示信息 -->
                     <div
                         style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
@@ -3820,6 +3861,16 @@
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
+                        <button class="btn-cast" tabindex="2" @click="openCurrentWithMpc" aria-label="使用 MPC 播放">
+                            <i class="fas fa-external-link-alt"></i> MPC
+                        </button>
+                        <button class="btn-cast" tabindex="2" @click="copyCurrentPlayUrl" aria-label="复制播放地址">
+                            <i class="fas fa-copy"></i> 复制地址
+                        </button>
+                        <button class="btn-cast" tabindex="2" @click="showSettingsModal = true; loadPlayerSettings()"
+                            aria-label="播放器设置">
+                            <i class="fas fa-sliders-h"></i> 播放器
+                        </button>
                         <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="分享">
                             <i class="fas fa-share-alt"></i> 分享
                         </button>
@@ -3832,6 +3883,9 @@
                 <!-- 2. 中部：超大播放器 -->
                 <div class="player-box" style="position: relative;">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
+                    <div v-if="shouldRecommendMpc()" style="position:absolute; left:18px; bottom:18px; z-index:80; max-width:520px; background:rgba(0,0,0,0.78); border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 14px; font-size:12px; backdrop-filter:blur(14px);">
+                        推荐使用 MPC 播放，以获得更稳定的 4K 高码率播放体验。
+                    </div>
                     <!-- 自动切换线路提示 -->
                     <div v-if="autoRetryMessage" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
                                background: rgba(0,0,0,0.9); padding: 20px 30px; border-radius: 10px; 
@@ -4314,6 +4368,18 @@
                     tvboxSources: [],
                     liveGroups: [],
                     liveChannels: [],
+                    playerSettings: {
+                        defaultPlayer: 'mpc',
+                        mpcExePath: '',
+                        fullscreenOnStart: true,
+                        closeMpcAfterPlayback: true,
+                        useMpcFor4K: true,
+                        useMpcForHEVC: true,
+                        useMpcForHDR: true,
+                        useMpcForCloudDrive: true
+                    },
+                    playerSettingsSaving: false,
+                    playerSettingsMessage: '',
                     appleNavItems: [
                         { id: 'home', label: '首页', icon: 'fa-home', action: 'home' },
                         { id: 'search', label: '搜索', icon: 'fa-search', action: 'search' },
@@ -4724,6 +4790,7 @@
 
                     if (item.action === 'settings') {
                         this.showSettingsModal = true;
+                        this.loadPlayerSettings();
                     }
                 },
 
@@ -4850,6 +4917,106 @@
                         source.enabled = data.source.enabled;
                     } catch (error) {
                         this.subscriptionError = error.message || '源状态更新失败';
+                    }
+                },
+
+                async loadPlayerSettings() {
+                    try {
+                        const response = await fetch('/api/player/settings');
+                        const data = await response.json();
+                        if (response.ok && data.settings) {
+                            this.playerSettings = { ...this.playerSettings, ...data.settings };
+                        }
+                    } catch (error) {
+                        this.playerSettingsMessage = error.message || '播放器设置加载失败';
+                    }
+                },
+
+                async savePlayerSettings() {
+                    this.playerSettingsSaving = true;
+                    this.playerSettingsMessage = '';
+                    try {
+                        const response = await fetch('/api/player/settings', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.playerSettings)
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '保存失败');
+                        this.playerSettings = { ...this.playerSettings, ...data.settings };
+                        this.playerSettingsMessage = '播放器设置已保存';
+                    } catch (error) {
+                        this.playerSettingsMessage = error.message || '保存失败';
+                    } finally {
+                        this.playerSettingsSaving = false;
+                    }
+                },
+
+                async detectMpcPath() {
+                    this.playerSettingsMessage = '';
+                    try {
+                        const response = await fetch('/api/player/detect-mpc', { method: 'POST' });
+                        const data = await response.json();
+                        if (data.found && data.recommended) {
+                            this.playerSettings.mpcExePath = data.recommended;
+                            this.playerSettingsMessage = '已检测到 MPC';
+                        } else {
+                            this.playerSettingsMessage = '未在常见路径检测到 MPC，请手动选择或粘贴 exe 路径';
+                        }
+                    } catch (error) {
+                        this.playerSettingsMessage = error.message || '检测失败';
+                    }
+                },
+
+                buildCurrentPlayUrlResult() {
+                    const url = this.currentUrl || '';
+                    const lower = url.toLowerCase();
+                    return {
+                        url,
+                        format: lower.includes('.m3u8') ? 'm3u8' : lower.includes('.mkv') ? 'mkv' : lower.includes('.mp4') ? 'mp4' : 'unknown',
+                        quality: /2160|4k/i.test(url) ? '4k' : 'unknown',
+                        codec: /hevc|h265|h\\.265/i.test(url) ? 'hevc' : 'unknown',
+                        hdr: /hdr|dolby|dv/i.test(url),
+                        sourceKind: /alist|115|aliyundrive|quark|ucdrive|webdav|pan\\./i.test(url) ? 'cloud-drive' : 'normal',
+                        headers: {},
+                        expiresAt: null
+                    };
+                },
+
+                shouldRecommendMpc() {
+                    const result = this.buildCurrentPlayUrlResult();
+                    return result.quality === '4k' || result.codec === 'hevc' || result.hdr || result.sourceKind === 'cloud-drive' || result.format === 'mkv';
+                },
+
+                async openCurrentWithMpc() {
+                    if (!this.currentUrl) {
+                        this.showMiniToast && this.showMiniToast('当前没有播放地址');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/player/open-mpc', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildCurrentPlayUrlResult() })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'MPC 启动失败');
+                        this.showMiniToast && this.showMiniToast('已调用 MPC 播放');
+                    } catch (error) {
+                        alert(error.message || 'MPC 启动失败，请检查播放器路径');
+                        this.showSettingsModal = true;
+                        this.loadPlayerSettings();
+                    }
+                },
+
+                async copyCurrentPlayUrl() {
+                    const url = this.currentUrl || '';
+                    if (!url) return;
+                    try {
+                        await navigator.clipboard.writeText(url);
+                        this.showMiniToast && this.showMiniToast('播放地址已复制');
+                    } catch (error) {
+                        window.prompt('请手动复制播放地址：', url);
                     }
                 },
 
