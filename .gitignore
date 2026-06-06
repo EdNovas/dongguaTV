@@ -36,3 +36,9 @@ android-tv/build_*.txt
 
 
 .agents/workflows/search-files.md
+
+# Windows desktop build outputs
+dist/
+dist-desktop/
+dist-desktop-check/
+electron-test.*.log

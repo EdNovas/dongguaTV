@@ -16,11 +16,16 @@ const pipeline = promisify(stream.pipeline);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'db.json');
+const RUNTIME_DATA_DIR = process.env.DONGGUATV_DATA_DIR || __dirname;
+if (!process.env.VERCEL && !fs.existsSync(RUNTIME_DATA_DIR)) {
+    fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true });
+}
+
+const DATA_FILE = path.join(RUNTIME_DATA_DIR, 'db.json');
 const TEMPLATE_FILE = path.join(__dirname, 'db.template.json');
 
 // 图片缓存目录 (仅本地/Docker 环境)
-const IMAGE_CACHE_DIR = path.join(__dirname, 'public/cache/images');
+const IMAGE_CACHE_DIR = path.join(RUNTIME_DATA_DIR, 'cache/images');
 if (!process.env.VERCEL && !fs.existsSync(IMAGE_CACHE_DIR)) {
     fs.mkdirSync(IMAGE_CACHE_DIR, { recursive: true });
 }
@@ -468,9 +473,9 @@ async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
 
 // 缓存配置
 const CACHE_TYPE = process.env.CACHE_TYPE || 'json'; // json, sqlite, memory, none
-const SEARCH_CACHE_JSON = path.join(__dirname, 'cache_search.json');
-const DETAIL_CACHE_JSON = path.join(__dirname, 'cache_detail.json');
-const CACHE_DB_FILE = path.join(__dirname, 'cache.db');
+const SEARCH_CACHE_JSON = path.join(RUNTIME_DATA_DIR, 'cache_search.json');
+const DETAIL_CACHE_JSON = path.join(RUNTIME_DATA_DIR, 'cache_detail.json');
+const CACHE_DB_FILE = path.join(RUNTIME_DATA_DIR, 'cache.db');
 
 console.log(`[System] Cache Type: ${CACHE_TYPE}`);
 
@@ -695,7 +700,7 @@ app.use('/api/search', searchLimiter);
 // ========== 静态资源配置 ==========
 
 // 静态资源 30天缓存 (libs 目录 - CSS/JS) - 这些文件不会变化
-app.use('/libs', express.static('public/libs', {
+app.use('/libs', express.static(path.join(__dirname, 'public/libs'), {
     maxAge: '30d',
     immutable: true,
     etag: true,
@@ -703,7 +708,7 @@ app.use('/libs', express.static('public/libs', {
 }));
 
 // 图片缓存目录 - 30天缓存
-app.use('/cache', express.static('public/cache', {
+app.use('/cache', express.static(path.join(RUNTIME_DATA_DIR, 'cache'), {
     maxAge: '30d',
     immutable: true,
     etag: true
@@ -872,7 +877,7 @@ app.get('/sw.js', (req, res, next) => {
 });
 
 // 其他静态文件 - 1小时缓存
-app.use(express.static('public', {
+app.use(express.static(path.join(__dirname, 'public'), {
     maxAge: '1h',
     etag: true,
     lastModified: true

@@ -1,10 +1,12 @@
 {
-  "name": "node-video-proxy",
+  "name": "dongguatv-enhanced-desktop",
   "version": "1.0.2",
-  "main": "server.js",
+  "main": "main.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js"
+    "dev": "node server.js",
+    "desktop": "electron .",
+    "dist:desktop": "electron-builder --win"
   },
   "dependencies": {
     "@capacitor/screen-orientation": "^8.0.0",
@@ -22,6 +24,30 @@
   "devDependencies": {
     "@capacitor/android": "^8.0.0",
     "@capacitor/cli": "^8.0.0",
-    "@capacitor/core": "^8.0.0"
+    "@capacitor/core": "^8.0.0",
+    "electron": "^32.3.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.donggua.tv.enhanced",
+    "productName": "DongguaTV Enhanced",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "api/**",
+      "public/**",
+      "server.js",
+      "main.js",
+      "proxy-server.js",
+      "db.template.json",
+      "cloudflare-*.js",
+      ".env.example",
+      "package.json",
+      "node_modules/**"
+    ],
+    "win": {
+      "target": "nsis"
+    }
   }
 }
