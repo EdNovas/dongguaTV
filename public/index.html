@@ -3547,7 +3547,24 @@
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
                         直播频道将在 TVBox / M3U / TXT 适配层接入后显示。当前阶段只保留 Windows 桌面入口，不内置任何第三方直播源。
                     </div>
-                    <div class="appletv-panel-list">
+                    <div v-if="liveGroups.length > 0" style="margin-top:20px;">
+                        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+                            <span v-for="group in liveGroups" :key="group.name"
+                                style="padding:7px 12px; border-radius:999px; background:rgba(255,255,255,0.08); color:#ddd; font-size:12px;">
+                                {{ group.name }} · {{ group.count }}
+                            </span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; max-height:260px; overflow:auto;">
+                            <div v-for="channel in liveChannels.slice(0, 80)" :key="channel.id"
+                                style="border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06); border-radius:14px; padding:12px;">
+                                <div style="color:#fff; font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                    {{ channel.name }}
+                                </div>
+                                <div style="color:#888; font-size:11px; margin-top:4px;">{{ channel.group }}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="appletv-panel-list" v-else>
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">M3U / M3U8</div>
                             <div style="color:#888; font-size:12px; margin-top:6px;">等待订阅解析层提供频道</div>
@@ -3572,7 +3589,89 @@
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
                         下一阶段会接入用户自有 TVBox JSON URL、本地 JSON、sites、lives、parses 与 plugin-required 标记。当前版本不硬编码影视源，也不执行 csp_xxx、spider.jar 或 py/js 插件。
                     </div>
-                    <div class="appletv-panel-list">
+                    <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,240px); gap:10px; margin-top:20px;">
+                        <input v-model="subscriptionUrl" type="url" placeholder="粘贴你的 TVBox JSON 订阅 URL"
+                            style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:12px 14px;">
+                        <input v-model="subscriptionName" type="text" placeholder="名称，可选"
+                            style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:12px 14px;">
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
+                        <button class="btn-play" @click="importTvboxSubscription" :disabled="subscriptionLoading"
+                            style="border:0;">
+                            <i :class="['fas', subscriptionLoading ? 'fa-spinner fa-spin' : 'fa-plus']"></i>
+                            {{ subscriptionLoading ? '处理中...' : '添加订阅' }}
+                        </button>
+                        <button class="btn-info" @click="loadSubscriptionData" :disabled="subscriptionLoading"
+                            style="border:0;">
+                            <i class="fas fa-sync-alt"></i> 刷新列表
+                        </button>
+                        <span v-if="subscriptionError" style="color:#ff6b6b; font-size:12px;">{{ subscriptionError }}</span>
+                    </div>
+
+                    <div v-if="subscriptions.length > 0" style="margin-top:22px; display:grid; gap:12px;">
+                        <div v-for="sub in subscriptions" :key="sub.id"
+                            style="border:1px solid rgba(255,255,255,0.1); border-radius:18px; background:rgba(255,255,255,0.06); padding:16px;">
+                            <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+                                <div style="min-width:0;">
+                                    <div style="color:#fff; font-weight:800; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        {{ sub.name }}
+                                    </div>
+                                    <div style="color:#888; font-size:11px; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        {{ sub.url || sub.filePath || 'local-json' }}
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:8px; flex-shrink:0;">
+                                    <button class="btn-info" @click="refreshTvboxSubscription(sub.id)" :disabled="subscriptionLoading"
+                                        style="border:0; padding:8px 12px; font-size:12px;">
+                                        <i class="fas fa-sync-alt"></i>
+                                    </button>
+                                    <button class="btn-info" @click="deleteTvboxSubscription(sub.id)" :disabled="subscriptionLoading"
+                                        style="border:0; padding:8px 12px; font-size:12px;">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+                                <span style="color:#ddd; font-size:12px;">sites {{ sub.summary && sub.summary.sites || 0 }}</span>
+                                <span style="color:#ddd; font-size:12px;">live {{ sub.summary && sub.summary.lives || 0 }}</span>
+                                <span style="color:#fbbf24; font-size:12px;">plugin {{ sub.summary && sub.summary.pluginRequired || 0 }}</span>
+                                <span style="color:#f87171; font-size:12px;">unsupported {{ sub.summary && sub.summary.unsupported || 0 }}</span>
+                            </div>
+                            <div v-if="sub.metadata && (sub.metadata.jar || sub.metadata.spider)"
+                                style="color:#888; font-size:11px; margin-top:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                jar/spider: {{ sub.metadata.jar || sub.metadata.spider }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div v-if="tvboxSources.length > 0" style="margin-top:22px;">
+                        <div style="color:#fff; font-weight:800; margin-bottom:10px;">解析出的源</div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; max-height:300px; overflow:auto;">
+                            <div v-for="source in tvboxSources" :key="source.id"
+                                style="border:1px solid rgba(255,255,255,0.1); border-radius:14px; background:rgba(255,255,255,0.05); padding:12px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                    <div style="min-width:0; color:#fff; font-weight:700; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        {{ source.name }}
+                                    </div>
+                                    <label class="settings-switch" style="transform:scale(.78); transform-origin:right center;">
+                                        <input type="checkbox" :checked="source.enabled" @change="toggleTvboxSource(source)">
+                                        <span class="settings-slider"></span>
+                                    </label>
+                                </div>
+                                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+                                    <span style="color:#aaa; font-size:11px;">{{ source.sourceType }}</span>
+                                    <span :style="{ color: source.status === 'plugin-required' ? '#fbbf24' : source.status === 'unsupported' ? '#f87171' : '#93c5fd', fontSize:'11px' }">
+                                        {{ source.status }}
+                                    </span>
+                                </div>
+                                <div v-if="source.status === 'plugin-required'" style="color:#aaa; font-size:11px; line-height:1.6; margin-top:8px;">
+                                    需要 CatVod/Spider 运行时，当前版本只识别不执行。
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="appletv-panel-list" v-if="subscriptions.length === 0">
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">TVBox JSON</div>
                             <div style="color:#888; font-size:12px; margin-top:6px;">导入、刷新、启用状态待接入</div>
@@ -4207,6 +4306,14 @@
                     showSubscriptionPanel: false,
                     showLivePanel: false,
                     activeAppleNav: 'home',
+                    subscriptionUrl: '',
+                    subscriptionName: '',
+                    subscriptionLoading: false,
+                    subscriptionError: '',
+                    subscriptions: [],
+                    tvboxSources: [],
+                    liveGroups: [],
+                    liveChannels: [],
                     appleNavItems: [
                         { id: 'home', label: '首页', icon: 'fa-home', action: 'home' },
                         { id: 'search', label: '搜索', icon: 'fa-search', action: 'search' },
@@ -4605,11 +4712,13 @@
 
                     if (item.action === 'live') {
                         this.showLivePanel = true;
+                        this.loadSubscriptionData();
                         return;
                     }
 
                     if (item.action === 'subscriptions') {
                         this.showSubscriptionPanel = true;
+                        this.loadSubscriptionData();
                         return;
                     }
 
@@ -4640,6 +4749,108 @@
                             section.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }
                     });
+                },
+
+                async loadSubscriptionData() {
+                    try {
+                        this.subscriptionError = '';
+                        const [subRes, sourceRes, groupRes, channelRes] = await Promise.all([
+                            fetch('/api/subscriptions'),
+                            fetch('/api/sources'),
+                            fetch('/api/live/groups'),
+                            fetch('/api/live/channels')
+                        ]);
+                        const subData = await subRes.json();
+                        const sourceData = await sourceRes.json();
+                        const groupData = await groupRes.json();
+                        const channelData = await channelRes.json();
+                        this.subscriptions = subData.subscriptions || [];
+                        this.tvboxSources = sourceData.sources || [];
+                        this.liveGroups = groupData.groups || [];
+                        this.liveChannels = channelData.channels || [];
+                    } catch (error) {
+                        this.subscriptionError = error.message || '订阅数据加载失败';
+                    }
+                },
+
+                async importTvboxSubscription() {
+                    const url = (this.subscriptionUrl || '').trim();
+                    if (!url) {
+                        this.subscriptionError = '请输入 TVBox JSON 订阅 URL';
+                        return;
+                    }
+                    this.subscriptionLoading = true;
+                    this.subscriptionError = '';
+                    try {
+                        const response = await fetch('/api/subscriptions/import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                url,
+                                name: (this.subscriptionName || '').trim() || undefined
+                            })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '导入失败');
+                        this.subscriptionUrl = '';
+                        this.subscriptionName = '';
+                        await this.loadSubscriptionData();
+                        this.showMiniToast && this.showMiniToast('订阅导入完成');
+                    } catch (error) {
+                        this.subscriptionError = error.message || '导入失败';
+                    } finally {
+                        this.subscriptionLoading = false;
+                    }
+                },
+
+                async refreshTvboxSubscription(subscriptionId) {
+                    this.subscriptionLoading = true;
+                    this.subscriptionError = '';
+                    try {
+                        const response = await fetch(`/api/subscriptions/${encodeURIComponent(subscriptionId)}/refresh`, {
+                            method: 'POST'
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '刷新失败');
+                        await this.loadSubscriptionData();
+                    } catch (error) {
+                        this.subscriptionError = error.message || '刷新失败';
+                    } finally {
+                        this.subscriptionLoading = false;
+                    }
+                },
+
+                async deleteTvboxSubscription(subscriptionId) {
+                    if (!confirm('删除这个订阅及其解析出的源和直播频道？')) return;
+                    this.subscriptionLoading = true;
+                    this.subscriptionError = '';
+                    try {
+                        const response = await fetch(`/api/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+                            method: 'DELETE'
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '删除失败');
+                        await this.loadSubscriptionData();
+                    } catch (error) {
+                        this.subscriptionError = error.message || '删除失败';
+                    } finally {
+                        this.subscriptionLoading = false;
+                    }
+                },
+
+                async toggleTvboxSource(source) {
+                    try {
+                        const response = await fetch(`/api/sources/${encodeURIComponent(source.id)}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ enabled: !source.enabled })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '更新失败');
+                        source.enabled = data.source.enabled;
+                    } catch (error) {
+                        this.subscriptionError = error.message || '源状态更新失败';
+                    }
                 },
 
                 async initApp() {

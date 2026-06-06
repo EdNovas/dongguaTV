@@ -36,6 +36,7 @@
     },
     "files": [
       "api/**",
+      "server/**",
       "public/**",
       "server.js",
       "main.js",

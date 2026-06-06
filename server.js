@@ -13,6 +13,7 @@ const crypto = require('crypto');
 const stream = require('stream');
 const { promisify } = require('util');
 const pipeline = promisify(stream.pipeline);
+const { createTvboxService } = require('./server/adapters/tvbox');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -652,7 +653,12 @@ app.use(compression({
 }));
 
 app.use(cors());
-app.use(bodyParser.json({ limit: '5mb' }));  // 增大限制以支持历史记录同步
+app.use(bodyParser.json({ limit: '10mb' }));  // 增大限制以支持历史记录同步
+
+const tvboxService = createTvboxService({
+    dataDir: RUNTIME_DATA_DIR,
+    httpClient: axios
+});
 
 // ========== API 速率限制 ==========
 const rateLimit = require('express-rate-limit');
@@ -912,6 +918,118 @@ app.get('/api/debug', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString()
     });
+});
+
+function sendTvboxError(res, error, statusCode = 500) {
+    res.status(statusCode).json({
+        error: error && error.message ? error.message : 'TVBox adapter error'
+    });
+}
+
+app.post('/api/subscriptions/import', async (req, res) => {
+    try {
+        const result = await tvboxService.importSubscription({
+            url: req.body && req.body.url,
+            filePath: req.body && req.body.filePath,
+            config: req.body && req.body.config,
+            name: req.body && req.body.name,
+            enabled: req.body && req.body.enabled
+        });
+        res.json(result);
+    } catch (error) {
+        sendTvboxError(res, error, 400);
+    }
+});
+
+app.get('/api/subscriptions', (req, res) => {
+    try {
+        res.json({ subscriptions: tvboxService.listSubscriptions() });
+    } catch (error) {
+        sendTvboxError(res, error);
+    }
+});
+
+app.delete('/api/subscriptions/:id', (req, res) => {
+    try {
+        tvboxService.deleteSubscription(req.params.id);
+        res.json({ ok: true });
+    } catch (error) {
+        sendTvboxError(res, error);
+    }
+});
+
+app.post('/api/subscriptions/:id/refresh', async (req, res) => {
+    try {
+        const result = await tvboxService.refreshSubscription(req.params.id);
+        res.json(result);
+    } catch (error) {
+        sendTvboxError(res, error, 400);
+    }
+});
+
+app.get('/api/sources', (req, res) => {
+    try {
+        const subscriptionId = req.query.subscriptionId;
+        let sources = tvboxService.listSources();
+        if (subscriptionId) {
+            sources = sources.filter(source => source.sourceSubscriptionId === subscriptionId);
+        }
+        res.json({ sources });
+    } catch (error) {
+        sendTvboxError(res, error);
+    }
+});
+
+app.get('/api/sources/:id', (req, res) => {
+    try {
+        const source = tvboxService.getSource(req.params.id);
+        if (!source) return res.status(404).json({ error: 'Source not found' });
+        res.json({ source });
+    } catch (error) {
+        sendTvboxError(res, error);
+    }
+});
+
+app.patch('/api/sources/:id', (req, res) => {
+    try {
+        const source = tvboxService.updateSource(req.params.id, req.body || {});
+        if (!source) return res.status(404).json({ error: 'Source not found' });
+        res.json({ source });
+    } catch (error) {
+        sendTvboxError(res, error, 400);
+    }
+});
+
+app.get('/api/live/channels', (req, res) => {
+    try {
+        const group = req.query.group;
+        let channels = tvboxService.listLiveChannels();
+        if (group) {
+            channels = channels.filter(channel => channel.group === group);
+        }
+        res.json({ channels });
+    } catch (error) {
+        sendTvboxError(res, error);
+    }
+});
+
+app.get('/api/live/groups', (req, res) => {
+    try {
+        res.json({ groups: tvboxService.listLiveGroups() });
+    } catch (error) {
+        sendTvboxError(res, error);
+    }
+});
+
+app.post('/api/source-health-check', async (req, res) => {
+    try {
+        const sourceId = req.body && req.body.sourceId;
+        if (!sourceId) return res.status(400).json({ error: 'sourceId is required' });
+        const result = await tvboxService.healthCheck(sourceId);
+        res.json(result);
+    } catch (error) {
+        sendTvboxError(res, error, 400);
+    }
 });
 
 // ========== 历史记录同步 API ==========
