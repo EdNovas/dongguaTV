@@ -6277,25 +6277,31 @@
                         this.showDetail = true;
                         document.body.classList.add('detail-open');
                         this.autoSearch(playName);
-                        // 安全兜底：万一 done/onerror 都不触发(极少)，12s 后用已到的源强制打开，避免一直卡加载
+                        // 安全兜底：万一 done/onerror/防抖 都没触发(极少)，12s 后用已到的源打开，避免一直卡加载
                         if (this._dlGraceTimer) clearTimeout(this._dlGraceTimer);
-                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(), 12000);
+                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(false), 12000);
                     } catch (e) { }
                 },
-                // 深链定位打开：等搜索"全部完成(done)"拿到【完整】源列表再 openDetail(普通搜索也是看到完整列表才点开)。
-                // 关键：用户端测不了的源(CORS)会全部降级成"服务"——但其中能被 CF Worker 代理拉到的会被标 'proxy'(可播)，
-                // 拉不到的标 'server'(多半播不了)。openDetail 的自动选源已优先 direct>proxy>server，故需完整列表才能选到可播的源。
-                // (早开/只攒一批会漏掉靠后返回的可播源——这正是"分享只有几个源且都播不了"的根因。)
-                tryOpenDeepLink() {
+                // 深链定位打开。不必等"全部站点搜完(done)"——那要等最慢的几个站点；改为"源流式到达停顿(防抖~1.2s)
+                // 即认为本批已基本到齐"就打开(此时通常已含可播的源)，openDetail 再边测边选。配合 checkEarlyReturn
+                // 一拿到首个可播(direct/proxy)源就立刻起播，不必等全部测速完成。
+                //   onmessage 防抖：源停顿 1.2s → tryOpenDeepLink(false)；done/onerror → tryOpenDeepLink(true)；12s 安全兜底。
+                //   isFinal=false：有匹配就开、还没搜到则继续等；isFinal=true：有匹配就开、确实没有才判失败退出。
+                _clearDeepLinkTimers() {
+                    if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
+                    if (this._dlDebounce) { clearTimeout(this._dlDebounce); this._dlDebounce = null; }
+                },
+                tryOpenDeepLink(isFinal) {
                     const dl = this._deepLink;
                     if (!dl || dl.done) return;
                     const norm = (s) => (s || '').trim();
                     const group = this.groupedList.find(g => norm(g.name) === norm(dl.name))
                         || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
                     if (!group) {
+                        if (!isFinal) return;  // 还没搜到该剧：继续等(防抖/兜底)，别误判失败
                         // 搜索结束仍无匹配：退出加载/锁定态，落到已加载的首页/搜索结果，而不是卡在黑屏框架
                         dl.done = true;
-                        if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
+                        this._clearDeepLinkTimers();
                         this.previewLocked = false;
                         this.deepLinkLoading = false;
                         this.showDetail = false;
@@ -6303,7 +6309,7 @@
                         return;
                     }
                     dl.done = true;
-                    if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
+                    this._clearDeepLinkTimers();
                     // 把目标集数交给 openDetail→switchSource→parseEpisodes 在"首次播放"时直接定位(标准化匹配 第01集↔第16集)，
                     // 不再用事后 setTimeout 轮询切集(那会与自动起播争用、并导致回到第一集)。
                     this._deepLinkTargetEp = dl.ep || '';
@@ -6780,12 +6786,15 @@
                                 newItems.forEach(item => {
                                     if (!item.vod_pic || item.vod_pic.includes('mac_default')) this.handleImgError(item.vod_name);
                                 });
-                                // ⏳ 深链加载帧：实时更新"已找到 N 个线路"(仅计数反馈，不提前打开——要等完整列表)
+                                // ⏳ 深链加载帧：实时更新"已找到 N 个线路"，并用防抖在"源到达停顿~1.2s"时即打开
+                                //   (不必等最慢站点的 done)，由 openDetail 边测边选、首个可播源就起播。
                                 if (this._deepLink && !this._deepLink.done) {
                                     const norm = (s) => (s || '').trim();
                                     const g = this.groupedList.find(x => norm(x.name) === norm(this._deepLink.name))
                                         || this.groupedList.find(x => norm(x.name).includes(norm(this._deepLink.name)));
                                     this.deepLinkSourceCount = (g && g.sources) ? g.sources.length : 0;
+                                    if (this._dlDebounce) clearTimeout(this._dlDebounce);
+                                    this._dlDebounce = setTimeout(() => this.tryOpenDeepLink(false), 1200);
                                 }
                             }
                         } catch (err) { }
@@ -6797,8 +6806,8 @@
                             this._evtSource.close();
                             this._evtSource = null;
                         }
-                        // 🔗 深链：搜索结束(完整源列表已就绪)，定位打开；无匹配则判失败退出加载态
-                        this.$nextTick(() => this.tryOpenDeepLink());
+                        // 🔗 深链：搜索结束，定位打开(若防抖未先触发)；无匹配则判失败退出加载态
+                        this.$nextTick(() => this.tryOpenDeepLink(true));
                     });
 
                     this._evtSource.onerror = () => {
@@ -6808,7 +6817,7 @@
                             this._evtSource = null;
                         }
                         // 🔗 深链：搜索连接中断也用已到的源尝试打开，避免一直卡在加载帧
-                        if (this._deepLink && !this._deepLink.done) this.$nextTick(() => this.tryOpenDeepLink());
+                        if (this._deepLink && !this._deepLink.done) this.$nextTick(() => this.tryOpenDeepLink(true));
                     };
                 },
                 async openDetail(group) {
@@ -6850,6 +6859,19 @@
                             directFastSources.sort((a, b) => a.latency - b.latency);
                             console.log(`[快速返回] 已找到 ${directFastSources.length} 个用户端快速线路，自动选择: ${directFastSources[0].site_name} (${directFastSources[0].latency}ms 🎬)`);
                             this.switchSource(directFastSources[0]);
+                            return;
+                        }
+
+                        // 没有直连快速线路时：一旦确认有"代理可播(proxy)"的源(海外用户多为此类)，立刻起播，
+                        // 不必等 3s 超时或全部测速完成——这就是"首个可播源就直接播"的关键。
+                        const proxyReady = this.currentGroup.sources.filter(s =>
+                            s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
+                        );
+                        if (proxyReady.length > 0) {
+                            hasAutoSelected = true;
+                            proxyReady.sort((a, b) => a.latency - b.latency);
+                            console.log(`[快速返回] 首个代理可播线路就绪，自动选择: ${proxyReady[0].site_name} (${proxyReady[0].latency}ms 🔁)`);
+                            this.switchSource(proxyReady[0]);
                         }
                     };
 
@@ -7127,7 +7149,7 @@
                     this.previewLocked = false;  // 🔒 退出预览锁定态
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
                     this._deepLinkTargetEp = '';  // 清除未消费的深链目标集数，避免串到下一部剧
-                    if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
+                    this._clearDeepLinkTimers();
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
 
