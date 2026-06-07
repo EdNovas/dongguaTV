@@ -1352,6 +1352,9 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         // 2. 取弹幕并转 DPlayer 格式
         const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
         let data = dandanToDplayer((cr.data && cr.data.comments) || []);
+        // 上游(聚合多平台/withRelated)不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"，
+        // 避免视频后半段弹幕被整段丢弃(排序成本极低，数千~万级数字比较 <1ms)
+        data.sort((a, b) => a[0] - b[0]);
         // 热门剧单集可达 1.5w+ 条(payload~1.5MB)：按时间均匀采样到上限，控制体积与前端渲染压力
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }

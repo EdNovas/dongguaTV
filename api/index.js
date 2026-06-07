@@ -375,6 +375,7 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         }
         const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
         let data = dandanToDplayer((cr.data && cr.data.comments) || []);
+        data.sort((a, b) => a[0] - b[0]); // 先按时间升序，保证下面按索引均匀采样=按时间均匀采样(后半段不丢)
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
         danmakuCache.set(cacheKey, { data, expiry: Date.now() + (data.length ? DANMAKU_CACHE_TTL : DANMAKU_MISS_TTL) });
