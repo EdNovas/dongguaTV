@@ -5869,11 +5869,11 @@
                                     this.play(targetEpisode.url, bestSource.site_name);
                                     // 后台自动刷新集数（不阻塞播放）
                                     this.refreshEpisodes();
-                                    // 🔄 线路测速优先用本地缓存(历史已存每路 latency/_testType)。仅当"从未测速"或"缓存超过 12h"
+                                    // 🔄 线路测速优先用本地缓存(历史已存每路 latency/_testType)。仅当"从未测速(缺失)"或"缓存超过 24h"
                                     //    才后台重测一次——避免每次打开历史都重测全部线路。重测结果会随播放进度存回历史，下次即用缓存。
                                     const _testedAt = item.groupData.sourcesTestedAt || 0;
                                     const _cacheAgeH = (Date.now() - _testedAt) / 3600000;
-                                    if (!_testedAt || _cacheAgeH > 12) {
+                                    if (!_testedAt || _cacheAgeH > 24) {
                                         console.log('[观看历史] 线路测速缓存' + (_testedAt ? '过期(' + _cacheAgeH.toFixed(1) + 'h)' : '缺失') + '，后台重测一次');
                                         this.refreshSources();
                                     } else {
