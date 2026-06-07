@@ -153,6 +153,19 @@
                 transition-duration: 0.01ms !important;
                 scroll-behavior: auto !important;
             }
+
+            /* 🛡️ 弹幕是核心内容(非装饰动画)：即便用户系统开启"减少动态效果"，弹幕也必须正常滚动，
+               否则上面的 0.01ms 会让弹幕瞬间跳到屏幕外消失(看似"弹幕完全不显示")。这里恢复其滚动时长。 */
+            .dplayer-danmaku .dplayer-danmaku-item.dplayer-danmaku-move,
+            .dplayer-danmaku .dplayer-danmaku-right.dplayer-danmaku-move {
+                animation-duration: 8s !important;
+                animation-iteration-count: 1 !important;
+            }
+            .dplayer-danmaku .dplayer-danmaku-top.dplayer-danmaku-move,
+            .dplayer-danmaku .dplayer-danmaku-bottom.dplayer-danmaku-move {
+                animation-duration: 6s !important;
+                animation-iteration-count: 1 !important;
+            }
         }
         /* 🔗 分享面板社交按钮（YouTube 风格） */
         .share-soc { background:none; border:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:7px; min-width:62px; color:#bbb; font-size:12px; padding:0; flex:0 0 auto; }
@@ -5825,6 +5838,9 @@
                                     this.play(targetEpisode.url, bestSource.site_name);
                                     // 后台自动刷新集数（不阻塞播放）
                                     this.refreshEpisodes();
+                                    // 🔄 历史打开同样后台重新测速所有线路：保存的延迟常不全(合并补齐的源未测=999)或已过期，
+                                    //    与"搜索后打开"一致地重测，不阻塞当前续播(refreshSources 只更新线路列表、不动播放器)
+                                    this.refreshSources();
                                     return;
                                 }
                             }
