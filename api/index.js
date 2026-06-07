@@ -291,9 +291,11 @@ app.get('/api/preview', async (req, res) => {
 // 🗨️ 弹幕代理：剧名+集名 → 自建 danmu_api(兼容弹弹play，聚合主流平台弹幕) → 转 DPlayer v3 格式。
 //   DPlayer 会 GET /api/danmaku/v3/?id=<剧名|集名>。需配置 DANMU_API_URL；未配置则返回空弹幕(优雅降级)。
 const danmakuCache = new Map();
+const danmakuSearchCache = new Map(); // norm(剧名) -> { animes, expiry } 同剧各集复用搜索结果
 const DANMAKU_CACHE_TTL = 30 * 60 * 1000;
 const DANMAKU_MISS_TTL = 5 * 60 * 1000;
 const DANMAKU_CACHE_MAX = 1000;
+const DANMAKU_MAX = 6000; // 单集弹幕上限(超出按时间均匀采样)，控制 payload 体积与渲染压力
 let danmakuWinStart = 0, danmakuWinCount = 0;
 function danmakuBudgetOk() {
     const now = Date.now();
@@ -349,11 +351,19 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         const base = DANMU_API_URL.replace(/\/$/, '');
         const token = process.env.DANMU_API_TOKEN || '';
         const prefix = token ? `/${encodeURIComponent(token)}` : '';
-        const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 6000 });
-        const animes = (sr.data && sr.data.animes) || [];
         const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
         const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
         const nt = norm(title), ct = core(title);
+        // 搜索结果按剧名缓存：同剧各集复用，省去每集 ~6s 搜索(对 Vercel 10s 函数上限尤为关键)
+        let animes;
+        const sc = danmakuSearchCache.get(nt);
+        if (sc && sc.expiry > Date.now()) { animes = sc.animes; }
+        else {
+            const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
+            animes = (sr.data && sr.data.animes) || [];
+            if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
+            danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_CACHE_TTL });
+        }
         const anime = animes.find(a => core(a.animeTitle) === ct)
             || animes.find(a => norm(a.animeTitle) === nt)
             || animes.find(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)))
@@ -363,8 +373,9 @@ app.get('/api/danmaku/v3/', async (req, res) => {
             danmakuCache.set(cacheKey, { data: [], expiry: Date.now() + DANMAKU_MISS_TTL });
             return res.json(empty);
         }
-        const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 8000 });
-        const data = dandanToDplayer((cr.data && cr.data.comments) || []);
+        const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
+        let data = dandanToDplayer((cr.data && cr.data.comments) || []);
+        if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
         danmakuCache.set(cacheKey, { data, expiry: Date.now() + (data.length ? DANMAKU_CACHE_TTL : DANMAKU_MISS_TTL) });
         return res.json({ code: 0, version: 3, data, msg: '' });

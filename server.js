@@ -1263,9 +1263,11 @@ app.get('/api/preview', async (req, res) => {
 //   再转成 DPlayer v3 格式。按 DPlayer 约定 danmaku.api='/api/danmaku/'，它会 GET /api/danmaku/v3/?id=<剧名|集名>。
 //   需配置环境变量 DANMU_API_URL(你部署的 danmu_api 地址)；未配置则返回空弹幕(功能优雅降级，不报错)。
 const danmakuCache = new Map(); // "剧名|集名" -> { data, expiry }
+const danmakuSearchCache = new Map(); // norm(剧名) -> { animes, expiry } 同剧各集复用搜索结果
 const DANMAKU_CACHE_TTL = 30 * 60 * 1000;
 const DANMAKU_MISS_TTL = 5 * 60 * 1000;
 const DANMAKU_CACHE_MAX = 1000;
+const DANMAKU_MAX = 6000; // 单集弹幕上限(超出按时间均匀采样)，控制 payload 体积与渲染压力
 let danmakuWinStart = 0, danmakuWinCount = 0;
 function danmakuBudgetOk() { // 全站每分钟最多 300 次上游弹幕查询，防刷
     const now = Date.now();
@@ -1323,13 +1325,21 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         const base = DANMU_API_URL.replace(/\/$/, '');
         const token = process.env.DANMU_API_TOKEN || '';
         const prefix = token ? `/${encodeURIComponent(token)}` : '';
-        // 1. 按剧名搜索剧集
-        const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 6000 });
-        const animes = (sr.data && sr.data.animes) || [];
         const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
         // 主标题：去掉 "(2022)"、"【国产剧】"、"from iqiyi" 等后缀，避免"破事精英"误命中"破事精英 第二季"
         const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
         const nt = norm(title), ct = core(title);
+        // 1. 按剧名搜索剧集 (danmu_api 在 CF 上现抓平台弹幕，冷启动可达 6s+，超时给足防被掐死返回空)
+        //    搜索结果按剧名缓存：同剧不同集复用，省去每集重复 ~6s 搜索(对 Vercel 10s 函数上限尤为关键)
+        let animes;
+        const sc = danmakuSearchCache.get(nt);
+        if (sc && sc.expiry > Date.now()) { animes = sc.animes; }
+        else {
+            const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
+            animes = (sr.data && sr.data.animes) || [];
+            if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
+            danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_CACHE_TTL });
+        }
         const anime = animes.find(a => core(a.animeTitle) === ct)   // 主标题精确(去后缀)优先——选对季/版本
             || animes.find(a => norm(a.animeTitle) === nt)
             || animes.find(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)))
@@ -1340,8 +1350,10 @@ app.get('/api/danmaku/v3/', async (req, res) => {
             return res.json(empty);
         }
         // 2. 取弹幕并转 DPlayer 格式
-        const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 8000 });
-        const data = dandanToDplayer((cr.data && cr.data.comments) || []);
+        const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
+        let data = dandanToDplayer((cr.data && cr.data.comments) || []);
+        // 热门剧单集可达 1.5w+ 条(payload~1.5MB)：按时间均匀采样到上限，控制体积与前端渲染压力
+        if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
         danmakuCache.set(cacheKey, { data, expiry: Date.now() + (data.length ? DANMAKU_CACHE_TTL : DANMAKU_MISS_TTL) });
         return res.json({ code: 0, version: 3, data, msg: '' });
