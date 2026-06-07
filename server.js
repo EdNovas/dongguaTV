@@ -1268,6 +1268,7 @@ const DANMAKU_CACHE_TTL = 30 * 60 * 1000;
 const DANMAKU_MISS_TTL = 5 * 60 * 1000;
 const DANMAKU_CACHE_MAX = 1000;
 const DANMAKU_MAX = 6000; // 单集弹幕上限(超出按时间均匀采样)，控制 payload 体积与渲染压力
+const DANMAKU_SEARCH_TTL = 3 * 60 * 1000; // danmu_api 的 episodeId 会过期(实测<10min)，搜索结果只短存，防复用过期id取到空弹幕
 let danmakuWinStart = 0, danmakuWinCount = 0;
 function danmakuBudgetOk() { // 全站每分钟最多 300 次上游弹幕查询，防刷
     const now = Date.now();
@@ -1338,7 +1339,7 @@ app.get('/api/danmaku/v3/', async (req, res) => {
             const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
             animes = (sr.data && sr.data.animes) || [];
             if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
-            danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_CACHE_TTL });
+            danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
         }
         // 收集匹配该剧名的所有 anime(同剧多平台)：core 精确(去后缀)优先，否则包含匹配
         let candidates = animes.filter(a => core(a.animeTitle) === ct);
