@@ -1340,20 +1340,27 @@ app.get('/api/danmaku/v3/', async (req, res) => {
             if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
             danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_CACHE_TTL });
         }
-        const anime = animes.find(a => core(a.animeTitle) === ct)   // 主标题精确(去后缀)优先——选对季/版本
-            || animes.find(a => norm(a.animeTitle) === nt)
-            || animes.find(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)))
-            || animes[0];
-        const episode = anime && pickDanmakuEpisode(anime.episodes, ep);
-        if (!episode || !episode.episodeId) {
-            danmakuCache.set(cacheKey, { data: [], expiry: Date.now() + DANMAKU_MISS_TTL });
-            return res.json(empty);
+        // 收集匹配该剧名的所有 anime(同剧多平台)：core 精确(去后缀)优先，否则包含匹配
+        let candidates = animes.filter(a => core(a.animeTitle) === ct);
+        if (!candidates.length) candidates = animes.filter(a => norm(a.animeTitle) === nt);
+        if (!candidates.length) candidates = animes.filter(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)));
+        if (!candidates.length && animes.length) candidates = [animes[0]];
+        // 按平台弹幕量优先级排序：iqiyi/腾讯/优酷/B站/芒果/360 在前；migu 常返 0 且慢(实测 23s/0条) → 排最后
+        const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
+        const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
+        candidates.sort((a, b) => (PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6));
+        // 2. 逐平台取弹幕：命中非空即用(优先平台已排前)；某平台空(如 migu)则回退下一个；限 3 次控时延
+        let data = [];
+        for (let tries = 0; tries < candidates.length && tries < 3; tries++) {
+            const episode = pickDanmakuEpisode(candidates[tries].episodes, ep);
+            if (!episode || !episode.episodeId) continue;
+            try {
+                const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
+                const d = dandanToDplayer((cr.data && cr.data.comments) || []);
+                if (d.length) { data = d; break; }
+            } catch (e) { /* 该平台失败，试下一个 */ }
         }
-        // 2. 取弹幕并转 DPlayer 格式
-        const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
-        let data = dandanToDplayer((cr.data && cr.data.comments) || []);
-        // 上游(聚合多平台/withRelated)不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"，
-        // 避免视频后半段弹幕被整段丢弃(排序成本极低，数千~万级数字比较 <1ms)
+        // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
         data.sort((a, b) => a[0] - b[0]);
         // 热门剧单集可达 1.5w+ 条(payload~1.5MB)：按时间均匀采样到上限，控制体积与前端渲染压力
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }

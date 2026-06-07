@@ -364,17 +364,24 @@ app.get('/api/danmaku/v3/', async (req, res) => {
             if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
             danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_CACHE_TTL });
         }
-        const anime = animes.find(a => core(a.animeTitle) === ct)
-            || animes.find(a => norm(a.animeTitle) === nt)
-            || animes.find(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)))
-            || animes[0];
-        const episode = anime && pickDanmakuEpisode(anime.episodes, ep);
-        if (!episode || !episode.episodeId) {
-            danmakuCache.set(cacheKey, { data: [], expiry: Date.now() + DANMAKU_MISS_TTL });
-            return res.json(empty);
+        // 同剧多平台：收集所有匹配的 anime，按平台弹幕量排序(migu 常返 0 且慢→最后)，逐个取直到非空(限3次)
+        let candidates = animes.filter(a => core(a.animeTitle) === ct);
+        if (!candidates.length) candidates = animes.filter(a => norm(a.animeTitle) === nt);
+        if (!candidates.length) candidates = animes.filter(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)));
+        if (!candidates.length && animes.length) candidates = [animes[0]];
+        const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
+        const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
+        candidates.sort((a, b) => (PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6));
+        let data = [];
+        for (let tries = 0; tries < candidates.length && tries < 3; tries++) {
+            const episode = pickDanmakuEpisode(candidates[tries].episodes, ep);
+            if (!episode || !episode.episodeId) continue;
+            try {
+                const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
+                const d = dandanToDplayer((cr.data && cr.data.comments) || []);
+                if (d.length) { data = d; break; }
+            } catch (e) { /* 该平台失败，试下一个 */ }
         }
-        const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
-        let data = dandanToDplayer((cr.data && cr.data.comments) || []);
         data.sort((a, b) => a[0] - b[0]); // 先按时间升序，保证下面按索引均匀采样=按时间均匀采样(后半段不丢)
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
