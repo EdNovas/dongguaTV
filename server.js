@@ -1287,13 +1287,18 @@ function dandanToDplayer(comments) {
     }
     return out;
 }
+function danmakuEpNum(s) {
+    // 优先取"第N集/话/期"里的 N(忽略"破事精英2第17集"里的剧名数字2)；取不到再退回第一个数字
+    const m = String(s || '').match(/第\s*0*(\d+)\s*[集话話期]/);
+    if (m) return parseInt(m[1], 10);
+    const m2 = String(s || '').match(/\d+/);
+    return m2 ? parseInt(m2[0], 10) : null;
+}
 function pickDanmakuEpisode(episodes, epName) {
     if (!episodes || !episodes.length) return null;
-    if (!epName) return episodes[0];
-    const m = String(epName).match(/\d+/);
-    if (m) {
-        const n = parseInt(m[0], 10);
-        const byTitle = episodes.find(e => { const mm = String(e.episodeTitle || '').match(/\d+/); return mm && parseInt(mm[0], 10) === n; });
+    const n = epName ? danmakuEpNum(epName) : null;
+    if (n != null) {
+        const byTitle = episodes.find(e => danmakuEpNum(e.episodeTitle) === n);
         if (byTitle) return byTitle;
         if (episodes[n - 1]) return episodes[n - 1];
     }
@@ -1322,8 +1327,12 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 6000 });
         const animes = (sr.data && sr.data.animes) || [];
         const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
-        const anime = animes.find(a => norm(a.animeTitle) === norm(title))
-            || animes.find(a => norm(a.animeTitle).includes(norm(title)) || norm(title).includes(norm(a.animeTitle)))
+        // 主标题：去掉 "(2022)"、"【国产剧】"、"from iqiyi" 等后缀，避免"破事精英"误命中"破事精英 第二季"
+        const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
+        const nt = norm(title), ct = core(title);
+        const anime = animes.find(a => core(a.animeTitle) === ct)   // 主标题精确(去后缀)优先——选对季/版本
+            || animes.find(a => norm(a.animeTitle) === nt)
+            || animes.find(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)))
             || animes[0];
         const episode = anime && pickDanmakuEpisode(anime.episodes, ep);
         if (!episode || !episode.episodeId) {

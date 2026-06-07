@@ -314,13 +314,17 @@ function dandanToDplayer(comments) {
     }
     return out;
 }
+function danmakuEpNum(s) {
+    const m = String(s || '').match(/第\s*0*(\d+)\s*[集话話期]/);
+    if (m) return parseInt(m[1], 10);
+    const m2 = String(s || '').match(/\d+/);
+    return m2 ? parseInt(m2[0], 10) : null;
+}
 function pickDanmakuEpisode(episodes, epName) {
     if (!episodes || !episodes.length) return null;
-    if (!epName) return episodes[0];
-    const m = String(epName).match(/\d+/);
-    if (m) {
-        const n = parseInt(m[0], 10);
-        const byTitle = episodes.find(e => { const mm = String(e.episodeTitle || '').match(/\d+/); return mm && parseInt(mm[0], 10) === n; });
+    const n = epName ? danmakuEpNum(epName) : null;
+    if (n != null) {
+        const byTitle = episodes.find(e => danmakuEpNum(e.episodeTitle) === n);
         if (byTitle) return byTitle;
         if (episodes[n - 1]) return episodes[n - 1];
     }
@@ -348,8 +352,11 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 6000 });
         const animes = (sr.data && sr.data.animes) || [];
         const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
-        const anime = animes.find(a => norm(a.animeTitle) === norm(title))
-            || animes.find(a => norm(a.animeTitle).includes(norm(title)) || norm(title).includes(norm(a.animeTitle)))
+        const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
+        const nt = norm(title), ct = core(title);
+        const anime = animes.find(a => core(a.animeTitle) === ct)
+            || animes.find(a => norm(a.animeTitle) === nt)
+            || animes.find(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)))
             || animes[0];
         const episode = anime && pickDanmakuEpisode(anime.episodes, ep);
         if (!episode || !episode.episodeId) {
