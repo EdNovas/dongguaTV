@@ -1309,7 +1309,10 @@ function pickDanmakuEpisode(episodes, epName) {
 }
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
-    res.set('Cache-Control', 'public, max-age=600');
+    // 缓存策略：默认短缓存(空/出错只 5min，避免 CDN 把"暂时为空"锁住很久)；取到非空弹幕时改 24h 长缓存。
+    // 注意：缓存要加在本接口(键 = ?id=剧名|集名，稳定)，不要去缓存 danmu_api 的 comment/{id}(id 会过期、键永远变)。
+    const LONG_CACHE = 'public, max-age=86400, s-maxage=86400';
+    res.set('Cache-Control', 'public, max-age=300');
     const DANMU_API_URL = process.env.DANMU_API_URL;
     if (!DANMU_API_URL) return res.json(empty);
 
@@ -1319,7 +1322,7 @@ app.get('/api/danmaku/v3/', async (req, res) => {
 
     const cacheKey = title + '|' + ep;
     const cached = danmakuCache.get(cacheKey);
-    if (cached && cached.expiry > Date.now()) return res.json({ code: 0, version: 3, data: cached.data, msg: '' });
+    if (cached && cached.expiry > Date.now()) { if (cached.data.length) res.set('Cache-Control', LONG_CACHE); return res.json({ code: 0, version: 3, data: cached.data, msg: '' }); }
     if (!danmakuBudgetOk()) return res.json(empty);
 
     try {
@@ -1367,6 +1370,7 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
         danmakuCache.set(cacheKey, { data, expiry: Date.now() + (data.length ? DANMAKU_CACHE_TTL : DANMAKU_MISS_TTL) });
+        if (data.length) res.set('Cache-Control', LONG_CACHE);
         return res.json({ code: 0, version: 3, data, msg: '' });
     } catch (e) {
         console.error('[弹幕] 获取失败:', e.message);
