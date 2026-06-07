@@ -1309,9 +1309,10 @@ function pickDanmakuEpisode(episodes, epName) {
 }
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
-    // 缓存策略：默认短缓存(空/出错只 5min，避免 CDN 把"暂时为空"锁住很久)；取到非空弹幕时改 24h 长缓存。
-    // 注意：缓存要加在本接口(键 = ?id=剧名|集名，稳定)，不要去缓存 danmu_api 的 comment/{id}(id 会过期、键永远变)。
-    const LONG_CACHE = 'public, max-age=86400, s-maxage=86400';
+    // 缓存策略：默认短缓存(空/出错只 5min，避免 CDN 把"暂时为空"锁住很久)；取到非空弹幕时改长缓存。
+    // 弹幕近乎静态 → 7 天新鲜 + 30 天 stale-while-revalidate(过期后先回旧缓存秒开、同时后台重新抓取更新)。
+    // 注意：缓存加在本接口(键 = ?id=剧名|集名，稳定)，不要去缓存 danmu_api 的 comment/{id}(id 会过期、键永远变)。
+    const LONG_CACHE = 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000';
     res.set('Cache-Control', 'public, max-age=300');
     const DANMU_API_URL = process.env.DANMU_API_URL;
     if (!DANMU_API_URL) return res.json(empty);
