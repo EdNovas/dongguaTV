@@ -287,6 +287,87 @@ app.get('/api/preview', async (req, res) => {
     return res.json(data);
 });
 
+// ========== API: /api/danmaku ==========
+// 🗨️ 弹幕代理：剧名+集名 → 自建 danmu_api(兼容弹弹play，聚合主流平台弹幕) → 转 DPlayer v3 格式。
+//   DPlayer 会 GET /api/danmaku/v3/?id=<剧名|集名>。需配置 DANMU_API_URL；未配置则返回空弹幕(优雅降级)。
+const danmakuCache = new Map();
+const DANMAKU_CACHE_TTL = 30 * 60 * 1000;
+const DANMAKU_MISS_TTL = 5 * 60 * 1000;
+const DANMAKU_CACHE_MAX = 1000;
+let danmakuWinStart = 0, danmakuWinCount = 0;
+function danmakuBudgetOk() {
+    const now = Date.now();
+    if (now - danmakuWinStart > 60000) { danmakuWinStart = now; danmakuWinCount = 0; }
+    if (danmakuWinCount >= 300) return false;
+    danmakuWinCount++;
+    return true;
+}
+function dandanToDplayer(comments) {
+    const modeMap = { '1': 0, '6': 0, '5': 1, '4': 2 };
+    const out = [];
+    for (const c of (comments || [])) {
+        const p = String(c.p || '').split(',');
+        if (p.length < 3) continue;
+        const t = parseFloat(p[0]);
+        if (!isFinite(t)) continue;
+        out.push([t, (modeMap[p[1]] != null ? modeMap[p[1]] : 0), parseInt(p[2], 10) || 16777215, '', String(c.m || '')]);
+    }
+    return out;
+}
+function pickDanmakuEpisode(episodes, epName) {
+    if (!episodes || !episodes.length) return null;
+    if (!epName) return episodes[0];
+    const m = String(epName).match(/\d+/);
+    if (m) {
+        const n = parseInt(m[0], 10);
+        const byTitle = episodes.find(e => { const mm = String(e.episodeTitle || '').match(/\d+/); return mm && parseInt(mm[0], 10) === n; });
+        if (byTitle) return byTitle;
+        if (episodes[n - 1]) return episodes[n - 1];
+    }
+    return episodes[0];
+}
+app.get('/api/danmaku/v3/', async (req, res) => {
+    const empty = { code: 0, version: 3, data: [], msg: '' };
+    res.set('Cache-Control', 'public, max-age=600');
+    const DANMU_API_URL = process.env.DANMU_API_URL;
+    if (!DANMU_API_URL) return res.json(empty);
+
+    let title = '', ep = '';
+    try { const parts = String(req.query.id || '').split('|'); title = (parts[0] || '').trim(); ep = (parts[1] || '').trim(); } catch (e) { }
+    if (!title) return res.json(empty);
+
+    const cacheKey = title + '|' + ep;
+    const cached = danmakuCache.get(cacheKey);
+    if (cached && cached.expiry > Date.now()) return res.json({ code: 0, version: 3, data: cached.data, msg: '' });
+    if (!danmakuBudgetOk()) return res.json(empty);
+
+    try {
+        const base = DANMU_API_URL.replace(/\/$/, '');
+        const token = process.env.DANMU_API_TOKEN || '';
+        const prefix = token ? `/${encodeURIComponent(token)}` : '';
+        const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 6000 });
+        const animes = (sr.data && sr.data.animes) || [];
+        const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+        const anime = animes.find(a => norm(a.animeTitle) === norm(title))
+            || animes.find(a => norm(a.animeTitle).includes(norm(title)) || norm(title).includes(norm(a.animeTitle)))
+            || animes[0];
+        const episode = anime && pickDanmakuEpisode(anime.episodes, ep);
+        if (!episode || !episode.episodeId) {
+            danmakuCache.set(cacheKey, { data: [], expiry: Date.now() + DANMAKU_MISS_TTL });
+            return res.json(empty);
+        }
+        const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 8000 });
+        const data = dandanToDplayer((cr.data && cr.data.comments) || []);
+        if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
+        danmakuCache.set(cacheKey, { data, expiry: Date.now() + (data.length ? DANMAKU_CACHE_TTL : DANMAKU_MISS_TTL) });
+        return res.json({ code: 0, version: 3, data, msg: '' });
+    } catch (e) {
+        console.error('[弹幕] 获取失败:', e.message);
+        return res.json(empty);
+    }
+});
+app.post('/api/danmaku/v3/', (req, res) => res.json({ code: 0, msg: '' }));
+
 // ========== API: /api/config ==========
 app.get('/api/config', (req, res) => {
     const userToken = req.query.token || '';
@@ -298,7 +379,8 @@ app.get('/api/config', (req, res) => {
         tmdb_proxy_url: TMDB_PROXY_URL,
         enable_local_image_cache: false, // Vercel 不支持本地缓存
         sync_enabled: syncEnabled,
-        multi_user_mode: ACCESS_PASSWORDS.length > 1
+        multi_user_mode: ACCESS_PASSWORDS.length > 1,
+        danmaku_enabled: !!process.env.DANMU_API_URL  // 🗨️ 弹幕开关
     });
 });
 

@@ -4600,6 +4600,7 @@
                     hotList: [],
                     sitesMap: {},  // 缓存站点信息（用于客户端测速）
                     corsProxyUrl: null,  // CORS 代理 URL（用于中转无法直接访问的资源站 API）
+                    danmakuEnabled: false,  // 🗨️ 弹幕开关（来自 /api/config，配置了 DANMU_API_URL 才为 true）
                     playbackErrorCount: 0,  // 播放失败计数
                     isAutoRetrying: false,  // 是否正在自动重试
                     autoRetryMessage: '',  // 自动切换提示信息
@@ -5044,6 +5045,10 @@
                             this.corsProxyUrl = config.cors_proxy_url;
                             console.log('[Config] CORS 代理已配置:', config.cors_proxy_url);
                         }
+
+                        // 🗨️ 弹幕开关（服务端配置了 DANMU_API_URL 才开启）
+                        this.danmakuEnabled = !!config.danmaku_enabled;
+                        if (this.danmakuEnabled) console.log('[Config] 弹幕已开启');
 
                         // Vercel 兼容性检测
                         if (config.enable_local_image_cache === false) {
@@ -7149,6 +7154,7 @@
                     this.previewLocked = false;  // 🔒 退出预览锁定态
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
                     this._deepLinkTargetEp = '';  // 清除未消费的深链目标集数，避免串到下一部剧
+                    this._lastDanmakuId = null;   // 🗨️ 复位弹幕标识，下次打开重新加载弹幕
                     this._clearDeepLinkTimers();
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
@@ -7531,6 +7537,21 @@
                         this.play(targetEp.url);
                     }
                 },
+                // 🗨️ 构建当前集的 DPlayer 弹幕配置：id="剧名|集名"(交给 /api/danmaku/v3/ 匹配第三方弹幕)。
+                //    未开启弹幕或无剧名时返回 null(DPlayer 不挂弹幕)。api 末尾的斜杠是 DPlayer 约定(它会拼 v3/?id=)。
+                _buildDanmakuOption() {
+                    if (!this.danmakuEnabled) return null;
+                    if (!this.currentGroup || !this.currentGroup.name) return null;
+                    const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    const epName = (cur && cur.name) || '';
+                    return {
+                        id: encodeURIComponent(this.currentGroup.name + '|' + epName),
+                        api: '/api/danmaku/',
+                        user: '观众',
+                        bottom: '12%',
+                        unlimited: false
+                    };
+                },
                 play(url) {
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
@@ -7629,6 +7650,12 @@
                         }
                     };
 
+                    // 🗨️ 本集弹幕配置(弹幕开启且匹配到剧名时返回，否则 undefined)。
+                    //    仅当"集数变化"(id 变)时才在 switchVideo 里重载弹幕——同集换源/代理回退不重载，避免弹幕闪烁与重复拉取。
+                    const danmakuOpt = this._buildDanmakuOption();
+                    const danmakuReload = !!danmakuOpt && danmakuOpt.id !== this._lastDanmakuId;
+                    if (danmakuOpt) this._lastDanmakuId = danmakuOpt.id;
+
                     if (!dp) {
                         console.log('[播放器] 创建新的 DPlayer 实例');
                         dp = new DPlayer({
@@ -7641,6 +7668,7 @@
                             loop: false,             // 循环播放（可在设置中切换）
                             playbackSpeed: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3],  // 0.25间隔倍速选项
                             video: { url: finalUrl, type: 'hls' },
+                            danmaku: danmakuOpt || undefined,  // 🗨️ 弹幕(借第三方聚合)；未开启则 undefined(DPlayer 不初始化弹幕)
                             contextmenu: [
                                 { text: '🎬 E视界MAX', link: '/' },
                                 { text: '⚡ 当前速度: 1x', click: () => { } }
@@ -8618,7 +8646,8 @@
                         //    从而既回收泄漏又不会误跳过线路（旧实现是在 switchVideo 前 destroy 才出的问题）。
                         const _oldHls = (dp.plugins && dp.plugins.hls) || null;
 
-                        dp.switchVideo({ url: finalUrl, type: 'hls' });
+                        // 🗨️ 仅"换集"(danmakuReload)时重载弹幕；同集换源/代理回退不传第二参(DPlayer 保留当前弹幕，不闪烁/不重拉)
+                        dp.switchVideo({ url: finalUrl, type: 'hls' }, danmakuReload ? danmakuOpt : undefined);
 
                         if (_oldHls) {
                             let _destroyed = false;  // 防止 'playing' 与 5s 兜底重复销毁
