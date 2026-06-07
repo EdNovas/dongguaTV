@@ -554,6 +554,15 @@ class CacheManager {
                     )
                 `);
 
+                // 创建用户设置表（多用户同步：弹幕开关等个性化偏好，跨设备记住）
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS user_settings (
+                        user_token TEXT PRIMARY KEY,
+                        settings_data TEXT NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    )
+                `);
+
                 // 创建索引加速过期查询
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_expire ON cache(expire)`);
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_history_user ON user_history(user_token)`);
@@ -1081,6 +1090,57 @@ app.post('/api/history/clear', (req, res) => {
         res.json({ success: true, deleted: result.changes });
     } catch (e) {
         console.error('[History Clear Error]', e.message);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== 用户设置同步 API（跨设备记住偏好，如弹幕开关）==========
+
+// 拉取用户设置
+app.get('/api/settings/pull', (req, res) => {
+    const userToken = req.query.token;
+    if (!userToken) return res.status(400).json({ error: 'Missing token' });
+    const userInfo = PASSWORD_HASH_MAP[userToken];
+    if (!userInfo) return res.status(401).json({ error: 'Invalid token' });
+    if (!userInfo.syncEnabled) return res.json({ sync_enabled: false, settings: {} });
+    if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
+        return res.json({ sync_enabled: true, settings: {}, message: 'SQLite not available' });
+    }
+    try {
+        const row = cacheManager.db.prepare('SELECT settings_data FROM user_settings WHERE user_token = ?').get(userToken);
+        let settings = {};
+        if (row && row.settings_data) { try { settings = JSON.parse(row.settings_data) || {}; } catch (e) { } }
+        res.json({ sync_enabled: true, settings });
+    } catch (e) {
+        console.error('[Settings Pull Error]', e.message);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// 推送用户设置（整体合并保存；前端只传变化的键也可，这里做浅合并）
+app.post('/api/settings/push', (req, res) => {
+    const { token, settings } = req.body;
+    if (!token || typeof settings !== 'object' || settings === null) {
+        return res.status(400).json({ error: 'Missing token or settings' });
+    }
+    const userInfo = PASSWORD_HASH_MAP[token];
+    if (!userInfo) return res.status(401).json({ error: 'Invalid token' });
+    if (!userInfo.syncEnabled) return res.json({ sync_enabled: false, saved: 0 });
+    if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
+        return res.json({ sync_enabled: true, saved: 0, message: 'SQLite not available' });
+    }
+    try {
+        // 浅合并已存在的设置，避免一次只传一个键时把其它键覆盖丢失
+        const existing = cacheManager.db.prepare('SELECT settings_data FROM user_settings WHERE user_token = ?').get(token);
+        let merged = {};
+        if (existing && existing.settings_data) { try { merged = JSON.parse(existing.settings_data) || {}; } catch (e) { } }
+        merged = { ...merged, ...settings };
+        cacheManager.db.prepare(`
+            INSERT OR REPLACE INTO user_settings (user_token, settings_data, updated_at) VALUES (?, ?, ?)
+        `).run(token, JSON.stringify(merged), Date.now());
+        res.json({ sync_enabled: true, saved: 1, settings: merged });
+    } catch (e) {
+        console.error('[Settings Push Error]', e.message);
         res.status(500).json({ error: 'Database error' });
     }
 });

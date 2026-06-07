@@ -5268,11 +5268,41 @@
                             if (this.syncEnabled) {
                                 // 启用同步，执行首次同步
                                 await this.syncHistory();
+                                await this.pullUserSettings();  // 同步用户偏好(弹幕开关等)
                             }
                         } catch (e) {
                             console.error('[同步] 检查同步状态失败:', e);
                         }
                     }
+                },
+
+                // 🗨️ 拉取服务器端用户设置(弹幕开关等)，跨设备记住。应用到 DPlayer 的 localStorage 键，
+                //    使之后创建的播放器据此初始化(开/关 + 齿轮里复选框状态)；若已在播则立即应用。
+                async pullUserSettings() {
+                    if (!this.syncEnabled || !this.syncToken) return;
+                    try {
+                        const res = await fetch(`/api/settings/pull?token=${this.syncToken}`);
+                        const data = await res.json();
+                        if (!data || !data.sync_enabled || !data.settings) return;
+                        if (typeof data.settings.danmakuOff === 'boolean') {
+                            try { localStorage.setItem('dplayer-danmaku-show', data.settings.danmakuOff ? '0' : '1'); } catch (e) { }
+                            try { if (dp && dp.danmaku) { data.settings.danmakuOff ? dp.danmaku.hide() : dp.danmaku.show(); } } catch (e) { }
+                            console.log('[同步] 已应用弹幕开关偏好:', data.settings.danmakuOff ? '关' : '开');
+                        }
+                    } catch (e) { console.error('[同步] 拉取用户设置失败:', e); }
+                },
+
+                // 🗨️ 保存"弹幕开关"偏好：本地(DPlayer 已写)+ 服务器(跨设备)。off=true 表示关弹幕。
+                pushDanmakuPref(off) {
+                    try { localStorage.setItem('dplayer-danmaku-show', off ? '0' : '1'); } catch (e) { }
+                    if (!this.syncEnabled || !this.syncToken) return;
+                    try {
+                        fetch('/api/settings/push', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: this.syncToken, settings: { danmakuOff: !!off } })
+                        }).catch(() => { });
+                    } catch (e) { }
                 },
 
                 // 拉取服务器历史（服务器优先模式）
@@ -7852,6 +7882,11 @@
                         // 也监听 web fullscreen 事件
                         dp.on('webfullscreen', handleEnterFullscreen);
                         dp.on('webfullscreen_cancel', handleExitFullscreen);
+
+                        // 🗨️ 弹幕开关：用户在齿轮里切换"显示弹幕"时，记住偏好(本地+服务器,跨设备)。
+                        //    DPlayer 已把状态写进 localStorage(dplayer-danmaku-show)；这里再同步到服务器。
+                        dp.on('danmaku_show', () => this.pushDanmakuPref(false));
+                        dp.on('danmaku_hide', () => this.pushDanmakuPref(true));
 
                         // ========== 🔧 设置菜单修复 ==========
                         setTimeout(() => {
