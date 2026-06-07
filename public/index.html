@@ -5498,6 +5498,7 @@
                         groupData: groupData ? {
                             name: groupData.name,
                             pic: groupData.pic,
+                            sourcesTestedAt: groupData.sourcesTestedAt || null,  // 🕐 测速时间戳：历史回放据此决定是否需要重测(新鲜则用本地缓存)
                             sources: groupData.sources.map((s, idx) => ({
                                 vod_id: s.vod_id,  // 用于刷新集数
                                 vod_name: s.vod_name,
@@ -5838,9 +5839,16 @@
                                     this.play(targetEpisode.url, bestSource.site_name);
                                     // 后台自动刷新集数（不阻塞播放）
                                     this.refreshEpisodes();
-                                    // 🔄 历史打开同样后台重新测速所有线路：保存的延迟常不全(合并补齐的源未测=999)或已过期，
-                                    //    与"搜索后打开"一致地重测，不阻塞当前续播(refreshSources 只更新线路列表、不动播放器)
-                                    this.refreshSources();
+                                    // 🔄 线路测速优先用本地缓存(历史已存每路 latency/_testType)。仅当"从未测速"或"缓存超过 12h"
+                                    //    才后台重测一次——避免每次打开历史都重测全部线路。重测结果会随播放进度存回历史，下次即用缓存。
+                                    const _testedAt = item.groupData.sourcesTestedAt || 0;
+                                    const _cacheAgeH = (Date.now() - _testedAt) / 3600000;
+                                    if (!_testedAt || _cacheAgeH > 12) {
+                                        console.log('[观看历史] 线路测速缓存' + (_testedAt ? '过期(' + _cacheAgeH.toFixed(1) + 'h)' : '缺失') + '，后台重测一次');
+                                        this.refreshSources();
+                                    } else {
+                                        console.log('[观看历史] 用本地测速缓存(' + _cacheAgeH.toFixed(1) + 'h 前)，跳过重测');
+                                    }
                                     return;
                                 }
                             }
@@ -7129,6 +7137,7 @@
                     // 🧭 测速期间用户可能已切换到别的剧（此时 isTestingSources 归 B 所有），丢弃本次结果
                     if (_openSeq !== _navSeq) return;
                     this.isTestingSources = false;  // 测速完成
+                    this.currentGroup.sourcesTestedAt = Date.now();  // 🕐 记录测速时间：历史回放据此判断缓存是否新鲜，避免每次都重测
 
                     // 按延迟排序 (低到高)
                     this.currentGroup.sources.sort((a, b) => {
@@ -7518,6 +7527,7 @@
                             console.warn('[刷新线路] 测速完成时上下文已切换，丢弃');
                             return;
                         }
+                        this.currentGroup.sourcesTestedAt = Date.now();  // 🕐 记录测速时间(历史回放据此判断缓存新鲜度)
 
                         // 按延迟排序
                         this.currentGroup.sources.sort((a, b) => {
