@@ -8298,6 +8298,26 @@
                                     });
                                 }
 
+                                // 🎯 菜单打开时点主视频 → 关菜单 + 隐藏控制栏(而非暂停视频)。捕获阶段拦在 DPlayer 的播放切换之前。
+                                dplayerContainer.addEventListener('click', (e) => {
+                                    // 点在控件/各类菜单/弹幕设置上 → 不拦截，照常工作
+                                    if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon')) return;
+                                    const settingOpen = settingBox && settingBox.classList.contains('dplayer-setting-box-open');
+                                    const dmPanel = dplayerContainer.querySelector('.dm-settings-panel');
+                                    const dmOpen = dmPanel && dmPanel.style.display === 'block';
+                                    if (!settingOpen && !dmOpen) return;  // 没有菜单开着 → 放行(正常播放/暂停)
+                                    // 有菜单开着：拦下这次点击，关掉菜单 + 隐藏控制栏，不触发暂停
+                                    e.preventDefault();
+                                    e.stopImmediatePropagation();
+                                    if (settingOpen) {
+                                        settingBox.classList.remove('dplayer-setting-box-open');
+                                        const ss = settingBox.querySelector('.dplayer-setting-speed'); if (ss) ss.classList.add('dplayer-setting-box-hide');
+                                        const so = settingBox.querySelector('.dplayer-setting-origin'); if (so) so.classList.remove('dplayer-setting-box-hide');
+                                    }
+                                    if (dmOpen) dmPanel.style.display = 'none';
+                                    dplayerContainer.classList.add('dplayer-hide-controller');  // 隐藏控制栏
+                                }, true);
+
                                 console.log('[Settings] Fix applied - monitoring setting box state');
                             }
                         }, 500);
