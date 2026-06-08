@@ -399,6 +399,56 @@
         #dplayer .dplayer-danmaku .dplayer-danmaku-item.dplayer-danmaku-move {
             animation-duration: var(--dm-dur, 8s) !important;
         }
+        /* 🗨️ 独立的弹幕设置滑块面板 */
+        #dplayer .dm-settings-panel {
+            position: absolute;
+            bottom: 56px;
+            right: 12px;
+            z-index: 25;
+            width: 250px;
+            background: rgba(20, 20, 22, 0.94);
+            -webkit-backdrop-filter: blur(10px);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: #fff;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+        }
+        #dplayer .dm-set-title {
+            font-size: 13px;
+            font-weight: 600;
+            opacity: 0.9;
+            margin-bottom: 10px;
+        }
+        #dplayer .dm-set-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 11px 0;
+        }
+        #dplayer .dm-set-label {
+            white-space: nowrap;
+            width: 56px;
+            flex-shrink: 0;
+            font-size: 12px;
+            opacity: 0.85;
+        }
+        #dplayer .dm-set-range {
+            flex: 1;
+            min-width: 0;
+            height: 4px;
+            accent-color: #e50914;
+            cursor: pointer;
+        }
+        #dplayer .dm-set-val {
+            width: 44px;
+            text-align: right;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            opacity: 0.8;
+            flex-shrink: 0;
+        }
 
         /* 1. 毛玻璃控制栏效果 */
         .dplayer-controller {
@@ -7957,10 +8007,6 @@
                                             if (isOpen && window.AdFilter && window.AdFilter.initUI) {
                                                 window.AdFilter.initUI();
                                             }
-                                            // 初始化弹幕样式(区域/速度/字号) UI
-                                            if (isOpen && window.danmakuStyle) {
-                                                window.danmakuStyle.initUI();
-                                            }
                                         }
                                     });
                                 });
@@ -8106,52 +8152,80 @@
 
                                 // ========== 🗨️ 弹幕样式管理器(B站风：区域/速度/字号，齿轮菜单可调，本地记住) ==========
                                 window.danmakuStyle = {
-                                    AREAS: [{ label: '1/4', v: 25 }, { label: '1/2', v: 50 }, { label: '全屏', v: 100 }],
-                                    SPEEDS: [{ label: '慢', v: '14s' }, { label: '正常', v: '8s' }, { label: '快', v: '5s' }, { label: '极快', v: '3s' }],
-                                    FONTS: [{ label: '小', v: 18 }, { label: '标准', v: 22 }, { label: '大', v: 28 }],
-                                    cfg: { area: 25, speed: '8s', font: 22 }, // 默认顶部 1/4、正常速、标准字号
+                                    // 行数/速度(1-10,越大越快)/字号(px)/不透明度(%) —— 都用滑块；默认 6 行、速度7(=8s)、22px、80%
+                                    cfg: { rows: 6, speed: 7, font: 22, opacity: 80 },
+                                    FMT: { rows: v => v + ' 行', speed: v => 'Lv.' + v, font: v => v + 'px', opacity: v => v + '%' },
+                                    dur() { return (22 - this.cfg.speed * 2) + 's'; },        // 速度1→20s … 7→8s … 10→2s
+                                    rowH() { return (typeof dp !== 'undefined' && dp && dp.danmaku && dp.danmaku.options && dp.danmaku.options.height) || 30; },
                                     load() {
                                         try { const s = JSON.parse(localStorage.getItem('donggua_dm_style') || '{}'); if (s && typeof s === 'object') this.cfg = Object.assign(this.cfg, s); } catch (e) { }
+                                        // 兼容旧版(存的是 area/字符串speed)：迁移到行数/数字speed
+                                        if (typeof this.cfg.speed === 'string') this.cfg.speed = 7;
+                                        if (this.cfg.area != null && this.cfg.rows == null) this.cfg.rows = 6;
                                         this.apply();
                                     },
-                                    save() { try { localStorage.setItem('donggua_dm_style', JSON.stringify(this.cfg)); } catch (e) { } },
+                                    save() { try { localStorage.setItem('donggua_dm_style', JSON.stringify({ rows: this.cfg.rows, speed: this.cfg.speed, font: this.cfg.font, opacity: this.cfg.opacity })); } catch (e) { } },
                                     apply() {
                                         const el = document.getElementById('dplayer');
-                                        if (!el) return;
-                                        el.style.setProperty('--dm-area', this.cfg.area + '%');
-                                        el.style.setProperty('--dm-dur', this.cfg.speed);
-                                        el.style.setProperty('--dm-fontsize', this.cfg.font + 'px');
+                                        if (el) {
+                                            el.style.setProperty('--dm-area', (this.cfg.rows * this.rowH()) + 'px'); // 行数×单行高=容器限高(=可见轨道数)
+                                            el.style.setProperty('--dm-dur', this.dur());
+                                            el.style.setProperty('--dm-fontsize', this.cfg.font + 'px');
+                                        }
+                                        try { if (typeof dp !== 'undefined' && dp && dp.danmaku && typeof dp.danmaku.opacity === 'function') dp.danmaku.opacity(this.cfg.opacity / 100); } catch (e) { }
                                     },
-                                    initUI() {
-                                        const panel = document.querySelector('.dplayer-setting-origin-panel');
-                                        if (!panel || panel.querySelector('.dplayer-setting-dmstyle-group')) return;
-                                        const row = (title, opts, cur, cls) => `
-                                            <div class="dplayer-setting-item" style="display:flex;align-items:center;justify-content:space-between;cursor:default;height:auto;padding:6px 10px;">
-                                                <span class="dplayer-label" style="white-space:nowrap;">${title}</span>
-                                                <div class="${cls}" style="display:flex;gap:4px;">
-                                                    ${opts.map(o => `<span data-v="${o.v}" style="padding:2px 8px;border-radius:6px;font-size:12px;cursor:pointer;background:${String(o.v) === String(cur) ? '#e50914' : 'rgba(255,255,255,0.15)'};">${o.label}</span>`).join('')}
-                                                </div>
-                                            </div>`;
-                                        const html = `
-                                            <div class="dplayer-setting-dmstyle-group" style="border-top:1px solid rgba(255,255,255,0.1);margin-top:5px;padding-top:5px;">
-                                                ${row('弹幕区域', this.AREAS, this.cfg.area, 'dm-area-opts')}
-                                                ${row('弹幕速度', this.SPEEDS, this.cfg.speed, 'dm-speed-opts')}
-                                                ${row('弹幕字号', this.FONTS, this.cfg.font, 'dm-font-opts')}
-                                            </div>`;
-                                        panel.insertAdjacentHTML('beforeend', html);
-                                        const grp = panel.querySelector('.dplayer-setting-dmstyle-group');
-                                        const bind = (cls, key, isNum) => {
-                                            grp.querySelectorAll('.' + cls + ' span').forEach(sp => sp.addEventListener('click', (e) => {
+                                    mount() {
+                                        const c = document.getElementById('dplayer');
+                                        if (!c) return;
+                                        const iconsRight = c.querySelector('.dplayer-icons-right');
+                                        // 单独的"弹幕设置"按钮(放在右侧图标区)
+                                        if (iconsRight && !iconsRight.querySelector('.dplayer-dmset-icon')) {
+                                            iconsRight.insertAdjacentHTML('afterbegin', `
+                                                <div class="dplayer-icon dplayer-dmset-icon" data-balloon="弹幕设置" data-balloon-pos="up">
+                                                    <span class="dplayer-icon-content" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
+                                                        <i class="fas fa-sliders-h" style="font-size:17px;"></i>
+                                                    </span>
+                                                </div>`);
+                                        }
+                                        // 滑块面板
+                                        if (!c.querySelector('.dm-settings-panel')) {
+                                            const sl = (key, label, min, max, step) => `
+                                                <div class="dm-set-row">
+                                                    <span class="dm-set-label">${label}</span>
+                                                    <input type="range" class="dm-set-range" data-key="${key}" min="${min}" max="${max}" step="${step}" value="${this.cfg[key]}">
+                                                    <span class="dm-set-val" data-for="${key}">${this.FMT[key](this.cfg[key])}</span>
+                                                </div>`;
+                                            c.insertAdjacentHTML('beforeend', `
+                                                <div class="dm-settings-panel" style="display:none;">
+                                                    <div class="dm-set-title">弹幕设置</div>
+                                                    ${sl('rows', '行数', 1, 20, 1)}
+                                                    ${sl('speed', '速度', 1, 10, 1)}
+                                                    ${sl('font', '字号', 12, 44, 1)}
+                                                    ${sl('opacity', '不透明度', 10, 100, 5)}
+                                                </div>`);
+                                            const panel = c.querySelector('.dm-settings-panel');
+                                            const btn = c.querySelector('.dplayer-dmset-icon');
+                                            panel.querySelectorAll('.dm-set-range').forEach(r => {
+                                                const onChange = (e) => {
+                                                    e.stopPropagation();
+                                                    const key = r.getAttribute('data-key');
+                                                    this.cfg[key] = parseInt(r.value, 10);
+                                                    const v = panel.querySelector(`.dm-set-val[data-for="${key}"]`);
+                                                    if (v) v.textContent = this.FMT[key](this.cfg[key]);
+                                                    this.apply(); this.save();
+                                                };
+                                                r.addEventListener('input', onChange);
+                                                r.addEventListener('click', e => e.stopPropagation());
+                                            });
+                                            if (btn) btn.addEventListener('click', (e) => {
                                                 e.stopPropagation();
-                                                let v = sp.getAttribute('data-v'); if (isNum) v = parseInt(v, 10);
-                                                this.cfg[key] = v; this.save(); this.apply();
-                                                grp.querySelectorAll('.' + cls + ' span').forEach(x => x.style.background = 'rgba(255,255,255,0.15)');
-                                                sp.style.background = '#e50914';
-                                            }));
-                                        };
-                                        bind('dm-area-opts', 'area', true);
-                                        bind('dm-speed-opts', 'speed', false);
-                                        bind('dm-font-opts', 'font', true);
+                                                panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+                                            });
+                                            // 点面板/按钮之外关闭
+                                            c.addEventListener('click', (e) => {
+                                                if (panel.style.display !== 'none' && !panel.contains(e.target) && !(btn && btn.contains(e.target))) panel.style.display = 'none';
+                                            });
+                                        }
                                     }
                                 };
 
@@ -8189,6 +8263,9 @@
                                         }
                                     }
                                 }
+
+                                // 挂载"弹幕设置"按钮+滑块面板(控件此时已就绪)
+                                if (window.danmakuStyle) window.danmakuStyle.mount();
 
                                 // 再次点击设置按钮时关闭设置菜单
                                 const settingIcon = dplayerContainer.querySelector('.dplayer-setting-icon');
