@@ -395,6 +395,36 @@
             height: var(--dm-area, 25%) !important;
             bottom: auto !important;
             font-size: var(--dm-fontsize, 22px) !important;
+            font-family: var(--dm-fontfamily, inherit) !important;
+        }
+        /* 字体选择子列表(点"字体"行展开，每项用各自字体显示) */
+        #dplayer .dm-font-list {
+            display: none;
+            margin: 4px 0 8px;
+            max-height: 168px;
+            overflow-y: auto;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.06);
+        }
+        #dplayer .dm-font-list.open {
+            display: block;
+        }
+        #dplayer .dm-font-item {
+            padding: 7px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        #dplayer .dm-font-item:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+        #dplayer .dm-font-item.dm-font-cur {
+            color: #ff5566;
+        }
+        #dplayer .dm-set-arrow {
+            margin-left: auto;
+            opacity: 0.7;
+            font-size: 11px;
         }
         #dplayer .dplayer-danmaku .dplayer-danmaku-item.dplayer-danmaku-move {
             animation-duration: var(--dm-dur, 8s) !important;
@@ -5391,6 +5421,10 @@
                             try { if (dp && dp.danmaku) { data.settings.danmakuOff ? dp.danmaku.hide() : dp.danmaku.show(); } } catch (e) { }
                             console.log('[同步] 已应用弹幕开关偏好:', data.settings.danmakuOff ? '关' : '开');
                         }
+                        // 弹幕样式(行数/速度/字号/不透明度)跨设备同步
+                        if (data.settings.dmStyle && typeof data.settings.dmStyle === 'object') {
+                            try { if (window.danmakuStyle && window.danmakuStyle.setCfg) window.danmakuStyle.setCfg(data.settings.dmStyle); } catch (e) { }
+                        }
                     } catch (e) { console.error('[同步] 拉取用户设置失败:', e); }
                 },
 
@@ -5405,6 +5439,21 @@
                             body: JSON.stringify({ token: this.syncToken, settings: { danmakuOff: !!off } })
                         }).catch(() => { });
                     } catch (e) { }
+                },
+
+                // 🗨️ 保存弹幕样式(行数/速度/字号/不透明度)到服务器(跨设备)。防抖,避免拖滑块时狂发请求。
+                pushDanmakuStyle(cfg) {
+                    if (!this.syncEnabled || !this.syncToken) return;
+                    clearTimeout(this._dmStyleTimer);
+                    this._dmStyleTimer = setTimeout(() => {
+                        try {
+                            fetch('/api/settings/push', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ token: this.syncToken, settings: { dmStyle: cfg } })
+                            }).catch(() => { });
+                        } catch (e) { }
+                    }, 800);
                 },
 
                 // 拉取服务器历史（服务器优先模式）
@@ -8194,8 +8243,9 @@
 
                                 // ========== 🗨️ 弹幕样式管理器(B站风：区域/速度/字号，齿轮菜单可调，本地记住) ==========
                                 window.danmakuStyle = {
-                                    // 行数/速度(1-10,越大越快)/字号(px)/不透明度(%) —— 都用滑块；默认 6 行、速度7(=8s)、22px、80%
-                                    cfg: { rows: 6, speed: 7, font: 22, opacity: 80 },
+                                    // 行数/速度(1-10,越大越快)/字号(px)/不透明度(%) —— 都用滑块；fontfam=字体(空=默认)
+                                    cfg: { rows: 6, speed: 7, font: 22, opacity: 80, fontfam: '' },
+                                    FONTS: [{ label: '默认', v: '' }, { label: '微软雅黑', v: '"Microsoft YaHei",微软雅黑' }, { label: '黑体', v: 'SimHei,黑体' }, { label: '宋体', v: 'SimSun,宋体' }, { label: '楷体', v: 'KaiTi,楷体' }, { label: '仿宋', v: 'FangSong,仿宋' }],
                                     FMT: { rows: v => v + ' 行', speed: v => 'Lv.' + v, font: v => v + 'px', opacity: v => v + '%' },
                                     dur() { return (22 - this.cfg.speed * 2) + 's'; },        // 速度1→20s … 7→8s … 10→2s
                                     rowH() { return (typeof dp !== 'undefined' && dp && dp.danmaku && dp.danmaku.options && dp.danmaku.options.height) || 30; },
@@ -8206,13 +8256,32 @@
                                         if (this.cfg.area != null && this.cfg.rows == null) this.cfg.rows = 6;
                                         this.apply();
                                     },
-                                    save() { try { localStorage.setItem('donggua_dm_style', JSON.stringify({ rows: this.cfg.rows, speed: this.cfg.speed, font: this.cfg.font, opacity: this.cfg.opacity })); } catch (e) { } },
+                                    save() {
+                                        const c = { rows: this.cfg.rows, speed: this.cfg.speed, font: this.cfg.font, opacity: this.cfg.opacity, fontfam: this.cfg.fontfam };
+                                        try { localStorage.setItem('donggua_dm_style', JSON.stringify(c)); } catch (e) { }
+                                        // 跨设备同步：推到服务器(和弹幕开关一样)
+                                        try { if (window.vueApp && window.vueApp.pushDanmakuStyle) window.vueApp.pushDanmakuStyle(c); } catch (e) { }
+                                    },
+                                    // 外部(服务器同步拉取)写入配置：合并→应用→本地存(不回推服务器,避免环)→刷新已挂载面板的滑块/数值
+                                    setCfg(newCfg) {
+                                        if (!newCfg || typeof newCfg !== 'object') return;
+                                        ['rows', 'speed', 'font', 'opacity'].forEach(k => { if (typeof newCfg[k] === 'number') this.cfg[k] = newCfg[k]; });
+                                        if (typeof newCfg.fontfam === 'string') this.cfg.fontfam = newCfg.fontfam;
+                                        try { localStorage.setItem('donggua_dm_style', JSON.stringify({ rows: this.cfg.rows, speed: this.cfg.speed, font: this.cfg.font, opacity: this.cfg.opacity, fontfam: this.cfg.fontfam })); } catch (e) { }
+                                        this.apply();
+                                        const panel = document.querySelector('#dplayer .dm-settings-panel');
+                                        if (panel) ['rows', 'speed', 'font', 'opacity'].forEach(k => {
+                                            const r = panel.querySelector(`.dm-set-range[data-key="${k}"]`); if (r) r.value = this.cfg[k];
+                                            const v = panel.querySelector(`.dm-set-val[data-for="${k}"]`); if (v && this.FMT[k]) v.textContent = this.FMT[k](this.cfg[k]);
+                                        });
+                                    },
                                     apply() {
                                         const el = document.getElementById('dplayer');
                                         if (el) {
                                             el.style.setProperty('--dm-area', (this.cfg.rows * this.rowH()) + 'px'); // 行数×单行高=容器限高(=可见轨道数)
                                             el.style.setProperty('--dm-dur', this.dur());
                                             el.style.setProperty('--dm-fontsize', this.cfg.font + 'px');
+                                            el.style.setProperty('--dm-fontfamily', this.cfg.fontfam || 'inherit');
                                         }
                                         try { if (typeof dp !== 'undefined' && dp && dp.danmaku && typeof dp.danmaku.opacity === 'function') dp.danmaku.opacity(this.cfg.opacity / 100); } catch (e) { }
                                     },
@@ -8256,9 +8325,32 @@
                                                     ${sl('speed', '速度', 1, 10, 1)}
                                                     ${sl('font', '字号', 12, 44, 1)}
                                                     ${sl('opacity', '不透明度', 10, 100, 5)}
+                                                    <div class="dm-set-row dm-font-toggle" style="cursor:pointer;">
+                                                        <span class="dm-set-label">字体</span>
+                                                        <span class="dm-set-val dm-font-cur-label" style="width:auto;flex:1;text-align:right;">${(this.FONTS.find(f => f.v === this.cfg.fontfam) || this.FONTS[0]).label}</span>
+                                                        <span class="dm-set-arrow">▼</span>
+                                                    </div>
+                                                    <div class="dm-font-list">
+                                                        ${this.FONTS.map(f => `<div class="dm-font-item ${f.v === this.cfg.fontfam ? 'dm-font-cur' : ''}" data-v="${f.v}" style="font-family:${f.v || 'inherit'};">${f.label}</div>`).join('')}
+                                                    </div>
                                                 </div>`);
                                             const panel = c.querySelector('.dm-settings-panel');
                                             const btn = c.querySelector('.dplayer-dmset-icon');
+                                            // 字体：点"字体"行展开子列表(每项用各自字体显示)，点某字体即应用
+                                            const fontToggle = panel.querySelector('.dm-font-toggle');
+                                            const fontList = panel.querySelector('.dm-font-list');
+                                            if (fontToggle && fontList) {
+                                                fontToggle.addEventListener('click', (e) => { e.stopPropagation(); fontList.classList.toggle('open'); });
+                                                fontList.querySelectorAll('.dm-font-item').forEach(it => it.addEventListener('click', (e) => {
+                                                    e.stopPropagation();
+                                                    this.cfg.fontfam = it.getAttribute('data-v') || '';
+                                                    this.apply(); this.save();
+                                                    fontList.querySelectorAll('.dm-font-item').forEach(x => x.classList.remove('dm-font-cur'));
+                                                    it.classList.add('dm-font-cur');
+                                                    const lbl = panel.querySelector('.dm-font-cur-label'); if (lbl) lbl.textContent = it.textContent;
+                                                    fontList.classList.remove('open');
+                                                }));
+                                            }
                                             panel.querySelectorAll('.dm-set-range').forEach(r => {
                                                 const onChange = (e) => {
                                                     e.stopPropagation();
@@ -8366,14 +8458,22 @@
                                     });
                                 }
 
-                                // 🎯 菜单打开时点主视频 → 关菜单 + 隐藏控制栏(而非暂停视频)。捕获阶段拦在 DPlayer 的播放切换之前。
+                                // 🎯 捕获阶段拦在 DPlayer 的播放切换之前，统一处理"点视频/控制栏"的两类问题：
+                                //   ① 菜单(设置/速度子菜单/弹幕面板)开着时点视频 → 关菜单+隐藏控制栏，不暂停。
+                                //   ② DPlayer 把"控制栏暗化层(.dplayer-controller-mask，即底部那条渐变)"也绑了点击切换播放，
+                                //      用户瞄准齿轮却点到旁边的暗化层就会误暂停 → 拦掉它(底部控制区不该是暂停热区)。
                                 dplayerContainer.addEventListener('click', (e) => {
-                                    // 点在控件/各类菜单/弹幕设置上 → 不拦截，照常工作
+                                    // 点在真正的控件/各类菜单/弹幕设置上 → 不拦截，照常工作
                                     if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon')) return;
                                     const settingOpen = settingBox && settingBox.classList.contains('dplayer-setting-box-open');
                                     const dmPanel = dplayerContainer.querySelector('.dm-settings-panel');
                                     const dmOpen = dmPanel && dmPanel.style.display === 'block';
-                                    if (!settingOpen && !dmOpen) return;  // 没有菜单开着 → 放行(正常播放/暂停)
+                                    const onCtrlMask = !!e.target.closest('.dplayer-controller-mask');  // 底部控制栏渐变区
+                                    if (!settingOpen && !dmOpen) {
+                                        // 没菜单开着：点底部控制栏渐变区 → 拦掉误暂停(什么都不做，留住控制栏)；点真正视频区 → 放行(正常播放/暂停)
+                                        if (onCtrlMask) { e.preventDefault(); e.stopImmediatePropagation(); }
+                                        return;
+                                    }
                                     // 有菜单开着：拦下这次点击，关掉菜单 + 隐藏控制栏，不触发暂停
                                     e.preventDefault();
                                     e.stopImmediatePropagation();
@@ -8385,6 +8485,14 @@
                                     if (dmOpen) dmPanel.style.display = 'none';
                                     dplayerContainer.classList.add('dplayer-hide-controller');  // 隐藏控制栏
                                 }, true);
+
+                                // 💾 用户在速度菜单里"手动选倍率"(含 1x 正常) → 显式记住，跨集/跨会话保持(本地，不走服务器)
+                                settingBox.addEventListener('click', (e) => {
+                                    const item = e.target.closest('.dplayer-setting-speed-item');
+                                    if (!item) return;
+                                    const sp = parseFloat(item.dataset.speed);
+                                    if (!isNaN(sp)) { try { localStorage.setItem('dplayer_speed', sp); } catch (err) { } }
+                                });
 
                                 console.log('[Settings] Fix applied - monitoring setting box state');
                             }
@@ -9066,7 +9174,9 @@
                                 // 创建新监听器
                                 _rateChangeHandler = () => {
                                     const speed = dp.video.playbackRate;
-                                    try { localStorage.setItem('dplayer_speed', speed); } catch (e) { }
+                                    // 只保存"非 1x"的倍率：换集/HLS 加载时会把倍率自动重置回 1x 并触发 ratechange，
+                                    // 若把这个 1x 也存下来就会覆盖用户设的倍率。用户"手动选 1x(正常)"由下方速度菜单点击单独保存。
+                                    try { if (speed && speed !== 1) localStorage.setItem('dplayer_speed', speed); } catch (e) { }
                                 };
                                 dp.video.addEventListener('ratechange', _rateChangeHandler);
                             }
