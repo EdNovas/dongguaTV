@@ -334,6 +334,41 @@ function pickDanmakuEpisode(episodes, epName) {
     }
     return episodes[0];
 }
+// 从【一个 danmu_api 实例】取某剧某集弹幕：搜索 → 同剧多平台回退 → 返回 DPlayer 数组(空=没取到)
+async function fetchDanmakuFromInstance(base, token, title, ep) {
+    base = String(base).replace(/\/$/, '');
+    const prefix = token ? `/${encodeURIComponent(token)}` : '';
+    const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+    const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
+    const nt = norm(title), ct = core(title);
+    let animes;
+    const skey = base + '||' + nt; // 按 实例+剧名 缓存(不同实例 episodeId 不同，key 必须带 base)
+    const sc = danmakuSearchCache.get(skey);
+    if (sc && sc.expiry > Date.now()) { animes = sc.animes; }
+    else {
+        const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
+        animes = (sr.data && sr.data.animes) || [];
+        if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
+        danmakuSearchCache.set(skey, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
+    }
+    let candidates = animes.filter(a => core(a.animeTitle) === ct);
+    if (!candidates.length) candidates = animes.filter(a => norm(a.animeTitle) === nt);
+    if (!candidates.length) candidates = animes.filter(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)));
+    if (!candidates.length && animes.length) candidates = [animes[0]];
+    const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
+    const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
+    candidates.sort((a, b) => (PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6));
+    for (let tries = 0; tries < candidates.length && tries < 3; tries++) {
+        const episode = pickDanmakuEpisode(candidates[tries].episodes, ep);
+        if (!episode || !episode.episodeId) continue;
+        try {
+            const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
+            const d = dandanToDplayer((cr.data && cr.data.comments) || []);
+            if (d.length) return d;
+        } catch (e) { }
+    }
+    return [];
+}
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
     // 默认短缓存(空/出错 5min)；非空弹幕→7天新鲜+30天 stale-while-revalidate(过期先回旧缓存、后台重抓)。
@@ -353,39 +388,19 @@ app.get('/api/danmaku/v3/', async (req, res) => {
     if (!danmakuBudgetOk()) return res.json(empty);
 
     try {
-        const base = DANMU_API_URL.replace(/\/$/, '');
-        const token = process.env.DANMU_API_TOKEN || '';
-        const prefix = token ? `/${encodeURIComponent(token)}` : '';
-        const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
-        const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
-        const nt = norm(title), ct = core(title);
-        // 搜索结果按剧名缓存：同剧各集复用，省去每集 ~6s 搜索(对 Vercel 10s 函数上限尤为关键)
-        let animes;
-        const sc = danmakuSearchCache.get(nt);
-        if (sc && sc.expiry > Date.now()) { animes = sc.animes; }
-        else {
-            const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
-            animes = (sr.data && sr.data.animes) || [];
-            if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
-            danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
-        }
-        // 同剧多平台：收集所有匹配的 anime，按平台弹幕量排序(migu 常返 0 且慢→最后)，逐个取直到非空(限3次)
-        let candidates = animes.filter(a => core(a.animeTitle) === ct);
-        if (!candidates.length) candidates = animes.filter(a => norm(a.animeTitle) === nt);
-        if (!candidates.length) candidates = animes.filter(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)));
-        if (!candidates.length && animes.length) candidates = [animes[0]];
-        const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
-        const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
-        candidates.sort((a, b) => (PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6));
+        // 多源回退：DANMU_API_URL 逗号分隔多个实例(不同出口IP绕开限流)；DANMU_API_TOKEN 逗号分隔配对或单 token 共用
+        const bases = String(DANMU_API_URL).split(',').map(s => s.trim()).filter(Boolean);
+        const tokens = String(process.env.DANMU_API_TOKEN || '').split(',').map(s => s.trim());
+        const instances = bases.map((b, i) => ({ base: b, token: tokens.length > 1 ? (tokens[i] || '') : (tokens[0] || '') }));
         let data = [];
-        for (let tries = 0; tries < candidates.length && tries < 3; tries++) {
-            const episode = pickDanmakuEpisode(candidates[tries].episodes, ep);
-            if (!episode || !episode.episodeId) continue;
-            try {
-                const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
-                const d = dandanToDplayer((cr.data && cr.data.comments) || []);
-                if (d.length) { data = d; break; }
-            } catch (e) { /* 该平台失败，试下一个 */ }
+        for (const inst of instances) {
+            try { data = await fetchDanmakuFromInstance(inst.base, inst.token, title, ep); } catch (e) { data = []; }
+            if (data.length) break;
+        }
+        // 全部实例空 → 多为上游限流瞬时空：等 3s 重试第一个实例(Vercel 有 10s 函数上限，谨慎)
+        if (!data.length && instances.length) {
+            await new Promise(r => setTimeout(r, 3000));
+            try { data = await fetchDanmakuFromInstance(instances[0].base, instances[0].token, title, ep); } catch (e) { data = []; }
         }
         data.sort((a, b) => a[0] - b[0]); // 先按时间升序，保证下面按索引均匀采样=按时间均匀采样(后半段不丢)
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }

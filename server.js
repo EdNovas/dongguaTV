@@ -1368,6 +1368,42 @@ function pickDanmakuEpisode(episodes, epName) {
     }
     return episodes[0];  // 无集号(电影等)取第一个
 }
+// 从【一个 danmu_api 实例】取某剧某集弹幕：搜索 → 同剧多平台(iqiyi/360/...)回退 → 返回 DPlayer 数组(空=该实例没取到)
+async function fetchDanmakuFromInstance(base, token, title, ep) {
+    base = String(base).replace(/\/$/, '');
+    const prefix = token ? `/${encodeURIComponent(token)}` : '';
+    const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+    const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
+    const nt = norm(title), ct = core(title);
+    // 搜索结果按【实例+剧名】缓存：不同实例的 episodeId 体系不同，key 必须带 base，否则串实例取到失效 id
+    let animes;
+    const skey = base + '||' + nt;
+    const sc = danmakuSearchCache.get(skey);
+    if (sc && sc.expiry > Date.now()) { animes = sc.animes; }
+    else {
+        const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
+        animes = (sr.data && sr.data.animes) || [];
+        if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
+        danmakuSearchCache.set(skey, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
+    }
+    let candidates = animes.filter(a => core(a.animeTitle) === ct);
+    if (!candidates.length) candidates = animes.filter(a => norm(a.animeTitle) === nt);
+    if (!candidates.length) candidates = animes.filter(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)));
+    if (!candidates.length && animes.length) candidates = [animes[0]];
+    const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
+    const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
+    candidates.sort((a, b) => (PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6));
+    for (let tries = 0; tries < candidates.length && tries < 3; tries++) {
+        const episode = pickDanmakuEpisode(candidates[tries].episodes, ep);
+        if (!episode || !episode.episodeId) continue;
+        try {
+            const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
+            const d = dandanToDplayer((cr.data && cr.data.comments) || []);
+            if (d.length) return d;
+        } catch (e) { /* 该平台失败，试下一个 */ }
+    }
+    return [];
+}
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
     // 缓存策略：默认短缓存(空/出错只 5min，避免 CDN 把"暂时为空"锁住很久)；取到非空弹幕时改长缓存。
@@ -1388,55 +1424,21 @@ app.get('/api/danmaku/v3/', async (req, res) => {
     if (!danmakuBudgetOk()) return res.json(empty);
 
     try {
-        const base = DANMU_API_URL.replace(/\/$/, '');
-        const token = process.env.DANMU_API_TOKEN || '';
-        const prefix = token ? `/${encodeURIComponent(token)}` : '';
-        const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
-        // 主标题：去掉 "(2022)"、"【国产剧】"、"from iqiyi" 等后缀，避免"破事精英"误命中"破事精英 第二季"
-        const core = s => norm(String(s || '').split(/[(（【\[]/)[0]);
-        const nt = norm(title), ct = core(title);
-        // 1. 按剧名搜索剧集 (danmu_api 在 CF 上现抓平台弹幕，冷启动可达 6s+，超时给足防被掐死返回空)
-        //    搜索结果按剧名缓存：同剧不同集复用，省去每集重复 ~6s 搜索(对 Vercel 10s 函数上限尤为关键)
-        let animes;
-        const sc = danmakuSearchCache.get(nt);
-        if (sc && sc.expiry > Date.now()) { animes = sc.animes; }
-        else {
-            const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
-            animes = (sr.data && sr.data.animes) || [];
-            if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
-            danmakuSearchCache.set(nt, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
-        }
-        // 收集匹配该剧名的所有 anime(同剧多平台)：core 精确(去后缀)优先，否则包含匹配
-        let candidates = animes.filter(a => core(a.animeTitle) === ct);
-        if (!candidates.length) candidates = animes.filter(a => norm(a.animeTitle) === nt);
-        if (!candidates.length) candidates = animes.filter(a => core(a.animeTitle).includes(ct) || ct.includes(core(a.animeTitle)));
-        if (!candidates.length && animes.length) candidates = [animes[0]];
-        // 按平台弹幕量优先级排序：iqiyi/腾讯/优酷/B站/芒果/360 在前；migu 常返 0 且慢(实测 23s/0条) → 排最后
-        const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
-        const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
-        candidates.sort((a, b) => (PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6));
-        // 2. 逐平台取弹幕：命中非空即用(优先平台已排前)；某平台空(如 migu)则回退下一个；限 3 次控时延
+        // 多源回退：DANMU_API_URL 支持逗号分隔多个实例(不同主机/区域=不同出口IP,绕开单实例被上游限流)；
+        //   DANMU_API_TOKEN 逗号分隔则按序与各实例配对，单个则全部实例共用。逐实例尝试，第一个非空即用。
+        const bases = String(DANMU_API_URL).split(',').map(s => s.trim()).filter(Boolean);
+        const tokens = String(process.env.DANMU_API_TOKEN || '').split(',').map(s => s.trim());
+        const instances = bases.map((b, i) => ({ base: b, token: tokens.length > 1 ? (tokens[i] || '') : (tokens[0] || '') }));
         let data = [];
-        for (let tries = 0; tries < candidates.length && tries < 3; tries++) {
-            const episode = pickDanmakuEpisode(candidates[tries].episodes, ep);
-            if (!episode || !episode.episodeId) continue;
-            try {
-                const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
-                const d = dandanToDplayer((cr.data && cr.data.comments) || []);
-                if (d.length) { data = d; break; }
-            } catch (e) { /* 该平台失败，试下一个 */ }
+        for (const inst of instances) {
+            try { data = await fetchDanmakuFromInstance(inst.base, inst.token, title, ep); } catch (e) { data = []; }
+            if (data.length) break;  // 第一个取到非空的实例即用
         }
-        // 弹幕全空但确有匹配集 → 多为 danmu_api 被上游(iqiyi)限流的瞬时空(实测同一集隔几秒重试即满)。
-        //   等 3s 重试一次最优平台；弹幕异步加载不阻塞视频，多等几秒无碍。超出集数时 pickDanmakuEpisode 返回 null → 不重试、保持空。
-        if (!data.length) {
-            const retryEp = candidates.map(c => pickDanmakuEpisode(c.episodes, ep)).find(e => e && e.episodeId);
-            if (retryEp) {
-                await new Promise(r => setTimeout(r, 3000));
-                try {
-                    const cr = await axios.get(`${base}${prefix}/api/v2/comment/${retryEp.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
-                    data = dandanToDplayer((cr.data && cr.data.comments) || []);
-                } catch (e) { }
-            }
+        // 所有实例都空 → 多为上游(iqiyi)限流的瞬时空(实测同集隔几秒重试即满)：等 3s 重试第一个实例一次。
+        //   弹幕异步加载不阻塞视频；超出集数时 pickDanmakuEpisode 返回 null → 各实例本就返回空、这里也取不到，保持空。
+        if (!data.length && instances.length) {
+            await new Promise(r => setTimeout(r, 3000));
+            try { data = await fetchDanmakuFromInstance(instances[0].base, instances[0].token, title, ep); } catch (e) { data = []; }
         }
         // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
         data.sort((a, b) => a[0] - b[0]);
