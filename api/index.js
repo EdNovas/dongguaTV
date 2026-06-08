@@ -293,7 +293,7 @@ app.get('/api/preview', async (req, res) => {
 const danmakuCache = new Map();
 const danmakuSearchCache = new Map(); // norm(剧名) -> { animes, expiry } 同剧各集复用搜索结果
 const DANMAKU_CACHE_TTL = 30 * 60 * 1000;
-const DANMAKU_MISS_TTL = 5 * 60 * 1000;
+const DANMAKU_MISS_TTL = 90 * 1000; // 空结果只缓存 90s：弹幕空多为上游限流瞬时失败，短缓存让下次很快重试成功
 const DANMAKU_CACHE_MAX = 1000;
 const DANMAKU_MAX = 12000; // 单集弹幕上限(超出按时间均匀采样)。提到 1.2w 让峰值更密、"海量弹幕"开关效果明显
 const DANMAKU_SEARCH_TTL = 3 * 60 * 1000; // danmu_api 的 episodeId 会过期(实测<10min)，搜索结果只短存，防复用过期id取到空弹幕
@@ -329,7 +329,8 @@ function pickDanmakuEpisode(episodes, epName) {
     if (n != null) {
         const byTitle = episodes.find(e => danmakuEpNum(e.episodeTitle) === n);
         if (byTitle) return byTitle;
-        if (episodes[n - 1]) return episodes[n - 1];
+        if (n >= 1 && n <= episodes.length) return episodes[n - 1];
+        return null;  // 集号超出弹幕源集数 → 返回空，别错放第1集弹幕
     }
     return episodes[0];
 }
@@ -338,7 +339,7 @@ app.get('/api/danmaku/v3/', async (req, res) => {
     // 默认短缓存(空/出错 5min)；非空弹幕→7天新鲜+30天 stale-while-revalidate(过期先回旧缓存、后台重抓)。
     // 缓存加在本接口(键=?id=剧名|集名,稳定)，勿缓存 danmu_api 的 comment/{id}(id会过期)
     const LONG_CACHE = 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000';
-    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Cache-Control', 'public, max-age=90');
     const DANMU_API_URL = process.env.DANMU_API_URL;
     if (!DANMU_API_URL) return res.json(empty);
 

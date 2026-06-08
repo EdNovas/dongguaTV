@@ -1325,7 +1325,7 @@ app.get('/api/preview', async (req, res) => {
 const danmakuCache = new Map(); // "剧名|集名" -> { data, expiry }
 const danmakuSearchCache = new Map(); // norm(剧名) -> { animes, expiry } 同剧各集复用搜索结果
 const DANMAKU_CACHE_TTL = 30 * 60 * 1000;
-const DANMAKU_MISS_TTL = 5 * 60 * 1000;
+const DANMAKU_MISS_TTL = 90 * 1000; // 空结果只缓存 90s：弹幕空多为 danmu_api 被上游(iqiyi)限流的瞬时失败，短缓存让下次很快重试成功(成功后再长缓存)
 const DANMAKU_CACHE_MAX = 1000;
 const DANMAKU_MAX = 12000; // 单集弹幕上限(超出按时间均匀采样)。提到 1.2w 让峰值更密、"海量弹幕"开关效果明显；unlimited 关时 DPlayer 仍按轨道限并发渲染，不会卡
 const DANMAKU_SEARCH_TTL = 3 * 60 * 1000; // danmu_api 的 episodeId 会过期(实测<10min)，搜索结果只短存，防复用过期id取到空弹幕
@@ -1363,9 +1363,10 @@ function pickDanmakuEpisode(episodes, epName) {
     if (n != null) {
         const byTitle = episodes.find(e => danmakuEpNum(e.episodeTitle) === n);
         if (byTitle) return byTitle;
-        if (episodes[n - 1]) return episodes[n - 1];
+        if (n >= 1 && n <= episodes.length) return episodes[n - 1];
+        return null;  // 集号超出弹幕源集数(资源站比弹幕源多集，如番外/彩蛋/预告) → 返回空，别错放第1集弹幕
     }
-    return episodes[0];
+    return episodes[0];  // 无集号(电影等)取第一个
 }
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
@@ -1373,7 +1374,7 @@ app.get('/api/danmaku/v3/', async (req, res) => {
     // 弹幕近乎静态 → 7 天新鲜 + 30 天 stale-while-revalidate(过期后先回旧缓存秒开、同时后台重新抓取更新)。
     // 注意：缓存加在本接口(键 = ?id=剧名|集名，稳定)，不要去缓存 danmu_api 的 comment/{id}(id 会过期、键永远变)。
     const LONG_CACHE = 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000';
-    res.set('Cache-Control', 'public, max-age=300');
+    res.set('Cache-Control', 'public, max-age=90');
     const DANMU_API_URL = process.env.DANMU_API_URL;
     if (!DANMU_API_URL) return res.json(empty);
 
@@ -1424,6 +1425,18 @@ app.get('/api/danmaku/v3/', async (req, res) => {
                 const d = dandanToDplayer((cr.data && cr.data.comments) || []);
                 if (d.length) { data = d; break; }
             } catch (e) { /* 该平台失败，试下一个 */ }
+        }
+        // 弹幕全空但确有匹配集 → 多为 danmu_api 被上游(iqiyi)限流的瞬时空(实测同一集隔几秒重试即满)。
+        //   等 3s 重试一次最优平台；弹幕异步加载不阻塞视频，多等几秒无碍。超出集数时 pickDanmakuEpisode 返回 null → 不重试、保持空。
+        if (!data.length) {
+            const retryEp = candidates.map(c => pickDanmakuEpisode(c.episodes, ep)).find(e => e && e.episodeId);
+            if (retryEp) {
+                await new Promise(r => setTimeout(r, 3000));
+                try {
+                    const cr = await axios.get(`${base}${prefix}/api/v2/comment/${retryEp.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
+                    data = dandanToDplayer((cr.data && cr.data.comments) || []);
+                } catch (e) { }
+            }
         }
         // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
         data.sort((a, b) => a[0] - b[0]);
