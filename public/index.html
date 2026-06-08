@@ -449,6 +449,46 @@
             opacity: 0.8;
             flex-shrink: 0;
         }
+        /* 弹幕面板里的开关(显示弹幕/海量弹幕) */
+        #dplayer .dm-toggle {
+            position: relative;
+            width: 40px;
+            height: 22px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            transition: background 0.25s;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        #dplayer .dm-toggle.dm-on {
+            background: #e50914;
+        }
+        #dplayer .dm-toggle .dm-knob {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #fff;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+            transition: transform 0.25s;
+        }
+        #dplayer .dm-toggle.dm-on .dm-knob {
+            transform: translateX(18px);
+        }
+        /* 弹幕的原生齿轮项(显示弹幕/海量弹幕/弹幕透明度)已移到独立弹幕设置面板 → 齿轮里隐藏 */
+        #dplayer .dplayer-setting-showdan,
+        #dplayer .dplayer-setting-danunlimit,
+        #dplayer .dplayer-setting-danmaku {
+            display: none !important;
+        }
+        /* 全屏拆成两个常驻按钮：页面全屏(左) + 真全屏(右)，不再 hover 才显示 */
+        #dplayer .dplayer-controller .dplayer-icons .dplayer-full .dplayer-full-in-icon {
+            position: static !important;
+            top: auto !important;
+            display: inline-block !important;
+        }
 
         /* 1. 毛玻璃控制栏效果 */
         .dplayer-controller {
@@ -7978,6 +8018,8 @@
                                             const isOpen = settingBox.classList.contains('dplayer-setting-box-open');
                                             // 当设置菜单打开时，禁用遮罩层的点击事件
                                             mask.style.pointerEvents = isOpen ? 'none' : 'auto';
+                                            // 互斥：打开视频设置(齿轮)时关掉弹幕设置面板
+                                            if (isOpen) { const dmp = document.querySelector('#dplayer .dm-settings-panel'); if (dmp) dmp.style.display = 'none'; }
                                             console.log('[Settings] Menu ' + (isOpen ? 'OPENED - mask disabled' : 'CLOSED - mask enabled'));
 
                                             // 打开菜单时，强制刷新一次倍速高亮
@@ -8178,17 +8220,27 @@
                                         const c = document.getElementById('dplayer');
                                         if (!c) return;
                                         const iconsRight = c.querySelector('.dplayer-icons-right');
-                                        // 单独的"弹幕设置"按钮(放在右侧图标区)
+                                        // "弹幕设置"按钮：插在 视频设置(齿轮) 之前 → 顺序：下一集 → 发送弹幕 → 弹幕设置 → 设置 → 全屏
                                         if (iconsRight && !iconsRight.querySelector('.dplayer-dmset-icon')) {
-                                            iconsRight.insertAdjacentHTML('afterbegin', `
+                                            const btnHtml = `
                                                 <div class="dplayer-icon dplayer-dmset-icon" data-balloon="弹幕设置" data-balloon-pos="up">
                                                     <span class="dplayer-icon-content" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
                                                         <i class="fas fa-sliders-h" style="font-size:17px;"></i>
                                                     </span>
-                                                </div>`);
+                                                </div>`;
+                                            const settingEl = iconsRight.querySelector('.dplayer-setting');
+                                            if (settingEl) settingEl.insertAdjacentHTML('beforebegin', btnHtml);
+                                            else iconsRight.insertAdjacentHTML('beforeend', btnHtml);
                                         }
-                                        // 滑块面板
+                                        // 面板：显示弹幕/海量弹幕 开关 + 行数/速度/字号/不透明度 滑块
                                         if (!c.querySelector('.dm-settings-panel')) {
+                                            const dmShown = !(typeof dp !== 'undefined' && dp && dp.danmaku) || dp.danmaku.showing !== false;
+                                            const dmUnlim = !!(typeof dp !== 'undefined' && dp && dp.danmaku && dp.danmaku.unlimited);
+                                            const tg = (key, label, on) => `
+                                                <div class="dm-set-row">
+                                                    <span class="dm-set-label">${label}</span>
+                                                    <div class="dm-toggle ${on ? 'dm-on' : ''}" data-key="${key}"><span class="dm-knob"></span></div>
+                                                </div>`;
                                             const sl = (key, label, min, max, step) => `
                                                 <div class="dm-set-row">
                                                     <span class="dm-set-label">${label}</span>
@@ -8198,6 +8250,8 @@
                                             c.insertAdjacentHTML('beforeend', `
                                                 <div class="dm-settings-panel" style="display:none;">
                                                     <div class="dm-set-title">弹幕设置</div>
+                                                    ${tg('show', '显示弹幕', dmShown)}
+                                                    ${tg('unlimited', '海量弹幕', dmUnlim)}
                                                     ${sl('rows', '行数', 1, 20, 1)}
                                                     ${sl('speed', '速度', 1, 10, 1)}
                                                     ${sl('font', '字号', 12, 44, 1)}
@@ -8217,9 +8271,23 @@
                                                 r.addEventListener('input', onChange);
                                                 r.addEventListener('click', e => e.stopPropagation());
                                             });
+                                            // 开关：显示弹幕 / 海量弹幕(直接驱动 DPlayer；原生 danmaku_show/hide 事件负责本地+服务器持久化)
+                                            panel.querySelectorAll('.dm-toggle').forEach(t => t.addEventListener('click', (e) => {
+                                                e.stopPropagation();
+                                                const key = t.getAttribute('data-key');
+                                                const on = !t.classList.contains('dm-on');
+                                                t.classList.toggle('dm-on', on);
+                                                try {
+                                                    if (key === 'show' && dp && dp.danmaku) { on ? dp.danmaku.show() : dp.danmaku.hide(); }
+                                                    else if (key === 'unlimited') { if (dp && dp.danmaku) dp.danmaku.unlimit(on); if (dp && dp.user) dp.user.set('unlimited', on ? 1 : 0); }
+                                                } catch (err) { }
+                                            }));
                                             if (btn) btn.addEventListener('click', (e) => {
                                                 e.stopPropagation();
-                                                panel.style.display = (panel.style.display === 'none') ? 'block' : 'none';
+                                                const willOpen = panel.style.display === 'none';
+                                                panel.style.display = willOpen ? 'block' : 'none';
+                                                // 互斥：打开弹幕设置时关掉视频设置(齿轮)
+                                                if (willOpen) { const sb = c.querySelector('.dplayer-setting-box'); if (sb) sb.classList.remove('dplayer-setting-box-open'); }
                                             });
                                             // 点面板/按钮之外关闭
                                             c.addEventListener('click', (e) => {
