@@ -5421,9 +5421,19 @@
                             try { if (dp && dp.danmaku) { data.settings.danmakuOff ? dp.danmaku.hide() : dp.danmaku.show(); } } catch (e) { }
                             console.log('[同步] 已应用弹幕开关偏好:', data.settings.danmakuOff ? '关' : '开');
                         }
-                        // 弹幕样式(行数/速度/字号/不透明度)跨设备同步
+                        // 弹幕样式(行数/速度/字号/不透明度/字体)跨设备同步。
+                        // ⚠️ danmakuStyle 管理器在"首次播放、播放器创建后"才存在,而本拉取在页面启动时就跑——
+                        //    管理器还不存在时必须先落到 localStorage(load() 读它),否则服务器值被静默丢弃、其它设备永远是本地旧值。
                         if (data.settings.dmStyle && typeof data.settings.dmStyle === 'object') {
-                            try { if (window.danmakuStyle && window.danmakuStyle.setCfg) window.danmakuStyle.setCfg(data.settings.dmStyle); } catch (e) { }
+                            try {
+                                if (window.danmakuStyle && window.danmakuStyle.setCfg) {
+                                    window.danmakuStyle.setCfg(data.settings.dmStyle);  // 播放器已在 → 立即应用+刷新面板
+                                } else {
+                                    const cur = JSON.parse(localStorage.getItem('donggua_dm_style') || '{}');
+                                    localStorage.setItem('donggua_dm_style', JSON.stringify(Object.assign(cur || {}, data.settings.dmStyle)));
+                                }
+                                console.log('[同步] 已应用弹幕样式偏好:', JSON.stringify(data.settings.dmStyle));
+                            } catch (e) { }
                         }
                     } catch (e) { console.error('[同步] 拉取用户设置失败:', e); }
                 },
