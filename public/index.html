@@ -536,6 +536,61 @@
         .dplayer-bar-wrap {
             height: 4px !important;
             transition: none !important;
+            /* 📱 拖进度条时禁止浏览器把触摸抢去滚动页面(否则手机上 touchmove 被取消=拖不动) */
+            touch-action: none;
+        }
+
+        /* 📱 手机/触屏：进度条与控制按钮等比例放大(屏幕小手指粗，4px 进度条根本按不到) */
+        @media (pointer: coarse), (max-width: 768px) {
+            #dplayer .dplayer-bar-wrap {
+                height: 6px !important;
+                padding: 14px 0 !important;
+                /* padding 撑大命中区(~34px)，视觉条仍是 6px；bottom 上移避免叠住按钮 */
+                bottom: 36px !important;
+                background-clip: content-box;
+            }
+            #dplayer .dplayer-bar {
+                height: 6px !important;
+            }
+            #dplayer .dplayer-bar-wrap .dplayer-thumb {
+                transform: scale(2) !important;
+            }
+            #dplayer .dplayer-controller {
+                height: 52px !important;
+            }
+            #dplayer .dplayer-icons {
+                height: 48px !important;
+            }
+            #dplayer .dplayer-icons .dplayer-icon {
+                width: 46px !important;
+            }
+            #dplayer .dplayer-icons .dplayer-icon i {
+                font-size: 20px !important;
+            }
+        }
+
+        /* 📱 音量/亮度滑动手势指示器 */
+        #dplayer .gesture-indicator {
+            position: absolute;
+            top: 18%;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 30;
+            background: rgba(0, 0, 0, 0.65);
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            white-space: nowrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s;
+            pointer-events: none;
+        }
+
+        #dplayer .gesture-indicator.show {
+            opacity: 1;
+            visibility: visible;
         }
 
         /* 3. 进度条拖动点 - 发光效果 */
@@ -8779,9 +8834,68 @@
                             }, 3000);
                         });
 
+                        // ========== 📱 左/右 1/3 屏幕上下滑：亮度/音量 ==========
+                        // 左 1/3 上下滑=亮度(CSS filter,网页拿不到系统亮度)；右 1/3 上下滑=音量。
+                        // 竖向滑动锁定后 preventDefault(passive:false)防页面滚动；横向滑动放弃(留给双击/原生)。
+                        // _swipeConsumed 防止滑完抬手被下面的"双击/单击检测"误判成点击切控制栏。
+                        let _swipeConsumed = false;
+                        {
+                            let _gx = 0, _gy = 0, _gmode = null, _gstart = 0;
+                            const gInd = document.createElement('div');
+                            gInd.className = 'gesture-indicator';
+                            container.appendChild(gInd);
+                            let _gHideTimer = null;
+                            const gShow = (txt) => { gInd.textContent = txt; gInd.classList.add('show'); clearTimeout(_gHideTimer); };
+                            const gHide = () => { _gHideTimer = setTimeout(() => gInd.classList.remove('show'), 700); };
+                            container.addEventListener('touchstart', (e) => {
+                                _gmode = null;
+                                if (e.touches.length !== 1) return;
+                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
+                                const rect = container.getBoundingClientRect();
+                                _gx = e.touches[0].clientX; _gy = e.touches[0].clientY;
+                                const rx = (_gx - rect.left) / rect.width;
+                                if (rx <= 1 / 3) _gmode = 'bri?';
+                                else if (rx >= 2 / 3) _gmode = 'vol?';
+                            }, { passive: true });
+                            container.addEventListener('touchmove', (e) => {
+                                if (!_gmode) return;
+                                const dx = e.touches[0].clientX - _gx, dy = e.touches[0].clientY - _gy;
+                                if (_gmode === 'bri?' || _gmode === 'vol?') {
+                                    if (Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+                                        // 锁定为竖向手势，记录起始值
+                                        if (_gmode === 'vol?') { _gmode = 'vol'; _gstart = (dp && dp.video) ? dp.video.volume : 1; }
+                                        else { _gmode = 'bri'; _gstart = window._videoBrightness || 1; }
+                                    } else if (Math.abs(dx) > 18) { _gmode = null; return; }
+                                    else return;
+                                }
+                                if (e.cancelable) e.preventDefault();  // 已锁定竖向手势 → 阻止页面滚动
+                                const rect = container.getBoundingClientRect();
+                                const delta = -dy / (rect.height * 0.7);  // 上滑为正；滑约 70% 屏高 = 全程
+                                if (_gmode === 'vol' && dp) {
+                                    const v = Math.min(1, Math.max(0, _gstart + delta));
+                                    try { dp.volume(v, true, true); } catch (err) { }
+                                    gShow('🔊 音量 ' + Math.round(v * 100) + '%');
+                                    _swipeConsumed = true;
+                                } else if (_gmode === 'bri' && dp && dp.video) {
+                                    const b = Math.min(2, Math.max(0.2, _gstart + delta * 1.6));
+                                    window._videoBrightness = b;
+                                    try { dp.video.style.filter = 'brightness(' + b.toFixed(2) + ')'; } catch (err) { }
+                                    gShow('🔆 亮度 ' + Math.round(b * 100) + '%');
+                                    _swipeConsumed = true;
+                                }
+                            }, { passive: false });
+                            container.addEventListener('touchend', () => {
+                                if (_gmode === 'vol') { try { dp.volume(dp.video.volume, false, true); } catch (err) { } gHide(); }  // 抬手时才落一次音量存储
+                                else if (_gmode === 'bri') gHide();
+                                _gmode = null;
+                            }, { passive: true });
+                        }
+
                         // 双击检测
                         // 双击检测
                         container.addEventListener('touchend', (e) => {
+                            // 🎚️ 刚完成音量/亮度滑动手势 → 这次抬手不算点击(防止误切控制栏/误判双击)
+                            if (_swipeConsumed) { _swipeConsumed = false; return; }
                             // 忽略控制栏区域和自定义按钮的点击
                             // 忽略控制栏区域、自定义按钮以及 DPlayer 遮罩的点击
                             if (e.target.closest('.dplayer-controller') ||
