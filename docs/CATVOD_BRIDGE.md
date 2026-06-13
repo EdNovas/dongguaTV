@@ -5,7 +5,7 @@ DongguaTV can identify TVBox plugin-style sources such as `csp_xxx`, `spider.jar
 ## Safety Rules
 
 - The bridge binds only to `127.0.0.1`, `localhost`, or `::1`.
-- `allowJavaProcess` is forced to `false` in this scaffold.
+- Java process launch is disabled unless local config explicitly sets `mode` to `java-http`, `allowJavaProcess` to `true`, and `trustedBridgeJar` to `true`.
 - Subscription-provided `jar`, py, and js code is never loaded automatically.
 - Runtime operation responses do not echo raw playback URLs, cookies, tokens, or headers.
 - Default mode is `disabled`, which returns `runtime-not-configured` for plugin operations.
@@ -62,9 +62,41 @@ For local UI testing only, copy `bridge-config.example.json` to `bridge-config.j
 
 Stub mode returns empty results and still does not execute CatVod jar, py, or js plugins.
 
+## Java HTTP Mode
+
+Java HTTP mode is only for a separate trusted local bridge jar that you install manually. It is not for subscription-provided `spider.jar` links.
+
+Example local config:
+
+```json
+{
+  "host": "127.0.0.1",
+  "port": 9978,
+  "runtime": {
+    "mode": "java-http",
+    "allowJavaProcess": true,
+    "trustedBridgeJar": true,
+    "javaPath": "java",
+    "catvodBridgeJarPath": "D:\\Tools\\catvod-bridge\\catvod-runtime-bridge.jar",
+    "childHost": "127.0.0.1",
+    "childPort": 9977,
+    "javaArgs": ["-jar", "{jar}", "--host", "{host}", "--port", "{port}"]
+  }
+}
+```
+
+When a runtime operation is received, the scaffold starts the Java bridge with `child_process.spawn` and `shell:false`, waits for `GET /health` on the child bridge, then forwards:
+
+- `POST /runtime/search`
+- `POST /runtime/category`
+- `POST /runtime/detail`
+- `POST /runtime/play`
+
+The expected Java child bridge must expose the same HTTP protocol on `127.0.0.1`.
+
 ## Future Java Runtime Bridge
 
-The next safe step is a separate Java Runtime Bridge process that:
+The Java child bridge itself still needs to be implemented separately. It should:
 
 - is installed and configured explicitly by the user;
 - runs as a local process outside Electron;

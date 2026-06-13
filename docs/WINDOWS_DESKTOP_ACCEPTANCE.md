@@ -113,7 +113,7 @@ This repository includes a local-only scaffold at `tools/catvod-bridge`. Start i
 npm run bridge:catvod
 ```
 
-Default mode returns `runtime-not-configured` and does not execute CatVod jar, py, or js plugin code. See `docs/CATVOD_BRIDGE.md` for the bridge protocol and future Java Runtime Bridge plan.
+Default mode returns `runtime-not-configured` and does not execute CatVod jar, py, or js plugin code. Java HTTP child bridge mode exists, but it only starts a manually configured trusted local bridge jar when `mode=java-http`, `allowJavaProcess=true`, and `trustedBridgeJar=true`. See `docs/CATVOD_BRIDGE.md` for the bridge protocol and future Java Runtime Bridge plan.
 
 ## Playback Diagnosis
 

@@ -4,9 +4,15 @@
   "runtime": {
     "mode": "disabled",
     "allowJavaProcess": false,
+    "trustedBridgeJar": false,
     "javaPath": "",
     "catvodBridgeJarPath": "",
-    "adapterModulePath": ""
+    "adapterModulePath": "",
+    "childHost": "127.0.0.1",
+    "childPort": 9977,
+    "javaArgs": ["-jar", "{jar}", "--host", "{host}", "--port", "{port}"],
+    "startupTimeoutMs": 8000,
+    "requestTimeoutMs": 15000
   },
   "logging": {
     "level": "info"

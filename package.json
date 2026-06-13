@@ -1,6 +1,6 @@
 {
   "name": "dongguatv-enhanced-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Windows desktop Apple TV style DongguaTV client with TVBox subscription intake and MPC playback support.",
   "author": "DongguaTV Enhanced",
   "main": "main.js",
@@ -8,10 +8,11 @@
     "start": "node server.js",
     "dev": "node server.js",
     "desktop": "electron .",
-    "build": "node --check server.js && node --check main.js",
+    "build": "node --check server.js && node --check main.js && node --check tools/catvod-bridge/server.js && node --check tools/catvod-bridge/javaBridgeSupervisor.js",
     "dist": "electron-builder --win",
     "dist:desktop": "electron-builder --win",
-    "bridge:catvod": "node tools/catvod-bridge/server.js"
+    "bridge:catvod": "node tools/catvod-bridge/server.js",
+    "bridge:catvod:check": "node --check tools/catvod-bridge/server.js && node --check tools/catvod-bridge/javaBridgeSupervisor.js"
   },
   "dependencies": {
     "@capacitor/screen-orientation": "^8.0.0",

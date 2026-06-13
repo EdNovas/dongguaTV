@@ -1,6 +1,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const { JavaBridgeSupervisor } = require('./javaBridgeSupervisor');
 
 const SERVICE_NAME = 'dongguatv-catvod-http-bridge';
 const VERSION = '0.1.0';
@@ -10,9 +11,15 @@ const DEFAULT_CONFIG = {
   runtime: {
     mode: 'disabled',
     allowJavaProcess: false,
+    trustedBridgeJar: false,
     javaPath: '',
     catvodBridgeJarPath: '',
-    adapterModulePath: ''
+    adapterModulePath: '',
+    childHost: '127.0.0.1',
+    childPort: 9977,
+    javaArgs: ['-jar', '{jar}', '--host', '{host}', '--port', '{port}'],
+    startupTimeoutMs: 8000,
+    requestTimeoutMs: 15000
   },
   logging: {
     level: 'info'
@@ -59,7 +66,7 @@ function deepMerge(base, patch) {
 
 function loadConfig(configPath) {
   if (!configPath || !fs.existsSync(configPath)) return { ...DEFAULT_CONFIG };
-  const raw = fs.readFileSync(configPath, 'utf8');
+  const raw = fs.readFileSync(configPath, 'utf8').replace(/^\uFEFF/, '');
   return deepMerge(DEFAULT_CONFIG, JSON.parse(raw));
 }
 
@@ -83,9 +90,20 @@ function normalizeConfig(config, args) {
   }
 
   next.runtime = deepMerge(DEFAULT_CONFIG.runtime, next.runtime || {});
-  next.runtime.allowJavaProcess = false;
-  if (!['disabled', 'stub'].includes(next.runtime.mode)) {
+  if (!['disabled', 'stub', 'java-http'].includes(next.runtime.mode)) {
     next.runtime.mode = 'disabled';
+  }
+  next.runtime.childHost = assertLocalHost(next.runtime.childHost);
+  next.runtime.childPort = Number(next.runtime.childPort || DEFAULT_CONFIG.runtime.childPort);
+  if (!Number.isInteger(next.runtime.childPort) || next.runtime.childPort < 1024 || next.runtime.childPort > 65535) {
+    throw new Error('Java bridge child port must be an integer between 1024 and 65535.');
+  }
+  next.runtime.allowJavaProcess = next.runtime.mode === 'java-http' && next.runtime.allowJavaProcess === true;
+  next.runtime.trustedBridgeJar = next.runtime.mode === 'java-http' && next.runtime.trustedBridgeJar === true;
+  next.runtime.startupTimeoutMs = Math.max(1000, Number(next.runtime.startupTimeoutMs || DEFAULT_CONFIG.runtime.startupTimeoutMs));
+  next.runtime.requestTimeoutMs = Math.max(1000, Number(next.runtime.requestTimeoutMs || DEFAULT_CONFIG.runtime.requestTimeoutMs));
+  if (!Array.isArray(next.runtime.javaArgs)) {
+    next.runtime.javaArgs = DEFAULT_CONFIG.runtime.javaArgs;
   }
   return next;
 }
@@ -132,10 +150,19 @@ function readJsonBody(req) {
 function safeRuntimeStatus(config) {
   return {
     mode: config.runtime.mode,
-    configured: config.runtime.mode === 'stub',
-    javaProcessEnabled: false,
+    configured: config.runtime.mode === 'stub' || (
+      config.runtime.mode === 'java-http' &&
+      config.runtime.allowJavaProcess &&
+      config.runtime.trustedBridgeJar &&
+      !!config.runtime.catvodBridgeJarPath
+    ),
+    javaProcessEnabled: config.runtime.mode === 'java-http' &&
+      config.runtime.allowJavaProcess &&
+      config.runtime.trustedBridgeJar,
     javaPathConfigured: !!config.runtime.javaPath,
     catvodBridgeJarConfigured: !!config.runtime.catvodBridgeJarPath,
+    trustedBridgeJar: !!config.runtime.trustedBridgeJar,
+    childBaseUrl: `http://${config.runtime.childHost}:${config.runtime.childPort}`,
     adapterModuleConfigured: !!config.runtime.adapterModulePath
   };
 }
@@ -164,7 +191,7 @@ function stubOperation(operation, payload) {
   };
 }
 
-async function handleRuntimeOperation(req, res, config, operation) {
+async function handleRuntimeOperation(req, res, config, javaSupervisor, operation) {
   if (!ALLOWED_OPERATIONS.has(operation)) {
     sendJson(res, 404, { ok: false, status: 'unsupported-operation' });
     return;
@@ -183,11 +210,26 @@ async function handleRuntimeOperation(req, res, config, operation) {
     return;
   }
 
+  if (config.runtime.mode === 'java-http') {
+    try {
+      sendJson(res, 200, await javaSupervisor.call(operation, payload));
+    } catch (error) {
+      sendJson(res, 503, {
+        ok: false,
+        status: 'java-bridge-unavailable',
+        operation,
+        error: error.message
+      });
+    }
+    return;
+  }
+
   sendJson(res, 200, disabledOperation(operation));
 }
 
 function createServer(config) {
-  return http.createServer(async (req, res) => {
+  const javaSupervisor = new JavaBridgeSupervisor(config.runtime);
+  const server = http.createServer(async (req, res) => {
     const requestUrl = new URL(req.url, `http://${req.headers.host || '127.0.0.1'}`);
 
     if (req.method === 'GET' && requestUrl.pathname === '/health') {
@@ -196,14 +238,15 @@ function createServer(config) {
         version: VERSION,
         status: 'available',
         safeMode: true,
-        runtime: safeRuntimeStatus(config)
+        runtime: safeRuntimeStatus(config),
+        javaBridge: javaSupervisor.getStatus()
       });
       return;
     }
 
     const runtimeMatch = requestUrl.pathname.match(/^\/runtime\/([a-z-]+)$/);
     if (req.method === 'POST' && runtimeMatch) {
-      await handleRuntimeOperation(req, res, config, runtimeMatch[1]);
+      await handleRuntimeOperation(req, res, config, javaSupervisor, runtimeMatch[1]);
       return;
     }
 
@@ -219,6 +262,8 @@ function createServer(config) {
       ]
     });
   });
+  server.javaSupervisor = javaSupervisor;
+  return server;
 }
 
 function start() {
@@ -239,8 +284,13 @@ function start() {
     process.exitCode = 1;
   });
 
-  process.on('SIGINT', () => server.close(() => process.exit(0)));
-  process.on('SIGTERM', () => server.close(() => process.exit(0)));
+  function closeGracefully() {
+    if (server.javaSupervisor) server.javaSupervisor.stop();
+    server.close(() => process.exit(0));
+  }
+
+  process.on('SIGINT', closeGracefully);
+  process.on('SIGTERM', closeGracefully);
 }
 
 if (require.main === module) {
