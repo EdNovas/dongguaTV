@@ -2,6 +2,7 @@ const { app, BrowserWindow } = require('electron');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
+const { ensureDesktopState } = require('./server/desktop/startupState');
 
 let mainWindow;
 
@@ -74,6 +75,7 @@ function createWindow(port) {
 app.whenReady().then(async () => {
   const dataDir = path.join(app.getPath('userData'), 'runtime');
   fs.mkdirSync(dataDir, { recursive: true });
+  ensureDesktopState(dataDir);
 
   const envPath = path.join(dataDir, '.env');
   if (!fs.existsSync(envPath)) {

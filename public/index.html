@@ -3578,6 +3578,35 @@
             </div>
         </div>
 
+        <div class="info-modal-overlay" v-if="showFirstRunGuide" @click.self="dismissFirstRunGuide">
+            <div class="info-modal" style="max-width: 760px;">
+                <button class="info-modal-close" @click="dismissFirstRunGuide"><i class="fas fa-times"></i></button>
+                <div style="padding: 30px;">
+                    <h2 style="color:#fff; margin-bottom:12px; font-size:1.6rem;">
+                        <i class="fas fa-magic" style="color:#60a5fa; margin-right:10px;"></i>首次设置
+                    </h2>
+                    <div style="color:#aaa; font-size:14px; line-height:1.8;">
+                        建议先完成两件事：导入你自己的 TVBox 订阅链接，并配置 MPC-HC / MPC-BE 路径。高码率 4K、HEVC、HDR 和网盘源会优先推荐外部播放器。
+                    </div>
+                    <div class="appletv-panel-list" style="margin-top:18px;">
+                        <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSubscriptionPanel=true; loadSubscriptionData()"
+                            style="text-align:left; color:#fff; cursor:pointer;">
+                            <div style="font-weight:800;">导入订阅</div>
+                            <div style="color:#888; font-size:12px; margin-top:6px;">只解析用户提供的 TVBox JSON，不内置第三方源</div>
+                        </button>
+                        <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSettingsModal=true; loadPlayerSettings()"
+                            style="text-align:left; color:#fff; cursor:pointer;">
+                            <div style="font-weight:800;">配置 MPC</div>
+                            <div style="color:#888; font-size:12px; margin-top:6px;">保存本机播放器路径和本地代理端口</div>
+                        </button>
+                    </div>
+                    <button class="btn-info" @click="dismissFirstRunGuide" style="border:0; margin-top:18px;">
+                        稍后再说
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div class="info-modal-overlay" v-if="showSubscriptionPanel" @click.self="showSubscriptionPanel = false">
             <div class="info-modal" style="max-width: 820px;">
                 <button class="info-modal-close" @click="showSubscriptionPanel = false"><i
@@ -4367,6 +4396,8 @@
                     showSettingsModal: false,  // 设置弹窗显示状态
                     showSubscriptionPanel: false,
                     showLivePanel: false,
+                    showFirstRunGuide: false,
+                    desktopStatus: null,
                     activeAppleNav: 'home',
                     subscriptionUrl: '',
                     subscriptionName: '',
@@ -4930,6 +4961,27 @@
                     }
                 },
 
+                async loadDesktopStatus() {
+                    try {
+                        const response = await fetch('/api/desktop/status');
+                        const data = await response.json();
+                        if (response.ok) {
+                            this.desktopStatus = data;
+                            const dismissed = localStorage.getItem('donggua_first_run_done') === 'true';
+                            if (!dismissed && data.firstRunRecommended) {
+                                this.showFirstRunGuide = true;
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('[Desktop Status] load failed:', error.message);
+                    }
+                },
+
+                dismissFirstRunGuide() {
+                    this.showFirstRunGuide = false;
+                    try { localStorage.setItem('donggua_first_run_done', 'true'); } catch (e) { }
+                },
+
                 async loadPlayerSettings() {
                     try {
                         const response = await fetch('/api/player/settings');
@@ -5112,6 +5164,7 @@
 
                     // 5. 加载观看历史
                     this.loadWatchHistory();
+                    this.loadDesktopStatus();
 
                     // 6. 🔗 处理分享深链 ?play=（自动搜索并打开对应剧）
                     this.handleDeepLink();

@@ -1,0 +1,102 @@
+# DongguaTV Enhanced Windows Desktop Acceptance
+
+## Scope
+
+This Windows desktop build keeps the original DongguaTV search, detail, and internal playback flow, then adds:
+
+- Apple TV style desktop shell.
+- User-provided TVBox subscription intake.
+- Plugin-required source identification without executing unknown jar, py, or js code.
+- MPC-HC / MPC-BE external playback support.
+- Local playback proxy bound to `127.0.0.1`.
+- Runtime data stored under Electron `userData/runtime`.
+
+## Runtime Files
+
+Electron sets `DONGGUATV_DATA_DIR` to:
+
+```text
+%APPDATA%\DongguaTV Enhanced\runtime
+```
+
+The app creates these files when missing:
+
+- `db.json`
+- `subscriptions.json`
+- `sources.json`
+- `live-channels.json`
+- `tvbox-parses.json`
+- `player-settings.json`
+
+## Commands
+
+```powershell
+npm install
+npm run dev
+npm run build
+npm run dist
+```
+
+`npm run dist:desktop` is kept as an alias for the Windows Electron package.
+
+## MPC Setup
+
+Open Settings, then either detect or paste the local MPC executable path.
+
+Common paths checked:
+
+- `C:\Program Files\MPC-HC\mpc-hc64.exe`
+- `C:\Program Files (x86)\MPC-HC\mpc-hc.exe`
+- `C:\Program Files\MPC-BE x64\mpc-be64.exe`
+- `C:\Program Files\MPC-BE\mpc-be.exe`
+
+The app passes the media URL as a separate `spawn` argument, not through a shell command string.
+
+## TVBox Import
+
+Open Subscriptions, paste a user-owned TVBox JSON URL, then import.
+
+Supported in this phase:
+
+- `sites`
+- `parses`
+- `lives`
+- `spider`
+- `jar`
+- `flags`
+- `rules`
+- `doh`
+- `wallpaper`
+- `ads`
+- `warningText`
+- `ijk`
+- `player`
+- `ext`
+
+Plugin-like sources are marked `plugin-required` and are not executed.
+
+## Playback Diagnosis
+
+When a source cannot play:
+
+- `plugin-required`: CatVod/Spider runtime is required and not installed.
+- `unsupported`: the source is not an HTTP-compatible source in this version.
+- `error`: health check or import failed.
+- Missing MPC path: configure Settings > MPC external player.
+- Local proxy issue: check `player-settings.json` `localProxyPort` and whether the port is occupied.
+
+## LocalProxy
+
+The LocalProxy listens only on:
+
+```text
+127.0.0.1
+```
+
+It forwards common playback headers and Range requests, and it returns `206 Partial Content` for range-capable upstream responses.
+
+## Packaging Checklist
+
+- `server/**` must stay in `build.files` so Electron asar includes TVBox, player, desktop, and proxy modules.
+- Packaged smoke tests must hit the unpacked exe, not only `npm run dev`.
+- User settings must remain in `userData/runtime`, not inside the installed app directory.

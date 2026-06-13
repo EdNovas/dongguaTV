@@ -1,11 +1,15 @@
 {
   "name": "dongguatv-enhanced-desktop",
   "version": "1.0.2",
+  "description": "Windows desktop Apple TV style DongguaTV client with TVBox subscription intake and MPC playback support.",
+  "author": "DongguaTV Enhanced",
   "main": "main.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
     "desktop": "electron .",
+    "build": "node --check server.js && node --check main.js",
+    "dist": "electron-builder --win",
     "dist:desktop": "electron-builder --win"
   },
   "dependencies": {

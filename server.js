@@ -15,6 +15,7 @@ const { promisify } = require('util');
 const pipeline = promisify(stream.pipeline);
 const { createTvboxService } = require('./server/adapters/tvbox');
 const { createDefaultPluginRuntimeRegistry } = require('./server/adapters/tvbox/pluginRuntime');
+const { ensureDesktopState, getDesktopStatus } = require('./server/desktop/startupState');
 const { PlayerManager } = require('./server/player/playerManager');
 
 const app = express();
@@ -22,6 +23,9 @@ const PORT = process.env.PORT || 3000;
 const RUNTIME_DATA_DIR = process.env.DONGGUATV_DATA_DIR || __dirname;
 if (!process.env.VERCEL && !fs.existsSync(RUNTIME_DATA_DIR)) {
     fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true });
+}
+if (!process.env.VERCEL) {
+    ensureDesktopState(RUNTIME_DATA_DIR);
 }
 
 const DATA_FILE = path.join(RUNTIME_DATA_DIR, 'db.json');
@@ -922,6 +926,14 @@ app.get('/api/debug', (req, res) => {
         status: 'ok',
         timestamp: new Date().toISOString()
     });
+});
+
+app.get('/api/desktop/status', async (req, res) => {
+    try {
+        res.json(await getDesktopStatus(RUNTIME_DATA_DIR));
+    } catch (error) {
+        res.status(500).json({ error: error.message || 'Failed to read desktop status' });
+    }
 });
 
 function sendTvboxError(res, error, statusCode = 500) {
