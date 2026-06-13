@@ -42,3 +42,4 @@ dist/
 dist-desktop/
 dist-desktop-check/
 electron-test.*.log
+tools/catvod-bridge/bridge-config.json

@@ -1,0 +1,14 @@
+{
+  "host": "127.0.0.1",
+  "port": 9978,
+  "runtime": {
+    "mode": "disabled",
+    "allowJavaProcess": false,
+    "javaPath": "",
+    "catvodBridgeJarPath": "",
+    "adapterModulePath": ""
+  },
+  "logging": {
+    "level": "info"
+  }
+}

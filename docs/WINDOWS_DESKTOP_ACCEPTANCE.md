@@ -107,6 +107,14 @@ External HTTP Bridge endpoints used by the app:
 
 The Bridge base URL must point to localhost or a private network address. Public internet hosts are rejected by the backend.
 
+This repository includes a local-only scaffold at `tools/catvod-bridge`. Start it with:
+
+```powershell
+npm run bridge:catvod
+```
+
+Default mode returns `runtime-not-configured` and does not execute CatVod jar, py, or js plugin code. See `docs/CATVOD_BRIDGE.md` for the bridge protocol and future Java Runtime Bridge plan.
+
 ## Playback Diagnosis
 
 When a source cannot play:
@@ -130,5 +138,6 @@ It forwards common playback headers and Range requests, and it returns `206 Part
 ## Packaging Checklist
 
 - `server/**` must stay in `build.files` so Electron asar includes TVBox, player, desktop, and proxy modules.
+- `tools/catvod-bridge/**` and `docs/**` are packaged as `extraResources` so the installed app exposes the local bridge template and operator documentation outside `app.asar`.
 - Packaged smoke tests must hit the unpacked exe, not only `npm run dev`.
 - User settings must remain in `userData/runtime`, not inside the installed app directory.
