@@ -593,6 +593,143 @@
             visibility: visible;
         }
 
+        /* ⬇️ 离线缓存：入口按钮(与"刷新线路"同款) + 面板 */
+        .offline-entry-btn {
+            margin-left: 8px;
+            font-size: 12px;
+            color: #888;
+            cursor: pointer;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            transition: all 0.2s;
+        }
+
+        .offline-entry-btn:hover,
+        .offline-entry-btn.active {
+            color: #fff;
+            border-color: #888;
+        }
+
+        .offline-panel {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin: 10px 0 12px;
+            font-size: 13px;
+        }
+
+        .offline-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 6px 0;
+        }
+
+        .offline-row+.offline-row {
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .offline-info {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .offline-name {
+            color: #eee;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .offline-ep {
+            color: #999;
+            font-size: 12px;
+            margin-left: 6px;
+        }
+
+        .offline-sub {
+            color: #777;
+            font-size: 11px;
+            margin-top: 2px;
+        }
+
+        .offline-btn {
+            flex-shrink: 0;
+            background: linear-gradient(135deg, #e50914, #b00710);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            padding: 6px 14px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .offline-btn:hover {
+            opacity: 0.85;
+        }
+
+        .offline-btn.downloading {
+            background: #555;
+        }
+
+        .offline-progress {
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            margin: 4px 0 8px;
+        }
+
+        .offline-progress-inner {
+            height: 100%;
+            background: linear-gradient(90deg, #e50914, #ff6b81);
+            transition: width 0.3s;
+        }
+
+        .offline-list {
+            margin-top: 6px;
+        }
+
+        .offline-del {
+            color: #777;
+            cursor: pointer;
+            padding: 4px 8px;
+            flex-shrink: 0;
+        }
+
+        .offline-del:hover {
+            color: #ef4444;
+        }
+
+        .offline-footer {
+            display: flex;
+            justify-content: space-between;
+            color: #666;
+            font-size: 11px;
+            padding-top: 8px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            margin-top: 4px;
+        }
+
+        .offline-clear {
+            color: #888;
+            cursor: pointer;
+        }
+
+        .offline-clear:hover {
+            color: #ef4444;
+        }
+
+        .offline-empty {
+            color: #666;
+            font-size: 12px;
+            padding: 6px 0 2px;
+        }
+
         /* 3. 进度条拖动点 - 发光效果 */
         .dplayer-bar-wrap .dplayer-thumb {
             background: #fff !important;
@@ -1809,9 +1946,15 @@
             }
         }
 
+        /* 📐 封面卡片宽度随视口缩放：小屏笔记本(≈1440)约180px、27寸(≥1680)封顶210px、
+           窄窗/手机保底150px(原值)。.poster-wrap 用 aspect-ratio 2/3，放大不变形。 */
+        :root {
+            --card-w: clamp(150px, 12.5vw, 210px);
+        }
+
         .hot-card {
-            min-width: 150px;
-            width: 150px;
+            min-width: var(--card-w, 150px);
+            width: var(--card-w, 150px);
             cursor: pointer;
             position: relative;
             /* 性能优化：只在 hover 时添加 transform */
@@ -1838,8 +1981,8 @@
 
         /* 历史卡片 - 不随 hover 缩放，只有内容缩放 */
         .history-card {
-            min-width: 150px;
-            width: 150px;
+            min-width: var(--card-w, 150px);
+            width: var(--card-w, 150px);
             cursor: pointer;
             position: relative;
             padding: 3px;
@@ -2030,7 +2173,7 @@
 
         .movie-name {
             margin-top: 10px;
-            font-size: 14px;
+            font-size: clamp(14px, 0.95vw, 16px);
             color: #eee;
             white-space: nowrap;
             overflow: hidden;
@@ -2492,9 +2635,9 @@
         }
 
         .grid-expanded .hot-card {
-            /* 保持与单行滚动时相同的固定宽度 */
-            min-width: 150px;
-            width: 150px;
+            /* 保持与单行滚动时相同的固定宽度(随视口缩放) */
+            min-width: var(--card-w, 150px);
+            width: var(--card-w, 150px);
             flex-shrink: 0;
         }
 
@@ -3557,6 +3700,33 @@
                 </div>
             </div>
 
+            <!-- ✨ 为你推荐：基于观看历史的 TMDB 推荐(无历史/无结果时整段隐藏) -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="recommendList.length > 0"
+                style="margin-bottom: 10px;">
+                <div class="section-header" style="display: flex; align-items: center;">
+                    <div class="section-line" style="background: linear-gradient(135deg, #f5af19, #f12711);"></div>
+                    <div class="section-title"><i class="fas fa-magic"></i> 为你推荐</div>
+                    <span style="margin-left: 12px; color: #777; font-size: 12px;">根据你的观看记录</span>
+                </div>
+                <div class="scroll-container">
+                    <div class="hot-row">
+                        <div class="hot-card" v-for="item in recommendList"
+                            :key="'rec-' + (item.media_type || '') + '-' + item.id"
+                            @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
+                            <div class="poster-wrap">
+                                <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
+                                    @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
+                                <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
+                                    item.vote_average ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                            </div>
+                            <div class="movie-name">{{ item.title || item.name }}</div>
+                            <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0]
+                                }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 分类导航栏 -->
             <div class="category-nav-container animate__animated animate__fadeInUp" style="margin-bottom: 40px;">
                 <div class="category-item" v-for="item in categories" :key="item.name" @click="handleCatClick(item)">
@@ -3981,6 +4151,76 @@
                                     style="margin-right: 4px;"></i>
                                 {{ refreshingSources ? '刷新中...' : '刷新线路' }}
                             </span>
+                            <span v-if="!previewLocked" @click="toggleOfflinePanel" class="offline-entry-btn"
+                                :class="{ active: showOfflinePanel }">
+                                <i class="fas fa-download" style="margin-right: 4px;"></i>
+                                离线缓存<span v-if="offlineList.length"> ({{ offlineList.length }})</span>
+                            </span>
+                        </div>
+
+                        <!-- ⬇️ 离线缓存面板 -->
+                        <div v-if="showOfflinePanel && !previewLocked" class="offline-panel">
+                            <!-- 当前集操作行 -->
+                            <div class="offline-row offline-current">
+                                <div class="offline-info">
+                                    <div class="offline-name">{{ currentGroup ? currentGroup.name : '' }}
+                                        <span class="offline-ep">{{ offlineCurrentEpName() }}</span>
+                                    </div>
+                                    <div class="offline-sub" v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
+                                        正在缓存 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}
+                                    </div>
+                                    <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'error'" style="color: #ef4444;">
+                                        {{ dlProgress.msg }}
+                                    </div>
+                                    <div class="offline-sub" v-else-if="offlineHasCurrent()" style="color: #46d369;">
+                                        <i class="fas fa-check-circle"></i> 本集已缓存，播放自动走本地
+                                    </div>
+                                    <div class="offline-sub" v-else>缓存后可离线/秒开播放(经去广告代理下载)</div>
+                                </div>
+                                <button class="offline-btn" @click="offlineDownloadCurrent"
+                                    :class="{ downloading: dlProgressIsCurrent() && dlProgress.status === 'downloading' }">
+                                    <template v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
+                                        {{ Math.floor(dlProgress.done / Math.max(1, dlProgress.total) * 100) }}% 取消
+                                    </template>
+                                    <template v-else-if="offlineHasCurrent()">重新缓存</template>
+                                    <template v-else><i class="fas fa-download"></i> 缓存本集</template>
+                                </button>
+                            </div>
+                            <!-- 进度条(仅当前集) -->
+                            <div v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'" class="offline-progress">
+                                <div class="offline-progress-inner"
+                                    :style="{ width: Math.floor(dlProgress.done / Math.max(1, dlProgress.total) * 100) + '%' }"></div>
+                            </div>
+                            <!-- 其它集/其它剧的后台缓存任务(切剧后仍可见可取消，不与"当前集"串显) -->
+                            <div v-if="dlProgress && dlProgress.status === 'downloading' && !dlProgressIsCurrent()"
+                                class="offline-row" style="opacity: 0.85;">
+                                <div class="offline-info">
+                                    <div class="offline-name">{{ dlProgress.epKey.split('|')[0] }}
+                                        <span class="offline-ep">{{ dlProgress.epKey.split('|')[1] }}</span>
+                                    </div>
+                                    <div class="offline-sub">后台缓存中 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}</div>
+                                </div>
+                                <button class="offline-btn downloading" @click="offlineCancelDownload">取消</button>
+                            </div>
+                            <!-- 已缓存列表 -->
+                            <div v-if="offlineList.length" class="offline-list">
+                                <div class="offline-row" v-for="item in offlineList" :key="item.epKey">
+                                    <div class="offline-info" @click="offlinePlay(item)" style="cursor: pointer;">
+                                        <div class="offline-name">{{ item.name }} <span class="offline-ep">{{ item.ep }}</span></div>
+                                        <div class="offline-sub">{{ formatBytes(item.bytes) }} · {{ item.total }} 段</div>
+                                    </div>
+                                    <span class="offline-del" @click="offlineDelete(item.epKey)" title="删除缓存">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </span>
+                                </div>
+                                <div class="offline-footer">
+                                    共 {{ formatBytes(offlineList.reduce((s, x) => s + (x.bytes || 0), 0)) }}
+                                    <span class="offline-clear" @click="offlineClearAll">清空全部</span>
+                                </div>
+                            </div>
+                            <div v-else-if="!(dlProgress && dlProgress.status === 'downloading')" class="offline-empty">
+                                还没有缓存的剧集
+                            </div>
                         </div>
 
                         <!-- 🔒 未登录预览：锁定线路 -->
@@ -4671,8 +4911,9 @@
 
         // TMDb URL 配置 (使用本地服务器缓存反代)
         let TMDB_BASE_URL = "https://api.themoviedb.org/3";
-        // 使用本地 API 缓存图片
-        let TMDB_IMG_URL = "/api/tmdb-image/w342";
+        // 使用本地 API 缓存图片。📐 高分屏(retina)或大视口卡片更大 → 用 w500 保持清晰(服务端尺寸白名单已含)
+        const TMDB_POSTER_SIZE = (window.devicePixelRatio >= 2 || window.innerWidth >= 1600) ? 'w500' : 'w342';
+        let TMDB_IMG_URL = "/api/tmdb-image/" + TMDB_POSTER_SIZE;
         let TMDB_BACKDROP_URL = "/api/tmdb-image/original";
 
         // TMDB 反代配置现在通过环境变量 TMDB_PROXY_URL 配置
@@ -4733,6 +4974,110 @@
             const next = Math.min(dur, Math.max(0, cur + delta));
             if (Number.isFinite(next)) { try { dp.video.currentTime = next; } catch (e) { } }
         };
+
+        // ⬇️ ========== 离线缓存(IndexedDB) ==========
+        // files 表: { key(归一化URL), epKey, data(m3u8文本/分段ArrayBuffer), size }，byEp 索引用于按集删除。
+        // episodes 表: { epKey:"剧名|集名", name, ep, total, bytes, date } 下载完成的元数据。
+        const offlineDB = {
+            _db: null,
+            open() {
+                if (this._db) return Promise.resolve(this._db);
+                if (!('indexedDB' in window)) return Promise.reject(new Error('no idb'));
+                if (!this._opening) {
+                    this._opening = new Promise((resolve, reject) => {
+                        const req = indexedDB.open('donggua_offline', 1);
+                        req.onupgradeneeded = () => {
+                            const db = req.result;
+                            if (!db.objectStoreNames.contains('files')) {
+                                const os = db.createObjectStore('files', { keyPath: 'key' });
+                                os.createIndex('byEp', 'epKey');
+                            }
+                            if (!db.objectStoreNames.contains('episodes')) db.createObjectStore('episodes', { keyPath: 'epKey' });
+                        };
+                        req.onsuccess = () => { this._db = req.result; resolve(this._db); };
+                        req.onerror = () => reject(req.error);
+                    });
+                }
+                return this._opening;
+            },
+            get(store, key) {
+                return this.open().then(db => new Promise((res, rej) => {
+                    const r = db.transaction(store).objectStore(store).get(key);
+                    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+                }));
+            },
+            put(store, val) {
+                return this.open().then(db => new Promise((res, rej) => {
+                    const tx = db.transaction(store, 'readwrite');
+                    tx.objectStore(store).put(val);
+                    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+                }));
+            },
+            del(store, key) {
+                return this.open().then(db => new Promise((res, rej) => {
+                    const tx = db.transaction(store, 'readwrite');
+                    tx.objectStore(store).delete(key);
+                    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
+                }));
+            },
+            all(store) {
+                return this.open().then(db => new Promise((res, rej) => {
+                    const r = db.transaction(store).objectStore(store).getAll();
+                    r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error);
+                }));
+            },
+            // 某集的所有文件 key(只取 key 不载入数据，避免把几百 MB 分段读进内存)
+            epFileKeys(epKey) {
+                return this.open().then(db => new Promise((res, rej) => {
+                    const r = db.transaction('files').objectStore('files').index('byEp').getAllKeys(IDBKeyRange.only(epKey));
+                    r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error);
+                }));
+            }
+        };
+        // URL 归一化：代理形式(https://代理域/?url=ENC)与直连视为同一资源——下载后切换去广告/代理开关仍能命中缓存。
+        // ⚠️ 锚定整串且要求值以编码的 http 开头：避免把"自带 url= 查询参数的直连地址"误剥壳(那会让缓存键错位永远 miss)
+        function offlineKey(u) {
+            try {
+                const m = String(u).match(/^https?:\/\/[^\/?]+\/?\?url=([^&]+)$/);
+                if (m && /^https?%3A/i.test(m[1])) return decodeURIComponent(m[1]);
+            } catch (e) { }
+            return String(u);
+        }
+        // hls.js(v1.x) 自定义 loader：清单/分段先查本地缓存，未命中走原生网络加载。已缓存的剧集=离线/秒开。
+        // ⚠️ 结构要点：onSuccess/super.load 不能落在任何 .catch 链里——onSuccess 内部抛错若兜底到再次 super.load，
+        //    v1.1.5 的 XhrLoader 会抛 "Loader can only be used once" 且该分段永久挂起。catch 只兜 IDB 本身。
+        //    另有 destroyed 守卫：IDB 异步返回时 hls 可能已 destroy 该 loader(快速切集)，迟到回调直接丢弃。
+        function buildOfflineHlsConfig() {
+            try {
+                if (!window.Hls || !Hls.DefaultConfig || !Hls.DefaultConfig.loader) return {};
+                if (!window._OfflineHlsLoader) {
+                    const Base = Hls.DefaultConfig.loader;
+                    class OfflineLoader extends Base {
+                        destroy() { this._offDestroyed = true; super.destroy(); }
+                        load(context, config, callbacks) {
+                            const wantBuf = context.responseType === 'arraybuffer';
+                            offlineDB.get('files', offlineKey(context.url)).then(r => r, () => null).then(rec => {
+                                if (this._offDestroyed) return;
+                                if (rec && ((typeof rec.data === 'string') === wantBuf)) rec = null;  // 类型不符走网络
+                                if (rec) {
+                                    const now = performance.now();
+                                    const stats = this.stats;
+                                    try {
+                                        stats.loading.start = now; stats.loading.first = now; stats.loading.end = now;
+                                        stats.loaded = stats.total = rec.size || 0;
+                                    } catch (e) { }
+                                    callbacks.onSuccess({ url: context.url, data: rec.data }, stats, context, null);
+                                } else {
+                                    super.load(context, config, callbacks);
+                                }
+                            });
+                        }
+                    }
+                    window._OfflineHlsLoader = OfflineLoader;
+                }
+                return { loader: window._OfflineHlsLoader };
+            } catch (e) { return {}; }
+        }
         let _lastProgressSaveTime = 0;  // timeupdate 节流时间戳（每15秒保存一次）
         let _rateChangeHandler = null;      // 倍速变化监听器（防止累积）
         // 🧭 导航令牌：每次切换剧集/打开/关闭详情时自增，用于作废上一部剧残留的
@@ -4816,6 +5161,10 @@
                     isAutoRetrying: false,  // 是否正在自动重试
                     autoRetryMessage: '',  // 自动切换提示信息
                     watchHistory: [],  // 用户观看历史记录
+                    recommendList: [],  // ✨ 为你推荐(基于观看历史的 TMDB recommendations)
+                    showOfflinePanel: false,  // ⬇️ 离线缓存面板开关
+                    offlineList: [],          // ⬇️ 已缓存剧集元数据列表
+                    dlProgress: null,         // ⬇️ 当前下载进度 {epKey,done,total,bytes,status}
                     wakeLock: null,  // Screen Wake Lock 对象（用于保持屏幕常亮）
 
                     // 🎛️ 用户偏好设置
@@ -5264,8 +5613,8 @@
                         // Vercel 兼容性检测
                         if (config.enable_local_image_cache === false) {
                             console.log('[Config] Vercel 环境检测：禁用本地图片缓存，使用官方源');
-                            // 回退到官方 CDN
-                            this.TMDB_IMG_URL = "https://image.tmdb.org/t/p/w342";
+                            // 回退到官方 CDN(沿用按屏幕选定的尺寸)
+                            this.TMDB_IMG_URL = "https://image.tmdb.org/t/p/" + TMDB_POSTER_SIZE;
                             this.TMDB_BACKDROP_URL = "https://image.tmdb.org/t/p/original";
                         }
 
@@ -5357,6 +5706,12 @@
 
                     // 初始化云同步（如果启用）
                     this.initHistorySync();
+
+                    // ✨ 为你推荐：延迟低优先级加载(等首页榜单先渲染)，无历史时方法内部直接跳过
+                    setTimeout(() => this.fetchRecommendations(), 2500);
+
+                    // ⬇️ 离线缓存：启动时读一次元数据(入口角标显示数量；不加载分段数据)
+                    this.refreshOfflineList();
                 },
 
                 // 清理过期的进度记忆（超过30天）
@@ -5566,6 +5921,9 @@
                         if (hasChanges) {
                             console.log('[同步] 服务器数据已同步到本地，共', newHistory.length, '条记录');
                             this.watchHistory = newHistory;
+                            // ✨ 新设备场景：本地原本无历史 → 2.5s 定时那次因 names 为空被跳过(未置位)，
+                            //    此处历史就绪后补一次推荐(幂等：已加载过则 _recLoaded 直接挡掉)
+                            this.fetchRecommendations();
                         } else {
                             console.log('[同步] 本地数据与服务器一致，无需更新');
                         }
@@ -6439,7 +6797,7 @@
                     if (isCN) {
                         console.log('[IP检测] 检测到大陆IP，启用TMDB反代:', proxyUrl);
                         TMDB_BASE_URL = proxyUrl + '/3';
-                        TMDB_IMG_URL = proxyUrl + '/t/p/w342';
+                        TMDB_IMG_URL = proxyUrl + '/t/p/' + TMDB_POSTER_SIZE;
                         TMDB_BACKDROP_URL = proxyUrl + '/t/p/original';
                     } else {
                         console.log('[IP检测] 非大陆IP或检测完成，保持官方地址');
@@ -7433,6 +7791,7 @@
                 },
                 closeDetail() {
                     this.showDetail = false;
+                    this.showOfflinePanel = false;  // ⬇️ 收起离线面板(防止下次打开别的剧时面板状态串显)
                     this.previewLocked = false;  // 🔒 退出预览锁定态
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
                     this._deepLinkTargetEp = '';  // 清除未消费的深链目标集数，避免串到下一部剧
@@ -7962,6 +8321,7 @@
                             loop: false,             // 循环播放（可在设置中切换）
                             playbackSpeed: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3],  // 0.25间隔倍速选项
                             video: { url: finalUrl, type: 'hls' },
+                            pluginOptions: { hls: buildOfflineHlsConfig() },  // ⬇️ 离线缓存优先的 hls loader(无缓存时行为与原生一致)
                             danmaku: danmakuOpt || undefined,  // 🗨️ 弹幕(借第三方聚合)；未开启则 undefined(DPlayer 不初始化弹幕)
                             contextmenu: [
                                 { text: '🎬 E视界MAX', link: '/' },
@@ -8457,6 +8817,7 @@
                                 // 监听播放器事件
                                 dp.on('timeupdate', () => {
                                     if (dp.video && window.skipManager) window.skipManager.check(dp.video.currentTime);
+                                    this._maybePreloadNext();  // ⏭️ 临近结尾时预加载下一集(内部有节流/守卫)
                                 });
 
                                 dp.on('canplay', () => {
@@ -8486,6 +8847,41 @@
                                                 this.playNextEpisode();
                                             });
                                         }
+                                    }
+                                }
+
+                                // 🖼️ 画中画按钮(最左)：标准 API + iOS Safari webkitPresentationMode；都不支持则不显示
+                                {
+                                    const iconsRight = dplayerContainer.querySelector('.dplayer-icons-right');
+                                    const v0 = dp.video;
+                                    const pipSupported = !!(document.pictureInPictureEnabled ||
+                                        (v0 && typeof v0.webkitSetPresentationMode === 'function'));
+                                    if (pipSupported && iconsRight && !iconsRight.querySelector('.dplayer-pip-icon')) {
+                                        iconsRight.insertAdjacentHTML('afterbegin', `
+                                            <div class="dplayer-icon dplayer-pip-icon" data-balloon="画中画" data-balloon-pos="up">
+                                                <span class="dplayer-icon-content" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
+                                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#fff;">
+                                                        <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+                                                        <rect x="12" y="12" width="8" height="6" rx="1" fill="currentColor" stroke="none"></rect>
+                                                    </svg>
+                                                </span>
+                                            </div>`);
+                                        const pipBtn = iconsRight.querySelector('.dplayer-pip-icon');
+                                        pipBtn.addEventListener('click', async (e) => {
+                                            e.stopPropagation();
+                                            const v = dp && dp.video;
+                                            if (!v) return;
+                                            try {
+                                                if (document.pictureInPictureEnabled) {
+                                                    if (document.pictureInPictureElement) await document.exitPictureInPicture();
+                                                    else await v.requestPictureInPicture();
+                                                } else if (typeof v.webkitSetPresentationMode === 'function') {
+                                                    v.webkitSetPresentationMode(v.webkitPresentationMode === 'picture-in-picture' ? 'inline' : 'picture-in-picture');
+                                                }
+                                            } catch (err) {
+                                                if (dp && dp.notice) dp.notice('画中画不可用' + (err && err.message ? ': ' + err.message : ''));
+                                            }
+                                        });
                                     }
                                 }
 
@@ -9678,6 +10074,298 @@
                 },
 
                 // 播放下一集
+                // ⬇️ ========== 离线缓存 ==========
+                // 媒体 URL 路由(与 play() 一致)：线路代理 > (广告过滤或强制)CF代理 > 直连。
+                // 下载必须 forceProxy=true：直连源无 CORS 头读不到内容，CF 代理统一加 CORS + 顺便去广告(缓存的就是净化版)。
+                _routeMediaUrl(url, forceProxy) {
+                    if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
+                        return `${this.currentSource._proxyUrl}/?url=${encodeURIComponent(url)}`;
+                    }
+                    if (this.corsProxyUrl && (forceProxy || (window.AdFilter && window.AdFilter.isEnabled()))) {
+                        return this.corsProxyUrl + '/?url=' + encodeURIComponent(url);
+                    }
+                    return url;
+                },
+
+                toggleOfflinePanel() {
+                    this.showOfflinePanel = !this.showOfflinePanel;
+                    if (this.showOfflinePanel) this.refreshOfflineList();
+                },
+
+                async refreshOfflineList() {
+                    try {
+                        const list = await offlineDB.all('episodes');
+                        list.sort((a, b) => (b.date || 0) - (a.date || 0));
+                        this.offlineList = list;
+                    } catch (e) { this.offlineList = []; }
+                },
+
+                formatBytes(b) {
+                    if (!b) return '0 MB';
+                    if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+                    return Math.round(b / 1048576) + ' MB';
+                },
+
+                // 当前集是否已缓存。⚠️ Vue3 模板禁止访问 _ 开头成员，模板一律用这俩公开方法。
+                //    必须比对 URL：缓存按下载时线路的 URL 命中，换线路后(同剧同集名、URL不同)不能假报"已缓存"
+                offlineHasCurrent() {
+                    const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    if (!this.currentGroup || !this.currentGroup.name || !cur) return false;
+                    const epKey = this.currentGroup.name + '|' + cur.name;
+                    return (this.offlineList || []).some(x => x.epKey === epKey && (!x.url || x.url === cur.url));
+                },
+                offlineCurrentEpName() {
+                    const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    return (cur && cur.name) || '';
+                },
+
+                // 模板用：当前下载进度是否属于"当前打开的这一集"(跨剧/跨集时面板不串显)
+                dlProgressIsCurrent() {
+                    if (!this.dlProgress || !this.currentGroup) return false;
+                    return this.dlProgress.epKey === this.currentGroup.name + '|' + this.offlineCurrentEpName();
+                },
+                offlineCancelDownload() { if (this._dlActive) this._dlActive.cancel = true; },
+
+                // ⬇️ 缓存当前集：分段(含 AES 密钥/EXT-X-MAP 初始化段) 4 并发、幂等(已有分段跳过=断点续传)、可取消。
+                //    ⚠️ 顺序关键：清单文本【最后】写库(全部分段零失败才写)——loader 只认 files 表里的 m3u8，
+                //    若先写清单、中途取消/失败，残缺清单会永久劫持该集播放且 UI 删不掉(孤儿)。
+                async offlineDownloadCurrent() {
+                    if (this._dlActive) {
+                        const curKey = this.currentGroup ? (this.currentGroup.name + '|' + this.offlineCurrentEpName()) : '';
+                        if (this._dlActive.epKey === curKey) { this._dlActive.cancel = true; }
+                        else if (dp && dp.notice) dp.notice('已有缓存任务进行中，请先取消');
+                        return;
+                    }
+                    const group = this.currentGroup;
+                    const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    if (!group || !group.name || !cur || !cur.url || !cur.url.includes('.m3u8')) {
+                        if (dp && dp.notice) dp.notice('当前内容不支持缓存'); return;
+                    }
+                    const epKey = group.name + '|' + cur.name;
+                    const finalUrl = this._routeMediaUrl(cur.url, true);
+                    this._dlActive = { epKey, cancel: false };
+                    this.dlProgress = { epKey, done: 0, total: 0, bytes: 0, status: 'fetching' };
+                    try {
+                        try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
+                        // 1. 拉清单(只入内存，最后才写库)
+                        let res = await fetch(finalUrl);
+                        if (!res.ok) throw new Error('清单获取失败 ' + res.status);
+                        let text = await res.text();
+                        let base = finalUrl;
+                        let lines = text.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+                        if (lines.length && /\.m3u8/i.test(lines[0])) {  // master playlist → 取第一个子清单
+                            base = new URL(lines[0], base).href;
+                            res = await fetch(base);
+                            if (!res.ok) throw new Error('子清单获取失败 ' + res.status);
+                            text = await res.text();
+                            lines = text.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+                        }
+                        // 2. 收集分段 + AES-128 密钥(#EXT-X-KEY)/fMP4 初始化段(#EXT-X-MAP)的 URI(否则加密剧"已缓存"却离线播不了)
+                        const segSet = new Set();
+                        for (const s of lines) { try { segSet.add(new URL(s, base).href); } catch (e) { } }
+                        const uriRe = /#EXT-X-(?:KEY|MAP):[^\n]*?URI="([^"]+)"/g;
+                        let um; while ((um = uriRe.exec(text)) !== null) {
+                            try { segSet.add(new URL(um[1], base).href); } catch (e) { }
+                        }
+                        const segs = [...segSet];  // 去重：避免重复下载与 bytes 虚高
+                        if (!segs.length) throw new Error('清单中没有分段');
+                        this.dlProgress = { epKey, done: 0, total: segs.length, bytes: 0, status: 'downloading' };
+                        // 3. 4 并发下载(进度按时间节流写响应式：避免高速源每秒几十次整树 diff)
+                        let done = 0, bytes = 0, failed = 0, lastUi = 0;
+                        const tickUi = (force) => {
+                            const now = Date.now();
+                            if (!force && now - lastUi < 500) return;
+                            lastUi = now;
+                            this.dlProgress = { epKey, done, total: segs.length, bytes, status: 'downloading' };
+                        };
+                        const queue = segs.slice();
+                        const worker = async () => {
+                            while (queue.length && !this._dlActive.cancel) {
+                                const u = queue.shift();
+                                const k = offlineKey(u);
+                                try {
+                                    const exist = await offlineDB.get('files', k);
+                                    if (!exist) {
+                                        const r = await fetch(u);
+                                        if (!r.ok) throw new Error(String(r.status));
+                                        const buf = await r.arrayBuffer();
+                                        await offlineDB.put('files', { key: k, epKey, data: buf, size: buf.byteLength });
+                                        bytes += buf.byteLength;
+                                    } else { bytes += exist.size || 0; }
+                                } catch (e) { failed++; }
+                                done++;
+                                tickUi(false);
+                            }
+                        };
+                        await Promise.all([worker(), worker(), worker(), worker()]);
+                        if (this._dlActive.cancel) {
+                            this.dlProgress = null;
+                            if (dp && dp.notice) dp.notice('已取消缓存(已下载分段保留,重新缓存可续传)');
+                            return;
+                        }
+                        // 4. 零容忍：缺任何一段都不算"已缓存"(否则离线播到缺口必卡死)；分段幂等，重试即续传
+                        if (failed > 0) throw new Error(failed + ' 个分段下载失败，请重试(已下载部分会续传)');
+                        // 5. 全部成功 → 才写清单与元数据。media 清单同时写到 master 键上：
+                        //    多码率 master 原文不入库(否则 ABR 可能选中未缓存的其它变体，离线即失败)
+                        await offlineDB.put('files', { key: offlineKey(base), epKey, data: text, size: text.length });
+                        if (offlineKey(base) !== offlineKey(finalUrl)) {
+                            await offlineDB.put('files', { key: offlineKey(finalUrl), epKey, data: text, size: text.length });
+                        }
+                        await offlineDB.put('episodes', { epKey, name: group.name, ep: cur.name, url: cur.url, siteKey: (this.currentSource && this.currentSource.site_key) || '', total: segs.length, bytes, date: Date.now() });
+                        this.dlProgress = { epKey, done: segs.length, total: segs.length, bytes, status: 'done' };
+                        await this.refreshOfflineList();
+                        if (dp && dp.notice) dp.notice('✅ 已缓存: ' + cur.name + ' (' + this.formatBytes(bytes) + ')');
+                        setTimeout(() => { if (this.dlProgress && this.dlProgress.status === 'done') this.dlProgress = null; }, 3000);
+                    } catch (e) {
+                        console.warn('[离线] 缓存失败:', e);
+                        this.dlProgress = { epKey, status: 'error', msg: (e && e.message) || '下载失败' };
+                        if (dp && dp.notice) dp.notice('缓存失败: ' + ((e && e.message) || ''));
+                    } finally {
+                        this._dlActive = null;
+                    }
+                },
+
+                // 删除某集缓存(按 byEp 索引取 key 逐个删，不把分段数据载入内存)
+                async offlineDelete(epKey) {
+                    try {
+                        const keys = await offlineDB.epFileKeys(epKey);
+                        for (const k of keys) await offlineDB.del('files', k);
+                        await offlineDB.del('episodes', epKey);
+                        await this.refreshOfflineList();
+                    } catch (e) { console.warn('[离线] 删除失败:', e); }
+                },
+
+                async offlineClearAll() {
+                    if (!confirm('确定清空全部离线缓存？')) return;
+                    try {
+                        for (const m of (this.offlineList || [])) {
+                            const keys = await offlineDB.epFileKeys(m.epKey);
+                            for (const k of keys) await offlineDB.del('files', k);
+                            await offlineDB.del('episodes', m.epKey);
+                        }
+                        await this.refreshOfflineList();
+                    } catch (e) { console.warn('[离线] 清空失败:', e); }
+                },
+
+                // 点已缓存条目：同一部剧优先按【下载时的 URL】匹配集(保证命中缓存)；只有集名同而 URL 不同=换过线路，
+                //    播放会走网络，要如实提示。不同剧给指引提示。
+                offlinePlay(item) {
+                    if (this.currentGroup && this.currentGroup.name === item.name) {
+                        const byUrl = item.url && (this.episodeList || []).find(e => e.url === item.url);
+                        if (byUrl) { this.play(byUrl.url); this.showOfflinePanel = false; return; }
+                        const byName = (this.episodeList || []).find(e => e.name === item.ep);
+                        if (byName) {
+                            this.play(byName.url);
+                            this.showOfflinePanel = false;
+                            if (item.url && dp && dp.notice) dp.notice('⚠️ 该集缓存来自其他线路，当前线路播放将走网络');
+                            return;
+                        }
+                    }
+                    if (dp && dp.notice) dp.notice('打开《' + item.name + '》并选择缓存时的线路即可使用缓存');
+                    else alert('打开《' + item.name + '》并选择缓存时的线路即可使用缓存');
+                },
+
+                // ✨ 为你推荐：取最近 3 条观看历史 → TMDB 搜索定位 → /recommendations → 交错合并去重、
+                //    排除已看过的 → 最多 18 条。纯前端，走已有 /api/tmdb-proxy(服务端有 10h 缓存)。失败静默(隐藏该行)。
+                async fetchRecommendations() {
+                    try {
+                        if (this._recLoaded) return;
+                        const names = (this.watchHistory || []).slice(0, 3).map(h => h && h.name).filter(Boolean);
+                        if (!names.length) return;  // ⚠️ 历史还没到(云同步慢)→ 不置位，等同步完成后补调
+                        this._recLoaded = true;
+                        const historySet = new Set((this.watchHistory || []).map(h => ((h && h.name) || '').trim()));
+                        const buckets = await Promise.all(names.map(async (n) => {
+                            try {
+                                const sr = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/search/multi')}&query=${encodeURIComponent(n)}&language=zh-CN`).then(r => r.json());
+                                const hit = ((sr && sr.results) || []).find(x => (x.media_type === 'tv' || x.media_type === 'movie') && x.poster_path);
+                                if (!hit) return [];
+                                const rr = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/' + hit.media_type + '/' + hit.id + '/recommendations')}&language=zh-CN`).then(r => r.json());
+                                return ((rr && rr.results) || []).filter(x => x.poster_path && (x.title || x.name) && !x.adult);
+                            } catch (e) { return []; }
+                        }));
+                        // 各来源交错取(口味更均衡)，按【类型+id】去重(TMDB 的 movie/tv id 空间重叠) + 排除历史里已看过的同名
+                        const seen = new Set(); const out = [];
+                        for (let i = 0; out.length < 18; i++) {
+                            let any = false;
+                            for (const b of buckets) {
+                                const x = b[i];
+                                if (!x) continue;
+                                any = true;
+                                const t = (x.title || x.name || '').trim();
+                                const k = (x.media_type || (x.first_air_date ? 'tv' : 'movie')) + '-' + x.id;
+                                if (!t || seen.has(k) || historySet.has(t)) continue;
+                                seen.add(k);
+                                out.push(x);
+                                if (out.length >= 18) break;
+                            }
+                            if (!any) break;
+                        }
+                        this.recommendList = out;
+                        if (out.length) console.log('[推荐] 基于观看历史生成', out.length, '条推荐');
+                    } catch (e) { console.warn('[推荐] 获取失败:', e); }
+                },
+
+                // ⏭️ 预加载下一集：临近本集结尾(2分钟)时触发一次。挂在 timeupdate 上，自带节流/守卫。
+                _maybePreloadNext() {
+                    try {
+                        const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                        if (!v || !Number.isFinite(v.duration) || v.duration <= 0) return;
+                        if (v.duration - v.currentTime > 120) return;  // 还没到结尾前 2 分钟
+                        const list = this.episodeList || [];
+                        const idx = list.findIndex(ep => ep.url === this.currentUrl);
+                        if (idx < 0 || idx >= list.length - 1) return;  // 无下一集
+                        const nextUrl = list[idx + 1].url;
+                        if (!nextUrl || this._preloadedNextUrl === nextUrl) return;  // 已预热过
+                        this._preloadedNextUrl = nextUrl;
+                        this._preloadNextEpisode(nextUrl);
+                    } catch (e) { }
+                },
+
+                // 按与播放完全一致的路由(线路代理/广告过滤代理)预取下一集 m3u8 + 前2个分段：
+                // warm CF Worker 边缘缓存与浏览器 HTTP 缓存 → 切集近秒开。低优先级、全程静默失败。
+                async _preloadNextEpisode(url) {
+                    try {
+                        if (!url.includes('.m3u8')) return;
+                        const mySeq = _navSeq;
+                        let finalUrl = url;
+                        if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
+                            finalUrl = `${this.currentSource._proxyUrl}/?url=${encodeURIComponent(url)}`;
+                        } else if (window.AdFilter && window.AdFilter.isEnabled() && this.corsProxyUrl) {
+                            finalUrl = this.corsProxyUrl + '/?url=' + encodeURIComponent(url);
+                        }
+                        let res, text;
+                        try {
+                            res = await fetch(finalUrl);
+                            if (!res.ok || mySeq !== _navSeq) return;
+                            text = await res.text();
+                        } catch (e) {
+                            // 直连源无 CORS 头读不到内容：no-cors 抓一次仍可写入 HTTP 缓存(只暖清单)
+                            fetch(finalUrl, { mode: 'no-cors' }).catch(() => { });
+                            return;
+                        }
+                        let baseUrl = finalUrl;
+                        let lines = text.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+                        if (lines.length && /\.m3u8/i.test(lines[0])) {
+                            // master playlist → 取第一个子清单
+                            baseUrl = new URL(lines[0], baseUrl).href;
+                            res = await fetch(baseUrl);
+                            if (!res.ok || mySeq !== _navSeq) return;
+                            text = await res.text();
+                            lines = text.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+                        }
+                        // ⚠️ 分段预热只在【代理路径】做：代理无条件回 ACAO 头安全；直连源若按 Origin 条件回 CORS 头
+                        //    且无 Vary:Origin，no-cors 预热会把"无 ACAO 的响应"塞进 HTTP 缓存，反而让 hls.js 的
+                        //    CORS 请求命中坏缓存而失败——直连时跳过分段预热(m3u8 预热已完成,收益保留大半)。
+                        if (finalUrl !== url) {
+                            for (const seg of lines.slice(0, 2)) {
+                                if (mySeq !== _navSeq) return;
+                                try { await fetch(new URL(seg, baseUrl).href, { mode: 'no-cors' }); } catch (e) { }
+                            }
+                        }
+                        console.log('[预加载] ✅ 下一集已预热:', (url || '').substring(0, 60));
+                    } catch (e) { }
+                },
+
                 playNextEpisode(auto = false) {
                     if (!this.episodeList || this.episodeList.length === 0) return;
 
