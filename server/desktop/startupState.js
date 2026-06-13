@@ -2,13 +2,15 @@ const fs = require('fs');
 const net = require('net');
 const path = require('path');
 const { DEFAULT_PLAYER_SETTINGS } = require('../player/externalPlayerConfig');
+const { DEFAULT_PLUGIN_RUNTIME_SETTINGS } = require('../adapters/tvbox/pluginRuntime');
 
 const DEFAULT_JSON_FILES = {
     'subscriptions.json': [],
     'sources.json': [],
     'live-channels.json': [],
     'tvbox-parses.json': [],
-    'player-settings.json': DEFAULT_PLAYER_SETTINGS
+    'player-settings.json': DEFAULT_PLAYER_SETTINGS,
+    'plugin-runtime-settings.json': DEFAULT_PLUGIN_RUNTIME_SETTINGS
 };
 
 function readJson(filePath, fallback) {

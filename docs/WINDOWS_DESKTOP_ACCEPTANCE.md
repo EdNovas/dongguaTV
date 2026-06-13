@@ -27,6 +27,7 @@ The app creates these files when missing:
 - `live-channels.json`
 - `tvbox-parses.json`
 - `player-settings.json`
+- `plugin-runtime-settings.json`
 
 ## Commands
 
@@ -74,6 +75,26 @@ Supported in this phase:
 - `ext`
 
 Plugin-like sources are marked `plugin-required` and are not executed.
+
+## Plugin Runtime Bridge Prep
+
+Settings contains a TVBox plugin runtime panel for safe bridge preparation.
+
+Supported in this phase:
+
+- Save Java executable path.
+- Save a local CatVod Bridge jar path.
+- Save an optional external HTTP Bridge base URL.
+- Detect whether Java is available.
+- Show runtime statuses from `/api/plugin-runtimes`.
+
+Not supported in this phase:
+
+- Automatically executing `spider.jar` from subscriptions.
+- Running unknown py or js plugins.
+- Bypassing DRM, member-only gates, or paid content restrictions.
+
+`allowSubscriptionJarExecution` is forced to `false` by the backend.
 
 ## Playback Diagnosis
 

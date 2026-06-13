@@ -3799,6 +3799,44 @@
                         </div>
                     </div>
 
+                    <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
+                            <i class="fas fa-plug" style="color:#f59e0b; margin-right:8px;"></i>TVBox 插件运行时
+                        </div>
+                        <div style="color:#999; font-size:12px; line-height:1.7; margin-bottom:12px;">
+                            当前只做安全桥接准备：识别插件型源、检测本机 Java、保存 Bridge 配置；不会自动执行订阅里的 spider.jar、py 或 js。
+                        </div>
+                        <div style="display:grid; gap:8px;">
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                <input type="checkbox" v-model="pluginRuntimeSettings.enableJavaCatvod" style="accent-color:#e50914;">
+                                启用 Java CatVod Bridge 准备
+                            </label>
+                            <input v-model="pluginRuntimeSettings.javaPath" type="text" placeholder="java.exe 路径，留空则使用系统 PATH"
+                                style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                            <input v-model="pluginRuntimeSettings.catvodBridgeJarPath" type="text" placeholder="本机 CatVod Bridge jar 路径，不读取订阅 jar"
+                                style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                            <input v-model="pluginRuntimeSettings.externalHttpBaseUrl" type="text" placeholder="外部 HTTP Bridge 地址，可选"
+                                style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                        </div>
+                        <div v-if="pluginRuntimes.length" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+                            <span v-for="runtime in pluginRuntimes" :key="runtime.id"
+                                style="padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.08); color:#ddd; font-size:11px;">
+                                {{ runtime.id }} · {{ runtime.status }}
+                            </span>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
+                            <button class="btn-info" @click="checkJavaCatvodRuntime" style="border:0; padding:8px 12px;">
+                                <i class="fas fa-vial"></i> 检测 Java
+                            </button>
+                            <button class="btn-play" @click="savePluginRuntimeSettings" :disabled="pluginRuntimeSaving"
+                                style="border:0; padding:9px 16px; font-size:13px;">
+                                <i :class="['fas', pluginRuntimeSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i>
+                                保存运行时
+                            </button>
+                            <span v-if="pluginRuntimeMessage" style="color:#aaa; font-size:12px;">{{ pluginRuntimeMessage }}</span>
+                        </div>
+                    </div>
+
                     <!-- 提示信息 -->
                     <div
                         style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
@@ -4421,6 +4459,16 @@
                     },
                     playerSettingsSaving: false,
                     playerSettingsMessage: '',
+                    pluginRuntimeSettings: {
+                        enableJavaCatvod: false,
+                        javaPath: '',
+                        catvodBridgeJarPath: '',
+                        externalHttpBaseUrl: '',
+                        allowSubscriptionJarExecution: false
+                    },
+                    pluginRuntimes: [],
+                    pluginRuntimeSaving: false,
+                    pluginRuntimeMessage: '',
                     appleNavItems: [
                         { id: 'home', label: '首页', icon: 'fa-home', action: 'home' },
                         { id: 'search', label: '搜索', icon: 'fa-search', action: 'search' },
@@ -4992,6 +5040,7 @@
                     } catch (error) {
                         this.playerSettingsMessage = error.message || '播放器设置加载失败';
                     }
+                    this.loadPluginRuntimeSettings();
                 },
 
                 async savePlayerSettings() {
@@ -5027,6 +5076,61 @@
                         }
                     } catch (error) {
                         this.playerSettingsMessage = error.message || '检测失败';
+                    }
+                },
+
+                async loadPluginRuntimeSettings() {
+                    try {
+                        const [settingsRes, runtimesRes] = await Promise.all([
+                            fetch('/api/plugin-runtimes/settings'),
+                            fetch('/api/plugin-runtimes')
+                        ]);
+                        const settingsData = await settingsRes.json();
+                        const runtimeData = await runtimesRes.json();
+                        if (settingsRes.ok && settingsData.settings) {
+                            this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...settingsData.settings };
+                        }
+                        if (runtimesRes.ok) {
+                            this.pluginRuntimes = runtimeData.runtimes || [];
+                        }
+                    } catch (error) {
+                        this.pluginRuntimeMessage = error.message || '运行时设置加载失败';
+                    }
+                },
+
+                async savePluginRuntimeSettings() {
+                    this.pluginRuntimeSaving = true;
+                    this.pluginRuntimeMessage = '';
+                    try {
+                        const response = await fetch('/api/plugin-runtimes/settings', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(this.pluginRuntimeSettings)
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '保存失败');
+                        this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...data.settings };
+                        await this.loadPluginRuntimeSettings();
+                        this.pluginRuntimeMessage = '插件运行时设置已保存';
+                    } catch (error) {
+                        this.pluginRuntimeMessage = error.message || '保存失败';
+                    } finally {
+                        this.pluginRuntimeSaving = false;
+                    }
+                },
+
+                async checkJavaCatvodRuntime() {
+                    this.pluginRuntimeMessage = '';
+                    try {
+                        await this.savePluginRuntimeSettings();
+                        const response = await fetch('/api/plugin-runtimes/java-catvod/check', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '检测失败');
+                        this.pluginRuntimeMessage = data.available
+                            ? `Java 可用 ${data.version || ''}`.trim()
+                            : `Java 不可用${data.error ? ': ' + data.error : ''}`;
+                    } catch (error) {
+                        this.pluginRuntimeMessage = error.message || 'Java 检测失败';
                     }
                 },
 

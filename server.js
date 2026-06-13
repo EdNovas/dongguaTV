@@ -665,7 +665,7 @@ const tvboxService = createTvboxService({
     dataDir: RUNTIME_DATA_DIR,
     httpClient: axios
 });
-const pluginRuntimeRegistry = createDefaultPluginRuntimeRegistry();
+const pluginRuntimeRegistry = createDefaultPluginRuntimeRegistry(RUNTIME_DATA_DIR);
 const playerManager = new PlayerManager(RUNTIME_DATA_DIR, axios);
 
 // ========== API 速率限制 ==========
@@ -1053,6 +1053,26 @@ app.get('/api/plugin-runtimes', (req, res) => {
         runtimes: pluginRuntimeRegistry.list(),
         message: 'Plugin-required TVBox sources are identified but not executed in this version.'
     });
+});
+
+app.get('/api/plugin-runtimes/settings', (req, res) => {
+    res.json({ settings: pluginRuntimeRegistry.getSettings() });
+});
+
+app.patch('/api/plugin-runtimes/settings', (req, res) => {
+    try {
+        res.json({ settings: pluginRuntimeRegistry.saveSettings(req.body || {}) });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to save plugin runtime settings' });
+    }
+});
+
+app.post('/api/plugin-runtimes/java-catvod/check', (req, res) => {
+    try {
+        res.json(pluginRuntimeRegistry.checkJava());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to check Java runtime' });
+    }
 });
 
 app.get('/api/player/settings', (req, res) => {
