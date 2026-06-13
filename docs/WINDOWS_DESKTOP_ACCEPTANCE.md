@@ -86,6 +86,7 @@ Supported in this phase:
 - Save a local CatVod Bridge jar path.
 - Save an optional external HTTP Bridge base URL.
 - Detect whether Java is available.
+- Detect whether an external HTTP Bridge is available.
 - Show runtime statuses from `/api/plugin-runtimes`.
 
 Not supported in this phase:
@@ -95,6 +96,16 @@ Not supported in this phase:
 - Bypassing DRM, member-only gates, or paid content restrictions.
 
 `allowSubscriptionJarExecution` is forced to `false` by the backend.
+
+External HTTP Bridge endpoints used by the app:
+
+- `GET /health`
+- `POST /runtime/search`
+- `POST /runtime/category`
+- `POST /runtime/detail`
+- `POST /runtime/play`
+
+The Bridge base URL must point to localhost or a private network address. Public internet hosts are rejected by the backend.
 
 ## Playback Diagnosis
 

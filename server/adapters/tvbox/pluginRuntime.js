@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { ExternalHttpBridgeClient } = require('./externalHttpBridge');
 
 const DEFAULT_PLUGIN_RUNTIME_SETTINGS = {
     enableJavaCatvod: false,
@@ -71,7 +72,15 @@ class PluginRuntime {
     play() { return this.unsupported(); }
 }
 
-function createDefaultPluginRuntimeRegistry(dataDir) {
+function createDefaultPluginRuntimeRegistry(dataDir, httpClient) {
+    function getExternalHttpBridge() {
+        const settings = readPluginRuntimeSettings(dataDir);
+        return new ExternalHttpBridgeClient({
+            baseUrl: settings.externalHttpBaseUrl,
+            httpClient
+        });
+    }
+
     function buildRuntimeDescriptors() {
         const settings = readPluginRuntimeSettings(dataDir);
         const javaCheck = settings.enableJavaCatvod ? checkJavaRuntime(settings.javaPath) : { available: false };
@@ -127,6 +136,12 @@ function createDefaultPluginRuntimeRegistry(dataDir) {
         checkJava() {
             const settings = readPluginRuntimeSettings(dataDir);
             return checkJavaRuntime(settings.javaPath);
+        },
+        async checkExternalHttpBridge() {
+            return getExternalHttpBridge().health();
+        },
+        async callExternalHttpBridge(operation, payload) {
+            return getExternalHttpBridge().call(operation, payload);
         }
     };
 }

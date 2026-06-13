@@ -665,7 +665,7 @@ const tvboxService = createTvboxService({
     dataDir: RUNTIME_DATA_DIR,
     httpClient: axios
 });
-const pluginRuntimeRegistry = createDefaultPluginRuntimeRegistry(RUNTIME_DATA_DIR);
+const pluginRuntimeRegistry = createDefaultPluginRuntimeRegistry(RUNTIME_DATA_DIR, axios);
 const playerManager = new PlayerManager(RUNTIME_DATA_DIR, axios);
 
 // ========== API 速率限制 ==========
@@ -1072,6 +1072,23 @@ app.post('/api/plugin-runtimes/java-catvod/check', (req, res) => {
         res.json(pluginRuntimeRegistry.checkJava());
     } catch (error) {
         res.status(400).json({ error: error.message || 'Failed to check Java runtime' });
+    }
+});
+
+app.post('/api/plugin-runtimes/external-http/check', async (req, res) => {
+    try {
+        res.json(await pluginRuntimeRegistry.checkExternalHttpBridge());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to check external HTTP bridge' });
+    }
+});
+
+app.post('/api/plugin-runtimes/external-http/:operation', async (req, res) => {
+    try {
+        const result = await pluginRuntimeRegistry.callExternalHttpBridge(req.params.operation, req.body || {});
+        res.json({ ok: true, result });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'External HTTP bridge operation failed' });
     }
 });
 
