@@ -145,7 +145,7 @@ When a source cannot play:
 
 ## Live TV
 
-The Live TV panel lists channels parsed from user-provided TVBox `lives`, M3U/M3U8, and TXT inputs. Channel cards can open the internal player or launch MPC. Live channels with custom headers are passed to MPC through the existing player API and LocalProxy path; internal playback still attempts direct URL playback.
+The Live TV panel lists channels parsed from user-provided TVBox `lives`, M3U/M3U8, and TXT inputs. Channel cards can open the internal player or launch MPC. Live channels with custom headers are passed to MPC through the existing player API and LocalProxy path. Internal playback also registers a LocalProxy URL first when headers are present and local proxy is enabled.
 
 ## LocalProxy
 

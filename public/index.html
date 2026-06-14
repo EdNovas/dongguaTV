@@ -3642,6 +3642,10 @@
                                     {{ channel.name }}
                                 </div>
                                 <div style="color:#888; font-size:11px; margin-top:4px;">{{ channel.group }}</div>
+                                <div v-if="channel.headers && Object.keys(channel.headers).length"
+                                    style="color:#fbbf24; font-size:10px; margin-top:5px;">
+                                    <i class="fas fa-shield-alt"></i> headers · 建议代理/MPC
+                                </div>
                                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
                                     <button class="btn-info" @click="playLiveChannel(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
@@ -5551,10 +5555,29 @@
                     };
                 },
 
-                playLiveChannel(channel) {
+                async playLiveChannel(channel) {
                     if (!channel || !channel.url) {
                         this.showMiniToast && this.showMiniToast('直播频道没有可用地址');
                         return;
+                    }
+
+                    let playbackUrl = channel.url;
+                    const headers = channel.headers || {};
+                    const hasHeaders = Object.keys(headers).length > 0;
+                    if (hasHeaders && this.playerSettings.useLocalProxy !== false) {
+                        try {
+                            const response = await fetch('/api/player/proxy-url', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ playUrlResult: this.buildLivePlayUrlResult(channel) })
+                            });
+                            const data = await response.json();
+                            if (!response.ok) throw new Error(data.error || '直播本地代理创建失败');
+                            playbackUrl = data.proxyUrl || playbackUrl;
+                            this.showMiniToast && this.showMiniToast('已通过本地代理播放直播');
+                        } catch (error) {
+                            this.showMiniToast && this.showMiniToast(error.message || '直播本地代理创建失败，尝试直连');
+                        }
                     }
 
                     const source = {
@@ -5563,11 +5586,13 @@
                         vod_id: channel.id,
                         vod_name: channel.name,
                         vod_pic: channel.logo || '',
-                        vod_play_url: `${channel.name || 'Live'}$${channel.url}`,
+                        vod_play_url: `${channel.name || 'Live'}$${playbackUrl}`,
                         latency: 0,
                         _testType: 'direct',
                         _sourceKind: 'live',
-                        _headers: channel.headers || {}
+                        _headers: headers,
+                        _originalUrl: channel.url,
+                        _localProxyUrl: playbackUrl !== channel.url ? playbackUrl : null
                     };
 
                     this.showLivePanel = false;
@@ -5579,10 +5604,10 @@
                         sources: [source]
                     };
                     this.currentSource = source;
-                    this.episodeList = [{ name: '直播', url: channel.url }];
+                    this.episodeList = [{ name: '直播', url: playbackUrl }];
                     this.loadingDetail = false;
                     this.isTestingSources = false;
-                    this.$nextTick(() => this.play(channel.url));
+                    this.$nextTick(() => this.play(playbackUrl));
                 },
 
                 async openLiveChannelWithMpc(channel) {
