@@ -106,6 +106,8 @@ On Windows, the build script can auto-detect JDK installs under common roots suc
 
 The desktop Settings page can now build and start the local Java Bridge. The generated jar is written under Electron `userData\plugin-runtime\catvod-runtime-bridge-java`, then the app sets `externalHttpBaseUrl` to the localhost bridge URL. This avoids writing generated files into `app.asar` or the installed program resources.
 
+Settings also shows local bridge status, including running state, PID, URL, mode, and jar path. Use `Stop Local Bridge` to stop the child process and clear the local `externalHttpBaseUrl`.
+
 ## Future Java Runtime Bridge
 
 The Java child bridge itself still needs to be implemented separately. It should:

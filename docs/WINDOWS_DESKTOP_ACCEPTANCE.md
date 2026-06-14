@@ -121,6 +121,8 @@ The Java bridge build path has been validated with Microsoft OpenJDK 21. The scr
 
 Settings exposes one-click local Java Bridge build/start actions. Built jars are stored in Electron `userData\plugin-runtime\catvod-runtime-bridge-java`, and the app auto-fills `externalHttpBaseUrl` with the localhost bridge URL after startup.
 
+The Settings page also shows local Java Bridge running state, PID, URL, mode, and jar path, with refresh and stop controls.
+
 ## Playback Diagnosis
 
 When a source cannot play:

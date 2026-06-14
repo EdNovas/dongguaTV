@@ -3833,6 +3833,18 @@
                                 {{ runtime.id }} · {{ runtime.status }}
                             </span>
                         </div>
+                        <div style="display:grid; gap:6px; margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:11px; line-height:1.6;">
+                            <div>
+                                <strong style="color:#fff;">Local Java Bridge:</strong>
+                                <span :style="{ color: localJavaBridgeStatus.running ? '#22c55e' : '#9ca3af' }">
+                                    {{ localJavaBridgeStatus.running ? 'running' : 'stopped' }}
+                                </span>
+                                <span v-if="localJavaBridgeStatus.pid"> PID {{ localJavaBridgeStatus.pid }}</span>
+                            </div>
+                            <div>URL: {{ localJavaBridgeStatus.baseUrl || 'not configured' }}</div>
+                            <div>Mode: {{ localJavaBridgeStatus.mode || pluginRuntimeSettings.localJavaBridgeMode || 'stub' }}</div>
+                            <div style="word-break:break-all;">Jar: {{ localJavaBridgeStatus.jarPath || pluginRuntimeSettings.catvodBridgeJarPath || 'not built' }}</div>
+                        </div>
                         <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
                             <button class="btn-info" @click="checkJavaCatvodRuntime" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-vial"></i> 检测 Java
@@ -3845,6 +3857,12 @@
                             </button>
                             <button class="btn-info" @click="startLocalJavaBridge" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-play-circle"></i> Start Local Bridge
+                            </button>
+                            <button class="btn-info" @click="refreshLocalJavaBridgeStatus" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
+                                <i class="fas fa-sync-alt"></i> Refresh Bridge
+                            </button>
+                            <button class="btn-info" @click="stopLocalJavaBridge" :disabled="pluginRuntimeSaving || !localJavaBridgeStatus.running" style="border:0; padding:8px 12px;">
+                                <i class="fas fa-stop-circle"></i> Stop Local Bridge
                             </button>
                             <button class="btn-play" @click="savePluginRuntimeSettings" :disabled="pluginRuntimeSaving"
                                 style="border:0; padding:9px 16px; font-size:13px;">
@@ -4489,6 +4507,13 @@
                     pluginRuntimes: [],
                     pluginRuntimeSaving: false,
                     pluginRuntimeMessage: '',
+                    localJavaBridgeStatus: {
+                        running: false,
+                        pid: null,
+                        baseUrl: '',
+                        jarPath: '',
+                        mode: 'stub'
+                    },
                     appleNavItems: [
                         { id: 'home', label: '首页', icon: 'fa-home', action: 'home' },
                         { id: 'search', label: '搜索', icon: 'fa-search', action: 'search' },
@@ -5101,17 +5126,22 @@
 
                 async loadPluginRuntimeSettings() {
                     try {
-                        const [settingsRes, runtimesRes] = await Promise.all([
+                        const [settingsRes, runtimesRes, localStatusRes] = await Promise.all([
                             fetch('/api/plugin-runtimes/settings'),
-                            fetch('/api/plugin-runtimes')
+                            fetch('/api/plugin-runtimes'),
+                            fetch('/api/plugin-runtimes/java-catvod/local-status')
                         ]);
                         const settingsData = await settingsRes.json();
                         const runtimeData = await runtimesRes.json();
+                        const localStatusData = await localStatusRes.json();
                         if (settingsRes.ok && settingsData.settings) {
                             this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...settingsData.settings };
                         }
                         if (runtimesRes.ok) {
                             this.pluginRuntimes = runtimeData.runtimes || [];
+                        }
+                        if (localStatusRes.ok) {
+                            this.localJavaBridgeStatus = { ...this.localJavaBridgeStatus, ...localStatusData };
                         }
                     } catch (error) {
                         this.pluginRuntimeMessage = error.message || '运行时设置加载失败';
@@ -5180,6 +5210,7 @@
                         if (!response.ok) throw new Error(data.error || 'Build failed');
                         this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...data.settings };
                         await this.loadPluginRuntimeSettings();
+                        await this.refreshLocalJavaBridgeStatus();
                         this.pluginRuntimeMessage = `Java Bridge built: ${data.jarPath || ''}`.trim();
                     } catch (error) {
                         this.pluginRuntimeMessage = error.message || 'Java Bridge build failed';
@@ -5198,9 +5229,38 @@
                         if (!response.ok) throw new Error(data.error || 'Start failed');
                         this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...data.settings };
                         await this.loadPluginRuntimeSettings();
+                        await this.refreshLocalJavaBridgeStatus();
                         this.pluginRuntimeMessage = `Local Java Bridge running at ${data.baseUrl || ''}`.trim();
                     } catch (error) {
                         this.pluginRuntimeMessage = error.message || 'Local Java Bridge start failed';
+                    } finally {
+                        this.pluginRuntimeSaving = false;
+                    }
+                },
+
+                async refreshLocalJavaBridgeStatus() {
+                    try {
+                        const response = await fetch('/api/plugin-runtimes/java-catvod/local-status');
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Status failed');
+                        this.localJavaBridgeStatus = { ...this.localJavaBridgeStatus, ...data };
+                    } catch (error) {
+                        this.pluginRuntimeMessage = error.message || 'Local Java Bridge status failed';
+                    }
+                },
+
+                async stopLocalJavaBridge() {
+                    this.pluginRuntimeSaving = true;
+                    this.pluginRuntimeMessage = 'Stopping local Java Bridge...';
+                    try {
+                        const response = await fetch('/api/plugin-runtimes/java-catvod/stop-local', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Stop failed');
+                        this.localJavaBridgeStatus = { ...this.localJavaBridgeStatus, ...data };
+                        await this.loadPluginRuntimeSettings();
+                        this.pluginRuntimeMessage = 'Local Java Bridge stopped';
+                    } catch (error) {
+                        this.pluginRuntimeMessage = error.message || 'Local Java Bridge stop failed';
                     } finally {
                         this.pluginRuntimeSaving = false;
                     }
