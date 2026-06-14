@@ -55,7 +55,7 @@ The app passes the media URL as a separate `spawn` argument, not through a shell
 
 ## TVBox Import
 
-Open Subscriptions, paste a user-owned TVBox JSON URL, then import.
+Open Subscriptions, paste a user-owned TVBox JSON URL, then import. You can also choose a local `.json` file from the Subscriptions panel; the desktop UI reads the file locally and posts the parsed config to the same import endpoint.
 
 Supported in this phase:
 

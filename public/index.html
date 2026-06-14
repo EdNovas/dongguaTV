@@ -3697,7 +3697,7 @@
                         <i class="fas fa-rss" style="margin-right: 10px; color: #f59e0b;"></i>订阅源
                     </h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
-                        下一阶段会接入用户自有 TVBox JSON URL、本地 JSON、sites、lives、parses 与 plugin-required 标记。当前版本不硬编码影视源，也不执行 csp_xxx、spider.jar 或 py/js 插件。
+                        支持导入用户自有 TVBox JSON URL 或本地 JSON 文件，解析 sites、lives、parses 与 plugin-required 标记。当前版本不硬编码影视源，也不执行 csp_xxx、spider.jar 或 py/js 插件。
                     </div>
                     <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,240px); gap:10px; margin-top:20px;">
                         <input v-model="subscriptionUrl" type="url" placeholder="粘贴你的 TVBox JSON 订阅 URL"
@@ -3711,6 +3711,12 @@
                             <i :class="['fas', subscriptionLoading ? 'fa-spinner fa-spin' : 'fa-plus']"></i>
                             {{ subscriptionLoading ? '处理中...' : '添加订阅' }}
                         </button>
+                        <button class="btn-info" @click="$refs.tvboxJsonFile && $refs.tvboxJsonFile.click()" :disabled="subscriptionLoading"
+                            style="border:0;">
+                            <i class="fas fa-file-import"></i> 导入本地 JSON
+                        </button>
+                        <input ref="tvboxJsonFile" type="file" accept=".json,application/json"
+                            style="display:none;" @change="importTvboxSubscriptionFile">
                         <button class="btn-info" @click="loadSubscriptionData" :disabled="subscriptionLoading"
                             style="border:0;">
                             <i class="fas fa-sync-alt"></i> 刷新列表
@@ -3805,7 +3811,7 @@
                     <div class="appletv-panel-list" v-if="subscriptions.length === 0">
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">TVBox JSON</div>
-                            <div style="color:#888; font-size:12px; margin-top:6px;">导入、刷新、启用状态待接入</div>
+                            <div style="color:#888; font-size:12px; margin-top:6px;">支持 URL 与本地 JSON 文件导入</div>
                         </div>
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">插件型源</div>
@@ -5135,6 +5141,47 @@
                         this.subscriptionError = error.message || '导入失败';
                     } finally {
                         this.subscriptionLoading = false;
+                    }
+                },
+
+                async importTvboxSubscriptionFile(event) {
+                    const input = event && event.target;
+                    const file = input && input.files && input.files[0];
+                    if (!file) return;
+
+                    this.subscriptionLoading = true;
+                    this.subscriptionError = '';
+                    try {
+                        const text = await file.text();
+                        let config;
+                        try {
+                            config = JSON.parse(text);
+                        } catch (parseError) {
+                            throw new Error('本地 JSON 解析失败，请确认文件是有效的 TVBox JSON');
+                        }
+
+                        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+                            throw new Error('本地文件不是有效的 TVBox JSON 对象');
+                        }
+
+                        const response = await fetch('/api/subscriptions/import', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                config,
+                                name: (this.subscriptionName || '').trim() || file.name || 'Local TVBox JSON'
+                            })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '本地 JSON 导入失败');
+                        this.subscriptionName = '';
+                        await this.loadSubscriptionData();
+                        this.showMiniToast && this.showMiniToast('本地 TVBox JSON 导入完成');
+                    } catch (error) {
+                        this.subscriptionError = error.message || '本地 JSON 导入失败';
+                    } finally {
+                        this.subscriptionLoading = false;
+                        if (input) input.value = '';
                     }
                 },
 
