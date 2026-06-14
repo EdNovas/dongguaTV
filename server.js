@@ -1008,6 +1008,7 @@ app.post('/api/subscriptions/import', async (req, res) => {
             url: req.body && req.body.url,
             filePath: req.body && req.body.filePath,
             config: req.body && req.body.config,
+            localFileName: req.body && req.body.localFileName,
             name: req.body && req.body.name,
             enabled: req.body && req.body.enabled
         });

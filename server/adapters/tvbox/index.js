@@ -64,6 +64,7 @@ class TvboxService {
 
     async importSubscription(input) {
         const config = await loadTvboxConfig(input, this.httpClient);
+        const isInlineConfig = !!(input.config && typeof input.config === 'object');
         const fields = pickTvboxFields(config);
         const subscriptionId = input.id || `tvbox-sub-${stableHash([
             input.url,
@@ -87,6 +88,8 @@ class TvboxService {
             sourceType: 'tvbox',
             url: input.url || null,
             filePath: input.filePath || null,
+            importKind: input.url ? 'url' : input.filePath ? 'file-path' : 'inline-config',
+            localFileName: input.localFileName || null,
             enabled: input.enabled === undefined ? true : !!input.enabled,
             status: 'available',
             summary,
@@ -104,6 +107,7 @@ class TvboxService {
                 ext: fields.ext,
                 liveErrors: liveResult.errors
             },
+            rawConfig: isInlineConfig ? config : undefined,
             createdAt: timestamp,
             updatedAt: timestamp
         };
@@ -135,14 +139,16 @@ class TvboxService {
         if (!subscription) {
             throw new Error('Subscription not found.');
         }
-        if (!subscription.url && !subscription.filePath) {
-            throw new Error('This subscription cannot be refreshed because it has no URL or file path.');
+        if (!subscription.url && !subscription.filePath && !subscription.rawConfig) {
+            throw new Error('This subscription cannot be refreshed because it has no URL, file path, or stored local JSON snapshot.');
         }
         return this.importSubscription({
             id: subscription.id,
             name: subscription.name,
             url: subscription.url,
             filePath: subscription.filePath,
+            config: subscription.rawConfig,
+            localFileName: subscription.localFileName,
             enabled: subscription.enabled
         });
     }

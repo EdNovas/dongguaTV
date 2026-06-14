@@ -3733,11 +3733,12 @@
                                         {{ sub.name }}
                                     </div>
                                     <div style="color:#888; font-size:11px; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-                                        {{ sub.url || sub.filePath || 'local-json' }}
+                                        {{ subscriptionLocationLabel(sub) }}
                                     </div>
                                 </div>
                                 <div style="display:flex; gap:8px; flex-shrink:0;">
                                     <button class="btn-info" @click="refreshTvboxSubscription(sub.id)" :disabled="subscriptionLoading"
+                                        :title="sub.url || sub.filePath ? '刷新订阅' : '重载本地 JSON 快照'"
                                         style="border:0; padding:8px 12px; font-size:12px;">
                                         <i class="fas fa-sync-alt"></i>
                                     </button>
@@ -5028,6 +5029,13 @@
                     if (!group || !Array.isArray(group.sources)) return 0;
                     return group.sources.filter(source => this.isTvboxSource(source)).length;
                 },
+                subscriptionLocationLabel(subscription) {
+                    if (!subscription) return 'unknown';
+                    if (subscription.url) return subscription.url;
+                    if (subscription.filePath) return subscription.filePath;
+                    if (subscription.localFileName) return `本地 JSON 快照: ${subscription.localFileName}`;
+                    return '本地 JSON 快照';
+                },
                 handleAppleNav(item) {
                     if (!item) return;
                     this.activeAppleNav = item.id || 'home';
@@ -5169,6 +5177,7 @@
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 config,
+                                localFileName: file.name,
                                 name: (this.subscriptionName || '').trim() || file.name || 'Local TVBox JSON'
                             })
                         });
