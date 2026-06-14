@@ -119,6 +119,8 @@ A minimal Java child bridge source tree is included at `tools/catvod-runtime-bri
 
 The Java bridge build path has been validated with Microsoft OpenJDK 21. The script can auto-detect common Windows JDK install locations when `java` is not yet visible in the current terminal `PATH`.
 
+Settings exposes one-click local Java Bridge build/start actions. Built jars are stored in Electron `userData\plugin-runtime\catvod-runtime-bridge-java`, and the app auto-fills `externalHttpBaseUrl` with the localhost bridge URL after startup.
+
 ## Playback Diagnosis
 
 When a source cannot play:

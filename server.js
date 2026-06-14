@@ -1075,6 +1075,38 @@ app.post('/api/plugin-runtimes/java-catvod/check', (req, res) => {
     }
 });
 
+app.get('/api/plugin-runtimes/java-catvod/local-status', (req, res) => {
+    try {
+        res.json(pluginRuntimeRegistry.getLocalJavaBridgeStatus());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to read local Java bridge status' });
+    }
+});
+
+app.post('/api/plugin-runtimes/java-catvod/build-local', (req, res) => {
+    try {
+        res.json(pluginRuntimeRegistry.buildLocalJavaBridge());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to build local Java bridge' });
+    }
+});
+
+app.post('/api/plugin-runtimes/java-catvod/start-local', async (req, res) => {
+    try {
+        res.json(await pluginRuntimeRegistry.startLocalJavaBridge());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to start local Java bridge' });
+    }
+});
+
+app.post('/api/plugin-runtimes/java-catvod/stop-local', (req, res) => {
+    try {
+        res.json(pluginRuntimeRegistry.stopLocalJavaBridge());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to stop local Java bridge' });
+    }
+});
+
 app.post('/api/plugin-runtimes/external-http/check', async (req, res) => {
     try {
         res.json(await pluginRuntimeRegistry.checkExternalHttpBridge());

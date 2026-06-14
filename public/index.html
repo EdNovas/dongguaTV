@@ -3817,6 +3817,15 @@
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
                             <input v-model="pluginRuntimeSettings.externalHttpBaseUrl" type="text" placeholder="外部 HTTP Bridge 地址，可选"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
+                                <input v-model.number="pluginRuntimeSettings.localJavaBridgePort" type="number" min="1024" max="65535" placeholder="Local Java Bridge Port"
+                                    style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                                <select v-model="pluginRuntimeSettings.localJavaBridgeMode"
+                                    style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                                    <option value="stub">stub</option>
+                                    <option value="disabled">disabled</option>
+                                </select>
+                            </div>
                         </div>
                         <div v-if="pluginRuntimes.length" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
                             <span v-for="runtime in pluginRuntimes" :key="runtime.id"
@@ -3830,6 +3839,12 @@
                             </button>
                             <button class="btn-info" @click="checkExternalHttpBridge" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-network-wired"></i> 检测 HTTP Bridge
+                            </button>
+                            <button class="btn-info" @click="buildLocalJavaBridge" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
+                                <i class="fas fa-hammer"></i> Build Java Bridge
+                            </button>
+                            <button class="btn-info" @click="startLocalJavaBridge" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
+                                <i class="fas fa-play-circle"></i> Start Local Bridge
                             </button>
                             <button class="btn-play" @click="savePluginRuntimeSettings" :disabled="pluginRuntimeSaving"
                                 style="border:0; padding:9px 16px; font-size:13px;">
@@ -4467,6 +4482,8 @@
                         javaPath: '',
                         catvodBridgeJarPath: '',
                         externalHttpBaseUrl: '',
+                        localJavaBridgePort: 9977,
+                        localJavaBridgeMode: 'stub',
                         allowSubscriptionJarExecution: false
                     },
                     pluginRuntimes: [],
@@ -5150,6 +5167,42 @@
                         await this.loadPluginRuntimeSettings();
                     } catch (error) {
                         this.pluginRuntimeMessage = error.message || 'HTTP Bridge 检测失败';
+                    }
+                },
+
+                async buildLocalJavaBridge() {
+                    this.pluginRuntimeSaving = true;
+                    this.pluginRuntimeMessage = 'Building local Java Bridge...';
+                    try {
+                        await this.savePluginRuntimeSettings();
+                        const response = await fetch('/api/plugin-runtimes/java-catvod/build-local', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Build failed');
+                        this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...data.settings };
+                        await this.loadPluginRuntimeSettings();
+                        this.pluginRuntimeMessage = `Java Bridge built: ${data.jarPath || ''}`.trim();
+                    } catch (error) {
+                        this.pluginRuntimeMessage = error.message || 'Java Bridge build failed';
+                    } finally {
+                        this.pluginRuntimeSaving = false;
+                    }
+                },
+
+                async startLocalJavaBridge() {
+                    this.pluginRuntimeSaving = true;
+                    this.pluginRuntimeMessage = 'Starting local Java Bridge...';
+                    try {
+                        await this.savePluginRuntimeSettings();
+                        const response = await fetch('/api/plugin-runtimes/java-catvod/start-local', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Start failed');
+                        this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...data.settings };
+                        await this.loadPluginRuntimeSettings();
+                        this.pluginRuntimeMessage = `Local Java Bridge running at ${data.baseUrl || ''}`.trim();
+                    } catch (error) {
+                        this.pluginRuntimeMessage = error.message || 'Local Java Bridge start failed';
+                    } finally {
+                        this.pluginRuntimeSaving = false;
                     }
                 },
 

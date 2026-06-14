@@ -7,10 +7,10 @@ $ErrorActionPreference = "Stop"
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $SourceRoot = Join-Path $Root "src"
-$BuildRoot = Join-Path $Root "build"
 if (-not $OutDir) {
     $OutDir = Join-Path $Root "dist"
 }
+$BuildRoot = Join-Path $OutDir "build"
 $ClassesDir = Join-Path $BuildRoot "classes"
 $ManifestPath = Join-Path $BuildRoot "MANIFEST.MF"
 $JarPath = Join-Path $OutDir "catvod-runtime-bridge.jar"

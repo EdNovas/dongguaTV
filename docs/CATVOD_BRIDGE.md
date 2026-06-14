@@ -104,6 +104,8 @@ The output jar is `tools\catvod-runtime-bridge-java\dist\catvod-runtime-bridge.j
 
 On Windows, the build script can auto-detect JDK installs under common roots such as `C:\Program Files\Microsoft`. It was validated with Microsoft OpenJDK 21.
 
+The desktop Settings page can now build and start the local Java Bridge. The generated jar is written under Electron `userData\plugin-runtime\catvod-runtime-bridge-java`, then the app sets `externalHttpBaseUrl` to the localhost bridge URL. This avoids writing generated files into `app.asar` or the installed program resources.
+
 ## Future Java Runtime Bridge
 
 The Java child bridge itself still needs to be implemented separately. It should:
