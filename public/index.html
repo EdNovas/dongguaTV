@@ -3488,19 +3488,96 @@
                 <div class="mt-2 text-muted small" v-else>正在全网搜索...</div>
             </div>
 
-            <div v-if="!loading && groupedList.length === 0" class="text-center"
-                style="padding: 60px 20px; margin-top: -20px;">
-                <i class="fas fa-search" style="font-size: 48px; color: #444; margin-bottom: 20px;"></i>
-                <h4 style="color: #888; margin-bottom: 15px;">暂未找到「{{ keyword }}」的相关资源</h4>
-                <div style="color: #666; font-size: 14px; line-height: 1.8; max-width: 400px; margin: 0 auto;">
-                    <p style="margin-bottom: 8px;">📌 新上映的电影/剧集可能需要等待1-2周才有资源</p>
-                    <p style="margin-bottom: 8px;">💡 尝试搜索电影的中文名</p>
-                    <p>🔍 或尝试搜索其他热门影片</p>
+            <div v-if="!loading && groupedList.length === 0"
+                style="padding: 42px 20px 60px; margin-top: -20px; max-width: 860px; margin-left:auto; margin-right:auto;">
+                <div class="text-center">
+                    <i class="fas fa-search" style="font-size: 44px; color: #555; margin-bottom: 18px;"></i>
+                    <h4 style="color: #ddd; margin-bottom: 12px;">暂未找到「{{ keyword }}」的相关资源</h4>
+                    <div style="color: #888; font-size: 14px; line-height: 1.8;">
+                        可以尝试中文名、简称或更短关键词。下面的诊断会说明当前可参与搜索的源状态。
+                    </div>
                 </div>
-                <button class="btn btn-outline-danger mt-4" @click="clearSearch"
-                    style="border-radius: 20px; padding: 8px 25px;">
-                    <i class="fas fa-home"></i> 返回首页
-                </button>
+
+                <div style="margin-top:24px; border:1px solid rgba(255,255,255,0.12); border-radius:18px; background:rgba(255,255,255,0.06); padding:18px; text-align:left; box-shadow:0 20px 60px rgba(0,0,0,0.22);">
+                    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                        <div>
+                            <div style="color:#fff; font-weight:800; font-size:15px;">
+                                <i class="fas fa-stethoscope" style="color:#f59e0b; margin-right:8px;"></i>Search Diagnostics
+                            </div>
+                            <div style="color:#8f98aa; font-size:12px; margin-top:4px;">
+                                TVBox 插件源只做识别和诊断，不会直接执行未知 jar、py 或 js。
+                            </div>
+                        </div>
+                        <button class="btn-info" @click="loadSearchDiagnostics" :disabled="searchDiagnosticsLoading"
+                            style="border:0; padding:8px 12px; font-size:12px;">
+                            <i :class="['fas', searchDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
+                            {{ searchDiagnosticsLoading ? 'Refreshing' : 'Refresh' }}
+                        </button>
+                    </div>
+
+                    <div v-if="searchDiagnosticsLoading && !searchDiagnostics"
+                        style="color:#9ca3af; font-size:13px; padding:16px 0 4px;">
+                        正在分析搜索源状态...
+                    </div>
+
+                    <div v-if="searchDiagnostics" style="margin-top:16px;">
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
+                            <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
+                                <div style="color:#8f98aa; font-size:11px;">Built-in search</div>
+                                <div style="color:#fff; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.nativeSearchSites) || 0 }}</div>
+                            </div>
+                            <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
+                                <div style="color:#8f98aa; font-size:11px;">Enabled TVBox</div>
+                                <div style="color:#fff; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.enabledTvboxSources) || 0 }}</div>
+                            </div>
+                            <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
+                                <div style="color:#8f98aa; font-size:11px;">Plugin-required</div>
+                                <div style="color:#fbbf24; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.pluginRequiredSources) || 0 }}</div>
+                            </div>
+                            <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
+                                <div style="color:#8f98aa; font-size:11px;">Unsupported</div>
+                                <div style="color:#f87171; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.unsupportedSources) || 0 }}</div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top:14px; display:grid; gap:10px;">
+                            <div style="color:#cfd3dc; font-size:13px; line-height:1.7;">
+                                {{ searchDiagnostics.message }}
+                            </div>
+                            <div style="color:#9ca3af; font-size:12px;">
+                                Local Java Bridge:
+                                <strong :style="{ color: searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.running ? '#22c55e' : '#fbbf24' }">
+                                    {{ searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.running ? 'running' : 'stopped' }}
+                                </strong>
+                                <span v-if="searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.baseUrl">
+                                    / {{ searchDiagnostics.localJavaBridge.baseUrl }} / {{ searchDiagnostics.localJavaBridge.mode || 'stub' }}
+                                </span>
+                                <span v-else>
+                                    / {{ (searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.mode) || 'stub' }}
+                                </span>
+                            </div>
+                            <ul v-if="searchDiagnostics.actions && searchDiagnostics.actions.length"
+                                style="margin:0 0 0 18px; padding:0; color:#cfd3dc; font-size:12px; line-height:1.8;">
+                                <li v-for="action in searchDiagnostics.actions" :key="action">{{ action }}</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;">
+                        <button class="btn-info" @click="showSubscriptionPanel=true; loadSubscriptionData()"
+                            style="border:0; padding:9px 14px; font-size:12px;">
+                            <i class="fas fa-rss"></i> 订阅源
+                        </button>
+                        <button class="btn-info" @click="showSettingsModal=true; loadPlayerSettings(); loadPluginRuntimeSettings()"
+                            style="border:0; padding:9px 14px; font-size:12px;">
+                            <i class="fas fa-cog"></i> 设置
+                        </button>
+                        <button class="btn btn-outline-danger" @click="clearSearch"
+                            style="border-radius: 20px; padding: 8px 18px;">
+                            <i class="fas fa-home"></i> 返回首页
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -4475,6 +4552,8 @@
 
                     // 恢复缺失的状态变量
                     keyword: '', loading: false, searched: false, rawList: [],
+                    searchDiagnostics: null,
+                    searchDiagnosticsLoading: false,
                     showDetail: false, currentGroup: null, currentSource: null,
                     episodeList: [], currentUrl: '', loadingDetail: false,
                     imageMap: {}, fallbackMap: {}, heroList: [], scrollY: 0,
@@ -6988,7 +7067,7 @@
                     this._originalTitle = originalTitle;  // 保存原始标题用于搜索
                     this.doSearch();
                 },
-                clearSearch() { this.searched = false; this.keyword = ''; this.rawList = []; this._originalTitle = ''; },
+                clearSearch() { this.searched = false; this.keyword = ''; this.rawList = []; this.searchDiagnostics = null; this._originalTitle = ''; },
                 doSearch() {
                     if (!this.keyword) return;
 
@@ -7000,6 +7079,7 @@
                     this.loading = true;
                     this.searched = true;
                     this.rawList = [];
+                    this.searchDiagnostics = null;
                     window.scrollTo({ top: 0, behavior: 'smooth' });
 
                     // TV 模式：聚焦到返回首页按钮
@@ -7038,6 +7118,9 @@
                             this._evtSource.close();
                             this._evtSource = null;
                         }
+                        if (this.rawList.length === 0) {
+                            this.loadSearchDiagnostics();
+                        }
                         // 🔗 若是深链触发的搜索，结果就绪后自动打开对应剧
                         this.$nextTick(() => this.tryOpenDeepLink());
                     });
@@ -7048,7 +7131,28 @@
                             this._evtSource.close();
                             this._evtSource = null;
                         }
+                        if (this.rawList.length === 0) {
+                            this.loadSearchDiagnostics();
+                        }
                     };
+                },
+                async loadSearchDiagnostics() {
+                    this.searchDiagnosticsLoading = true;
+                    try {
+                        const response = await fetch(`/api/search/diagnostics?wd=${encodeURIComponent(this.keyword || '')}`);
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Search diagnostics failed');
+                        this.searchDiagnostics = data;
+                    } catch (error) {
+                        this.searchDiagnostics = {
+                            message: error.message || 'Search diagnostics failed',
+                            counts: {},
+                            localJavaBridge: {},
+                            actions: ['Open Subscriptions to refresh sources, then try the search again.']
+                        };
+                    } finally {
+                        this.searchDiagnosticsLoading = false;
+                    }
                 },
                 async openDetail(group) {
                     // 🧭 进入新剧详情：自增导航令牌并记录，用于作废本次测速期间被切换走的残留回调

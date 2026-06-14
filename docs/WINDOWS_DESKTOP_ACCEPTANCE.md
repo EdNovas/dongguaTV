@@ -125,6 +125,8 @@ The Settings page also shows local Java Bridge running state, PID, URL, mode, an
 
 The Subscriptions panel exposes per-source diagnostics. Plugin-required sources show whether the local Java Bridge is running and explain that subscription-provided plugin code is not executed directly.
 
+Search empty states expose a Search Diagnostics panel. It reports built-in search site counts, enabled TVBox sources, plugin-required sources, unsupported sources, and Local Java Bridge running state. This is diagnostic only: current built-in search still uses HTTP search sites, and TVBox plugin code is not executed directly.
+
 ## Playback Diagnosis
 
 When a source cannot play:
@@ -135,6 +137,7 @@ When a source cannot play:
 - Missing MPC path: configure Settings > MPC external player.
 - Local proxy issue: check `player-settings.json` `localProxyPort` and whether the port is occupied.
 - Source diagnostics: use Subscriptions > Diagnose on the specific source to see unsupported/plugin/runtime reasons.
+- Search diagnostics: when search returns no results, use the inline Search Diagnostics panel to see whether the issue is missing built-in search sites, disabled TVBox sources, plugin-required sources, unsupported sources, or Local Java Bridge state.
 
 ## LocalProxy
 

@@ -1060,6 +1060,65 @@ app.post('/api/source-health-check', async (req, res) => {
     }
 });
 
+app.get('/api/search/diagnostics', (req, res) => {
+    try {
+        const keyword = String(req.query.wd || '').trim();
+        const nativeSites = getDB().sites || [];
+        const tvboxSources = tvboxService.listSources();
+        const enabledSources = tvboxSources.filter(source => source.enabled !== false);
+        const pluginRequired = enabledSources.filter(source => source.status === 'plugin-required' || source.sourceType === 'plugin-required');
+        const unsupported = enabledSources.filter(source => source.status === 'unsupported' || source.supportLevel === 'unsupported');
+        const httpCompatible = enabledSources.filter(source =>
+            source.status !== 'plugin-required' &&
+            source.status !== 'unsupported' &&
+            source.sourceType !== 'plugin-required' &&
+            ['native', 'tvbox', 'maccms', 'live'].includes(source.sourceType)
+        );
+        const localJavaBridge = pluginRuntimeRegistry.getLocalJavaBridgeStatus();
+        const actions = [];
+
+        if (nativeSites.length === 0 && enabledSources.length === 0) {
+            actions.push('Import a user-owned TVBox subscription or configure at least one source.');
+        }
+        if (pluginRequired.length > 0 && !localJavaBridge.running) {
+            actions.push(`Start Local Java Bridge in Settings for ${pluginRequired.length} plugin-required source(s).`);
+        }
+        if (pluginRequired.length > 0 && localJavaBridge.running) {
+            actions.push('Local Java Bridge is running, but current Java bridge stub mode does not execute real CatVod plugins yet.');
+        }
+        if (unsupported.length > 0) {
+            actions.push(`${unsupported.length} enabled TVBox source(s) are unsupported in this version; disable or hide them if they add noise.`);
+        }
+        if (httpCompatible.length > 0) {
+            actions.push('Run per-source Diagnose or health check on HTTP-compatible TVBox sources.');
+        }
+        actions.push('Try alternate titles, Chinese names, or shorter keywords.');
+
+        res.json({
+            keyword,
+            counts: {
+                nativeSearchSites: nativeSites.length,
+                tvboxSources: tvboxSources.length,
+                enabledTvboxSources: enabledSources.length,
+                httpCompatibleTvboxSources: httpCompatible.length,
+                pluginRequiredSources: pluginRequired.length,
+                unsupportedSources: unsupported.length,
+                disabledTvboxSources: tvboxSources.length - enabledSources.length
+            },
+            localJavaBridge: {
+                running: !!localJavaBridge.running,
+                baseUrl: localJavaBridge.baseUrl,
+                mode: localJavaBridge.mode,
+                jarConfigured: !!localJavaBridge.jarPath
+            },
+            message: 'Search currently uses built-in HTTP search sites. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.',
+            actions
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to build search diagnostics' });
+    }
+});
+
 app.get('/api/plugin-runtimes', (req, res) => {
     res.json({
         runtimes: pluginRuntimeRegistry.list(),

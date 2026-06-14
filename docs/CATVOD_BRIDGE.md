@@ -2,6 +2,8 @@
 
 DongguaTV can identify TVBox plugin-style sources such as `csp_xxx`, `spider.jar`, py, and js definitions. The desktop app does not execute those plugins directly. This bridge is a local-only protocol scaffold for a future CatVod runtime.
 
+The Search Diagnostics panel may show Local Java Bridge state when a search returns no results. That panel is informational: it does not cause subscription-provided plugin code to run directly inside DongguaTV.
+
 ## Safety Rules
 
 - The bridge binds only to `127.0.0.1`, `localhost`, or `::1`.
