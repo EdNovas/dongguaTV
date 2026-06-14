@@ -4,6 +4,8 @@ DongguaTV can identify TVBox plugin-style sources such as `csp_xxx`, `spider.jar
 
 The Search Diagnostics panel may show Local Java Bridge state when a search returns no results. That panel is informational: it does not cause subscription-provided plugin code to run directly inside DongguaTV.
 
+Normal TVBox HTTP/MacCMS-compatible sources can participate in search and detail fetching without this bridge. This bridge is only for future plugin-required CatVod/Spider style sources.
+
 ## Safety Rules
 
 - The bridge binds only to `127.0.0.1`, `localhost`, or `::1`.

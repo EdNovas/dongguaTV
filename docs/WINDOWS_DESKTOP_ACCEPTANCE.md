@@ -76,6 +76,8 @@ Supported in this phase:
 
 Plugin-like sources are marked `plugin-required` and are not executed.
 
+Enabled TVBox HTTP/MacCMS-compatible sources that are marked searchable are included in normal search. Search results keep a `tvbox:` source key so the detail endpoint can fetch the matching user subscription source. Plugin-required and unsupported sources are skipped by search and remain visible through diagnostics.
+
 ## Plugin Runtime Bridge Prep
 
 Settings contains a TVBox plugin runtime panel for safe bridge preparation.
@@ -125,7 +127,7 @@ The Settings page also shows local Java Bridge running state, PID, URL, mode, an
 
 The Subscriptions panel exposes per-source diagnostics. Plugin-required sources show whether the local Java Bridge is running and explain that subscription-provided plugin code is not executed directly.
 
-Search empty states expose a Search Diagnostics panel. It reports built-in search site counts, enabled TVBox sources, plugin-required sources, unsupported sources, and Local Java Bridge running state. This is diagnostic only: current built-in search still uses HTTP search sites, and TVBox plugin code is not executed directly.
+Search empty states expose a Search Diagnostics panel. It reports built-in search site counts, TVBox HTTP sources participating in search, plugin-required sources, unsupported sources, and Local Java Bridge running state. This is diagnostic only for plugin sources: TVBox plugin code is not executed directly.
 
 ## Playback Diagnosis
 

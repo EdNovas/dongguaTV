@@ -942,6 +942,66 @@ function sendTvboxError(res, error, statusCode = 500) {
     });
 }
 
+function isHttpUrl(value) {
+    return /^https?:\/\//i.test(String(value || '').trim());
+}
+
+function buildVodApiUrl(api, params) {
+    const base = String(api || '').trim();
+    if (isHttpUrl(base)) {
+        const url = new URL(base);
+        Object.entries(params || {}).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                url.searchParams.set(key, value);
+            }
+        });
+        return url.toString();
+    }
+
+    const query = new URLSearchParams();
+    Object.entries(params || {}).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+            query.set(key, value);
+        }
+    });
+    const separator = base.includes('?') ? '&' : '?';
+    return `${base}${separator}${query.toString()}`;
+}
+
+function isTvboxSearchCompatible(source) {
+    if (!source || source.enabled === false || source.searchable === false) return false;
+    if (!isHttpUrl(source.api)) return false;
+    if (source.status === 'plugin-required' || source.status === 'unsupported') return false;
+    if (source.sourceType === 'plugin-required') return false;
+    return ['maccms', 'tvbox', 'native'].includes(source.sourceType);
+}
+
+function getTvboxSearchSites() {
+    return tvboxService.listSources()
+        .filter(isTvboxSearchCompatible)
+        .map(source => ({
+            key: `tvbox:${source.id}`,
+            name: `[TVBox] ${source.name}`,
+            api: source.api,
+            active: source.enabled !== false,
+            sourceOrigin: 'tvbox',
+            sourceId: source.id,
+            sourceType: source.sourceType,
+            supportLevel: source.supportLevel
+        }));
+}
+
+function getAllSearchSites() {
+    return [
+        ...(getDB().sites || []),
+        ...getTvboxSearchSites()
+    ];
+}
+
+function findSearchSite(siteKey) {
+    return getAllSearchSites().find(site => site.key === siteKey);
+}
+
 app.post('/api/subscriptions/import', async (req, res) => {
     try {
         const result = await tvboxService.importSubscription({
@@ -1066,6 +1126,7 @@ app.get('/api/search/diagnostics', (req, res) => {
         const nativeSites = getDB().sites || [];
         const tvboxSources = tvboxService.listSources();
         const enabledSources = tvboxSources.filter(source => source.enabled !== false);
+        const searchableTvboxSites = getTvboxSearchSites();
         const pluginRequired = enabledSources.filter(source => source.status === 'plugin-required' || source.sourceType === 'plugin-required');
         const unsupported = enabledSources.filter(source => source.status === 'unsupported' || source.supportLevel === 'unsupported');
         const httpCompatible = enabledSources.filter(source =>
@@ -1089,8 +1150,10 @@ app.get('/api/search/diagnostics', (req, res) => {
         if (unsupported.length > 0) {
             actions.push(`${unsupported.length} enabled TVBox source(s) are unsupported in this version; disable or hide them if they add noise.`);
         }
-        if (httpCompatible.length > 0) {
-            actions.push('Run per-source Diagnose or health check on HTTP-compatible TVBox sources.');
+        if (searchableTvboxSites.length > 0) {
+            actions.push(`${searchableTvboxSites.length} compatible TVBox HTTP source(s) are included in search.`);
+        } else if (httpCompatible.length > 0) {
+            actions.push('Run per-source Diagnose or health check on HTTP-compatible TVBox sources, then confirm they are enabled and searchable.');
         }
         actions.push('Try alternate titles, Chinese names, or shorter keywords.');
 
@@ -1101,6 +1164,7 @@ app.get('/api/search/diagnostics', (req, res) => {
                 tvboxSources: tvboxSources.length,
                 enabledTvboxSources: enabledSources.length,
                 httpCompatibleTvboxSources: httpCompatible.length,
+                searchableTvboxSources: searchableTvboxSites.length,
                 pluginRequiredSources: pluginRequired.length,
                 unsupportedSources: unsupported.length,
                 disabledTvboxSources: tvboxSources.length - enabledSources.length
@@ -1111,7 +1175,7 @@ app.get('/api/search/diagnostics', (req, res) => {
                 mode: localJavaBridge.mode,
                 jarConfigured: !!localJavaBridge.jarPath
             },
-            message: 'Search currently uses built-in HTTP search sites. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.',
+            message: 'Search uses built-in HTTP sites plus compatible user TVBox HTTP/MacCMS sources. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.',
             actions
         });
     } catch (error) {
@@ -1521,7 +1585,7 @@ app.get('/api/search', async (req, res) => {
         return res.status(400).json({ error: 'Missing keyword' });
     }
 
-    const sites = getDB().sites;
+    const sites = getAllSearchSites();
 
     if (!stream) {
         // 非流式模式：返回聚合的 JSON 结果（用于 refreshEpisodes 查找 vod_id）
@@ -1534,12 +1598,17 @@ app.get('/api/search', async (req, res) => {
             const cached = cacheManager.get('search', cacheKey);
             if (cached && cached.list) {
                 cached.list.forEach(item => {
-                    allResults.push({ ...item, site_key: site.key, site_name: site.name });
+                    allResults.push({
+                        ...item,
+                        site_key: site.key,
+                        site_name: site.name,
+                        source_origin: site.sourceOrigin || item.source_origin || 'native'
+                    });
                 });
                 return;
             }
             try {
-                const searchUrl = `${site.api}?ac=detail&wd=${encodeURIComponent(keyword)}`;
+                const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: keyword });
                 const { data } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
                 const list = data.list ? data.list.map(item => ({
                     vod_id: item.vod_id,
@@ -1547,7 +1616,8 @@ app.get('/api/search', async (req, res) => {
                     vod_pic: item.vod_pic,
                     vod_play_url: item.vod_play_url,
                     site_key: site.key,
-                    site_name: site.name
+                    site_name: site.name,
+                    source_origin: site.sourceOrigin || 'native'
                 })) : [];
                 cacheManager.set('search', cacheKey, { list }, 3600);
                 allResults.push(...list);
@@ -1614,7 +1684,7 @@ app.get('/api/search', async (req, res) => {
                     }
 
                     // 构建请求 URL（带参数）
-                    const searchUrl = `${site.api}?ac=detail&wd=${encodeURIComponent(kw)}`;
+                    const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: kw });
 
                     // 使用带代理回退的请求
                     const { data, usedProxy } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
@@ -1632,7 +1702,8 @@ app.get('/api/search', async (req, res) => {
                         type_name: item.type_name,
                         vod_content: item.vod_content,
                         vod_play_from: item.vod_play_from,
-                        vod_play_url: item.vod_play_url
+                        vod_play_url: item.vod_play_url,
+                        source_origin: site.sourceOrigin || 'native'
                     })) : [];
 
                     // 缓存结果 (1小时)
@@ -1658,7 +1729,8 @@ app.get('/api/search', async (req, res) => {
                 uniqueResults.push({
                     ...item,
                     site_key: site.key,
-                    site_name: site.name
+                    site_name: site.name,
+                    source_origin: site.sourceOrigin || item.source_origin || 'native'
                 });
             }
         }
@@ -1692,8 +1764,7 @@ app.get('/api/search', async (req, res) => {
 // 2b. 搜索 API - POST 版本 (用于单站点搜索)
 app.post('/api/search', async (req, res) => {
     const { keyword, siteKey } = req.body;
-    const sites = getDB().sites;
-    const site = sites.find(s => s.key === siteKey);
+    const site = findSearchSite(siteKey);
 
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
@@ -1708,7 +1779,7 @@ app.post('/api/search', async (req, res) => {
         console.log(`[Search] ${site.name} -> ${keyword}`);
 
         // 构建请求 URL
-        const searchUrl = `${site.api}?ac=detail&wd=${encodeURIComponent(keyword)}`;
+        const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: keyword });
         const { data } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
 
         // 简单的数据清洗
@@ -1719,7 +1790,10 @@ app.post('/api/search', async (req, res) => {
                 vod_pic: item.vod_pic,
                 vod_remarks: item.vod_remarks,
                 vod_year: item.vod_year,
-                type_name: item.type_name
+                type_name: item.type_name,
+                site_key: site.key,
+                site_name: site.name,
+                source_origin: site.sourceOrigin || 'native'
             })) : []
         };
 
@@ -1736,8 +1810,7 @@ app.get('/api/detail', async (req, res) => {
     const id = req.query.id;
     const siteKey = req.query.site_key;
     const nocache = req.query.nocache === '1';
-    const sites = getDB().sites;
-    const site = sites.find(s => s.key === siteKey);
+    const site = findSearchSite(siteKey);
 
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
@@ -1757,7 +1830,7 @@ app.get('/api/detail', async (req, res) => {
         console.log(`[Detail] ${site.name} -> ID: ${id}`);
 
         // 构建请求 URL
-        const detailUrl = `${site.api}?ac=detail&ids=${encodeURIComponent(id)}`;
+        const detailUrl = buildVodApiUrl(site.api, { ac: 'detail', ids: id });
         const { data } = await fetchWithProxyFallback(detailUrl, { timeout: 8000 }, site.key);
 
         if (data.list && data.list.length > 0) {
@@ -1777,8 +1850,7 @@ app.get('/api/detail', async (req, res) => {
 // 3b. 详情 API (带缓存) - POST 版本
 app.post('/api/detail', async (req, res) => {
     const { id, siteKey } = req.body;
-    const sites = getDB().sites;
-    const site = sites.find(s => s.key === siteKey);
+    const site = findSearchSite(siteKey);
 
     if (!site) return res.status(404).json({ error: 'Site not found' });
 
@@ -1793,7 +1865,7 @@ app.post('/api/detail', async (req, res) => {
         console.log(`[Detail] ${site.name} -> ID: ${id}`);
 
         // 构建请求 URL
-        const detailUrl = `${site.api}?ac=detail&ids=${encodeURIComponent(id)}`;
+        const detailUrl = buildVodApiUrl(site.api, { ac: 'detail', ids: id });
         const { data } = await fetchWithProxyFallback(detailUrl, { timeout: 8000 }, siteKey);
 
         if (data.list && data.list.length > 0) {
