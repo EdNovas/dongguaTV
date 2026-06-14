@@ -3626,7 +3626,7 @@
                         <i class="fas fa-broadcast-tower" style="margin-right: 10px; color: #60a5fa;"></i>Live TV
                     </h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
-                        直播频道将在 TVBox / M3U / TXT 适配层接入后显示。当前阶段只保留 Windows 桌面入口，不内置任何第三方直播源。
+                        直播频道来自你导入的 TVBox / M3U / TXT 订阅，不内置任何第三方直播源。普通 M3U8 可尝试内置播放，带 headers 的频道建议使用 MPC。
                     </div>
                     <div v-if="liveGroups.length > 0" style="margin-top:20px;">
                         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
@@ -3642,6 +3642,16 @@
                                     {{ channel.name }}
                                 </div>
                                 <div style="color:#888; font-size:11px; margin-top:4px;">{{ channel.group }}</div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+                                    <button class="btn-info" @click="playLiveChannel(channel)" :disabled="channel.status === 'error'"
+                                        style="border:0; padding:6px 10px; font-size:11px;">
+                                        <i class="fas fa-play"></i> 播放
+                                    </button>
+                                    <button class="btn-info" @click="openLiveChannelWithMpc(channel)" :disabled="channel.status === 'error'"
+                                        style="border:0; padding:6px 10px; font-size:11px;">
+                                        <i class="fas fa-external-link-alt"></i> MPC
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -5018,9 +5028,11 @@
                     return !!(source && (source.source_origin === 'tvbox' || String(source.site_key || '').startsWith('tvbox:')));
                 },
                 sourceOriginLabel(source) {
+                    if (source && source._sourceKind === 'live') return 'Live TV';
                     return this.isTvboxSource(source) ? 'TVBox 订阅源' : '内置源';
                 },
                 sourceOriginBadgeStyle(source) {
+                    if (source && source._sourceKind === 'live') return 'background:rgba(96,165,250,0.86); color:#07111f;';
                     return this.isTvboxSource(source)
                         ? 'background:rgba(245,158,11,0.92); color:#111827;'
                         : 'background:rgba(99,102,241,0.72); color:#fff;';
@@ -5483,21 +5495,24 @@
                 buildCurrentPlayUrlResult() {
                     const url = this.currentUrl || '';
                     const lower = url.toLowerCase();
+                    const sourceKind = this.currentSource && this.currentSource._sourceKind
+                        ? this.currentSource._sourceKind
+                        : /alist|115|aliyundrive|quark|ucdrive|webdav|pan\\./i.test(url) ? 'cloud-drive' : 'normal';
                     return {
                         url,
                         format: lower.includes('.m3u8') ? 'm3u8' : lower.includes('.mkv') ? 'mkv' : lower.includes('.mp4') ? 'mp4' : 'unknown',
                         quality: /2160|4k/i.test(url) ? '4k' : 'unknown',
                         codec: /hevc|h265|h\\.265/i.test(url) ? 'hevc' : 'unknown',
                         hdr: /hdr|dolby|dv/i.test(url),
-                        sourceKind: /alist|115|aliyundrive|quark|ucdrive|webdav|pan\\./i.test(url) ? 'cloud-drive' : 'normal',
-                        headers: {},
+                        sourceKind,
+                        headers: (this.currentSource && this.currentSource._headers) || {},
                         expiresAt: null
                     };
                 },
 
                 shouldRecommendMpc() {
                     const result = this.buildCurrentPlayUrlResult();
-                    return result.quality === '4k' || result.codec === 'hevc' || result.hdr || result.sourceKind === 'cloud-drive' || result.format === 'mkv';
+                    return result.quality === '4k' || result.codec === 'hevc' || result.hdr || result.sourceKind === 'cloud-drive' || result.format === 'mkv' || (result.sourceKind === 'live' && Object.keys(result.headers || {}).length > 0);
                 },
 
                 async openCurrentWithMpc() {
@@ -5514,6 +5529,76 @@
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'MPC 启动失败');
                         this.showMiniToast && this.showMiniToast('已调用 MPC 播放');
+                    } catch (error) {
+                        alert(error.message || 'MPC 启动失败，请检查播放器路径');
+                        this.showSettingsModal = true;
+                        this.loadPlayerSettings();
+                    }
+                },
+
+                buildLivePlayUrlResult(channel) {
+                    const url = channel && channel.url ? channel.url : '';
+                    const lower = url.toLowerCase();
+                    return {
+                        url,
+                        format: lower.includes('.m3u8') ? 'm3u8' : lower.includes('.ts') ? 'ts' : lower.includes('.flv') ? 'flv' : 'unknown',
+                        quality: 'unknown',
+                        codec: 'unknown',
+                        hdr: false,
+                        sourceKind: 'live',
+                        headers: (channel && channel.headers) || {},
+                        expiresAt: null
+                    };
+                },
+
+                playLiveChannel(channel) {
+                    if (!channel || !channel.url) {
+                        this.showMiniToast && this.showMiniToast('直播频道没有可用地址');
+                        return;
+                    }
+
+                    const source = {
+                        site_key: channel.id,
+                        site_name: channel.group || 'Live TV',
+                        vod_id: channel.id,
+                        vod_name: channel.name,
+                        vod_pic: channel.logo || '',
+                        vod_play_url: `${channel.name || 'Live'}$${channel.url}`,
+                        latency: 0,
+                        _testType: 'direct',
+                        _sourceKind: 'live',
+                        _headers: channel.headers || {}
+                    };
+
+                    this.showLivePanel = false;
+                    this.showDetail = true;
+                    document.body.classList.add('detail-open');
+                    this.currentGroup = {
+                        name: channel.name,
+                        pic: channel.logo || '',
+                        sources: [source]
+                    };
+                    this.currentSource = source;
+                    this.episodeList = [{ name: '直播', url: channel.url }];
+                    this.loadingDetail = false;
+                    this.isTestingSources = false;
+                    this.$nextTick(() => this.play(channel.url));
+                },
+
+                async openLiveChannelWithMpc(channel) {
+                    if (!channel || !channel.url) {
+                        this.showMiniToast && this.showMiniToast('直播频道没有可用地址');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/player/open-mpc', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildLivePlayUrlResult(channel) })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'MPC 启动失败');
+                        this.showMiniToast && this.showMiniToast('已调用 MPC 播放直播');
                     } catch (error) {
                         alert(error.message || 'MPC 启动失败，请检查播放器路径');
                         this.showSettingsModal = true;

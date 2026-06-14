@@ -143,6 +143,10 @@ When a source cannot play:
 - Source diagnostics: use Subscriptions > Diagnose on the specific source to see unsupported/plugin/runtime reasons.
 - Search diagnostics: when search returns no results, use the inline Search Diagnostics panel to see whether the issue is missing built-in search sites, disabled TVBox sources, plugin-required sources, unsupported sources, or Local Java Bridge state.
 
+## Live TV
+
+The Live TV panel lists channels parsed from user-provided TVBox `lives`, M3U/M3U8, and TXT inputs. Channel cards can open the internal player or launch MPC. Live channels with custom headers are passed to MPC through the existing player API and LocalProxy path; internal playback still attempts direct URL playback.
+
 ## LocalProxy
 
 The LocalProxy listens only on:
