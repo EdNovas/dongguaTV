@@ -108,6 +108,8 @@ The desktop Settings page can now build and start the local Java Bridge. The gen
 
 Settings also shows local bridge status, including running state, PID, URL, mode, and jar path. Use `Stop Local Bridge` to stop the child process and clear the local `externalHttpBaseUrl`.
 
+The Subscriptions panel has a per-source `Diagnose` action. Plugin-required sources report whether the local Java Bridge is running and explain why DongguaTV does not directly execute subscription-provided plugin code.
+
 ## Future Java Runtime Bridge
 
 The Java child bridge itself still needs to be implemented separately. It should:

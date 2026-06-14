@@ -1006,6 +1006,18 @@ app.get('/api/sources/:id', (req, res) => {
     }
 });
 
+app.get('/api/sources/:id/diagnostics', (req, res) => {
+    try {
+        const diagnostics = tvboxService.diagnoseSource(req.params.id, {
+            settings: pluginRuntimeRegistry.getSettings(),
+            localJavaBridge: pluginRuntimeRegistry.getLocalJavaBridgeStatus()
+        });
+        res.json({ diagnostics });
+    } catch (error) {
+        sendTvboxError(res, error, 400);
+    }
+});
+
 app.patch('/api/sources/:id', (req, res) => {
     try {
         const source = tvboxService.updateSource(req.params.id, req.body || {});

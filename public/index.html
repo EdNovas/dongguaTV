@@ -3693,6 +3693,27 @@
                                         {{ source.status }}
                                     </span>
                                 </div>
+                                <button class="btn-info" @click="diagnoseTvboxSource(source)" :disabled="subscriptionLoading"
+                                    style="border:0; padding:6px 10px; margin-top:10px; font-size:11px;">
+                                    <i class="fas fa-stethoscope"></i> Diagnose
+                                </button>
+                                <div v-if="sourceDiagnostics[source.id]"
+                                    style="margin-top:10px; padding:8px 10px; border-radius:10px; background:rgba(0,0,0,0.22); color:#cfd3dc; font-size:11px; line-height:1.55;">
+                                    <div>
+                                        <strong :style="{ color: sourceDiagnostics[source.id].playable ? '#22c55e' : '#fbbf24' }">
+                                            {{ sourceDiagnostics[source.id].playable ? 'playable path' : 'not playable yet' }}
+                                        </strong>
+                                        · {{ sourceDiagnostics[source.id].reason }}
+                                    </div>
+                                    <div>{{ sourceDiagnostics[source.id].message }}</div>
+                                    <div v-if="sourceDiagnostics[source.id].runtime && sourceDiagnostics[source.id].runtime.localJavaBridgeBaseUrl">
+                                        Bridge: {{ sourceDiagnostics[source.id].runtime.localJavaBridgeBaseUrl }} / {{ sourceDiagnostics[source.id].runtime.localJavaBridgeMode }}
+                                    </div>
+                                    <ul v-if="sourceDiagnostics[source.id].actions && sourceDiagnostics[source.id].actions.length"
+                                        style="margin:6px 0 0 16px; padding:0;">
+                                        <li v-for="action in sourceDiagnostics[source.id].actions" :key="action">{{ action }}</li>
+                                    </ul>
+                                </div>
                                 <div v-if="source.status === 'plugin-required'" style="color:#aaa; font-size:11px; line-height:1.6; margin-top:8px;">
                                     需要 CatVod/Spider 运行时，当前版本只识别不执行。
                                 </div>
@@ -4479,6 +4500,7 @@
                     subscriptionError: '',
                     subscriptions: [],
                     tvboxSources: [],
+                    sourceDiagnostics: {},
                     liveGroups: [],
                     liveChannels: [],
                     playerSettings: {
@@ -4967,6 +4989,7 @@
                         const channelData = await channelRes.json();
                         this.subscriptions = subData.subscriptions || [];
                         this.tvboxSources = sourceData.sources || [];
+                        this.sourceDiagnostics = {};
                         this.liveGroups = groupData.groups || [];
                         this.liveChannels = channelData.channels || [];
                     } catch (error) {
@@ -5051,6 +5074,30 @@
                         source.enabled = data.source.enabled;
                     } catch (error) {
                         this.subscriptionError = error.message || '源状态更新失败';
+                    }
+                },
+
+                async diagnoseTvboxSource(source) {
+                    if (!source || !source.id) return;
+                    this.subscriptionError = '';
+                    try {
+                        const response = await fetch(`/api/sources/${encodeURIComponent(source.id)}/diagnostics`);
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Source diagnostics failed');
+                        this.sourceDiagnostics = {
+                            ...this.sourceDiagnostics,
+                            [source.id]: data.diagnostics
+                        };
+                    } catch (error) {
+                        this.sourceDiagnostics = {
+                            ...this.sourceDiagnostics,
+                            [source.id]: {
+                                playable: false,
+                                reason: 'diagnostics-error',
+                                message: error.message || 'Source diagnostics failed',
+                                actions: ['Try refreshing the subscription and run diagnostics again.']
+                            }
+                        };
                     }
                 },
 

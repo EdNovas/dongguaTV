@@ -123,6 +123,8 @@ Settings exposes one-click local Java Bridge build/start actions. Built jars are
 
 The Settings page also shows local Java Bridge running state, PID, URL, mode, and jar path, with refresh and stop controls.
 
+The Subscriptions panel exposes per-source diagnostics. Plugin-required sources show whether the local Java Bridge is running and explain that subscription-provided plugin code is not executed directly.
+
 ## Playback Diagnosis
 
 When a source cannot play:
@@ -132,6 +134,7 @@ When a source cannot play:
 - `error`: health check or import failed.
 - Missing MPC path: configure Settings > MPC external player.
 - Local proxy issue: check `player-settings.json` `localProxyPort` and whether the port is occupied.
+- Source diagnostics: use Subscriptions > Diagnose on the specific source to see unsupported/plugin/runtime reasons.
 
 ## LocalProxy
 

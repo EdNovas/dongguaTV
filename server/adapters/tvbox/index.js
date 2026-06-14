@@ -162,6 +162,80 @@ class TvboxService {
         }
         return { sourceId, ...result };
     }
+
+    diagnoseSource(sourceId, runtimeState = {}) {
+        const source = this.getSource(sourceId);
+        if (!source) {
+            return {
+                sourceId,
+                status: 'error',
+                playable: false,
+                reason: 'source-not-found',
+                message: 'Source was not found.',
+                actions: ['Refresh subscriptions and try again.']
+            };
+        }
+
+        if (source.status === 'plugin-required' || source.sourceType === 'plugin-required') {
+            const bridgeRunning = !!(runtimeState.localJavaBridge && runtimeState.localJavaBridge.running);
+            const bridgeConfigured = !!(runtimeState.settings && runtimeState.settings.catvodBridgeJarPath);
+            return {
+                sourceId,
+                sourceName: source.name,
+                status: 'plugin-required',
+                playable: bridgeRunning,
+                reason: bridgeRunning ? 'local-java-bridge-running' : 'plugin-runtime-required',
+                message: bridgeRunning
+                    ? 'This TVBox plugin source can be sent to the local Java Bridge. Current bridge stub mode may still return empty results until a real CatVod runtime is implemented.'
+                    : 'This TVBox source requires a CatVod/Spider plugin runtime. It is recognized, but plugin code is not executed directly by DongguaTV.',
+                actions: bridgeRunning
+                    ? ['Use the bridge operation endpoints for controlled testing.', 'Keep using only trusted local runtime jars.']
+                    : [
+                        bridgeConfigured ? 'Start Local Bridge in Settings.' : 'Build Java Bridge in Settings.',
+                        'Do not use subscription-provided spider.jar as a trusted runtime jar.'
+                    ],
+                runtime: {
+                    localJavaBridgeRunning: bridgeRunning,
+                    localJavaBridgeBaseUrl: runtimeState.localJavaBridge && runtimeState.localJavaBridge.baseUrl,
+                    localJavaBridgeMode: runtimeState.localJavaBridge && runtimeState.localJavaBridge.mode
+                }
+            };
+        }
+
+        if (source.status === 'unsupported' || source.supportLevel === 'unsupported') {
+            return {
+                sourceId,
+                sourceName: source.name,
+                status: 'unsupported',
+                playable: false,
+                reason: 'unsupported-source-shape',
+                message: 'This source is not a supported HTTP/MacCMS-compatible source in the current version.',
+                actions: ['Disable or hide this source.', 'Refresh the subscription after the provider changes its config.']
+            };
+        }
+
+        if (!source.enabled) {
+            return {
+                sourceId,
+                sourceName: source.name,
+                status: source.status,
+                playable: false,
+                reason: 'source-disabled',
+                message: 'This source is disabled.',
+                actions: ['Enable the source before searching or playback testing.']
+            };
+        }
+
+        return {
+            sourceId,
+            sourceName: source.name,
+            status: source.status,
+            playable: source.status === 'available' || source.supportLevel === 'basic' || source.supportLevel === 'full',
+            reason: 'http-source',
+            message: 'This source is handled as a normal HTTP-compatible source. Use health check if search or detail requests fail.',
+            actions: ['Run source health check.', 'If playback needs headers, use LocalProxy or MPC external playback.']
+        };
+    }
 }
 
 function createTvboxService(options) {
