@@ -33,6 +33,27 @@ function Resolve-Tool {
         return $Command.Source
     }
 
+    $CommonRoots = @(
+        "C:\Program Files\Microsoft",
+        "C:\Program Files\Java",
+        "C:\Program Files\Eclipse Adoptium",
+        "C:\Program Files\Zulu"
+    )
+    foreach ($RootPath in $CommonRoots) {
+        if (-not (Test-Path -LiteralPath $RootPath)) {
+            continue
+        }
+        $Candidate = Get-ChildItem -LiteralPath $RootPath -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match "jdk|openjdk|temurin|zulu" } |
+            Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName ("bin\" + $Name + ".exe") } |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            Select-Object -First 1
+        if ($Candidate) {
+            return $Candidate
+        }
+    }
+
     throw "$Name was not found. Install a JDK and make sure javac and jar are available, or pass -JavaHome."
 }
 
@@ -43,7 +64,7 @@ Remove-Item -LiteralPath $BuildRoot -Recurse -Force -ErrorAction SilentlyContinu
 New-Item -ItemType Directory -Force $ClassesDir | Out-Null
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 
-$Sources = Get-ChildItem -LiteralPath $SourceRoot -Recurse -Filter *.java | ForEach-Object { $_.FullName }
+$Sources = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -Filter *.java | ForEach-Object { $_.FullName })
 if (-not $Sources -or $Sources.Count -eq 0) {
     throw "No Java sources found under $SourceRoot"
 }

@@ -117,6 +117,8 @@ Default mode returns `runtime-not-configured` and does not execute CatVod jar, p
 
 A minimal Java child bridge source tree is included at `tools/catvod-runtime-bridge-java`. It builds to a local trusted jar with `npm run bridge:java:build` when a JDK is installed. The current jar protocol implementation supports disabled/stub responses only.
 
+The Java bridge build path has been validated with Microsoft OpenJDK 21. The script can auto-detect common Windows JDK install locations when `java` is not yet visible in the current terminal `PATH`.
+
 ## Playback Diagnosis
 
 When a source cannot play:

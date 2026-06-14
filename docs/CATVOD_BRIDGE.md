@@ -102,6 +102,8 @@ npm run bridge:java:build
 
 The output jar is `tools\catvod-runtime-bridge-java\dist\catvod-runtime-bridge.jar`. It currently implements the local HTTP protocol in disabled/stub mode only; it does not execute TVBox plugin code.
 
+On Windows, the build script can auto-detect JDK installs under common roots such as `C:\Program Files\Microsoft`. It was validated with Microsoft OpenJDK 21.
+
 ## Future Java Runtime Bridge
 
 The Java child bridge itself still needs to be implemented separately. It should:

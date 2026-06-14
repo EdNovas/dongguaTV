@@ -31,6 +31,13 @@ If Java is not in `PATH`, pass a JDK path:
 powershell -ExecutionPolicy Bypass -File tools\catvod-runtime-bridge-java\build.ps1 -JavaHome "C:\Program Files\Eclipse Adoptium\jdk-21"
 ```
 
+The build script also checks common JDK install roots such as:
+
+- `C:\Program Files\Microsoft`
+- `C:\Program Files\Java`
+- `C:\Program Files\Eclipse Adoptium`
+- `C:\Program Files\Zulu`
+
 ## Run Directly
 
 ```powershell
