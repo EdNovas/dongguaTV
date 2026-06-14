@@ -94,6 +94,14 @@ When a runtime operation is received, the scaffold starts the Java bridge with `
 
 The expected Java child bridge must expose the same HTTP protocol on `127.0.0.1`.
 
+This repository now includes a minimal Java child bridge source tree at `tools/catvod-runtime-bridge-java`. It can be built with:
+
+```powershell
+npm run bridge:java:build
+```
+
+The output jar is `tools\catvod-runtime-bridge-java\dist\catvod-runtime-bridge.jar`. It currently implements the local HTTP protocol in disabled/stub mode only; it does not execute TVBox plugin code.
+
 ## Future Java Runtime Bridge
 
 The Java child bridge itself still needs to be implemented separately. It should:

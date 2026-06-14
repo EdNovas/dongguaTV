@@ -43,3 +43,6 @@ dist-desktop/
 dist-desktop-check/
 electron-test.*.log
 tools/catvod-bridge/bridge-config.json
+tools/catvod-runtime-bridge-java/build/
+tools/catvod-runtime-bridge-java/dist/
+tools/catvod-runtime-bridge-java/**/*.class

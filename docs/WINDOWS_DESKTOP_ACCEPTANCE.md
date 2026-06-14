@@ -115,6 +115,8 @@ npm run bridge:catvod
 
 Default mode returns `runtime-not-configured` and does not execute CatVod jar, py, or js plugin code. Java HTTP child bridge mode exists, but it only starts a manually configured trusted local bridge jar when `mode=java-http`, `allowJavaProcess=true`, and `trustedBridgeJar=true`. See `docs/CATVOD_BRIDGE.md` for the bridge protocol and future Java Runtime Bridge plan.
 
+A minimal Java child bridge source tree is included at `tools/catvod-runtime-bridge-java`. It builds to a local trusted jar with `npm run bridge:java:build` when a JDK is installed. The current jar protocol implementation supports disabled/stub responses only.
+
 ## Playback Diagnosis
 
 When a source cannot play:
@@ -139,5 +141,6 @@ It forwards common playback headers and Range requests, and it returns `206 Part
 
 - `server/**` must stay in `build.files` so Electron asar includes TVBox, player, desktop, and proxy modules.
 - `tools/catvod-bridge/**` and `docs/**` are packaged as `extraResources` so the installed app exposes the local bridge template and operator documentation outside `app.asar`.
+- `tools/catvod-runtime-bridge-java/**` is packaged as `extraResources` without generated `build` or `dist` outputs.
 - Packaged smoke tests must hit the unpacked exe, not only `npm run dev`.
 - User settings must remain in `userData/runtime`, not inside the installed app directory.
