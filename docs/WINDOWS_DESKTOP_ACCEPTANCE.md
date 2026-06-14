@@ -78,6 +78,8 @@ Plugin-like sources are marked `plugin-required` and are not executed.
 
 Enabled TVBox HTTP/MacCMS-compatible sources that are marked searchable are included in normal search. Search results keep a `tvbox:` source key so the detail endpoint can fetch the matching user subscription source. Plugin-required and unsupported sources are skipped by search and remain visible through diagnostics.
 
+Search cards and playback source buttons show TVBox badges when a result or line comes from a user subscription. The current playing source also shows whether it is a TVBox subscription source or a built-in source.
+
 ## Plugin Runtime Bridge Prep
 
 Settings contains a TVBox plugin runtime panel for safe bridge preparation.

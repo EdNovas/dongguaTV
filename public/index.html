@@ -3474,6 +3474,10 @@
                         <div class="rating-badge" style="background:var(--accent); color:#fff; border:none;">
                             {{ group.sources.length }} 源
                         </div>
+                        <div v-if="countTvboxSources(group) > 0"
+                            style="position:absolute; left:8px; top:8px; background:rgba(245,158,11,0.94); color:#111827; font-size:10px; font-weight:800; padding:3px 7px; border-radius:999px; box-shadow:0 4px 16px rgba(0,0,0,0.35);">
+                            TVBox {{ countTvboxSources(group) }}
+                        </div>
                     </div>
                     <div class="movie-name">{{ group.name }}</div>
                 </div>
@@ -4067,6 +4071,11 @@
                         <h1 class="video-title">{{ currentGroup.name }}</h1>
                         <div class="video-meta">
                             正在播放: <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span>
+                            <span v-if="currentSource"
+                                :style="sourceOriginBadgeStyle(currentSource)"
+                                style="margin-left:8px; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px;">
+                                {{ sourceOriginLabel(currentSource) }}
+                            </span>
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
@@ -4164,6 +4173,10 @@
                                 :class="{ active: currentSource?.site_key === source.site_key }" :tabindex="10 + index"
                                 @click="switchSource(source)" @keydown.enter="switchSource(source)">
                                 <span>{{ source.site_name }}</span>
+                                <span v-if="isTvboxSource(source)" :style="sourceOriginBadgeStyle(source)"
+                                    style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; margin-left:4px;">
+                                    TVBox
+                                </span>
                                 <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
                                 <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
                                 <span v-if="source._testType === 'direct'"
@@ -4190,6 +4203,10 @@
                                 :tabindex="100 + index" @click="switchSource(source)"
                                 @keydown.enter="switchSource(source)">
                                 <span>{{ source.site_name }}</span>
+                                <span v-if="isTvboxSource(source)" :style="sourceOriginBadgeStyle(source)"
+                                    style="font-size:9px; font-weight:800; padding:1px 5px; border-radius:999px; margin-left:4px;">
+                                    TVBox
+                                </span>
                                 <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
                                 <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
                                 <span v-if="source._testType === 'direct'"
@@ -4990,6 +5007,21 @@
                 }
             },
             methods: {
+                isTvboxSource(source) {
+                    return !!(source && (source.source_origin === 'tvbox' || String(source.site_key || '').startsWith('tvbox:')));
+                },
+                sourceOriginLabel(source) {
+                    return this.isTvboxSource(source) ? 'TVBox 订阅源' : '内置源';
+                },
+                sourceOriginBadgeStyle(source) {
+                    return this.isTvboxSource(source)
+                        ? 'background:rgba(245,158,11,0.92); color:#111827;'
+                        : 'background:rgba(99,102,241,0.72); color:#fff;';
+                },
+                countTvboxSources(group) {
+                    if (!group || !Array.isArray(group.sources)) return 0;
+                    return group.sources.filter(source => this.isTvboxSource(source)).length;
+                },
                 handleAppleNav(item) {
                     if (!item) return;
                     this.activeAppleNav = item.id || 'home';
@@ -5901,6 +5933,7 @@
                                 vod_content: s.vod_content || '',  // 剧情介绍
                                 site_name: s.site_name,
                                 site_key: s.site_key || (s.site_name + '_' + idx),  // 用于匹配高亮
+                                source_origin: s.source_origin || (String(s.site_key || '').startsWith('tvbox:') ? 'tvbox' : 'native'),
                                 latency: s.latency || 500,  // 默认延迟
                                 _testType: s._testType || null,  // 保存测速类型: direct/proxy/server
                                 // 🔧 保留代理标记，否则只能通过代理访问的线路在历史回放时会被当成直连而播放失败
@@ -7671,6 +7704,7 @@
                         this.currentGroup.sources = results.map(item => ({
                             site_key: item.site_key,
                             site_name: item.site_name,
+                            source_origin: item.source_origin || (String(item.site_key || '').startsWith('tvbox:') ? 'tvbox' : 'native'),
                             vod_id: item.vod_id,
                             vod_name: item.vod_name,
                             vod_play_url: item.vod_play_url || '',
