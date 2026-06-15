@@ -48,6 +48,18 @@ ACCESS_PASSWORDS.forEach((pwd, index) => {
 
 console.log(`[System] Password mode: ${ACCESS_PASSWORDS.length > 1 ? 'Multi-user' : 'Single'} (${ACCESS_PASSWORDS.length} passwords)`);
 
+// 反查：token(=SHA256(独立密码)) → 原始独立密码。仅用于站长后台辨认"是哪个独立密码用户"
+// (v2board 用户用 email 辨认)。只在 ADMIN_TOKEN 鉴权后的后台接口里用到，不外泄。
+const HASH_TO_PASSWORD = {};
+ACCESS_PASSWORDS.forEach(pwd => { HASH_TO_PASSWORD[crypto.createHash('sha256').update(pwd).digest('hex')] = pwd; });
+// 求片/统计后台展示用：把 token 翻成人能认的身份
+function userIdentity(token, label) {
+    if (label && String(label).trim()) return String(label).trim();              // v2board email
+    if (token && HASH_TO_PASSWORD[token]) return '独立密码: ' + HASH_TO_PASSWORD[token];
+    if (token && String(token).startsWith('v2board_')) return 'v2board用户#' + String(token).slice(8, 16);
+    return (token ? String(token).slice(0, 12) : '匿名');
+}
+
 // v2board 用户 token 是运行时动态加入 PASSWORD_HASH_MAP 的，永不删除 → 长跑会无限增长。
 // 这里只对“运行时加入的 v2board token”做容量上限+FIFO 淘汰，绝不淘汰启动时配置的密码哈希。
 const V2BOARD_TOKEN_CAP = 20000;
@@ -599,11 +611,25 @@ class CacheManager {
                     try { this.db.exec(`ALTER TABLE content_requests ADD COLUMN ${col} TEXT`); } catch (e) { /* 列已存在 */ }
                 }
 
+                // 用户统计/封禁：站长后台据此看每个用户的活跃/封禁。观看数据另从 user_history 现算。
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS user_stats (
+                        user_token TEXT PRIMARY KEY,
+                        label TEXT,
+                        first_seen INTEGER,
+                        last_login INTEGER,
+                        last_active INTEGER,
+                        banned INTEGER NOT NULL DEFAULT 0,
+                        banned_at INTEGER
+                    )
+                `);
+
                 // 创建索引加速过期查询
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_expire ON cache(expire)`);
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_history_user ON user_history(user_token)`);
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_req_user ON content_requests(user_token)`);
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_req_status ON content_requests(status)`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_stats_active ON user_stats(last_active)`);
 
                 // 清理过期数据
                 this.db.prepare('DELETE FROM cache WHERE expire < ?').run(Date.now());
@@ -974,7 +1000,9 @@ app.get('/api/config', (req, res) => {
         // 🗨️ 弹幕：配置了 DANMU_API_URL 才开启(前端据此决定是否给播放器挂弹幕)
         danmaku_enabled: !!process.env.DANMU_API_URL,
         // 📮 求片：必须配置 ADMIN_TOKEN(站长才能履行)才开启;否则前端整个隐藏入口、后端拒收
-        requests_enabled: !!process.env.ADMIN_TOKEN
+        requests_enabled: !!process.env.ADMIN_TOKEN,
+        // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
+        banned: isBanned(userToken)
     });
 });
 
@@ -1001,6 +1029,7 @@ app.get('/api/history/pull', (req, res) => {
     if (!userInfo) {
         return res.status(401).json({ error: 'Invalid token' });
     }
+    if (isBanned(userToken)) return res.status(403).json({ error: 'banned', banned: true });
     if (!userInfo.syncEnabled) {
         return res.json({ sync_enabled: false, history: [] });
     }
@@ -1009,6 +1038,7 @@ app.get('/api/history/pull', (req, res) => {
     if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
         return res.json({ sync_enabled: true, history: [], message: 'SQLite not available' });
     }
+    touchUser(userToken);  // 记录活跃
 
     try {
         const stmt = cacheManager.db.prepare('SELECT item_id, item_data, updated_at FROM user_history WHERE user_token = ?');
@@ -1043,6 +1073,7 @@ app.post('/api/history/push', (req, res) => {
     if (!userInfo) {
         return res.status(401).json({ error: 'Invalid token' });
     }
+    if (isBanned(token)) return res.status(403).json({ error: 'banned', banned: true });
     if (!userInfo.syncEnabled) {
         return res.json({ sync_enabled: false, saved: 0 });
     }
@@ -1051,6 +1082,7 @@ app.post('/api/history/push', (req, res) => {
     if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
         return res.json({ sync_enabled: true, saved: 0, message: 'SQLite not available' });
     }
+    touchUser(token);  // 记录活跃
 
     try {
         const insertStmt = cacheManager.db.prepare(`
@@ -1115,6 +1147,7 @@ app.post('/api/history/clear', (req, res) => {
     if (!userInfo) {
         return res.status(401).json({ error: 'Invalid token' });
     }
+    if (isBanned(token)) return res.status(403).json({ error: 'banned', banned: true });
 
     // 从 SQLite 删除该用户的所有历史
     if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
@@ -1142,6 +1175,7 @@ app.get('/api/settings/pull', (req, res) => {
     if (!userToken) return res.status(400).json({ error: 'Missing token' });
     const userInfo = PASSWORD_HASH_MAP[userToken];
     if (!userInfo) return res.status(401).json({ error: 'Invalid token' });
+    if (isBanned(userToken)) return res.status(403).json({ error: 'banned', banned: true });
     if (!userInfo.syncEnabled) return res.json({ sync_enabled: false, settings: {} });
     if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
         return res.json({ sync_enabled: true, settings: {}, message: 'SQLite not available' });
@@ -1165,6 +1199,7 @@ app.post('/api/settings/push', (req, res) => {
     }
     const userInfo = PASSWORD_HASH_MAP[token];
     if (!userInfo) return res.status(401).json({ error: 'Invalid token' });
+    if (isBanned(token)) return res.status(403).json({ error: 'banned', banned: true });
     if (!userInfo.syncEnabled) return res.json({ sync_enabled: false, saved: 0 });
     if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
         return res.json({ sync_enabled: true, saved: 0, message: 'SQLite not available' });
@@ -1189,13 +1224,45 @@ app.post('/api/settings/push', (req, res) => {
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
 const REQ_DB_OK = () => cacheManager.type === 'sqlite' && cacheManager.db;
 
+// ========== 用户统计/封禁 助手 ==========
+// 记录用户活跃(last_active)、登录(last_login)、身份标签(label=email)。在历史同步/求片/登录处调用。
+function touchUser(token, opts) {
+    opts = opts || {};
+    if (!REQ_DB_OK() || !token) return;
+    try {
+        const now = Date.now();
+        const exists = cacheManager.db.prepare('SELECT 1 FROM user_stats WHERE user_token = ?').get(token);
+        if (exists) {
+            cacheManager.db.prepare('UPDATE user_stats SET last_active = ?, last_login = COALESCE(?, last_login), label = COALESCE(?, label) WHERE user_token = ?')
+                .run(now, opts.login ? now : null, (opts.label && String(opts.label).trim()) ? String(opts.label).trim() : null, token);
+        } else {
+            cacheManager.db.prepare('INSERT INTO user_stats (user_token, label, first_seen, last_login, last_active, banned) VALUES (?, ?, ?, ?, ?, 0)')
+                .run(token, (opts.label && String(opts.label).trim()) ? String(opts.label).trim() : null, now, opts.login ? now : null, now);
+        }
+    } catch (e) { /* 统计失败不影响主流程 */ }
+}
+function isBanned(token) {
+    if (!REQ_DB_OK() || !token) return false;
+    try { const r = cacheManager.db.prepare('SELECT banned FROM user_stats WHERE user_token = ?').get(token); return !!(r && r.banned); }
+    catch (e) { return false; }
+}
+// 恒定时间比较 ADMIN_TOKEN（后台接口会吐出全站独立密码明文，避免计时侧信道猜令牌）
+function adminTokenMatch(provided) {
+    if (!ADMIN_TOKEN || !provided) return false;
+    const a = Buffer.from(String(provided)), b = Buffer.from(ADMIN_TOKEN);
+    if (a.length !== b.length) return false;
+    try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
+}
+
 // 提交求片（需登录账号）
 app.post('/api/requests', (req, res) => {
     if (!ADMIN_TOKEN) return res.status(403).json({ error: '求片功能未开启' });  // 未配 ADMIN_TOKEN = 功能关闭
     const { token, name, tmdb_id, poster, note, label, year, aka, cast } = req.body || {};
     if (!token || !name || !String(name).trim()) return res.status(400).json({ error: 'Missing token or name' });
     if (!PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
+    if (isBanned(token)) return res.status(403).json({ error: 'banned', banned: true });
     if (!REQ_DB_OK()) return res.json({ ok: false, message: 'SQLite not available' });
+    touchUser(token, { label });  // 记录活跃 + 身份标签(email)
     try {
         // 防刷：单用户待处理(pending)上限 3
         const pending = cacheManager.db.prepare("SELECT COUNT(*) c FROM content_requests WHERE user_token = ? AND status = 'pending'").get(token).c;
@@ -1215,6 +1282,7 @@ app.post('/api/requests', (req, res) => {
 app.post('/api/requests/cancel', (req, res) => {
     const { token, id } = req.body || {};
     if (!token || !PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
+    if (isBanned(token)) return res.status(403).json({ error: 'banned', banned: true });
     if (!REQ_DB_OK() || !id) return res.status(400).json({ error: 'Bad request' });
     try {
         const info = cacheManager.db.prepare("DELETE FROM content_requests WHERE id = ? AND user_token = ? AND status IN ('pending', 'need_info')").run(id, token);
@@ -1226,6 +1294,7 @@ app.post('/api/requests/cancel', (req, res) => {
 app.get('/api/requests/mine', (req, res) => {
     const token = req.query.token;
     if (!token || !PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
+    if (isBanned(token)) return res.status(403).json({ error: 'banned', banned: true });
     if (!REQ_DB_OK()) return res.json({ requests: [] });
     try {
         const rows = cacheManager.db.prepare(`SELECT id, name, tmdb_id, poster, note, year, aka, cast_info, status, fulfill_link, fulfill_note, created_at, updated_at
@@ -1238,13 +1307,15 @@ app.get('/api/requests/mine', (req, res) => {
 app.get('/api/requests/admin', (req, res) => {
     // 优先从请求头取令牌(避免 ADMIN_TOKEN 落入访问日志/Referer/浏览器历史)；兼容旧的 query 传参
     const admin = req.headers['x-admin-token'] || req.query.admin;
-    if (!ADMIN_TOKEN || admin !== ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
+    if (!adminTokenMatch(admin)) return res.status(403).json({ error: 'Forbidden' });
     if (!REQ_DB_OK()) return res.json({ requests: [] });
     try {
         const status = req.query.status;
         const rows = status
             ? cacheManager.db.prepare(`SELECT * FROM content_requests WHERE status = ? ORDER BY created_at DESC LIMIT 500`).all(status)
             : cacheManager.db.prepare(`SELECT * FROM content_requests ORDER BY (status='pending') DESC, created_at DESC LIMIT 500`).all();
+        // 加上求片人身份(邮箱/独立密码/token前缀)，方便站长确认是谁提的
+        rows.forEach(r => { r.identity = userIdentity(r.user_token, r.user_label); });
         res.json({ requests: rows });
     } catch (e) { res.status(500).json({ error: 'Database error' }); }
 });
@@ -1252,7 +1323,7 @@ app.get('/api/requests/admin', (req, res) => {
 // 站长：履行/更新求片（贴链接、改状态、删除）
 app.post('/api/requests/admin', (req, res) => {
     const { admin, id, action, status, fulfill_link, fulfill_note } = req.body || {};
-    if (!ADMIN_TOKEN || admin !== ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
+    if (!adminTokenMatch(admin)) return res.status(403).json({ error: 'Forbidden' });
     if (!REQ_DB_OK() || !id) return res.status(400).json({ error: 'Bad request' });
     try {
         if (action === 'delete') {
@@ -1264,6 +1335,117 @@ app.post('/api/requests/admin', (req, res) => {
             .run(st, String(fulfill_link || '').slice(0, 2000), String(fulfill_note || '').slice(0, 500), Date.now(), id);
         res.json({ ok: true });
     } catch (e) { console.error('[求片履行]', e.message); res.status(500).json({ error: 'Database error' }); }
+});
+
+// ========== 站长后台：用户统计 / 封禁（均 ADMIN_TOKEN 鉴权，仅 网址#admin 用得到）==========
+const adminAuthed = (req) => {
+    const t = req.headers['x-admin-token'] || req.query.admin || (req.body && req.body.admin);
+    return adminTokenMatch(t);
+};
+
+// 用户统计列表 + 聚合（观看数据从 user_history 现算；活跃/登录/封禁从 user_stats）
+app.get('/api/admin/users', (req, res) => {
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    if (!REQ_DB_OK()) return res.json({ users: [], aggregates: {} });
+    try {
+        const now = Date.now(), DAY = 86400000;
+        // 1. 每用户观看聚合(数量/最近观看)
+        const hist = {};
+        for (const r of cacheManager.db.prepare('SELECT user_token, COUNT(*) cnt, MAX(updated_at) last FROM user_history GROUP BY user_token').all()) {
+            hist[r.user_token] = { watch_count: r.cnt, last_watch: r.last, watch_seconds: 0 };
+        }
+        // 2. 估算观看时长：每剧 ≈ (当前集序号-1)*单集时长 + 当前集已看进度。
+        //    比只算"当前集位置"更接近真实(老办法严重低估多集剧)，但仍是估算(前面集未必真看完/快进)→ 前端标"估"。
+        //    ORDER BY 使限量扫描确定(取最近 N 条)，避免无序 LIMIT 的不确定取样。
+        for (const row of cacheManager.db.prepare('SELECT user_token, item_data FROM user_history ORDER BY updated_at DESC LIMIT 200000').all()) {
+            const a = hist[row.user_token]; if (!a) continue;
+            try {
+                const d = JSON.parse(row.item_data) || {};
+                const pt = Number(d.progressTime) || 0;       // 当前集已看秒数
+                const pd = Number(d.progressDuration) || 0;   // 当前集时长
+                const em = String(d.episode || '').match(/(\d+)/);
+                const epIdx = em ? parseInt(em[1]) : 1;
+                let secs = pt;
+                if (epIdx > 1 && pd > 0 && pd < 86400) secs = (epIdx - 1) * pd + pt;  // 前面整集 + 当前进度
+                if (secs > 0 && secs < 200 * 86400) a.watch_seconds += secs;          // 上限防脏数据
+            } catch (e) { }
+        }
+        // 3. 求片数 + 身份标签兜底(email 来自求片记录)
+        const reqCnt = {}, labelMap = {};
+        for (const r of cacheManager.db.prepare('SELECT user_token, COUNT(*) cnt FROM content_requests GROUP BY user_token').all()) reqCnt[r.user_token] = r.cnt;
+        for (const r of cacheManager.db.prepare("SELECT user_token, MAX(user_label) lbl FROM content_requests WHERE user_label IS NOT NULL AND user_label != '' GROUP BY user_token").all()) labelMap[r.user_token] = r.lbl;
+        // 4. user_stats 行
+        const statMap = {};
+        for (const s of cacheManager.db.prepare('SELECT * FROM user_stats').all()) statMap[s.user_token] = s;
+        // 5. 全量 token = 观看者 ∪ 求片者 ∪ 已追踪
+        const tokens = new Set([...Object.keys(hist), ...Object.keys(reqCnt), ...Object.keys(statMap)]);
+        const users = [];
+        for (const tk of tokens) {
+            const st = statMap[tk] || {}, h = hist[tk] || {};
+            users.push({
+                token: tk,
+                identity: userIdentity(tk, st.label || labelMap[tk] || ''),
+                is_v2board: String(tk).startsWith('v2board_'),
+                watch_count: h.watch_count || 0,
+                last_watch: h.last_watch || null,
+                watch_minutes: Math.round((h.watch_seconds || 0) / 60),
+                request_count: reqCnt[tk] || 0,
+                first_seen: st.first_seen || null,
+                last_login: st.last_login || null,
+                last_active: st.last_active || h.last_watch || null,
+                banned: !!st.banned,
+                banned_at: st.banned_at || null
+            });
+        }
+        users.sort((a, b) => (b.last_active || 0) - (a.last_active || 0));
+        const aggregates = {
+            total_users: users.length,
+            active_1d: users.filter(u => u.last_active && now - u.last_active < DAY).length,
+            active_7d: users.filter(u => u.last_active && now - u.last_active < 7 * DAY).length,
+            active_30d: users.filter(u => u.last_active && now - u.last_active < 30 * DAY).length,
+            banned_count: users.filter(u => u.banned).length,
+            v2board_users: users.filter(u => u.is_v2board).length,
+            total_watch_count: users.reduce((s, u) => s + u.watch_count, 0),
+            total_watch_hours: Math.round(users.reduce((s, u) => s + u.watch_minutes, 0) / 60),
+            total_requests: users.reduce((s, u) => s + u.request_count, 0)
+        };
+        res.json({ users: users.slice(0, 1000), aggregates });
+    } catch (e) { console.error('[Admin Users]', e.message); res.status(500).json({ error: 'Database error' }); }
+});
+
+// 封禁 / 解封（被封用户：/api/config 返回 banned→前端锁屏；历史同步/求片接口一律 403）
+app.post('/api/admin/ban', (req, res) => {
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    if (!REQ_DB_OK()) return res.status(400).json({ error: 'SQLite not available' });
+    const { token, banned } = req.body || {};
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+    try {
+        const b = banned ? 1 : 0, now = Date.now();
+        const exists = cacheManager.db.prepare('SELECT 1 FROM user_stats WHERE user_token = ?').get(token);
+        if (exists) cacheManager.db.prepare('UPDATE user_stats SET banned = ?, banned_at = ? WHERE user_token = ?').run(b, b ? now : null, token);
+        else cacheManager.db.prepare('INSERT INTO user_stats (user_token, first_seen, last_active, banned, banned_at) VALUES (?, ?, ?, ?, ?)').run(token, now, now, b, b ? now : null);
+        res.json({ ok: true, banned: !!b });
+    } catch (e) { res.status(500).json({ error: 'Database error' }); }
+});
+
+// 某用户的观看记录（站长 drill-in 看详情）
+app.get('/api/admin/user-history', (req, res) => {
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    if (!REQ_DB_OK()) return res.json({ history: [] });
+    const token = req.query.token;
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+    try {
+        const rows = cacheManager.db.prepare('SELECT item_id, item_data, updated_at FROM user_history WHERE user_token = ? ORDER BY updated_at DESC LIMIT 300').all(token);
+        const history = rows.map(r => {
+            let d = {}; try { d = JSON.parse(r.item_data) || {}; } catch (e) { }
+            return {
+                name: d.name || r.item_id, episode: d.episode || null, progress: d.progress || 0,
+                progressTime: d.progressTime || 0, progressDuration: d.progressDuration || 0,
+                watchedAt: d.watchedAt || null, updated_at: r.updated_at
+            };
+        });
+        res.json({ history });
+    } catch (e) { res.status(500).json({ error: 'Database error' }); }
 });
 
 // TMDB 通用代理与缓存 API
@@ -2256,6 +2438,8 @@ app.post('/api/auth/v2board', async (req, res) => {
 
             // 将 v2board 用户加入同步白名单（动态，带容量上限防无限增长）
             registerV2boardToken(v2boardUserToken, { index: -1, syncEnabled: true });
+            // 统计：记录登录时间 + email 身份（站长后台用）
+            touchUser(v2boardUserToken, { label: email, login: true });
 
             // 计算过期信息
             let expiresAt = null;
@@ -2418,6 +2602,8 @@ app.post('/api/auth/v2board/check', async (req, res) => {
             // 生成 userToken
             const v2boardUserToken = 'v2board_' + crypto.createHash('sha256').update((email || '').toLowerCase()).digest('hex');
             registerV2boardToken(v2boardUserToken, { index: -1, syncEnabled: true });
+            // 统计：免密续期(回访用户主要走这条)也记登录时间 + email，否则"上次登录"对老用户永远缺失
+            touchUser(v2boardUserToken, { label: email, login: true });
 
             console.log(`[V2Board] Token 验证成功: ${email || '未知用户'}`);
 
