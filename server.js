@@ -1381,8 +1381,16 @@ async function fetchDanmakuFromInstance(base, token, title, ep) {
     const sc = danmakuSearchCache.get(skey);
     if (sc && sc.expiry > Date.now()) { animes = sc.animes; }
     else {
-        const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
-        animes = (sr.data && sr.data.animes) || [];
+        const _s0 = Date.now();
+        try {
+            const sr = await axios.get(`${base}${prefix}/api/v2/search/episodes`, { params: { anime: title }, timeout: 20000 });
+            animes = (sr.data && sr.data.animes) || [];
+            console.log(`[弹幕诊断] search "${title}" @${base} → ${animes.length} animes (${Date.now() - _s0}ms)`);
+        } catch (e) {
+            // ECONNABORTED=超时, ECONNREFUSED=拒连, ETIMEDOUT=连不上, ENOTFOUND=DNS, 或 HTTP 4xx/5xx(被WAF/限流拦)
+            console.warn(`[弹幕诊断] search "${title}" @${base} 失败: ${e.code || ''} ${e.response ? 'HTTP' + e.response.status : e.message} (${Date.now() - _s0}ms)`);
+            throw e;
+        }
         if (danmakuSearchCache.size >= 500) { const k = danmakuSearchCache.keys().next().value; if (k !== undefined) danmakuSearchCache.delete(k); }
         danmakuSearchCache.set(skey, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
     }
@@ -1396,11 +1404,13 @@ async function fetchDanmakuFromInstance(base, token, title, ep) {
     for (let tries = 0; tries < candidates.length && tries < 3; tries++) {
         const episode = pickDanmakuEpisode(candidates[tries].episodes, ep);
         if (!episode || !episode.episodeId) continue;
+        const _c0 = Date.now();
         try {
             const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
             const d = dandanToDplayer((cr.data && cr.data.comments) || []);
+            console.log(`[弹幕诊断] comment/${episode.episodeId} (${platOf(candidates[tries].animeTitle) || '?'}) → ${d.length} 条 (${Date.now() - _c0}ms)`);
             if (d.length) return d;
-        } catch (e) { /* 该平台失败，试下一个 */ }
+        } catch (e) { console.warn(`[弹幕诊断] comment/${episode.episodeId} 失败: ${e.code || ''} ${e.response ? 'HTTP' + e.response.status : e.message} (${Date.now() - _c0}ms)`); }
     }
     return [];
 }
