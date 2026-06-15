@@ -230,6 +230,17 @@ class LocalProxy {
         return entry;
     }
 
+    registerChildUrl(parentEntry, childUrl, headers) {
+        const id = createId();
+        this.entries.set(id, {
+            url: childUrl,
+            headers,
+            expiresAt: parentEntry.expiresAt,
+            removeAt: parentEntry.removeAt
+        });
+        return `http://127.0.0.1:${this.port}/play/${id}`;
+    }
+
     async handleRequest(req, res) {
         const match = req.url.match(/^\/play\/([a-f0-9]+)$/i);
         if (!match) {
@@ -282,27 +293,32 @@ class LocalProxy {
         upstream.data.pipe(res);
     }
 
+    rewriteM3u8UriAttributes(line, parentEntry, headers) {
+        return String(line || '').replace(/URI=(?:"([^"]+)"|'([^']+)'|([^,\s]+))/gi, (match, doubleQuoted, singleQuoted, bareValue) => {
+            const uri = doubleQuoted || singleQuoted || bareValue || '';
+            if (!uri || /^data:/i.test(uri)) return match;
+            const childUrl = /^https?:\/\//i.test(uri) ? uri : resolveSegmentUrl(parentEntry.url, uri);
+            const proxyUrl = this.registerChildUrl(parentEntry, childUrl, headers);
+            if (doubleQuoted !== undefined) return `URI="${proxyUrl}"`;
+            if (singleQuoted !== undefined) return `URI='${proxyUrl}'`;
+            return `URI="${proxyUrl}"`;
+        });
+    }
+
     async rewriteM3u8(body, parentEntry, headers) {
         const lines = [];
         for (const line of String(body || '').split(/\r?\n/)) {
             const trimmed = line.trim();
+            if (trimmed.startsWith('#')) {
+                lines.push(this.rewriteM3u8UriAttributes(line, parentEntry, headers));
+                continue;
+            }
             if (!trimmed || trimmed.startsWith('#') || /^https?:\/\//i.test(trimmed) === false && trimmed.startsWith('data:')) {
                 lines.push(line);
                 continue;
             }
-            if (trimmed.startsWith('#')) {
-                lines.push(line);
-                continue;
-            }
             const segmentUrl = /^https?:\/\//i.test(trimmed) ? trimmed : resolveSegmentUrl(parentEntry.url, trimmed);
-            const id = createId();
-            this.entries.set(id, {
-                url: segmentUrl,
-                headers,
-                expiresAt: parentEntry.expiresAt,
-                removeAt: parentEntry.removeAt
-            });
-            lines.push(`http://127.0.0.1:${this.port}/play/${id}`);
+            lines.push(this.registerChildUrl(parentEntry, segmentUrl, headers));
         }
         return lines.join('\n');
     }

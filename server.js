@@ -1346,6 +1346,14 @@ app.post('/api/player/proxy-range-self-test', async (req, res) => {
     }
 });
 
+app.post('/api/player/proxy-m3u8-self-test', async (req, res) => {
+    try {
+        res.json(await playerManager.runProxyM3u8RewriteSelfTest());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to run proxy m3u8 self-test' });
+    }
+});
+
 app.post('/api/player/open-mpc', async (req, res) => {
     try {
         const playUrlResult = req.body && (req.body.playUrlResult || req.body);

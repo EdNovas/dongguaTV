@@ -46,6 +46,63 @@ function createRangeTestUpstream() {
     });
 }
 
+function createHlsRewriteTestUpstream() {
+    const requests = [];
+    const bodies = {
+        '/init.mp4': Buffer.from('init-segment', 'utf8'),
+        '/key.bin': Buffer.from('0123456789abcdef', 'utf8'),
+        '/segments/seg-1.ts': Buffer.from('segment-one', 'utf8')
+    };
+    const server = http.createServer((req, res) => {
+        requests.push({
+            url: req.url,
+            referer: req.headers.referer || ''
+        });
+
+        if (req.url === '/playlist.m3u8') {
+            const playlist = [
+                '#EXTM3U',
+                '#EXT-X-VERSION:7',
+                '#EXT-X-MAP:URI="init.mp4"',
+                '#EXT-X-KEY:METHOD=AES-128,URI="key.bin"',
+                '#EXTINF:4.000,',
+                'segments/seg-1.ts',
+                '#EXT-X-ENDLIST',
+                ''
+            ].join('\n');
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+            res.setHeader('Content-Length', Buffer.byteLength(playlist));
+            res.end(playlist);
+            return;
+        }
+
+        const body = bodies[req.url];
+        if (body) {
+            res.statusCode = 200;
+            res.setHeader('Content-Type', req.url.endsWith('.ts') ? 'video/mp2t' : 'application/octet-stream');
+            res.setHeader('Content-Length', body.length);
+            res.end(body);
+            return;
+        }
+
+        res.statusCode = 404;
+        res.end('not found');
+    });
+
+    return new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+            const address = server.address();
+            resolve({
+                server,
+                url: `http://127.0.0.1:${address.port}/playlist.m3u8`,
+                requests
+            });
+        });
+    });
+}
+
 function requestThroughProxy(url, headers) {
     return new Promise((resolve, reject) => {
         const req = http.get(url, { headers }, res => {
@@ -142,6 +199,56 @@ class PlayerManager {
                 contentLength: Number(response.headers['content-length'] || response.body.length),
                 bodyLength: response.body.length,
                 proxyUrl: proxy.proxyUrl,
+                proxyPort: this.localProxy.getStatus().port,
+                checkedAt: new Date().toISOString()
+            };
+        } finally {
+            await new Promise(resolve => upstream.server.close(resolve));
+        }
+    }
+
+    async runProxyM3u8RewriteSelfTest() {
+        const settings = this.getSettings();
+        const upstream = await createHlsRewriteTestUpstream();
+        try {
+            const proxy = await this.localProxy.register({
+                url: upstream.url,
+                format: 'm3u8',
+                sourceKind: 'live',
+                headers: {
+                    Referer: 'https://example.test/hls'
+                }
+            }, settings);
+            const playlistResponse = await requestThroughProxy(proxy.proxyUrl, {});
+            const playlist = playlistResponse.body.toString('utf8');
+            const proxyUrls = playlist.match(/http:\/\/127\.0\.0\.1:\d+\/play\/[a-f0-9]+/gi) || [];
+            const uniqueProxyUrls = Array.from(new Set(proxyUrls));
+            const childResponses = [];
+            for (const childUrl of uniqueProxyUrls) {
+                const response = await requestThroughProxy(childUrl, {});
+                childResponses.push({
+                    url: childUrl,
+                    statusCode: response.statusCode,
+                    bodyLength: response.body.length
+                });
+            }
+
+            const childUpstreamRequests = upstream.requests.filter(request => request.url !== '/playlist.m3u8');
+            const childReferersOk = childUpstreamRequests.length === 3
+                && childUpstreamRequests.every(request => request.referer === 'https://example.test/hls');
+            const ok = playlistResponse.statusCode === 200
+                && uniqueProxyUrls.length === 3
+                && !/URI="(?:init\.mp4|key\.bin)"/i.test(playlist)
+                && !/\nsegments\/seg-1\.ts(?:\r?\n|$)/i.test(playlist)
+                && childResponses.every(response => response.statusCode === 200 && response.bodyLength > 0)
+                && childReferersOk;
+
+            return {
+                ok,
+                statusCode: playlistResponse.statusCode,
+                rewrittenUrls: uniqueProxyUrls.length,
+                childResponses,
+                childReferersOk,
                 proxyPort: this.localProxy.getStatus().port,
                 checkedAt: new Date().toISOString()
             };

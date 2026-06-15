@@ -4013,6 +4013,11 @@
                                 <i :class="['fas', proxyRangeTestLoading ? 'fa-spinner fa-spin' : 'fa-wave-square']"></i>
                                 Range 自检
                             </button>
+                            <button class="btn-info" @click="runProxyM3u8SelfTest" :disabled="proxyM3u8TestLoading"
+                                style="border:0; padding:9px 12px; font-size:12px;">
+                                <i :class="['fas', proxyM3u8TestLoading ? 'fa-spinner fa-spin' : 'fa-stream']"></i>
+                                HLS self-test
+                            </button>
                             <span v-if="playerSettingsMessage" style="color:#aaa; font-size:12px;">{{ playerSettingsMessage }}</span>
                         </div>
                         <div v-if="proxyStatus"
@@ -4056,6 +4061,19 @@
                                 · length: {{ proxyRangeTest.contentLength || 0 }}
                             </div>
                             <div v-if="proxyRangeTest.error" style="color:#fca5a5;">{{ proxyRangeTest.error }}</div>
+                        </div>
+                        <div v-if="proxyM3u8Test"
+                            style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
+                            <strong :style="{ color: proxyM3u8Test.ok ? '#22c55e' : '#f87171' }">
+                                HLS rewrite self-test {{ proxyM3u8Test.ok ? 'passed' : 'failed' }}
+                            </strong>
+                            <span> 路 HTTP {{ proxyM3u8Test.statusCode || 'n/a' }}</span>
+                            <span> 路 rewritten URLs {{ proxyM3u8Test.rewrittenUrls || 0 }}</span>
+                            <div style="color:#8f98aa;">
+                                proxy port: {{ proxyM3u8Test.proxyPort || 'n/a' }}
+                                路 child headers: {{ proxyM3u8Test.childReferersOk ? 'ok' : 'check failed' }}
+                            </div>
+                            <div v-if="proxyM3u8Test.error" style="color:#fca5a5;">{{ proxyM3u8Test.error }}</div>
                         </div>
                     </div>
 
@@ -4799,6 +4817,8 @@
                     proxyPortCheckLoading: false,
                     proxyRangeTest: null,
                     proxyRangeTestLoading: false,
+                    proxyM3u8Test: null,
+                    proxyM3u8TestLoading: false,
                     pluginRuntimeSettings: {
                         enableJavaCatvod: false,
                         javaPath: '',
@@ -5674,6 +5694,7 @@
                         this.mpcValidation = null;
                         this.proxyPortCheck = null;
                         this.proxyRangeTest = null;
+                        this.proxyM3u8Test = null;
                         await this.loadProxyStatus();
                         this.playerSettingsMessage = '播放器设置已保存';
                     } catch (error) {
@@ -5800,6 +5821,29 @@
                         };
                     } finally {
                         this.proxyRangeTestLoading = false;
+                    }
+                },
+
+                async runProxyM3u8SelfTest() {
+                    this.proxyM3u8TestLoading = true;
+                    try {
+                        const response = await fetch('/api/player/proxy-m3u8-self-test', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'HLS rewrite self-test failed');
+                        this.proxyM3u8Test = data;
+                        await this.loadProxyStatus();
+                        this.showMiniToast && this.showMiniToast(data.ok ? 'HLS rewrite self-test passed' : 'HLS rewrite self-test failed');
+                    } catch (error) {
+                        this.proxyM3u8Test = {
+                            ok: false,
+                            statusCode: null,
+                            rewrittenUrls: 0,
+                            childReferersOk: false,
+                            proxyPort: this.playerSettings.localProxyPort,
+                            error: error.message || 'HLS rewrite self-test failed'
+                        };
+                    } finally {
+                        this.proxyM3u8TestLoading = false;
                     }
                 },
 

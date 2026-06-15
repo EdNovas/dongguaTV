@@ -180,6 +180,8 @@ Settings also exposes a LocalProxy port check backed by `POST /api/player/proxy-
 
 Settings exposes a LocalProxy Range self-test backed by `POST /api/player/proxy-range-self-test`. The backend creates a temporary localhost upstream, registers it through LocalProxy, requests `Range: bytes=10-29`, and verifies `206 Partial Content`, `Content-Range`, and body length. This gives a deterministic local Range proof without depending on third-party media hosts.
 
+Settings exposes an HLS rewrite self-test backed by `POST /api/player/proxy-m3u8-self-test`. The backend creates a temporary localhost playlist with relative segment, `#EXT-X-MAP:URI`, and `#EXT-X-KEY:URI` entries, registers it through LocalProxy, and verifies that all child URLs are rewritten to `127.0.0.1` proxy URLs with playback headers preserved.
+
 ## Packaging Checklist
 
 - `server/**` must stay in `build.files` so Electron asar includes TVBox, player, desktop, and proxy modules.
