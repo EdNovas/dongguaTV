@@ -826,6 +826,15 @@
         .ban-lock-box h2 { color: #fff; font-size: 1.6rem; margin-bottom: 12px; }
         .ban-lock-box p { color: #aaa; font-size: 14px; line-height: 1.7; }
 
+        /* 设置：封面/文字大小分段选择 */
+        .scale-seg { display: flex; gap: 8px; }
+        .scale-seg button {
+            flex: 1; padding: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);
+            background: rgba(255,255,255,0.05); color: #bbb; font-size: 13px; cursor: pointer; transition: all 0.18s;
+        }
+        .scale-seg button:hover { background: rgba(255,255,255,0.1); color: #eee; }
+        .scale-seg button.active { background: rgba(229,9,20,0.2); border-color: rgba(229,9,20,0.5); color: #fff; font-weight: 600; }
+
         /* 3. 进度条拖动点 - 发光效果 */
         .dplayer-bar-wrap .dplayer-thumb {
             background: #fff !important;
@@ -2087,7 +2096,9 @@
         /* 📐 封面卡片宽度随视口缩放：小屏笔记本(≈1440)约180px、27寸(≥1680)封顶210px、
            窄窗/手机保底150px(原值)。.poster-wrap 用 aspect-ratio 2/3，放大不变形。 */
         :root {
-            --card-w: clamp(150px, 12.5vw, 210px);
+            /* 用户可调的等比缩放(封面+文字一起放大缩小)，几档预设，跨设备保存。默认 1。 */
+            --ui-scale: 1;
+            --card-w: calc(clamp(150px, 12.5vw, 210px) * var(--ui-scale, 1));
         }
 
         .hot-card {
@@ -2311,7 +2322,7 @@
 
         .movie-name {
             margin-top: 10px;
-            font-size: clamp(14px, 0.95vw, 16px);
+            font-size: calc(clamp(14px, 0.95vw, 16px) * var(--ui-scale, 1));
             color: #eee;
             white-space: nowrap;
             overflow: hidden;
@@ -2321,7 +2332,7 @@
         }
 
         .movie-date {
-            font-size: 12px;
+            font-size: calc(12px * var(--ui-scale, 1));
             color: #666;
             text-align: center;
             margin-top: 2px;
@@ -2329,7 +2340,7 @@
 
         .result-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(calc(160px * var(--ui-scale, 1)), 1fr));
             gap: 20px;
             min-height: 300px;
         }
@@ -4202,6 +4213,16 @@
                         </label>
                     </div>
 
+                    <!-- 📐 封面/文字大小（等比缩放，几档，跨设备保存）-->
+                    <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="color: #fff; font-size: 15px; font-weight: 500;">封面 / 文字大小</div>
+                        <div style="color: #888; font-size: 12px; margin: 4px 0 10px;">等比放大缩小封面图和文字，跨设备同步</div>
+                        <div class="scale-seg">
+                            <button v-for="lv in coverScaleLevels" :key="lv.v"
+                                :class="{ active: Math.abs(coverScale - lv.v) < 0.001 }" @click="setCoverScale(lv.v)">{{ lv.label }}</button>
+                        </div>
+                    </div>
+
                     <!-- 求片入口（站长配了 ADMIN_TOKEN 才显示）-->
                     <div v-if="requestsEnabled"
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer;"
@@ -5611,6 +5632,8 @@
                     showSettingsModal: false,  // 设置弹窗显示状态
                     hideRandomRow: (function () { try { return localStorage.getItem('donggua_hide_random') === 'true'; } catch (e) { return false; } })(),  // 隐藏随机盲盒
                     filterNsfw: (function () { try { return localStorage.getItem('donggua_filter_nsfw') !== 'false'; } catch (e) { return true; } })(),  // 过滤 NSFW 内容（默认开启）
+                    coverScale: (function () { try { return parseFloat(localStorage.getItem('donggua_cover_scale')) || 1; } catch (e) { return 1; } })(),  // 📐 封面+文字等比缩放(几档,跨设备)
+                    coverScaleLevels: [{ v: 0.9, label: '小' }, { v: 1.0, label: '标准' }, { v: 1.15, label: '大' }, { v: 1.35, label: '特大' }],
 
                     // 📱 原生 App 检测 (Capacitor)
                     isNativeApp: !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()),
@@ -5737,6 +5760,9 @@
             async mounted() {
                 console.log('[VERSION] DongguaTV Code Version: 2024-12-19-v2 (showMovieInfo exists)');
                 console.log('[VERSION] Methods available:', Object.keys(this.$options.methods || {}).join(', '));
+
+                // 📐 封面/文字缩放：尽早套用本地值(避免封面先以默认大小渲染再跳变)
+                this.applyCoverScale();
 
                 // 📺 TV 模式设置
                 if (this.isTVMode) {
@@ -6293,6 +6319,13 @@
                                 console.log('[同步] 已应用弹幕样式偏好:', JSON.stringify(data.settings.dmStyle));
                             } catch (e) { }
                         }
+                        // 📐 封面/文字缩放跨设备同步
+                        if (typeof data.settings.coverScale === 'number' && data.settings.coverScale > 0) {
+                            this.coverScale = data.settings.coverScale;
+                            try { localStorage.setItem('donggua_cover_scale', String(this.coverScale)); } catch (e) { }
+                            this.applyCoverScale();
+                            console.log('[同步] 已应用封面缩放偏好:', this.coverScale);
+                        }
                     } catch (e) { console.error('[同步] 拉取用户设置失败:', e); }
                 },
 
@@ -6775,10 +6808,29 @@
                                 this.rowLists.randomRow = null;
                                 this.fetchRandomMixed();
                             }
+                        } else if (key === 'coverScale') {
+                            localStorage.setItem('donggua_cover_scale', String(this.coverScale));
+                            // 跨设备：推到服务器(并入 user_settings)，与弹幕样式同机制
+                            if (this.syncEnabled && this.syncToken) {
+                                fetch('/api/settings/push', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ token: this.syncToken, settings: { coverScale: this.coverScale } })
+                                }).catch(() => { });
+                            }
                         }
                     } catch (e) {
                         console.error('[设置] 保存失败:', e);
                     }
+                },
+                // 📐 应用封面/文字缩放到 CSS 变量(全站封面与卡片文字一起等比)
+                applyCoverScale() {
+                    try { document.documentElement.style.setProperty('--ui-scale', String(this.coverScale || 1)); } catch (e) { }
+                },
+                // 点某一档：设值 + 应用 + 保存(本地+服务器)
+                setCoverScale(v) {
+                    this.coverScale = v;
+                    this.applyCoverScale();
+                    this.saveSettings('coverScale');
                 },
 
                 // handleFooterClick removed (now using visible logout button)
@@ -11013,9 +11065,9 @@
                         }));
                         const total = groups.reduce((s, g) => s + g.count, 0);
 
-                        const REC_CAP = 60;  // 推荐总条数上限(展开后可分页:18/页 ≈ 3~4 页,给足"尽可能多可选")
+                        const REC_CAP = 120;  // 推荐总条数上限(三位数,展开后 18/页 ≈ 7 页,尽量多可选)
                         // 3. 每组 discover tv+movie(同语言同类型按热度;不加票数门槛,国产剧票数稀疏)
-                        //    拉前 3 页 → 候选更多(展开后够翻页);并按年份下限过滤
+                        //    拉前 5 页 → 候选更多(展开后够翻页);并按年份下限过滤
                         const discover = async (lang, genres, type, page) => {
                             let p = `sort_by=popularity.desc&page=${page}`;
                             if (genres.length) p += `&with_genres=${genres.join('%7C')}`;  // %7C = | 任一类型
@@ -11026,7 +11078,7 @@
                                 return ((r && r.results) || []).map(x => ({ ...x, media_type: type }));
                             } catch (e) { return []; }
                         };
-                        const PAGES = [1, 2, 3];
+                        const PAGES = [1, 2, 3, 4, 5];
                         const groupLists = await Promise.all(groups.map(async g => {
                             const [tvPages, mvPages] = await Promise.all([
                                 Promise.all(PAGES.map(p => discover(g.lang, g.genres, 'tv', p))),
