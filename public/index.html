@@ -1575,12 +1575,14 @@
             transition: opacity 1s ease-in-out !important;
         }
 
-        /* 轮播指示条(底部透明小白条)：当前高亮加粗、hover 变粗便于点击、可点击切换 */
+        /* 轮播指示条(底部透明小白条)：当前高亮加粗、hover 变粗便于点击、可点击切换
+           注意：搜索栏(.search-section)用 margin-top:-35px 浮在 Hero 底部、z-index:1001，
+           会盖住 Hero 最底部一条；故指示条要上移到搜索栏之上(bottom 给足),且 z-index 高于搜索栏 */
         .hero-dots {
             position: absolute;
-            bottom: 20px;
+            bottom: 72px;
             left: 5%;
-            z-index: 12;
+            z-index: 1002;
             display: flex;
             gap: 8px;
             align-items: center;
@@ -1605,7 +1607,7 @@
             background: #fff;
         }
         @media (max-width: 768px) {
-            .hero-dots { bottom: 12px; gap: 6px; }
+            .hero-dots { bottom: 64px; gap: 6px; }
             .hero-dot { width: 20px; }
             .hero-dot.active { width: 30px; }
         }
