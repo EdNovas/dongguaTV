@@ -141,9 +141,9 @@
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
 
     <style>
-        /* ♿ 尊重用户的"减少动态效果"系统偏好：大幅削弱动画/过渡，
-           缓解前庭功能障碍/晕动症用户的不适（保留极短时长以不破坏交互反馈） */
-        @media (prefers-reduced-motion: reduce) {
+        /* ♿ "减少动态效果"偏好：只在【手机端】削弱动画(手机也顺带省电省性能)；桌面端保留完整动效——
+           大屏不易引发晕动症、且高配电脑的动效是体验一部分。这正好实现"电脑加动效、手机减少"。 */
+        @media (prefers-reduced-motion: reduce) and (max-width: 768px) {
 
             *,
             *::before,
@@ -1562,6 +1562,46 @@
             transform: scale(1.05) translateZ(0);
         }
 
+        /* 轮播：强制平滑淡入(覆盖 Bootstrap 在 reduced-motion 下的 transition:none) → 大图切换有过渡感 */
+        #heroCarousel.carousel-fade .carousel-item {
+            transition: opacity 1s ease-in-out !important;
+        }
+
+        /* 轮播指示条(底部透明小白条)：当前高亮加粗、hover 变粗便于点击、可点击切换 */
+        .hero-dots {
+            position: absolute;
+            bottom: 20px;
+            left: 5%;
+            z-index: 12;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .hero-dot {
+            width: 26px;
+            height: 4px;
+            border-radius: 3px;
+            background: rgba(255, 255, 255, 0.35);
+            cursor: pointer;
+            border: none;
+            padding: 0;
+            transition: all 0.25s ease;
+        }
+        .hero-dot:hover {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.65);
+        }
+        .hero-dot.active {
+            width: 42px;
+            height: 5px;
+            background: #fff;
+        }
+        @media (max-width: 768px) {
+            .hero-dots { bottom: 12px; gap: 6px; }
+            .hero-dot { width: 20px; }
+            .hero-dot.active { width: 30px; }
+        }
+
         .hero-overlay {
             position: absolute;
             inset: 0;
@@ -2690,6 +2730,39 @@
             flex-shrink: 0;
         }
 
+        /* 为你推荐展开后的分页器 */
+        .rec-pager {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 18px;
+            margin-top: 22px;
+        }
+        .rec-pager-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.06);
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+        .rec-pager-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.16);
+            transform: scale(1.08);
+        }
+        .rec-pager-btn:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+        .rec-pager-info {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.75);
+            min-width: 48px;
+            text-align: center;
+        }
+
         /* 分页控制 */
         .pagination-controls {
             width: 100%;
@@ -3671,6 +3744,12 @@
                     </div>
                 </div>
             </div>
+            <!-- 轮播指示条(小白条)：当前高亮、点击切换、hover变粗、手机端滑动由 Bootstrap 触摸支持 -->
+            <div class="hero-dots" v-if="heroList.length > 1">
+                <button v-for="(item, index) in heroList" :key="'dot' + index" class="hero-dot"
+                    :class="{ active: index === heroActiveIndex }" @click="goHero(index)"
+                    :aria-label="'切换到第 ' + (index + 1) + ' 张'"></button>
+            </div>
         </div>
 
         <!-- 2. Search -->
@@ -3751,7 +3830,7 @@
 
             <!-- ✨ 为你推荐：基于观看历史的 TMDB 推荐(无历史/无结果时整段隐藏) -->
             <div class="section-container animate__animated animate__fadeInUp" v-if="recommendList.length > 0"
-                style="margin-top: 48px; margin-bottom: 10px;">
+                style="margin-top: 48px; margin-bottom: 44px;">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #f5af19, #f12711);"></div>
                     <div class="section-title"><i class="fas fa-magic"></i> 为你推荐</div>
@@ -3785,18 +3864,28 @@
                         aria-label="向右滚动推荐"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 </div>
                 <!-- 展开：网格(全部一次看) -->
-                <div class="grid-expanded" v-show="recommendExpanded">
-                    <div class="hot-card" v-for="item in recommendList"
-                        :key="'recg-' + (item.media_type || '') + '-' + item.id"
-                        @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
-                        <div class="poster-wrap">
-                            <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
-                                @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
-                            <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
-                                item.vote_average ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                <div v-show="recommendExpanded">
+                    <div class="grid-expanded">
+                        <div class="hot-card" v-for="item in recPaged()"
+                            :key="'recg-' + (item.media_type || '') + '-' + item.id"
+                            @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
+                            <div class="poster-wrap">
+                                <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
+                                    @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
+                                <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
+                                    item.vote_average ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                            </div>
+                            <div class="movie-name">{{ item.title || item.name }}</div>
+                            <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0] }}</div>
                         </div>
-                        <div class="movie-name">{{ item.title || item.name }}</div>
-                        <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0] }}</div>
+                    </div>
+                    <!-- 展开后分页：候选多于一页时显示上一页/下一页 -->
+                    <div class="rec-pager" v-if="recTotalPages() > 1">
+                        <button class="rec-pager-btn" :disabled="recommendPage <= 1" @click="recPagePrev"
+                            aria-label="上一页"><i class="fas fa-chevron-left"></i></button>
+                        <span class="rec-pager-info">{{ recommendPage }} / {{ recTotalPages() }}</span>
+                        <button class="rec-pager-btn" :disabled="recommendPage >= recTotalPages()" @click="recPageNext"
+                            aria-label="下一页"><i class="fas fa-chevron-right"></i></button>
                     </div>
                 </div>
             </div>
@@ -5305,7 +5394,7 @@
                     keyword: '', loading: false, searched: false, rawList: [],
                     showDetail: false, currentGroup: null, currentSource: null,
                     episodeList: [], currentUrl: '', loadingDetail: false,
-                    imageMap: {}, fallbackMap: {}, heroList: [],
+                    imageMap: {}, fallbackMap: {}, heroList: [], heroActiveIndex: 0,
                     pastCompactThreshold: false,  // 滚动越过 400px(用于搜索框 compact)；仅阈值翻转时更新，避免每帧重渲染
                     hotList: [],
                     sitesMap: {},  // 缓存站点信息（用于客户端测速）
@@ -5317,6 +5406,7 @@
                     watchHistory: [],  // 用户观看历史记录
                     recommendList: [],  // ✨ 为你推荐(基于观看历史的 TMDB recommendations)
                     recommendExpanded: false,       // 为你推荐：展开为网格
+                    recommendPage: 1,               // 为你推荐：展开网格当前页(分页)
                     recommendCanScrollLeft: false,  // 为你推荐：左箭头显隐
                     recommendCanScrollRight: true,  // 为你推荐：右箭头显隐
                     // 📮 求片
@@ -7617,12 +7707,36 @@
                                     backdrop: `${TMDB_BACKDROP_URL}${item.backdrop_path}`,
                                     rawData: item
                                 }));
+                                this.heroActiveIndex = 0;
+                                this.$nextTick(() => this.setupHeroIndicators());
                             }
                         })
                         .catch(e => {
                             console.error('[Hero] 加载失败:', e);
                             // 不抛出错误，允许 initApp 继续执行
                         });
+                },
+
+                // 轮播：监听 Bootstrap 切换事件同步当前页(给指示条高亮);手机端左右滑动 Bootstrap 触摸已自带
+                // 用 slide(开始) 而非 slid(结束)——slide 携带正确 e.to 且即时触发(指示条随淡入立刻高亮),
+                // 而 slid 依赖 transitionend、在自定义 transition 下可能漏触发。
+                setupHeroIndicators() {
+                    const el = document.getElementById('heroCarousel');
+                    if (!el || el._dotsBound) return;
+                    el._dotsBound = true;
+                    el.addEventListener('slide.bs.carousel', (e) => {
+                        if (typeof e.to === 'number') this.heroActiveIndex = e.to;
+                    });
+                },
+                // 点指示条切到第 i 张(用 Bootstrap Carousel API)
+                goHero(i) {
+                    try {
+                        const el = document.getElementById('heroCarousel');
+                        if (el && window.bootstrap && bootstrap.Carousel) {
+                            bootstrap.Carousel.getOrCreateInstance(el).to(i);
+                            this.heroActiveIndex = i;
+                        }
+                    } catch (err) { }
                 },
 
                 finalPoster(item, isHot = false) {
@@ -10554,8 +10668,24 @@
                         if (this._recLoaded) return;
                         const names = (this.watchHistory || []).slice(0, 6).map(h => h && h.name).filter(Boolean);
                         if (!names.length) return;  // ⚠️ 历史还没到(云同步慢)→ 不置位，等同步完成后补调
-                        this._recLoaded = true;
                         const historySet = new Set((this.watchHistory || []).map(h => ((h && h.name) || '').trim()));
+
+                        // 📦 本地缓存：按历史画像签名命中(6h内同样的最近历史→直接用缓存,零 TMDB 请求)
+                        const recSig = names.slice().sort().join('|');
+                        const REC_CACHE_KEY = 'donggua_rec_cache';
+                        const REC_TTL = 6 * 3600 * 1000;
+                        try {
+                            const c = JSON.parse(localStorage.getItem(REC_CACHE_KEY) || 'null');
+                            if (c && c.sig === recSig && (Date.now() - c.ts) < REC_TTL && Array.isArray(c.list) && c.list.length) {
+                                this.recommendList = c.list;
+                                this._recLoaded = true;
+                                this.recommendPage = 1;
+                                this.$nextTick(() => this.onRecommendScroll());
+                                console.log('[推荐] 命中本地缓存', c.list.length, '条');
+                                return;
+                            }
+                        } catch (e) { }
+                        this._recLoaded = true;
 
                         // 1. 搜每部历史剧拿画像(genre_ids + original_language)
                         const hits = (await Promise.all(names.map(async (n) => {
@@ -10565,6 +10695,10 @@
                             } catch (e) { return null; }
                         }))).filter(Boolean);
                         if (!hits.length) { this.recommendList = []; return; }
+
+                        // 年份关联：取历史里最早的年份-5 作下限,不给"看 2020 后剧"的用户推 1990 老片
+                        const yrs = hits.map(h => parseInt((((h.first_air_date || h.release_date || '') + '')).slice(0, 4))).filter(y => y > 1900);
+                        const yearFloor = yrs.length ? Math.max(1980, Math.min(...yrs) - 5) : 0;
 
                         // 2. 按语言分组(覆盖多口味);每组统计类型频次,取观看部数前2的语言组
                         const byLang = {};
@@ -10580,21 +10714,28 @@
                         }));
                         const total = groups.reduce((s, g) => s + g.count, 0);
 
+                        const REC_CAP = 40;  // 推荐总条数上限(展开后可分页:18/页 ≈ 2~3 页)
                         // 3. 每组 discover tv+movie(同语言同类型按热度;不加票数门槛,国产剧票数稀疏)
-                        const discover = async (lang, genres, type) => {
-                            let p = `sort_by=popularity.desc&page=1`;
+                        //    拉前 2 页 → 候选更多(展开后够翻页);并按年份下限过滤
+                        const discover = async (lang, genres, type, page) => {
+                            let p = `sort_by=popularity.desc&page=${page}`;
                             if (genres.length) p += `&with_genres=${genres.join('%7C')}`;  // %7C = | 任一类型
                             if (lang && lang !== 'xx') p += `&with_original_language=${lang}`;
+                            if (yearFloor) p += `&${type === 'tv' ? 'first_air_date.gte' : 'primary_release_date.gte'}=${yearFloor}-01-01`;
                             try {
                                 const r = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/discover/' + type)}&${p}&language=zh-CN`).then(r => r.json());
                                 return ((r && r.results) || []).map(x => ({ ...x, media_type: type }));
                             } catch (e) { return []; }
                         };
                         const groupLists = await Promise.all(groups.map(async g => {
-                            const [tv, movie] = await Promise.all([discover(g.lang, g.genres, 'tv'), discover(g.lang, g.genres, 'movie')]);
+                            const [tv1, tv2, mv1, mv2] = await Promise.all([
+                                discover(g.lang, g.genres, 'tv', 1), discover(g.lang, g.genres, 'tv', 2),
+                                discover(g.lang, g.genres, 'movie', 1), discover(g.lang, g.genres, 'movie', 2)
+                            ]);
+                            const tv = [...tv1, ...tv2], movie = [...mv1, ...mv2];
                             const list = []; const mx = Math.max(tv.length, movie.length);
                             for (let i = 0; i < mx; i++) { if (tv[i]) list.push(tv[i]); if (movie[i]) list.push(movie[i]); }
-                            return { lang: g.lang, list, quota: Math.max(1, Math.round(18 * g.count / total)) };
+                            return { lang: g.lang, list, quota: Math.max(1, Math.round(REC_CAP * g.count / total)) };
                         }));
 
                         // 4. 按配额从各组取(看得多的语言占比高),按[类型+id]去重、排已看、滤海报,凑满18
@@ -10606,7 +10747,7 @@
                         const pick = (gl, n) => {
                             let took = 0;
                             for (const x of gl.list) {
-                                if (out.length >= 18 || took >= n) break;
+                                if (out.length >= REC_CAP || took >= n) break;
                                 if (!x || !x.poster_path || x.adult) continue;
                                 const t = (x.title || x.name || '').trim();
                                 const k = x.media_type + '-' + x.id;
@@ -10615,11 +10756,29 @@
                             }
                         };
                         groupLists.forEach(gl => pick(gl, gl.quota));  // 第一轮按配额
-                        groupLists.forEach(gl => pick(gl, 18));        // 没满则继续填
+                        groupLists.forEach(gl => pick(gl, REC_CAP));   // 没满则继续填
                         this.recommendList = out;
+                        this.recommendPage = 1;
+                        try { localStorage.setItem(REC_CACHE_KEY, JSON.stringify({ sig: recSig, ts: Date.now(), list: out })); } catch (e) { }
                         this.$nextTick(() => this.onRecommendScroll());  // 列表渲染后校正左右箭头显隐
-                        if (out.length) console.log('[推荐] 多语言口味', groups.map(g => g.lang + '×' + g.count), '→', out.length, '条');
+                        if (out.length) console.log('[推荐] 多语言口味', groups.map(g => g.lang + '×' + g.count), '→', out.length, '条', yearFloor ? '(≥' + yearFloor + ')' : '');
                     } catch (e) { console.warn('[推荐] 获取失败:', e); }
+                },
+
+                // 为你推荐：展开网格分页(每页 18，与折叠行视觉一致)
+                recPaged() {
+                    const per = 18;
+                    const s = (this.recommendPage - 1) * per;
+                    return (this.recommendList || []).slice(s, s + per);
+                },
+                recTotalPages() {
+                    return Math.max(1, Math.ceil((this.recommendList || []).length / 18));
+                },
+                recPagePrev() {
+                    if (this.recommendPage > 1) this.recommendPage--;
+                },
+                recPageNext() {
+                    if (this.recommendPage < this.recTotalPages()) this.recommendPage++;
                 },
 
                 // ⏭️ 预加载下一集：临近本集结尾(2分钟)时触发一次。挂在 timeupdate 上，自带节流/守卫。
