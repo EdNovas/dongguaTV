@@ -371,10 +371,11 @@ async function fetchDanmakuFromInstance(base, token, title, ep) {
 }
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
-    // 默认短缓存(空/出错 5min)；非空弹幕→7天新鲜+30天 stale-while-revalidate(过期先回旧缓存、后台重抓)。
-    // 缓存加在本接口(键=?id=剧名|集名,稳定)，勿缓存 danmu_api 的 comment/{id}(id会过期)
+    // 空/出错一律 no-store：绝不让 CDN/浏览器缓存"暂时为空"的弹幕(防 CF 1年TTL 把空响应永久冻结)；
+    //   服务器侧 90s miss 缓存护住上游。非空弹幕→7天新鲜+30天 stale-while-revalidate(过期先回旧缓存、后台重抓)。
+    // 缓存键=?id=剧名|集名(稳定)；勿缓存 danmu_api 的 comment/{id}(id会过期)
     const LONG_CACHE = 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000';
-    res.set('Cache-Control', 'public, max-age=90');
+    res.set('Cache-Control', 'no-store');
     const DANMU_API_URL = process.env.DANMU_API_URL;
     if (!DANMU_API_URL) return res.json(empty);
 

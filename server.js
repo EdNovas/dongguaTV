@@ -1406,11 +1406,13 @@ async function fetchDanmakuFromInstance(base, token, title, ep) {
 }
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
-    // 缓存策略：默认短缓存(空/出错只 5min，避免 CDN 把"暂时为空"锁住很久)；取到非空弹幕时改长缓存。
-    // 弹幕近乎静态 → 7 天新鲜 + 30 天 stale-while-revalidate(过期后先回旧缓存秒开、同时后台重新抓取更新)。
-    // 注意：缓存加在本接口(键 = ?id=剧名|集名，稳定)，不要去缓存 danmu_api 的 comment/{id}(id 会过期、键永远变)。
+    // 缓存策略：空/出错一律 no-store——绝不让 CDN/浏览器缓存"暂时为空"的弹幕。
+    //   (事故：CF 的"浏览器缓存TTL=1年"会把空响应在每个用户浏览器冻结一年 → 某集偶发一次取空就永久没弹幕。
+    //    服务器侧另有 90s miss 缓存护住上游，所以 no-store 不会反复打 danmu_api。)
+    // 取到非空弹幕才长缓存：弹幕近乎静态 → 7 天新鲜 + 30 天 stale-while-revalidate(过期先回旧缓存秒开、后台重抓)。
+    // 注意：缓存键 = ?id=剧名|集名(稳定)；不要去缓存 danmu_api 的 comment/{id}(id 会过期、键永远变)。
     const LONG_CACHE = 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000';
-    res.set('Cache-Control', 'public, max-age=90');
+    res.set('Cache-Control', 'no-store');
     const DANMU_API_URL = process.env.DANMU_API_URL;
     if (!DANMU_API_URL) return res.json(empty);
 

@@ -8197,7 +8197,10 @@
                     const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
                     const epName = (cur && cur.name) || '';
                     return {
-                        id: encodeURIComponent(this.currentGroup.name + '|' + epName),
+                        // 末尾 |v2 是缓存版本：CF 曾把"暂时为空"的弹幕响应按 1 年浏览器TTL 缓存进了各用户浏览器(中毒)，
+                        // 改 URL 即让旧的中毒缓存 miss、重新拉取。服务器只取 split('|') 的前两段(剧名|集名)，第三段被忽略、
+                        // 不影响匹配与服务器缓存键。将来若再需强制刷新弹幕缓存，把 v2 往上 bump 即可。
+                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v2'),
                         api: '/api/danmaku/',
                         user: '观众',
                         // 弹幕显示区域由 CSS(.dplayer-danmaku height:33%)限制到顶部 1/3，
