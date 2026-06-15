@@ -19,6 +19,8 @@ Electron sets `DONGGUATV_DATA_DIR` to:
 %APPDATA%\DongguaTV Enhanced\runtime
 ```
 
+If `DONGGUATV_DATA_DIR` is already provided in the process environment, the Electron main process keeps that override. This is used by packaged smoke tests so they do not touch the user's normal runtime data.
+
 The app creates these files when missing:
 
 - `db.json`
@@ -128,6 +130,8 @@ Settings exposes one-click local Java Bridge build/start actions. Built jars are
 The Settings page also shows local Java Bridge running state, PID, URL, mode, and jar path, with refresh and stop controls.
 
 The Subscriptions panel exposes per-source diagnostics. Plugin-required sources show whether the local Java Bridge is running and explain that subscription-provided plugin code is not executed directly.
+
+The Subscriptions panel also exposes per-source Health checks. HTTP-compatible sources are probed through the backend, and the latest status, latency, reason, and checked time are saved on the source record in `sources.json`. Plugin-required and unsupported sources return their marker status without executing plugin code.
 
 Search empty states expose a Search Diagnostics panel. It reports built-in search site counts, TVBox HTTP sources participating in search, plugin-required sources, unsupported sources, and Local Java Bridge running state. This is diagnostic only for plugin sources: TVBox plugin code is not executed directly.
 

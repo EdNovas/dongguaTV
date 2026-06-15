@@ -160,11 +160,24 @@ class TvboxService {
     async healthCheck(sourceId) {
         const source = this.getSource(sourceId);
         const result = await checkSourceHealth(source, this.httpClient);
-        if (source && result.status) {
-            this.updateSource(source.id, {
-                status: result.status === 'available' ? 'available' : source.status,
-                supportLevel: source.supportLevel
-            });
+        if (source) {
+            const sources = this.store.getSources();
+            const index = sources.findIndex(item => item.id === source.id);
+            if (index >= 0) {
+                const now = new Date().toISOString();
+                sources[index] = {
+                    ...sources[index],
+                    status: result.status === 'available' ? 'available' : sources[index].status,
+                    supportLevel: sources[index].supportLevel,
+                    healthCheck: {
+                        sourceId,
+                        ...result,
+                        checkedAt: result.checkedAt || now
+                    },
+                    updatedAt: now
+                };
+                this.store.saveSources(sources);
+            }
         }
         return { sourceId, ...result };
     }

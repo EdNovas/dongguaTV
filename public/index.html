@@ -3850,6 +3850,21 @@
                                     style="border:0; padding:6px 10px; margin-top:10px; font-size:11px;">
                                     <i class="fas fa-stethoscope"></i> Diagnose
                                 </button>
+                                <button class="btn-info" @click="healthCheckTvboxSource(source)" :disabled="subscriptionLoading || sourceHealthLoading[source.id]"
+                                    style="border:0; padding:6px 10px; margin-top:10px; margin-left:6px; font-size:11px;">
+                                    <i :class="['fas', sourceHealthLoading[source.id] ? 'fa-spinner fa-spin' : 'fa-heartbeat']"></i> Health
+                                </button>
+                                <div v-if="sourceHealthResult(source)"
+                                    style="margin-top:8px; padding:7px 9px; border-radius:10px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:11px; line-height:1.5;">
+                                    <strong :style="{ color: sourceHealthResult(source).status === 'available' ? '#22c55e' : sourceHealthResult(source).status === 'error' ? '#f87171' : '#fbbf24' }">
+                                        Health: {{ sourceHealthResult(source).status }}
+                                    </strong>
+                                    <span v-if="sourceHealthResult(source).latency"> · {{ sourceHealthResult(source).latency }}ms</span>
+                                    <span v-if="sourceHealthResult(source).reason"> · {{ sourceHealthResult(source).reason }}</span>
+                                    <div v-if="sourceHealthResult(source).checkedAt" style="color:#8f98aa;">
+                                        {{ sourceHealthResult(source).checkedAt }}
+                                    </div>
+                                </div>
                                 <div v-if="sourceDiagnostics[source.id]"
                                     style="margin-top:10px; padding:8px 10px; border-radius:10px; background:rgba(0,0,0,0.22); color:#cfd3dc; font-size:11px; line-height:1.55;">
                                     <div>
@@ -4669,6 +4684,8 @@
                     subscriptions: [],
                     tvboxSources: [],
                     sourceDiagnostics: {},
+                    sourceHealthResults: {},
+                    sourceHealthLoading: {},
                     liveGroups: [],
                     liveChannels: [],
                     liveActiveGroup: '',
@@ -5123,6 +5140,10 @@
                     if (!group || !Array.isArray(group.sources)) return 0;
                     return group.sources.filter(source => this.isTvboxSource(source)).length;
                 },
+                sourceHealthResult(source) {
+                    if (!source || !source.id) return null;
+                    return this.sourceHealthResults[source.id] || source.healthCheck || null;
+                },
                 favoriteLiveKey(channel) {
                     if (!channel) return '';
                     return String(channel.id || channel.url || `${channel.group || 'default'}::${channel.name || ''}`);
@@ -5470,6 +5491,48 @@
                                 message: error.message || 'Source diagnostics failed',
                                 actions: ['Try refreshing the subscription and run diagnostics again.']
                             }
+                        };
+                    }
+                },
+
+                async healthCheckTvboxSource(source) {
+                    if (!source || !source.id) return;
+                    this.subscriptionError = '';
+                    this.sourceHealthLoading = {
+                        ...this.sourceHealthLoading,
+                        [source.id]: true
+                    };
+                    try {
+                        const response = await fetch('/api/source-health-check', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ sourceId: source.id })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Source health check failed');
+                        this.sourceHealthResults = {
+                            ...this.sourceHealthResults,
+                            [source.id]: data
+                        };
+                        source.healthCheck = data;
+                        if (data.status === 'available') source.status = 'available';
+                        this.showMiniToast && this.showMiniToast(`Health: ${data.status}`);
+                    } catch (error) {
+                        const data = {
+                            sourceId: source.id,
+                            status: 'error',
+                            reason: 'health-check-error',
+                            message: error.message || 'Source health check failed',
+                            checkedAt: new Date().toISOString()
+                        };
+                        this.sourceHealthResults = {
+                            ...this.sourceHealthResults,
+                            [source.id]: data
+                        };
+                    } finally {
+                        this.sourceHealthLoading = {
+                            ...this.sourceHealthLoading,
+                            [source.id]: false
                         };
                     }
                 },

@@ -73,7 +73,7 @@ function createWindow(port) {
 }
 
 app.whenReady().then(async () => {
-  const dataDir = path.join(app.getPath('userData'), 'runtime');
+  const dataDir = process.env.DONGGUATV_DATA_DIR || path.join(app.getPath('userData'), 'runtime');
   fs.mkdirSync(dataDir, { recursive: true });
   ensureDesktopState(dataDir);
 
