@@ -4151,76 +4151,6 @@
                                     style="margin-right: 4px;"></i>
                                 {{ refreshingSources ? '刷新中...' : '刷新线路' }}
                             </span>
-                            <span v-if="!previewLocked" @click="toggleOfflinePanel" class="offline-entry-btn"
-                                :class="{ active: showOfflinePanel }">
-                                <i class="fas fa-download" style="margin-right: 4px;"></i>
-                                离线缓存<span v-if="offlineList.length"> ({{ offlineList.length }})</span>
-                            </span>
-                        </div>
-
-                        <!-- ⬇️ 离线缓存面板 -->
-                        <div v-if="showOfflinePanel && !previewLocked" class="offline-panel">
-                            <!-- 当前集操作行 -->
-                            <div class="offline-row offline-current">
-                                <div class="offline-info">
-                                    <div class="offline-name">{{ currentGroup ? currentGroup.name : '' }}
-                                        <span class="offline-ep">{{ offlineCurrentEpName() }}</span>
-                                    </div>
-                                    <div class="offline-sub" v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
-                                        正在缓存 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}
-                                    </div>
-                                    <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'error'" style="color: #ef4444;">
-                                        {{ dlProgress.msg }}
-                                    </div>
-                                    <div class="offline-sub" v-else-if="offlineHasCurrent()" style="color: #46d369;">
-                                        <i class="fas fa-check-circle"></i> 本集已缓存，播放自动走本地
-                                    </div>
-                                    <div class="offline-sub" v-else>缓存后可离线/秒开播放(经去广告代理下载)</div>
-                                </div>
-                                <button class="offline-btn" @click="offlineDownloadCurrent"
-                                    :class="{ downloading: dlProgressIsCurrent() && dlProgress.status === 'downloading' }">
-                                    <template v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
-                                        {{ Math.floor(dlProgress.done / Math.max(1, dlProgress.total) * 100) }}% 取消
-                                    </template>
-                                    <template v-else-if="offlineHasCurrent()">重新缓存</template>
-                                    <template v-else><i class="fas fa-download"></i> 缓存本集</template>
-                                </button>
-                            </div>
-                            <!-- 进度条(仅当前集) -->
-                            <div v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'" class="offline-progress">
-                                <div class="offline-progress-inner"
-                                    :style="{ width: Math.floor(dlProgress.done / Math.max(1, dlProgress.total) * 100) + '%' }"></div>
-                            </div>
-                            <!-- 其它集/其它剧的后台缓存任务(切剧后仍可见可取消，不与"当前集"串显) -->
-                            <div v-if="dlProgress && dlProgress.status === 'downloading' && !dlProgressIsCurrent()"
-                                class="offline-row" style="opacity: 0.85;">
-                                <div class="offline-info">
-                                    <div class="offline-name">{{ dlProgress.epKey.split('|')[0] }}
-                                        <span class="offline-ep">{{ dlProgress.epKey.split('|')[1] }}</span>
-                                    </div>
-                                    <div class="offline-sub">后台缓存中 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}</div>
-                                </div>
-                                <button class="offline-btn downloading" @click="offlineCancelDownload">取消</button>
-                            </div>
-                            <!-- 已缓存列表 -->
-                            <div v-if="offlineList.length" class="offline-list">
-                                <div class="offline-row" v-for="item in offlineList" :key="item.epKey">
-                                    <div class="offline-info" @click="offlinePlay(item)" style="cursor: pointer;">
-                                        <div class="offline-name">{{ item.name }} <span class="offline-ep">{{ item.ep }}</span></div>
-                                        <div class="offline-sub">{{ formatBytes(item.bytes) }} · {{ item.total }} 段</div>
-                                    </div>
-                                    <span class="offline-del" @click="offlineDelete(item.epKey)" title="删除缓存">
-                                        <i class="fas fa-trash-alt"></i>
-                                    </span>
-                                </div>
-                                <div class="offline-footer">
-                                    共 {{ formatBytes(offlineList.reduce((s, x) => s + (x.bytes || 0), 0)) }}
-                                    <span class="offline-clear" @click="offlineClearAll">清空全部</span>
-                                </div>
-                            </div>
-                            <div v-else-if="!(dlProgress && dlProgress.status === 'downloading')" class="offline-empty">
-                                还没有缓存的剧集
-                            </div>
                         </div>
 
                         <!-- 🔒 未登录预览：锁定线路 -->
@@ -4312,6 +4242,11 @@
                     <div>
                         <div class="panel-title" style="display: flex; align-items: center;">
                             选集播放
+                            <span v-if="!previewLocked" @click="toggleOfflinePanel" class="offline-entry-btn"
+                                :class="{ active: showOfflinePanel }" style="margin-left: auto;">
+                                <i class="fas fa-download" style="margin-right: 4px;"></i>
+                                离线缓存<span v-if="offlineList.length"> ({{ offlineList.length }})</span>
+                            </span>
                             <span v-if="!previewLocked" @click="refreshEpisodes"
                                 style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
                                 :style="{ opacity: refreshingEpisodes ? 0.5 : 1, pointerEvents: refreshingEpisodes ? 'none' : 'auto' }"
@@ -4322,6 +4257,68 @@
                                 {{ refreshingEpisodes ? '刷新中...' : '刷新集数' }}
                             </span>
                         </div>
+
+                        <!-- ⬇️ 离线缓存面板(选集区) -->
+                        <div v-if="showOfflinePanel && !previewLocked" class="offline-panel">
+                            <div class="offline-row offline-current">
+                                <div class="offline-info">
+                                    <div class="offline-name">{{ currentGroup ? currentGroup.name : '' }}
+                                        <span class="offline-ep">{{ offlineCurrentEpName() }}</span>
+                                    </div>
+                                    <div class="offline-sub" v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
+                                        正在缓存 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}
+                                    </div>
+                                    <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'error'" style="color: #ef4444;">
+                                        {{ dlProgress.msg }}
+                                    </div>
+                                    <div class="offline-sub" v-else-if="offlineHasCurrent()" style="color: #46d369;">
+                                        <i class="fas fa-check-circle"></i> 本集已缓存，播放自动走本地
+                                    </div>
+                                    <div class="offline-sub" v-else>缓存后可离线/秒开播放(经去广告代理下载)</div>
+                                </div>
+                                <button class="offline-btn" @click="offlineDownloadCurrent"
+                                    :class="{ downloading: dlProgressIsCurrent() && dlProgress.status === 'downloading' }">
+                                    <template v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
+                                        {{ Math.floor(dlProgress.done / Math.max(1, dlProgress.total) * 100) }}% 取消
+                                    </template>
+                                    <template v-else-if="offlineHasCurrent()">重新缓存</template>
+                                    <template v-else><i class="fas fa-download"></i> 缓存本集</template>
+                                </button>
+                            </div>
+                            <div v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'" class="offline-progress">
+                                <div class="offline-progress-inner"
+                                    :style="{ width: Math.floor(dlProgress.done / Math.max(1, dlProgress.total) * 100) + '%' }"></div>
+                            </div>
+                            <div v-if="dlProgress && dlProgress.status === 'downloading' && !dlProgressIsCurrent()"
+                                class="offline-row" style="opacity: 0.85;">
+                                <div class="offline-info">
+                                    <div class="offline-name">{{ dlProgress.epKey.split('|')[0] }}
+                                        <span class="offline-ep">{{ dlProgress.epKey.split('|')[1] }}</span>
+                                    </div>
+                                    <div class="offline-sub">后台缓存中 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}</div>
+                                </div>
+                                <button class="offline-btn downloading" @click="offlineCancelDownload">取消</button>
+                            </div>
+                            <div v-if="offlineList.length" class="offline-list">
+                                <div class="offline-row" v-for="item in offlineList" :key="item.epKey">
+                                    <div class="offline-info" @click="offlinePlay(item)" style="cursor: pointer;">
+                                        <div class="offline-name">{{ item.name }} <span class="offline-ep">{{ item.ep }}</span></div>
+                                        <div class="offline-sub">{{ formatBytes(item.bytes) }} · {{ item.total }} 段</div>
+                                    </div>
+                                    <span class="offline-del" @click="offlineDelete(item.epKey)" title="删除缓存">
+                                        <i class="fas fa-trash-alt"></i>
+                                    </span>
+                                </div>
+                                <div class="offline-footer">
+                                    共 {{ formatBytes(offlineList.reduce((s, x) => s + (x.bytes || 0), 0)) }}
+                                    <span class="offline-clear" @click="offlineClearAll">清空全部</span>
+                                </div>
+                            </div>
+                            <div v-else-if="!(dlProgress && dlProgress.status === 'downloading')" class="offline-empty">
+                                还没有缓存的剧集
+                            </div>
+                        </div>
+
                         <!-- 🔒 未登录预览：锁定选集 -->
                         <div v-if="previewLocked" class="preview-locked-note">
                             <i class="fas fa-lock"></i> 登录后解锁选集播放
@@ -8853,14 +8850,14 @@
                                     }
                                 }
 
-                                // 🖼️ 画中画按钮(最左)：标准 API + iOS Safari webkitPresentationMode；都不支持则不显示
+                                // 🖼️ 画中画按钮：插在 设置(齿轮) 右边、全屏(.dplayer-full)左边 → 设置→画中画→页面全屏→真全屏
                                 {
                                     const iconsRight = dplayerContainer.querySelector('.dplayer-icons-right');
                                     const v0 = dp.video;
                                     const pipSupported = !!(document.pictureInPictureEnabled ||
                                         (v0 && typeof v0.webkitSetPresentationMode === 'function'));
                                     if (pipSupported && iconsRight && !iconsRight.querySelector('.dplayer-pip-icon')) {
-                                        iconsRight.insertAdjacentHTML('afterbegin', `
+                                        const pipHtml = `
                                             <div class="dplayer-icon dplayer-pip-icon" data-balloon="画中画" data-balloon-pos="up">
                                                 <span class="dplayer-icon-content" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
                                                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#fff;">
@@ -8868,7 +8865,10 @@
                                                         <rect x="12" y="12" width="8" height="6" rx="1" fill="currentColor" stroke="none"></rect>
                                                     </svg>
                                                 </span>
-                                            </div>`);
+                                            </div>`;
+                                        const fullEl = iconsRight.querySelector('.dplayer-full');
+                                        if (fullEl) fullEl.insertAdjacentHTML('beforebegin', pipHtml);
+                                        else iconsRight.insertAdjacentHTML('beforeend', pipHtml);
                                         const pipBtn = iconsRight.querySelector('.dplayer-pip-icon');
                                         pipBtn.addEventListener('click', async (e) => {
                                             e.stopPropagation();
