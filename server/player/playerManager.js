@@ -46,6 +46,11 @@ class PlayerManager {
         };
     }
 
+    async checkProxyPort(port) {
+        const settings = this.getSettings();
+        return this.localProxy.checkPort(port || settings.localProxyPort || 9979);
+    }
+
     async openMpc(playUrlResult) {
         const input = typeof playUrlResult === 'string' ? { url: playUrlResult } : (playUrlResult || {});
         const settings = this.getSettings();

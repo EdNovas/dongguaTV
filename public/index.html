@@ -3989,6 +3989,11 @@
                                 <i :class="['fas', proxyStatusLoading ? 'fa-spinner fa-spin' : 'fa-network-wired']"></i>
                                 代理状态
                             </button>
+                            <button class="btn-info" @click="checkProxyPort" :disabled="proxyPortCheckLoading"
+                                style="border:0; padding:9px 12px; font-size:12px;">
+                                <i :class="['fas', proxyPortCheckLoading ? 'fa-spinner fa-spin' : 'fa-plug']"></i>
+                                检测端口
+                            </button>
                             <span v-if="playerSettingsMessage" style="color:#aaa; font-size:12px;">{{ playerSettingsMessage }}</span>
                         </div>
                         <div v-if="proxyStatus"
@@ -4005,6 +4010,14 @@
                                 · active entries: {{ proxyStatus.proxy ? proxyStatus.proxy.activeEntries : 0 }}
                                 · expired entries: {{ proxyStatus.proxy ? proxyStatus.proxy.expiredEntries : 0 }}
                             </div>
+                        </div>
+                        <div v-if="proxyPortCheck"
+                            style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
+                            <strong :style="{ color: proxyPortCheck.available ? '#22c55e' : '#f87171' }">
+                                Port {{ proxyPortCheck.port }} {{ proxyPortCheck.available ? 'available' : 'unavailable' }}
+                            </strong>
+                            <span> · {{ proxyPortCheck.reason }}</span>
+                            <div v-if="proxyPortCheck.message" style="color:#8f98aa;">{{ proxyPortCheck.message }}</div>
                         </div>
                     </div>
 
@@ -4737,6 +4750,8 @@
                     playerSettingsMessage: '',
                     proxyStatus: null,
                     proxyStatusLoading: false,
+                    proxyPortCheck: null,
+                    proxyPortCheckLoading: false,
                     pluginRuntimeSettings: {
                         enableJavaCatvod: false,
                         javaPath: '',
@@ -5609,6 +5624,7 @@
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || '保存失败');
                         this.playerSettings = { ...this.playerSettings, ...data.settings };
+                        this.proxyPortCheck = null;
                         await this.loadProxyStatus();
                         this.playerSettingsMessage = '播放器设置已保存';
                     } catch (error) {
@@ -5658,6 +5674,30 @@
                         };
                     } finally {
                         this.proxyStatusLoading = false;
+                    }
+                },
+
+                async checkProxyPort() {
+                    this.proxyPortCheckLoading = true;
+                    try {
+                        const response = await fetch('/api/player/proxy-port-check', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ port: this.playerSettings.localProxyPort })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '代理端口检测失败');
+                        this.proxyPortCheck = data;
+                        this.showMiniToast && this.showMiniToast(data.available ? '代理端口可用' : `代理端口不可用: ${data.reason}`);
+                    } catch (error) {
+                        this.proxyPortCheck = {
+                            available: false,
+                            port: this.playerSettings.localProxyPort,
+                            reason: 'port-check-error',
+                            message: error.message || '代理端口检测失败'
+                        };
+                    } finally {
+                        this.proxyPortCheckLoading = false;
                     }
                 },
 

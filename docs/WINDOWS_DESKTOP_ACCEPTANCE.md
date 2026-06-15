@@ -170,6 +170,8 @@ It forwards common playback headers and Range requests, and it returns `206 Part
 
 Settings exposes a read-only LocalProxy status check backed by `GET /api/player/proxy-status`. It reports whether the proxy is running, the configured port, the active listening port, and active/expired registered playback entries.
 
+Settings also exposes a LocalProxy port check backed by `POST /api/player/proxy-port-check`. It attempts a temporary `127.0.0.1` listen on the configured port and reports `available`, `port-in-use`, or `permission-denied` without scanning external addresses.
+
 ## Packaging Checklist
 
 - `server/**` must stay in `build.files` so Electron asar includes TVBox, player, desktop, and proxy modules.

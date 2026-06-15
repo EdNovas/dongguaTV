@@ -1,5 +1,6 @@
 const http = require('http');
 const crypto = require('crypto');
+const net = require('net');
 const { URL } = require('url');
 
 const DEFAULT_TTL_MS = 2 * 60 * 60 * 1000;
@@ -103,6 +104,50 @@ class LocalProxy {
             activeEntries,
             expiredEntries
         };
+    }
+
+    async checkPort(port) {
+        const desiredPort = Number(port) || 9979;
+        if (this.server && this.port === desiredPort) {
+            return {
+                available: true,
+                runningByLocalProxy: true,
+                host: '127.0.0.1',
+                port: desiredPort,
+                reason: 'local-proxy-running'
+            };
+        }
+
+        const tester = net.createServer();
+        return new Promise(resolve => {
+            tester.once('error', error => {
+                resolve({
+                    available: false,
+                    runningByLocalProxy: false,
+                    host: '127.0.0.1',
+                    port: desiredPort,
+                    code: error.code || 'UNKNOWN',
+                    reason: error.code === 'EADDRINUSE'
+                        ? 'port-in-use'
+                        : error.code === 'EACCES'
+                            ? 'permission-denied'
+                            : 'listen-failed',
+                    message: error.message || 'Port check failed'
+                });
+            });
+            tester.once('listening', () => {
+                tester.close(() => {
+                    resolve({
+                        available: true,
+                        runningByLocalProxy: false,
+                        host: '127.0.0.1',
+                        port: desiredPort,
+                        reason: 'available'
+                    });
+                });
+            });
+            tester.listen(desiredPort, '127.0.0.1');
+        });
     }
 
     async register(playUrlResult, settings) {

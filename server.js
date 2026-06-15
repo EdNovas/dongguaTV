@@ -1320,6 +1320,15 @@ app.get('/api/player/proxy-status', (req, res) => {
     }
 });
 
+app.post('/api/player/proxy-port-check', async (req, res) => {
+    try {
+        const port = req.body && req.body.port;
+        res.json(await playerManager.checkProxyPort(port));
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to check proxy port' });
+    }
+});
+
 app.post('/api/player/open-mpc', async (req, res) => {
     try {
         const playUrlResult = req.body && (req.body.playUrlResult || req.body);
