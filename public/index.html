@@ -3949,6 +3949,20 @@
                             <button class="btn-info" @click="detectMpcPath" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-search"></i>
                             </button>
+                            <button class="btn-info" @click="validateMpcPath" :disabled="mpcValidationLoading"
+                                style="border:0; padding:8px 12px; font-size:12px;">
+                                <i :class="['fas', mpcValidationLoading ? 'fa-spinner fa-spin' : 'fa-check-circle']"></i>
+                                验证
+                            </button>
+                        </div>
+                        <div v-if="mpcValidation"
+                            style="margin-top:10px; padding:9px 11px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
+                            <strong :style="{ color: mpcValidation.valid ? '#22c55e' : '#f87171' }">
+                                MPC path {{ mpcValidation.valid ? 'valid' : 'invalid' }}
+                            </strong>
+                            <span> · {{ mpcValidation.reason }}</span>
+                            <span v-if="mpcValidation.playerType && mpcValidation.playerType !== 'unknown'"> · {{ mpcValidation.playerType }}</span>
+                            <div style="color:#8f98aa;">{{ mpcValidation.message }}</div>
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
@@ -4772,6 +4786,8 @@
                     },
                     playerSettingsSaving: false,
                     playerSettingsMessage: '',
+                    mpcValidation: null,
+                    mpcValidationLoading: false,
                     proxyStatus: null,
                     proxyStatusLoading: false,
                     proxyPortCheck: null,
@@ -5650,6 +5666,7 @@
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || '保存失败');
                         this.playerSettings = { ...this.playerSettings, ...data.settings };
+                        this.mpcValidation = null;
                         this.proxyPortCheck = null;
                         this.proxyRangeTest = null;
                         await this.loadProxyStatus();
@@ -5674,6 +5691,32 @@
                         }
                     } catch (error) {
                         this.playerSettingsMessage = error.message || '检测失败';
+                    }
+                },
+
+                async validateMpcPath() {
+                    this.mpcValidationLoading = true;
+                    try {
+                        const response = await fetch('/api/player/validate-mpc', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ exePath: this.playerSettings.mpcExePath })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'MPC 路径验证失败');
+                        this.mpcValidation = data;
+                        this.showMiniToast && this.showMiniToast(data.valid ? 'MPC 路径有效' : `MPC 路径无效: ${data.reason}`);
+                    } catch (error) {
+                        this.mpcValidation = {
+                            valid: false,
+                            exists: false,
+                            path: this.playerSettings.mpcExePath || '',
+                            playerType: 'unknown',
+                            reason: 'validation-error',
+                            message: error.message || 'MPC 路径验证失败'
+                        };
+                    } finally {
+                        this.mpcValidationLoading = false;
                     }
                 },
 

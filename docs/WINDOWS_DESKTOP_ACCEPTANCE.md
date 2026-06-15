@@ -55,6 +55,8 @@ Common paths checked:
 
 The app passes the media URL as a separate `spawn` argument, not through a shell command string.
 
+Settings can validate the configured MPC path through `POST /api/player/validate-mpc`. The validation is non-executing: it checks that the path exists, is a file, ends in `.exe`, and looks like an MPC-HC or MPC-BE executable.
+
 ## TVBox Import
 
 Open Subscriptions, paste a user-owned TVBox JSON URL, then import. You can also choose a local `.json` file from the Subscriptions panel; the desktop UI reads the file locally and posts the parsed config to the same import endpoint. Local JSON imports are saved as a userData snapshot, so the refresh button reprocesses the last imported snapshot. If the disk file changes, choose the file again to import the new content.

@@ -1295,6 +1295,15 @@ app.post('/api/player/detect-mpc', (req, res) => {
     res.json(playerManager.detectMpc());
 });
 
+app.post('/api/player/validate-mpc', (req, res) => {
+    try {
+        const exePath = req.body && req.body.exePath;
+        res.json(playerManager.validateMpc(exePath));
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to validate MPC path' });
+    }
+});
+
 app.post('/api/player/classify', (req, res) => {
     try {
         res.json(playerManager.classify(req.body && (req.body.playUrlResult || req.body)));

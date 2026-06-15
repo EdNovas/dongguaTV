@@ -1,4 +1,4 @@
-const { readPlayerSettings, savePlayerSettings, detectMpcPaths } = require('./externalPlayerConfig');
+const { readPlayerSettings, savePlayerSettings, detectMpcPaths, validateMpcPath } = require('./externalPlayerConfig');
 const { classifyPlayUrl } = require('./playUrlClassifier');
 const { playWithMpc } = require('./mpcPlayer');
 const { LocalProxy } = require('./localProxy');
@@ -87,6 +87,11 @@ class PlayerManager {
             matches,
             recommended: matches[0] || ''
         };
+    }
+
+    validateMpc(exePath) {
+        const settings = this.getSettings();
+        return validateMpcPath(exePath || settings.mpcExePath);
     }
 
     classify(playUrlResult) {

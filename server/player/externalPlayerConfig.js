@@ -49,9 +49,61 @@ function detectMpcPaths() {
     return candidates.filter(candidate => fs.existsSync(candidate));
 }
 
+function validateMpcPath(exePath) {
+    const value = String(exePath || '').trim();
+    if (!value) {
+        return {
+            valid: false,
+            exists: false,
+            path: '',
+            playerType: 'unknown',
+            reason: 'missing-path',
+            message: 'MPC executable path is not configured.'
+        };
+    }
+
+    const baseName = path.basename(value).toLowerCase();
+    const playerType = baseName.includes('mpc-hc')
+        ? 'mpc-hc'
+        : baseName.includes('mpc-be')
+            ? 'mpc-be'
+            : 'unknown';
+
+    try {
+        const stat = fs.statSync(value);
+        const isFile = stat.isFile();
+        const isExe = baseName.endsWith('.exe');
+        const valid = isFile && isExe && playerType !== 'unknown';
+        return {
+            valid,
+            exists: true,
+            isFile,
+            isExe,
+            path: value,
+            playerType,
+            reason: valid ? 'valid' : playerType === 'unknown' ? 'not-mpc-executable' : !isExe ? 'not-exe' : 'not-file',
+            message: valid
+                ? `${playerType.toUpperCase()} executable is available.`
+                : 'The path exists, but it does not look like an MPC-HC or MPC-BE executable.'
+        };
+    } catch (error) {
+        return {
+            valid: false,
+            exists: false,
+            isFile: false,
+            isExe: baseName.endsWith('.exe'),
+            path: value,
+            playerType,
+            reason: 'path-not-found',
+            message: 'MPC executable path was not found.'
+        };
+    }
+}
+
 module.exports = {
     DEFAULT_PLAYER_SETTINGS,
     readPlayerSettings,
     savePlayerSettings,
-    detectMpcPaths
+    detectMpcPaths,
+    validateMpcPath
 };
