@@ -4265,7 +4265,10 @@
                                     <div class="offline-name">{{ currentGroup ? currentGroup.name : '' }}
                                         <span class="offline-ep">{{ offlineCurrentEpName() }}</span>
                                     </div>
-                                    <div class="offline-sub" v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
+                                    <div class="offline-sub" v-if="dlProgressIsCurrent() && dlProgress.status === 'fetching'">
+                                        <i class="fas fa-spinner fa-spin"></i> 正在读取清单...
+                                    </div>
+                                    <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
                                         正在缓存 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}
                                     </div>
                                     <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'error'" style="color: #ef4444;">
@@ -4277,8 +4280,9 @@
                                     <div class="offline-sub" v-else>缓存后可离线/秒开播放(经去广告代理下载)</div>
                                 </div>
                                 <button class="offline-btn" @click="offlineDownloadCurrent"
-                                    :class="{ downloading: dlProgressIsCurrent() && dlProgress.status === 'downloading' }">
-                                    <template v-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
+                                    :class="{ downloading: dlProgressIsCurrent() && (dlProgress.status === 'downloading' || dlProgress.status === 'fetching') }">
+                                    <template v-if="dlProgressIsCurrent() && dlProgress.status === 'fetching'">准备中...</template>
+                                    <template v-else-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
                                         {{ Math.floor(dlProgress.done / Math.max(1, dlProgress.total) * 100) }}% 取消
                                     </template>
                                     <template v-else-if="offlineHasCurrent()">重新缓存</template>
@@ -10150,19 +10154,32 @@
                     this.dlProgress = { epKey, done: 0, total: 0, bytes: 0, status: 'fetching' };
                     try {
                         try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { }
-                        // 1. 拉清单(只入内存，最后才写库)
-                        let res = await fetch(finalUrl);
-                        if (!res.ok) throw new Error('清单获取失败 ' + res.status);
-                        let text = await res.text();
+                        // 1. 拉清单(只入内存，最后才写库)。带重试+校验 #EXTM3U(代理偶发返回空/错误页时不至于误判"无分段")；
+                        //    逐层下钻 master(变体仍是 .m3u8 就取第一个继续)，直到拿到含分段的媒体清单。
+                        const fetchM3u8 = async (u) => {
+                            let lastErr;
+                            for (let attempt = 0; attempt < 2; attempt++) {
+                                try {
+                                    const r = await fetch(u, { cache: 'no-store' });
+                                    if (!r.ok) { lastErr = new Error('HTTP ' + r.status); continue; }
+                                    const t = await r.text();
+                                    if (!/#EXTM3U/.test(t)) { lastErr = new Error('代理未返回有效m3u8，内容:「' + t.slice(0, 50).replace(/\s+/g, ' ') + '」'); continue; }
+                                    return t;
+                                } catch (e) { lastErr = e; }
+                            }
+                            throw lastErr || new Error('清单获取失败');
+                        };
                         let base = finalUrl;
-                        let lines = text.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
-                        if (lines.length && /\.m3u8/i.test(lines[0])) {  // master playlist → 取第一个子清单
-                            base = new URL(lines[0], base).href;
-                            res = await fetch(base);
-                            if (!res.ok) throw new Error('子清单获取失败 ' + res.status);
-                            text = await res.text();
+                        let text = await fetchM3u8(base);
+                        let lines, resolved = false;
+                        for (let depth = 0; depth < 4; depth++) {
                             lines = text.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
+                            if (!lines.length) throw new Error('清单为空，该源可能已失效，换个线路再缓存');
+                            if (!/\.m3u8/i.test(lines[0])) { resolved = true; break; }  // 首个非#行不是 .m3u8 = 媒体清单
+                            base = new URL(lines[0], base).href;                          // 否则是 master，下钻一层
+                            text = await fetchM3u8(base);
                         }
+                        if (!resolved) throw new Error('清单嵌套过深无法解析，换个线路再缓存');
                         // 2. 收集分段 + AES-128 密钥(#EXT-X-KEY)/fMP4 初始化段(#EXT-X-MAP)的 URI(否则加密剧"已缓存"却离线播不了)
                         const segSet = new Set();
                         for (const s of lines) { try { segSet.add(new URL(s, base).href); } catch (e) { } }
@@ -10171,7 +10188,7 @@
                             try { segSet.add(new URL(um[1], base).href); } catch (e) { }
                         }
                         const segs = [...segSet];  // 去重：避免重复下载与 bytes 虚高
-                        if (!segs.length) throw new Error('清单中没有分段');
+                        if (!segs.length) throw new Error('清单中没有分段，该源结构异常，换个线路再缓存');
                         this.dlProgress = { epKey, done: 0, total: segs.length, bytes: 0, status: 'downloading' };
                         // 3. 4 并发下载(进度按时间节流写响应式：避免高速源每秒几十次整树 diff)
                         let done = 0, bytes = 0, failed = 0, lastUi = 0;
