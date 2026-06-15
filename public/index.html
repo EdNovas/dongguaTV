@@ -740,6 +740,45 @@
             padding: 6px 0 2px;
         }
 
+        /* 📮 求片弹窗 */
+        .req-modal { max-width: 560px; width: 92%; max-height: 86vh; overflow-y: auto; }
+        .req-body { padding: 26px 24px 22px; }
+        .req-h { color: #fff; font-size: 20px; margin: 0 0 6px; }
+        .req-sub { color: #999; font-size: 13px; line-height: 1.6; margin: 0 0 18px; }
+        .req-need-login { color: #bbb; text-align: center; padding: 20px; }
+        .req-need-login p { margin-bottom: 12px; }
+        .req-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+        .req-input {
+            width: 100%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 8px; color: #eee; padding: 10px 12px; font-size: 14px; outline: none;
+        }
+        .req-input:focus { border-color: #e50914; }
+        textarea.req-input { resize: vertical; }
+        .req-sec-title {
+            display: flex; align-items: center; color: #ddd; font-size: 14px; font-weight: 600;
+            margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .req-list { display: flex; flex-direction: column; gap: 10px; }
+        .req-item { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 10px 12px; }
+        .req-row { display: flex; align-items: center; gap: 8px; }
+        .req-name { color: #eee; font-size: 14px; font-weight: 500; }
+        .req-who { margin-left: auto; color: #777; font-size: 11px; }
+        .req-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; }
+        .rb-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .rb-fulfilled { background: rgba(70, 211, 105, 0.2); color: #46d369; }
+        .rb-rejected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .req-note { color: #999; font-size: 12px; margin-top: 4px; word-break: break-all; }
+        .req-fulfill { margin-top: 6px; }
+        .req-dl { color: #46d369; font-size: 13px; text-decoration: none; }
+        .req-dl:hover { text-decoration: underline; }
+        .req-admin-toggle {
+            display: flex; align-items: center; gap: 8px; margin-top: 18px; padding: 10px 0; cursor: pointer;
+            color: #888; font-size: 13px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .req-admin-toggle:hover { color: #ccc; }
+        .req-admin { margin-top: 4px; }
+        .req-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
         /* 3. 进度条拖动点 - 发光效果 */
         .dplayer-bar-wrap .dplayer-thumb {
             background: #fff !important;
@@ -3909,10 +3948,16 @@
                     <p style="margin-bottom: 8px;">💡 尝试搜索电影的中文名</p>
                     <p>🔍 或尝试搜索其他热门影片</p>
                 </div>
-                <button class="btn btn-outline-danger mt-4" @click="clearSearch"
-                    style="border-radius: 20px; padding: 8px 25px;">
-                    <i class="fas fa-home"></i> 返回首页
-                </button>
+                <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:24px;">
+                    <button class="btn btn-danger" @click="openRequestModal(keyword)"
+                        style="border-radius: 20px; padding: 8px 25px;">
+                        <i class="fas fa-paper-plane"></i> 求这部片
+                    </button>
+                    <button class="btn btn-outline-danger" @click="clearSearch"
+                        style="border-radius: 20px; padding: 8px 25px;">
+                        <i class="fas fa-home"></i> 返回首页
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -4027,6 +4072,79 @@
         </div>
 
         <!-- ★★★ TMDb 电影详情弹窗 ★★★ -->
+        <!-- 📮 求片弹窗 -->
+        <div class="info-modal-overlay" v-if="showRequestModal" @click.self="showRequestModal = false">
+            <div class="info-modal req-modal">
+                <button class="info-modal-close" @click="showRequestModal = false"><i class="fas fa-times"></i></button>
+                <div class="req-body">
+                    <h3 class="req-h"><i class="fas fa-paper-plane"></i> 求片</h3>
+                    <p class="req-sub">站内没有想看的剧？提交求片，站长处理后会在「我的求片」给出下载链接，自己下载观看。</p>
+
+                    <div v-if="!syncToken" class="req-need-login">
+                        <p>求片需要登录账号。</p>
+                        <button class="btn btn-danger btn-sm" @click="showRequestModal = false; promptLogin && promptLogin()">去登录</button>
+                    </div>
+
+                    <template v-else>
+                        <div class="req-form">
+                            <input class="req-input" v-model="reqForm.name" placeholder="剧名 / 电影名（必填）" maxlength="200">
+                            <textarea class="req-input" v-model="reqForm.note" rows="2" maxlength="500"
+                                placeholder="备注（可选）：年份、第几季、想要的清晰度等"></textarea>
+                            <button class="btn btn-danger" :disabled="reqSubmitting || !reqForm.name.trim()" @click="submitRequest">
+                                {{ reqSubmitting ? '提交中…' : '提交求片' }}
+                            </button>
+                        </div>
+
+                        <div class="req-sec-title">我的求片</div>
+                        <div v-if="!myRequests.length" class="req-empty">还没有求片记录</div>
+                        <div v-else class="req-list">
+                            <div v-for="r in myRequests" :key="r.id" class="req-item">
+                                <div class="req-row">
+                                    <span class="req-name">{{ r.name }}</span>
+                                    <span class="req-badge" :class="'rb-' + r.status">{{ reqStatusText(r.status) }}</span>
+                                </div>
+                                <div v-if="r.note" class="req-note">{{ r.note }}</div>
+                                <div v-if="r.status === 'fulfilled' && r.fulfill_link" class="req-fulfill">
+                                    <a :href="r.fulfill_link" target="_blank" rel="noopener" class="req-dl"><i class="fas fa-download"></i> 下载链接（自取）</a>
+                                    <div v-if="r.fulfill_note" class="req-note">{{ r.fulfill_note }}</div>
+                                </div>
+                                <div v-else-if="r.status === 'rejected'" class="req-note" style="color:#ef4444;">{{ r.fulfill_note || '暂时无法提供' }}</div>
+                            </div>
+                        </div>
+
+                        <div class="req-admin-toggle" @click="reqAdminOpen = !reqAdminOpen">
+                            <i class="fas fa-user-shield"></i> 站长管理
+                            <i class="fas" :class="reqAdminOpen ? 'fa-chevron-up' : 'fa-chevron-down'" style="margin-left:auto;"></i>
+                        </div>
+                        <div v-if="reqAdminOpen" class="req-admin">
+                            <div v-if="!reqAdminAuthed" class="req-form">
+                                <input class="req-input" v-model="reqAdminToken" type="password" placeholder="管理员令牌 (ADMIN_TOKEN)">
+                                <button class="btn btn-outline-light btn-sm" @click="adminLoadRequests">进入后台</button>
+                            </div>
+                            <template v-else>
+                                <div class="req-sec-title">全部求片（{{ adminRequests.length }}）<span class="expand-toggle" @click="adminLoadRequests" style="margin-left:auto;font-size:12px;"><i class="fas fa-sync-alt"></i> 刷新</span></div>
+                                <div v-for="r in adminRequests" :key="'a' + r.id" class="req-item">
+                                    <div class="req-row">
+                                        <span class="req-name">{{ r.name }}</span>
+                                        <span class="req-badge" :class="'rb-' + r.status">{{ reqStatusText(r.status) }}</span>
+                                        <span class="req-who">{{ r.user_label || (r.user_token || '').slice(0, 8) }}</span>
+                                    </div>
+                                    <div v-if="r.note" class="req-note">备注：{{ r.note }}</div>
+                                    <input class="req-input" v-model="r.fulfill_link" placeholder="磁力 / 下载链接">
+                                    <input class="req-input" v-model="r.fulfill_note" placeholder="给用户的说明（可选）">
+                                    <div class="req-actions">
+                                        <button class="btn btn-success btn-sm" @click="adminFulfill(r, 'fulfilled')">标记已提供</button>
+                                        <button class="btn btn-secondary btn-sm" @click="adminFulfill(r, 'rejected')">无法提供</button>
+                                        <button class="btn btn-outline-danger btn-sm" @click="adminFulfill(r, 'delete')">删除</button>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
         <div class="info-modal-overlay" v-if="showInfoModal" @click.self="showInfoModal = false">
             <div class="info-modal">
                 <button class="info-modal-close" @click="showInfoModal = false"><i class="fas fa-times"></i></button>
@@ -5201,6 +5319,15 @@
                     recommendExpanded: false,       // 为你推荐：展开为网格
                     recommendCanScrollLeft: false,  // 为你推荐：左箭头显隐
                     recommendCanScrollRight: true,  // 为你推荐：右箭头显隐
+                    // 📮 求片
+                    showRequestModal: false,
+                    reqForm: { name: '', note: '' },
+                    reqSubmitting: false,
+                    myRequests: [],
+                    reqAdminOpen: false,
+                    reqAdminToken: '',
+                    reqAdminAuthed: false,
+                    adminRequests: [],
                     showOfflinePanel: false,  // ⬇️ 离线缓存面板开关
                     offlineList: [],          // ⬇️ 已缓存剧集元数据列表
                     dlProgress: null,         // ⬇️ 当前下载进度 {epKey,done,total,bytes,status}
@@ -7430,6 +7557,52 @@
                     const right = row.scrollLeft + row.clientWidth < row.scrollWidth - 10;
                     if (this.recommendCanScrollLeft !== left) this.recommendCanScrollLeft = left;
                     if (this.recommendCanScrollRight !== right) this.recommendCanScrollRight = right;
+                },
+
+                // 📮 求片
+                reqStatusText(s) { return ({ pending: '待处理', fulfilled: '已提供', rejected: '无法提供' })[s] || s; },
+                openRequestModal(prefill) {
+                    this.reqForm = { name: (prefill || '').trim(), note: '' };
+                    this.showRequestModal = true;
+                    if (this.syncToken) this.loadMyRequests();
+                },
+                async submitRequest() {
+                    if (!this.syncToken || !this.reqForm.name.trim() || this.reqSubmitting) return;
+                    this.reqSubmitting = true;
+                    try {
+                        const label = localStorage.getItem('emax_v2board_email') || '';
+                        const r = await fetch('/api/requests', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: this.syncToken, name: this.reqForm.name.trim(), note: this.reqForm.note, label })
+                        }).then(r => r.json());
+                        if (r.ok) {
+                            this.reqForm.note = '';
+                            await this.loadMyRequests();
+                            if (this.showMiniToast) this.showMiniToast('✅ 求片已提交，处理后会在「我的求片」出现下载链接');
+                        } else { alert('提交失败: ' + (r.error || '')); }
+                    } catch (e) { alert('提交失败，请重试'); }
+                    this.reqSubmitting = false;
+                },
+                async loadMyRequests() {
+                    if (!this.syncToken) return;
+                    try { const r = await fetch(`/api/requests/mine?token=${encodeURIComponent(this.syncToken)}`).then(r => r.json()); this.myRequests = r.requests || []; } catch (e) { }
+                },
+                async adminLoadRequests() {
+                    if (!this.reqAdminToken) return;
+                    try {
+                        const r = await fetch(`/api/requests/admin?admin=${encodeURIComponent(this.reqAdminToken)}`).then(r => r.json());
+                        if (r.requests) { this.adminRequests = r.requests; this.reqAdminAuthed = true; }
+                        else alert('管理员令牌无效');
+                    } catch (e) { alert('加载失败'); }
+                },
+                async adminFulfill(r, action) {
+                    try {
+                        const body = { admin: this.reqAdminToken, id: r.id, status: action, fulfill_link: r.fulfill_link, fulfill_note: r.fulfill_note };
+                        if (action === 'delete') { if (!confirm('删除这条求片？')) return; body.action = 'delete'; }
+                        const res = await fetch('/api/requests/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
+                        if (res.ok) await this.adminLoadRequests();
+                        else alert('操作失败');
+                    } catch (e) { alert('操作失败'); }
                 },
 
                 fetchHero() {

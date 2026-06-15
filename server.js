@@ -573,9 +573,29 @@ class CacheManager {
                     )
                 `);
 
+                // 求片：用户提交想看但站内没有的剧；站长在站内后台贴磁力/下载链接履行，用户在"我的求片"看链接自取
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS content_requests (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        user_token TEXT NOT NULL,
+                        user_label TEXT,
+                        name TEXT NOT NULL,
+                        tmdb_id TEXT,
+                        poster TEXT,
+                        note TEXT,
+                        status TEXT NOT NULL DEFAULT 'pending',
+                        fulfill_link TEXT,
+                        fulfill_note TEXT,
+                        created_at INTEGER NOT NULL,
+                        updated_at INTEGER NOT NULL
+                    )
+                `);
+
                 // 创建索引加速过期查询
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_expire ON cache(expire)`);
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_history_user ON user_history(user_token)`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_req_user ON content_requests(user_token)`);
+                this.db.exec(`CREATE INDEX IF NOT EXISTS idx_req_status ON content_requests(status)`);
 
                 // 清理过期数据
                 this.db.prepare('DELETE FROM cache WHERE expire < ?').run(Date.now());
@@ -1153,6 +1173,71 @@ app.post('/api/settings/push', (req, res) => {
         console.error('[Settings Push Error]', e.message);
         res.status(500).json({ error: 'Database error' });
     }
+});
+
+// ========== 求片 API（用户提交想看的剧；站长后台贴磁力/下载链接履行）==========
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+const REQ_DB_OK = () => cacheManager.type === 'sqlite' && cacheManager.db;
+
+// 提交求片（需登录账号）
+app.post('/api/requests', (req, res) => {
+    const { token, name, tmdb_id, poster, note, label } = req.body || {};
+    if (!token || !name || !String(name).trim()) return res.status(400).json({ error: 'Missing token or name' });
+    if (!PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
+    if (!REQ_DB_OK()) return res.json({ ok: false, message: 'SQLite not available' });
+    try {
+        // 防刷：单用户待处理(pending)上限 20
+        const pending = cacheManager.db.prepare("SELECT COUNT(*) c FROM content_requests WHERE user_token = ? AND status = 'pending'").get(token).c;
+        if (pending >= 20) return res.status(429).json({ error: '待处理的求片过多，请等已有的处理完' });
+        const now = Date.now();
+        const info = cacheManager.db.prepare(`INSERT INTO content_requests (user_token, user_label, name, tmdb_id, poster, note, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).run(
+            token, String(label || '').slice(0, 120), String(name).trim().slice(0, 200),
+            String(tmdb_id || '').slice(0, 40), String(poster || '').slice(0, 400), String(note || '').slice(0, 500), now, now);
+        res.json({ ok: true, id: info.lastInsertRowid });
+    } catch (e) { console.error('[求片提交]', e.message); res.status(500).json({ error: 'Database error' }); }
+});
+
+// 我的求片
+app.get('/api/requests/mine', (req, res) => {
+    const token = req.query.token;
+    if (!token || !PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
+    if (!REQ_DB_OK()) return res.json({ requests: [] });
+    try {
+        const rows = cacheManager.db.prepare(`SELECT id, name, tmdb_id, poster, note, status, fulfill_link, fulfill_note, created_at, updated_at
+            FROM content_requests WHERE user_token = ? ORDER BY created_at DESC LIMIT 100`).all(token);
+        res.json({ requests: rows });
+    } catch (e) { res.status(500).json({ error: 'Database error' }); }
+});
+
+// 站长：列出全部求片（用 ADMIN_TOKEN 鉴权）
+app.get('/api/requests/admin', (req, res) => {
+    if (!ADMIN_TOKEN || req.query.admin !== ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
+    if (!REQ_DB_OK()) return res.json({ requests: [] });
+    try {
+        const status = req.query.status;
+        const rows = status
+            ? cacheManager.db.prepare(`SELECT * FROM content_requests WHERE status = ? ORDER BY created_at DESC LIMIT 500`).all(status)
+            : cacheManager.db.prepare(`SELECT * FROM content_requests ORDER BY (status='pending') DESC, created_at DESC LIMIT 500`).all();
+        res.json({ requests: rows });
+    } catch (e) { res.status(500).json({ error: 'Database error' }); }
+});
+
+// 站长：履行/更新求片（贴链接、改状态、删除）
+app.post('/api/requests/admin', (req, res) => {
+    const { admin, id, action, status, fulfill_link, fulfill_note } = req.body || {};
+    if (!ADMIN_TOKEN || admin !== ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
+    if (!REQ_DB_OK() || !id) return res.status(400).json({ error: 'Bad request' });
+    try {
+        if (action === 'delete') {
+            cacheManager.db.prepare('DELETE FROM content_requests WHERE id = ?').run(id);
+            return res.json({ ok: true, deleted: true });
+        }
+        const st = ['pending', 'fulfilled', 'rejected'].includes(status) ? status : 'fulfilled';
+        cacheManager.db.prepare(`UPDATE content_requests SET status = ?, fulfill_link = ?, fulfill_note = ?, updated_at = ? WHERE id = ?`)
+            .run(st, String(fulfill_link || '').slice(0, 2000), String(fulfill_note || '').slice(0, 500), Date.now(), id);
+        res.json({ ok: true });
+    } catch (e) { console.error('[求片履行]', e.message); res.status(500).json({ error: 'Database error' }); }
 });
 
 // TMDB 通用代理与缓存 API

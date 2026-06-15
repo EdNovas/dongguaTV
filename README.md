@@ -248,6 +248,7 @@ node server.js
 | `DANMU_API_TOKEN` | ❌ | — | `danmu_api` 鉴权令牌；**逗号分隔与多实例按序配对**，单个则共用 |
 | `SITE_URL` | ❌ | 自动探测* | 分享卡片/SEO 用的站点根地址 |
 | `PROXY_PASSWORD` | ❌ | — | 自建 `proxy-server.js` 的 Bearer 鉴权口令 |
+| `ADMIN_TOKEN` | ❌ | — | 站长令牌：开启「求片」后台管理（在求片弹窗的"站长管理"里输入它即可看全部求片、贴下载链接履行）。不设则求片后台不可用 |
 
 > \* `SITE_URL` 未设置时自动从请求 `Host`/`X-Forwarded-Host` 头推断，最终回退为 `https://ednovas.video`。
 >
