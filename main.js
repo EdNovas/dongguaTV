@@ -22,7 +22,7 @@ function findAvailablePort(startPort, maxTries = 40) {
       const tester = net
         .createServer()
         .once('error', (error) => {
-          if (error.code === 'EADDRINUSE' && port < Number(startPort) + maxTries) {
+          if (['EADDRINUSE', 'EACCES'].includes(error.code) && port < Number(startPort) + maxTries) {
             port += 1;
             tryPort();
             return;

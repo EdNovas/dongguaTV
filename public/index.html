@@ -4263,7 +4263,10 @@
                 <div class="player-box" style="position: relative;">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
                     <div v-if="shouldRecommendMpc()" style="position:absolute; left:18px; bottom:18px; z-index:80; max-width:520px; background:rgba(0,0,0,0.78); border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 14px; font-size:12px; backdrop-filter:blur(14px);">
-                        推荐使用 MPC 播放，以获得更稳定的 4K 高码率播放体验。
+                        推荐使用 MPC 播放，以获得更稳定的高码率播放体验。
+                        <div v-if="playbackClassification && playbackClassification.reason" style="color:#cbd5e1; margin-top:4px;">
+                            {{ playbackClassification.reason }}
+                        </div>
                     </div>
                     <!-- 自动切换线路提示 -->
                     <div v-if="autoRetryMessage" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
@@ -4741,6 +4744,8 @@
                     playbackErrorCount: 0,  // 播放失败计数
                     isAutoRetrying: false,  // 是否正在自动重试
                     autoRetryMessage: '',  // 自动切换提示信息
+                    playbackClassification: null,
+                    playbackClassificationLoading: false,
                     watchHistory: [],  // 用户观看历史记录
                     wakeLock: null,  // Screen Wake Lock 对象（用于保持屏幕常亮）
 
@@ -5959,8 +5964,40 @@
                 },
 
                 shouldRecommendMpc() {
+                    if (this.playbackClassification && this.playbackClassification.recommendedPlayer) {
+                        return this.playbackClassification.recommendedPlayer === 'mpc';
+                    }
                     const result = this.buildCurrentPlayUrlResult();
                     return result.quality === '4k' || result.codec === 'hevc' || result.hdr || result.sourceKind === 'cloud-drive' || result.format === 'mkv' || (result.sourceKind === 'live' && Object.keys(result.headers || {}).length > 0);
+                },
+
+                async refreshPlaybackClassification(expectedUrl) {
+                    const url = expectedUrl || this.currentUrl;
+                    if (!url) {
+                        this.playbackClassification = null;
+                        return;
+                    }
+                    this.playbackClassificationLoading = true;
+                    try {
+                        const response = await fetch('/api/player/classify', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildCurrentPlayUrlResult() })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '播放分类失败');
+                        if (this.currentUrl === url) {
+                            this.playbackClassification = data;
+                        }
+                    } catch (error) {
+                        if (this.currentUrl === url) {
+                            this.playbackClassification = null;
+                        }
+                    } finally {
+                        if (this.currentUrl === url) {
+                            this.playbackClassificationLoading = false;
+                        }
+                    }
                 },
 
                 async openCurrentWithMpc() {
@@ -8513,6 +8550,8 @@
                 },
                 play(url) {
                     this.currentUrl = url;
+                    this.playbackClassification = null;
+                    this.refreshPlaybackClassification(url);
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
                     const playSeq = _navSeq;       // 🧭 记录本次播放的导航上下文（供错误回退判断串剧）
