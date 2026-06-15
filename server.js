@@ -583,6 +583,9 @@ class CacheManager {
                         tmdb_id TEXT,
                         poster TEXT,
                         note TEXT,
+                        year TEXT,
+                        aka TEXT,
+                        cast_info TEXT,
                         status TEXT NOT NULL DEFAULT 'pending',
                         fulfill_link TEXT,
                         fulfill_note TEXT,
@@ -590,6 +593,11 @@ class CacheManager {
                         updated_at INTEGER NOT NULL
                     )
                 `);
+                // 求片：为帮站长准确找片新增的可选字段(年份/外文名又名/导演主演)。
+                // 用幂等 ALTER 给【已存在】的旧表补列(SQLite 列已存在会抛错→吞掉即可)，免破坏旧数据。
+                for (const col of ['year', 'aka', 'cast_info']) {
+                    try { this.db.exec(`ALTER TABLE content_requests ADD COLUMN ${col} TEXT`); } catch (e) { /* 列已存在 */ }
+                }
 
                 // 创建索引加速过期查询
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_expire ON cache(expire)`);
@@ -964,7 +972,9 @@ app.get('/api/config', (req, res) => {
         sync_enabled: syncEnabled,
         multi_user_mode: ACCESS_PASSWORDS.length > 1,
         // 🗨️ 弹幕：配置了 DANMU_API_URL 才开启(前端据此决定是否给播放器挂弹幕)
-        danmaku_enabled: !!process.env.DANMU_API_URL
+        danmaku_enabled: !!process.env.DANMU_API_URL,
+        // 📮 求片：必须配置 ADMIN_TOKEN(站长才能履行)才开启;否则前端整个隐藏入口、后端拒收
+        requests_enabled: !!process.env.ADMIN_TOKEN
     });
 });
 
@@ -1181,21 +1191,35 @@ const REQ_DB_OK = () => cacheManager.type === 'sqlite' && cacheManager.db;
 
 // 提交求片（需登录账号）
 app.post('/api/requests', (req, res) => {
-    const { token, name, tmdb_id, poster, note, label } = req.body || {};
+    if (!ADMIN_TOKEN) return res.status(403).json({ error: '求片功能未开启' });  // 未配 ADMIN_TOKEN = 功能关闭
+    const { token, name, tmdb_id, poster, note, label, year, aka, cast } = req.body || {};
     if (!token || !name || !String(name).trim()) return res.status(400).json({ error: 'Missing token or name' });
     if (!PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
     if (!REQ_DB_OK()) return res.json({ ok: false, message: 'SQLite not available' });
     try {
-        // 防刷：单用户待处理(pending)上限 20
+        // 防刷：单用户待处理(pending)上限 3
         const pending = cacheManager.db.prepare("SELECT COUNT(*) c FROM content_requests WHERE user_token = ? AND status = 'pending'").get(token).c;
-        if (pending >= 20) return res.status(429).json({ error: '待处理的求片过多，请等已有的处理完' });
+        if (pending >= 3) return res.status(429).json({ error: '最多同时有 3 条待处理的求片，请等已有的处理完或先撤销' });
         const now = Date.now();
-        const info = cacheManager.db.prepare(`INSERT INTO content_requests (user_token, user_label, name, tmdb_id, poster, note, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).run(
+        const info = cacheManager.db.prepare(`INSERT INTO content_requests (user_token, user_label, name, tmdb_id, poster, note, year, aka, cast_info, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).run(
             token, String(label || '').slice(0, 120), String(name).trim().slice(0, 200),
-            String(tmdb_id || '').slice(0, 40), String(poster || '').slice(0, 400), String(note || '').slice(0, 500), now, now);
+            String(tmdb_id || '').slice(0, 40), String(poster || '').slice(0, 400), String(note || '').slice(0, 500),
+            String(year || '').slice(0, 20), String(aka || '').slice(0, 200), String(cast || '').slice(0, 200), now, now);
         res.json({ ok: true, id: info.lastInsertRowid });
     } catch (e) { console.error('[求片提交]', e.message); res.status(500).json({ error: 'Database error' }); }
+});
+
+// 撤销自己的求片（仅限本人；pending 或 need_info 可撤销）→ 让"上限 3"不至于把人卡死，
+// 也用于 need_info 补充重提时清掉旧的那条（避免同片堆积孤儿记录）。已履行/已拒绝的不可删。
+app.post('/api/requests/cancel', (req, res) => {
+    const { token, id } = req.body || {};
+    if (!token || !PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
+    if (!REQ_DB_OK() || !id) return res.status(400).json({ error: 'Bad request' });
+    try {
+        const info = cacheManager.db.prepare("DELETE FROM content_requests WHERE id = ? AND user_token = ? AND status IN ('pending', 'need_info')").run(id, token);
+        res.json({ ok: true, deleted: info.changes });
+    } catch (e) { res.status(500).json({ error: 'Database error' }); }
 });
 
 // 我的求片
@@ -1204,7 +1228,7 @@ app.get('/api/requests/mine', (req, res) => {
     if (!token || !PASSWORD_HASH_MAP[token]) return res.status(401).json({ error: 'Invalid token' });
     if (!REQ_DB_OK()) return res.json({ requests: [] });
     try {
-        const rows = cacheManager.db.prepare(`SELECT id, name, tmdb_id, poster, note, status, fulfill_link, fulfill_note, created_at, updated_at
+        const rows = cacheManager.db.prepare(`SELECT id, name, tmdb_id, poster, note, year, aka, cast_info, status, fulfill_link, fulfill_note, created_at, updated_at
             FROM content_requests WHERE user_token = ? ORDER BY created_at DESC LIMIT 100`).all(token);
         res.json({ requests: rows });
     } catch (e) { res.status(500).json({ error: 'Database error' }); }
@@ -1212,7 +1236,9 @@ app.get('/api/requests/mine', (req, res) => {
 
 // 站长：列出全部求片（用 ADMIN_TOKEN 鉴权）
 app.get('/api/requests/admin', (req, res) => {
-    if (!ADMIN_TOKEN || req.query.admin !== ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
+    // 优先从请求头取令牌(避免 ADMIN_TOKEN 落入访问日志/Referer/浏览器历史)；兼容旧的 query 传参
+    const admin = req.headers['x-admin-token'] || req.query.admin;
+    if (!ADMIN_TOKEN || admin !== ADMIN_TOKEN) return res.status(403).json({ error: 'Forbidden' });
     if (!REQ_DB_OK()) return res.json({ requests: [] });
     try {
         const status = req.query.status;
@@ -1233,7 +1259,7 @@ app.post('/api/requests/admin', (req, res) => {
             cacheManager.db.prepare('DELETE FROM content_requests WHERE id = ?').run(id);
             return res.json({ ok: true, deleted: true });
         }
-        const st = ['pending', 'fulfilled', 'rejected'].includes(status) ? status : 'fulfilled';
+        const st = ['pending', 'fulfilled', 'rejected', 'need_info'].includes(status) ? status : 'fulfilled';
         cacheManager.db.prepare(`UPDATE content_requests SET status = ?, fulfill_link = ?, fulfill_note = ?, updated_at = ? WHERE id = ?`)
             .run(st, String(fulfill_link || '').slice(0, 2000), String(fulfill_note || '').slice(0, 500), Date.now(), id);
         res.json({ ok: true });

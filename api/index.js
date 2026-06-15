@@ -434,7 +434,9 @@ app.get('/api/config', (req, res) => {
         enable_local_image_cache: false, // Vercel 不支持本地缓存
         sync_enabled: syncEnabled,
         multi_user_mode: ACCESS_PASSWORDS.length > 1,
-        danmaku_enabled: !!process.env.DANMU_API_URL  // 🗨️ 弹幕开关
+        danmaku_enabled: !!process.env.DANMU_API_URL,  // 🗨️ 弹幕开关
+        // 📮 求片：Vercel 无持久 SQLite、不适合求片(需站长长期履行)→ 始终关闭，仅 VPS(server.js) 支持
+        requests_enabled: false
     });
 });
 

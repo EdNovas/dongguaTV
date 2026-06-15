@@ -767,6 +767,14 @@
         .rb-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
         .rb-fulfilled { background: rgba(70, 211, 105, 0.2); color: #46d369; }
         .rb-rejected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .rb-need_info { background: rgba(251, 191, 36, 0.18); color: #fcd34d; }
+        .req-hint { color: #8a8a8a; font-size: 12px; margin: -2px 0 2px; line-height: 1.5; }
+        .req-hint .fa-lightbulb { color: #fbbf24; margin-right: 4px; }
+        .req-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 480px) { .req-grid2 { grid-template-columns: 1fr; } }
+        .req-meta { color: #8b8b8b; font-size: 12px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 8px; }
+        .req-meta span { white-space: nowrap; }
+        .req-needinfo { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
         .req-note { color: #999; font-size: 12px; margin-top: 4px; word-break: break-all; }
         .req-fulfill { margin-top: 6px; }
         .req-dl { color: #46d369; font-size: 13px; text-decoration: none; }
@@ -4038,7 +4046,7 @@
                     <p>🔍 或尝试搜索其他热门影片</p>
                 </div>
                 <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:24px;">
-                    <button class="btn btn-danger" @click="openRequestModal(keyword)"
+                    <button v-if="requestsEnabled" class="btn btn-danger" @click="openRequestModal(keyword)"
                         style="border-radius: 20px; padding: 8px 25px;">
                         <i class="fas fa-paper-plane"></i> 求这部片
                     </button>
@@ -4167,7 +4175,7 @@
                 <button class="info-modal-close" @click="showRequestModal = false"><i class="fas fa-times"></i></button>
                 <div class="req-body">
                     <h3 class="req-h"><i class="fas fa-paper-plane"></i> 求片</h3>
-                    <p class="req-sub">站内没有想看的剧？提交求片，站长处理后会在「我的求片」给出下载链接，自己下载观看。</p>
+                    <p class="req-sub">站内没有想看的剧？提交求片，站长处理后会在「我的求片」给出观看 / 下载链接（站内播放、网盘下载或外站均可）。</p>
 
                     <div v-if="!syncToken" class="req-need-login">
                         <p>求片需要登录账号。</p>
@@ -4176,9 +4184,15 @@
 
                     <template v-else>
                         <div class="req-form">
-                            <input class="req-input" v-model="reqForm.name" placeholder="剧名 / 电影名（必填）" maxlength="200">
+                            <input class="req-input" v-model="reqForm.name" placeholder="片名（必填）" maxlength="200">
+                            <p class="req-hint"><i class="fas fa-lightbulb"></i> 信息越全，站长越容易准确找到这部片（同名作品很多，建议尽量填写）</p>
+                            <input class="req-input" v-model="reqForm.aka" placeholder="外文名 / 又名 / 中英文译名（可选，如 Men at Work / 打工狂想曲）" maxlength="200">
+                            <div class="req-grid2">
+                                <input class="req-input" v-model="reqForm.year" placeholder="年份（可选，如 2008）" maxlength="20">
+                                <input class="req-input" v-model="reqForm.cast" placeholder="导演 / 主演（可选）" maxlength="200">
+                            </div>
                             <textarea class="req-input" v-model="reqForm.note" rows="2" maxlength="500"
-                                placeholder="备注（可选）：年份、第几季、想要的清晰度等"></textarea>
+                                placeholder="补充说明（可选）：第几季、剧情梗概、想要的清晰度等"></textarea>
                             <button class="btn btn-danger" :disabled="reqSubmitting || !reqForm.name.trim()" @click="submitRequest">
                                 {{ reqSubmitting ? '提交中…' : '提交求片' }}
                             </button>
@@ -4192,12 +4206,23 @@
                                     <span class="req-name">{{ r.name }}</span>
                                     <span class="req-badge" :class="'rb-' + r.status">{{ reqStatusText(r.status) }}</span>
                                 </div>
+                                <div v-if="r.aka || r.year || r.cast_info" class="req-meta">
+                                    <span v-if="r.year">{{ r.year }}</span><span v-if="r.aka">《{{ r.aka }}》</span><span v-if="r.cast_info">{{ r.cast_info }}</span>
+                                </div>
                                 <div v-if="r.note" class="req-note">{{ r.note }}</div>
                                 <div v-if="r.status === 'fulfilled' && r.fulfill_link" class="req-fulfill">
-                                    <a :href="r.fulfill_link" target="_blank" rel="noopener" class="req-dl"><i class="fas fa-download"></i> 下载链接（自取）</a>
+                                    <a :href="safeLink(r.fulfill_link)" target="_blank" rel="noopener" class="req-dl"><i class="fas fa-play-circle"></i> 前往观看 / 下载（点此自取）</a>
                                     <div v-if="r.fulfill_note" class="req-note">{{ r.fulfill_note }}</div>
                                 </div>
-                                <div v-else-if="r.status === 'rejected'" class="req-note" style="color:#ef4444;">{{ r.fulfill_note || '暂时无法提供' }}</div>
+                                <div v-else-if="r.status === 'fulfilled'" class="req-note" style="color:#46d369;"><i class="fas fa-circle-check"></i> {{ r.fulfill_note || '站长已标记为已提供' }}</div>
+                                <div v-else-if="r.status === 'rejected'" class="req-note" style="color:#f87171;"><i class="fas fa-circle-xmark"></i> {{ r.fulfill_note || '暂时无法提供（可能暂无资源）' }}</div>
+                                <div v-else-if="r.status === 'need_info'" class="req-needinfo">
+                                    <div class="req-note" style="color:#fbbf24;"><i class="fas fa-circle-info"></i> {{ r.fulfill_note || '信息不足，无法确定是哪部，请补充更多信息（年份/外文名/导演主演）' }}</div>
+                                    <button class="btn btn-outline-warning btn-sm" @click="refillRequest(r)"><i class="fas fa-pen"></i> 补充信息重新提交</button>
+                                </div>
+                                <div v-else-if="r.status === 'pending'" class="req-actions">
+                                    <button class="btn btn-outline-secondary btn-sm" @click="cancelRequest(r)"><i class="fas fa-xmark"></i> 撤销</button>
+                                </div>
                             </div>
                         </div>
 
@@ -4218,11 +4243,15 @@
                                         <span class="req-badge" :class="'rb-' + r.status">{{ reqStatusText(r.status) }}</span>
                                         <span class="req-who">{{ r.user_label || (r.user_token || '').slice(0, 8) }}</span>
                                     </div>
+                                    <div v-if="r.aka || r.year || r.cast_info" class="req-meta">
+                                        <span v-if="r.year">{{ r.year }}</span><span v-if="r.aka">《{{ r.aka }}》</span><span v-if="r.cast_info">{{ r.cast_info }}</span>
+                                    </div>
                                     <div v-if="r.note" class="req-note">备注：{{ r.note }}</div>
-                                    <input class="req-input" v-model="r.fulfill_link" placeholder="磁力 / 下载链接">
-                                    <input class="req-input" v-model="r.fulfill_note" placeholder="给用户的说明（可选）">
+                                    <input class="req-input" v-model="r.fulfill_link" placeholder="链接：磁力 / 下载 / 站内播放 / 其他网站均可">
+                                    <input class="req-input" v-model="r.fulfill_note" placeholder="给用户的说明 / 原因（无法提供或需补充信息时填写）">
                                     <div class="req-actions">
                                         <button class="btn btn-success btn-sm" @click="adminFulfill(r, 'fulfilled')">标记已提供</button>
+                                        <button class="btn btn-warning btn-sm" @click="adminFulfill(r, 'need_info')">需补充信息</button>
                                         <button class="btn btn-secondary btn-sm" @click="adminFulfill(r, 'rejected')">无法提供</button>
                                         <button class="btn btn-outline-danger btn-sm" @click="adminFulfill(r, 'delete')">删除</button>
                                     </div>
@@ -5400,6 +5429,7 @@
                     sitesMap: {},  // 缓存站点信息（用于客户端测速）
                     corsProxyUrl: null,  // CORS 代理 URL（用于中转无法直接访问的资源站 API）
                     danmakuEnabled: false,  // 🗨️ 弹幕开关（来自 /api/config，配置了 DANMU_API_URL 才为 true）
+                    requestsEnabled: false, // 📮 求片开关（来自 /api/config：仅 VPS/server.js 配了 ADMIN_TOKEN 才为 true；Vercel 始终 false）
                     playbackErrorCount: 0,  // 播放失败计数
                     isAutoRetrying: false,  // 是否正在自动重试
                     autoRetryMessage: '',  // 自动切换提示信息
@@ -5411,7 +5441,8 @@
                     recommendCanScrollRight: true,  // 为你推荐：右箭头显隐
                     // 📮 求片
                     showRequestModal: false,
-                    reqForm: { name: '', note: '' },
+                    reqForm: { name: '', aka: '', year: '', cast: '', note: '' },
+                    reqRefillFromId: null,  // need_info 补充重提时来源记录 id（提交成功后删掉它，避免堆积孤儿）
                     reqSubmitting: false,
                     myRequests: [],
                     reqAdminOpen: false,
@@ -5865,6 +5896,8 @@
                         // 🗨️ 弹幕开关（服务端配置了 DANMU_API_URL 才开启）
                         this.danmakuEnabled = !!config.danmaku_enabled;
                         if (this.danmakuEnabled) console.log('[Config] 弹幕已开启');
+                        // 📮 求片开关（服务端配置了 ADMIN_TOKEN 才开启；否则整个功能隐藏）
+                        this.requestsEnabled = !!config.requests_enabled;
 
                         // Vercel 兼容性检测
                         if (config.enable_local_image_cache === false) {
@@ -7650,28 +7683,64 @@
                 },
 
                 // 📮 求片
-                reqStatusText(s) { return ({ pending: '待处理', fulfilled: '已提供', rejected: '无法提供' })[s] || s; },
+                reqStatusText(s) { return ({ pending: '待处理', fulfilled: '已提供', rejected: '无法提供', need_info: '需补充信息' })[s] || s; },
+                // 链接安全：只允许常见可点协议，挡掉 javascript:/data: 等(站长误粘或令牌泄露时的兜底)
+                safeLink(u) {
+                    const s = String(u || '').trim();
+                    return /^(https?:|magnet:|ed2k:|thunder:|\/)/i.test(s) ? s : '#';
+                },
                 openRequestModal(prefill) {
-                    this.reqForm = { name: (prefill || '').trim(), note: '' };
+                    if (!this.requestsEnabled) return;  // 站长未配 ADMIN_TOKEN → 求片功能关闭
+                    this.reqForm = { name: (prefill || '').trim(), aka: '', year: '', cast: '', note: '' };
+                    this.reqRefillFromId = null;
                     this.showRequestModal = true;
                     if (this.syncToken) this.loadMyRequests();
+                },
+                // need_info：从被退回的求片预填表单，让用户补充信息后重新提交(提交成功会删掉这条旧的)
+                refillRequest(r) {
+                    this.reqForm = { name: r.name || '', aka: r.aka || '', year: r.year || '', cast: r.cast_info || '', note: r.note || '' };
+                    this.reqRefillFromId = r.id || null;
+                    const panel = document.querySelector('.req-modal .req-form');
+                    if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
                 },
                 async submitRequest() {
                     if (!this.syncToken || !this.reqForm.name.trim() || this.reqSubmitting) return;
                     this.reqSubmitting = true;
                     try {
                         const label = localStorage.getItem('emax_v2board_email') || '';
+                        const f = this.reqForm;
                         const r = await fetch('/api/requests', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ token: this.syncToken, name: this.reqForm.name.trim(), note: this.reqForm.note, label })
+                            body: JSON.stringify({ token: this.syncToken, name: f.name.trim(), aka: f.aka, year: f.year, cast: f.cast, note: f.note, label })
                         }).then(r => r.json());
                         if (r.ok) {
-                            this.reqForm.note = '';
+                            // need_info 补充重提：删掉来源的那条旧记录，避免同片堆积
+                            if (this.reqRefillFromId) {
+                                try {
+                                    await fetch('/api/requests/cancel', {
+                                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ token: this.syncToken, id: this.reqRefillFromId })
+                                    });
+                                } catch (e) { }
+                                this.reqRefillFromId = null;
+                            }
+                            this.reqForm = { name: '', aka: '', year: '', cast: '', note: '' };
                             await this.loadMyRequests();
-                            if (this.showMiniToast) this.showMiniToast('✅ 求片已提交，处理后会在「我的求片」出现下载链接');
+                            if (this.showMiniToast) this.showMiniToast('✅ 求片已提交，处理后会在「我的求片」给出结果');
                         } else { alert('提交失败: ' + (r.error || '')); }
                     } catch (e) { alert('提交失败，请重试'); }
                     this.reqSubmitting = false;
+                },
+                async cancelRequest(r) {
+                    if (!this.syncToken || !r || !r.id) return;
+                    if (!confirm('撤销这条求片？')) return;
+                    try {
+                        const res = await fetch('/api/requests/cancel', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: this.syncToken, id: r.id })
+                        }).then(r => r.json());
+                        if (res.ok) await this.loadMyRequests();
+                    } catch (e) { alert('撤销失败，请重试'); }
                 },
                 async loadMyRequests() {
                     if (!this.syncToken) return;
@@ -7680,7 +7749,8 @@
                 async adminLoadRequests() {
                     if (!this.reqAdminToken) return;
                     try {
-                        const r = await fetch(`/api/requests/admin?admin=${encodeURIComponent(this.reqAdminToken)}`).then(r => r.json());
+                        // 令牌走请求头，不进 URL（避免落入访问日志/Referer）
+                        const r = await fetch('/api/requests/admin', { headers: { 'X-Admin-Token': this.reqAdminToken } }).then(r => r.json());
                         if (r.requests) { this.adminRequests = r.requests; this.reqAdminAuthed = true; }
                         else alert('管理员令牌无效');
                     } catch (e) { alert('加载失败'); }
