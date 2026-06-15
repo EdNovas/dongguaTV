@@ -10425,6 +10425,10 @@
                         }));
 
                         // 4. 按配额从各组取(看得多的语言占比高),按[类型+id]去重、排已看、滤海报,凑满18
+                        //    ⚠️ 只保留【有中文名】的:TMDB(zh-CN)给不出中文名的(如 Men at Work / Une Famille de Bâtards)
+                        //    说明该剧没中文本地化→中文资源站基本没有、且英文/法文名也搜不到。这样推的都是能搜到能看的
+                        //    (国产剧 + 已中文化的热门西片如 阿凡达/挽救计划/星际穿越)。
+                        const hasCJK = s => /[一-鿿]/.test(s);
                         const seen = new Set(); const out = [];
                         const pick = (gl, n) => {
                             let took = 0;
@@ -10433,7 +10437,7 @@
                                 if (!x || !x.poster_path || x.adult) continue;
                                 const t = (x.title || x.name || '').trim();
                                 const k = x.media_type + '-' + x.id;
-                                if (!t || seen.has(k) || historySet.has(t)) continue;
+                                if (!t || !hasCJK(t) || seen.has(k) || historySet.has(t)) continue;
                                 seen.add(k); out.push(x); took++;
                             }
                         };
