@@ -1312,6 +1312,14 @@ app.post('/api/player/proxy-url', async (req, res) => {
     }
 });
 
+app.get('/api/player/proxy-status', (req, res) => {
+    try {
+        res.json(playerManager.getProxyStatus());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to read proxy status' });
+    }
+});
+
 app.post('/api/player/open-mpc', async (req, res) => {
     try {
         const playUrlResult = req.body && (req.body.playUrlResult || req.body);

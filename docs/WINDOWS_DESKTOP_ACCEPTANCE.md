@@ -168,6 +168,8 @@ The LocalProxy listens only on:
 
 It forwards common playback headers and Range requests, and it returns `206 Partial Content` for range-capable upstream responses.
 
+Settings exposes a read-only LocalProxy status check backed by `GET /api/player/proxy-status`. It reports whether the proxy is running, the configured port, the active listening port, and active/expired registered playback entries.
+
 ## Packaging Checklist
 
 - `server/**` must stay in `build.files` so Electron asar includes TVBox, player, desktop, and proxy modules.

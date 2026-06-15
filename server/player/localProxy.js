@@ -88,6 +88,23 @@ class LocalProxy {
         this.entries.clear();
     }
 
+    getStatus() {
+        const now = Date.now();
+        let activeEntries = 0;
+        let expiredEntries = 0;
+        for (const entry of this.entries.values()) {
+            if (entry.removeAt && entry.removeAt <= now) expiredEntries += 1;
+            else activeEntries += 1;
+        }
+        return {
+            running: !!this.server,
+            host: this.server ? '127.0.0.1' : null,
+            port: this.port,
+            activeEntries,
+            expiredEntries
+        };
+    }
+
     async register(playUrlResult, settings) {
         const input = playUrlResult || {};
         if (!input.url) throw new Error('Playback URL is required.');

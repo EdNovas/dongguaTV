@@ -35,6 +35,17 @@ class PlayerManager {
         return this.localProxy.register(playUrlResult, settings);
     }
 
+    getProxyStatus() {
+        const settings = this.getSettings();
+        return {
+            settings: {
+                useLocalProxy: settings.useLocalProxy,
+                localProxyPort: settings.localProxyPort
+            },
+            proxy: this.localProxy.getStatus()
+        };
+    }
+
     async openMpc(playUrlResult) {
         const input = typeof playUrlResult === 'string' ? { url: playUrlResult } : (playUrlResult || {});
         const settings = this.getSettings();

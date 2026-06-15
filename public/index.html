@@ -3984,7 +3984,27 @@
                                 <i :class="['fas', playerSettingsSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i>
                                 保存播放器
                             </button>
+                            <button class="btn-info" @click="loadProxyStatus" :disabled="proxyStatusLoading"
+                                style="border:0; padding:9px 12px; font-size:12px;">
+                                <i :class="['fas', proxyStatusLoading ? 'fa-spinner fa-spin' : 'fa-network-wired']"></i>
+                                代理状态
+                            </button>
                             <span v-if="playerSettingsMessage" style="color:#aaa; font-size:12px;">{{ playerSettingsMessage }}</span>
+                        </div>
+                        <div v-if="proxyStatus"
+                            style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
+                            <strong :style="{ color: proxyStatus.proxy && proxyStatus.proxy.running ? '#22c55e' : '#fbbf24' }">
+                                LocalProxy {{ proxyStatus.proxy && proxyStatus.proxy.running ? 'running' : 'stopped' }}
+                            </strong>
+                            <span v-if="proxyStatus.proxy && proxyStatus.proxy.running">
+                                · {{ proxyStatus.proxy.host }}:{{ proxyStatus.proxy.port }}
+                            </span>
+                            <span> · configured {{ proxyStatus.settings && proxyStatus.settings.localProxyPort }}</span>
+                            <div style="color:#8f98aa;">
+                                enabled: {{ proxyStatus.settings && proxyStatus.settings.useLocalProxy ? 'yes' : 'no' }}
+                                · active entries: {{ proxyStatus.proxy ? proxyStatus.proxy.activeEntries : 0 }}
+                                · expired entries: {{ proxyStatus.proxy ? proxyStatus.proxy.expiredEntries : 0 }}
+                            </div>
                         </div>
                     </div>
 
@@ -4715,6 +4735,8 @@
                     },
                     playerSettingsSaving: false,
                     playerSettingsMessage: '',
+                    proxyStatus: null,
+                    proxyStatusLoading: false,
                     pluginRuntimeSettings: {
                         enableJavaCatvod: false,
                         javaPath: '',
@@ -5572,6 +5594,7 @@
                         this.playerSettingsMessage = error.message || '播放器设置加载失败';
                     }
                     this.loadPluginRuntimeSettings();
+                    this.loadProxyStatus();
                 },
 
                 async savePlayerSettings() {
@@ -5586,6 +5609,7 @@
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || '保存失败');
                         this.playerSettings = { ...this.playerSettings, ...data.settings };
+                        await this.loadProxyStatus();
                         this.playerSettingsMessage = '播放器设置已保存';
                     } catch (error) {
                         this.playerSettingsMessage = error.message || '保存失败';
@@ -5607,6 +5631,33 @@
                         }
                     } catch (error) {
                         this.playerSettingsMessage = error.message || '检测失败';
+                    }
+                },
+
+                async loadProxyStatus() {
+                    this.proxyStatusLoading = true;
+                    try {
+                        const response = await fetch('/api/player/proxy-status');
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '代理状态读取失败');
+                        this.proxyStatus = data;
+                    } catch (error) {
+                        this.proxyStatus = {
+                            settings: {
+                                useLocalProxy: this.playerSettings.useLocalProxy,
+                                localProxyPort: this.playerSettings.localProxyPort
+                            },
+                            proxy: {
+                                running: false,
+                                host: null,
+                                port: null,
+                                activeEntries: 0,
+                                expiredEntries: 0
+                            },
+                            error: error.message || '代理状态读取失败'
+                        };
+                    } finally {
+                        this.proxyStatusLoading = false;
                     }
                 },
 
