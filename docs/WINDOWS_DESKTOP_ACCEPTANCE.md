@@ -148,6 +148,7 @@ When a source cannot play:
 - Local proxy issue: check `player-settings.json` `localProxyPort` and whether the port is occupied.
 - Current playback: use the player header `Proxy URL` button to register the current PlayUrlResult with LocalProxy and copy the local `127.0.0.1` URL for external player testing.
 - Current playback recommendation: the player overlay calls `POST /api/player/classify` so MPC recommendations use the same backend rules as external playback dispatch.
+- Playback classifier: when sources do not provide full metadata, the backend also infers 4K, HEVC/H.265, HDR, cloud-drive, MKV, and live-header hints from the URL before recommending a player.
 - Source diagnostics: use Subscriptions > Diagnose on the specific source to see unsupported/plugin/runtime reasons.
 - Search diagnostics: when search returns no results, use the inline Search Diagnostics panel to see whether the issue is missing built-in search sites, disabled TVBox sources, plugin-required sources, unsupported sources, or Local Java Bridge state.
 
