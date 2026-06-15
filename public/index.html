@@ -5892,14 +5892,23 @@
 
                         console.log('[同步] 服务器优先模式 - 服务器历史:', serverHistory.length, '本地历史:', this.watchHistory.length);
 
-                        // 🔄 服务器优先策略：服务器数据直接覆盖本地
-                        // 将服务器历史转换为本地格式
-                        const newHistory = serverHistory.map(serverItem => serverItem.data);
+                        // 🪦 合并墓碑(本地+服务器,取较新)并剪枝(120天)，存回本地
+                        const tomb = this._loadTombstones();
+                        for (const d of (data.deleted || [])) {
+                            if (!d || !d.id) continue;
+                            if (!(tomb[d.id] >= d.deleted_at)) tomb[d.id] = d.deleted_at;
+                        }
+                        const cutoff = Date.now() - 120 * 24 * 60 * 60 * 1000;
+                        for (const k of Object.keys(tomb)) { if (tomb[k] < cutoff) delete tomb[k]; }
+                        this._saveTombstones(tomb);
 
-                        // 💡 优化：本地独有的记录（服务器上没有的）需要保留
-                        // 这通常是刚添加还没来得及推送的记录
+                        // 🔄 服务器优先策略：服务器数据覆盖本地；被墓碑压制的(已删且之后没再看)一律剔除
+                        const newHistory = serverHistory.map(serverItem => serverItem.data).filter(d => !this._isTombstoned(tomb, d));
+
+                        // 💡 本地独有的记录（服务器上没有的、且未被墓碑压制）保留——这是刚添加还没推送的；
+                        //    已删但本地还残留的会被 _isTombstoned 挡掉，不再被当作"本地独有"复活。
                         const serverNames = new Set(serverHistory.map(item => item.data.name));
-                        const localOnlyItems = this.watchHistory.filter(item => !serverNames.has(item.name));
+                        const localOnlyItems = this.watchHistory.filter(item => !serverNames.has(item.name) && !this._isTombstoned(tomb, item));
 
                         if (localOnlyItems.length > 0) {
                             console.log('[同步] 保留本地独有记录:', localOnlyItems.length, '条');
@@ -5999,15 +6008,18 @@
                             updated_at: new Date(item.watchedAt).getTime()
                         }));
 
+                        const tomb = this._loadTombstones();
+                        const deleted = Object.keys(tomb).map(id => ({ id, deleted_at: tomb[id] }));
                         await fetch('/api/history/push', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 token: this.syncToken,
-                                history: historyToSync
+                                history: historyToSync,
+                                deleted: deleted
                             })
                         });
-                        console.log('[同步] 推送成功，共', historyToSync.length, '条记录');
+                        console.log('[同步] 推送成功，共', historyToSync.length, '条记录,', deleted.length, '条墓碑');
                     } catch (e) {
                         console.error('[同步] 推送历史失败:', e);
                     }
@@ -6024,9 +6036,11 @@
                             updated_at: new Date(item.watchedAt).getTime()
                         }));
 
+                        const tomb = this._loadTombstones();
                         const data = JSON.stringify({
                             token: this.syncToken,
-                            history: historyToSync
+                            history: historyToSync,
+                            deleted: Object.keys(tomb).map(id => ({ id, deleted_at: tomb[id] }))
                         });
 
                         // sendBeacon 确保页面关闭时数据也能发送
@@ -6069,6 +6083,8 @@
 
                 // 添加到观看历史（包含 groupData 用于直接播放）
                 addToWatchHistory(name, poster, episode, progress, duration, groupData) {
+                    // 重新观看 → 作废该剧的删除墓碑(否则同步时会被压制成"已删")
+                    if (name) { const t = this._loadTombstones(); if (t[name] != null) { delete t[name]; this._saveTombstones(t); } }
                     // 查找是否已存在
                     const existingIndex = this.watchHistory.findIndex(item => item.name === name);
 
@@ -6141,10 +6157,16 @@
                 // 清除观看历史
                 async clearWatchHistory() {
                     if (confirm('确定要清除所有观看历史吗？')) {
+                        // 给当前所有条目打墓碑，随推送上报服务器 → 别的设备/旧会话不会把它们再推回来复活
+                        const t = this._loadTombstones();
+                        const now = Date.now();
+                        this.watchHistory.forEach(item => { if (item && item.name) t[item.name] = now; });
+                        this._saveTombstones(t);
+
                         this.watchHistory = [];
                         localStorage.removeItem('donggua_watch_history');
 
-                        // 清除服务器端历史
+                        // 清除服务器端历史 + 推送墓碑(空历史+墓碑数组)
                         if (this.syncEnabled && this.syncToken) {
                             try {
                                 await fetch('/api/history/clear', {
@@ -6152,6 +6174,7 @@
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ token: this.syncToken })
                                 });
+                                this._doPushHistory();  // 上报墓碑(此时 watchHistory 已空)，让删除跨设备生效
                                 console.log('[同步] 服务器历史已清除');
                             } catch (e) {
                                 console.error('[同步] 清除服务器历史失败:', e);
@@ -6331,9 +6354,22 @@
                 },
 
                 // 从历史记录中删除单个项目
+                // 删除墓碑(本地)：记录"某剧在何时被删",随同步上报服务器，跨设备压制复活
+                _loadTombstones() { try { return JSON.parse(localStorage.getItem('donggua_history_deleted') || '{}') || {}; } catch (e) { return {}; } },
+                _saveTombstones(t) { try { localStorage.setItem('donggua_history_deleted', JSON.stringify(t)); } catch (e) { } },
+                _isTombstoned(tomb, item) {
+                    // 删除时间 >= 该条观看时间 → 压制(删除发生在最后一次观看之后)；之后再看过的(观看更新)则不压制
+                    const d = tomb[item && item.name];
+                    return d != null && d >= new Date(item.watchedAt || 0).getTime();
+                },
+
                 removeFromHistory(index) {
                     if (index >= 0 && index < this.watchHistory.length) {
                         const removed = this.watchHistory.splice(index, 1);
+                        // 打墓碑(防复活)
+                        if (removed[0] && removed[0].name) {
+                            const t = this._loadTombstones(); t[removed[0].name] = Date.now(); this._saveTombstones(t);
+                        }
                         this.saveWatchHistoryToStorage();
                         // 立即同步到服务器
                         this.pushHistoryToServer(true);

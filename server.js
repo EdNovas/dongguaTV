@@ -563,6 +563,16 @@ class CacheManager {
                     )
                 `);
 
+                // 历史删除墓碑：记录"某条历史在何时被删"，跨设备同步删除，防止别的设备/旧会话把已删记录复活
+                this.db.exec(`
+                    CREATE TABLE IF NOT EXISTS user_history_deleted (
+                        user_token TEXT NOT NULL,
+                        item_id TEXT NOT NULL,
+                        deleted_at INTEGER NOT NULL,
+                        PRIMARY KEY (user_token, item_id)
+                    )
+                `);
+
                 // 创建索引加速过期查询
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_expire ON cache(expire)`);
                 this.db.exec(`CREATE INDEX IF NOT EXISTS idx_history_user ON user_history(user_token)`);
@@ -980,7 +990,10 @@ app.get('/api/history/pull', (req, res) => {
             updated_at: row.updated_at
         }));
 
-        res.json({ sync_enabled: true, history: history });
+        // 删除墓碑：让其它设备据此压制"已删但本地还在"的记录,不再复活
+        const deleted = cacheManager.db.prepare('SELECT item_id, deleted_at FROM user_history_deleted WHERE user_token = ?').all(userToken).map(r => ({ id: r.item_id, deleted_at: r.deleted_at }));
+
+        res.json({ sync_enabled: true, history: history, deleted: deleted });
     } catch (e) {
         console.error('[History Pull Error]', e.message);
         res.status(500).json({ error: 'Database error' });
@@ -989,7 +1002,7 @@ app.get('/api/history/pull', (req, res) => {
 
 // 推送历史记录到服务器
 app.post('/api/history/push', (req, res) => {
-    const { token, history } = req.body;
+    const { token, history, deleted } = req.body;
 
     if (!token || !Array.isArray(history)) {
         return res.status(400).json({ error: 'Missing token or history' });
@@ -1014,48 +1027,45 @@ app.post('/api/history/push', (req, res) => {
             INSERT OR REPLACE INTO user_history (user_token, item_id, item_data, updated_at)
             VALUES (?, ?, ?, ?)
         `);
+        const deleteHist = cacheManager.db.prepare('DELETE FROM user_history WHERE user_token = ? AND item_id = ?');
+        const upsertTomb = cacheManager.db.prepare('INSERT OR REPLACE INTO user_history_deleted (user_token, item_id, deleted_at) VALUES (?, ?, ?)');
 
-        // 获取当前服务器上该用户的所有记录 ID
-        const existingIds = cacheManager.db.prepare(
-            'SELECT item_id FROM user_history WHERE user_token = ?'
-        ).all(token).map(row => row.item_id);
+        // 现有墓碑 + 本次上报的墓碑(取较新的 deleted_at)
+        const tomb = new Map(cacheManager.db.prepare('SELECT item_id, deleted_at FROM user_history_deleted WHERE user_token = ?').all(token).map(r => [r.item_id, r.deleted_at]));
+        for (const d of (Array.isArray(deleted) ? deleted : [])) {
+            if (!d || !d.id) continue;
+            const at = Number(d.deleted_at) || Date.now();
+            if (!(tomb.get(d.id) >= at)) tomb.set(d.id, at);
+        }
 
-        // 计算需要删除的 ID（服务器有但本地没有的）
+        // 计算需要删除的 ID（服务器有但本地没推上来的，单设备删除路径）
+        const existingIds = cacheManager.db.prepare('SELECT item_id FROM user_history WHERE user_token = ?').all(token).map(row => row.item_id);
         const pushingIds = new Set(history.map(item => item.id));
         const idsToDelete = existingIds.filter(id => !pushingIds.has(id));
+        const PRUNE_MS = 120 * 24 * 60 * 60 * 1000;  // 墓碑保留 120 天，过期剪枝避免无限增长
 
-        let saved = 0;
-        let deleted = 0;
-        const transaction = cacheManager.db.transaction((items) => {
-            // 1. 插入/更新本地有的记录
-            for (const item of items) {
-                if (item.id && item.data) {
-                    insertStmt.run(
-                        token,
-                        item.id,
-                        JSON.stringify(item.data),
-                        item.updated_at || Date.now()
-                    );
-                    saved++;
-                }
+        let saved = 0, deletedCount = 0;
+        const transaction = cacheManager.db.transaction(() => {
+            // 1. 插入历史，但被【更新的删除墓碑】压制的不入库(防复活)；若该条比墓碑更新=重新观看,清墓碑后入库
+            for (const item of history) {
+                if (!item.id || !item.data) continue;
+                const upd = item.updated_at || Date.now();
+                const td = tomb.get(item.id);
+                if (td != null && td >= upd) { deleteHist.run(token, item.id); continue; }  // 删除比这次观看新 → 压制
+                if (td != null) tomb.delete(item.id);  // 这次观看更新 → 重新观看,墓碑作废
+                insertStmt.run(token, item.id, JSON.stringify(item.data), upd);
+                saved++;
             }
-
-            // 2. 删除本地已删除的记录
-            if (idsToDelete.length > 0) {
-                const deleteStmt = cacheManager.db.prepare(
-                    'DELETE FROM user_history WHERE user_token = ? AND item_id = ?'
-                );
-                for (const id of idsToDelete) {
-                    deleteStmt.run(token, id);
-                    deleted++;
-                }
-                console.log(`[History Sync] 删除了 ${deleted} 条已移除的记录:`, idsToDelete);
-            }
+            // 2. 单设备删除：服务器有、推送里没有的，删掉(沿用旧行为,不打墓碑以免误伤未同步设备)
+            for (const id of idsToDelete) { deleteHist.run(token, id); deletedCount++; }
+            // 3. 持久化墓碑(剪枝过期)
+            cacheManager.db.prepare('DELETE FROM user_history_deleted WHERE user_token = ?').run(token);
+            const cutoff = Date.now() - PRUNE_MS;
+            for (const [id, at] of tomb) { if (at >= cutoff) upsertTomb.run(token, id, at); }
         });
+        transaction();
 
-        transaction(history);
-
-        res.json({ sync_enabled: true, saved: saved, deleted: deleted });
+        res.json({ sync_enabled: true, saved: saved, deleted: deletedCount });
     } catch (e) {
         console.error('[History Push Error]', e.message);
         res.status(500).json({ error: 'Database error' });
