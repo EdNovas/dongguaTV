@@ -3686,6 +3686,15 @@
                                         style="border:0; padding:6px 10px; font-size:11px;">
                                         <i class="fas fa-external-link-alt"></i> MPC
                                     </button>
+                                    <button class="btn-info" @click="copyLiveChannelUrl(channel)" :disabled="channel.status === 'error'"
+                                        style="border:0; padding:6px 10px; font-size:11px;">
+                                        <i class="fas fa-copy"></i> 地址
+                                    </button>
+                                    <button v-if="channel.headers && Object.keys(channel.headers).length" class="btn-info"
+                                        @click="copyLiveChannelProxyUrl(channel)" :disabled="channel.status === 'error'"
+                                        style="border:0; padding:6px 10px; font-size:11px;">
+                                        <i class="fas fa-shield-alt"></i> 代理
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -5812,15 +5821,48 @@
                     }
                 },
 
+                async copyTextToClipboard(text, successMessage, promptMessage) {
+                    const value = String(text || '');
+                    if (!value) return;
+                    try {
+                        await navigator.clipboard.writeText(value);
+                        this.showMiniToast && this.showMiniToast(successMessage || '已复制');
+                    } catch (error) {
+                        window.prompt(promptMessage || '请手动复制：', value);
+                    }
+                },
+
+                async copyLiveChannelUrl(channel) {
+                    if (!channel || !channel.url) {
+                        this.showMiniToast && this.showMiniToast('直播频道没有可用地址');
+                        return;
+                    }
+                    await this.copyTextToClipboard(channel.url, '直播原始地址已复制', '请手动复制直播地址：');
+                },
+
+                async copyLiveChannelProxyUrl(channel) {
+                    if (!channel || !channel.url) {
+                        this.showMiniToast && this.showMiniToast('直播频道没有可用地址');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/player/proxy-url', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildLivePlayUrlResult(channel) })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '直播本地代理创建失败');
+                        await this.copyTextToClipboard(data.proxyUrl, '直播代理地址已复制', '请手动复制直播代理地址：');
+                    } catch (error) {
+                        this.showMiniToast && this.showMiniToast(error.message || '直播本地代理创建失败');
+                    }
+                },
+
                 async copyCurrentPlayUrl() {
                     const url = this.currentUrl || '';
                     if (!url) return;
-                    try {
-                        await navigator.clipboard.writeText(url);
-                        this.showMiniToast && this.showMiniToast('播放地址已复制');
-                    } catch (error) {
-                        window.prompt('请手动复制播放地址：', url);
-                    }
+                    await this.copyTextToClipboard(url, '播放地址已复制', '请手动复制播放地址：');
                 },
 
                 async initApp() {

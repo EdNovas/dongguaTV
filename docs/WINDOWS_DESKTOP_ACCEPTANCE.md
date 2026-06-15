@@ -151,6 +151,8 @@ Live TV supports group filtering, channel search, and paged loading for large ch
 
 Live TV channel favorites are stored in browser `localStorage` under `donggua_live_favorites`. Favorite filtering is local-only, so it does not modify imported subscriptions or hard-code any third-party source data into the app.
 
+Live TV channel cards can copy the original channel URL. Channels with custom headers also expose a copy-proxy action that registers the URL with LocalProxy and copies the local `127.0.0.1` playback URL for external player diagnosis.
+
 ## LocalProxy
 
 The LocalProxy listens only on:
