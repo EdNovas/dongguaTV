@@ -3994,6 +3994,11 @@
                                 <i :class="['fas', proxyPortCheckLoading ? 'fa-spinner fa-spin' : 'fa-plug']"></i>
                                 检测端口
                             </button>
+                            <button class="btn-info" @click="runProxyRangeSelfTest" :disabled="proxyRangeTestLoading"
+                                style="border:0; padding:9px 12px; font-size:12px;">
+                                <i :class="['fas', proxyRangeTestLoading ? 'fa-spinner fa-spin' : 'fa-wave-square']"></i>
+                                Range 自检
+                            </button>
                             <span v-if="playerSettingsMessage" style="color:#aaa; font-size:12px;">{{ playerSettingsMessage }}</span>
                         </div>
                         <div v-if="proxyStatus"
@@ -4018,6 +4023,20 @@
                             </strong>
                             <span> · {{ proxyPortCheck.reason }}</span>
                             <div v-if="proxyPortCheck.message" style="color:#8f98aa;">{{ proxyPortCheck.message }}</div>
+                        </div>
+                        <div v-if="proxyRangeTest"
+                            style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
+                            <strong :style="{ color: proxyRangeTest.ok ? '#22c55e' : '#f87171' }">
+                                Range self-test {{ proxyRangeTest.ok ? 'passed' : 'failed' }}
+                            </strong>
+                            <span> · HTTP {{ proxyRangeTest.statusCode || 'n/a' }}</span>
+                            <span v-if="proxyRangeTest.contentRange"> · {{ proxyRangeTest.contentRange }}</span>
+                            <div style="color:#8f98aa;">
+                                proxy port: {{ proxyRangeTest.proxyPort || 'n/a' }}
+                                · body: {{ proxyRangeTest.bodyLength || 0 }} bytes
+                                · length: {{ proxyRangeTest.contentLength || 0 }}
+                            </div>
+                            <div v-if="proxyRangeTest.error" style="color:#fca5a5;">{{ proxyRangeTest.error }}</div>
                         </div>
                     </div>
 
@@ -4752,6 +4771,8 @@
                     proxyStatusLoading: false,
                     proxyPortCheck: null,
                     proxyPortCheckLoading: false,
+                    proxyRangeTest: null,
+                    proxyRangeTestLoading: false,
                     pluginRuntimeSettings: {
                         enableJavaCatvod: false,
                         javaPath: '',
@@ -5625,6 +5646,7 @@
                         if (!response.ok) throw new Error(data.error || '保存失败');
                         this.playerSettings = { ...this.playerSettings, ...data.settings };
                         this.proxyPortCheck = null;
+                        this.proxyRangeTest = null;
                         await this.loadProxyStatus();
                         this.playerSettingsMessage = '播放器设置已保存';
                     } catch (error) {
@@ -5698,6 +5720,30 @@
                         };
                     } finally {
                         this.proxyPortCheckLoading = false;
+                    }
+                },
+
+                async runProxyRangeSelfTest() {
+                    this.proxyRangeTestLoading = true;
+                    try {
+                        const response = await fetch('/api/player/proxy-range-self-test', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Range 自检失败');
+                        this.proxyRangeTest = data;
+                        await this.loadProxyStatus();
+                        this.showMiniToast && this.showMiniToast(data.ok ? 'Range 自检通过' : 'Range 自检未通过');
+                    } catch (error) {
+                        this.proxyRangeTest = {
+                            ok: false,
+                            statusCode: null,
+                            contentRange: '',
+                            contentLength: 0,
+                            bodyLength: 0,
+                            proxyPort: this.playerSettings.localProxyPort,
+                            error: error.message || 'Range 自检失败'
+                        };
+                    } finally {
+                        this.proxyRangeTestLoading = false;
                     }
                 },
 

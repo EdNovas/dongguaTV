@@ -172,6 +172,8 @@ Settings exposes a read-only LocalProxy status check backed by `GET /api/player/
 
 Settings also exposes a LocalProxy port check backed by `POST /api/player/proxy-port-check`. It attempts a temporary `127.0.0.1` listen on the configured port and reports `available`, `port-in-use`, or `permission-denied` without scanning external addresses.
 
+Settings exposes a LocalProxy Range self-test backed by `POST /api/player/proxy-range-self-test`. The backend creates a temporary localhost upstream, registers it through LocalProxy, requests `Range: bytes=10-29`, and verifies `206 Partial Content`, `Content-Range`, and body length. This gives a deterministic local Range proof without depending on third-party media hosts.
+
 ## Packaging Checklist
 
 - `server/**` must stay in `build.files` so Electron asar includes TVBox, player, desktop, and proxy modules.

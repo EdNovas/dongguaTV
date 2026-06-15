@@ -1329,6 +1329,14 @@ app.post('/api/player/proxy-port-check', async (req, res) => {
     }
 });
 
+app.post('/api/player/proxy-range-self-test', async (req, res) => {
+    try {
+        res.json(await playerManager.runProxyRangeSelfTest());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to run proxy range self-test' });
+    }
+});
+
 app.post('/api/player/open-mpc', async (req, res) => {
     try {
         const playUrlResult = req.body && (req.body.playUrlResult || req.body);
