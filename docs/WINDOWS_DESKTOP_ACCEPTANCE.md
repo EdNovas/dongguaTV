@@ -149,6 +149,8 @@ The Live TV panel lists channels parsed from user-provided TVBox `lives`, M3U/M3
 
 Live TV supports group filtering, channel search, and paged loading for large channel lists. Group chips call the filtered live-channel API, and the search box matches channel names or group names without executing any plugin source code. The UI loads channels in batches and exposes a Load More button when additional matches are available.
 
+Live TV channel favorites are stored in browser `localStorage` under `donggua_live_favorites`. Favorite filtering is local-only, so it does not modify imported subscriptions or hard-code any third-party source data into the app.
+
 ## LocalProxy
 
 The LocalProxy listens only on:

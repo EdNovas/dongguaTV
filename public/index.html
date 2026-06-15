@@ -3646,19 +3646,31 @@
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', liveLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
                             </button>
-                            <button class="btn-info" @click="clearLiveFilters" :disabled="liveLoading || (!liveActiveGroup && !liveSearch)"
+                            <button class="btn-info" @click="toggleLiveFavoritesOnly"
+                                :style="showLiveFavoritesOnly ? 'border:0; padding:9px 12px; font-size:12px; background:rgba(251,191,36,0.25); color:#fff;' : 'border:0; padding:9px 12px; font-size:12px;'">
+                                <i class="fas fa-star" :style="showLiveFavoritesOnly ? 'color:#fbbf24;' : ''"></i>
+                                收藏 · {{ liveFavorites.length }}
+                            </button>
+                            <button class="btn-info" @click="clearLiveFilters" :disabled="liveLoading || (!liveActiveGroup && !liveSearch && !showLiveFavoritesOnly)"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 清除
                             </button>
                         </div>
                         <div style="color:#8f98aa; font-size:11px; margin-bottom:10px;">
-                            显示 {{ liveChannels.length }} / {{ liveTotal }} 个频道<span v-if="liveActiveGroup"> / {{ liveActiveGroup }}</span><span v-if="liveSearch"> / "{{ liveSearch }}"</span>
+                            显示 {{ displayLiveChannels.length }} / {{ liveDisplayTotal }} 个频道<span v-if="showLiveFavoritesOnly"> / 收藏</span><span v-if="liveActiveGroup"> / {{ liveActiveGroup }}</span><span v-if="liveSearch"> / "{{ liveSearch }}"</span>
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; max-height:260px; overflow:auto;">
-                            <div v-for="channel in liveChannels" :key="channel.id"
+                            <div v-for="channel in displayLiveChannels" :key="favoriteLiveKey(channel)"
                                 style="border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06); border-radius:14px; padding:12px;">
-                                <div style="color:#fff; font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
-                                    {{ channel.name }}
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <div style="color:#fff; font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1; min-width:0;">
+                                        {{ channel.name }}
+                                    </div>
+                                    <button class="btn-info" @click.stop="toggleLiveFavorite(channel)"
+                                        :title="isLiveFavorite(channel) ? '取消收藏' : '收藏频道'"
+                                        :style="isLiveFavorite(channel) ? 'border:0; padding:5px 7px; font-size:11px; color:#fbbf24; background:rgba(251,191,36,0.16);' : 'border:0; padding:5px 7px; font-size:11px; color:#8f98aa;'">
+                                        <i :class="[isLiveFavorite(channel) ? 'fas' : 'far', 'fa-star']"></i>
+                                    </button>
                                 </div>
                                 <div style="color:#888; font-size:11px; margin-top:4px;">{{ channel.group }}</div>
                                 <div v-if="channel.headers && Object.keys(channel.headers).length"
@@ -3677,11 +3689,11 @@
                                 </div>
                             </div>
                         </div>
-                        <div v-if="!liveLoading && liveChannels.length === 0"
+                        <div v-if="!liveLoading && displayLiveChannels.length === 0"
                             style="color:#9ca3af; font-size:12px; padding:18px 0; text-align:center;">
-                            没有匹配的直播频道
+                            {{ showLiveFavoritesOnly ? '没有匹配的收藏频道' : '没有匹配的直播频道' }}
                         </div>
-                        <div v-if="liveHasMore" style="display:flex; justify-content:center; margin-top:14px;">
+                        <div v-if="liveCanLoadMore" style="display:flex; justify-content:center; margin-top:14px;">
                             <button class="btn-info" @click="loadMoreLiveChannels" :disabled="liveLoading"
                                 style="border:0; padding:9px 16px; font-size:12px;">
                                 <i :class="['fas', liveLoading ? 'fa-spinner fa-spin' : 'fa-chevron-down']"></i>
@@ -4658,6 +4670,8 @@
                     liveOffset: 0,
                     liveTotal: 0,
                     liveHasMore: false,
+                    liveFavorites: [],
+                    showLiveFavoritesOnly: false,
                     playerSettings: {
                         defaultPlayer: 'mpc',
                         mpcExePath: '',
@@ -4826,6 +4840,7 @@
             async mounted() {
                 console.log('[VERSION] DongguaTV Code Version: 2024-12-19-v2 (showMovieInfo exists)');
                 console.log('[VERSION] Methods available:', Object.keys(this.$options.methods || {}).join(', '));
+                this.loadLiveFavorites();
 
                 // 📺 TV 模式设置
                 if (this.isTVMode) {
@@ -5063,6 +5078,22 @@
                 // 兼容旧代码的 availableSources（包含快速和慢速）
                 availableSources() {
                     return [...this.fastSources, ...this.slowSources];
+                },
+                displayLiveChannels() {
+                    if (!this.showLiveFavoritesOnly) return this.liveChannels;
+                    const keyword = (this.liveSearch || '').trim().toLowerCase();
+                    return (this.liveFavorites || []).filter(channel => {
+                        if (this.liveActiveGroup && channel.group !== this.liveActiveGroup) return false;
+                        if (!keyword) return true;
+                        return String(channel.name || '').toLowerCase().includes(keyword)
+                            || String(channel.group || '').toLowerCase().includes(keyword);
+                    });
+                },
+                liveDisplayTotal() {
+                    return this.showLiveFavoritesOnly ? this.displayLiveChannels.length : this.liveTotal;
+                },
+                liveCanLoadMore() {
+                    return !this.showLiveFavoritesOnly && this.liveHasMore;
                 }
             },
             methods: {
@@ -5082,6 +5113,68 @@
                 countTvboxSources(group) {
                     if (!group || !Array.isArray(group.sources)) return 0;
                     return group.sources.filter(source => this.isTvboxSource(source)).length;
+                },
+                favoriteLiveKey(channel) {
+                    if (!channel) return '';
+                    return String(channel.id || channel.url || `${channel.group || 'default'}::${channel.name || ''}`);
+                },
+                loadLiveFavorites() {
+                    try {
+                        const saved = localStorage.getItem('donggua_live_favorites');
+                        const parsed = saved ? JSON.parse(saved) : [];
+                        this.liveFavorites = Array.isArray(parsed)
+                            ? parsed.filter(channel => channel && channel.name && channel.url)
+                            : [];
+                    } catch (error) {
+                        console.warn('[Live TV] 收藏频道读取失败:', error);
+                        this.liveFavorites = [];
+                    }
+                },
+                saveLiveFavorites() {
+                    try {
+                        localStorage.setItem('donggua_live_favorites', JSON.stringify(this.liveFavorites || []));
+                    } catch (error) {
+                        this.subscriptionError = '收藏频道保存失败，请检查浏览器本地存储';
+                    }
+                },
+                isLiveFavorite(channel) {
+                    const key = this.favoriteLiveKey(channel);
+                    return !!key && (this.liveFavorites || []).some(item => this.favoriteLiveKey(item) === key);
+                },
+                normalizeLiveFavorite(channel) {
+                    return {
+                        id: channel.id || this.favoriteLiveKey(channel),
+                        name: channel.name || 'Live Channel',
+                        group: channel.group || '未分组',
+                        url: channel.url,
+                        logo: channel.logo || null,
+                        headers: channel.headers && typeof channel.headers === 'object' ? channel.headers : {},
+                        status: channel.status || 'unknown',
+                        sourceSubscriptionId: channel.sourceSubscriptionId || null
+                    };
+                },
+                toggleLiveFavorite(channel) {
+                    if (!channel || !channel.url) {
+                        this.showMiniToast && this.showMiniToast('频道缺少播放地址，无法收藏');
+                        return;
+                    }
+                    const key = this.favoriteLiveKey(channel);
+                    const before = this.liveFavorites || [];
+                    if (this.isLiveFavorite(channel)) {
+                        this.liveFavorites = before.filter(item => this.favoriteLiveKey(item) !== key);
+                        this.showMiniToast && this.showMiniToast('已取消收藏');
+                    } else {
+                        this.liveFavorites = [this.normalizeLiveFavorite(channel), ...before].slice(0, 300);
+                        this.showMiniToast && this.showMiniToast('已收藏频道');
+                    }
+                    this.saveLiveFavorites();
+                },
+                toggleLiveFavoritesOnly() {
+                    this.showLiveFavoritesOnly = !this.showLiveFavoritesOnly;
+                    this.liveOffset = 0;
+                    if (!this.showLiveFavoritesOnly) {
+                        this.loadLiveChannels();
+                    }
                 },
                 subscriptionLocationLabel(subscription) {
                     if (!subscription) return 'unknown';
@@ -5175,6 +5268,7 @@
                 },
 
                 async loadLiveChannels(options = {}) {
+                    if (this.showLiveFavoritesOnly) return;
                     const append = !!options.append;
                     this.liveLoading = true;
                     try {
@@ -5201,18 +5295,21 @@
 
                 debouncedLoadLiveChannels() {
                     if (this.liveSearchTimer) clearTimeout(this.liveSearchTimer);
-                    this.liveSearchTimer = setTimeout(() => this.loadLiveChannels(), 250);
+                    this.liveSearchTimer = setTimeout(() => {
+                        if (!this.showLiveFavoritesOnly) this.loadLiveChannels();
+                    }, 250);
                 },
 
                 selectLiveGroup(groupName) {
                     this.liveActiveGroup = groupName || '';
                     this.liveOffset = 0;
-                    this.loadLiveChannels();
+                    if (!this.showLiveFavoritesOnly) this.loadLiveChannels();
                 },
 
                 clearLiveFilters() {
                     this.liveActiveGroup = '';
                     this.liveSearch = '';
+                    this.showLiveFavoritesOnly = false;
                     this.liveOffset = 0;
                     this.loadLiveChannels();
                 },
