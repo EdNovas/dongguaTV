@@ -255,12 +255,33 @@ class LocalProxy {
             res.end('Expired or unknown play id');
             return;
         }
+        if (!['GET', 'HEAD'].includes(req.method)) {
+            res.statusCode = 405;
+            res.setHeader('Allow', 'GET, HEAD');
+            res.end('Method not allowed');
+            return;
+        }
 
         const headers = {
             ...entry.headers
         };
         for (const key of ['range', 'accept', 'origin']) {
             if (req.headers[key]) headers[key] = req.headers[key];
+        }
+
+        if (req.method === 'HEAD') {
+            const upstreamHead = await this.httpClient.request({
+                method: 'HEAD',
+                url: entry.url,
+                timeout: 20000,
+                maxRedirects: 5,
+                validateStatus: status => status >= 200 && status < 400,
+                headers
+            });
+            res.statusCode = upstreamHead.status;
+            copyResponseHeaders(res, upstreamHead.headers);
+            res.end();
+            return;
         }
 
         const upstream = await this.httpClient.get(entry.url, {

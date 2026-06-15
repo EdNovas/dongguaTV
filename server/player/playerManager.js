@@ -8,6 +8,7 @@ function createRangeTestUpstream() {
     const body = Buffer.from('0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ', 'utf8');
     const server = http.createServer((req, res) => {
         const range = req.headers.range;
+        const isHead = req.method === 'HEAD';
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Content-Type', 'video/mp4');
 
@@ -25,13 +26,13 @@ function createRangeTestUpstream() {
             res.statusCode = 206;
             res.setHeader('Content-Range', `bytes ${start}-${safeEnd}/${body.length}`);
             res.setHeader('Content-Length', chunk.length);
-            res.end(chunk);
+            res.end(isHead ? undefined : chunk);
             return;
         }
 
         res.statusCode = 200;
         res.setHeader('Content-Length', body.length);
-        res.end(body);
+        res.end(isHead ? undefined : body);
     });
 
     return new Promise((resolve, reject) => {
@@ -123,6 +124,25 @@ function requestThroughProxy(url, headers) {
     });
 }
 
+function requestHeadThroughProxy(url, headers) {
+    return new Promise((resolve, reject) => {
+        const req = http.request(url, { method: 'HEAD', headers }, res => {
+            res.resume();
+            res.on('end', () => {
+                resolve({
+                    statusCode: res.statusCode,
+                    headers: res.headers
+                });
+            });
+        });
+        req.setTimeout(10000, () => {
+            req.destroy(new Error('Proxy HEAD request timed out'));
+        });
+        req.on('error', reject);
+        req.end();
+    });
+}
+
 class PlayerManager {
     constructor(dataDir, httpClient) {
         this.dataDir = dataDir;
@@ -198,6 +218,36 @@ class PlayerManager {
                 contentRange,
                 contentLength: Number(response.headers['content-length'] || response.body.length),
                 bodyLength: response.body.length,
+                proxyUrl: proxy.proxyUrl,
+                proxyPort: this.localProxy.getStatus().port,
+                checkedAt: new Date().toISOString()
+            };
+        } finally {
+            await new Promise(resolve => upstream.server.close(resolve));
+        }
+    }
+
+    async runProxyHeadSelfTest() {
+        const settings = this.getSettings();
+        const upstream = await createRangeTestUpstream();
+        try {
+            const proxy = await this.localProxy.register({
+                url: upstream.url,
+                format: 'mp4',
+                sourceKind: 'normal',
+                headers: {}
+            }, settings);
+            const response = await requestHeadThroughProxy(proxy.proxyUrl, {});
+            const ok = response.statusCode === 200
+                && Number(response.headers['content-length'] || 0) === 62
+                && String(response.headers['accept-ranges'] || '').toLowerCase() === 'bytes'
+                && String(response.headers['content-type'] || '').includes('video/mp4');
+            return {
+                ok,
+                statusCode: response.statusCode,
+                contentLength: Number(response.headers['content-length'] || 0),
+                acceptRanges: response.headers['accept-ranges'] || '',
+                contentType: response.headers['content-type'] || '',
                 proxyUrl: proxy.proxyUrl,
                 proxyPort: this.localProxy.getStatus().port,
                 checkedAt: new Date().toISOString()
