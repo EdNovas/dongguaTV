@@ -55,15 +55,53 @@ class LocalProxy {
         this.httpClient = httpClient;
         this.server = null;
         this.port = null;
+        this.requestedPort = null;
+        this.fallbackUsed = false;
+        this.fallbackReason = '';
         this.entries = new Map();
     }
 
     async ensureStarted(port) {
-        const desiredPort = Number(port) || 9979;
-        if (this.server && this.port === desiredPort) return;
+        const desiredPort = Math.max(1024, Math.min(Number(port) || 9979, 65535));
+        if (this.server && this.port === desiredPort) {
+            return {
+                requestedPort: desiredPort,
+                actualPort: this.port,
+                fallbackUsed: false,
+                fallbackReason: ''
+            };
+        }
         if (this.server) await this.stop();
 
-        this.server = http.createServer((req, res) => {
+        let lastError = null;
+        for (let offset = 0; offset < 20; offset += 1) {
+            const candidatePort = desiredPort + offset;
+            if (candidatePort > 65535) break;
+            try {
+                this.server = await this.createServer(candidatePort);
+                this.port = candidatePort;
+                this.requestedPort = desiredPort;
+                this.fallbackUsed = candidatePort !== desiredPort;
+                this.fallbackReason = this.fallbackUsed && lastError
+                    ? (lastError.code === 'EADDRINUSE' ? 'configured-port-in-use' : lastError.code === 'EACCES' ? 'configured-port-denied' : 'configured-port-failed')
+                    : '';
+                return {
+                    requestedPort: desiredPort,
+                    actualPort: this.port,
+                    fallbackUsed: this.fallbackUsed,
+                    fallbackReason: this.fallbackReason
+                };
+            } catch (error) {
+                lastError = error;
+                if (!['EADDRINUSE', 'EACCES'].includes(error.code)) break;
+            }
+        }
+
+        throw lastError || new Error(`Unable to start LocalProxy on or after port ${desiredPort}`);
+    }
+
+    createServer(port) {
+        const server = http.createServer((req, res) => {
             this.handleRequest(req, res).catch(error => {
                 res.statusCode = 502;
                 res.setHeader('Content-Type', 'application/json');
@@ -71,12 +109,15 @@ class LocalProxy {
             });
         });
 
-        await new Promise((resolve, reject) => {
-            this.server.once('error', reject);
-            this.server.listen(desiredPort, '127.0.0.1', () => {
-                this.port = desiredPort;
-                this.server.off('error', reject);
-                resolve();
+        return new Promise((resolve, reject) => {
+            const onError = error => {
+                try { server.close(() => {}); } catch (closeError) {}
+                reject(error);
+            };
+            server.once('error', onError);
+            server.listen(port, '127.0.0.1', () => {
+                server.off('error', onError);
+                resolve(server);
             });
         });
     }
@@ -86,6 +127,9 @@ class LocalProxy {
         await new Promise(resolve => this.server.close(resolve));
         this.server = null;
         this.port = null;
+        this.requestedPort = null;
+        this.fallbackUsed = false;
+        this.fallbackReason = '';
         this.entries.clear();
     }
 
@@ -101,6 +145,9 @@ class LocalProxy {
             running: !!this.server,
             host: this.server ? '127.0.0.1' : null,
             port: this.port,
+            requestedPort: this.requestedPort,
+            fallbackUsed: this.fallbackUsed,
+            fallbackReason: this.fallbackReason,
             activeEntries,
             expiredEntries
         };
@@ -153,7 +200,7 @@ class LocalProxy {
     async register(playUrlResult, settings) {
         const input = playUrlResult || {};
         if (!input.url) throw new Error('Playback URL is required.');
-        await this.ensureStarted(settings.localProxyPort || 9979);
+        const startResult = await this.ensureStarted(settings.localProxyPort || 9979);
         const id = createId();
         const ttl = DEFAULT_TTL_MS;
         this.entries.set(id, {
@@ -165,6 +212,10 @@ class LocalProxy {
         return {
             id,
             proxyUrl: `http://127.0.0.1:${this.port}/play/${id}`,
+            requestedPort: startResult.requestedPort,
+            actualPort: startResult.actualPort,
+            fallbackUsed: startResult.fallbackUsed,
+            fallbackReason: startResult.fallbackReason,
             expiresAt: new Date(Date.now() + ttl).toISOString()
         };
     }

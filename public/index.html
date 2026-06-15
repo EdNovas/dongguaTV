@@ -4012,8 +4012,13 @@
                             <span> · configured {{ proxyStatus.settings && proxyStatus.settings.localProxyPort }}</span>
                             <div style="color:#8f98aa;">
                                 enabled: {{ proxyStatus.settings && proxyStatus.settings.useLocalProxy ? 'yes' : 'no' }}
+                                · requested: {{ proxyStatus.proxy && proxyStatus.proxy.requestedPort || 'n/a' }}
+                                · fallback: {{ proxyStatus.proxy && proxyStatus.proxy.fallbackUsed ? 'yes' : 'no' }}
                                 · active entries: {{ proxyStatus.proxy ? proxyStatus.proxy.activeEntries : 0 }}
                                 · expired entries: {{ proxyStatus.proxy ? proxyStatus.proxy.expiredEntries : 0 }}
+                            </div>
+                            <div v-if="proxyStatus.proxy && proxyStatus.proxy.fallbackReason" style="color:#fbbf24;">
+                                fallback reason: {{ proxyStatus.proxy.fallbackReason }}
                             </div>
                         </div>
                         <div v-if="proxyPortCheck"
@@ -5689,6 +5694,9 @@
                                 running: false,
                                 host: null,
                                 port: null,
+                                requestedPort: this.playerSettings.localProxyPort,
+                                fallbackUsed: false,
+                                fallbackReason: '',
                                 activeEntries: 0,
                                 expiredEntries: 0
                             },

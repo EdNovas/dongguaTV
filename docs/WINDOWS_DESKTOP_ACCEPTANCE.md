@@ -166,6 +166,8 @@ The LocalProxy listens only on:
 127.0.0.1
 ```
 
+If the configured LocalProxy port is unavailable or denied, the app tries nearby higher ports and returns the actual local playback URL. The Settings status panel reports configured, requested, actual, and fallback reason values so the user can see when a fallback happened.
+
 It forwards common playback headers and Range requests, and it returns `206 Partial Content` for range-capable upstream responses.
 
 Settings exposes a read-only LocalProxy status check backed by `GET /api/player/proxy-status`. It reports whether the proxy is running, the configured port, the active listening port, and active/expired registered playback entries.
