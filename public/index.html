@@ -166,6 +166,16 @@
                 animation-duration: 6s !important;
                 animation-iteration-count: 1 !important;
             }
+
+            /* 🛡️ 加载转圈是功能反馈(告诉用户"正在处理"而非卡死)：开启"减少动态"时也必须持续转，
+               否则上面的 iteration-count:1 + 0.01ms 会让转圈停在一帧，看着像卡死。恢复其无限循环。 */
+            .spinner-border,
+            .loader-spinner,
+            .player-loading-spinner,
+            .fa-spin {
+                animation-duration: 0.8s !important;
+                animation-iteration-count: infinite !important;
+            }
         }
         /* 🔗 分享面板社交按钮（YouTube 风格） */
         .share-soc { background:none; border:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:7px; min-width:62px; color:#bbb; font-size:12px; padding:0; flex:0 0 auto; }
@@ -10363,20 +10373,18 @@
                     else alert('打开《' + item.name + '》并选择缓存时的线路即可使用缓存');
                 },
 
-                // ✨ 为你推荐：取最近 3 条观看历史 → TMDB 搜索定位 → /recommendations → 交错合并去重、
-                //    排除已看过的 → 最多 18 条。纯前端，走已有 /api/tmdb-proxy(服务端有 10h 缓存)。失败静默(隐藏该行)。
-                // ✨ 为你推荐：内容过滤(类型+语言)而非 TMDB 的 /recommendations(那是西方用户协同过滤，对国产剧
-                //    几乎无信号→全推美剧)。做法：搜最近历史拿到每部的 genre_ids+original_language → 取最常见的类型+
-                //    主语言 → /discover 拉【同语言同类型】按热度排 → 国产剧历史就推国产剧。全程走已有 tmdb-proxy(免费)。
+                // ✨ 为你推荐：内容过滤(类型+语言)。弃用 TMDB /recommendations(西方协同过滤、对国产剧无信号→全推美剧)。
+                //    搜最近6条历史拿每部 genre_ids+original_language → 【按语言分组】(覆盖多口味:国产剧+美国电影各自一组)
+                //    → 每组取最常见2类型、/discover 同语言同类型按热度 → 按各组观看部数【加权配额】混合。全程走 tmdb-proxy(免费)。
                 async fetchRecommendations() {
                     try {
                         if (this._recLoaded) return;
-                        const names = (this.watchHistory || []).slice(0, 5).map(h => h && h.name).filter(Boolean);
+                        const names = (this.watchHistory || []).slice(0, 6).map(h => h && h.name).filter(Boolean);
                         if (!names.length) return;  // ⚠️ 历史还没到(云同步慢)→ 不置位，等同步完成后补调
                         this._recLoaded = true;
                         const historySet = new Set((this.watchHistory || []).map(h => ((h && h.name) || '').trim()));
 
-                        // 1. 搜每部历史剧，拿 genre_ids + original_language(内容画像)
+                        // 1. 搜每部历史剧拿画像(genre_ids + original_language)
                         const hits = (await Promise.all(names.map(async (n) => {
                             try {
                                 const sr = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/search/multi')}&query=${encodeURIComponent(n)}&language=zh-CN`).then(r => r.json());
@@ -10385,49 +10393,55 @@
                         }))).filter(Boolean);
                         if (!hits.length) { this.recommendList = []; return; }
 
-                        // 2. 统计类型频次 + 主语言(国产剧站通常 zh 主导)
-                        const gf = {}, lf = {};
+                        // 2. 按语言分组(覆盖多口味);每组统计类型频次,取观看部数前2的语言组
+                        const byLang = {};
                         hits.forEach(h => {
-                            (h.genre_ids || []).forEach(g => gf[g] = (gf[g] || 0) + 1);
-                            if (h.original_language) lf[h.original_language] = (lf[h.original_language] || 0) + 1;
+                            const l = h.original_language || 'xx';
+                            const g = byLang[l] || (byLang[l] = { count: 0, gf: {} });
+                            g.count++;
+                            (h.genre_ids || []).forEach(id => g.gf[id] = (g.gf[id] || 0) + 1);
                         });
-                        const topGenres = Object.keys(gf).sort((a, b) => gf[b] - gf[a]).slice(0, 2);
-                        const topLang = Object.keys(lf).sort((a, b) => lf[b] - lf[a])[0];
-                        const lang = (topLang && lf[topLang] >= Math.ceil(hits.length / 2)) ? topLang : '';  // 过半才锁语言
+                        const groups = Object.keys(byLang).sort((a, b) => byLang[b].count - byLang[a].count).slice(0, 2).map(l => ({
+                            lang: l, count: byLang[l].count,
+                            genres: Object.keys(byLang[l].gf).sort((a, b) => byLang[l].gf[b] - byLang[l].gf[a]).slice(0, 2)
+                        }));
+                        const total = groups.reduce((s, g) => s + g.count, 0);
 
-                        // 3. /discover 同语言同类型按热度(去掉评分票数门槛，国产剧票数稀疏)
-                        const discover = async (type, withLang) => {
+                        // 3. 每组 discover tv+movie(同语言同类型按热度;不加票数门槛,国产剧票数稀疏)
+                        const discover = async (lang, genres, type) => {
                             let p = `sort_by=popularity.desc&page=1`;
-                            if (topGenres.length) p += `&with_genres=${topGenres.join('%7C')}`;  // %7C = | (任一类型)
-                            if (withLang) p += `&with_original_language=${withLang}`;
+                            if (genres.length) p += `&with_genres=${genres.join('%7C')}`;  // %7C = | 任一类型
+                            if (lang && lang !== 'xx') p += `&with_original_language=${lang}`;
                             try {
                                 const r = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/discover/' + type)}&${p}&language=zh-CN`).then(r => r.json());
                                 return ((r && r.results) || []).map(x => ({ ...x, media_type: type }));
                             } catch (e) { return []; }
                         };
-                        let [tv, movie] = await Promise.all([discover('tv', lang), discover('movie', lang)]);
-                        // 锁了语言却结果太少 → 放宽语言再来一次(避免冷门类型在该语言下没货)
-                        if (lang && (tv.length + movie.length) < 8) {
-                            const [tv2, movie2] = await Promise.all([discover('tv', ''), discover('movie', '')]);
-                            tv = tv.concat(tv2); movie = movie.concat(movie2);
-                        }
+                        const groupLists = await Promise.all(groups.map(async g => {
+                            const [tv, movie] = await Promise.all([discover(g.lang, g.genres, 'tv'), discover(g.lang, g.genres, 'movie')]);
+                            const list = []; const mx = Math.max(tv.length, movie.length);
+                            for (let i = 0; i < mx; i++) { if (tv[i]) list.push(tv[i]); if (movie[i]) list.push(movie[i]); }
+                            return { lang: g.lang, list, quota: Math.max(1, Math.round(18 * g.count / total)) };
+                        }));
 
-                        // 4. tv/movie 交错合并、按[类型+id]去重、排除已看、滤海报、≤18
+                        // 4. 按配额从各组取(看得多的语言占比高),按[类型+id]去重、排已看、滤海报,凑满18
                         const seen = new Set(); const out = [];
-                        const mx = Math.max(tv.length, movie.length);
-                        for (let i = 0; i < mx && out.length < 18; i++) {
-                            for (const x of [tv[i], movie[i]]) {
+                        const pick = (gl, n) => {
+                            let took = 0;
+                            for (const x of gl.list) {
+                                if (out.length >= 18 || took >= n) break;
                                 if (!x || !x.poster_path || x.adult) continue;
                                 const t = (x.title || x.name || '').trim();
                                 const k = x.media_type + '-' + x.id;
                                 if (!t || seen.has(k) || historySet.has(t)) continue;
-                                seen.add(k); out.push(x);
-                                if (out.length >= 18) break;
+                                seen.add(k); out.push(x); took++;
                             }
-                        }
+                        };
+                        groupLists.forEach(gl => pick(gl, gl.quota));  // 第一轮按配额
+                        groupLists.forEach(gl => pick(gl, 18));        // 没满则继续填
                         this.recommendList = out;
-                        this.$nextTick(() => this.onRecommendScroll());  // 列表渲染后校正左右箭头显隐(短列表不显右箭头)
-                        if (out.length) console.log('[推荐] 基于类型/语言生成', out.length, '条', { topGenres, lang });
+                        this.$nextTick(() => this.onRecommendScroll());  // 列表渲染后校正左右箭头显隐
+                        if (out.length) console.log('[推荐] 多语言口味', groups.map(g => g.lang + '×' + g.count), '→', out.length, '条');
                     } catch (e) { console.warn('[推荐] 获取失败:', e); }
                 },
 
