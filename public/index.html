@@ -4007,6 +4007,11 @@
                     <div class="section-line"></div>
                     <div class="section-title">正在搜索: "{{ keyword }}"</div>
                 </div>
+                <!-- 没有想要的那部？就地求片（搜到结果也可能缺想看的那部）-->
+                <button v-if="requestsEnabled" class="btn btn-outline-danger rounded-pill px-3 px-md-4 py-2 ms-auto"
+                    @click="openRequestModal(keyword)" title="没有想看的那部？求片">
+                    <i class="fas fa-paper-plane me-0 me-md-2"></i><span class="d-none d-md-inline">求片</span>
+                </button>
             </div>
 
             <!-- 搜索结果网格 (即使在 loading 也可以显示) -->
@@ -4158,6 +4163,17 @@
                         </label>
                     </div>
 
+                    <!-- 求片入口（站长配了 ADMIN_TOKEN 才显示）-->
+                    <div v-if="requestsEnabled"
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer;"
+                        @click="showSettingsModal = false; openRequestModal('')">
+                        <div>
+                            <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-paper-plane" style="margin-right: 8px; color: #e50914;"></i>求片 / 我的求片</div>
+                            <div style="color: #888; font-size: 12px; margin-top: 4px;">站内没有想看的剧？提交求片，站长会贴链接</div>
+                        </div>
+                        <i class="fas fa-chevron-right" style="color: #666;"></i>
+                    </div>
+
                     <!-- 提示信息 -->
                     <div
                         style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
@@ -4228,37 +4244,46 @@
                             </div>
                         </div>
 
-                        <div class="req-admin-toggle" @click="reqAdminOpen = !reqAdminOpen">
-                            <i class="fas fa-user-shield"></i> 站长管理
-                            <i class="fas" :class="reqAdminOpen ? 'fa-chevron-up' : 'fa-chevron-down'" style="margin-left:auto;"></i>
-                        </div>
-                        <div v-if="reqAdminOpen" class="req-admin">
-                            <div v-if="!reqAdminAuthed" class="req-form">
-                                <input class="req-input" v-model="reqAdminToken" type="password" placeholder="管理员令牌 (ADMIN_TOKEN)">
-                                <button class="btn btn-outline-light btn-sm" @click="adminLoadRequests">进入后台</button>
-                            </div>
-                            <template v-else>
-                                <div class="req-sec-title">全部求片（{{ adminRequests.length }}）<span class="expand-toggle" @click="adminLoadRequests" style="margin-left:auto;font-size:12px;"><i class="fas fa-sync-alt"></i> 刷新</span></div>
-                                <div v-for="r in adminRequests" :key="'a' + r.id" class="req-item">
-                                    <div class="req-row">
-                                        <span class="req-name">{{ r.name }}</span>
-                                        <span class="req-badge" :class="'rb-' + r.status">{{ reqStatusText(r.status) }}</span>
-                                        <span class="req-who">{{ r.user_label || (r.user_token || '').slice(0, 8) }}</span>
-                                    </div>
-                                    <div v-if="r.aka || r.year || r.cast_info" class="req-meta">
-                                        <span v-if="r.year">{{ r.year }}</span><span v-if="r.aka">《{{ r.aka }}》</span><span v-if="r.cast_info">{{ r.cast_info }}</span>
-                                    </div>
-                                    <div v-if="r.note" class="req-note">备注：{{ r.note }}</div>
-                                    <input class="req-input" v-model="r.fulfill_link" placeholder="链接：磁力 / 下载 / 站内播放 / 其他网站均可">
-                                    <input class="req-input" v-model="r.fulfill_note" placeholder="给用户的说明 / 原因（无法提供或需补充信息时填写）">
-                                    <div class="req-actions">
-                                        <button class="btn btn-success btn-sm" @click="adminFulfill(r, 'fulfilled')">标记已提供</button>
-                                        <button class="btn btn-warning btn-sm" @click="adminFulfill(r, 'need_info')">需补充信息</button>
-                                        <button class="btn btn-secondary btn-sm" @click="adminFulfill(r, 'rejected')">无法提供</button>
-                                        <button class="btn btn-outline-danger btn-sm" @click="adminFulfill(r, 'delete')">删除</button>
-                                    </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- 站长后台 · 求片管理（独立隐藏入口：仅访问 网址#admin 时出现；用 ADMIN_TOKEN 验证）-->
+        <div class="info-modal-overlay" v-if="showAdminPage" @click.self="closeAdminPage">
+            <div class="info-modal req-modal">
+                <button class="info-modal-close" @click="closeAdminPage"><i class="fas fa-times"></i></button>
+                <div class="req-body">
+                    <h3 class="req-h"><i class="fas fa-user-shield"></i> 站长后台 · 求片管理</h3>
+                    <div v-if="!reqAdminAuthed" class="req-form">
+                        <p class="req-sub">输入管理员令牌（ADMIN_TOKEN）进入后台。此页面仅通过 <code>网址#admin</code> 访问，普通用户看不到。</p>
+                        <input class="req-input" v-model="reqAdminToken" type="password" placeholder="管理员令牌 (ADMIN_TOKEN)"
+                            @keyup.enter="adminLoadRequests">
+                        <button class="btn btn-danger" @click="adminLoadRequests">进入后台</button>
+                    </div>
+                    <template v-else>
+                        <div class="req-sec-title">全部求片（{{ adminRequests.length }}）<span class="expand-toggle" @click="adminLoadRequests" style="margin-left:auto;font-size:12px;cursor:pointer;"><i class="fas fa-sync-alt"></i> 刷新</span></div>
+                        <div v-if="!adminRequests.length" class="req-empty">暂无求片</div>
+                        <div class="req-list">
+                            <div v-for="r in adminRequests" :key="'a' + r.id" class="req-item">
+                                <div class="req-row">
+                                    <span class="req-name">{{ r.name }}</span>
+                                    <span class="req-badge" :class="'rb-' + r.status">{{ reqStatusText(r.status) }}</span>
+                                    <span class="req-who">{{ r.user_label || (r.user_token || '').slice(0, 8) }}</span>
                                 </div>
-                            </template>
+                                <div v-if="r.aka || r.year || r.cast_info" class="req-meta">
+                                    <span v-if="r.year">{{ r.year }}</span><span v-if="r.aka">《{{ r.aka }}》</span><span v-if="r.cast_info">{{ r.cast_info }}</span>
+                                </div>
+                                <div v-if="r.note" class="req-note">备注：{{ r.note }}</div>
+                                <input class="req-input" v-model="r.fulfill_link" placeholder="链接：磁力 / 下载 / 站内播放 / 其他网站均可">
+                                <input class="req-input" v-model="r.fulfill_note" placeholder="给用户的说明 / 原因（无法提供或需补充信息时填写）">
+                                <div class="req-actions">
+                                    <button class="btn btn-success btn-sm" @click="adminFulfill(r, 'fulfilled')">标记已提供</button>
+                                    <button class="btn btn-warning btn-sm" @click="adminFulfill(r, 'need_info')">需补充信息</button>
+                                    <button class="btn btn-secondary btn-sm" @click="adminFulfill(r, 'rejected')">无法提供</button>
+                                    <button class="btn btn-outline-danger btn-sm" @click="adminFulfill(r, 'delete')">删除</button>
+                                </div>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -5447,7 +5472,7 @@
                     reqRefillFromId: null,  // need_info 补充重提时来源记录 id（提交成功后删掉它，避免堆积孤儿）
                     reqSubmitting: false,
                     myRequests: [],
-                    reqAdminOpen: false,
+                    showAdminPage: false,   // 站长后台（访问 网址#admin 才出现，与求片弹窗分离）
                     reqAdminToken: '',
                     reqAdminAuthed: false,
                     adminRequests: [],
@@ -5962,6 +5987,10 @@
 
                     // 6. 🔗 处理分享深链 ?play=（自动搜索并打开对应剧）
                     this.handleDeepLink();
+
+                    // 7. 🛡️ 站长后台：访问 网址#admin 显示后台(隐藏入口，与普通用户分离)
+                    this._syncAdminHash();
+                    window.addEventListener('hashchange', () => this._syncAdminHash());
                 },
 
                 // ========== 📺 观看历史功能 ==========
@@ -7765,6 +7794,26 @@
                         if (res.ok) await this.adminLoadRequests();
                         else alert('操作失败');
                     } catch (e) { alert('操作失败'); }
+                },
+                // 站长后台：访问 网址#admin 时打开(由 mounted 的 hash 监听调用)
+                // 未配 ADMIN_TOKEN(requestsEnabled=false)则求片功能整体关闭，后台也彻底隐身——
+                // 与三处用户入口的门控一致。requestsEnabled 来自 /api/config，mounted 里在本方法之前已就绪。
+                openAdminPage() {
+                    if (!this.requestsEnabled) return;
+                    this.showAdminPage = true;
+                },
+                closeAdminPage() {
+                    this.showAdminPage = false;
+                    // 清掉 #admin，避免刷新又弹出；不触发整页跳转
+                    if ((location.hash || '').toLowerCase().indexOf('admin') !== -1) {
+                        history.replaceState(null, '', location.pathname + location.search);
+                    }
+                },
+                // 监听 hash，#admin / #/admin 时开后台
+                _syncAdminHash() {
+                    const h = (location.hash || '').toLowerCase();
+                    if (h === '#admin' || h === '#/admin') this.openAdminPage();
+                    else if (this.showAdminPage) this.showAdminPage = false;
                 },
 
                 fetchHero() {
@@ -10786,9 +10835,9 @@
                         }));
                         const total = groups.reduce((s, g) => s + g.count, 0);
 
-                        const REC_CAP = 40;  // 推荐总条数上限(展开后可分页:18/页 ≈ 2~3 页)
+                        const REC_CAP = 60;  // 推荐总条数上限(展开后可分页:18/页 ≈ 3~4 页,给足"尽可能多可选")
                         // 3. 每组 discover tv+movie(同语言同类型按热度;不加票数门槛,国产剧票数稀疏)
-                        //    拉前 2 页 → 候选更多(展开后够翻页);并按年份下限过滤
+                        //    拉前 3 页 → 候选更多(展开后够翻页);并按年份下限过滤
                         const discover = async (lang, genres, type, page) => {
                             let p = `sort_by=popularity.desc&page=${page}`;
                             if (genres.length) p += `&with_genres=${genres.join('%7C')}`;  // %7C = | 任一类型
@@ -10799,12 +10848,13 @@
                                 return ((r && r.results) || []).map(x => ({ ...x, media_type: type }));
                             } catch (e) { return []; }
                         };
+                        const PAGES = [1, 2, 3];
                         const groupLists = await Promise.all(groups.map(async g => {
-                            const [tv1, tv2, mv1, mv2] = await Promise.all([
-                                discover(g.lang, g.genres, 'tv', 1), discover(g.lang, g.genres, 'tv', 2),
-                                discover(g.lang, g.genres, 'movie', 1), discover(g.lang, g.genres, 'movie', 2)
+                            const [tvPages, mvPages] = await Promise.all([
+                                Promise.all(PAGES.map(p => discover(g.lang, g.genres, 'tv', p))),
+                                Promise.all(PAGES.map(p => discover(g.lang, g.genres, 'movie', p)))
                             ]);
-                            const tv = [...tv1, ...tv2], movie = [...mv1, ...mv2];
+                            const tv = tvPages.flat(), movie = mvPages.flat();
                             const list = []; const mx = Math.max(tv.length, movie.length);
                             for (let i = 0; i < mx; i++) { if (tv[i]) list.push(tv[i]); if (movie[i]) list.push(movie[i]); }
                             return { lang: g.lang, list, quota: Math.max(1, Math.round(REC_CAP * g.count / total)) };
