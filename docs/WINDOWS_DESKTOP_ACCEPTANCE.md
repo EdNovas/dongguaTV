@@ -147,7 +147,7 @@ When a source cannot play:
 
 The Live TV panel lists channels parsed from user-provided TVBox `lives`, M3U/M3U8, and TXT inputs. Channel cards can open the internal player or launch MPC. Live channels with custom headers are passed to MPC through the existing player API and LocalProxy path. Internal playback also registers a LocalProxy URL first when headers are present and local proxy is enabled.
 
-Live TV supports group filtering and channel search. Group chips call the filtered live-channel API, and the search box matches channel names or group names without executing any plugin source code.
+Live TV supports group filtering, channel search, and paged loading for large channel lists. Group chips call the filtered live-channel API, and the search box matches channel names or group names without executing any plugin source code. The UI loads channels in batches and exposes a Load More button when additional matches are available.
 
 ## LocalProxy
 

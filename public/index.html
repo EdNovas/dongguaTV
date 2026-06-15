@@ -3652,7 +3652,7 @@
                             </button>
                         </div>
                         <div style="color:#8f98aa; font-size:11px; margin-bottom:10px;">
-                            显示 {{ liveChannels.length }} 个频道<span v-if="liveActiveGroup"> / {{ liveActiveGroup }}</span><span v-if="liveSearch"> / "{{ liveSearch }}"</span>
+                            显示 {{ liveChannels.length }} / {{ liveTotal }} 个频道<span v-if="liveActiveGroup"> / {{ liveActiveGroup }}</span><span v-if="liveSearch"> / "{{ liveSearch }}"</span>
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; max-height:260px; overflow:auto;">
                             <div v-for="channel in liveChannels" :key="channel.id"
@@ -3680,6 +3680,13 @@
                         <div v-if="!liveLoading && liveChannels.length === 0"
                             style="color:#9ca3af; font-size:12px; padding:18px 0; text-align:center;">
                             没有匹配的直播频道
+                        </div>
+                        <div v-if="liveHasMore" style="display:flex; justify-content:center; margin-top:14px;">
+                            <button class="btn-info" @click="loadMoreLiveChannels" :disabled="liveLoading"
+                                style="border:0; padding:9px 16px; font-size:12px;">
+                                <i :class="['fas', liveLoading ? 'fa-spinner fa-spin' : 'fa-chevron-down']"></i>
+                                加载更多
+                            </button>
                         </div>
                     </div>
                     <div class="appletv-panel-list" v-else>
@@ -4647,6 +4654,10 @@
                     liveSearch: '',
                     liveLoading: false,
                     liveSearchTimer: null,
+                    liveLimit: 80,
+                    liveOffset: 0,
+                    liveTotal: 0,
+                    liveHasMore: false,
                     playerSettings: {
                         defaultPlayer: 'mpc',
                         mpcExePath: '',
@@ -5163,17 +5174,24 @@
                     }
                 },
 
-                async loadLiveChannels() {
+                async loadLiveChannels(options = {}) {
+                    const append = !!options.append;
                     this.liveLoading = true;
                     try {
                         const params = new URLSearchParams();
                         if (this.liveActiveGroup) params.set('group', this.liveActiveGroup);
                         if (this.liveSearch) params.set('q', this.liveSearch);
+                        params.set('limit', String(this.liveLimit));
+                        params.set('offset', String(append ? this.liveOffset : 0));
                         const query = params.toString();
                         const response = await fetch(`/api/live/channels${query ? '?' + query : ''}`);
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || '直播频道加载失败');
-                        this.liveChannels = data.channels || [];
+                        const nextChannels = data.channels || [];
+                        this.liveChannels = append ? this.liveChannels.concat(nextChannels) : nextChannels;
+                        this.liveOffset = (data.offset || 0) + nextChannels.length;
+                        this.liveTotal = data.total || this.liveChannels.length;
+                        this.liveHasMore = !!data.hasMore;
                     } catch (error) {
                         this.subscriptionError = error.message || '直播频道加载失败';
                     } finally {
@@ -5188,13 +5206,20 @@
 
                 selectLiveGroup(groupName) {
                     this.liveActiveGroup = groupName || '';
+                    this.liveOffset = 0;
                     this.loadLiveChannels();
                 },
 
                 clearLiveFilters() {
                     this.liveActiveGroup = '';
                     this.liveSearch = '';
+                    this.liveOffset = 0;
                     this.loadLiveChannels();
+                },
+
+                loadMoreLiveChannels() {
+                    if (this.liveLoading || !this.liveHasMore) return;
+                    this.loadLiveChannels({ append: true });
                 },
 
                 async importTvboxSubscription() {

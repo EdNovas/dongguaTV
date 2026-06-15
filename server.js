@@ -1093,6 +1093,10 @@ app.get('/api/live/channels', (req, res) => {
     try {
         const group = String(req.query.group || '').trim();
         const q = String(req.query.q || '').trim().toLowerCase();
+        const rawLimit = Number(req.query.limit);
+        const rawOffset = Number(req.query.offset);
+        const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(Math.floor(rawLimit), 500) : null;
+        const offset = Number.isFinite(rawOffset) && rawOffset > 0 ? Math.floor(rawOffset) : 0;
         let channels = tvboxService.listLiveChannels();
         if (group) {
             channels = channels.filter(channel => channel.group === group);
@@ -1103,7 +1107,15 @@ app.get('/api/live/channels', (req, res) => {
                 String(channel.group || '').toLowerCase().includes(q)
             );
         }
-        res.json({ channels });
+        const total = channels.length;
+        const pagedChannels = limit ? channels.slice(offset, offset + limit) : channels;
+        res.json({
+            channels: pagedChannels,
+            total,
+            limit,
+            offset,
+            hasMore: limit ? offset + pagedChannels.length < total : false
+        });
     } catch (error) {
         sendTvboxError(res, error);
     }
