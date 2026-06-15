@@ -393,15 +393,21 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         const bases = String(DANMU_API_URL).split(',').map(s => s.trim()).filter(Boolean);
         const tokens = String(process.env.DANMU_API_TOKEN || '').split(',').map(s => s.trim());
         const instances = bases.map((b, i) => ({ base: b, token: tokens.length > 1 ? (tokens[i] || '') : (tokens[0] || '') }));
-        let data = [];
-        for (const inst of instances) {
-            try { data = await fetchDanmakuFromInstance(inst.base, inst.token, title, ep); } catch (e) { data = []; }
-            if (data.length) break;
-        }
-        // 全部实例空 → 多为上游限流瞬时空：等 3s 重试第一个实例(Vercel 有 10s 函数上限，谨慎)
+        // 🏁 并行赛跑：所有实例同时查，第一个非空即用——一个实例卡死/401 不拖累其它(原串行先傻等主实例超时才轮到下一个)
+        const raceInstances = async () => {
+            if (!instances.length) return [];
+            const runs = instances.map(inst => (async () => {
+                const d = await fetchDanmakuFromInstance(inst.base, inst.token, title, ep);
+                if (!d.length) throw new Error('empty');
+                return d;
+            })());
+            try { return await Promise.any(runs); } catch (e) { return []; }
+        };
+        let data = await raceInstances();
+        // 全部实例空 → 多为上游限流瞬时空：等 3s 再赛一轮(Vercel 有 10s 函数上限，谨慎)
         if (!data.length && instances.length) {
             await new Promise(r => setTimeout(r, 3000));
-            try { data = await fetchDanmakuFromInstance(instances[0].base, instances[0].token, title, ep); } catch (e) { data = []; }
+            data = await raceInstances();
         }
         data.sort((a, b) => a[0] - b[0]); // 先按时间升序，保证下面按索引均匀采样=按时间均匀采样(后半段不丢)
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }

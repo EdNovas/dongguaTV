@@ -1437,20 +1437,27 @@ app.get('/api/danmaku/v3/', async (req, res) => {
 
     try {
         // 多源回退：DANMU_API_URL 支持逗号分隔多个实例(不同主机/区域=不同出口IP,绕开单实例被上游限流)；
-        //   DANMU_API_TOKEN 逗号分隔则按序与各实例配对，单个则全部实例共用。逐实例尝试，第一个非空即用。
+        //   DANMU_API_TOKEN 逗号分隔则按序与各实例配对，单个则全部实例共用。
         const bases = String(DANMU_API_URL).split(',').map(s => s.trim()).filter(Boolean);
         const tokens = String(process.env.DANMU_API_TOKEN || '').split(',').map(s => s.trim());
         const instances = bases.map((b, i) => ({ base: b, token: tokens.length > 1 ? (tokens[i] || '') : (tokens[0] || '') }));
-        let data = [];
-        for (const inst of instances) {
-            try { data = await fetchDanmakuFromInstance(inst.base, inst.token, title, ep); } catch (e) { data = []; }
-            if (data.length) break;  // 第一个取到非空的实例即用
-        }
-        // 所有实例都空 → 多为上游(iqiyi)限流的瞬时空(实测同集隔几秒重试即满)：等 3s 重试第一个实例一次。
-        //   弹幕异步加载不阻塞视频；超出集数时 pickDanmakuEpisode 返回 null → 各实例本就返回空、这里也取不到，保持空。
+        // 🏁 并行赛跑：所有实例同时查，第一个返回【非空】的即用——一个实例卡死/401 不再拖累其它(原串行会先傻等
+        //    主实例超时 20s 才轮到下一个)。把"空"当失败抛出，让 Promise.any 跳过空结果继续等非空的。
+        const raceInstances = async () => {
+            if (!instances.length) return [];
+            const runs = instances.map(inst => (async () => {
+                const d = await fetchDanmakuFromInstance(inst.base, inst.token, title, ep);
+                if (!d.length) throw new Error('empty');
+                return d;
+            })());
+            try { return await Promise.any(runs); } catch (e) { return []; }
+        };
+        let data = await raceInstances();
+        // 全空 → 多为上游(iqiyi)限流的瞬时空(实测同集隔几秒重试即满)：等 3s 再赛一轮。
+        //   超出集数时 pickDanmakuEpisode 返回 null → 各实例本就返回空、这里也取不到，保持空。
         if (!data.length && instances.length) {
             await new Promise(r => setTimeout(r, 3000));
-            try { data = await fetchDanmakuFromInstance(instances[0].base, instances[0].token, title, ep); } catch (e) { data = []; }
+            data = await raceInstances();
         }
         // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
         data.sort((a, b) => a[0] - b[0]);
