@@ -35,3 +35,4 @@ android-tv/build_*.txt
 *.apk
 
 
+/.claude
