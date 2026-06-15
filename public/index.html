@@ -10323,41 +10323,68 @@
 
                 // ✨ 为你推荐：取最近 3 条观看历史 → TMDB 搜索定位 → /recommendations → 交错合并去重、
                 //    排除已看过的 → 最多 18 条。纯前端，走已有 /api/tmdb-proxy(服务端有 10h 缓存)。失败静默(隐藏该行)。
+                // ✨ 为你推荐：内容过滤(类型+语言)而非 TMDB 的 /recommendations(那是西方用户协同过滤，对国产剧
+                //    几乎无信号→全推美剧)。做法：搜最近历史拿到每部的 genre_ids+original_language → 取最常见的类型+
+                //    主语言 → /discover 拉【同语言同类型】按热度排 → 国产剧历史就推国产剧。全程走已有 tmdb-proxy(免费)。
                 async fetchRecommendations() {
                     try {
                         if (this._recLoaded) return;
-                        const names = (this.watchHistory || []).slice(0, 3).map(h => h && h.name).filter(Boolean);
+                        const names = (this.watchHistory || []).slice(0, 5).map(h => h && h.name).filter(Boolean);
                         if (!names.length) return;  // ⚠️ 历史还没到(云同步慢)→ 不置位，等同步完成后补调
                         this._recLoaded = true;
                         const historySet = new Set((this.watchHistory || []).map(h => ((h && h.name) || '').trim()));
-                        const buckets = await Promise.all(names.map(async (n) => {
+
+                        // 1. 搜每部历史剧，拿 genre_ids + original_language(内容画像)
+                        const hits = (await Promise.all(names.map(async (n) => {
                             try {
                                 const sr = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/search/multi')}&query=${encodeURIComponent(n)}&language=zh-CN`).then(r => r.json());
-                                const hit = ((sr && sr.results) || []).find(x => (x.media_type === 'tv' || x.media_type === 'movie') && x.poster_path);
-                                if (!hit) return [];
-                                const rr = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/' + hit.media_type + '/' + hit.id + '/recommendations')}&language=zh-CN`).then(r => r.json());
-                                return ((rr && rr.results) || []).filter(x => x.poster_path && (x.title || x.name) && !x.adult);
+                                return ((sr && sr.results) || []).find(x => (x.media_type === 'tv' || x.media_type === 'movie') && x.poster_path) || null;
+                            } catch (e) { return null; }
+                        }))).filter(Boolean);
+                        if (!hits.length) { this.recommendList = []; return; }
+
+                        // 2. 统计类型频次 + 主语言(国产剧站通常 zh 主导)
+                        const gf = {}, lf = {};
+                        hits.forEach(h => {
+                            (h.genre_ids || []).forEach(g => gf[g] = (gf[g] || 0) + 1);
+                            if (h.original_language) lf[h.original_language] = (lf[h.original_language] || 0) + 1;
+                        });
+                        const topGenres = Object.keys(gf).sort((a, b) => gf[b] - gf[a]).slice(0, 2);
+                        const topLang = Object.keys(lf).sort((a, b) => lf[b] - lf[a])[0];
+                        const lang = (topLang && lf[topLang] >= Math.ceil(hits.length / 2)) ? topLang : '';  // 过半才锁语言
+
+                        // 3. /discover 同语言同类型按热度(去掉评分票数门槛，国产剧票数稀疏)
+                        const discover = async (type, withLang) => {
+                            let p = `sort_by=popularity.desc&page=1`;
+                            if (topGenres.length) p += `&with_genres=${topGenres.join('%7C')}`;  // %7C = | (任一类型)
+                            if (withLang) p += `&with_original_language=${withLang}`;
+                            try {
+                                const r = await fetch(`/api/tmdb-proxy?path=${encodeURIComponent('/discover/' + type)}&${p}&language=zh-CN`).then(r => r.json());
+                                return ((r && r.results) || []).map(x => ({ ...x, media_type: type }));
                             } catch (e) { return []; }
-                        }));
-                        // 各来源交错取(口味更均衡)，按【类型+id】去重(TMDB 的 movie/tv id 空间重叠) + 排除历史里已看过的同名
+                        };
+                        let [tv, movie] = await Promise.all([discover('tv', lang), discover('movie', lang)]);
+                        // 锁了语言却结果太少 → 放宽语言再来一次(避免冷门类型在该语言下没货)
+                        if (lang && (tv.length + movie.length) < 8) {
+                            const [tv2, movie2] = await Promise.all([discover('tv', ''), discover('movie', '')]);
+                            tv = tv.concat(tv2); movie = movie.concat(movie2);
+                        }
+
+                        // 4. tv/movie 交错合并、按[类型+id]去重、排除已看、滤海报、≤18
                         const seen = new Set(); const out = [];
-                        for (let i = 0; out.length < 18; i++) {
-                            let any = false;
-                            for (const b of buckets) {
-                                const x = b[i];
-                                if (!x) continue;
-                                any = true;
+                        const mx = Math.max(tv.length, movie.length);
+                        for (let i = 0; i < mx && out.length < 18; i++) {
+                            for (const x of [tv[i], movie[i]]) {
+                                if (!x || !x.poster_path || x.adult) continue;
                                 const t = (x.title || x.name || '').trim();
-                                const k = (x.media_type || (x.first_air_date ? 'tv' : 'movie')) + '-' + x.id;
+                                const k = x.media_type + '-' + x.id;
                                 if (!t || seen.has(k) || historySet.has(t)) continue;
-                                seen.add(k);
-                                out.push(x);
+                                seen.add(k); out.push(x);
                                 if (out.length >= 18) break;
                             }
-                            if (!any) break;
                         }
                         this.recommendList = out;
-                        if (out.length) console.log('[推荐] 基于观看历史生成', out.length, '条推荐');
+                        if (out.length) console.log('[推荐] 基于类型/语言生成', out.length, '条', { topGenres, lang });
                     } catch (e) { console.warn('[推荐] 获取失败:', e); }
                 },
 
