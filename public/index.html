@@ -3630,13 +3630,32 @@
                     </div>
                     <div v-if="liveGroups.length > 0" style="margin-top:20px;">
                         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
-                            <span v-for="group in liveGroups" :key="group.name"
-                                style="padding:7px 12px; border-radius:999px; background:rgba(255,255,255,0.08); color:#ddd; font-size:12px;">
+                            <button class="btn-info" @click="selectLiveGroup('')"
+                                :style="liveActiveGroup === '' ? 'border:0; padding:7px 12px; font-size:12px; background:rgba(96,165,250,0.28); color:#fff;' : 'border:0; padding:7px 12px; font-size:12px;'">
+                                全部 · {{ liveGroups.reduce((sum, group) => sum + (group.count || 0), 0) }}
+                            </button>
+                            <button v-for="group in liveGroups" :key="group.name" class="btn-info" @click="selectLiveGroup(group.name)"
+                                :style="liveActiveGroup === group.name ? 'border:0; padding:7px 12px; font-size:12px; background:rgba(96,165,250,0.28); color:#fff;' : 'border:0; padding:7px 12px; font-size:12px;'">
                                 {{ group.name }} · {{ group.count }}
-                            </span>
+                            </button>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+                            <input v-model.trim="liveSearch" @input="debouncedLoadLiveChannels" type="search" placeholder="搜索频道或分组"
+                                style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:10px 12px; font-size:12px;">
+                            <button class="btn-info" @click="loadLiveChannels" :disabled="liveLoading"
+                                style="border:0; padding:9px 12px; font-size:12px;">
+                                <i :class="['fas', liveLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
+                            </button>
+                            <button class="btn-info" @click="clearLiveFilters" :disabled="liveLoading || (!liveActiveGroup && !liveSearch)"
+                                style="border:0; padding:9px 12px; font-size:12px;">
+                                清除
+                            </button>
+                        </div>
+                        <div style="color:#8f98aa; font-size:11px; margin-bottom:10px;">
+                            显示 {{ liveChannels.length }} 个频道<span v-if="liveActiveGroup"> / {{ liveActiveGroup }}</span><span v-if="liveSearch"> / "{{ liveSearch }}"</span>
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; max-height:260px; overflow:auto;">
-                            <div v-for="channel in liveChannels.slice(0, 80)" :key="channel.id"
+                            <div v-for="channel in liveChannels" :key="channel.id"
                                 style="border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.06); border-radius:14px; padding:12px;">
                                 <div style="color:#fff; font-weight:700; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
                                     {{ channel.name }}
@@ -3657,6 +3676,10 @@
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                        <div v-if="!liveLoading && liveChannels.length === 0"
+                            style="color:#9ca3af; font-size:12px; padding:18px 0; text-align:center;">
+                            没有匹配的直播频道
                         </div>
                     </div>
                     <div class="appletv-panel-list" v-else>
@@ -4620,6 +4643,10 @@
                     sourceDiagnostics: {},
                     liveGroups: [],
                     liveChannels: [],
+                    liveActiveGroup: '',
+                    liveSearch: '',
+                    liveLoading: false,
+                    liveSearchTimer: null,
                     playerSettings: {
                         defaultPlayer: 'mpc',
                         mpcExePath: '',
@@ -5118,24 +5145,56 @@
                 async loadSubscriptionData() {
                     try {
                         this.subscriptionError = '';
-                        const [subRes, sourceRes, groupRes, channelRes] = await Promise.all([
+                        const [subRes, sourceRes, groupRes] = await Promise.all([
                             fetch('/api/subscriptions'),
                             fetch('/api/sources'),
-                            fetch('/api/live/groups'),
-                            fetch('/api/live/channels')
+                            fetch('/api/live/groups')
                         ]);
                         const subData = await subRes.json();
                         const sourceData = await sourceRes.json();
                         const groupData = await groupRes.json();
-                        const channelData = await channelRes.json();
                         this.subscriptions = subData.subscriptions || [];
                         this.tvboxSources = sourceData.sources || [];
                         this.sourceDiagnostics = {};
                         this.liveGroups = groupData.groups || [];
-                        this.liveChannels = channelData.channels || [];
+                        await this.loadLiveChannels();
                     } catch (error) {
                         this.subscriptionError = error.message || '订阅数据加载失败';
                     }
+                },
+
+                async loadLiveChannels() {
+                    this.liveLoading = true;
+                    try {
+                        const params = new URLSearchParams();
+                        if (this.liveActiveGroup) params.set('group', this.liveActiveGroup);
+                        if (this.liveSearch) params.set('q', this.liveSearch);
+                        const query = params.toString();
+                        const response = await fetch(`/api/live/channels${query ? '?' + query : ''}`);
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '直播频道加载失败');
+                        this.liveChannels = data.channels || [];
+                    } catch (error) {
+                        this.subscriptionError = error.message || '直播频道加载失败';
+                    } finally {
+                        this.liveLoading = false;
+                    }
+                },
+
+                debouncedLoadLiveChannels() {
+                    if (this.liveSearchTimer) clearTimeout(this.liveSearchTimer);
+                    this.liveSearchTimer = setTimeout(() => this.loadLiveChannels(), 250);
+                },
+
+                selectLiveGroup(groupName) {
+                    this.liveActiveGroup = groupName || '';
+                    this.loadLiveChannels();
+                },
+
+                clearLiveFilters() {
+                    this.liveActiveGroup = '';
+                    this.liveSearch = '';
+                    this.loadLiveChannels();
                 },
 
                 async importTvboxSubscription() {

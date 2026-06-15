@@ -1091,10 +1091,17 @@ app.patch('/api/sources/:id', (req, res) => {
 
 app.get('/api/live/channels', (req, res) => {
     try {
-        const group = req.query.group;
+        const group = String(req.query.group || '').trim();
+        const q = String(req.query.q || '').trim().toLowerCase();
         let channels = tvboxService.listLiveChannels();
         if (group) {
             channels = channels.filter(channel => channel.group === group);
+        }
+        if (q) {
+            channels = channels.filter(channel =>
+                String(channel.name || '').toLowerCase().includes(q) ||
+                String(channel.group || '').toLowerCase().includes(q)
+            );
         }
         res.json({ channels });
     } catch (error) {
