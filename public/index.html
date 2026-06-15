@@ -3702,14 +3702,22 @@
 
             <!-- ✨ 为你推荐：基于观看历史的 TMDB 推荐(无历史/无结果时整段隐藏) -->
             <div class="section-container animate__animated animate__fadeInUp" v-if="recommendList.length > 0"
-                style="margin-bottom: 10px;">
+                style="margin-top: 48px; margin-bottom: 10px;">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #f5af19, #f12711);"></div>
                     <div class="section-title"><i class="fas fa-magic"></i> 为你推荐</div>
                     <span style="margin-left: 12px; color: #777; font-size: 12px;">根据你的观看记录</span>
+                    <span class="expand-toggle" :class="{ expanded: recommendExpanded }"
+                        @click="recommendExpanded = !recommendExpanded" style="margin-left: auto;">
+                        {{ recommendExpanded ? '收起' : '展开' }}
+                        <i class="fas fa-chevron-down"></i>
+                    </span>
                 </div>
-                <div class="scroll-container">
-                    <div class="hot-row">
+                <!-- 收起：横向滚动 + 左右翻页箭头 -->
+                <div class="scroll-container" v-show="!recommendExpanded">
+                    <button class="scroll-btn left" v-show="recommendCanScrollLeft" @click="scrollRecommendRow(-1)"
+                        aria-label="向左滚动推荐"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <div class="hot-row" ref="recommendRow" @scroll="onRecommendScroll">
                         <div class="hot-card" v-for="item in recommendList"
                             :key="'rec-' + (item.media_type || '') + '-' + item.id"
                             @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
@@ -3723,6 +3731,23 @@
                             <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0]
                                 }}</div>
                         </div>
+                    </div>
+                    <button class="scroll-btn right" v-show="recommendCanScrollRight" @click="scrollRecommendRow(1)"
+                        aria-label="向右滚动推荐"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                </div>
+                <!-- 展开：网格(全部一次看) -->
+                <div class="grid-expanded" v-show="recommendExpanded">
+                    <div class="hot-card" v-for="item in recommendList"
+                        :key="'recg-' + (item.media_type || '') + '-' + item.id"
+                        @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
+                        <div class="poster-wrap">
+                            <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
+                                @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
+                            <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
+                                item.vote_average ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                        </div>
+                        <div class="movie-name">{{ item.title || item.name }}</div>
+                        <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0] }}</div>
                     </div>
                 </div>
             </div>
@@ -5163,6 +5188,9 @@
                     autoRetryMessage: '',  // 自动切换提示信息
                     watchHistory: [],  // 用户观看历史记录
                     recommendList: [],  // ✨ 为你推荐(基于观看历史的 TMDB recommendations)
+                    recommendExpanded: false,       // 为你推荐：展开为网格
+                    recommendCanScrollLeft: false,  // 为你推荐：左箭头显隐
+                    recommendCanScrollRight: true,  // 为你推荐：右箭头显隐
                     showOfflinePanel: false,  // ⬇️ 离线缓存面板开关
                     offlineList: [],          // ⬇️ 已缓存剧集元数据列表
                     dlProgress: null,         // ⬇️ 当前下载进度 {epKey,done,total,bytes,status}
@@ -7378,6 +7406,20 @@
                         row.scrollLeft += direction * scrollAmount;
                         if (direction > 0) this.fetchRow(refName, true);
                     }
+                },
+
+                // ✨ 为你推荐：专用横向滚动(不触发 fetchRow，推荐是定长列表)
+                scrollRecommendRow(direction) {
+                    const row = this.$refs.recommendRow;
+                    if (row) row.scrollLeft += direction * row.clientWidth * 0.6;
+                },
+                onRecommendScroll() {
+                    const row = this.$refs.recommendRow;
+                    if (!row) return;
+                    const left = row.scrollLeft > 10;
+                    const right = row.scrollLeft + row.clientWidth < row.scrollWidth - 10;
+                    if (this.recommendCanScrollLeft !== left) this.recommendCanScrollLeft = left;
+                    if (this.recommendCanScrollRight !== right) this.recommendCanScrollRight = right;
                 },
 
                 fetchHero() {
@@ -10384,6 +10426,7 @@
                             }
                         }
                         this.recommendList = out;
+                        this.$nextTick(() => this.onRecommendScroll());  // 列表渲染后校正左右箭头显隐(短列表不显右箭头)
                         if (out.length) console.log('[推荐] 基于类型/语言生成', out.length, '条', { topGenres, lang });
                     } catch (e) { console.warn('[推荐] 获取失败:', e); }
                 },

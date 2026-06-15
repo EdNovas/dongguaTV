@@ -244,8 +244,8 @@ node server.js
 | `CORS_PROXY_URL` | ❌ | — | 资源站/m3u8 的 CORS 代理与边缘去广告地址 |
 | `REMOTE_DB_URL` | ❌ | — | 远程 `db.json` 地址（5 分钟缓存，失败回退本地） |
 | `SITES_JSON` | ❌ | — | 直接内嵌站点配置（JSON 或 Base64），主要用于 Vercel |
-| `DANMU_API_URL` | ❌ | — | 自建 `danmu_api` 地址；配置后开启弹幕 |
-| `DANMU_API_TOKEN` | ❌ | — | `danmu_api` 的可选鉴权令牌 |
+| `DANMU_API_URL` | ❌ | — | 自建 `danmu_api` 地址；配置后开启弹幕。**支持逗号分隔多实例**（并行赛跑、抗限流）。详见[弹幕](#️-弹幕) |
+| `DANMU_API_TOKEN` | ❌ | — | `danmu_api` 鉴权令牌；**逗号分隔与多实例按序配对**，单个则共用 |
 | `SITE_URL` | ❌ | 自动探测* | 分享卡片/SEO 用的站点根地址 |
 | `PROXY_PASSWORD` | ❌ | — | 自建 `proxy-server.js` 的 Bearer 鉴权口令 |
 
@@ -475,29 +475,70 @@ ACCESS_PASSWORD=admin_password,user1_pass,user2_pass
 
 ## 🗨️ 弹幕
 
-播放器可挂接弹幕，弹幕数据来自一个**自建的第三方弹幕聚合服务 `danmu_api`**（兼容弹弹play、聚合爱奇艺/腾讯/优酷/B站/芒果/360 等平台）。后端把"剧名+集名"映射到该服务并转成 DPlayer v3 格式喂给播放器。
+播放器可挂接弹幕，数据来自一个**自建的第三方弹幕聚合服务 `danmu_api`**（[huangxd-/danmu_api](https://github.com/huangxd-/danmu_api)，兼容弹弹play、聚合爱奇艺/腾讯/优酷/B站/芒果/360 等平台）。本站后端把"剧名+集名"映射到该服务、抓取并转成 DPlayer v3 格式喂给播放器。
 
 ### 启用方式
 
-1. 自行部署一个 `danmu_api` 服务（Cloudflare Workers 或自建均可）。
+1. 自行部署一个 `danmu_api` 服务（**推荐 Docker/Node 自托管**，原因见下文「部署选择」）。
 2. 配置环境变量：
    ```env
+   # 单实例：
    DANMU_API_URL=https://your-danmu-api.example.com
-   # 若该服务需要鉴权令牌：
    DANMU_API_TOKEN=your_token
+   # 多实例（逗号分隔，多出口 IP 抗限流）：哪个先返回非空就用谁（并行赛跑）
+   DANMU_API_URL=http://127.0.0.1:9321,https://backup-danmu.example.com
+   DANMU_API_TOKEN=token1,token2          # 逗号分隔与各实例配对；只填一个则全部共用
    ```
-3. 重启服务。**未配置 `DANMU_API_URL` 时弹幕优雅降级**（返回空弹幕，不报错、不影响播放）。
+3. 重启服务。**未配置 `DANMU_API_URL` 时弹幕优雅降级**（返回空、不报错、不影响播放）。
 
-### 特性
+### 前端弹幕设置（播放器内）
 
-- **主标题归一**：去掉 `(2022)`、`【国产剧】` 等年份/标签后缀，避免"破事精英"误命中"破事精英 第二季"
-- **集号识别**：优先抓"第 N 集/话/期"中的 N，忽略剧名里的数字
-- **平台回退排序**：优先 爱奇艺/腾讯/优酷/360，跳过常返空且较慢的源
-- **结果缓存**：搜索结果按剧名短缓存供同剧各集复用；弹幕内存缓存命中 30 分钟、空结果 5 分钟（命中结果对 CDN 走长缓存）
-- **体积控制**：单集弹幕上限 6000 条，超出按时间均匀采样
-- **防刷**：上游弹幕查询全站每分钟封顶
+控制栏有独立的「弹幕设置」按钮（视频设置齿轮左侧），点开滑块面板可调，且**全部跨设备同步**（存 `user_settings`）：
 
-端点：`GET /api/danmaku/v3/?id=<剧名|集名>`（DPlayer 约定）。
+| 项 | 说明 |
+|---|---|
+| 显示弹幕 / 海量弹幕 | 开关（海量=允许重叠不丢弃） |
+| 行数 | 弹幕占屏行数 1–20（按单行高换算容器限高） |
+| 速度 | Lv.1–10，越大越快（动画时长 20s→2s） |
+| 字号 | 12–44px |
+| 字体 | 默认 / 微软雅黑 / 黑体 / 宋体 / 楷体 / 仿宋（子列表每项以各自字体显示） |
+| 不透明度 | 10–100% |
+
+弹幕设置面板与视频设置（齿轮）互斥；菜单开着点视频画面 = 关菜单 + 隐藏控制栏（不暂停）。倍速跨集保持（本地记住）。
+
+### 后端抓取与缓存
+
+- 端点：`GET /api/danmaku/v3/?id=<剧名|集名>`（DPlayer 约定）。
+- **主标题归一**（去 `(2022)`/`【国产剧】` 等后缀，防"破事精英"误配"破事精英 第二季"）、**集号识别**（抓"第N集/话/期"、忽略剧名数字）、**平台回退排序**（爱奇艺/腾讯/优酷/360 优先，跳过常空的源）。
+- **多实例并行赛跑**：`DANMU_API_URL` 多实例时 `Promise.any` 并发，第一个非空即用——某实例卡死/限流不拖累其它。
+- **缓存**：搜索结果按剧名短缓存（同剧各集复用）；非空弹幕长缓存（7 天 + 30 天 stale-while-revalidate）；**空/出错一律 `no-store`**（绝不让 CDN/浏览器缓存"暂时为空"，否则某集偶发取空会被长期冻结）。单集上限 12000 条按时间均匀采样。
+- **防刷**：上游查询全站每分钟封顶。
+
+### `danmu_api` 推荐配置参数
+
+> 下面是 **`danmu_api` 服务自身**的环境变量（不是本站的）。经实测，这几项对"快、稳、不被限"最关键：
+
+| 参数 | 建议值 | 作用 |
+|---|---|---|
+| `TOKEN` | 自定义 | API 鉴权令牌（与本站 `DANMU_API_TOKEN` 对应） |
+| `RATE_LIMIT_MAX_REQUESTS` | `0` | 关闭每 IP 限流——本站是单服务器代理、整站流量同一 IP，默认 `3/分` 会被限成大量 429 |
+| `SOURCE_ORDER` | `360`（国产剧）| "搜索匹配"源；`360` 一次聚合即定位 爱奇艺/腾讯/B站。**别用默认含 `douban`**（它内部串多平台、最慢） |
+| `PLATFORM_ORDER` | `qiyi,qq` | 优先取哪个平台的弹幕（爱奇艺/腾讯最多最稳；B站维护成本高、对国产剧弱） |
+| `OTHER_SERVER` | 一个可用的 danmu_api 地址 | **兜底**：自家抓空时转它（借其干净出口 IP），治"整集没弹幕" |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | 免费 Upstash | **持久缓存**——serverless 上没它，剧集临时 ID 映射跨请求即丢 → `comment not found`，配上即根治 |
+| `BILIBILI_COOKIE` | B站 `SESSDATA` | 绕过 B站 对机房 IP 的风控（仅 B站 这一路需要） |
+| `VOD_REQUEST_TIMEOUT` | `6000` | 单源超时（默认 10s），调小让慢源快速失败 |
+
+### 部署选择（重要）
+
+- **CF Workers / Netlify / Vercel（serverless）**：共享出口 IP，常被弹幕平台**按 IP 限流/风控**（繁忙节点会 0 字节挂死）；CF Workers 还有**单请求子请求上限**（免费版 50，长视频会"后半段没弹幕"），内存缓存跨请求/跨节点失效（**必须配 Redis**，否则频繁 `comment not found`）。
+- **✅ 推荐：Docker/Node 自托管**（自己的 VPS）：专用 IP 不易被限、**无子请求上限**（长视频弹幕抓全）、单进程内存常驻（ID 映射不丢、可不依赖 Redis）。本站 `DANMU_API_URL` 指向 `http://127.0.0.1:9321` 即可：
+  ```bash
+  docker run -d --name danmu-api --restart unless-stopped -p 127.0.0.1:9321:9321 \
+    -e TOKEN=your_token -e RATE_LIMIT_MAX_REQUESTS=0 \
+    -e SOURCE_ORDER=360 -e PLATFORM_ORDER=qiyi,qq \
+    -v /opt/danmu/cache:/app/.cache logvar/danmu-api:latest
+  ```
 
 ---
 
