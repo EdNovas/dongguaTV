@@ -144,6 +144,7 @@ When a source cannot play:
 - `error`: health check or import failed.
 - Missing MPC path: configure Settings > MPC external player.
 - Local proxy issue: check `player-settings.json` `localProxyPort` and whether the port is occupied.
+- Current playback: use the player header `Proxy URL` button to register the current PlayUrlResult with LocalProxy and copy the local `127.0.0.1` URL for external player testing.
 - Source diagnostics: use Subscriptions > Diagnose on the specific source to see unsupported/plugin/runtime reasons.
 - Search diagnostics: when search returns no results, use the inline Search Diagnostics panel to see whether the issue is missing built-in search sites, disabled TVBox sources, plugin-required sources, unsupported sources, or Local Java Bridge state.
 

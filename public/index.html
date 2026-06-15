@@ -4172,6 +4172,9 @@
                         <button class="btn-cast" tabindex="2" @click="copyCurrentPlayUrl" aria-label="复制播放地址">
                             <i class="fas fa-copy"></i> 复制地址
                         </button>
+                        <button class="btn-cast" tabindex="2" @click="copyCurrentProxyUrl" aria-label="复制本地代理地址">
+                            <i class="fas fa-shield-alt"></i> 代理地址
+                        </button>
                         <button class="btn-cast" tabindex="2" @click="showSettingsModal = true; loadPlayerSettings()"
                             aria-label="播放器设置">
                             <i class="fas fa-sliders-h"></i> 播放器
@@ -5926,6 +5929,25 @@
                     const url = this.currentUrl || '';
                     if (!url) return;
                     await this.copyTextToClipboard(url, '播放地址已复制', '请手动复制播放地址：');
+                },
+
+                async copyCurrentProxyUrl() {
+                    if (!this.currentUrl) {
+                        this.showMiniToast && this.showMiniToast('当前没有播放地址');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/player/proxy-url', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildCurrentPlayUrlResult() })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || '本地代理创建失败');
+                        await this.copyTextToClipboard(data.proxyUrl, '本地代理地址已复制', '请手动复制本地代理地址：');
+                    } catch (error) {
+                        this.showMiniToast && this.showMiniToast(error.message || '本地代理创建失败');
+                    }
                 },
 
                 async initApp() {
