@@ -4309,118 +4309,6 @@
             </div>
         </div>
 
-        <!-- 站长后台（独立隐藏入口：仅访问 网址#admin 时出现；用 ADMIN_TOKEN 验证。单页，无需另建后台站点）-->
-        <div class="info-modal-overlay" v-if="showAdminPage" @click.self="closeAdminPage">
-            <div class="info-modal req-modal admin-modal">
-                <button class="info-modal-close" @click="closeAdminPage"><i class="fas fa-times"></i></button>
-                <div class="req-body">
-                    <h3 class="req-h"><i class="fas fa-user-shield"></i> 站长后台</h3>
-                    <div v-if="!reqAdminAuthed" class="req-form">
-                        <p class="req-sub">输入管理员令牌（ADMIN_TOKEN）进入后台。此页面仅通过 <code>网址#admin</code> 访问，普通用户看不到。</p>
-                        <input class="req-input" v-model="reqAdminToken" type="password" placeholder="管理员令牌 (ADMIN_TOKEN)"
-                            @keyup.enter="adminLoadRequests">
-                        <button class="btn btn-danger" @click="adminLoadRequests">进入后台</button>
-                    </div>
-                    <template v-else>
-                        <div class="admin-tabs">
-                            <button :class="{ active: adminTab === 'requests' }" @click="adminTab = 'requests'"><i class="fas fa-paper-plane"></i> 求片管理</button>
-                            <button :class="{ active: adminTab === 'users' }" @click="adminTab = 'users'; adminLoadUsers()"><i class="fas fa-users"></i> 用户统计</button>
-                        </div>
-
-                        <!-- ===== 求片管理 ===== -->
-                        <div v-show="adminTab === 'requests'">
-                            <div class="req-sec-title">全部求片（{{ adminRequests.length }}）<span class="expand-toggle" @click="adminLoadRequests" style="margin-left:auto;font-size:12px;cursor:pointer;"><i class="fas fa-sync-alt"></i> 刷新</span></div>
-                            <div v-if="!adminRequests.length" class="req-empty">暂无求片</div>
-                            <div class="req-list">
-                                <div v-for="r in adminRequests" :key="'a' + r.id" class="req-item">
-                                    <div class="req-row">
-                                        <span class="req-name">{{ r.name }}</span>
-                                        <span class="req-badge" :class="'rb-' + r.status">{{ reqStatusText(r.status) }}</span>
-                                        <span class="req-who" :title="r.identity || r.user_token">{{ r.identity || r.user_label || (r.user_token || '').slice(0, 8) }}</span>
-                                    </div>
-                                    <div v-if="r.aka || r.year || r.cast_info" class="req-meta">
-                                        <span v-if="r.year">{{ r.year }}</span><span v-if="r.aka">《{{ r.aka }}》</span><span v-if="r.cast_info">{{ r.cast_info }}</span>
-                                    </div>
-                                    <div v-if="r.note" class="req-note">备注：{{ r.note }}</div>
-                                    <input class="req-input" v-model="r.fulfill_link" placeholder="链接：磁力 / 下载 / 站内播放 / 其他网站均可">
-                                    <input class="req-input" v-model="r.fulfill_note" placeholder="给用户的说明 / 原因（无法提供或需补充信息时填写）">
-                                    <div class="req-actions">
-                                        <button class="btn btn-success btn-sm" @click="adminFulfill(r, 'fulfilled')">标记已提供</button>
-                                        <button class="btn btn-warning btn-sm" @click="adminFulfill(r, 'need_info')">需补充信息</button>
-                                        <button class="btn btn-secondary btn-sm" @click="adminFulfill(r, 'rejected')">无法提供</button>
-                                        <button class="btn btn-outline-danger btn-sm" @click="adminFulfill(r, 'delete')">删除</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- ===== 用户统计 / 封禁 ===== -->
-                        <div v-show="adminTab === 'users'">
-                            <div class="admin-stats-grid">
-                                <div class="admin-stat-card"><div class="asc-num">{{ adminAggregates.total_users || 0 }}</div><div class="asc-lbl">总用户</div></div>
-                                <div class="admin-stat-card"><div class="asc-num">{{ adminAggregates.active_1d || 0 }}</div><div class="asc-lbl">今日活跃</div></div>
-                                <div class="admin-stat-card"><div class="asc-num">{{ adminAggregates.active_7d || 0 }}</div><div class="asc-lbl">7日活跃</div></div>
-                                <div class="admin-stat-card"><div class="asc-num">{{ adminAggregates.active_30d || 0 }}</div><div class="asc-lbl">30日活跃</div></div>
-                                <div class="admin-stat-card" title="按观看进度估算，仅供参考"><div class="asc-num">{{ adminAggregates.total_watch_hours || 0 }}</div><div class="asc-lbl">观看时长(h,估)</div></div>
-                                <div class="admin-stat-card"><div class="asc-num">{{ adminAggregates.total_requests || 0 }}</div><div class="asc-lbl">求片总数</div></div>
-                                <div class="admin-stat-card"><div class="asc-num">{{ adminAggregates.v2board_users || 0 }}</div><div class="asc-lbl">机场用户</div></div>
-                                <div class="admin-stat-card"><div class="asc-num" style="color:#f87171;">{{ adminAggregates.banned_count || 0 }}</div><div class="asc-lbl">已封禁</div></div>
-                            </div>
-                            <div class="req-sec-title">用户列表（{{ adminUsers.length }}，按活跃排序）<span class="expand-toggle" @click="adminLoadUsers" style="margin-left:auto;font-size:12px;cursor:pointer;"><i class="fas fa-sync-alt"></i> 刷新</span></div>
-                            <div v-if="adminLoadingUsers" class="req-empty">加载中…</div>
-                            <div v-else-if="!adminUsers.length" class="req-empty">暂无用户数据</div>
-                            <div v-else class="admin-user-table">
-                                <div v-for="u in adminUsers" :key="u.token" class="admin-user-row" :class="{ banned: u.banned }">
-                                    <div class="aur-top">
-                                        <span class="aur-id" :title="u.token">{{ u.identity }}</span>
-                                        <span v-if="u.banned" class="req-badge rb-rejected">已封禁</span>
-                                        <span v-else-if="u.is_v2board" class="aur-tag">机场</span>
-                                    </div>
-                                    <div class="aur-stats">
-                                        <span title="观看剧数"><i class="fas fa-tv"></i> {{ u.watch_count }}</span>
-                                        <span title="估算观看时长(按进度推算，仅供参考)"><i class="fas fa-clock"></i> {{ adminFmtMinutes(u.watch_minutes) }}<small style="opacity:.6">估</small></span>
-                                        <span v-if="u.request_count" title="求片数"><i class="fas fa-paper-plane"></i> {{ u.request_count }}</span>
-                                        <span title="上次观看">看 {{ adminFmtTime(u.last_watch) }}</span>
-                                        <span v-if="u.last_login" title="上次登录">登 {{ adminFmtTime(u.last_login) }}</span>
-                                        <span title="上次活跃">活 {{ adminFmtTime(u.last_active) }}</span>
-                                    </div>
-                                    <div class="aur-actions">
-                                        <button class="btn btn-outline-light btn-sm" @click="adminViewUserHistory(u)"><i class="fas fa-clock-rotate-left"></i> 记录</button>
-                                        <button v-if="!u.banned" class="btn btn-outline-danger btn-sm" @click="adminBanUser(u, true)">封禁</button>
-                                        <button v-else class="btn btn-success btn-sm" @click="adminBanUser(u, false)">解封</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </template>
-                </div>
-            </div>
-        </div>
-
-        <!-- 站长后台：某用户观看记录 drill-in -->
-        <div class="info-modal-overlay" v-if="adminUserHistory" @click.self="adminUserHistory = null" style="z-index: 2147483600;">
-            <div class="info-modal req-modal">
-                <button class="info-modal-close" @click="adminUserHistory = null"><i class="fas fa-times"></i></button>
-                <div class="req-body">
-                    <h3 class="req-h"><i class="fas fa-clock-rotate-left"></i> 观看记录 · {{ adminUserHistoryName }}</h3>
-                    <div v-if="!adminUserHistory.length" class="req-empty">该用户暂无观看记录</div>
-                    <div v-else class="req-list">
-                        <div v-for="(h, i) in adminUserHistory" :key="i" class="req-item">
-                            <div class="req-row">
-                                <span class="req-name">{{ h.name }}</span>
-                                <span class="req-who">{{ adminFmtTime(h.updated_at) }}</span>
-                            </div>
-                            <div class="req-meta">
-                                <span v-if="h.episode">{{ h.episode }}</span>
-                                <span>进度 {{ h.progress }}%</span>
-                                <span v-if="h.progressTime">已看 {{ adminFmtMinutes(Math.round(h.progressTime / 60)) }}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- 🚫 被封禁锁屏：服务端 /api/config 返回 banned 时挡住整站 -->
         <div v-if="userBanned" class="ban-lock">
             <div class="ban-lock-box">
@@ -6496,7 +6384,9 @@
                             body: JSON.stringify({
                                 token: this.syncToken,
                                 history: historyToSync,
-                                deleted: deleted
+                                deleted: deleted,
+                                // 顺带上报自己的邮箱，让站长后台能显示是谁(否则只有登录时才有，老用户一直缺)
+                                label: localStorage.getItem('emax_v2board_email') || ''
                             })
                         });
                         console.log('[同步] 推送成功，共', historyToSync.length, '条记录,', deleted.length, '条墓碑');
@@ -6520,7 +6410,8 @@
                         const data = JSON.stringify({
                             token: this.syncToken,
                             history: historyToSync,
-                            deleted: Object.keys(tomb).map(id => ({ id, deleted_at: tomb[id] }))
+                            deleted: Object.keys(tomb).map(id => ({ id, deleted_at: tomb[id] })),
+                            label: localStorage.getItem('emax_v2board_email') || ''
                         });
 
                         // sendBeacon 确保页面关闭时数据也能发送
@@ -8028,22 +7919,13 @@
                 // 站长后台：访问 网址#admin 时打开(由 mounted 的 hash 监听调用)
                 // 未配 ADMIN_TOKEN(requestsEnabled=false)则求片功能整体关闭，后台也彻底隐身——
                 // 与三处用户入口的门控一致。requestsEnabled 来自 /api/config，mounted 里在本方法之前已就绪。
-                openAdminPage() {
-                    if (!this.requestsEnabled) return;
-                    this.showAdminPage = true;
-                },
-                closeAdminPage() {
-                    this.showAdminPage = false;
-                    // 清掉 #admin，避免刷新又弹出；不触发整页跳转
-                    if ((location.hash || '').toLowerCase().indexOf('admin') !== -1) {
-                        history.replaceState(null, '', location.pathname + location.search);
-                    }
-                },
-                // 监听 hash，#admin / #/admin 时开后台
+                // 老的 #admin 入口 → 重定向到独立后台页 /admin(独立轻量页，可搜索/分页，不再是首页里的卡顿弹窗)
                 _syncAdminHash() {
                     const h = (location.hash || '').toLowerCase();
-                    if (h === '#admin' || h === '#/admin') this.openAdminPage();
-                    else if (this.showAdminPage) this.showAdminPage = false;
+                    if (h === '#admin' || h === '#/admin') {
+                        history.replaceState(null, '', location.pathname + location.search);  // 先清 hash 防回退循环
+                        window.location.assign('/admin');
+                    }
                 },
 
                 fetchHero() {

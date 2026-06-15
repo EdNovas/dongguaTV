@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>站长后台 · DongguaTV</title>
+    <link rel="icon" href="favicon.ico">
+    <script src="libs/js/vue.global.prod.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        :root { --accent: #e50914; --bg: #0e0e10; --card: #1a1a1d; --line: rgba(255, 255, 255, 0.08); }
+        body { background: var(--bg); color: #eee; font-family: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif; font-size: 14px; line-height: 1.5; }
+        a { color: #46d369; }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 18px 60px; }
+        .topbar { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+        .topbar h1 { font-size: 1.4rem; font-weight: 800; }
+        .topbar .sp { flex: 1; }
+        .btn { border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: #ddd; border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; transition: all .15s; }
+        .btn:hover { background: rgba(255, 255, 255, 0.12); }
+        .btn:disabled { opacity: .4; cursor: not-allowed; }
+        .btn-red { background: rgba(229, 9, 20, .85); border-color: transparent; color: #fff; }
+        .btn-red:hover { background: var(--accent); }
+        .btn-green { background: rgba(70, 211, 105, .85); border-color: transparent; color: #06210f; font-weight: 600; }
+        .btn-amber { background: rgba(245, 158, 11, .85); border-color: transparent; color: #2a1c00; font-weight: 600; }
+        .btn-ghost-red { border-color: rgba(239, 68, 68, .5); color: #f87171; background: transparent; }
+        .btn-sm { padding: 5px 10px; font-size: 12px; }
+        input, select { background: rgba(255, 255, 255, .06); border: 1px solid var(--line); border-radius: 8px; color: #eee; padding: 9px 11px; font-size: 14px; outline: none; width: 100%; }
+        input:focus { border-color: var(--accent); }
+
+        /* 登录 */
+        .login-box { max-width: 380px; margin: 12vh auto 0; text-align: center; }
+        .login-box h1 { font-size: 1.5rem; margin-bottom: 8px; }
+        .login-box p { color: #999; font-size: 13px; margin-bottom: 18px; }
+        .login-box input { margin-bottom: 12px; }
+
+        /* tabs */
+        .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+        .tabs button { flex: 0 0 auto; padding: 9px 18px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, .04); color: #bbb; font-size: 14px; cursor: pointer; }
+        .tabs button.on { background: rgba(229, 9, 20, .2); border-color: rgba(229, 9, 20, .45); color: #fff; }
+
+        /* 聚合卡片 */
+        .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+        @media (max-width:680px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+        .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 13px 10px; text-align: center; }
+        .stat .n { font-size: 22px; font-weight: 800; }
+        .stat .l { font-size: 11px; color: #999; margin-top: 3px; }
+
+        .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+        .toolbar .search { flex: 1; min-width: 200px; }
+        .muted { color: #888; font-size: 13px; }
+
+        /* 列表 */
+        .list { display: flex; flex-direction: column; gap: 9px; }
+        .row { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 11px 13px; }
+        .row.banned { background: rgba(239, 68, 68, .07); border-color: rgba(239, 68, 68, .25); }
+        .row .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .row .id { font-weight: 600; color: #fff; word-break: break-all; }
+        .tag { font-size: 10px; padding: 1px 7px; border-radius: 8px; }
+        .tag-air { background: rgba(59, 130, 246, .2); color: #93c5fd; }
+        .tag-ban { background: rgba(239, 68, 68, .2); color: #f87171; }
+        .tag-pending { background: rgba(245, 158, 11, .2); color: #fbbf24; }
+        .tag-fulfilled { background: rgba(70, 211, 105, .2); color: #46d369; }
+        .tag-rejected { background: rgba(239, 68, 68, .2); color: #f87171; }
+        .tag-need_info { background: rgba(251, 191, 36, .18); color: #fcd34d; }
+        .meta { color: #9a9a9a; font-size: 12px; display: flex; flex-wrap: wrap; gap: 5px 14px; margin: 6px 0; }
+        .note { color: #999; font-size: 12px; margin: 4px 0; word-break: break-all; }
+        .acts { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 8px; }
+        .req-inputs { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+
+        /* 分页 */
+        .pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 16px; }
+        .pager .info { color: #aaa; font-size: 13px; min-width: 64px; text-align: center; }
+
+        /* drill-in 弹层 */
+        .overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, .7); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; }
+        .modal { background: #141416; border: 1px solid var(--line); border-radius: 14px; width: 100%; max-width: 620px; max-height: 82vh; display: flex; flex-direction: column; box-shadow: 0 20px 60px rgba(0, 0, 0, .6); }
+        .modal .mh { display: flex; align-items: center; gap: 10px; padding: 16px 18px; border-bottom: 1px solid var(--line); }
+        .modal .mh h3 { font-size: 1.05rem; flex: 1; }
+        .modal .mb { padding: 12px 18px 18px; overflow-y: auto; }
+        .hrow { padding: 9px 0; border-bottom: 1px solid var(--line); }
+        .hrow:last-child { border-bottom: none; }
+        .hrow .ht { display: flex; gap: 8px; align-items: baseline; }
+        .hrow .hn { font-weight: 500; color: #eee; flex: 1; }
+        .hrow .when { color: #777; font-size: 12px; }
+        .x { cursor: pointer; color: #999; background: none; border: none; font-size: 20px; line-height: 1; }
+        .x:hover { color: #fff; }
+        .empty { color: #888; text-align: center; padding: 30px; }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <!-- 登录 -->
+        <div v-if="!authed" class="login-box">
+            <h1>🛡️ 站长后台</h1>
+            <p>输入管理员令牌（ADMIN_TOKEN）登录</p>
+            <input v-model="token" type="password" placeholder="ADMIN_TOKEN" @keyup.enter="login">
+            <button class="btn btn-red" style="width:100%;padding:10px" :disabled="loading" @click="login">{{ loading ? '验证中…' : '登录' }}</button>
+            <p v-if="err" style="color:#f87171;margin-top:10px">{{ err }}</p>
+        </div>
+
+        <!-- 主体 -->
+        <div v-else class="wrap">
+            <div class="topbar">
+                <h1>🛡️ 站长后台</h1>
+                <span class="sp"></span>
+                <button class="btn btn-sm" @click="refresh"><span v-if="loading">刷新中…</span><span v-else>↻ 刷新</span></button>
+                <button class="btn btn-sm" @click="logout">退出</button>
+            </div>
+
+            <div class="tabs">
+                <button :class="{ on: tab === 'requests' }" @click="tab = 'requests'">📮 求片管理 <span v-if="requests.length">({{ requests.length }})</span></button>
+                <button :class="{ on: tab === 'users' }" @click="tab = 'users'; if(!users.length) loadUsers()">👥 用户统计 <span v-if="users.length">({{ users.length }})</span></button>
+            </div>
+
+            <!-- ===== 求片管理 ===== -->
+            <div v-show="tab === 'requests'">
+                <div v-if="!requests.length" class="empty">暂无求片</div>
+                <div class="list">
+                    <div v-for="r in requests" :key="r.id" class="row">
+                        <div class="head">
+                            <span class="id">{{ r.name }}</span>
+                            <span class="tag" :class="'tag-' + r.status">{{ statusText(r.status) }}</span>
+                            <span class="muted" style="margin-left:auto" :title="r.user_token">{{ r.identity }}</span>
+                        </div>
+                        <div v-if="r.year || r.aka || r.cast_info" class="meta">
+                            <span v-if="r.year">{{ r.year }}</span><span v-if="r.aka">《{{ r.aka }}》</span><span v-if="r.cast_info">{{ r.cast_info }}</span>
+                        </div>
+                        <div v-if="r.note" class="note">备注：{{ r.note }}</div>
+                        <div class="req-inputs">
+                            <input v-model="r.fulfill_link" placeholder="链接：磁力 / 下载 / 站内播放 / 其他网站均可">
+                            <input v-model="r.fulfill_note" placeholder="给用户的说明 / 原因（无法提供或需补充信息时填写）">
+                        </div>
+                        <div class="acts">
+                            <button class="btn btn-sm btn-green" @click="fulfill(r, 'fulfilled')">标记已提供</button>
+                            <button class="btn btn-sm btn-amber" @click="fulfill(r, 'need_info')">需补充信息</button>
+                            <button class="btn btn-sm" @click="fulfill(r, 'rejected')">无法提供</button>
+                            <button class="btn btn-sm btn-ghost-red" @click="fulfill(r, 'delete')">删除</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ===== 用户统计 ===== -->
+            <div v-show="tab === 'users'">
+                <div class="stats">
+                    <div class="stat"><div class="n">{{ agg.total_users || 0 }}</div><div class="l">总用户</div></div>
+                    <div class="stat"><div class="n">{{ agg.active_1d || 0 }}</div><div class="l">今日活跃</div></div>
+                    <div class="stat"><div class="n">{{ agg.active_7d || 0 }}</div><div class="l">7日活跃</div></div>
+                    <div class="stat"><div class="n">{{ agg.active_30d || 0 }}</div><div class="l">30日活跃</div></div>
+                    <div class="stat" title="按观看进度估算，仅供参考"><div class="n">{{ agg.total_watch_hours || 0 }}</div><div class="l">观看时长(h,估)</div></div>
+                    <div class="stat"><div class="n">{{ agg.total_requests || 0 }}</div><div class="l">求片总数</div></div>
+                    <div class="stat"><div class="n">{{ agg.v2board_users || 0 }}</div><div class="l">机场用户</div></div>
+                    <div class="stat"><div class="n" style="color:#f87171">{{ agg.banned_count || 0 }}</div><div class="l">已封禁</div></div>
+                </div>
+
+                <div class="toolbar">
+                    <input class="search" v-model.trim="q" placeholder="🔍 搜索用户（邮箱 / 独立密码 / token）" @input="page = 1">
+                    <select v-model="userFilter" @change="page = 1" style="width:auto">
+                        <option value="all">全部</option>
+                        <option value="active">近7日活跃</option>
+                        <option value="banned">已封禁</option>
+                        <option value="airport">机场用户</option>
+                    </select>
+                    <span class="muted">共 {{ filteredUsers.length }} 人</span>
+                </div>
+
+                <div v-if="loadingUsers" class="empty">加载中…</div>
+                <div v-else-if="!filteredUsers.length" class="empty">没有匹配的用户</div>
+                <div v-else class="list">
+                    <div v-for="u in pagedUsers" :key="u.token" class="row" :class="{ banned: u.banned }">
+                        <div class="head">
+                            <span class="id">{{ u.identity }}</span>
+                            <span v-if="u.banned" class="tag tag-ban">已封禁</span>
+                            <span v-else-if="u.is_v2board" class="tag tag-air">机场</span>
+                        </div>
+                        <div class="meta">
+                            <span title="观看剧数">📺 {{ u.watch_count }} 部</span>
+                            <span title="估算观看时长">⏱ {{ fmtMin(u.watch_minutes) }} <small style="opacity:.6">估</small></span>
+                            <span v-if="u.request_count" title="求片数">📮 {{ u.request_count }}</span>
+                            <span title="上次观看">看 {{ fmtTime(u.last_watch) }}</span>
+                            <span v-if="u.last_login" title="上次登录">登 {{ fmtTime(u.last_login) }}</span>
+                            <span title="上次活跃">活 {{ fmtTime(u.last_active) }}</span>
+                        </div>
+                        <div class="acts">
+                            <button class="btn btn-sm" @click="viewHistory(u)">🕘 观看记录</button>
+                            <button v-if="!u.banned" class="btn btn-sm btn-ghost-red" @click="ban(u, true)">封禁</button>
+                            <button v-else class="btn btn-sm btn-green" @click="ban(u, false)">解封</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="pager" v-if="totalPages > 1">
+                    <button class="btn btn-sm" :disabled="page <= 1" @click="page--">‹ 上一页</button>
+                    <span class="info">{{ page }} / {{ totalPages }}</span>
+                    <button class="btn btn-sm" :disabled="page >= totalPages" @click="page++">下一页 ›</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 观看记录 drill-in（可滚动）-->
+        <div v-if="histUser" class="overlay" @click.self="histUser = null">
+            <div class="modal">
+                <div class="mh">
+                    <h3>🕘 观看记录 · {{ histUser.identity }}</h3>
+                    <button class="x" @click="histUser = null">&times;</button>
+                </div>
+                <div class="mb">
+                    <div v-if="histLoading" class="empty">加载中…</div>
+                    <div v-else-if="!history.length" class="empty">该用户暂无观看记录</div>
+                    <div v-else>
+                        <div v-for="(h, i) in history" :key="i" class="hrow">
+                            <div class="ht"><span class="hn">{{ h.name }}</span><span class="when">{{ fmtTime(h.updated_at) }}</span></div>
+                            <div class="meta" style="margin:3px 0 0">
+                                <span v-if="h.episode">{{ h.episode }}</span>
+                                <span>进度 {{ h.progress }}%</span>
+                                <span v-if="h.progressTime">已看 {{ fmtMin(Math.round(h.progressTime / 60)) }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        const TK = 'donggua_admin_token';
+        createApp({
+            data() {
+                return {
+                    token: sessionStorage.getItem(TK) || '',
+                    authed: false, loading: false, err: '',
+                    tab: 'requests',
+                    requests: [],
+                    users: [], agg: {}, loadingUsers: false,
+                    q: '', userFilter: 'all', page: 1, pageSize: 40,
+                    histUser: null, history: [], histLoading: false
+                };
+            },
+            computed: {
+                filteredUsers() {
+                    let list = this.users;
+                    const f = this.userFilter, now = Date.now();
+                    if (f === 'active') list = list.filter(u => u.last_active && now - u.last_active < 7 * 86400000);
+                    else if (f === 'banned') list = list.filter(u => u.banned);
+                    else if (f === 'airport') list = list.filter(u => u.is_v2board);
+                    const q = (this.q || '').toLowerCase();
+                    if (q) list = list.filter(u => (u.identity || '').toLowerCase().includes(q) || (u.token || '').toLowerCase().includes(q));
+                    return list;
+                },
+                totalPages() { return Math.max(1, Math.ceil(this.filteredUsers.length / this.pageSize)); },
+                pagedUsers() {
+                    const p = Math.min(this.page, this.totalPages);
+                    return this.filteredUsers.slice((p - 1) * this.pageSize, p * this.pageSize);
+                }
+            },
+            methods: {
+                hdr() { return { 'X-Admin-Token': this.token }; },
+                async login() {
+                    if (!this.token) return;
+                    this.loading = true; this.err = '';
+                    try {
+                        const r = await fetch('/api/requests/admin', { headers: this.hdr() });
+                        if (r.status === 403) { this.err = '令牌无效'; this.loading = false; return; }
+                        const data = await r.json();
+                        this.requests = data.requests || [];
+                        this.authed = true;
+                        sessionStorage.setItem(TK, this.token);
+                    } catch (e) { this.err = '连接失败，请重试'; }
+                    this.loading = false;
+                },
+                logout() { sessionStorage.removeItem(TK); this.authed = false; this.token = ''; this.requests = []; this.users = []; },
+                async refresh() {
+                    this.loading = true;
+                    try {
+                        const r = await fetch('/api/requests/admin', { headers: this.hdr() }).then(r => r.json());
+                        this.requests = r.requests || [];
+                        if (this.users.length || this.tab === 'users') await this.loadUsers();
+                    } catch (e) { }
+                    this.loading = false;
+                },
+                async loadRequests() {
+                    try { const r = await fetch('/api/requests/admin', { headers: this.hdr() }).then(r => r.json()); this.requests = r.requests || []; } catch (e) { }
+                },
+                async loadUsers() {
+                    this.loadingUsers = true;
+                    try {
+                        const r = await fetch('/api/admin/users', { headers: this.hdr() }).then(r => r.json());
+                        this.users = r.users || []; this.agg = r.aggregates || {};
+                    } catch (e) { alert('加载用户失败'); }
+                    this.loadingUsers = false;
+                },
+                async fulfill(r, action) {
+                    if (action === 'delete' && !confirm('删除这条求片？')) return;
+                    try {
+                        const body = { admin: this.token, id: r.id, status: action, fulfill_link: r.fulfill_link, fulfill_note: r.fulfill_note };
+                        if (action === 'delete') body.action = 'delete';
+                        const res = await fetch('/api/requests/admin', { method: 'POST', headers: { 'Content-Type': 'application/json', ...this.hdr() }, body: JSON.stringify(body) }).then(r => r.json());
+                        if (res.ok) {
+                            // 本地原地更新，保留输入框内容；删除则移除
+                            if (action === 'delete') this.requests = this.requests.filter(x => x.id !== r.id);
+                            else { r.status = action; }
+                        } else alert('操作失败');
+                    } catch (e) { alert('操作失败'); }
+                },
+                async ban(u, banned) {
+                    if (!confirm(banned ? ('封禁「' + u.identity + '」？被封后该用户将无法使用本站。') : ('解封「' + u.identity + '」？'))) return;
+                    try {
+                        const res = await fetch('/api/admin/ban', { method: 'POST', headers: { 'Content-Type': 'application/json', ...this.hdr() }, body: JSON.stringify({ token: u.token, banned }) }).then(r => r.json());
+                        if (res.ok) { u.banned = res.banned; this.agg.banned_count = (this.agg.banned_count || 0) + (banned ? 1 : -1); }
+                        else alert('操作失败');
+                    } catch (e) { alert('操作失败'); }
+                },
+                async viewHistory(u) {
+                    this.histUser = u; this.history = []; this.histLoading = true;
+                    try { const r = await fetch('/api/admin/user-history?token=' + encodeURIComponent(u.token), { headers: this.hdr() }).then(r => r.json()); this.history = r.history || []; } catch (e) { }
+                    this.histLoading = false;
+                },
+                statusText(s) { return ({ pending: '待处理', fulfilled: '已提供', rejected: '无法提供', need_info: '需补充信息' })[s] || s; },
+                fmtTime(ts) {
+                    if (!ts) return '—';
+                    const d = new Date(ts), now = Date.now(), diff = now - ts;
+                    if (diff < 60000) return '刚刚';
+                    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
+                    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
+                    if (diff < 7 * 86400000) return Math.floor(diff / 86400000) + '天前';
+                    const p = n => (n < 10 ? '0' + n : '' + n);
+                    return (d.getFullYear() === new Date(now).getFullYear() ? '' : d.getFullYear() + '-') + p(d.getMonth() + 1) + '-' + p(d.getDate());
+                },
+                fmtMin(min) {
+                    min = Math.round(min || 0);
+                    if (min < 60) return min + '分';
+                    return Math.floor(min / 60) + '时' + (min % 60 ? (min % 60) + '分' : '');
+                }
+            },
+            mounted() {
+                // 已有 sessionStorage 令牌 → 自动登录
+                if (this.token) this.login();
+            }
+        }).mount('#app');
+    </script>
+</body>
+
+</html>

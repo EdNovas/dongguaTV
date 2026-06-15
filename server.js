@@ -937,6 +937,11 @@ app.get(['/', '/index.html'], async (req, res) => {
     }
 });
 
+// 站长后台：独立页面(非首页弹窗)。鉴权在前端输入 ADMIN_TOKEN 后由 /api/admin/* 服务端校验。
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public/admin.html'));
+});
+
 // 动态注入站点 URL 到 robots.txt
 app.get('/robots.txt', (req, res) => {
     try {
@@ -1062,7 +1067,7 @@ app.get('/api/history/pull', (req, res) => {
 
 // 推送历史记录到服务器
 app.post('/api/history/push', (req, res) => {
-    const { token, history, deleted } = req.body;
+    const { token, history, deleted, label } = req.body;
 
     if (!token || !Array.isArray(history)) {
         return res.status(400).json({ error: 'Missing token or history' });
@@ -1082,7 +1087,7 @@ app.post('/api/history/push', (req, res) => {
     if (cacheManager.type !== 'sqlite' || !cacheManager.db) {
         return res.json({ sync_enabled: true, saved: 0, message: 'SQLite not available' });
     }
-    touchUser(token);  // 记录活跃
+    touchUser(token, { label });  // 记录活跃 + 邮箱身份(后台显示用)
 
     try {
         const insertStmt = cacheManager.db.prepare(`
