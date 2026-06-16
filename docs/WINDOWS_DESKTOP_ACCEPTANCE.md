@@ -38,6 +38,8 @@ Subscription URL import, local JSON import, subscription refresh, and subscripti
 
 Settings now include a desktop readiness panel that reuses `GET /api/desktop/status` to show subscription, source, live-channel, MPC, LocalProxy, checklist, and next-action state after the first-run guide has been dismissed.
 
+The readiness panel also provides a one-click setup check that refreshes desktop status, LocalProxy status, LocalProxy port availability, and MPC validation without launching an external player.
+
 ## Commands
 
 ```powershell

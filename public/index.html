@@ -3991,6 +3991,11 @@
                             <div v-for="action in desktopStatus.nextActions" :key="action">- {{ action }}</div>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                            <button class="btn-play" @click="runDesktopReadinessCheck" :disabled="desktopSelfCheckLoading"
+                                style="border:0; padding:8px 12px; font-size:12px;">
+                                <i :class="['fas', desktopSelfCheckLoading ? 'fa-spinner fa-spin' : 'fa-vial']"></i>
+                                Run setup check
+                            </button>
                             <button class="btn-info" @click="loadDesktopStatus" style="border:0; padding:8px 12px; font-size:12px;">
                                 <i class="fas fa-sync-alt"></i> Refresh readiness
                             </button>
@@ -4001,6 +4006,9 @@
                             <button class="btn-info" @click="showSettingsModal=false; showFirstRunGuide=true" style="border:0; padding:8px 12px; font-size:12px;">
                                 <i class="fas fa-magic"></i> Show guide
                             </button>
+                        </div>
+                        <div v-if="desktopSelfCheckMessage" style="color:#9ca3af; font-size:12px; margin-top:8px;">
+                            {{ desktopSelfCheckMessage }}
                         </div>
                     </div>
 
@@ -4932,6 +4940,8 @@
                     showLivePanel: false,
                     showFirstRunGuide: false,
                     desktopStatus: null,
+                    desktopSelfCheckLoading: false,
+                    desktopSelfCheckMessage: '',
                     activeAppleNav: 'home',
                     subscriptionUrl: '',
                     subscriptionName: '',
@@ -5823,6 +5833,39 @@
                         }
                     } catch (error) {
                         console.warn('[Desktop Status] load failed:', error.message);
+                    }
+                },
+
+                async runDesktopReadinessCheck() {
+                    this.desktopSelfCheckLoading = true;
+                    this.desktopSelfCheckMessage = '';
+                    try {
+                        await this.loadDesktopStatus();
+                        await this.loadProxyStatus();
+                        await this.checkProxyPort();
+                        if ((this.playerSettings.mpcExePath || '').trim()) {
+                            await this.validateMpcPath();
+                        } else {
+                            this.mpcValidation = {
+                                valid: false,
+                                exists: false,
+                                path: '',
+                                playerType: 'unknown',
+                                reason: 'missing-path',
+                                message: 'MPC executable path is not configured.'
+                            };
+                        }
+                        await this.loadDesktopStatus();
+                        const missing = (this.desktopStatus && this.desktopStatus.setupChecklist || [])
+                            .filter(item => !item.ok)
+                            .map(item => item.label);
+                        this.desktopSelfCheckMessage = missing.length
+                            ? `Setup check finished. Needs attention: ${missing.join(', ')}.`
+                            : 'Setup check finished. Desktop playback readiness looks good.';
+                    } catch (error) {
+                        this.desktopSelfCheckMessage = error.message || 'Desktop setup check failed.';
+                    } finally {
+                        this.desktopSelfCheckLoading = false;
                     }
                 },
 
