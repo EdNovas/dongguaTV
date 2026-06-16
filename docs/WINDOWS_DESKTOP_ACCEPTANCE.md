@@ -48,6 +48,8 @@ Live readiness is counted through `liveBreakdown`: channels need a non-empty URL
 
 If live channels are imported but all are invalid or marked error, readiness next actions call out the bad live entries and Settings shows a Live errors count.
 
+Source enable/disable changes and source health checks refresh desktop readiness immediately, so Settings source counts do not require reopening the app.
+
 ## Commands
 
 ```powershell

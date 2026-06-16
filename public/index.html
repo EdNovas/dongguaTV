@@ -5775,6 +5775,7 @@
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || '更新失败');
                         source.enabled = data.source.enabled;
+                        await this.loadDesktopStatus();
                     } catch (error) {
                         this.subscriptionError = error.message || '源状态更新失败';
                     }
@@ -5843,6 +5844,7 @@
                             ...this.sourceHealthLoading,
                             [source.id]: false
                         };
+                        await this.loadDesktopStatus();
                     }
                 },
 
