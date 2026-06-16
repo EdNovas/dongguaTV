@@ -3686,6 +3686,10 @@
                                         style="border:0; padding:6px 10px; font-size:11px;">
                                         <i class="fas fa-external-link-alt"></i> MPC
                                     </button>
+                                    <button class="btn-info" @click="openLiveChannelWithMpv(channel)" :disabled="channel.status === 'error'"
+                                        style="border:0; padding:6px 10px; font-size:11px;">
+                                        <i class="fas fa-external-link-alt"></i> mpv.net
+                                    </button>
                                     <button class="btn-info" @click="copyLiveChannelUrl(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
                                         <i class="fas fa-copy"></i> 地址
@@ -4124,7 +4128,38 @@
                             <span v-if="mpcValidation.playerType && mpcValidation.playerType !== 'unknown'"> · {{ mpcValidation.playerType }}</span>
                             <div style="color:#8f98aa;">{{ mpcValidation.message }}</div>
                         </div>
+                        <div style="display:flex; gap:8px; margin-top:12px;">
+                            <input v-model="playerSettings.mpvExePath" type="text" placeholder="mpv / mpv.net exe path"
+                                style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                            <button class="btn-info" @click="detectMpvPath" style="border:0; padding:8px 12px;">
+                                <i class="fas fa-search"></i> mpv
+                            </button>
+                            <button class="btn-info" @click="validateMpvPath" :disabled="mpvValidationLoading"
+                                style="border:0; padding:8px 12px; font-size:12px;">
+                                <i :class="['fas', mpvValidationLoading ? 'fa-spinner fa-spin' : 'fa-check-circle']"></i>
+                                Validate
+                            </button>
+                        </div>
+                        <div v-if="mpvValidation"
+                            style="margin-top:10px; padding:9px 11px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
+                            <strong :style="{ color: mpvValidation.valid ? '#22c55e' : '#f87171' }">
+                                mpv path {{ mpvValidation.valid ? 'valid' : 'invalid' }}
+                            </strong>
+                            <span> · {{ mpvValidation.reason }}</span>
+                            <span v-if="mpvValidation.playerType && mpvValidation.playerType !== 'unknown'"> · {{ mpvValidation.playerType }}</span>
+                            <div style="color:#8f98aa;">{{ mpvValidation.message }}</div>
+                        </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
+                                Default
+                                <select v-model="playerSettings.defaultPlayer"
+                                    style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:10px; padding:6px 8px; font-size:12px;">
+                                    <option value="mpc">MPC</option>
+                                    <option value="mpv">mpv.net</option>
+                                    <option value="internal">Internal</option>
+                                    <option value="vlc">VLC</option>
+                                </select>
+                            </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
                                 <input type="checkbox" v-model="playerSettings.fullscreenOnStart" style="accent-color:#e50914;"> 全屏启动
                             </label>
@@ -4454,6 +4489,9 @@
                     <div style="display: flex; gap: 10px; align-items: center;">
                         <button class="btn-cast" tabindex="2" @click="openCurrentWithMpc" aria-label="使用 MPC 播放">
                             <i class="fas fa-external-link-alt"></i> MPC
+                        </button>
+                        <button class="btn-cast" tabindex="2" @click="openCurrentWithMpv" aria-label="Use mpv.net">
+                            <i class="fas fa-external-link-alt"></i> mpv.net
                         </button>
                         <button class="btn-cast" tabindex="2" @click="copyCurrentPlayUrl" aria-label="复制播放地址">
                             <i class="fas fa-copy"></i> 复制地址
@@ -5041,6 +5079,8 @@
                     playerSettingsMessage: '',
                     mpcValidation: null,
                     mpcValidationLoading: false,
+                    mpvValidation: null,
+                    mpvValidationLoading: false,
                     proxyStatus: null,
                     proxyStatusLoading: false,
                     proxyPortCheck: null,
@@ -6022,6 +6062,49 @@
                     }
                 },
 
+                async detectMpvPath() {
+                    try {
+                        const response = await fetch('/api/player/detect-mpv', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'mpv detection failed');
+                        if (data.found && data.recommended) {
+                            this.playerSettings.mpvExePath = data.recommended;
+                            this.playerSettings.defaultPlayer = 'mpv';
+                            this.playerSettingsMessage = 'Detected mpv/mpv.net';
+                        } else {
+                            this.playerSettingsMessage = 'mpv/mpv.net was not found. Paste the exe path manually.';
+                        }
+                    } catch (error) {
+                        this.playerSettingsMessage = error.message || 'mpv detection failed';
+                    }
+                },
+
+                async validateMpvPath() {
+                    this.mpvValidationLoading = true;
+                    try {
+                        const response = await fetch('/api/player/validate-mpv', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ exePath: this.playerSettings.mpvExePath })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'mpv path validation failed');
+                        this.mpvValidation = data;
+                        this.showMiniToast && this.showMiniToast(data.valid ? 'mpv path valid' : `mpv path invalid: ${data.reason}`);
+                    } catch (error) {
+                        this.mpvValidation = {
+                            valid: false,
+                            exists: false,
+                            path: this.playerSettings.mpvExePath || '',
+                            playerType: 'unknown',
+                            reason: 'validation-error',
+                            message: error.message || 'mpv path validation failed'
+                        };
+                    } finally {
+                        this.mpvValidationLoading = false;
+                    }
+                },
+
                 async loadProxyStatus() {
                     this.proxyStatusLoading = true;
                     try {
@@ -6421,6 +6504,27 @@
                     }
                 },
 
+                async openCurrentWithMpv() {
+                    if (!this.currentUrl) {
+                        this.showMiniToast && this.showMiniToast('No playback URL is available.');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/player/open-mpv', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildCurrentPlayUrlResult() })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'mpv launch failed');
+                        this.showMiniToast && this.showMiniToast('Opened with mpv.net');
+                    } catch (error) {
+                        alert(error.message || 'mpv launch failed. Check player path.');
+                        this.showSettingsModal = true;
+                        this.loadPlayerSettings();
+                    }
+                },
+
                 buildLivePlayUrlResult(channel) {
                     const url = channel && channel.url ? channel.url : '';
                     const lower = url.toLowerCase();
@@ -6507,6 +6611,27 @@
                         this.showMiniToast && this.showMiniToast('已调用 MPC 播放直播');
                     } catch (error) {
                         alert(error.message || 'MPC 启动失败，请检查播放器路径');
+                        this.showSettingsModal = true;
+                        this.loadPlayerSettings();
+                    }
+                },
+
+                async openLiveChannelWithMpv(channel) {
+                    if (!channel || !channel.url) {
+                        this.showMiniToast && this.showMiniToast('Live channel has no URL.');
+                        return;
+                    }
+                    try {
+                        const response = await fetch('/api/player/open-mpv', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildLivePlayUrlResult(channel) })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'mpv launch failed');
+                        this.showMiniToast && this.showMiniToast('Opened live channel with mpv.net');
+                    } catch (error) {
+                        alert(error.message || 'mpv launch failed. Check player path.');
                         this.showSettingsModal = true;
                         this.loadPlayerSettings();
                     }

@@ -1,6 +1,7 @@
-const { readPlayerSettings, savePlayerSettings, detectMpcPaths, validateMpcPath } = require('./externalPlayerConfig');
+const { readPlayerSettings, savePlayerSettings, detectMpcPaths, detectMpvPaths, validateMpcPath, validateMpvPath } = require('./externalPlayerConfig');
 const { classifyPlayUrl } = require('./playUrlClassifier');
 const { playWithMpc } = require('./mpcPlayer');
+const { playWithMpv } = require('./mpvPlayer');
 const { LocalProxy } = require('./localProxy');
 const http = require('http');
 
@@ -171,6 +172,20 @@ class PlayerManager {
         return validateMpcPath(exePath || settings.mpcExePath);
     }
 
+    detectMpv() {
+        const matches = detectMpvPaths();
+        return {
+            found: matches.length > 0,
+            matches,
+            recommended: matches[0] || ''
+        };
+    }
+
+    validateMpv(exePath) {
+        const settings = this.getSettings();
+        return validateMpvPath(exePath || settings.mpvExePath);
+    }
+
     classify(playUrlResult) {
         return classifyPlayUrl(playUrlResult, this.getSettings());
     }
@@ -180,6 +195,7 @@ class PlayerManager {
         const settings = this.getSettings();
         const classification = classifyPlayUrl(input, settings);
         const mpcValidation = validateMpcPath(settings.mpcExePath);
+        const mpvValidation = validateMpvPath(settings.mpvExePath);
         const proxyStatus = this.localProxy.getStatus();
         const headers = input.headers || {};
         const headerNames = Object.keys(headers).filter(key => Boolean(headers[key]));
@@ -275,6 +291,12 @@ class PlayerManager {
                     reason: mpcValidation.reason,
                     playerType: mpcValidation.playerType,
                     message: mpcValidation.message
+                },
+                mpvValidation: {
+                    valid: mpvValidation.valid,
+                    reason: mpvValidation.reason,
+                    playerType: mpvValidation.playerType,
+                    message: mpvValidation.message
                 }
             },
             proxy: {
@@ -468,6 +490,20 @@ class PlayerManager {
         const classification = classifyPlayUrl(input, settings);
         const proxy = settings.useLocalProxy ? await this.localProxy.register(input, settings) : null;
         playWithMpc(proxy ? proxy.proxyUrl : input.url, settings);
+        return {
+            ok: true,
+            proxyUrl: proxy ? proxy.proxyUrl : null,
+            recommendedPlayer: classification.recommendedPlayer,
+            reason: classification.reason
+        };
+    }
+
+    async openMpv(playUrlResult) {
+        const input = typeof playUrlResult === 'string' ? { url: playUrlResult } : (playUrlResult || {});
+        const settings = this.getSettings();
+        const classification = classifyPlayUrl(input, settings);
+        const proxy = settings.useLocalProxy ? await this.localProxy.register(input, settings) : null;
+        playWithMpv(proxy ? proxy.proxyUrl : input.url, settings);
         return {
             ok: true,
             proxyUrl: proxy ? proxy.proxyUrl : null,

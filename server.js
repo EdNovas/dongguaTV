@@ -1304,6 +1304,19 @@ app.post('/api/player/validate-mpc', (req, res) => {
     }
 });
 
+app.post('/api/player/detect-mpv', (req, res) => {
+    res.json(playerManager.detectMpv());
+});
+
+app.post('/api/player/validate-mpv', (req, res) => {
+    try {
+        const exePath = req.body && req.body.exePath;
+        res.json(playerManager.validateMpv(exePath));
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to validate mpv path' });
+    }
+});
+
 app.post('/api/player/classify', (req, res) => {
     try {
         res.json(playerManager.classify(req.body && (req.body.playUrlResult || req.body)));
@@ -1384,6 +1397,15 @@ app.post('/api/player/open-mpc', async (req, res) => {
         res.json(await playerManager.openMpc(playUrlResult));
     } catch (error) {
         res.status(400).json({ error: error.message || 'Failed to open MPC' });
+    }
+});
+
+app.post('/api/player/open-mpv', async (req, res) => {
+    try {
+        const playUrlResult = req.body && (req.body.playUrlResult || req.body);
+        res.json(await playerManager.openMpv(playUrlResult));
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to open mpv' });
     }
 });
 
