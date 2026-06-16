@@ -196,6 +196,63 @@ async function getDesktopStatus(dataDir) {
         && contentReady
         && mpcValidation.valid
         && !!playerSettings.useLocalProxy;
+    const readinessIssues = [];
+    if (!allRequiredFilesExist) {
+        readinessIssues.push({
+            code: 'runtime-files-missing',
+            label: 'Runtime files',
+            severity: 'error',
+            blocking: true,
+            message: 'Some required runtime JSON files are missing.'
+        });
+    }
+    if (subscriptions.length === 0) {
+        readinessIssues.push({
+            code: 'no-subscriptions',
+            label: 'Subscriptions',
+            severity: 'warning',
+            blocking: true,
+            message: 'Import your own TVBox JSON subscription before testing playback.'
+        });
+    }
+    if (subscriptions.length > 0 && !contentReady) {
+        readinessIssues.push({
+            code: 'no-playable-content',
+            label: 'Playable content',
+            severity: 'warning',
+            blocking: true,
+            message: liveBreakdown.total > 0 && liveBreakdown.playable === 0
+                ? 'Live entries were imported, but none have a playable URL. HTTP-ready VOD sources are also missing.'
+                : 'Imported sources are plugin-required, unsupported, disabled, or otherwise not HTTP-ready.'
+        });
+    }
+    if (!mpcValidation.valid) {
+        readinessIssues.push({
+            code: 'mpc-invalid',
+            label: 'MPC player',
+            severity: 'warning',
+            blocking: true,
+            message: mpcValidation.message
+        });
+    }
+    if (!playerSettings.useLocalProxy) {
+        readinessIssues.push({
+            code: 'local-proxy-disabled',
+            label: 'LocalProxy',
+            severity: 'warning',
+            blocking: true,
+            message: 'Enable LocalProxy for header-protected, Range, HLS, and external-player links.'
+        });
+    }
+    if (!localProxyPortAvailable) {
+        readinessIssues.push({
+            code: 'local-proxy-port-unavailable',
+            label: 'LocalProxy port',
+            severity: 'warning',
+            blocking: false,
+            message: `Port ${localProxyPort} is unavailable; playback can still try fallback ports.`
+        });
+    }
 
     return {
         dataDir,
@@ -221,6 +278,7 @@ async function getDesktopStatus(dataDir) {
         },
         setupChecklist,
         nextActions,
+        readinessIssues,
         setupComplete,
         firstRunRecommended: !setupComplete
     };

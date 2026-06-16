@@ -1,6 +1,6 @@
 {
   "name": "dongguatv-enhanced-desktop",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "description": "Windows desktop Apple TV style DongguaTV client with TVBox subscription intake and MPC playback support.",
   "author": "DongguaTV Enhanced",
   "main": "main.js",

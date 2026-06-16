@@ -50,6 +50,8 @@ If live channels are imported but all are invalid or marked error, readiness nex
 
 Source enable/disable changes and source health checks refresh desktop readiness immediately, so Settings source counts do not require reopening the app.
 
+Desktop status includes machine-readable `readinessIssues` with blocking flags and messages for missing subscriptions, missing playable content, MPC validation, LocalProxy, runtime files, and LocalProxy port warnings.
+
 ## Commands
 
 ```powershell

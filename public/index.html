@@ -4016,6 +4016,20 @@
                             <strong style="color:#fff;">Next actions</strong>
                             <div v-for="action in desktopStatus.nextActions" :key="action">- {{ action }}</div>
                         </div>
+                        <div v-if="desktopStatus.readinessIssues && desktopStatus.readinessIssues.length"
+                            style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(251,191,36,0.08); color:#e5e7eb; font-size:12px; line-height:1.55;">
+                            <strong style="color:#fff;">Readiness issues</strong>
+                            <div v-for="issue in desktopStatus.readinessIssues" :key="issue.code"
+                                style="display:flex; gap:8px; align-items:flex-start; margin-top:6px;">
+                                <i :class="['fas', issue.blocking ? 'fa-exclamation-triangle' : 'fa-info-circle']"
+                                    :style="{ color: issue.blocking ? '#fbbf24' : '#93c5fd', marginTop:'2px' }"></i>
+                                <div>
+                                    <span style="font-weight:800;">{{ issue.label }}</span>
+                                    <span style="color:#9ca3af;"> / {{ issue.blocking ? 'blocking' : 'warning' }}</span>
+                                    <div style="color:#cfd3dc;">{{ issue.message }}</div>
+                                </div>
+                            </div>
+                        </div>
                         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px;">
                             <button class="btn-play" @click="runDesktopReadinessCheck" :disabled="desktopSelfCheckLoading"
                                 style="border:0; padding:8px 12px; font-size:12px;">
