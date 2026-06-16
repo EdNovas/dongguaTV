@@ -4,6 +4,7 @@ function stripJsonLikeComments(text) {
     return String(text || '')
         .replace(/^\uFEFF/, '')
         .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*#.*$/gm, '')
         .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 

@@ -107,6 +107,8 @@ Supported in this phase:
 - `player`
 - `ext`
 
+TVBox JSON parsing tolerates common JSON-like comments, including standalone `#` comment lines found in some shared configuration files, while still requiring the remaining content to be valid JSON.
+
 Plugin-like sources are marked `plugin-required` and are not executed.
 
 Enabled TVBox HTTP/MacCMS-compatible sources that are marked searchable are included in normal search. Search results keep a `tvbox:` source key so the detail endpoint can fetch the matching user subscription source. Plugin-required and unsupported sources are skipped by search and remain visible through diagnostics.
