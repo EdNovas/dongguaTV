@@ -84,6 +84,7 @@ async function getDesktopStatus(dataDir) {
     const sources = readJson(path.join(dataDir, 'sources.json'), []);
     const liveChannels = readJson(path.join(dataDir, 'live-channels.json'), []);
     const sourceBreakdown = buildSourceBreakdown(sources);
+    const contentReady = sourceBreakdown.playableHttp > 0 || liveChannels.length > 0;
     const playerSettings = readJson(path.join(dataDir, 'player-settings.json'), DEFAULT_PLAYER_SETTINGS);
     const mpcValidation = validateMpcPath(playerSettings.mpcExePath);
     const localProxyPort = Number(playerSettings.localProxyPort || DEFAULT_PLAYER_SETTINGS.localProxyPort);
@@ -111,6 +112,19 @@ async function getDesktopStatus(dataDir) {
             message: subscriptions.length > 0
                 ? `${subscriptions.length} subscription(s) imported.`
                 : 'No user TVBox subscription has been imported yet.'
+        },
+        {
+            id: 'http-ready-sources',
+            label: 'HTTP-ready sources',
+            ok: contentReady,
+            severity: contentReady ? 'ok' : 'warning',
+            message: sourceBreakdown.playableHttp > 0
+                ? `${sourceBreakdown.playableHttp} HTTP-compatible source(s) can use the built-in resolver path.`
+                : liveChannels.length > 0
+                    ? `No HTTP-ready VOD source yet, but ${liveChannels.length} live channel(s) are available.`
+                    : sources.length > 0
+                        ? 'Imported sources are plugin-required or unsupported; subscription plugin code is not executed directly.'
+                        : 'No TVBox HTTP-ready sources or live channels have been imported yet.'
         },
         {
             id: 'mpc',
@@ -149,12 +163,16 @@ async function getDesktopStatus(dataDir) {
     ];
     const nextActions = [];
     if (subscriptions.length === 0) nextActions.push('Import your own TVBox JSON subscription.');
+    if (subscriptions.length > 0 && !contentReady) {
+        nextActions.push('Import a subscription with HTTP/MacCMS sources, or configure a trusted plugin runtime bridge for plugin-required sources.');
+    }
     if (!mpcValidation.valid) nextActions.push('Configure a valid MPC-HC or MPC-BE executable path.');
     if (!playerSettings.useLocalProxy) nextActions.push('Enable LocalProxy for high-bitrate, header-protected, and cloud-drive links.');
     if (!localProxyPortAvailable) nextActions.push('Keep the fallback port behavior or change the LocalProxy port in Settings.');
     if (nextActions.length === 0) nextActions.push('Setup looks ready for local playback testing.');
     const setupComplete = setupChecklist.every(item => item.ok || item.severity !== 'error')
         && subscriptions.length > 0
+        && contentReady
         && mpcValidation.valid
         && !!playerSettings.useLocalProxy;
 
@@ -164,6 +182,7 @@ async function getDesktopStatus(dataDir) {
         subscriptions: subscriptions.length,
         sources: sources.length,
         sourceBreakdown,
+        contentReady,
         liveChannels: liveChannels.length,
         player: {
             defaultPlayer: playerSettings.defaultPlayer,

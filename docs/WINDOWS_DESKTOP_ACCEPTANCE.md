@@ -42,6 +42,8 @@ The readiness panel also provides a one-click setup check that refreshes desktop
 
 Desktop status includes `sourceBreakdown` so Settings can show HTTP-ready sources, plugin-required sources, unsupported sources, enabled/disabled counts, and source distributions without executing subscription plugin code.
 
+Desktop readiness now requires at least one HTTP-ready VOD source or one live channel after subscriptions are imported. Plugin-required and unsupported-only subscriptions remain visible, but they do not mark playback content as ready.
+
 ## Commands
 
 ```powershell
