@@ -56,7 +56,7 @@ Desktop status also includes `readinessSummary` with blocker count, warning coun
 
 Desktop status responses include an ISO `checkedAt` timestamp, also mirrored inside `readinessSummary`, and Settings displays it as the last readiness check time.
 
-Settings formats the `checkedAt` timestamp with the local desktop locale while preserving the ISO value in the API response for diagnostics.
+Settings formats readiness and source health `checkedAt` timestamps with the local desktop locale while preserving the ISO value in the API response and stored health records for diagnostics.
 
 ## Commands
 

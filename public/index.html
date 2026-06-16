@@ -3879,7 +3879,7 @@
                                     <span v-if="sourceHealthResult(source).latency"> · {{ sourceHealthResult(source).latency }}ms</span>
                                     <span v-if="sourceHealthResult(source).reason"> · {{ sourceHealthResult(source).reason }}</span>
                                     <div v-if="sourceHealthResult(source).checkedAt" style="color:#8f98aa;">
-                                        {{ sourceHealthResult(source).checkedAt }}
+                                        {{ formatLocalTimestamp(sourceHealthResult(source).checkedAt) }}
                                     </div>
                                 </div>
                                 <div v-if="sourceDiagnostics[source.id]"
@@ -3942,7 +3942,7 @@
                                     userData runtime, subscriptions, MPC, and LocalProxy
                                 </div>
                                 <div v-if="desktopStatus.checkedAt" style="color:#6b7280; font-size:11px; margin-top:4px;">
-                                    Last checked: {{ formatDesktopCheckedAt(desktopStatus.checkedAt) }}
+                                    Last checked: {{ formatLocalTimestamp(desktopStatus.checkedAt) }}
                                 </div>
                             </div>
                             <span
@@ -7174,7 +7174,7 @@
                 // handleFooterClick removed (now using visible logout button)
 
                 // 格式化观看时间
-                formatDesktopCheckedAt(isoString) {
+                formatLocalTimestamp(isoString) {
                     if (!isoString) return '';
                     const date = new Date(isoString);
                     if (Number.isNaN(date.getTime())) return isoString;
