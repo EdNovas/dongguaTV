@@ -3921,7 +3921,7 @@
         </div>
 
         <div class="info-modal-overlay" v-if="showSettingsModal" @click.self="showSettingsModal = false">
-            <div class="info-modal" style="max-width: 450px;">
+            <div class="info-modal" style="max-width: 760px;">
                 <button class="info-modal-close" @click="showSettingsModal = false"><i
                         class="fas fa-times"></i></button>
                 <div style="padding: 30px;">
@@ -3930,7 +3930,81 @@
                     </h2>
 
 
-                    <!-- 随机盲盒开关 -->
+                    <!-- Desktop readiness panel -->
+                    <div v-if="desktopStatus"
+                        style="padding:14px; margin-bottom:18px; border-radius:16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                            <div>
+                                <div style="color:#fff; font-size:15px; font-weight:800;">
+                                    <i class="fas fa-clipboard-check" style="color:#60a5fa; margin-right:8px;"></i>Desktop readiness
+                                </div>
+                                <div style="color:#9ca3af; font-size:12px; margin-top:4px;">
+                                    userData runtime, subscriptions, MPC, and LocalProxy
+                                </div>
+                            </div>
+                            <span
+                                :style="{ color: desktopStatus.setupComplete ? '#22c55e' : '#fbbf24', fontSize:'12px', fontWeight:'800' }">
+                                {{ desktopStatus.setupComplete ? 'Ready' : 'Needs setup' }}
+                            </span>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-top:12px;">
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Subscriptions</div>
+                                <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.subscriptions || 0 }}</div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Sources</div>
+                                <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.sources || 0 }}</div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Live</div>
+                                <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.liveChannels || 0 }}</div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">MPC</div>
+                                <div :style="{ color: desktopStatus.player && desktopStatus.player.mpcValidation && desktopStatus.player.mpcValidation.valid ? '#22c55e' : '#fbbf24', fontWeight:'800', marginTop:'4px' }">
+                                    {{ desktopStatus.player && desktopStatus.player.mpcValidation && desktopStatus.player.mpcValidation.valid ? 'Valid' : 'Missing' }}
+                                </div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Proxy</div>
+                                <div :style="{ color: desktopStatus.player && desktopStatus.player.useLocalProxy ? '#22c55e' : '#fbbf24', fontWeight:'800', marginTop:'4px' }">
+                                    {{ desktopStatus.player && desktopStatus.player.useLocalProxy ? 'Enabled' : 'Disabled' }}
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="desktopStatus.setupChecklist && desktopStatus.setupChecklist.length"
+                            style="display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:8px; margin-top:12px;">
+                            <div v-for="item in desktopStatus.setupChecklist" :key="item.id"
+                                style="display:flex; gap:8px; align-items:flex-start; color:#cfd3dc; font-size:12px; line-height:1.45;">
+                                <i :class="['fas', item.ok ? 'fa-check-circle' : item.severity === 'error' ? 'fa-times-circle' : 'fa-exclamation-circle']"
+                                    :style="{ color: item.ok ? '#22c55e' : item.severity === 'error' ? '#f87171' : '#fbbf24', marginTop:'2px' }"></i>
+                                <div>
+                                    <strong style="color:#fff;">{{ item.label }}</strong>
+                                    <div style="color:#9ca3af;">{{ item.message }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div v-if="desktopStatus.nextActions && desktopStatus.nextActions.length"
+                            style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(96,165,250,0.1); color:#bfdbfe; font-size:12px; line-height:1.6;">
+                            <strong style="color:#fff;">Next actions</strong>
+                            <div v-for="action in desktopStatus.nextActions" :key="action">- {{ action }}</div>
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                            <button class="btn-info" @click="loadDesktopStatus" style="border:0; padding:8px 12px; font-size:12px;">
+                                <i class="fas fa-sync-alt"></i> Refresh readiness
+                            </button>
+                            <button class="btn-info" @click="showSettingsModal=false; showSubscriptionPanel=true; loadSubscriptionData()"
+                                style="border:0; padding:8px 12px; font-size:12px;">
+                                <i class="fas fa-rss"></i> Open subscriptions
+                            </button>
+                            <button class="btn-info" @click="showSettingsModal=false; showFirstRunGuide=true" style="border:0; padding:8px 12px; font-size:12px;">
+                                <i class="fas fa-magic"></i> Show guide
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Random row toggle -->
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
@@ -5769,6 +5843,7 @@
                     }
                     this.loadPluginRuntimeSettings();
                     this.loadProxyStatus();
+                    this.loadDesktopStatus();
                 },
 
                 async savePlayerSettings() {

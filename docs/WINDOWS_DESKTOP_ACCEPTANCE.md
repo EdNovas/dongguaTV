@@ -36,6 +36,8 @@ The app creates these files when missing:
 
 Subscription URL import, local JSON import, subscription refresh, and subscription deletion reload desktop status through the shared subscription data path, so the first-run guide reflects the current userData state without restarting the app.
 
+Settings now include a desktop readiness panel that reuses `GET /api/desktop/status` to show subscription, source, live-channel, MPC, LocalProxy, checklist, and next-action state after the first-run guide has been dismissed.
+
 ## Commands
 
 ```powershell
