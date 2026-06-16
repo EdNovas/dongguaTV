@@ -257,6 +257,49 @@ class PlayerManager {
         }
     }
 
+    async runProxyExpirySelfTest() {
+        const settings = this.getSettings();
+        const upstream = await createRangeTestUpstream();
+        try {
+            let expiredRejected = false;
+            try {
+                await this.localProxy.register({
+                    url: upstream.url,
+                    format: 'mp4',
+                    sourceKind: 'normal',
+                    headers: {},
+                    expiresAt: new Date(Date.now() - 1000).toISOString()
+                }, settings);
+            } catch (error) {
+                expiredRejected = /expired/i.test(error.message || '');
+            }
+
+            const proxy = await this.localProxy.register({
+                url: upstream.url,
+                format: 'mp4',
+                sourceKind: 'normal',
+                headers: {},
+                expiresAt: new Date(Date.now() + 250).toISOString()
+            }, settings);
+            await new Promise(resolve => setTimeout(resolve, 450));
+            const response = await requestThroughProxy(proxy.proxyUrl, {});
+            const ok = expiredRejected
+                && response.statusCode === 410
+                && new Date(proxy.expiresAt).getTime() <= Date.now();
+            return {
+                ok,
+                expiredRejected,
+                expiredStatusCode: response.statusCode,
+                proxyUrl: proxy.proxyUrl,
+                proxyExpiresAt: proxy.expiresAt,
+                proxyPort: this.localProxy.getStatus().port,
+                checkedAt: new Date().toISOString()
+            };
+        } finally {
+            await new Promise(resolve => upstream.server.close(resolve));
+        }
+    }
+
     async runProxyM3u8RewriteSelfTest() {
         const settings = this.getSettings();
         const upstream = await createHlsRewriteTestUpstream();

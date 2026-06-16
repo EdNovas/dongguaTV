@@ -50,6 +50,14 @@ function resolveSegmentUrl(baseUrl, segment) {
     }
 }
 
+function resolveRemoveAt(expiresAt) {
+    const defaultRemoveAt = Date.now() + DEFAULT_TTL_MS;
+    if (!expiresAt) return defaultRemoveAt;
+    const sourceExpiresAt = new Date(expiresAt).getTime();
+    if (!Number.isFinite(sourceExpiresAt)) return defaultRemoveAt;
+    return Math.min(defaultRemoveAt, sourceExpiresAt);
+}
+
 class LocalProxy {
     constructor(httpClient) {
         this.httpClient = httpClient;
@@ -200,14 +208,17 @@ class LocalProxy {
     async register(playUrlResult, settings) {
         const input = playUrlResult || {};
         if (!input.url) throw new Error('Playback URL is required.');
+        const removeAt = resolveRemoveAt(input.expiresAt);
+        if (removeAt <= Date.now()) {
+            throw new Error('Playback URL has already expired.');
+        }
         const startResult = await this.ensureStarted(settings.localProxyPort || 9979);
         const id = createId();
-        const ttl = DEFAULT_TTL_MS;
         this.entries.set(id, {
             url: input.url,
             headers: sanitizeHeaders(input.headers || {}),
             expiresAt: input.expiresAt || null,
-            removeAt: Date.now() + ttl
+            removeAt
         });
         return {
             id,
@@ -216,7 +227,7 @@ class LocalProxy {
             actualPort: startResult.actualPort,
             fallbackUsed: startResult.fallbackUsed,
             fallbackReason: startResult.fallbackReason,
-            expiresAt: new Date(Date.now() + ttl).toISOString()
+            expiresAt: new Date(removeAt).toISOString()
         };
     }
 
@@ -228,6 +239,16 @@ class LocalProxy {
             return null;
         }
         return entry;
+    }
+
+    getEntryState(id) {
+        const entry = this.entries.get(id);
+        if (!entry) return { status: 'missing', entry: null };
+        if (Date.now() > entry.removeAt) {
+            this.entries.delete(id);
+            return { status: 'expired', entry: null };
+        }
+        return { status: 'available', entry };
     }
 
     registerChildUrl(parentEntry, childUrl, headers) {
@@ -249,12 +270,18 @@ class LocalProxy {
             return;
         }
 
-        const entry = this.getEntry(match[1]);
-        if (!entry) {
-            res.statusCode = 404;
-            res.end('Expired or unknown play id');
+        const entryState = this.getEntryState(match[1]);
+        if (entryState.status === 'expired') {
+            res.statusCode = 410;
+            res.end('Expired play id');
             return;
         }
+        if (entryState.status !== 'available') {
+            res.statusCode = 404;
+            res.end('Unknown play id');
+            return;
+        }
+        const entry = entryState.entry;
         if (!['GET', 'HEAD'].includes(req.method)) {
             res.statusCode = 405;
             res.setHeader('Allow', 'GET, HEAD');

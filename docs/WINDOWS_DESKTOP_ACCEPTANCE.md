@@ -182,6 +182,8 @@ Settings exposes a LocalProxy Range self-test backed by `POST /api/player/proxy-
 
 Settings exposes a LocalProxy HEAD self-test backed by `POST /api/player/proxy-head-self-test`. The backend verifies that player probe requests return upstream media headers such as `Content-Length`, `Content-Type`, and `Accept-Ranges` without downloading the media body.
 
+LocalProxy respects `PlayUrlResult.expiresAt`: already-expired URLs are rejected, short-lived URLs shorten the proxy entry lifetime, and expired proxy ids return `410 Gone` instead of retrying a stale token. Settings exposes this check through `POST /api/player/proxy-expiry-self-test`.
+
 Settings exposes an HLS rewrite self-test backed by `POST /api/player/proxy-m3u8-self-test`. The backend creates a temporary localhost playlist with relative segment, `#EXT-X-MAP:URI`, and `#EXT-X-KEY:URI` entries, registers it through LocalProxy, and verifies that all child URLs are rewritten to `127.0.0.1` proxy URLs with playback headers preserved.
 
 ## Packaging Checklist

@@ -1354,6 +1354,14 @@ app.post('/api/player/proxy-head-self-test', async (req, res) => {
     }
 });
 
+app.post('/api/player/proxy-expiry-self-test', async (req, res) => {
+    try {
+        res.json(await playerManager.runProxyExpirySelfTest());
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to run proxy expiry self-test' });
+    }
+});
+
 app.post('/api/player/proxy-m3u8-self-test', async (req, res) => {
     try {
         res.json(await playerManager.runProxyM3u8RewriteSelfTest());

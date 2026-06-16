@@ -4018,6 +4018,11 @@
                                 <i :class="['fas', proxyHeadTestLoading ? 'fa-spinner fa-spin' : 'fa-heading']"></i>
                                 HEAD self-test
                             </button>
+                            <button class="btn-info" @click="runProxyExpirySelfTest" :disabled="proxyExpiryTestLoading"
+                                style="border:0; padding:9px 12px; font-size:12px;">
+                                <i :class="['fas', proxyExpiryTestLoading ? 'fa-spinner fa-spin' : 'fa-hourglass-end']"></i>
+                                Expiry self-test
+                            </button>
                             <button class="btn-info" @click="runProxyM3u8SelfTest" :disabled="proxyM3u8TestLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyM3u8TestLoading ? 'fa-spinner fa-spin' : 'fa-stream']"></i>
@@ -4080,6 +4085,19 @@
                                 路 type: {{ proxyHeadTest.contentType || 'n/a' }}
                             </div>
                             <div v-if="proxyHeadTest.error" style="color:#fca5a5;">{{ proxyHeadTest.error }}</div>
+                        </div>
+                        <div v-if="proxyExpiryTest"
+                            style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
+                            <strong :style="{ color: proxyExpiryTest.ok ? '#22c55e' : '#f87171' }">
+                                Expiry self-test {{ proxyExpiryTest.ok ? 'passed' : 'failed' }}
+                            </strong>
+                            <span> 路 expired HTTP {{ proxyExpiryTest.expiredStatusCode || 'n/a' }}</span>
+                            <span> 路 rejected {{ proxyExpiryTest.expiredRejected ? 'yes' : 'no' }}</span>
+                            <div style="color:#8f98aa;">
+                                proxy port: {{ proxyExpiryTest.proxyPort || 'n/a' }}
+                                路 expires: {{ proxyExpiryTest.proxyExpiresAt || 'n/a' }}
+                            </div>
+                            <div v-if="proxyExpiryTest.error" style="color:#fca5a5;">{{ proxyExpiryTest.error }}</div>
                         </div>
                         <div v-if="proxyM3u8Test"
                             style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
@@ -4838,6 +4856,8 @@
                     proxyRangeTestLoading: false,
                     proxyHeadTest: null,
                     proxyHeadTestLoading: false,
+                    proxyExpiryTest: null,
+                    proxyExpiryTestLoading: false,
                     proxyM3u8Test: null,
                     proxyM3u8TestLoading: false,
                     pluginRuntimeSettings: {
@@ -5716,6 +5736,7 @@
                         this.proxyPortCheck = null;
                         this.proxyRangeTest = null;
                         this.proxyHeadTest = null;
+                        this.proxyExpiryTest = null;
                         this.proxyM3u8Test = null;
                         await this.loadProxyStatus();
                         this.playerSettingsMessage = '播放器设置已保存';
@@ -5867,6 +5888,29 @@
                         };
                     } finally {
                         this.proxyHeadTestLoading = false;
+                    }
+                },
+
+                async runProxyExpirySelfTest() {
+                    this.proxyExpiryTestLoading = true;
+                    try {
+                        const response = await fetch('/api/player/proxy-expiry-self-test', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Expiry self-test failed');
+                        this.proxyExpiryTest = data;
+                        await this.loadProxyStatus();
+                        this.showMiniToast && this.showMiniToast(data.ok ? 'Expiry self-test passed' : 'Expiry self-test failed');
+                    } catch (error) {
+                        this.proxyExpiryTest = {
+                            ok: false,
+                            expiredRejected: false,
+                            expiredStatusCode: null,
+                            proxyExpiresAt: '',
+                            proxyPort: this.playerSettings.localProxyPort,
+                            error: error.message || 'Expiry self-test failed'
+                        };
+                    } finally {
+                        this.proxyExpiryTestLoading = false;
                     }
                 },
 
