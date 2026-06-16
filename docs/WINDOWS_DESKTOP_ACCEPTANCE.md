@@ -54,6 +54,8 @@ Desktop status includes machine-readable `readinessIssues` with blocking flags a
 
 Desktop status also includes `readinessSummary` with blocker count, warning count, total issue count, primary blocking code, and a `readyForPlayback` boolean for quick UI checks.
 
+Desktop status responses include an ISO `checkedAt` timestamp, also mirrored inside `readinessSummary`, and Settings displays it as the last readiness check time.
+
 ## Commands
 
 ```powershell

@@ -95,6 +95,7 @@ function buildLiveBreakdown(liveChannels) {
 
 async function getDesktopStatus(dataDir) {
     ensureDesktopState(dataDir);
+    const checkedAt = new Date().toISOString();
     const subscriptions = readJson(path.join(dataDir, 'subscriptions.json'), []);
     const sources = readJson(path.join(dataDir, 'sources.json'), []);
     const liveChannels = readJson(path.join(dataDir, 'live-channels.json'), []);
@@ -260,10 +261,12 @@ async function getDesktopStatus(dataDir) {
         blockingIssueCount,
         warningIssueCount,
         issueCount: readinessIssues.length,
-        primaryBlockingCode: (readinessIssues.find(issue => issue.blocking) || {}).code || null
+        primaryBlockingCode: (readinessIssues.find(issue => issue.blocking) || {}).code || null,
+        checkedAt
     };
 
     return {
+        checkedAt,
         dataDir,
         requiredFiles,
         subscriptions: subscriptions.length,

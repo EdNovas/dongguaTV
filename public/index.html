@@ -3941,6 +3941,9 @@
                                 <div style="color:#9ca3af; font-size:12px; margin-top:4px;">
                                     userData runtime, subscriptions, MPC, and LocalProxy
                                 </div>
+                                <div v-if="desktopStatus.checkedAt" style="color:#6b7280; font-size:11px; margin-top:4px;">
+                                    Last checked: {{ desktopStatus.checkedAt }}
+                                </div>
                             </div>
                             <span
                                 :style="{ color: desktopStatus.setupComplete ? '#22c55e' : '#fbbf24', fontSize:'12px', fontWeight:'800' }">
