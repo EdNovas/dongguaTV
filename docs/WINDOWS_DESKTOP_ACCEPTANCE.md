@@ -46,6 +46,8 @@ Desktop readiness now requires at least one HTTP-ready VOD source or one live ch
 
 Live readiness is counted through `liveBreakdown`: channels need a non-empty URL and a non-error status before they contribute to `contentReady`.
 
+If live channels are imported but all are invalid or marked error, readiness next actions call out the bad live entries and Settings shows a Live errors count.
+
 ## Commands
 
 ```powershell

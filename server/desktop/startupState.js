@@ -138,6 +138,8 @@ async function getDesktopStatus(dataDir) {
                 ? `${sourceBreakdown.playableHttp} HTTP-compatible source(s) can use the built-in resolver path.`
                 : liveBreakdown.playable > 0
                     ? `No HTTP-ready VOD source yet, but ${liveBreakdown.playable} live channel(s) are playable.`
+                    : liveBreakdown.total > 0
+                        ? `${liveBreakdown.total} live channel(s) were imported, but none are currently playable.`
                     : sources.length > 0
                         ? 'Imported sources are plugin-required or unsupported; subscription plugin code is not executed directly.'
                         : 'No TVBox HTTP-ready sources or live channels have been imported yet.'
@@ -181,6 +183,9 @@ async function getDesktopStatus(dataDir) {
     if (subscriptions.length === 0) nextActions.push('Import your own TVBox JSON subscription.');
     if (subscriptions.length > 0 && !contentReady) {
         nextActions.push('Import a subscription with HTTP/MacCMS sources, or configure a trusted plugin runtime bridge for plugin-required sources.');
+        if (liveBreakdown.total > 0 && liveBreakdown.playable === 0) {
+            nextActions.push('Check live channel URLs; imported live entries are empty or marked error.');
+        }
     }
     if (!mpcValidation.valid) nextActions.push('Configure a valid MPC-HC or MPC-BE executable path.');
     if (!playerSettings.useLocalProxy) nextActions.push('Enable LocalProxy for high-bitrate, header-protected, and cloud-drive links.');

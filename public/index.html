@@ -3981,6 +3981,12 @@
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Live errors</div>
+                                <div style="color:#f87171; font-weight:800; margin-top:4px;">
+                                    {{ desktopStatus.liveBreakdown && desktopStatus.liveBreakdown.error || 0 }}
+                                </div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
                                 <div style="color:#9ca3af; font-size:11px;">MPC</div>
                                 <div :style="{ color: desktopStatus.player && desktopStatus.player.mpcValidation && desktopStatus.player.mpcValidation.valid ? '#22c55e' : '#fbbf24', fontWeight:'800', marginTop:'4px' }">
                                     {{ desktopStatus.player && desktopStatus.player.mpcValidation && desktopStatus.player.mpcValidation.valid ? 'Valid' : 'Missing' }}
