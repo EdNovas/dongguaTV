@@ -3942,7 +3942,7 @@
                                     userData runtime, subscriptions, MPC, and LocalProxy
                                 </div>
                                 <div v-if="desktopStatus.checkedAt" style="color:#6b7280; font-size:11px; margin-top:4px;">
-                                    Last checked: {{ desktopStatus.checkedAt }}
+                                    Last checked: {{ formatDesktopCheckedAt(desktopStatus.checkedAt) }}
                                 </div>
                             </div>
                             <span
@@ -7174,6 +7174,20 @@
                 // handleFooterClick removed (now using visible logout button)
 
                 // 格式化观看时间
+                formatDesktopCheckedAt(isoString) {
+                    if (!isoString) return '';
+                    const date = new Date(isoString);
+                    if (Number.isNaN(date.getTime())) return isoString;
+                    return date.toLocaleString('zh-CN', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                },
+
                 formatWatchTime(isoString) {
                     if (!isoString) return '';
                     const date = new Date(isoString);
