@@ -5488,6 +5488,9 @@
                         this.sourceDiagnostics = {};
                         this.liveGroups = groupData.groups || [];
                         await this.loadLiveChannels();
+                        if (typeof this.loadDesktopStatus === 'function') {
+                            await this.loadDesktopStatus();
+                        }
                     } catch (error) {
                         this.subscriptionError = error.message || '订阅数据加载失败';
                     }
