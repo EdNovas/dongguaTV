@@ -44,6 +44,8 @@ Desktop status includes `sourceBreakdown` so Settings can show HTTP-ready source
 
 Desktop readiness now requires at least one HTTP-ready VOD source or one live channel after subscriptions are imported. Plugin-required and unsupported-only subscriptions remain visible, but they do not mark playback content as ready.
 
+Live readiness is counted through `liveBreakdown`: channels need a non-empty URL and a non-error status before they contribute to `contentReady`.
+
 ## Commands
 
 ```powershell

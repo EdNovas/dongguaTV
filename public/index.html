@@ -3975,8 +3975,10 @@
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">Live</div>
-                                <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.liveChannels || 0 }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Live-ready</div>
+                                <div style="color:#22c55e; font-weight:800; margin-top:4px;">
+                                    {{ desktopStatus.liveBreakdown && desktopStatus.liveBreakdown.playable || 0 }}
+                                </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
                                 <div style="color:#9ca3af; font-size:11px;">MPC</div>

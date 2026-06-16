@@ -78,13 +78,29 @@ function buildSourceBreakdown(sources) {
     };
 }
 
+function buildLiveBreakdown(liveChannels) {
+    const playableChannels = liveChannels.filter(channel => {
+        const url = String(channel.url || '').trim();
+        return !!url && channel.status !== 'error';
+    });
+
+    return {
+        total: liveChannels.length,
+        playable: playableChannels.length,
+        error: liveChannels.length - playableChannels.length,
+        byStatus: countBy(liveChannels, channel => channel.status),
+        byGroup: countBy(liveChannels, channel => channel.group)
+    };
+}
+
 async function getDesktopStatus(dataDir) {
     ensureDesktopState(dataDir);
     const subscriptions = readJson(path.join(dataDir, 'subscriptions.json'), []);
     const sources = readJson(path.join(dataDir, 'sources.json'), []);
     const liveChannels = readJson(path.join(dataDir, 'live-channels.json'), []);
     const sourceBreakdown = buildSourceBreakdown(sources);
-    const contentReady = sourceBreakdown.playableHttp > 0 || liveChannels.length > 0;
+    const liveBreakdown = buildLiveBreakdown(liveChannels);
+    const contentReady = sourceBreakdown.playableHttp > 0 || liveBreakdown.playable > 0;
     const playerSettings = readJson(path.join(dataDir, 'player-settings.json'), DEFAULT_PLAYER_SETTINGS);
     const mpcValidation = validateMpcPath(playerSettings.mpcExePath);
     const localProxyPort = Number(playerSettings.localProxyPort || DEFAULT_PLAYER_SETTINGS.localProxyPort);
@@ -120,8 +136,8 @@ async function getDesktopStatus(dataDir) {
             severity: contentReady ? 'ok' : 'warning',
             message: sourceBreakdown.playableHttp > 0
                 ? `${sourceBreakdown.playableHttp} HTTP-compatible source(s) can use the built-in resolver path.`
-                : liveChannels.length > 0
-                    ? `No HTTP-ready VOD source yet, but ${liveChannels.length} live channel(s) are available.`
+                : liveBreakdown.playable > 0
+                    ? `No HTTP-ready VOD source yet, but ${liveBreakdown.playable} live channel(s) are playable.`
                     : sources.length > 0
                         ? 'Imported sources are plugin-required or unsupported; subscription plugin code is not executed directly.'
                         : 'No TVBox HTTP-ready sources or live channels have been imported yet.'
@@ -184,6 +200,7 @@ async function getDesktopStatus(dataDir) {
         sourceBreakdown,
         contentReady,
         liveChannels: liveChannels.length,
+        liveBreakdown,
         player: {
             defaultPlayer: playerSettings.defaultPlayer,
             mpcConfigured: !!playerSettings.mpcExePath,
