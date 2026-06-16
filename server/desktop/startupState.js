@@ -253,6 +253,15 @@ async function getDesktopStatus(dataDir) {
             message: `Port ${localProxyPort} is unavailable; playback can still try fallback ports.`
         });
     }
+    const blockingIssueCount = readinessIssues.filter(issue => issue.blocking).length;
+    const warningIssueCount = readinessIssues.filter(issue => issue.severity === 'warning').length;
+    const readinessSummary = {
+        readyForPlayback: blockingIssueCount === 0,
+        blockingIssueCount,
+        warningIssueCount,
+        issueCount: readinessIssues.length,
+        primaryBlockingCode: (readinessIssues.find(issue => issue.blocking) || {}).code || null
+    };
 
     return {
         dataDir,
@@ -279,6 +288,7 @@ async function getDesktopStatus(dataDir) {
         setupChecklist,
         nextActions,
         readinessIssues,
+        readinessSummary,
         setupComplete,
         firstRunRecommended: !setupComplete
     };

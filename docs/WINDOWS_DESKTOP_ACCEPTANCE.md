@@ -52,6 +52,8 @@ Source enable/disable changes and source health checks refresh desktop readiness
 
 Desktop status includes machine-readable `readinessIssues` with blocking flags and messages for missing subscriptions, missing playable content, MPC validation, LocalProxy, runtime files, and LocalProxy port warnings.
 
+Desktop status also includes `readinessSummary` with blocker count, warning count, total issue count, primary blocking code, and a `readyForPlayback` boolean for quick UI checks.
+
 ## Commands
 
 ```powershell

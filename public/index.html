@@ -3957,6 +3957,18 @@
                                 <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.sources || 0 }}</div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Blockers</div>
+                                <div :style="{ color: desktopStatus.readinessSummary && desktopStatus.readinessSummary.blockingIssueCount ? '#fbbf24' : '#22c55e', fontWeight:'800', marginTop:'4px' }">
+                                    {{ desktopStatus.readinessSummary && desktopStatus.readinessSummary.blockingIssueCount || 0 }}
+                                </div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Warnings</div>
+                                <div style="color:#93c5fd; font-weight:800; margin-top:4px;">
+                                    {{ desktopStatus.readinessSummary && desktopStatus.readinessSummary.warningIssueCount || 0 }}
+                                </div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
                                 <div style="color:#9ca3af; font-size:11px;">HTTP-ready</div>
                                 <div style="color:#22c55e; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.sourceBreakdown && desktopStatus.sourceBreakdown.playableHttp || 0 }}
