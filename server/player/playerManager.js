@@ -175,6 +175,118 @@ class PlayerManager {
         return classifyPlayUrl(playUrlResult, this.getSettings());
     }
 
+    diagnosePlayback(playUrlResult) {
+        const input = typeof playUrlResult === 'string' ? { url: playUrlResult } : (playUrlResult || {});
+        const settings = this.getSettings();
+        const classification = classifyPlayUrl(input, settings);
+        const mpcValidation = validateMpcPath(settings.mpcExePath);
+        const proxyStatus = this.localProxy.getStatus();
+        const headers = input.headers || {};
+        const headerNames = Object.keys(headers).filter(key => Boolean(headers[key]));
+        const expiresAtMs = input.expiresAt ? new Date(input.expiresAt).getTime() : null;
+        const now = Date.now();
+        const expiresInSeconds = Number.isFinite(expiresAtMs) ? Math.round((expiresAtMs - now) / 1000) : null;
+        const issues = [];
+        const recommendations = [];
+
+        if (!input.url) {
+            issues.push({
+                code: 'missing-url',
+                severity: 'error',
+                message: 'No playback URL is available for the current item.'
+            });
+        }
+
+        if (input.sourceKind === 'plugin-required') {
+            issues.push({
+                code: 'plugin-required',
+                severity: 'error',
+                message: 'This source needs a TVBox plugin runtime and cannot be played directly.'
+            });
+            recommendations.push('Use a supported HTTP/MacCMS source or configure a trusted plugin runtime bridge later.');
+        }
+
+        if (expiresInSeconds !== null && expiresInSeconds <= 0) {
+            issues.push({
+                code: 'url-expired',
+                severity: 'error',
+                message: 'The playback URL has expired.'
+            });
+            recommendations.push('Refresh the episode or source detail to resolve a new playback URL.');
+        } else if (expiresInSeconds !== null && expiresInSeconds < 300) {
+            issues.push({
+                code: 'url-expires-soon',
+                severity: 'warning',
+                message: 'The playback URL will expire soon.'
+            });
+            recommendations.push('Start playback soon or refresh the source before opening an external player.');
+        }
+
+        if (classification.recommendedPlayer === 'mpc' && !mpcValidation.valid) {
+            issues.push({
+                code: 'mpc-not-ready',
+                severity: 'warning',
+                message: 'MPC is recommended, but the configured MPC path is not valid.'
+            });
+            recommendations.push('Open Settings and configure a valid MPC-HC or MPC-BE executable path.');
+        }
+
+        if (headerNames.length > 0 && settings.useLocalProxy === false) {
+            issues.push({
+                code: 'headers-without-proxy',
+                severity: 'warning',
+                message: 'This playback URL needs custom headers, but LocalProxy is disabled.'
+            });
+            recommendations.push('Enable LocalProxy so MPC/internal playback can receive Referer, Cookie, User-Agent, or Authorization headers.');
+        }
+
+        if (classification.recommendedPlayer === 'mpc') {
+            recommendations.push(classification.reason);
+        }
+
+        if (input.format === 'm3u8' && headerNames.length > 0) {
+            recommendations.push('For HLS with headers, use the LocalProxy URL or the MPC button instead of copying the raw URL.');
+        }
+
+        if (issues.length === 0) {
+            recommendations.push('No obvious playback configuration problem was detected.');
+        }
+
+        return {
+            ok: issues.length === 0,
+            checkedAt: new Date().toISOString(),
+            classification,
+            playUrl: {
+                present: Boolean(input.url),
+                format: input.format || 'unknown',
+                quality: input.quality || 'unknown',
+                codec: input.codec || 'unknown',
+                hdr: Boolean(input.hdr),
+                sourceKind: input.sourceKind || 'normal',
+                hasHeaders: headerNames.length > 0,
+                headerNames,
+                expiresAt: input.expiresAt || null,
+                expiresInSeconds
+            },
+            player: {
+                defaultPlayer: settings.defaultPlayer,
+                mpcValidation: {
+                    valid: mpcValidation.valid,
+                    reason: mpcValidation.reason,
+                    playerType: mpcValidation.playerType,
+                    message: mpcValidation.message
+                }
+            },
+            proxy: {
+                useLocalProxy: settings.useLocalProxy,
+                localProxyPort: settings.localProxyPort,
+                status: proxyStatus
+            },
+            issues,
+            recommendations: Array.from(new Set(recommendations.filter(Boolean)))
+        };
+    }
+
     async createProxyUrl(playUrlResult) {
         const settings = this.getSettings();
         return this.localProxy.register(playUrlResult, settings);

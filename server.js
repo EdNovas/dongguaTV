@@ -1312,6 +1312,14 @@ app.post('/api/player/classify', (req, res) => {
     }
 });
 
+app.post('/api/player/diagnose', (req, res) => {
+    try {
+        res.json(playerManager.diagnosePlayback(req.body && (req.body.playUrlResult || req.body)));
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to diagnose playback' });
+    }
+});
+
 app.post('/api/player/proxy-url', async (req, res) => {
     try {
         const playUrlResult = req.body && (req.body.playUrlResult || req.body);

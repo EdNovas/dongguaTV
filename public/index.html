@@ -4301,6 +4301,9 @@
                         <button class="btn-cast" tabindex="2" @click="copyCurrentProxyUrl" aria-label="复制本地代理地址">
                             <i class="fas fa-shield-alt"></i> 代理地址
                         </button>
+                        <button class="btn-cast" tabindex="2" @click="diagnoseCurrentPlayback" aria-label="Playback diagnostics">
+                            <i :class="['fas', playbackDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-stethoscope']"></i> Diagnose
+                        </button>
                         <button class="btn-cast" tabindex="2" @click="showSettingsModal = true; loadPlayerSettings()"
                             aria-label="播放器设置">
                             <i class="fas fa-sliders-h"></i> 播放器
@@ -4324,6 +4327,32 @@
                         </div>
                     </div>
                     <!-- 自动切换线路提示 -->
+                    <div v-if="playbackDiagnostics" style="position:absolute; right:18px; bottom:18px; z-index:82; width:min(520px, calc(100% - 36px)); max-height:48%; overflow:auto; background:rgba(4,8,18,0.9); border:1px solid rgba(148,163,184,0.32); color:#e5e7eb; border-radius:12px; padding:12px 14px; font-size:12px; backdrop-filter:blur(14px); box-shadow:0 18px 50px rgba(0,0,0,0.45);">
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
+                            <strong :style="{ color: playbackDiagnostics.ok ? '#22c55e' : '#fbbf24' }">
+                                Playback diagnostics {{ playbackDiagnostics.ok ? 'ok' : 'needs attention' }}
+                            </strong>
+                            <button @click="playbackDiagnostics = null" style="background:none; border:0; color:#94a3b8; cursor:pointer; font-size:16px; line-height:1;">&times;</button>
+                        </div>
+                        <div style="color:#cbd5e1; line-height:1.55;">
+                            Player: {{ playbackDiagnostics.classification && playbackDiagnostics.classification.recommendedPlayer }}
+                            <span v-if="playbackDiagnostics.classification && playbackDiagnostics.classification.reason"> 路 {{ playbackDiagnostics.classification.reason }}</span>
+                        </div>
+                        <div style="color:#94a3b8; line-height:1.55;">
+                            URL: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.format }}
+                            路 {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.sourceKind }}
+                            路 headers: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.hasHeaders ? 'yes' : 'no' }}
+                            路 expires: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.expiresInSeconds !== null ? playbackDiagnostics.playUrl.expiresInSeconds + 's' : 'n/a' }}
+                        </div>
+                        <div v-if="playbackDiagnostics.issues && playbackDiagnostics.issues.length" style="margin-top:8px; display:grid; gap:6px;">
+                            <div v-for="issue in playbackDiagnostics.issues" :key="issue.code" style="padding:7px 9px; border-radius:9px; background:rgba(251,191,36,0.12); color:#fde68a;">
+                                {{ issue.severity }} 路 {{ issue.code }} 路 {{ issue.message }}
+                            </div>
+                        </div>
+                        <div v-if="playbackDiagnostics.recommendations && playbackDiagnostics.recommendations.length" style="margin-top:8px; display:grid; gap:5px; color:#bfdbfe;">
+                            <div v-for="tip in playbackDiagnostics.recommendations" :key="tip">- {{ tip }}</div>
+                        </div>
+                    </div>
                     <div v-if="autoRetryMessage" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
                                background: rgba(0,0,0,0.9); padding: 20px 30px; border-radius: 10px; 
                                text-align: center; z-index: 100; border: 1px solid rgba(255,255,255,0.1);">
@@ -4801,6 +4830,8 @@
                     autoRetryMessage: '',  // 自动切换提示信息
                     playbackClassification: null,
                     playbackClassificationLoading: false,
+                    playbackDiagnostics: null,
+                    playbackDiagnosticsLoading: false,
                     watchHistory: [],  // 用户观看历史记录
                     wakeLock: null,  // Screen Wake Lock 对象（用于保持屏幕常亮）
 
@@ -6131,6 +6162,39 @@
                         if (this.currentUrl === url) {
                             this.playbackClassificationLoading = false;
                         }
+                    }
+                },
+
+                async diagnoseCurrentPlayback() {
+                    if (!this.currentUrl) {
+                        this.showMiniToast && this.showMiniToast('当前没有播放地址');
+                        return;
+                    }
+                    this.playbackDiagnosticsLoading = true;
+                    try {
+                        const response = await fetch('/api/player/diagnose', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ playUrlResult: this.buildCurrentPlayUrlResult() })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Playback diagnostics failed');
+                        this.playbackDiagnostics = data;
+                        this.showMiniToast && this.showMiniToast(data.ok ? 'Playback diagnostics ok' : 'Playback needs attention');
+                    } catch (error) {
+                        this.playbackDiagnostics = {
+                            ok: false,
+                            classification: null,
+                            playUrl: this.buildCurrentPlayUrlResult(),
+                            issues: [{
+                                code: 'diagnostics-failed',
+                                severity: 'error',
+                                message: error.message || 'Playback diagnostics failed'
+                            }],
+                            recommendations: ['Check the current source, player settings, and LocalProxy status.']
+                        };
+                    } finally {
+                        this.playbackDiagnosticsLoading = false;
                     }
                 },
 
@@ -8685,6 +8749,7 @@
                 play(url) {
                     this.currentUrl = url;
                     this.playbackClassification = null;
+                    this.playbackDiagnostics = null;
                     this.refreshPlaybackClassification(url);
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
