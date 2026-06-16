@@ -3,6 +3,7 @@ const net = require('net');
 const path = require('path');
 const { DEFAULT_PLAYER_SETTINGS, validateMpcPath } = require('../player/externalPlayerConfig');
 const { DEFAULT_PLUGIN_RUNTIME_SETTINGS } = require('../adapters/tvbox/pluginRuntime');
+const packageInfo = require('../../package.json');
 
 const DEFAULT_JSON_FILES = {
     'subscriptions.json': [],
@@ -90,6 +91,18 @@ function buildLiveBreakdown(liveChannels) {
         error: liveChannels.length - playableChannels.length,
         byStatus: countBy(liveChannels, channel => channel.status),
         byGroup: countBy(liveChannels, channel => channel.group)
+    };
+}
+
+function getAppInfo() {
+    return {
+        name: packageInfo.name || 'dongguatv-enhanced-desktop',
+        version: packageInfo.version || 'unknown',
+        platform: process.platform,
+        arch: process.arch,
+        runtime: process.versions.electron ? 'electron' : 'node',
+        nodeVersion: process.versions.node || '',
+        electronVersion: process.versions.electron || ''
     };
 }
 
@@ -267,6 +280,7 @@ async function getDesktopStatus(dataDir) {
 
     return {
         checkedAt,
+        appInfo: getAppInfo(),
         dataDir,
         requiredFiles,
         subscriptions: subscriptions.length,

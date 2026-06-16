@@ -3952,6 +3952,12 @@
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-top:12px;">
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
+                                <div style="color:#9ca3af; font-size:11px;">Version</div>
+                                <div style="color:#fff; font-weight:800; margin-top:4px;">
+                                    {{ desktopStatus.appInfo && desktopStatus.appInfo.version || 'unknown' }}
+                                </div>
+                            </div>
+                            <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
                                 <div style="color:#9ca3af; font-size:11px;">Subscriptions</div>
                                 <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.subscriptions || 0 }}</div>
                             </div>

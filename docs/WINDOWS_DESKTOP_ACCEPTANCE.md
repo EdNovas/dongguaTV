@@ -34,6 +34,8 @@ The app creates these files when missing:
 
 `GET /api/desktop/status` returns a setup checklist for runtime file presence, subscription count, MPC validation, default player, LocalProxy enablement, LocalProxy port availability, and next actions. The first-run guide displays this checklist before linking to subscriptions and player settings.
 
+The same desktop status response includes `appInfo` with the packaged app version, platform, architecture, and runtime versions so Settings can confirm which Windows build is being diagnosed.
+
 Subscription URL import, local JSON import, subscription refresh, and subscription deletion reload desktop status through the shared subscription data path, so the first-run guide reflects the current userData state without restarting the app.
 
 Settings now include a desktop readiness panel that reuses `GET /api/desktop/status` to show subscription, source, live-channel, MPC, LocalProxy, checklist, and next-action state after the first-run guide has been dismissed.
