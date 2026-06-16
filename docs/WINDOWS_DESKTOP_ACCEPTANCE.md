@@ -10,6 +10,7 @@ This Windows desktop build keeps the original DongguaTV search, detail, and inte
 - MPC-HC / MPC-BE external playback support.
 - Local playback proxy bound to `127.0.0.1`.
 - Runtime data stored under Electron `userData/runtime`.
+- First-run setup checklist backed by `GET /api/desktop/status`.
 
 ## Runtime Files
 
@@ -30,6 +31,8 @@ The app creates these files when missing:
 - `tvbox-parses.json`
 - `player-settings.json`
 - `plugin-runtime-settings.json`
+
+`GET /api/desktop/status` returns a setup checklist for runtime file presence, subscription count, MPC validation, default player, LocalProxy enablement, LocalProxy port availability, and next actions. The first-run guide displays this checklist before linking to subscriptions and player settings.
 
 ## Commands
 

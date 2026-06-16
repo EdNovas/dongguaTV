@@ -3734,6 +3734,23 @@
                     <div style="color:#aaa; font-size:14px; line-height:1.8;">
                         建议先完成两件事：导入你自己的 TVBox 订阅链接，并配置 MPC-HC / MPC-BE 路径。高码率 4K、HEVC、HDR 和网盘源会优先推荐外部播放器。
                     </div>
+                    <div v-if="desktopStatus && desktopStatus.setupChecklist"
+                        style="margin-top:18px; display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px;">
+                        <div v-for="item in desktopStatus.setupChecklist" :key="item.id"
+                            style="padding:12px; border-radius:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">
+                            <div style="display:flex; align-items:center; gap:8px; color:#fff; font-weight:800; font-size:13px;">
+                                <i :class="['fas', item.ok ? 'fa-check-circle' : item.severity === 'error' ? 'fa-times-circle' : 'fa-exclamation-circle']"
+                                    :style="{ color: item.ok ? '#22c55e' : item.severity === 'error' ? '#f87171' : '#fbbf24' }"></i>
+                                {{ item.label }}
+                            </div>
+                            <div style="color:#9ca3af; font-size:12px; line-height:1.55; margin-top:6px;">{{ item.message }}</div>
+                        </div>
+                    </div>
+                    <div v-if="desktopStatus && desktopStatus.nextActions && desktopStatus.nextActions.length"
+                        style="margin-top:14px; padding:12px 14px; border-radius:14px; background:rgba(96,165,250,0.1); color:#bfdbfe; font-size:12px; line-height:1.7;">
+                        <div style="color:#fff; font-weight:800; margin-bottom:4px;">Next actions</div>
+                        <div v-for="action in desktopStatus.nextActions" :key="action">- {{ action }}</div>
+                    </div>
                     <div class="appletv-panel-list" style="margin-top:18px;">
                         <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSubscriptionPanel=true; loadSubscriptionData()"
                             style="text-align:left; color:#fff; cursor:pointer;">
@@ -5770,6 +5787,7 @@
                         this.proxyExpiryTest = null;
                         this.proxyM3u8Test = null;
                         await this.loadProxyStatus();
+                        await this.loadDesktopStatus();
                         this.playerSettingsMessage = '播放器设置已保存';
                     } catch (error) {
                         this.playerSettingsMessage = error.message || '保存失败';

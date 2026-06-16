@@ -1,7 +1,7 @@
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
-const { DEFAULT_PLAYER_SETTINGS } = require('../player/externalPlayerConfig');
+const { DEFAULT_PLAYER_SETTINGS, validateMpcPath } = require('../player/externalPlayerConfig');
 const { DEFAULT_PLUGIN_RUNTIME_SETTINGS } = require('../adapters/tvbox/pluginRuntime');
 
 const DEFAULT_JSON_FILES = {
@@ -57,12 +57,78 @@ async function getDesktopStatus(dataDir) {
     const sources = readJson(path.join(dataDir, 'sources.json'), []);
     const liveChannels = readJson(path.join(dataDir, 'live-channels.json'), []);
     const playerSettings = readJson(path.join(dataDir, 'player-settings.json'), DEFAULT_PLAYER_SETTINGS);
+    const mpcValidation = validateMpcPath(playerSettings.mpcExePath);
     const localProxyPort = Number(playerSettings.localProxyPort || DEFAULT_PLAYER_SETTINGS.localProxyPort);
     const localProxyPortAvailable = await isPortAvailable(localProxyPort);
     const requiredFiles = Object.keys(DEFAULT_JSON_FILES).map(fileName => ({
         fileName,
         exists: fs.existsSync(path.join(dataDir, fileName))
     }));
+    const allRequiredFilesExist = requiredFiles.every(file => file.exists);
+    const setupChecklist = [
+        {
+            id: 'runtime-files',
+            label: 'Runtime config files',
+            ok: allRequiredFilesExist,
+            severity: allRequiredFilesExist ? 'ok' : 'error',
+            message: allRequiredFilesExist
+                ? 'All runtime JSON files exist in userData.'
+                : 'Some runtime JSON files are missing and should be recreated.'
+        },
+        {
+            id: 'subscriptions',
+            label: 'User subscriptions',
+            ok: subscriptions.length > 0,
+            severity: subscriptions.length > 0 ? 'ok' : 'warning',
+            message: subscriptions.length > 0
+                ? `${subscriptions.length} subscription(s) imported.`
+                : 'No user TVBox subscription has been imported yet.'
+        },
+        {
+            id: 'mpc',
+            label: 'MPC external player',
+            ok: mpcValidation.valid,
+            severity: mpcValidation.valid ? 'ok' : 'warning',
+            message: mpcValidation.valid
+                ? `${mpcValidation.playerType} is configured.`
+                : mpcValidation.message
+        },
+        {
+            id: 'default-player',
+            label: 'Default player',
+            ok: ['mpc', 'internal', 'mpv', 'vlc'].includes(playerSettings.defaultPlayer),
+            severity: ['mpc', 'internal', 'mpv', 'vlc'].includes(playerSettings.defaultPlayer) ? 'ok' : 'warning',
+            message: `Default player is ${playerSettings.defaultPlayer || 'not configured'}.`
+        },
+        {
+            id: 'local-proxy',
+            label: 'LocalProxy',
+            ok: !!playerSettings.useLocalProxy,
+            severity: playerSettings.useLocalProxy ? 'ok' : 'warning',
+            message: playerSettings.useLocalProxy
+                ? 'LocalProxy is enabled for headers, Range, HLS, and MPC playback.'
+                : 'LocalProxy is disabled; links with headers may fail in external players.'
+        },
+        {
+            id: 'local-proxy-port',
+            label: 'LocalProxy port',
+            ok: localProxyPortAvailable,
+            severity: localProxyPortAvailable ? 'ok' : 'warning',
+            message: localProxyPortAvailable
+                ? `Port ${localProxyPort} is available before LocalProxy starts.`
+                : `Port ${localProxyPort} is currently unavailable; the app will try nearby fallback ports.`
+        }
+    ];
+    const nextActions = [];
+    if (subscriptions.length === 0) nextActions.push('Import your own TVBox JSON subscription.');
+    if (!mpcValidation.valid) nextActions.push('Configure a valid MPC-HC or MPC-BE executable path.');
+    if (!playerSettings.useLocalProxy) nextActions.push('Enable LocalProxy for high-bitrate, header-protected, and cloud-drive links.');
+    if (!localProxyPortAvailable) nextActions.push('Keep the fallback port behavior or change the LocalProxy port in Settings.');
+    if (nextActions.length === 0) nextActions.push('Setup looks ready for local playback testing.');
+    const setupComplete = setupChecklist.every(item => item.ok || item.severity !== 'error')
+        && subscriptions.length > 0
+        && mpcValidation.valid
+        && !!playerSettings.useLocalProxy;
 
     return {
         dataDir,
@@ -73,11 +139,20 @@ async function getDesktopStatus(dataDir) {
         player: {
             defaultPlayer: playerSettings.defaultPlayer,
             mpcConfigured: !!playerSettings.mpcExePath,
+            mpcValidation: {
+                valid: mpcValidation.valid,
+                reason: mpcValidation.reason,
+                playerType: mpcValidation.playerType,
+                message: mpcValidation.message
+            },
             useLocalProxy: !!playerSettings.useLocalProxy,
             localProxyPort,
             localProxyPortAvailable
         },
-        firstRunRecommended: subscriptions.length === 0 || !playerSettings.mpcExePath
+        setupChecklist,
+        nextActions,
+        setupComplete,
+        firstRunRecommended: !setupComplete
     };
 }
 
