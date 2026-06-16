@@ -40,6 +40,8 @@ Settings now include a desktop readiness panel that reuses `GET /api/desktop/sta
 
 The readiness panel also provides a one-click setup check that refreshes desktop status, LocalProxy status, LocalProxy port availability, and MPC validation without launching an external player.
 
+Desktop status includes `sourceBreakdown` so Settings can show HTTP-ready sources, plugin-required sources, unsupported sources, enabled/disabled counts, and source distributions without executing subscription plugin code.
+
 ## Commands
 
 ```powershell

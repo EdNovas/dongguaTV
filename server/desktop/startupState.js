@@ -51,11 +51,39 @@ function isPortAvailable(port) {
     });
 }
 
+function countBy(items, getKey) {
+    return items.reduce((counts, item) => {
+        const key = getKey(item) || 'unknown';
+        counts[key] = (counts[key] || 0) + 1;
+        return counts;
+    }, {});
+}
+
+function buildSourceBreakdown(sources) {
+    const enabledSources = sources.filter(source => source.enabled !== false);
+    const playableHttpSources = enabledSources.filter(source => {
+        if (source.status === 'plugin-required' || source.status === 'unsupported' || source.status === 'error') return false;
+        if (source.sourceType === 'plugin-required' || source.supportLevel === 'unsupported') return false;
+        return ['native', 'tvbox', 'maccms'].includes(source.sourceType);
+    });
+
+    return {
+        total: sources.length,
+        enabled: enabledSources.length,
+        disabled: sources.length - enabledSources.length,
+        playableHttp: playableHttpSources.length,
+        byStatus: countBy(sources, source => source.status),
+        bySourceType: countBy(sources, source => source.sourceType),
+        bySupportLevel: countBy(sources, source => source.supportLevel)
+    };
+}
+
 async function getDesktopStatus(dataDir) {
     ensureDesktopState(dataDir);
     const subscriptions = readJson(path.join(dataDir, 'subscriptions.json'), []);
     const sources = readJson(path.join(dataDir, 'sources.json'), []);
     const liveChannels = readJson(path.join(dataDir, 'live-channels.json'), []);
+    const sourceBreakdown = buildSourceBreakdown(sources);
     const playerSettings = readJson(path.join(dataDir, 'player-settings.json'), DEFAULT_PLAYER_SETTINGS);
     const mpcValidation = validateMpcPath(playerSettings.mpcExePath);
     const localProxyPort = Number(playerSettings.localProxyPort || DEFAULT_PLAYER_SETTINGS.localProxyPort);
@@ -135,6 +163,7 @@ async function getDesktopStatus(dataDir) {
         requiredFiles,
         subscriptions: subscriptions.length,
         sources: sources.length,
+        sourceBreakdown,
         liveChannels: liveChannels.length,
         player: {
             defaultPlayer: playerSettings.defaultPlayer,
