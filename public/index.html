@@ -7430,7 +7430,7 @@
                         window._castWireless ||
                         (window._castGuardUntil && Date.now() < window._castGuardUntil));
                 },
-                castVideo() {
+                async castVideo() {
                     const videoEl = (typeof dp !== 'undefined' && dp && dp.video) || document.querySelector('.dplayer-video');
                     if (!videoEl) return alert('请先播放视频');
 
@@ -7451,24 +7451,84 @@
                         catch (e) { console.log('[投屏] AirPlay 调用失败:', e); }
                     }
 
-                    // 2) Chrome / Android / Edge → Remote Playback API（Cast / DLNA / 无线投屏）
+                    // 2) 安卓 / Chrome / Edge → Google Cast SDK 投真流到 Chromecast（HLS.js 是 MSE，原生 remote 投不了，必须用 Cast SDK 投 m3u8 直链）
+                    const sdkOk = await this._ensureCastSdk();
+                    if (sdkOk) { await this._castToChromecast(); return; }  // Cast 选择器就是它的 UI，不再叠加旧兜底
+
+                    // 3) 没有 Cast SDK(非 Chrome / gstatic 不可达) → 旧 Remote Playback 兜底
                     if (videoEl.remote && typeof videoEl.remote.prompt === 'function') {
                         videoEl.remote.prompt()
                             .then(() => console.log('[投屏] 已呼出投屏菜单'))
                             .catch((err) => {
                                 console.log('[投屏] 无设备/已取消:', err && err.name);
-                                // 兜底再试 AirPlay（部分桌面浏览器也支持）
                                 if (videoEl.webkitShowPlaybackTargetPicker) { try { videoEl.webkitShowPlaybackTargetPicker(); return; } catch (e) { } }
                                 if (err && err.name !== 'NotAllowedError') this._castFallback(videoEl);
                             });
                         return;
                     }
 
-                    // 3) 非苹果但有 AirPlay API
+                    // 4) 非苹果但有 AirPlay API
                     if (videoEl.webkitShowPlaybackTargetPicker) { try { videoEl.webkitShowPlaybackTargetPicker(); return; } catch (e) { } }
 
-                    // 4) 都不支持 → 复制直链并指引
+                    // 5) 都不支持 → 复制直链并指引(含系统屏幕镜像)
                     this._castFallback(videoEl);
+                },
+                // 按需加载 Google Cast SDK(CAF 框架)，初始化默认媒体接收器。返回是否可用(非 Chrome / 加载失败 → false)
+                _ensureCastSdk() {
+                    if (window.__castReady !== undefined) return Promise.resolve(window.__castReady);
+                    if (window.__castLoading) return window.__castLoading;
+                    window.__castLoading = new Promise((resolve) => {
+                        let settled = false;
+                        const done = (ok) => { if (settled) return; settled = true; window.__castReady = ok; resolve(ok); };
+                        window['__onGCastApiAvailable'] = (isAvailable) => {
+                            if (isAvailable && window.cast && window.cast.framework && window.chrome && window.chrome.cast) {
+                                try {
+                                    cast.framework.CastContext.getInstance().setOptions({
+                                        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+                                        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+                                    });
+                                    done(true);
+                                } catch (e) { console.log('[投屏] Cast 初始化失败:', e); done(false); }
+                            } else done(false);
+                        };
+                        const s = document.createElement('script');
+                        s.src = 'https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1';
+                        s.async = true;
+                        s.onerror = () => done(false);
+                        document.head.appendChild(s);
+                        setTimeout(() => done(false), 6000);  // 加载/初始化超时兜底
+                    });
+                    return window.__castLoading;
+                },
+                // 用 Cast SDK 把当前剧集 m3u8 投到 Chromecast（弹设备选择器；取消/无设备安静处理）
+                async _castToChromecast() {
+                    try {
+                        const ctx = cast.framework.CastContext.getInstance();
+                        let session = ctx.getCurrentSession();
+                        if (!session) { await ctx.requestSession(); session = ctx.getCurrentSession(); }
+                        if (!session) return;
+                        const url = this._activeFinalUrl || this.currentUrl;
+                        if (!url) { if (this.showMiniToast) this.showMiniToast('当前没有可投屏的视频'); return; }
+                        const mi = new chrome.cast.media.MediaInfo(url, 'application/x-mpegurl');
+                        mi.streamType = chrome.cast.media.StreamType.BUFFERED;
+                        mi.metadata = new chrome.cast.media.GenericMediaMetadata();
+                        mi.metadata.title = (this.currentGroup && this.currentGroup.name) || '投屏';
+                        const req = new chrome.cast.media.LoadRequest(mi);
+                        const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                        if (v && isFinite(v.currentTime) && v.currentTime > 0) req.currentTime = v.currentTime;
+                        await session.loadMedia(req);
+                        if (this.showMiniToast) this.showMiniToast('📺 已投屏到 Chromecast');
+                    } catch (e) {
+                        const code = (e && (e.code || e));
+                        if (code === 'cancel') return;  // 用户取消，安静结束
+                        console.log('[投屏] Cast 失败:', e);
+                        if (code === 'receiver_unavailable') {
+                            // 附近没有 Chromecast → 引导用系统屏幕镜像 / 复制直链
+                            this._castFallback((typeof dp !== 'undefined' && dp) ? dp.video : null);
+                        } else if (this.showMiniToast) {
+                            this.showMiniToast('投屏连接失败，请重试');
+                        }
+                    }
                 },
                 // 投屏兜底：清晰指引 + 复制视频直链
                 _castFallback(videoEl) {
@@ -8874,6 +8934,7 @@
                     this._activePlaySeq = playSeq;
                     this._activeOriginalUrl = originalUrl;
                     this._activeAdFilterProxyUsed = adFilterProxyUsed;
+                    this._activeFinalUrl = finalUrl;  // 📺 投屏(Chromecast)用：实际喂给播放器的 URL(去广告代理过、带 CORS，Chromecast 能拉)
 
                     const setupErrorHandling = () => {
                         // 统一错误处理函数（dp.error 和 video.error 都会触发）
