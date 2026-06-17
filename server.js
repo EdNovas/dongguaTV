@@ -1002,6 +1002,138 @@ function findSearchSite(siteKey) {
     return getAllSearchSites().find(site => site.key === siteKey);
 }
 
+function isPluginRequiredSource(source) {
+    return !!(source && (source.status === 'plugin-required' || source.sourceType === 'plugin-required'));
+}
+
+function sanitizePluginSourceForBridge(source) {
+    if (!source) return null;
+    return {
+        id: source.id,
+        sourceSubscriptionId: source.sourceSubscriptionId,
+        sourceType: source.sourceType,
+        key: source.key,
+        name: source.name,
+        api: source.api,
+        tvboxType: source.tvboxType,
+        searchable: source.searchable,
+        quickSearch: source.quickSearch,
+        filterable: source.filterable,
+        ext: source.ext === undefined ? null : source.ext,
+        jar: source.jar || null,
+        spider: source.spider || null,
+        status: source.status,
+        supportLevel: source.supportLevel,
+        raw: source.raw || null
+    };
+}
+
+function buildPluginBridgePayload(operation, source, params) {
+    return {
+        operation,
+        source: sanitizePluginSourceForBridge(source),
+        params: params || {},
+        policy: {
+            allowSubscriptionJarExecution: false,
+            allowRemoteCodeExecution: false,
+            trustedRuntimeRequired: true
+        }
+    };
+}
+
+function bridgeResultData(response) {
+    if (!response || typeof response !== 'object') return response;
+    if (Object.prototype.hasOwnProperty.call(response, 'result')) return response.result;
+    if (Object.prototype.hasOwnProperty.call(response, 'data')) return response.data;
+    return response;
+}
+
+function normalizePluginSearchResult(response, source) {
+    const data = bridgeResultData(response);
+    const rawList = Array.isArray(data)
+        ? data
+        : data && Array.isArray(data.list)
+            ? data.list
+            : [];
+    const list = rawList.map((item, index) => ({
+        vod_id: item.vod_id || item.id || item.url || item.key || `${source.id}:${index}`,
+        vod_name: item.vod_name || item.name || item.title || 'Unnamed',
+        vod_pic: item.vod_pic || item.pic || item.poster || '',
+        vod_remarks: item.vod_remarks || item.remarks || item.remark || '',
+        vod_year: item.vod_year || item.year || '',
+        type_name: item.type_name || item.type || '',
+        site_key: `plugin:${source.id}`,
+        site_name: `[TVBox Plugin] ${source.name}`,
+        source_origin: 'tvbox-plugin',
+        plugin_source_id: source.id,
+        raw: item
+    }));
+    return {
+        status: response && response.status || 'unknown',
+        message: response && response.message || '',
+        list
+    };
+}
+
+function normalizePluginDetailResult(response, source) {
+    const data = bridgeResultData(response);
+    const rawList = data && Array.isArray(data.list) ? data.list : Array.isArray(data) ? data : data ? [data] : [];
+    const list = rawList.filter(Boolean).map((item, index) => ({
+        ...item,
+        vod_id: item.vod_id || item.id || `${source.id}:detail:${index}`,
+        vod_name: item.vod_name || item.name || item.title || source.name,
+        site_key: `plugin:${source.id}`,
+        site_name: `[TVBox Plugin] ${source.name}`,
+        source_origin: 'tvbox-plugin',
+        plugin_source_id: source.id
+    }));
+    return {
+        status: response && response.status || 'unknown',
+        message: response && response.message || '',
+        list
+    };
+}
+
+function normalizePluginPlayResult(response, source) {
+    const data = bridgeResultData(response);
+    const item = data && typeof data === 'object' ? data : { url: typeof data === 'string' ? data : '' };
+    return {
+        status: response && response.status || 'unknown',
+        message: response && response.message || '',
+        playUrlResult: {
+            url: item.url || item.playUrl || item.play_url || '',
+            format: item.format || 'unknown',
+            quality: item.quality || 'unknown',
+            codec: item.codec || 'unknown',
+            hdr: !!item.hdr,
+            sourceKind: 'plugin-required',
+            headers: item.headers || {},
+            expiresAt: item.expiresAt || null,
+            sourceId: source.id,
+            sourceName: source.name
+        },
+        raw: item
+    };
+}
+
+async function callPluginSourceBridge(sourceId, operation, params) {
+    const source = tvboxService.getSource(sourceId);
+    if (!source) {
+        const error = new Error('TVBox source was not found.');
+        error.statusCode = 404;
+        throw error;
+    }
+    if (!isPluginRequiredSource(source)) {
+        const error = new Error('This source is not marked plugin-required.');
+        error.statusCode = 400;
+        throw error;
+    }
+
+    const payload = buildPluginBridgePayload(operation, source, params);
+    const response = await pluginRuntimeRegistry.callExternalHttpBridge(operation, payload);
+    return { source, response };
+}
+
 app.post('/api/subscriptions/import', async (req, res) => {
     try {
         const result = await tvboxService.importSubscription({
@@ -1278,6 +1410,97 @@ app.post('/api/plugin-runtimes/external-http/:operation', async (req, res) => {
         res.json({ ok: true, result });
     } catch (error) {
         res.status(400).json({ error: error.message || 'External HTTP bridge operation failed' });
+    }
+});
+
+app.get('/api/plugin-sources', (req, res) => {
+    try {
+        const sources = tvboxService.listSources()
+            .filter(source => isPluginRequiredSource(source))
+            .map(source => ({
+                id: source.id,
+                name: source.name,
+                key: source.key,
+                api: source.api,
+                sourceSubscriptionId: source.sourceSubscriptionId,
+                enabled: source.enabled !== false,
+                status: source.status,
+                supportLevel: source.supportLevel,
+                jar: source.jar || null,
+                spider: source.spider || null,
+                extPresent: source.ext !== undefined && source.ext !== null
+            }));
+        const localJavaBridge = pluginRuntimeRegistry.getLocalJavaBridgeStatus();
+        res.json({
+            sources,
+            count: sources.length,
+            bridge: {
+                externalHttpConfigured: !!pluginRuntimeRegistry.getSettings().externalHttpBaseUrl,
+                localJavaBridgeRunning: !!localJavaBridge.running,
+                localJavaBridgeBaseUrl: localJavaBridge.baseUrl,
+                localJavaBridgeMode: localJavaBridge.mode
+            },
+            message: 'Plugin sources require a trusted local bridge. Subscription jar/py/js code is not executed directly.'
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to list plugin sources' });
+    }
+});
+
+app.post('/api/plugin-sources/:sourceId/search', async (req, res) => {
+    try {
+        const { source, response } = await callPluginSourceBridge(req.params.sourceId, 'search', {
+            keyword: req.body && (req.body.keyword || req.body.wd || req.body.query),
+            page: req.body && req.body.page || 1,
+            raw: req.body || {}
+        });
+        const normalized = normalizePluginSearchResult(response, source);
+        res.json({ ok: true, source: sanitizePluginSourceForBridge(source), bridge: response, ...normalized });
+    } catch (error) {
+        res.status(error.statusCode || 400).json({ ok: false, error: error.message || 'Plugin source search failed' });
+    }
+});
+
+app.post('/api/plugin-sources/:sourceId/category', async (req, res) => {
+    try {
+        const { source, response } = await callPluginSourceBridge(req.params.sourceId, 'category', {
+            tid: req.body && (req.body.tid || req.body.typeId),
+            page: req.body && req.body.page || 1,
+            filters: req.body && req.body.filters || {},
+            raw: req.body || {}
+        });
+        const normalized = normalizePluginSearchResult(response, source);
+        res.json({ ok: true, source: sanitizePluginSourceForBridge(source), bridge: response, ...normalized });
+    } catch (error) {
+        res.status(error.statusCode || 400).json({ ok: false, error: error.message || 'Plugin source category failed' });
+    }
+});
+
+app.post('/api/plugin-sources/:sourceId/detail', async (req, res) => {
+    try {
+        const { source, response } = await callPluginSourceBridge(req.params.sourceId, 'detail', {
+            id: req.body && (req.body.id || req.body.vod_id),
+            raw: req.body || {}
+        });
+        const normalized = normalizePluginDetailResult(response, source);
+        res.json({ ok: true, source: sanitizePluginSourceForBridge(source), bridge: response, ...normalized });
+    } catch (error) {
+        res.status(error.statusCode || 400).json({ ok: false, error: error.message || 'Plugin source detail failed' });
+    }
+});
+
+app.post('/api/plugin-sources/:sourceId/play', async (req, res) => {
+    try {
+        const { source, response } = await callPluginSourceBridge(req.params.sourceId, 'play', {
+            id: req.body && (req.body.id || req.body.vod_id || req.body.playId),
+            flag: req.body && (req.body.flag || req.body.from),
+            flags: req.body && req.body.flags,
+            raw: req.body || {}
+        });
+        const normalized = normalizePluginPlayResult(response, source);
+        res.json({ ok: true, source: sanitizePluginSourceForBridge(source), bridge: response, ...normalized });
+    } catch (error) {
+        res.status(error.statusCode || 400).json({ ok: false, error: error.message || 'Plugin source play failed' });
     }
 });
 

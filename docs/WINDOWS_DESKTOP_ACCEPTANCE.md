@@ -192,6 +192,16 @@ The Subscriptions panel also exposes per-source Health checks. HTTP-compatible s
 
 Search empty states expose a Search Diagnostics panel. It reports built-in search site counts, TVBox HTTP sources participating in search, plugin-required sources, unsupported sources, and Local Java Bridge running state. This is diagnostic only for plugin sources: TVBox plugin code is not executed directly.
 
+Plugin-required source bridge dispatch is exposed through backend APIs for controlled runtime testing:
+
+- `GET /api/plugin-sources`
+- `POST /api/plugin-sources/:sourceId/search`
+- `POST /api/plugin-sources/:sourceId/category`
+- `POST /api/plugin-sources/:sourceId/detail`
+- `POST /api/plugin-sources/:sourceId/play`
+
+These APIs send the selected plugin-required source and operation parameters to the configured local External HTTP Bridge. The payload explicitly carries `allowSubscriptionJarExecution: false` and `allowRemoteCodeExecution: false`. If the bridge is not configured, the API returns a clear error. If the local Java bridge is running in `stub` mode, the APIs return `stub` status without executing TVBox plugin code. This prepares the app-side contract for a future trusted CatVod runtime while preserving the current safety boundary.
+
 ## Playback Diagnosis
 
 When a source cannot play:
