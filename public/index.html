@@ -7421,10 +7421,21 @@
                     if (typeof window.showLoginForDeepLink === 'function') window.showLoginForDeepLink();
                     else if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
                 },
+                // 是否正在投屏(AirPlay/远程)：接管 MSE 流时本地 <video> 会发伪 ended/error，据此停手不自动跳集/切线路
+                _isCasting() {
+                    const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                    if (!v) return false;
+                    return !!(v.webkitCurrentPlaybackTargetIsWireless ||
+                        (v.remote && (v.remote.state === 'connected' || v.remote.state === 'connecting')) ||
+                        window._castWireless ||
+                        (window._castGuardUntil && Date.now() < window._castGuardUntil));
+                },
                 castVideo() {
                     const videoEl = (typeof dp !== 'undefined' && dp && dp.video) || document.querySelector('.dplayer-video');
                     if (!videoEl) return alert('请先播放视频');
 
+                    // 🛡️ 点投屏即进入"投屏保护窗口"：交接 MSE 流那几秒的伪 ended 不会触发连跳集
+                    window._castGuardUntil = Date.now() + 12000;
                     // 🔆 投屏时保持屏幕常亮（防止锁屏导致投屏暂停）
                     this.requestWakeLock();
                     // 允许 AirPlay / 远程播放（关键：不设此属性 iOS 可能找不到 AirPlay 设备）
@@ -9825,6 +9836,31 @@
                                 v.removeEventListener(ev, window._syncPlayOverlays);
                                 v.addEventListener(ev, window._syncPlayOverlays);
                             });
+                            // 🛡️ 投屏状态侦测：AirPlay/远程播放接管 MSE 流的瞬间，<video> 会发"伪 ended/error"
+                            //    （进度远没到结尾）。旧逻辑据此连跳好几集。这里记录"投屏中"，让自动跳集/切线路在那段时间内停手。
+                            //    用【稳定的具名 handler】(只建一次, 读实时 dp.video)，remove→add 幂等，避免切集时在复用的
+                            //    <video> 上重复叠加监听(switchVideo 复用同一元素)。
+                            try {
+                                if (!window._onCastWirelessChange) {
+                                    window._onCastWirelessChange = () => {
+                                        const vv = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                                        window._castWireless = !!(vv && vv.webkitCurrentPlaybackTargetIsWireless);
+                                        window._castGuardUntil = Date.now() + 8000;
+                                        console.log('[投屏] AirPlay 目标变化, wireless=', window._castWireless);
+                                    };
+                                }
+                                v.removeEventListener('webkitcurrentplaybacktargetiswirelesschanged', window._onCastWirelessChange);
+                                v.addEventListener('webkitcurrentplaybacktargetiswirelesschanged', window._onCastWirelessChange);
+                            } catch (e) { }
+                            try {
+                                if (v.remote && v.remote.addEventListener) {
+                                    if (!window._onRemoteCast) window._onRemoteCast = () => { window._castGuardUntil = Date.now() + 8000; };
+                                    v.remote.removeEventListener('connecting', window._onRemoteCast);
+                                    v.remote.removeEventListener('connect', window._onRemoteCast);
+                                    v.remote.addEventListener('connecting', window._onRemoteCast);
+                                    v.remote.addEventListener('connect', window._onRemoteCast);
+                                }
+                            } catch (e) { }
                         };
                         window._bindOverlayVideoEvents();
 
@@ -10156,6 +10192,9 @@
 
                         // 播放结束时清除进度记录
                         dp.on('ended', () => {
+                            // 🛡️ 投屏(AirPlay/远程)接管 MSE 流时会发"伪 ended"(进度远没到结尾)，旧逻辑直接 playNextEpisode
+                            //    → 连跳好几集(用户报 iOS 投屏从第6集跳到第10+集)。投屏期间一律不处理 ended、不自动跳集。
+                            if (this._isCasting()) { console.log('[投屏] 投屏中忽略 ended，不自动跳集'); return; }
                             localStorage.removeItem(getProgressKey());
                             console.log('[进度记忆] 播放完毕，清除记录');
                             // 更新观看历史（进度100%）
@@ -10631,6 +10670,8 @@
 
                 // 处理播放错误，自动切换线路
                 handlePlaybackError() {
+                    // 🛡️ 投屏接管 MSE 时本地 <video> 会报 error，这不是线路问题；投屏期间不要自动切线路
+                    if (this._isCasting()) { console.log('[投屏] 投屏中忽略播放错误，不自动切线路'); return; }
                     this.playbackErrorCount++;
 
                     // 避免重复触发
