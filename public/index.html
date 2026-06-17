@@ -4757,7 +4757,7 @@
         function showPasswordError(message) {
             const errorDiv = document.getElementById('password-error');
             const errorText = document.getElementById('password-error-text');
-            errorText.textContent = message;  // 闂?textContent 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柛顐ｆ处閺佸棙绻涢幋娆忕仼閻庢艾顦遍埀顒€绠嶉崕閬嶅箠鎼搭煉缍栭柕鍫濐槹閻撴洟鏌ㄥ┑鍡楁殭濠殿喒鍋撶紓鍌欒兌缁垶宕归崹顔炬殾闁割偅娲橀崐鐑芥煕椤垵浜為柡鍡欏█濮婄粯鎷呴悷閭﹀殝闂佽崵鍠嗛崝鎴︺€佸璺何ч柛鈩冪憿閺€鎶芥⒑閺傘儲娅呴柛鐔叉櫇濡叉劙寮介鐔蜂画濠电偛妫欓悷褔鎮炬潏鈺傚枑?XSS
+            errorText.textContent = message;  // Use textContent to avoid XSS.
             errorDiv.style.display = 'flex';
         }
 
@@ -4780,7 +4780,7 @@
 
             errorDiv.style.display = 'none';
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>婵犲痉鏉库偓妤佹叏閹绢喗鍎楀〒姘ｅ亾闁诡垯鐒﹀鍕偓锝庡厴閺?..</span>';
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Verifying...</span>';
 
             try {
                 const res = await fetch('/api/auth/verify', {
@@ -4819,7 +4819,7 @@
             }
 
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="fas fa-unlock"></i><span>婵犲痉鏉库偓妤佹叏閹绢喗鍎楀〒姘ｅ亾闁诡垯鐒﹀鍕沪缁嬪じ澹曢梻鍌氱墛缁嬫帡藟閻樼粯鐓</span>';
+            submitBtn.innerHTML = '<i class="fas fa-unlock"></i><span>Unlock</span>';
             return false;
         }
 
@@ -5026,7 +5026,7 @@
                     corsProxyUrl: null,  // CORS 婵犵數鍋涢顓熷垔鐎电绶ら柛褎顨呯粻?URL闂傚倷鐒︾€笛呯矙閹达附鍋嬮煫鍥ㄧ☉閺嬩線鏌曢崼婵囶棤妞も晜鐓￠獮鏍偓娑欘焽缁犳岸鏌涘鍡楀⒋鐎殿喖鐖奸幃婊堝幢濡も偓椤亜鈹戦埥鍡椾簴闁稿﹥娲熼崺銏ゅ籍閸繂宓嗛梺缁樏壕顓㈠礄娴犲鈷戦悷娆忓閼割亪鏌涙惔銏″唉妞ゃ垺鐟╁浠嬵敇閻斿弶瀚芥俊鐐€栧濠氬磻閹剧粯鍋╅梺顒€绉甸崑锝囨喐瀹ュ洠鍋撳鐓庡箻闁兼椽浜堕、娆撳礈瑜嶅畷?API闂?
                     playbackErrorCount: 0,  // 闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡ê霉閿濆洦鍤€缂佸墎鍋ゅ鍫曞醇椤愵澀鍑介悶姘箞閺岋綁鎮╂潏顐敼闂佸憡鎸荤换鍫濐嚕?
                     isAutoRetrying: false,  // 闂傚倷绀侀幖顐も偓姘卞厴瀹曡瀵奸弶鎴犵暰婵炶揪绲芥竟濠傤焽娴煎瓨鐓ユ繝闈涙閸ｆ椽妫呴澶婂⒋闁哄被鍊栫缓鑺ュ緞婢跺瞼娉垮┑鐘愁問閸犳帡寮查悩璇茶摕閻忕偟鐡旈崥瀣煕椤愮姴鐏粭?
-                    autoRetryMessage: '',  // 闂傚倷鑳堕崢褔銆冩惔銏㈩洸婵犲﹤瀚崣蹇涙煃閸濆嫭鍣圭紒鈧崱娑欑厱闁靛绲芥俊濂稿箹閺夋埊韬柡宀€鍠撶槐鎺懳熼崫鍕垫綍闂備線娼уú锔惧枈瀹ュ洨鐭氶梺顒€绉撮悞娲煕閹板苯鎳愰ˇ?
+                    autoRetryMessage: '',  // Message shown while failover is trying another source.
                     playbackClassification: null,
                     playbackClassificationLoading: false,
                     playbackDiagnostics: null,
@@ -6311,8 +6311,8 @@
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.pluginRuntimeMessage = data.available
-                            ? `Java 闂傚倷绀侀幉锟犳偡椤栫偛鍨傞柟鎯版閺?${data.version || ''}`.trim()
-                            : `Java 婵犵數鍋為崹鍫曞箰閸濄儳鐭撶痪鎯ь儍娴滃綊鏌＄仦璇插姕闁?{data.error ? ': ' + data.error : ''}`;
+                            ? `Java available ${data.version || ''}`.trim()
+                            : `Java unavailable${data.error ? ': ' + data.error : ''}`;
                     } catch (error) {
                         this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
                     }
@@ -6753,12 +6753,12 @@
                         try {
                             await this.fetchHero();
                         } catch (e) {
-                            console.error('[InitApp] Hero 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞垮劤缁愮偤鏌℃径濠勫⒈闁稿顦抽·?', e);
+                            console.error('[InitApp] Failed to load hero data', e);
                         }
                         try {
                             this.fetchAllLists();
                         } catch (e) {
-                            console.error('[InitApp] Lists 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞垮劤缁愮偤鏌℃径濠勫⒈闁稿顦抽·?', e);
+                            console.error('[InitApp] Failed to load content rows', e);
                         }
                     } else {
                         console.warn('[DongguaTV] warning');
@@ -6819,7 +6819,7 @@
                             this.$nextTick(() => this.updateHistoryScrollNeeded());
                         }
                     } catch (e) {
-                        console.error('[闂備浇宕甸崰鎰版偡閵夆晛纾归悹鍥嚋閼板潡鏌涘☉娆愮稇闁稿被鍔戦弻娑㈠焺閸愮偓鐣堕梺鑺ュ灥閵?闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞垮劤缁愮偤鏌℃径濠勫⒈闁稿顦抽·?', e);
+                        console.error('[WatchHistory] Failed to load watch history', e);
                     }
                     // 闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺嗗亾妞ゎ亜鍟村畷鎺戭潩閵夈垹浜鹃柟鐑橆殔瀹告繃銇勯弽銊р槈闁逞屽墰閸嬨倕顕ｉ崼鏇炵厸濞达絿鎳撻ˇ鈺佲攽閻橆偄浜鹃梺璺ㄥ枔婵敻宕曞澶嬬厱闁哄洢鍔岄弸銈囩磼閻樺樊鐓兼鐐寸墬濞煎繘宕滆閺嗐垹顪冮妶鍡樼叆婵炴祴鏅犳俊?
                     this.cleanUpOldProgress();
@@ -6861,7 +6861,7 @@
                             keysToRemove.forEach(key => localStorage.removeItem(key));
                         }
                     } catch (e) {
-                        console.error('[濠电姷鏁搁崑鐐哄箰閹间礁绠犻柟鐗堟緲缁犳牕鈹?闂備礁鎼ˇ顐﹀疾濠婂懐鐭欓柟瀵稿Л閸嬫捇鎮烽弶鎸庢瘣闂侀潧妫欑敮鈥崇暦閵娾晩鏁嶆繛鎴炃氶崑鎾绘倷瀹割喚鍞甸梺璇″灡婢瑰棛鑺遍崸妤佸仭?', e);
+                        console.error('[WatchHistory] Failed to clean old progress entries', e);
                     }
                 },
 
@@ -6895,7 +6895,7 @@
                                 store(this.watchHistory.slice(0, 15));
                                 console.log('[DongguaTV] log');
                             } catch (e3) {
-                                console.error('[闂備浇宕甸崰鎰版偡閵夆晛纾归悹鍥嚋閼板潡鏌涘☉娆愮稇闁稿被鍔戦弻娑㈠焺閸愮偓鐣堕梺鑺ュ灥閵?婵犵數鍎戠徊钘壝洪敂鐐床闁稿瞼鍋為崑銈夋煏婵犲繒鐣辩紒鍓佸仱瀵爼宕奸顫嚱閻炴碍绻堝娲箰鎼达絺妲堥梺缁橆殔閿曘倝鏁冮姀鈥愁嚤闁哄鍨跺畵宥夋⒑閸濆嫷妲兼繛澶嬫礋楠炴鎮╃紒妯煎幈闁诲繒鍋犻褎淇婃總鍛婄厱闁瑰瓨鏌￠崑鎾诲箛娴ｅ搫寮抽梻浣哥枃濡嫰骞婇幇顔剧焼?', e3);
+                                console.error('[WatchHistory] Failed to persist fallback watch history', e3);
                             }
                         }
                     }
@@ -6926,7 +6926,7 @@
                                 await this.syncHistory();
                             }
                         } catch (e) {
-                            console.error('[闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌?濠电姷顣藉Σ鍛村磻閳ь剟鏌涚€ｎ偅宕岄柡宀嬬磿娴狅妇鎷犻幓鎺戭潛闂備浇顕栭崰妤呭箰閹间緤缍栭柕蹇嬪€曞敮閻熸粌绉堕悷褔姊绘担绛嬪殐闁稿繑绋撶划鍫熺瑹閳ь剚淇婇悽绋跨闁绘ê鍟块?', e);
+                            console.error('[WatchHistory] Failed to sync watch history', e);
                         }
                     }
                 },
@@ -7002,7 +7002,7 @@
                             });
                         }
                     } catch (e) {
-                        console.error('[闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌?闂傚倷鑳堕幊鎾诲床閺屻儖鍥敍濠靛嫪姹楅梺鎼炲労閸撴瑩宕掗妸鈺傜厱闁斥晛鍠氬▓鏃堟煢閹存繍妲告い顓炴健楠炲棝骞嶉鍓у嫎闂?', e);
+                        console.error('[HistorySync] Failed to prepare history push', e);
                     }
                 },
 
@@ -7060,7 +7060,7 @@
                         });
                         console.log('[DongguaTV] log');
                     } catch (e) {
-                        console.error('[闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌?闂傚倷娴囬～澶嬬娴犲绀夐柟杈剧畱閻掑灚銇勯幋锝嗙《妞わ讣濡囬埀顒€婀遍…鍫モ€﹀畡鎵殾闁挎繂顦粻鐢告煙閸濆嫷鍎庨柡澶樺弮閺?', e);
+                        console.error('[HistorySync] Failed to push history', e);
                     }
                 },
 
@@ -7086,7 +7086,7 @@
                             console.log('[DongguaTV] log');
                         }
                     } catch (e) {
-                        console.error('[闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌?Beacon 闂傚倷娴囬～澶嬬娴犲绀夐柟杈剧畱閻掑灚銇勯幋锝嗙《妞わ讣绠撻弻鏇㈠炊閵娿儳浠奸梺?', e);
+                        console.error('[HistorySync] Beacon push failed', e);
                     }
                 },
 
@@ -7113,7 +7113,7 @@
                             }
                         }, 3000);
                     } catch (e) {
-                        console.error('[闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌?闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌ｉ幇顓熺稇缂佸墎鍋ゅ鍫曞醇椤愵澀鍑介悶?', e);
+                        console.error('[HistorySync] Failed to restore remote history', e);
                         this.syncStatus = 'error';
                     }
                 },
@@ -7205,7 +7205,7 @@
                                 });
                                 console.log('[DongguaTV] log');
                             } catch (e) {
-                                console.error('[闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌?濠电姷鏁搁崑鐐哄箰閹间礁绠犳俊顖濄€€閺嬪秹骞栧ǎ顒€濡奸悗姘槺閳ь剙绠嶉崕閬嶅箠鎼搭煉缍栭柕鍫濐槹閻撴洟鏌ㄥ┑鍡楁殭濠德ゅ亹閳ь剙婀遍…鍫モ€﹀畡鎵殾闁挎繂顦粻鐢告煙閸濆嫷鍎庨柡澶樺弮閺?', e);
+                                console.error('[HistorySync] Failed to clear remote history', e);
                             }
                         }
                         console.log('[DongguaTV] log');
@@ -7258,8 +7258,8 @@
 
                     // 闂傚倷绀侀幖顐も偓姘煎墯閺呰埖绂掔€ｎ€附鎱ㄥΟ鎸庣【缂佺姷鏁婚弻鐔兼焽閿曗偓閺嬫柨霉?
                     const message = newMode
-                        ? '濠碘槅鍋撶徊浠嬪疮椤栫偛绠?闂佽娴烽幊鎾诲箟闄囬妵鎰板礃椤忓拋娼熼梺纭呮彧缁犳垹鎲?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鈷戦柟绋挎捣閳藉鏌ｉ鐐测偓鎸庝繆鐎涙ê绶為柟閭﹀弾濡啴姊洪棃娑氱濠殿喖顕划濠囶敋閳ь剟骞冨Ο璺ㄧ杸闁圭偓鎯屽Λ鐐烘⒑缁洘娅嗛柣鈺婂灠椤?..'
-                        : '濠碘槅鍋撶徊浠嬪疮椤栫偛绠?闂佽娴烽幊鎾诲箟闄囬妵鎰板礃椤旇偐鐓戦悷婊勬煥椤?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鈷戦柟绋挎捣閳藉鏌ｉ鐐测偓鎸庝繆鐎涙ê绶為柟閭﹀弾濡啴姊洪棃娑氱濠殿喖顕划濠囶敋閳ь剟骞冨Ο璺ㄧ杸闁圭偓鎯屽Λ鐐烘⒑缁洘娅嗛柣鈺婂灠椤?..';
+                        ? 'TV mode enabled. Keyboard-friendly navigation is active.'
+                        : 'TV mode disabled. Desktop navigation is active.';
 
                     // 闂傚倷绀侀幉锛勬暜濡ゅ啰鐭欓柟瀵稿Х绾句粙鏌熼幆褍顣崇紒鈧崘顔肩婵烇綆鍓欓埀顑惧€曢…鍥ㄦ償閵婏妇鍘介梺闈涱焾閸庨亶顢旈鍡樺枑濡娴囬崗宀€绱?
                     const toast = document.createElement('div');
@@ -7278,7 +7278,7 @@
                         box-shadow: 0 10px 40px rgba(0,0,0,0.5);
                         border: 1px solid rgba(229, 9, 20, 0.3);
                     `;
-                    toast.textContent = message;  // textContent 闂?XSS
+                    toast.textContent = message;  // Use textContent to avoid XSS.
                     document.body.appendChild(toast);
 
                     // 闂佽娴烽崑锝夊磹閺嶎厼纾块柤娴嬫櫆瀹曞弶绻濇繝鍌滃缂佲偓閸℃稒鈷戦柛顭戝櫘閸庢劙鏌ｉ幘顖氫壕婵犵數鍋涢顓熸叏娴兼潙纾块柟娈垮枤閻岸鏌涢锝嗙闁稿鍔戦弻鏇熺節韫囨洜鏆犻梺缁樻尰濞茬喖寮婚敐澶樻晜闁告洟娼ч崜浼存⒑缁洘娅呴柣顓炲€块悰顕€骞樼拠鑼杸濡炪倖妫佸銊у垝?
@@ -7303,7 +7303,7 @@
                             }
                         }
                     } catch (e) {
-                        console.error('[闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸嬵亪鏌?婵犵數鍎戠徊钘壝洪敂鐐床闁稿瞼鍋為崑銈夋煏婵犲繒鐣辩紒鍓佸仱瀵爼宕奸顫嚱閻?', e);
+                        console.error('[Settings] Failed to save local setting', e);
                     }
                 },
 
@@ -7906,9 +7906,9 @@
                     const mask = document.createElement('div');
                     mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:2147483550;display:flex;align-items:center;justify-content:center;';
                     mask.innerHTML = '<div style="background:#fff;border-radius:14px;padding:22px;text-align:center;max-width:280px;">'
-                        + '<div style="color:#222;font-weight:bold;margin-bottom:12px;">闂佽娴烽弫濠氬磻婵犲洤绐楅柡鍥╁枔閳瑰秴鈹戦悩鍙夋悙缂佺姰鍎查妵鍕箛閳轰讲鍋撳Δ鍛瀭闁规儼濮ら悡鏇㈡煙閻戞ê鐏︽い銉︾懇濮</div>'
-                        + '<img src="' + qr + '" alt="婵犵數鍋涢悺銊у垝瀹€鍕剶闁绘挸鏀绘惔顭戞晪闁逞屽墴楠? style="width:220px;height:220px;display:block;border-radius:8px;">'
-                        + '<div style="color:#888;font-size:12px;margin-top:10px;">闂傚倷鐒﹀鍨焽閸ф绀夐悘鐐插⒔椤╂煡鏌￠崶鈺佹灁闁崇懓绉归獮鎺楀箮閽樺鍔﹀銈嗗坊閸嬫捇鏌￠崼顐㈠缂佹梻鍠栧畷鎺戔槈濮橈絾鐏冮梻渚€鈧偛鑻晶瀛橆殽閻愯尙效妞ゃ垺娲熼幃鈺咁敃椤厼顥氶柣搴＄畭閸庡崬螞濡ゅ懎鐒婚柣銏㈩暯閸嬫挸鈻撻崹顔界亐闂佺顑嗛幑鍥蓟濞戞﹩娼╂い鎺嶇閺€顓炩攽閻愬瓨缍戞俊顐ｇ箓閻ｇ兘鏁愭径濠勵吅闂佺粯眉缁插宕哄Δ浣虹瘈闂傚牊绋戦埀顒冩铻為柛鏇ㄥ亽閸</div></div>';
+                        + '<div style="color:#222;font-weight:bold;margin-bottom:12px;">Scan to share</div>'
+                        + '<img src="' + qr + '" alt="Share QR code" style="width:220px;height:220px;display:block;border-radius:8px;">'
+                        + '<div style="color:#888;font-size:12px;margin-top:10px;">Scan this code with WeChat to open the share link.</div></div>';
                     mask.addEventListener('click', () => mask.remove());
                     document.body.appendChild(mask);
                 },
@@ -8189,7 +8189,7 @@
 
                     // 闂傚倷绀侀幉锛勬暜閹烘嚚娲晝閳ь剟鎮鹃悜钘夌闁瑰箍鍔庨崰鏍垂閹呮殾闁搞儮鏅╅弨?
                     config.sortMode = config.sortMode === 'newest' ? 'popular' : 'newest';
-                    console.log(`[闂傚倷绀佸﹢閬嶅磿閵堝洦鏆滈柟鐑樻婵櫕銇勯幘鍗炵仼缂佲偓閸℃稒鐓曢柕澶涚到婵″ジ骞栭弶鎴欏仈 ${config.title} -> ${config.sortMode}`);
+                    console.log(`[Rows] Sort mode ${config.title} -> ${config.sortMode}`);
 
                     // 闂傚倷绀侀幉锟犲蓟閿濆绀夐幖娣妼閺嬩礁螖閿濆懎鏆欓柡瀣╃窔閺屾盯顢曢妶鍛亖婵炲瓨绮犻崹鍫曞蓟閵娿儮妲堟繛鍡樺笒椤ユ繈姊洪崨濞氭垹绮欓幋锝呯倒闂備胶鍋ㄩ崕閬嶅疮閸啩?
                     let rowEl = this.$refs[key];
@@ -8330,7 +8330,7 @@
 
                         // console.log(`[闂傚倸鍊搁崐鎼佸箠鎼达絾宕查柟瀛樼妇閺€锕傛煃瑜滈崜鐔煎蓟閿濆鐓涢柛鏇ㄥ亞濮ｃ垹鈹戦悙鏉戠祷閻?闂傚倷鑳堕幊鎾绘偤閵娾晛绀夐柡鍥╁枑閸欏繑绻涢幋鐐偓鎺撴償閵婏妇鍙嗛柣搴秵閸嬪嫰宕滈悷鎷旀棃鎮╅棃娑楀摋闂佺硶鏅滈悧婊呭垝閸儱纾奸柣鎰綑娴?${combined.length} 闂傚倷绀侀幖顐λ囬锕€绀堟繝闈涱儏濮规煡鏌ｉ弮鍌氬付缂?(缂傚倸鍊风粈渚€藝椤栨粎鐭撻柟缁㈠枟閸? ${dateSeed})`);
                     } catch (e) {
-                        console.error('[闂傚倸鍊搁崐鎼佸箠鎼达絾宕查柟瀛樼妇閺€锕傛煃瑜滈崜鐔煎蓟閿濆鐓涢柛鏇ㄥ亞濮ｃ垹鈹戦悙鏉戠祷閻?濠电姷鏁搁崕鎴犵礊娓氣偓瀵劑鏌嗗鍛暰闁诲繒鍋為崕宕囨閻愬搫绾ч柛顐亜娴滎垳鎮?', e);
+                        console.error('[RandomRow] Failed to load mixed recommendations', e);
                     }
                 },
 
@@ -8359,7 +8359,7 @@
                             }
                         })
                         .catch(e => {
-                            console.error('[Hero] 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞垮劤缁愮偤鏌℃径濠勫⒈闁稿顦抽·?', e);
+                            console.error('[Hero] Failed to fetch hero data', e);
                             // 婵犵數鍋為崹鍫曞箰閸濄儳鐭撻柛顭戝亝閸欏繘鐓崶銊р槈缂佲偓閸曨剛绠剧€瑰壊鍠曠花濂告煛閸涱亝娅婇柟顔肩秺瀹曞墎鎹勯搹閫涚礄缂傚倷娴囨ご鍝ユ崲閸繄鏆︽俊銈勭劍婵绱掑☉姗嗗剰闁?initApp 缂傚倸鍊搁崐椋庣礊閳ь剟鏌涘☉鍗炵仭闁哄棔鍗冲娲捶椤撶姵鍤勯梺绯曟閺呮粓寮埀?
                         });
                 },
@@ -9101,7 +9101,7 @@
 
                         console.log('[DongguaTV] log');
                     } catch (e) {
-                        console.error('[闂傚倷绀侀幉锛勬暜閿熺姴缁╅梺顒€绉撮拑鐔封攽閻樻彃顏俊顐灦閺屻倝骞囨担鍝ヤ化闂佺粯鏌ㄧ亸?婵犵數濮伴崹娲磿閼测晛鍨濋柛鎾楀嫬鏋?', e);
+                        console.error('[Sources] Failed to refresh sources', e);
                     } finally {
                         this.isTestingSources = false;
                         this.refreshingSources = false;
@@ -9523,17 +9523,17 @@
                                         const html = `
                                             <div class="dplayer-setting-skip-group" style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 5px; padding-top: 5px;">
                                                 <div class="dplayer-setting-item dplayer-setting-skip-toggle" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                                                    <span class="dplayer-label" style="white-space: nowrap;">闂備浇宕垫慨鎾箹椤愶附鍋柛銉㈡櫆瀹曟煡鏌涢幇闈涙灍闁稿顑夐弻娑㈠Ψ閹存粍顦风紒顔芥崌濮婅櫣绱掑鍡樼暥濠电偛鐪伴崐婵嬪箖</span>
+                                                    <span class="dplayer-label" style="white-space: nowrap;">Skip intro/outro</span>
                                                     <div class="dplayer-toggle-icon" style="position: relative; width: 40px; height: 22px; background: ${this.config.enabled ? '#e50914' : 'rgba(255,255,255,0.2)'}; border-radius: 20px; transition: background 0.3s; flex-shrink: 0;">
                                                         <div class="toggle-knob" style="position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transform: translateX(${this.config.enabled ? '18px' : '0'});"></div>
                                                     </div>
                                                 </div>
                                                 <div class="dplayer-setting-item dplayer-setting-set-intro" style="cursor: pointer; justify-content: space-between;">
-                                                    <span class="dplayer-label">闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸嬵亪鏌涢埄鍐姇闁稿顑夐弻娑㈠Ψ閹存粍顦风紒</span>
+                                                    <span class="dplayer-label">Set intro</span>
                                                     <span class="dplayer-value intro-val" style="opacity: 0.8;">${this.formatTime(this.config.intro)}</span>
                                                 </div>
                                                 <div class="dplayer-setting-item dplayer-setting-set-outro" style="cursor: pointer; justify-content: space-between;">
-                                                    <span class="dplayer-label">闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸嬵亪鏌涢埄鍐姇闁稿顑夐弻娑㈠Ψ閹存繃鍣归柡</span>
+                                                    <span class="dplayer-label">Set outro</span>
                                                     <span class="dplayer-value outro-val" style="opacity: 0.8;">${this.formatTime(this.config.outro)}</span>
                                                 </div>
                                                  <div class="dplayer-setting-item dplayer-setting-del-config" style="cursor: pointer; color: #888; font-size: 12px; height: 32px; display: flex; align-items: center; padding: 0 10px; margin-top: 0;">
@@ -9584,7 +9584,7 @@
                                     const iconsRight = dplayerContainer.querySelector('.dplayer-icons-right');
                                     if (iconsRight && !iconsRight.querySelector('.dplayer-next-icon')) {
                                         const nextBtnHtml = `
-                                            <div class="dplayer-icon dplayer-next-icon" data-balloon="婵犵數鍋為崹鍫曞箰閹间緡鏁勯柛鏇ㄥ幘閸楁岸鏌熺紒銏犳灍闁? data-balloon-pos="up">
+                                            <div class="dplayer-icon dplayer-next-icon" data-balloon="Next episode" data-balloon-pos="up">
                                                 <span class="dplayer-icon-content" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;">
                                                     <i class="fas fa-step-forward" aria-hidden="true" style="font-size:18px;"></i>
                                                 </span>
@@ -9723,12 +9723,12 @@
                         // 闂傚倷绀侀幉锛勬暜濡ゅ啰鐭欓柟瀵稿Х绾句粙鏌熼幑鎰靛殭缂佺姷鏁婚弻鐔兼焽閿曗偓閺嬫柨霉閻樺磭娲撮柡灞剧缁犳盯骞橀搹顐ｎ啀缂傚倷璁查崑?
                         const seekHintLeft = document.createElement('div');
                         seekHintLeft.className = 'dplayer-seek-hint left';
-                        seekHintLeft.innerHTML = '<i class="fas fa-backward"></i><span>-10缂</span>';
+                        seekHintLeft.innerHTML = '<i class="fas fa-backward"></i><span>-10s</span>';
                         container.appendChild(seekHintLeft);
 
                         const seekHintRight = document.createElement('div');
                         seekHintRight.className = 'dplayer-seek-hint right';
-                        seekHintRight.innerHTML = '<i class="fas fa-forward"></i><span>+10缂</span>';
+                        seekHintRight.innerHTML = '<i class="fas fa-forward"></i><span>+10s</span>';
                         container.appendChild(seekHintRight);
 
                         // 闂傚倷鑳堕…鍫ユ晝閵堝洨鐭撶憸鐗堝笒閻掑灚銇勯幒鎴濃偓鎼佸几閹达附鍊甸柛顭戝亝閻ㄦ垹绱掗鑲╁ⅵ鐎规洦鍋婂畷鐔碱敆閸屾氨绋?
@@ -10712,7 +10712,7 @@
                     if (currentIndex >= 0 && currentIndex < allSources.length - 1) {
                         this.isAutoRetrying = true;
                         const nextSource = allSources[currentIndex + 1];
-                        this.autoRetryMessage = `濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾崇弸婵炴垯鍨归悞鍨亜閹哄棗浜鹃梻?${failingSource?.site_name} 缂傚倸鍊烽悞锕€鐣峰鈧畷鏇熺節濮橆厼鍓?..`;
+                        this.autoRetryMessage = `Trying next source after ${failingSource?.site_name || 'current source'} failed...`;
                         console.log('[DongguaTV] log');
 
                         setTimeout(() => {
@@ -10737,7 +10737,7 @@
                             }
 
                             // 缂傚倷鑳堕搹搴ㄥ矗鎼淬劌绐楁繛鎴欏焺閺佸洨绱撴担璇＄劷闁崇粯姊婚埀顒€绠嶉崕閬嶅箠鎼达絾濯奸柡灞诲劜閻?闂?闂傚倷绀侀幖顐ょ矓閺夋嚚娲煛閸滀焦鏅╅梺鎼炲労閸撴稑鐣垫笟鈧幃褰掑传閸曨剚鍎撻梺璇查閵堟悂寮婚悢鑲╁祦闁割煈鍠氭禒濂告⒑缁洘娅呴柡鍫墰缁瑦寰勭仦绋夸壕闁挎繂鍊瑰▍鍥ㄣ亜韫囨挸鑸归柍钘夘樀楠炴瑩宕樿閺佹牠姊洪幖鐐测偓鏇灻归悜钘夌?
-                            this.autoRetryMessage = `${failingSource?.site_name || 'Current source'} failed. Switching to ${nextSource.site_name || 'next source'}...`;
+                            this.autoRetryMessage = `Trying next source after ${failingSource?.site_name || 'current source'} failed...`;
                             console.log(`[Auto-Failover] ${this.autoRetryMessage}`);
                             if (failingSource) failingSource.latency = 9998;  // 闂傚倷绀侀幖顐ょ矓閺夋嚚娲煛閸滀焦鏅╅梺鎼炲劘閸斿酣鍩㈤弮鍫熺叄闊洦鍑瑰鎰版煛閸℃绠婚柡宀€鍠栭獮姗€顢氶崨顕呮婵＄偑鍊曞ù姘跺礈濮樿京鐭欏璺侯煬閸氬鏌涘☉鍗炲绩妞ゆ柨顦靛?
                             this.switchSource(nextSource);
@@ -10764,7 +10764,7 @@
                         console.log('[DongguaTV] log');
 
                         if (auto) {
-                            if (typeof dp !== 'undefined' && dp.notice) dp.notice(`闂傚倷绀侀幉锟犮€冮崨鏉戠柈闁秆勵殕閸庡秹鏌曡箛瀣偓鏇犵不缂佹ǜ浜滈柟鎹愭硾閺嬫垿鏌℃径灞惧殌闁宠棄顦甸獮姗€骞囨担绋垮缂傚倷鐒﹀褰掑箰閸愬樊娼? ${nextEp.name}`, 3000);
+                            if (typeof dp !== 'undefined' && dp.notice) dp.notice(`Next episode: ${nextEp.name}`, 3000);
                         }
 
                         this.play(nextEp.url);
