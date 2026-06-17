@@ -9,7 +9,8 @@ It is intentionally limited:
 - exposes `POST /runtime/search`, `category`, `detail`, and `play`;
 - does not load subscription-provided `spider.jar`, py, or js plugins;
 - default mode is `disabled`;
-- `stub` mode only returns empty protocol-shaped results.
+- `stub` mode only returns empty protocol-shaped results;
+- `reflect` mode only loads a trusted local Spider jar that the user explicitly configured.
 
 ## Build
 
@@ -44,6 +45,23 @@ The build script also checks common JDK install roots such as:
 java -jar tools\catvod-runtime-bridge-java\dist\catvod-runtime-bridge.jar --host 127.0.0.1 --port 9977 --mode disabled
 ```
 
+Trusted local Spider reflection smoke run:
+
+```powershell
+java -jar tools\catvod-runtime-bridge-java\dist\catvod-runtime-bridge.jar `
+  --host 127.0.0.1 `
+  --port 9977 `
+  --mode reflect `
+  --spider-jar "D:\trusted\my-spider.jar" `
+  --spider-class "com.example.Spider" `
+  --spider-ext ""
+```
+
+The bridge probes common CatVod-style methods such as `searchContent`, `categoryContent`,
+`detailContent`, and `playerContent`. If a Spider depends on Android-only classes or a
+different CatVod runtime surface, the bridge returns a structured `reflect-error` response
+instead of crashing DongguaTV.
+
 ## Use With The Node Supervisor
 
 Configure `tools\catvod-bridge\bridge-config.json`:
@@ -71,4 +89,5 @@ Then run:
 npm run bridge:catvod
 ```
 
-Future CatVod execution logic should be added behind an explicit user-installed runtime configuration, not by automatically executing subscription jar links.
+Future CatVod execution logic should remain behind an explicit user-installed runtime configuration,
+not by automatically executing subscription jar links.

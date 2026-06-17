@@ -104,23 +104,32 @@ This repository now includes a minimal Java child bridge source tree at `tools/c
 npm run bridge:java:build
 ```
 
-The output jar is `tools\catvod-runtime-bridge-java\dist\catvod-runtime-bridge.jar`. It currently implements the local HTTP protocol in disabled/stub mode only; it does not execute TVBox plugin code.
+The output jar is `tools\catvod-runtime-bridge-java\dist\catvod-runtime-bridge.jar`. It implements disabled, stub, and trusted local reflect modes. Reflect mode only loads a Spider jar and class name that the user manually configures; subscription-provided jar links are still not executed automatically.
 
 On Windows, the build script can auto-detect JDK installs under common roots such as `C:\Program Files\Microsoft`. It was validated with Microsoft OpenJDK 21.
 
 The desktop Settings page can now build and start the local Java Bridge. The generated jar is written under Electron `userData\plugin-runtime\catvod-runtime-bridge-java`, then the app sets `externalHttpBaseUrl` to the localhost bridge URL. This avoids writing generated files into `app.asar` or the installed program resources.
 
-Settings also shows local bridge status, including running state, PID, URL, mode, and jar path. Use `Stop Local Bridge` to stop the child process and clear the local `externalHttpBaseUrl`.
+Settings also shows local bridge status, including running state, PID, URL, mode, bridge jar path, trusted Spider jar readiness, and trusted Spider class name. Use `Stop Local Bridge` to stop the child process and clear the local `externalHttpBaseUrl`.
 
 The Subscriptions panel has a per-source `Diagnose` action. Plugin-required sources report whether the local Java Bridge is running and explain why DongguaTV does not directly execute subscription-provided plugin code.
 
-## Future Java Runtime Bridge
+## Trusted Reflect Mode
 
-The Java child bridge itself still needs to be implemented separately. It should:
+The first Java runtime bridge is implemented as a conservative reflection bridge. It probes common CatVod-style Spider methods:
 
-- is installed and configured explicitly by the user;
-- runs as a local process outside Electron;
-- exposes the same HTTP protocol;
-- never loads subscription jar files without explicit user approval;
-- redacts URLs, headers, cookies, and tokens from logs;
-- converts CatVod search, category, detail, and play results into the existing DongguaTV `PlayUrlResult` flow.
+- `searchContent`
+- `categoryContent`
+- `detailContent`
+- `playerContent`
+
+If the Spider depends on Android-only classes or a different runtime surface, the bridge returns a structured `reflect-error` instead of crashing DongguaTV.
+
+The runtime must continue to:
+
+- require explicit user configuration;
+- run as a local process outside Electron;
+- expose the same HTTP protocol;
+- never load subscription jar files without explicit user approval;
+- redact URLs, headers, cookies, and tokens from logs;
+- convert CatVod search, category, detail, and play results into the existing DongguaTV `PlayUrlResult` flow.

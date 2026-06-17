@@ -178,13 +178,13 @@ npm run bridge:catvod
 
 Default mode returns `runtime-not-configured` and does not execute CatVod jar, py, or js plugin code. Java HTTP child bridge mode exists, but it only starts a manually configured trusted local bridge jar when `mode=java-http`, `allowJavaProcess=true`, and `trustedBridgeJar=true`. See `docs/CATVOD_BRIDGE.md` for the bridge protocol and future Java Runtime Bridge plan.
 
-A minimal Java child bridge source tree is included at `tools/catvod-runtime-bridge-java`. It builds to a local trusted jar with `npm run bridge:java:build` when a JDK is installed. The current jar protocol implementation supports disabled/stub responses only.
+A minimal Java child bridge source tree is included at `tools/catvod-runtime-bridge-java`. It builds to a local trusted jar with `npm run bridge:java:build` when a JDK is installed. The jar supports disabled, stub, and trusted local reflect modes. Reflect mode requires a user-configured local Spider jar path and Spider class name; subscription-provided jar links are not executed automatically.
 
 The Java bridge build path has been validated with Microsoft OpenJDK 21. The script can auto-detect common Windows JDK install locations when `java` is not yet visible in the current terminal `PATH`.
 
 Settings exposes one-click local Java Bridge build/start actions. Built jars are stored in Electron `userData\plugin-runtime\catvod-runtime-bridge-java`, and the app auto-fills `externalHttpBaseUrl` with the localhost bridge URL after startup.
 
-The Settings page also shows local Java Bridge running state, PID, URL, mode, and jar path, with refresh and stop controls.
+The Settings page also shows local Java Bridge running state, PID, URL, mode, bridge jar path, trusted Spider jar readiness, and trusted Spider class name, with refresh and stop controls.
 
 The Subscriptions panel exposes per-source diagnostics. Plugin-required sources show whether the local Java Bridge is running and explain that subscription-provided plugin code is not executed directly.
 
@@ -200,7 +200,7 @@ Plugin-required source bridge dispatch is exposed through backend APIs for contr
 - `POST /api/plugin-sources/:sourceId/detail`
 - `POST /api/plugin-sources/:sourceId/play`
 
-These APIs send the selected plugin-required source and operation parameters to the configured local External HTTP Bridge. The payload explicitly carries `allowSubscriptionJarExecution: false` and `allowRemoteCodeExecution: false`. If the bridge is not configured, the API returns a clear error. If the local Java bridge is running in `stub` mode, the APIs return `stub` status without executing TVBox plugin code. This prepares the app-side contract for a future trusted CatVod runtime while preserving the current safety boundary.
+These APIs send the selected plugin-required source and operation parameters to the configured local External HTTP Bridge. The payload explicitly carries `allowSubscriptionJarExecution: false` and `allowRemoteCodeExecution: false`. If the bridge is not configured, the API returns a clear error. If the local Java bridge is running in `stub` mode, the APIs return `stub` status without executing TVBox plugin code. If the local Java bridge is running in `reflect` mode, it only invokes the user-configured trusted local Spider jar/class and returns structured `reflect` or `reflect-error` responses.
 
 ## Playback Diagnosis
 

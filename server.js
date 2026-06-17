@@ -1107,7 +1107,7 @@ function normalizePluginPlayResult(response, source) {
             codec: item.codec || 'unknown',
             hdr: !!item.hdr,
             sourceKind: 'plugin-required',
-            headers: item.headers || {},
+            headers: item.headers || item.header || {},
             expiresAt: item.expiresAt || null,
             sourceId: source.id,
             sourceName: source.name
