@@ -3837,8 +3837,14 @@
                             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
                                 <span style="color:#ddd; font-size:12px;">sites {{ sub.summary && sub.summary.sites || 0 }}</span>
                                 <span style="color:#ddd; font-size:12px;">live {{ sub.summary && sub.summary.lives || 0 }}</span>
+                                <span style="color:#93c5fd; font-size:12px;">warehouses {{ sub.summary && sub.summary.warehouses || 0 }}</span>
+                                <span v-if="sub.summary && sub.summary.expandedWarehouses" style="color:#60a5fa; font-size:12px;">expanded {{ sub.summary.expandedWarehouses }}</span>
                                 <span style="color:#fbbf24; font-size:12px;">plugin {{ sub.summary && sub.summary.pluginRequired || 0 }}</span>
                                 <span style="color:#f87171; font-size:12px;">unsupported {{ sub.summary && sub.summary.unsupported || 0 }}</span>
+                            </div>
+                            <div v-if="sub.metadata && sub.metadata.parserDiagnostics"
+                                style="color:#8f98aa; font-size:11px; margin-top:8px;">
+                                parser: {{ sub.metadata.parserDiagnostics.configKind || 'tvbox-config' }} / {{ sub.metadata.parserDiagnostics.parseMode || 'strict' }}
                             </div>
                             <div v-if="sub.metadata && (sub.metadata.jar || sub.metadata.spider)"
                                 style="color:#888; font-size:11px; margin-top:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">

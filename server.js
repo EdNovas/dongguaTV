@@ -1010,7 +1010,9 @@ app.post('/api/subscriptions/import', async (req, res) => {
             config: req.body && req.body.config,
             localFileName: req.body && req.body.localFileName,
             name: req.body && req.body.name,
-            enabled: req.body && req.body.enabled
+            enabled: req.body && req.body.enabled,
+            expandWarehouses: req.body && req.body.expandWarehouses,
+            warehouseLimit: req.body && req.body.warehouseLimit
         });
         res.json(result);
     } catch (error) {

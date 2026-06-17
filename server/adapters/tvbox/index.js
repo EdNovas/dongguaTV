@@ -19,6 +19,84 @@ class TvboxService {
         this.httpClient = httpClient;
     }
 
+    async expandWarehouses(warehouses, subscriptionId, options = {}) {
+        const enabled = options.enabled !== false;
+        const limit = Number.isFinite(Number(options.limit)) ? Math.max(0, Number(options.limit)) : 12;
+        const result = {
+            enabled,
+            limit,
+            attempted: 0,
+            expanded: 0,
+            errors: [],
+            sources: [],
+            parses: [],
+            liveChannels: [],
+            liveErrors: []
+        };
+
+        if (!enabled || !Array.isArray(warehouses) || warehouses.length === 0 || limit === 0) {
+            return result;
+        }
+
+        for (const [warehouseIndex, warehouse] of warehouses.slice(0, limit).entries()) {
+            result.attempted += 1;
+            try {
+                const childConfig = await loadTvboxConfig({ url: warehouse.url }, this.httpClient);
+                const childFields = pickTvboxFields(childConfig);
+                const sourceIdSalt = `${subscriptionId}:warehouse:${warehouse.url}`;
+                const childSources = normalizeSites(childFields.sites, {
+                    subscriptionId,
+                    sourceIdSalt,
+                    rootConfig: childFields
+                }).map(source => ({
+                    ...source,
+                    warehouse: {
+                        index: warehouseIndex,
+                        name: warehouse.name,
+                        url: warehouse.url
+                    }
+                }));
+                const childParses = normalizeParses(childFields.parses, `${subscriptionId}:warehouse:${warehouseIndex}`);
+                const childLives = await parseLives(childFields.lives, `${subscriptionId}:warehouse:${warehouseIndex}`, this.httpClient);
+
+                result.sources.push(...childSources);
+                result.parses.push(...childParses.map(parse => ({
+                    ...parse,
+                    sourceSubscriptionId: subscriptionId,
+                    warehouse: {
+                        index: warehouseIndex,
+                        name: warehouse.name,
+                        url: warehouse.url
+                    }
+                })));
+                result.liveChannels.push(...childLives.channels.map(channel => ({
+                    ...channel,
+                    sourceSubscriptionId: subscriptionId,
+                    warehouse: {
+                        index: warehouseIndex,
+                        name: warehouse.name,
+                        url: warehouse.url
+                    }
+                })));
+                result.liveErrors.push(...childLives.errors.map(error => ({
+                    ...error,
+                    warehouse: warehouse.name || warehouse.url
+                })));
+                result.expanded += 1;
+            } catch (error) {
+                result.errors.push({
+                    index: warehouseIndex,
+                    name: warehouse.name,
+                    url: warehouse.url,
+                    reason: error.code || 'warehouse-import-failed',
+                    message: String(error.message || error).slice(0, 240)
+                });
+            }
+        }
+
+        return result;
+    }
+
     listSubscriptions() {
         return this.store.getSubscriptions().map(sanitizeSubscription);
     }
@@ -73,13 +151,27 @@ class TvboxService {
             JSON.stringify(fields.sites.map(site => site && (site.key || site.name || site.api)).slice(0, 20))
         ])}`;
 
+        const shouldExpandWarehouses = input.expandWarehouses !== false
+            && fields.warehouses.length > 0
+            && fields.sites.length === 0
+            && fields.lives.length === 0;
+        const warehouseExpansion = await this.expandWarehouses(fields.warehouses, subscriptionId, {
+            enabled: shouldExpandWarehouses,
+            limit: input.warehouseLimit
+        });
         const sources = normalizeSites(fields.sites, {
             subscriptionId,
             rootConfig: fields
-        });
-        const parses = normalizeParses(fields.parses, subscriptionId);
+        }).concat(warehouseExpansion.sources);
+        const parses = normalizeParses(fields.parses, subscriptionId).concat(warehouseExpansion.parses);
         const liveResult = await parseLives(fields.lives, subscriptionId, this.httpClient);
-        const summary = summarizeSources(sources, liveResult.channels, parses);
+        const liveChannels = liveResult.channels.concat(warehouseExpansion.liveChannels);
+        const summary = {
+            ...summarizeSources(sources, liveChannels, parses, fields.warehouses),
+            expandedWarehouses: warehouseExpansion.expanded,
+            attemptedWarehouses: warehouseExpansion.attempted,
+            warehouseErrors: warehouseExpansion.errors.length
+        };
         const timestamp = new Date().toISOString();
 
         const subscription = {
@@ -105,7 +197,17 @@ class TvboxService {
                 ijkCount: Array.isArray(fields.ijk) ? fields.ijk.length : 0,
                 player: fields.player,
                 ext: fields.ext,
-                liveErrors: liveResult.errors
+                warehouses: fields.warehouses,
+                warehouseCount: fields.warehouses.length,
+                warehouseExpansion: {
+                    enabled: warehouseExpansion.enabled,
+                    limit: warehouseExpansion.limit,
+                    attempted: warehouseExpansion.attempted,
+                    expanded: warehouseExpansion.expanded,
+                    errors: warehouseExpansion.errors
+                },
+                parserDiagnostics: fields.parserDiagnostics,
+                liveErrors: liveResult.errors.concat(warehouseExpansion.liveErrors)
             },
             rawConfig: isInlineConfig ? config : undefined,
             createdAt: timestamp,
@@ -120,7 +222,7 @@ class TvboxService {
         const result = {
             subscription,
             sources,
-            liveChannels: liveResult.channels,
+            liveChannels,
             parses
         };
         this.store.upsertImportResult(result);
@@ -130,7 +232,8 @@ class TvboxService {
             summary,
             sources,
             liveChannels: liveResult.channels,
-            parses
+            parses,
+            warehouses: fields.warehouses
         };
     }
 
@@ -149,7 +252,8 @@ class TvboxService {
             filePath: subscription.filePath,
             config: subscription.rawConfig,
             localFileName: subscription.localFileName,
-            enabled: subscription.enabled
+            enabled: subscription.enabled,
+            expandWarehouses: true
         });
     }
 
@@ -252,7 +356,7 @@ class TvboxService {
             playable: source.status === 'available' || source.supportLevel === 'basic' || source.supportLevel === 'full',
             reason: 'http-source',
             message: 'This source is handled as a normal HTTP-compatible source. Use health check if search or detail requests fail.',
-            actions: ['Run source health check.', 'If playback needs headers, use LocalProxy or MPC external playback.']
+            actions: ['Run source health check.', 'If playback needs headers, use LocalProxy or external playback.']
         };
     }
 }

@@ -123,6 +123,16 @@ Supported in this phase:
 
 TVBox JSON parsing tolerates common JSON-like comments, including standalone `#` comment lines found in some shared configuration files, while still requiring the remaining content to be valid JSON.
 
+TVBox intake now includes a tolerant parser pass for common subscription shapes found in public TVBox lists:
+
+- HTML or binary/image responses are rejected with a clear payload-kind reason instead of a generic JSON error.
+- JSON-like configs may be recovered when they use single quotes, trailing commas, unquoted object keys, bare string values, raw control characters inside strings, or extra text after the first JSON object.
+- Plain-text multi-warehouse lists are recognized and stored as warehouse metadata.
+- Warehouse objects using `urls`, `storeHouse`, `storehouse`, or `warehouses` arrays are recognized.
+- Warehouse-only imports automatically expand a bounded number of child warehouses, defaulting to the backend limit, so multi-warehouse subscriptions can contribute ordinary HTTP/MacCMS sources without hard-coding third-party URLs.
+
+Encrypted, obfuscated, image-disguised, or binary subscription payloads are still not decoded automatically. The app identifies them as unsupported payloads unless a future trusted adapter is added.
+
 Plugin-like sources are marked `plugin-required` and are not executed.
 
 Enabled TVBox HTTP/MacCMS-compatible sources that are marked searchable are included in normal search. Search results keep a `tvbox:` source key so the detail endpoint can fetch the matching user subscription source. Plugin-required and unsupported sources are skipped by search and remain visible through diagnostics.

@@ -70,7 +70,7 @@ function normalizeSite(site, context) {
     const key = String(site.key || site.name || site.api || `site-${context.index}`).trim();
     const support = inferSourceSupport(site, context.rootConfig);
     return {
-        id: `tvbox-source-${stableHash([context.subscriptionId, key, site.api, String(context.index)])}`,
+        id: `tvbox-source-${stableHash([context.sourceIdSalt || context.subscriptionId, key, site.api, String(context.index)])}`,
         sourceSubscriptionId: context.subscriptionId,
         sourceType: support.sourceType,
         key,
@@ -117,11 +117,12 @@ function countBy(items, predicate) {
     return items.filter(predicate).length;
 }
 
-function summarizeSources(sources, liveChannels, parses) {
+function summarizeSources(sources, liveChannels, parses, warehouses = []) {
     return {
         sites: sources.length,
         lives: liveChannels.length,
         parses: parses.length,
+        warehouses: warehouses.length,
         pluginRequired: countBy(sources, source => source.status === 'plugin-required'),
         unsupported: countBy(sources, source => source.status === 'unsupported'),
         available: countBy(sources, source => source.status === 'available' || source.status === 'partial')
