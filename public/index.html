@@ -3244,15 +3244,15 @@
                     <div class="hero-bg" :style="{ backgroundImage: 'url(' + item.backdrop + ')' }"></div>
                     <div class="hero-overlay">
                         <div class="hero-content">
-                            <div class="hero-tag">闂傚倷绀侀幖顐︽偋濠婂牆绀堟繛鍡樻尭缁?TOP {{ index + 1 }}</div>
+                            <div class="hero-tag">Featured TOP {{ index + 1 }}</div>
                             <h1 class="hero-title">{{ item.title }}</h1>
                             <p class="hero-desc">{{ item.overview }}</p>
                             <div class="hero-btns" style="display: flex; gap: 15px; flex-wrap: wrap;">
                                 <button class="btn-play" @click="autoSearch(item.title, item.originalTitle)"><i
                                         class="fas fa-play"></i>
-                                    闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡</button>
+                                    Play</button>
                                 <button class="btn-info" @click="showMovieInfo(item.rawData)"><i
-                                        class="fas fa-info-circle"></i> 闂傚倷绀侀幖顐⒚洪敃鈧…鍥р枎閹惧秴娲獮鎰償閿濆倹鏁甸梻浣规灱閺呮盯宕埡鍐╊潟</button>
+                                        class="fas fa-info-circle"></i> Details</button>
                             </div>
                         </div>
                     </div>
@@ -3266,7 +3266,7 @@
             <div class="search-box-wrapper" :class="{ 'compact': !searched && scrollY > 400 }">
                 <i class="fas fa-search search-icon" @click="doSearch"></i>
                 <input type="text" v-model="keyword" @keyup.enter="doSearch" @input="debouncedSearch"
-                    class="search-input" placeholder="闂備礁鎼ˇ顖炴偋婵犲洤绠伴柟闂寸閻鏌涢埄鍐姇闁稿顑夐弻娑㈠Ψ閹存繂顏╅柍褜鍓氭繛濠囧蓟閻旇　鍋撳☉娆樼劷濠⒀屼簻椤儻顦辩紒顔界懃椤繘宕稿Δ鈧獮銏′繆閵堝嫮顦﹂柍褜鍓欑壕顓犳?..">
+                    class="search-input" placeholder="Search movies, series, anime, live channels, or sources...">
             </div>
         </div>
 
@@ -3276,7 +3276,7 @@
                 style="margin-top: 60px; margin-bottom: 10px;">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #667eea, #764ba2);"></div>
-                    <div class="section-title"><i class="fas fa-history"></i> 缂傚倸鍊搁崐椋庣礊閳ь剟鏌涘☉鍗炵仭闁哄棔鍗抽弻锝夋偄閸濄儲鍣ч梺绋匡龚椤曆囨晝</div>
+                    <div class="section-title"><i class="fas fa-history"></i> Continue Watching</div>
                     <!-- 闂傚倷绀侀幉锟犳嚌妤ｅ啫瀚夋い鎺戝閺佸棝鏌ｉ幇顔煎妺闁稿鍔欓弻銈夊传閵夘喗姣岄梺绋款儐閹稿骞忛崨鏉戝窛濠电姴瀚峰ú顖炴⒒?(闂傚倷绀侀幉锟犳偡閵夆晜鍤愭い鏍仜閸氳銇勯弴妤€浜鹃梺鍝勮嫰閹虫﹢宕洪埀顒併亜閹烘垵顏╃紒鈧崟顖涚叄闊洦鍑瑰鎰亜韫囧鐏柟? -->
                     <span v-if="syncEnabled" style="margin-left: 8px; font-size: 12px; opacity: 0.6; cursor: pointer;"
                         :title="syncStatus === 'syncing' ? 'Syncing' : syncStatus === 'success' ? 'Synced' : syncStatus === 'error' ? 'Sync failed' : 'Sync status'"
@@ -3290,7 +3290,7 @@
                     </span>
                     <span class="expand-toggle" @click="clearWatchHistory"
                         style="margin-left: auto; color: #888; font-size: 12px;">
-                        <i class="fas fa-trash-alt"></i> 濠电姷鏁搁崑鐐哄箰閹间礁绠犳俊顖濄€€閺嬪秹骞栧ǎ顒€濡肩紒鈧崒鐐寸厪濠电偟鍋撳▍鍛存煕?
+                        <i class="fas fa-trash-alt"></i> Clear
                     </span>
                 </div>
 
@@ -3348,7 +3348,7 @@
                     <span class="appletv-feature-icon"><i class="fas fa-broadcast-tower"></i></span>
                     <span>
                         <span class="appletv-feature-title">Live TV</span>
-                        <span class="appletv-feature-meta">闂傚倷鑳堕崕鐢稿疾濞戙垺鍋ら柕濞炬櫅缁犱即寮堕崼顐ゅ帨缂佹唻缍侀弻鐔告綇閸撗呯獥婵</span>
+                        <span class="appletv-feature-meta">Live channels from user subscriptions</span>
                     </span>
                 </button>
                 <button class="appletv-feature-card"
@@ -3356,14 +3356,14 @@
                     <span class="appletv-feature-icon"><i class="fas fa-rss"></i></span>
                     <span>
                         <span class="appletv-feature-title">Source Picks</span>
-                        <span class="appletv-feature-meta">闂備浇宕垫慨鎶芥⒔瀹ュ鍨傞柦妯猴級閿濆绀嬫い鎰枑閺</span>
+                        <span class="appletv-feature-meta">Manage TVBox and local sources</span>
                     </span>
                 </button>
                 <button class="appletv-feature-card" @click="handleAppleNav({ id: 'settings', action: 'settings' })">
                     <span class="appletv-feature-icon"><i class="fas fa-sliders-h"></i></span>
                     <span>
                         <span class="appletv-feature-title">Player</span>
-                        <span class="appletv-feature-meta">闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡ê銆掑锝呬壕閻庤娲樻繛濠冧繆閹间讲鈧箓骞嬪┑鍥ㄧ彫缂</span>
+                        <span class="appletv-feature-meta">External players and playback preferences</span>
                     </span>
                 </button>
             </div>
@@ -3392,7 +3392,7 @@
                     </span>
                     <!-- 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞р偓閺嬫牕顪冮妶鍡樺暗闁哥姴娴峰濠囧捶椤撶姷锛滈梺?-->
                     <span v-if="!rowLists[key]" style="margin-left: 15px; color: #666; font-size: 12px;">
-                        <i class="fas fa-spinner fa-spin"></i> 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞р偓閺?..
+                        <i class="fas fa-spinner fa-spin"></i> Loading...
                     </span>
                 </div>
                 <!-- 闂傚倷绀侀幉锟犲礉閺囥垹绠犻幖鎼厛閺佸﹪鏌熼悧鍫熺凡缂佲偓瀹€鍕厽婵﹩鍓﹂崵鐔虹磼閳ь剟宕熼娑氬幐闂佸壊鍋呯换宥呂ｈぐ鎺撶厸闁糕剝鐟ラ弸娑欘殽閻愭潙鐏存い銏＄懇閹崇偤濡烽鍙繈姊绘担鍛婃儓閻庢凹鍓氶弲鑸电鐎ｎ€附鎱ㄥΟ鍨厫闁?-->
@@ -3439,7 +3439,7 @@
                                 <i class="fas fa-chevron-left"></i>
                             </button>
                             <div class="page-info">
-                                <span class="page-num">{{ viewPages[key] || 1 }}</span> 婵?
+                                <span class="page-num">{{ viewPages[key] || 1 }}</span> / {{ getTotalViewPages(key) }}
                             </div>
                             <button class="page-btn" @click="changeViewPage(key, 1)"
                                 :disabled="(viewPages[key] || 1) >= getTotalViewPages(key) && rowConfigs[key].page >= (rowConfigs[key].totalPages || 999)">
@@ -3456,11 +3456,11 @@
             <div class="d-flex align-items-center gap-2 mb-5 mt-2">
                 <button class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2" @click="goHome"
                     style="color: #fff; border-color: rgba(255,255,255,0.3);">
-                    <i class="fas fa-arrow-left me-0 me-md-2"></i><span class="d-none d-md-inline">闂備礁鎼ˇ顐﹀疾濠婂牆钃熼柕濞垮剭濞差亜鍐€妞ゎ厽甯炵壕楣冩⒑閸濆嫮鈻夐柛妯虹秺閸┾偓</span>
+                    <i class="fas fa-arrow-left me-0 me-md-2"></i><span class="d-none d-md-inline">Back</span>
                 </button>
                 <div class="section-header mb-0 ms-3 ms-md-4">
                     <div class="section-line"></div>
-                    <div class="section-title">濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾跺缂佺姾顫夌换婵囩節閸屾稑娅ｉ梺? "{{ keyword }}"</div>
+                    <div class="section-title">Search Results for "{{ keyword }}"</div>
                 </div>
             </div>
 
@@ -3477,7 +3477,7 @@
                             <div style="font-size:12px; color:#999">{{ group.name }}</div>
                         </div>
                         <div class="rating-badge" style="background:var(--accent); color:#fff; border:none;">
-                            {{ group.sources.length }} 濠?                        </div>
+                            {{ group.sources.length }} sources                        </div>
                         <div v-if="countTvboxSources(group) > 0"
                             style="position:absolute; left:8px; top:8px; background:rgba(245,158,11,0.94); color:#111827; font-size:10px; font-weight:800; padding:3px 7px; border-radius:999px; box-shadow:0 4px 16px rgba(0,0,0,0.35);">
                             TVBox {{ countTvboxSources(group) }}
@@ -3492,17 +3492,17 @@
                 <div class="spinner-border text-danger" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
-                <div class="mt-2 text-muted small" v-if="groupedList.length > 0">濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾跺缂佺姾顫夌换婵囩節閸屾稑娅ｉ梺绋款儏缁夊綊寮婚敓鐘茬倞闁靛濡囩粙鍥ь渻閵堝繒鐣虫繛澶嬫礋楠炴劘顦圭€规洜鍠栭、妤呭磼濠婂啰鍘?..</div>
-                <div class="mt-2 text-muted small" v-else>濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾跺缂佲偓閸岀偞鐓忓┑鐐戝啯鍣介弫鍫ユ⒒娴ｇ儤鍤€闁告艾顑囬崚鎺撴償閵娿儳锛?..</div>
+                <div class="mt-2 text-muted small" v-if="groupedList.length > 0">Loading more sources...</div>
+                <div class="mt-2 text-muted small" v-else>Searching...</div>
             </div>
 
             <div v-if="!loading && groupedList.length === 0"
                 style="padding: 42px 20px 60px; margin-top: -20px; max-width: 860px; margin-left:auto; margin-right:auto;">
                 <div class="text-center">
                     <i class="fas fa-search" style="font-size: 44px; color: #555; margin-bottom: 18px;"></i>
-                    <h4 style="color: #ddd; margin-bottom: 12px;">闂傚倷绀侀幖顐⑽涘Δ鍛９闁荤喎搴滈懓鎸庛亜閹惧崬鐏╃紒鐘劦閺岀喖顢涢崱妤€鏆熼柛妯诲浮濮婃椽妫冨☉娆樻闂佷紮闄勯?keyword }}闂傚倷绶氬褍螞濡ゅ啰鐭撻悹楦裤€€閺嬫棃鏌熸潏楣冩闁稿骸娴风槐鎺斺偓锝庝簽娴犮垻鎲搁幍顔尖枅闁诡喚顢婇ˇ鏌ユ倵濮樼厧骞橀柤</h4>
+                    <h4 style="color: #ddd; margin-bottom: 12px;">No results for "{{ keyword }}"</h4>
                     <div style="color: #888; font-size: 14px; line-height: 1.8;">
-                        闂傚倷绀侀幉锟犳偡椤栫偛鍨傛い鏍ㄧ〒椤╂煡鏌熼悜妯荤叄闁绘帒锕ョ换婵嬫濞戝啿濮涘┑陇灏欓…鍫ュ煡婢舵劕绠奸柛鎰╁妼缁犳椽姊洪崫鍕靛剰闁哥喐娼欓悾鐑藉Ψ閵夘喖鎮戦梺鍛婂姧缁茶姤绂嶉幆顬″綊鏁愰崼鐕佷哗闂佸搫妫楀Λ娑氭閹烘挸绶為悘鐐电摂閺嗩參姊洪幖鐐插Ω闁告梹鍨甸锝団偓鐢电《閸嬫捇妫冨☉娆愬枑闂佸憡鐟﹀畝鎼佸蓟濞戞粎鐤€闁哄倸绨遍弸娆撴⒑鏉炴壆璐伴柛姗€绠栭獮蹇涙偐瀹割喖鎮戦梺鍛婂姧缁茶姤绂嶆ィ鍐╃厱閻忕偛澧介幊鍛存煟閻斿憡宕屾慨濠傤煼瀹曠厧鈽夊Ο闂寸磿婵犵數鍋涢悧濠囧垂瑜版帒绠柣妯虹－缁♀偓闂佸憡鍔忛弲婵嬪礉闁垮绠鹃柡澶嬪灥閹垵菐閸ャ劍銇濇い銏″哺閸╋繝宕ㄩ鐐叉尋闂佺澹堥幓顏嗘閺囩姷鐭撳┑鍌氭啞閻撴洟鏌熼幆褏锛嶇€涙繈鎮峰鍛暭闁绘挴鈧磭鏆﹂柨婵嗩槸绾惧吋绻涢崱妯虹仼闁规彃娼″娲偡閺夋寧鍊紓渚囧枛闁帮絽鐣烽幒妤€惟闁冲搫鍊搁崜顓㈡⒑閸涘﹥澶勯柛鎾寸洴閹儵鏌嗗鍡欏幗濠碘槅鍨伴悘婵嬫偂閹扮増鐓冪憸婊堝礂濞戙垺鈷旂€广儱顦悞?                    </div>
+                        Try another keyword, refresh sources, or import a TVBox subscription.
                 </div>
 
                 <div style="margin-top:24px; border:1px solid rgba(255,255,255,0.12); border-radius:18px; background:rgba(255,255,255,0.06); padding:18px; text-align:left; box-shadow:0 20px 60px rgba(0,0,0,0.22);">
@@ -3512,7 +3512,7 @@
                                 <i class="fas fa-stethoscope" style="color:#f59e0b; margin-right:8px;"></i>Search Diagnostics
                             </div>
                             <div style="color:#8f98aa; font-size:12px; margin-top:4px;">
-                                TVBox 闂傚倷绀佸﹢杈╁垝椤栨粍鏆滃┑鐘插€甸弸搴ㄦ煏韫囨洖袥闁衡偓閿曞倹鐓欓梺顓ㄧ畱婢ь喗绻涢幊宄版处閻撴洟鎮楅敐搴′簵濞存嚎鍨介弻锝夋晜閽樺浼岄悗瑙勬礃瀹€鎼併€侀弴銏狀潊闁炽儲鍓氭导鍛存⒑閼姐倕孝婵炲眰鍊濋弫鍐Ψ閳轰浇鎽曢梺鎼炲労閸撴岸寮查鍕€堕柣鎰硾娴滃綊鏌ｉ悢鍝ョ畵闂囧鏌涜箛鎾虫倯闁汇劍鍨剁换娑㈠箵閹烘挸浠村Δ鐘靛仦鐢剝淇婇悜鑺ユ櫇闁逞屽墴閸╂盯寮崼鐔蜂哗濠电偞鍨惰摫婵犫偓閻楀牏绡€闁逞屽墴椤㈡﹢濮€閳ュ啿澹?jar闂傚倷绶氬褍螞閺冨牆鍨傛い?闂?js闂?                            </div>
+                                TVBox diagnostics show built-in search, HTTP sources, plugin-required sources, and local bridge status without executing unknown plugins.
                         </div>
                         <button class="btn-info" @click="loadSearchDiagnostics" :disabled="searchDiagnosticsLoading"
                             style="border:0; padding:8px 12px; font-size:12px;">
@@ -3523,7 +3523,7 @@
 
                     <div v-if="searchDiagnosticsLoading && !searchDiagnostics"
                         style="color:#9ca3af; font-size:13px; padding:16px 0 4px;">
-                        濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾跺缂佲偓閸℃稒鐓曢柍鈺佸枤閻掍粙鏌嶈閸忔稓鍒掑▎鎾跺祦闁哄诞宀€鍙嗛梺鍛婁緱閸樺吋绂嶇捄琛℃斀闁绘ɑ鐟ョ€氼剚鎱ㄦ径濞炬斀妞ゆ棁濮ら崐鎰殽閻愨晛浜?..
+                        Loading diagnostics...
                     </div>
 
                     <div v-if="searchDiagnostics" style="margin-top:16px;">
@@ -3572,14 +3572,14 @@
                     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;">
                         <button class="btn-info" @click="showSubscriptionPanel=true; loadSubscriptionData()"
                             style="border:0; padding:9px 14px; font-size:12px;">
-                            <i class="fas fa-rss"></i> 闂備浇宕垫慨鎶芥⒔瀹ュ鍨傞柦妯猴級閿濆绀嬫い鎰枑閺?                        </button>
+                            <i class="fas fa-rss"></i> Subscriptions</button>
                         <button class="btn-info" @click="showSettingsModal=true; loadPlayerSettings(); loadPluginRuntimeSettings()"
                             style="border:0; padding:9px 14px; font-size:12px;">
-                            <i class="fas fa-cog"></i> 闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸?
+                            <i class="fas fa-cog"></i> Settings
                         </button>
                         <button class="btn btn-outline-danger" @click="clearSearch"
                             style="border-radius: 20px; padding: 8px 18px;">
-                            <i class="fas fa-home"></i> 闂備礁鎼ˇ顐﹀疾濠婂牆钃熼柕濞垮剭濞差亜鍐€妞ゎ厽甯炵壕楣冩⒑閸濆嫮鈻夐柛妯虹秺閸┾偓?
+                            <i class="fas fa-home"></i> Home
                         </button>
                     </div>
                 </div>
@@ -3591,7 +3591,7 @@
             <div class="tv-icon-wrapper">
                 <i class="fas fa-times"></i>
             </div>
-            <span class="tv-text">闂傚倷鑳堕…鍫㈡崲閹寸偟绠惧┑鐘蹭迹?TV</span>
+                            <span>Exit TV</span>
             <div class="tv-glow"></div>
         </div>
 
@@ -3600,17 +3600,17 @@
                 <!-- TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鍊垫繛鍫濈仢閺嬫捇鏌涚€ｎ偅宕岄柡?(闂?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鈷戦柛婵嗗閺嗐垽鏌涢埡鍌滃ⅹ閾伙絽顭跨捄铏圭伇闁活厼妫濋弻锝咁潩椤掑娈剁紓浣插亾濠㈣埖鍔栭悡鐔搞亜椤愵偄澧┑陇娅ｇ槐鎺椻€﹂幋婵嗩潻濡炪倖娲╃紞渚€宕洪埀顒併亜閹烘垵顏╅悷? -->
                 <div v-if="!isTVMode" class="tv-mode-toggle" @click="toggleTVMode" title="Enter TV mode">
                     <i class="fas fa-tv"></i>
-                    <span>闂佽瀛╅鏍窗閹烘纾婚柟鍓х帛閻?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵</span>
+                        <span>TV Mode</span>
                 </div>
                 <!-- 闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸嬵亪鏌涢埄鍐槈缂佺姵婢橀…鍧楁嚋闂堟稑顫嶉柣?-->
                 <div class="tv-mode-toggle" @click="showSettingsModal = true; loadPlayerSettings()" title="Player settings">
                     <i class="fas fa-cog"></i>
-                    <span>闂傚倷鑳堕…鍫ヮ敄閸涱垱宕查柟鐗堟緲鍥撮梺浼欑到閺堫剚鍒婃總鍛婄厱闁圭偓顨呴幊蹇涙倵</span>
+                        <span>Settings</span>
                 </div>
                 <!-- 闂傚倸鍊风欢锟犲磻閳ь剟鏌涚€ｎ偅宕岄柡灞剧洴楠炲鏁愰崱鈺€鍝楁繝鐢靛仜閹冲矂宕曢幘顔嘉﹂柟鐗堟緲閸楁娊鏌ｉ弮鍫婵☆垰妫濆?-->
                 <div class="tv-mode-toggle" @click="confirmLogout" title="Logout">
                     <i class="fas fa-sign-out-alt"></i>
-                    <span>闂傚倸鍊风欢锟犲磻閳ь剟鏌涚€ｎ偅宕岄柡灞剧洴楠炲鏁愰崱鈺€鍝楁繝鐢靛仜閹冲矂宕曢幘顔嘉</span>
+                        <span>Logout</span>
                 </div>
             </div>
             <div style="font-size:10px; margin-top:10px; opacity:0.5; user-select: none;">
@@ -3627,16 +3627,16 @@
                         <i class="fas fa-broadcast-tower" style="margin-right: 10px; color: #60a5fa;"></i>Live TV
                     </h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
-                        闂傚倷鑳堕崕鐢稿疾濞戙垺鍋ら柕濞炬櫅缁犱即寮堕崼顐ゅ帨缂佹唻缍侀弻鐔告綇閸撗呯獥婵犮垼顫夊ú鐔煎蓟閳╁啫绶為柛顐ｇ箓婵倝姊洪幖鐐测偓鏍垝瀹ュ绠柛娑樼摠閸嬫劗鈧懓澹婇崰鏍р枔婵傚憡鈷戠紒瀣硶缁犵偤鏌涙惔鈥虫毐闁?TVBox / M3U / TXT 闂備浇宕垫慨鎶芥⒔瀹ュ鍨傞柦妯猴級閿濆绀嬫い鏍ㄧ⊕濞呮牠鏌ｈ箛鏇炰哗闁稿鍔欓幃宄扳攽鐎ｎ偆鍘遍梺褰掑亰閸撴岸宕虫禒瀣厽闁靛牆鎳忛ˉ鐐电磼閸屾稑绗ч柟宄邦儏閻ｇ兘宕堕埞顒夊幘缁辨挻鎷呯拠鈩冾吂闂佺绻戠粙鎾跺垝椤撶喓鐟归柍褜鍓欓锝夘敆閸曨偅宓嶅銈嗘尵閸犳捇宕欐禒瀣拺闁革富鍙€濡炬悂鏌涘Ο鍏兼珪闁兼椽浜堕、姘跺焵椤掍椒绻嗛柟缁㈠枛绾惧吋绻涢幋鐐垫噮鐟滈偊鍨跺?M3U8 闂傚倷绀侀幉锟犳偡椤栫偛鍨傚ù鐓庣摠閸庡秹鏌涢幘妤€瀚悵浼存⒑閸濆嫭宸濋柛瀣洴瀵偊宕滄担铏癸紳闂佸憡鍔栭崕鎶藉几閻斿吋鐓欓柟闂存閹插墽鈧鍠撻崝鎴︾嵁濮椻偓瀹曘劑顢涘搴⑿ラ梻?headers 闂傚倷鐒﹂惇褰掑礉瀹€鈧埀顒佺煯閸楁娊濡撮崒鐐查唶闁哄洨鍠撻崝鍫曟⒑鐟欏嫬鍔ょ痪缁㈠幘濡叉劙鏁冮崒娑樹化婵炴挻鑹惧ú銈夊几濞嗗繆鏀介柣鎰级閸犳﹢鏌?mpv.net闂?                    </div>
+                        Live channels are loaded from user-owned TVBox, M3U, or TXT subscriptions. Channels with headers can use the local proxy for external players.</div>
                     <div v-if="liveGroups.length > 0" style="margin-top:20px;">
                         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
                             <button class="btn-info" @click="selectLiveGroup('')"
                                 :style="liveActiveGroup === '' ? 'border:0; padding:7px 12px; font-size:12px; background:rgba(96,165,250,0.28); color:#fff;' : 'border:0; padding:7px 12px; font-size:12px;'">
-                                闂傚倷鑳堕…鍫㈡崲閸儱绀夐柟杈剧畱绾?闂?{{ liveGroups.reduce((sum, group) => sum + (group.count || 0), 0) }}
+                            All {{ liveGroups.reduce((sum, group) => sum + (group.count || 0), 0) }}
                             </button>
                             <button v-for="group in liveGroups" :key="group.name" class="btn-info" @click="selectLiveGroup(group.name)"
                                 :style="liveActiveGroup === group.name ? 'border:0; padding:7px 12px; font-size:12px; background:rgba(96,165,250,0.28); color:#fff;' : 'border:0; padding:7px 12px; font-size:12px;'">
-                                {{ group.name }} 闂?{{ group.count }}
+                            {{ group.name }} {{ group.count }}
                             </button>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
@@ -3653,7 +3653,7 @@
                             </button>
                             <button class="btn-info" @click="clearLiveFilters" :disabled="liveLoading || (!liveActiveGroup && !liveSearch && !showLiveFavoritesOnly)"
                                 style="border:0; padding:9px 12px; font-size:12px;">
-                                濠电姷鏁搁崑鐐哄箰閹间礁绠犳俊顖濄€€閺?
+                                Clear
                             </button>
                         </div>
                         <div style="color:#8f98aa; font-size:11px; margin-bottom:10px;">
@@ -3675,12 +3675,12 @@
                                 <div style="color:#888; font-size:11px; margin-top:4px;">{{ channel.group }}</div>
                                 <div v-if="channel.headers && Object.keys(channel.headers).length"
                                     style="color:#fbbf24; font-size:10px; margin-top:5px;">
-                                    <i class="fas fa-shield-alt"></i> headers 闂?闂佽娴烽崑锝夊磹濠靛牏纾芥慨姗€顤傞弫濠囨煕濞戝崬鏋ゆい鈺冨厴閺屻劌鈹戦崱妯侯槱闂?MPC
+                                    <i class="fas fa-shield-alt"></i> headers: proxy recommended for MPC/mpv
                                 </div>
                                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
                                     <button class="btn-info" @click="playLiveChannel(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
-                                        <i class="fas fa-play"></i> 闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡?
+                                    <i class="fas fa-play"></i> Play
                                     </button>
                                     <button class="btn-info" @click="openLiveChannelWithMpc(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
@@ -3692,12 +3692,12 @@
                                     </button>
                                     <button class="btn-info" @click="copyLiveChannelUrl(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
-                                        <i class="fas fa-copy"></i> 闂傚倷绶氬濠氭⒔閸曨偒鐔嗘俊顖欒閻?
+                                <i class="fas fa-copy"></i> Copy URL
                                     </button>
                                     <button v-if="channel.headers && Object.keys(channel.headers).length" class="btn-info"
                                         @click="copyLiveChannelProxyUrl(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
-                                        <i class="fas fa-shield-alt"></i> 婵犵數鍋涢顓熷垔鐎电绶ら柛褎顨呯粻?
+                                <i class="fas fa-shield-alt"></i> Copy proxy URL
                                     </button>
                                 </div>
                             </div>
@@ -3710,18 +3710,18 @@
                             <button class="btn-info" @click="loadMoreLiveChannels" :disabled="liveLoading"
                                 style="border:0; padding:9px 16px; font-size:12px;">
                                 <i :class="['fas', liveLoading ? 'fa-spinner fa-spin' : 'fa-chevron-down']"></i>
-                                闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婃い鎺嗗亾闁告濞婇弻鈩冨緞鐎ｎ亞鍔稿┑?
+                                Load more
                             </button>
                         </div>
                     </div>
                     <div class="appletv-panel-list" v-else>
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">M3U / M3U8</div>
-                            <div style="color:#888; font-size:12px; margin-top:6px;">缂傚倸鍊烽悞锔剧矙閹次诲洭顢涘鍕靛仺闂佺粯姊婚崕銈嗗垔婵傚憡鐓忛煫鍥ь儏閳ь剚鐗犻敐鐐村緞閹邦厼浠┑鐐叉閻熝呯矙婵犳碍鐓熼幖杈剧稻濞呮洖霉閻欏懐鐣电€规洘甯掗埥澶娢熼悡搴樺亾閹烘挾绠鹃柟鎯ь嚟椤ｆ煡鏌ｉ埡濠傜仸闁靛棗鍊垮畷濂稿即閻斿搫濮</div>
+                        <span>Only user-imported live subscriptions are shown here.</span>
                         </div>
                         <div class="appletv-panel-item">
-                            <div style="color:#fff; font-weight:700;">TXT 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷槈濮橆剙鐏</div>
-                            <div style="color:#888; font-size:12px; margin-top:6px;">闂傚倷娴囬妴鈧柛瀣尰閵囧嫰寮介妸褉妲堥梺浼欏瘜閸ｏ綁骞冨畡鎵虫瀻闊洦鎼╂禒濂告⒑閹肩偛濡界紒璇插€块、娆掔疀濞戞鎽曢梺闈涱樈閸犳鈻撻妸鈺傗拺</div>
+                        <div style="font-weight:800; color:#e5e7eb; margin-bottom:6px;">TXT / M3U playlist support</div>
+                        <div>Import live sources from your own subscription URLs.</div>
                         </div>
                     </div>
                 </div>
@@ -3733,11 +3733,11 @@
                 <button class="info-modal-close" @click="dismissFirstRunGuide"><i class="fas fa-times"></i></button>
                 <div style="padding: 30px;">
                     <h2 style="color:#fff; margin-bottom:12px; font-size:1.6rem;">
-                        <i class="fas fa-magic" style="color:#60a5fa; margin-right:10px;"></i>婵犵妲呴崑鎾跺緤妤ｅ啯鍋嬫俊銈呮媼閺佸啴鏌ゅù瀣珕濠殿垰銈搁弻娑㈠箻濡も偓閹冲繘鎮?
-                    </h2>
+                        First Run Guide</h2>
+
                     <div style="color:#aaa; font-size:14px; line-height:1.8;">
-                        闂佽娴烽崑锝夊磹濠靛牏纾芥慨姗€顤傞弫濠囨煕濞戞瑦缍戠紒鈧崒鐐寸厱妞ゆ劧绲跨粻姗€鏌￠崱妯哄摵闁哄瞼鍠撻埀顒佺⊕閿氬┑顔煎暣閹泛顫濋幎钘夋懙缂備礁鍊圭敮鈥愁嚕閻㈠憡鍋ㄩ柣銏犵仛椤撳姊绘担鐟邦嚋缂佸甯￠幊婵囥偅閸愮偓鏅梻渚囧墮缁夊绮堥崒鐐寸厪濠㈣泛鐗嗛埀顒侇殘缁瑩骞嬮敂鐣屽幘婵犻潧鍊搁ˇ顔捐姳閼姐倗纾奸悹浣哥－缁愭棃鏌?TVBox 闂備浇宕垫慨鎶芥⒔瀹ュ鍨傞柦妯猴級閿濆绀嬫い鏍ㄧ〒閸欏嫰姊虹紒妯哄Е闁告挻鐟﹀鍕吋婢跺鍙嗗┑鐐村灦椤牏鈧矮鍗抽弻銈夋嚒閵堝懏鐏堥梺鍝勮嫰閿曘倝顢樻總绋跨倞闁冲搫鍊婚埀?mpv.net 闂備浇宕垫慨宕囨媰閿曞倸鍨傞柟娈垮枟椤愪粙鏌ｉ幇顒佹儓鏉╂繈姊虹粙璺ㄧ伇闁稿鍠曢妵鎰邦敍閻愬鍘藉銈嗘⒐濡叉帡宕楀畝鈧埀?4K闂傚倷绶氬褍螞閺冨倻绠旈柣鐘插瀺C闂傚倷绶氬褍螞閺冨倻绠旈柣鐘辩讣 闂傚倷绀侀幉锛勫垝瀹€鍕剶闁兼祴鏅濈粈濠傤熆閼搁潧濮堥柛搴″娣囧﹪顢涘┑鍡楁優闂佺粯鐗曞畷顒勬箒闂佺绻楅崑鎰版偂椤栨粎纾煎Σ灞剧墪瀵喚鈧娲橀〃濠傜暦婵傚憡鍋勯柣銈庡灠閹懘姊绘担钘夘棈濠殿喓鍊濆畷婵嬪即閳跺搫娲︾换婵嗩潩椤撶姴濮奸梻渚€娼ч…顓㈡⒔閸曨厺鐒婇柨鐔哄У閻撴盯鏌嶈閸撶喖鐛崱姘兼Ъ闂佺粯绺块崐婵嬪蓟?                    </div>
-                    <div v-if="desktopStatus && desktopStatus.setupChecklist"
+                        Configure the app for Windows desktop playback: import your own TVBox subscriptions, choose mpv.net or MPC for heavy 4K streams, and keep plugin sources disabled until a trusted runtime is configured.
+                    </div><div v-if="desktopStatus && desktopStatus.setupChecklist"
                         style="margin-top:18px; display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px;">
                         <div v-for="item in desktopStatus.setupChecklist" :key="item.id"
                             style="padding:12px; border-radius:14px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">
@@ -3757,17 +3757,17 @@
                     <div class="appletv-panel-list" style="margin-top:18px;">
                         <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSubscriptionPanel=true; loadSubscriptionData()"
                             style="text-align:left; color:#fff; cursor:pointer;">
-                            <div style="font-weight:800;">闂備浇顕уù鐑藉极閹间礁鍌ㄧ憸鏂跨暦閿濆骞㈡繛鍡樺姇椤庢盯姊洪棃娑氱疄闁稿﹥鐗犻敐</div>
-                            <div style="color:#888; font-size:12px; margin-top:6px;">闂傚倷绀侀幉锟犳偡椤栨稓顩查柨婵嗙墱閺嗕即姊绘担鍛婃儓妞ゆ垵妫濆畷婵單旈崨顓熺€梺闈涚墕椤︻垳绮婚敐澶嬧拺闁割煈鍣崕蹇曠磼閼碱剚鍤€闁靛棙甯掗～婵嬵敇閻橆喒鍋撻幒鎾剁?TVBox JSON闂傚倷鐒︾€笛呯矙閹寸偟闄勯柡鍐ㄥ€荤粻鏂款熆閼搁潧濮囩紒鈧崘顔界厱婵炴垵宕悘锝夋煛鐎ｎ亜鈧崵妲愰幒鎳虫梹绻濋崒姘缂傚倷鐒﹂妵鐐垫濮橆剦鍤曟い鎺戝€归崰鍡涙煕閺囥劌骞橀柛</div>
+                        <h3>Import subscriptions</h3>
+                        <p>Add your own TVBox JSON, M3U, or TXT subscription. Plugin sources are identified but not executed automatically.</p>
                         </button>
                         <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSettingsModal=true; loadPlayerSettings()"
                             style="text-align:left; color:#fff; cursor:pointer;">
-                            <div style="font-weight:800;">闂傚倸鍊烽悞锕€顭垮Ο鑲╃煋闁割偅娲橀崑?mpv.net</div>
-                            <div style="color:#888; font-size:12px; margin-top:6px;">婵犵數鍎戠徊钘壝洪敂鐐床闁稿瞼鍋為崑銈夋煏婵炵偓娅呴悗姘槹閵囧嫰骞掑鍥у缂備降鍔嶅畝鎼佸蓟閻旇櫣纾奸柕蹇曞Т缁犳椽姊洪崫鍕偓椋庢濮橆剛鏆﹂柟鎯版鎯熼梺闈浤涢崨顓熸殽闂佽楠搁悘姘熆濡皷鍋撳鐓庡⒋妤犵偛绻戠€靛ジ寮堕幋婵堝綁婵＄偑鍊栧濠氬磻閹惧绡€闁逞屽墰閳ь剚绋掗…鍥€呴悜鑺ョ叆婵犻潧妫欐径鍕煕婵犲嫬浠х紒杈ㄥ浮瀵噣骞嬪┑鍫滃摋闁</div>
+                        <h3>Configure mpv.net</h3>
+                        <p>Use mpv.net or MPC for high bitrate 4K, HEVC, HDR, and cloud-drive streams.</p>
                         </button>
                     </div>
                     <button class="btn-info" @click="dismissFirstRunGuide" style="border:0; margin-top:18px;">
-                        缂傚倸鍊风粈渚€顢栭崨顖滅煋闁圭虎鍠栫粻鏍ㄤ繆閵堝懏鍣圭紒鈧崘顏佸亾楠炲灝鍔氶柣妤佺矒瀹?
+                        Got it
                     </button>
                 </div>
             </div>
@@ -3779,11 +3779,11 @@
                         class="fas fa-times"></i></button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.55rem;">
-                        <i class="fas fa-rss" style="margin-right: 10px; color: #f59e0b;"></i>闂備浇宕垫慨鎶芥⒔瀹ュ鍨傞柦妯猴級閿濆绀嬫い鎰枑閺?                    </h2>
+                        <i class="fas fa-rss"></i> Subscriptions</h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
-                        闂傚倷娴囬妴鈧柛瀣尰閵囧嫰寮介妸褉妲堥梺浼欏瘜閸ｏ綁骞冨Δ鍛仺闂傚牊绋戞禒姗€姊洪崨濠勬噧婵☆偅绻堥獮鍐╃鐎ｎ€晠鏌ㄩ弴妤€浜鹃梺缁樻尰濞茬喖寮婚妶鍡欓檮濠㈣泛顦遍崙鐟扳攽閻橆偄浜?TVBox JSON URL 闂傚倷鑳堕幊鎾绘偤閵娾晜鍋嬫俊銈傚亾闁挎洏鍨虹€靛ジ寮堕幋鐐茬ザ?JSON 闂傚倷绀侀幖顐﹀磹缁嬫５娲晲閸涱亝鐎婚梺闈涚箞閸婃牠寮查鍌楀亾閸忓浜鹃梺鍛婂姇閸燁垳鏁垾鎰佸殨?sites闂傚倷绶氬褍螞閺冨牆绀嬬紒璺哄es闂傚倷绶氬褍螞閺冨牆鍨傛い锝呮ses 婵?plugin-required 闂傚倷绀侀幖顐ょ矓閺夋嚚娲煛閸滀焦鏅╅梺鎼炲労閸撴瑨绻氶梻浣侯焾閺堫剙顫濋妸褏鐭撳┑鍌氭啞閻撴洟鏌熼幆褏锛嶉懖鏍ㄧ節閳封偓閸曞灚鐤侀悗娈垮枤閺佸銆侀弽顐ｅ磯闁靛ě鍕灀缂傚倷鑳堕搹搴ㄥ矗鎼淬劌绀堟繛鎴炵椤洘銇勮箛鎾跺闁稿孩锚闇夐柨婵嗘祩閻掔偓銇勯妸锔炬创闁诡喖鍢查埢搴ょ疀閺冩垶锛佺紓鍌欑贰閻撳牓宕抽敐澶婃瀬鐎广儱娲ｅ▽顏堟煠濞村娅囨俊鎻掔箲缁绘盯骞嬮悙鏉戠缂備礁顦悘姘跺疾閸洘鍋╅悘鐐村劤娴?csp_xxx闂傚倷绶氬褍螞閺冣偓瀵板嫰鎮為。寤砮r.jar 闂?py/js 闂傚倷绀佸﹢杈╁垝椤栨粍鏆滃┑鐘插€甸弸搴ㄦ煏韫囧鈧洝绻?                    </div>
-                    <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,240px); gap:10px; margin-top:20px;">
-                        <input v-model="subscriptionUrl" type="url" placeholder="缂傚倸鍊风欢锟犲窗濡ゅ應鈧箓宕奸妷銉ь槴濠电偞鍨堕悷锔藉垔閹绢喗鐓熸俊顖濇娴犳盯鏌?TVBox JSON 闂備浇宕垫慨鎶芥⒔瀹ュ鍨傞柦妯猴級?URL"
+                        Import only your own TVBox JSON URLs or local JSON files. The app stores sites, lives, parses, and plugin-required markers, but it does not execute csp_xxx, spider.jar, py, or js plugins automatically.
+                    </div><div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,240px); gap:10px; margin-top:20px;">
+                        <input v-model="subscriptionUrl" type="url" placeholder="TVBox JSON URL"
                             style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:12px 14px;">
                         <input v-model="subscriptionName" type="text" placeholder="Subscription name"
                             style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:12px 14px;">
@@ -3796,13 +3796,13 @@
                         </button>
                         <button class="btn-info" @click="$refs.tvboxJsonFile && $refs.tvboxJsonFile.click()" :disabled="subscriptionLoading"
                             style="border:0;">
-                            <i class="fas fa-file-import"></i> 闂備浇顕уù鐑藉极閹间礁鍌ㄧ憸鏂跨暦閿濆骞㈡繛鎴灻悵妯侯渻閵堝棗鍧婇柛瀣尰缁绘繈鍩€?JSON
+                    <i class="fas fa-file-import"></i> Import local JSON
                         </button>
                         <input ref="tvboxJsonFile" type="file" accept=".json,application/json"
                             style="display:none;" @change="importTvboxSubscriptionFile">
                         <button class="btn-info" @click="loadSubscriptionData" :disabled="subscriptionLoading"
                             style="border:0;">
-                            <i class="fas fa-sync-alt"></i> 闂傚倷绀侀幉锛勬暜閿熺姴缁╅梺顒€绉撮拑鐔封攽閻樺弶鎼愮紒鈧崱妯圭箚闁靛牆鎳庨銉╂煃?
+                    <i class="fas fa-sync-alt"></i> Refresh all
                         </button>
                         <span v-if="subscriptionError" style="color:#ff6b6b; font-size:12px;">{{ subscriptionError }}</span>
                     </div>
@@ -3851,7 +3851,7 @@
                     </div>
 
                     <div v-if="tvboxSources.length > 0" style="margin-top:22px;">
-                        <div style="color:#fff; font-weight:800; margin-bottom:10px;">闂備浇宕甸崰鎰版偡鏉堚晛绶ゅΔ锝呭暞閸婇潧霉閻樺樊鍎忕紒鈧崟顖涚叄闊洦鍑瑰鎰版煟閿濆牓鍝虹紒</div>
+                <strong>Source Summary</strong>
                         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; max-height:300px; overflow:auto;">
                             <div v-for="source in tvboxSources" :key="source.id"
                                 style="border:1px solid rgba(255,255,255,0.1); border-radius:14px; background:rgba(255,255,255,0.05); padding:12px;">
@@ -3883,8 +3883,8 @@
                                     <strong :style="{ color: sourceHealthResult(source).status === 'available' ? '#22c55e' : sourceHealthResult(source).status === 'error' ? '#f87171' : '#fbbf24' }">
                                         Health: {{ sourceHealthResult(source).status }}
                                     </strong>
-                                    <span v-if="sourceHealthResult(source).latency"> 闂?{{ sourceHealthResult(source).latency }}ms</span>
-                                    <span v-if="sourceHealthResult(source).reason"> 闂?{{ sourceHealthResult(source).reason }}</span>
+                            <span v-if="sourceHealthResult(source).latency">{{ sourceHealthResult(source).latency }}ms</span>
+                            <span v-if="sourceHealthResult(source).reason">{{ sourceHealthResult(source).reason }}</span>
                                     <div v-if="sourceHealthResult(source).checkedAt" style="color:#8f98aa;">
                                         {{ formatLocalTimestamp(sourceHealthResult(source).checkedAt) }}
                                     </div>
@@ -3895,7 +3895,7 @@
                                         <strong :style="{ color: sourceDiagnostics[source.id].playable ? '#22c55e' : '#fbbf24' }">
                                             {{ sourceDiagnostics[source.id].playable ? 'playable path' : 'not playable yet' }}
                                         </strong>
-                                        闂?{{ sourceDiagnostics[source.id].reason }}
+                        <span>{{ sourceDiagnostics[source.id].reason }}</span>
                                     </div>
                                     <div>{{ sourceDiagnostics[source.id].message }}</div>
                                     <div v-if="sourceDiagnostics[source.id].runtime && sourceDiagnostics[source.id].runtime.localJavaBridgeBaseUrl">
@@ -3907,7 +3907,7 @@
                                     </ul>
                                 </div>
                                 <div v-if="source.status === 'plugin-required'" style="color:#aaa; font-size:11px; line-height:1.6; margin-top:8px;">
-                                    闂傚倸鍊搁崐绋棵洪悩璇茬；闁瑰墽绮崑?CatVod/Spider 闂備礁鎼ˇ顐﹀疾濠婂牆绀夋慨妞诲亾闁靛棔绶氶獮瀣晝閳ь剛鐚惧澶嬪仯濞达絽鎲＄拹锛勭磼閳ь剚寰勭仦鎯ф瀾闂佺粯顨呴悧濠勪焊椤撶儐鐔嗙憸蹇旂箾閳ь剟鏌熼銊ユ搐闁卞洭鏌ｉ弬鎸庡暈閻庢碍濞婂娲川婵犲嫭鍣芥繛瀛樼玻缂嶄線骞嗘笟鈧獮瀣晝閳ь剛绮堥崱妯镐簻闁规澘澧庣壕鍧楁煟閻斿摜绠為柡宀€鍠撶划顓炩槈濡紮绱為梺琛″亾濞寸姴顑嗛悡?                                </div>
+                                    This source requires a CatVod/Spider runtime. It is recognized and can be managed, but unknown plugin code is not executed automatically.
                             </div>
                         </div>
                     </div>
@@ -3915,11 +3915,11 @@
                     <div class="appletv-panel-list" v-if="subscriptions.length === 0">
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">TVBox JSON</div>
-                            <div style="color:#888; font-size:12px; margin-top:6px;">闂傚倷娴囬妴鈧柛瀣尰閵囧嫰寮介妸褉妲堥梺?URL 婵犵數鍋為崹鍫曞箰閸濄儮鍋撳☉鎺撴珔闁挎洏鍨虹€靛ジ寮堕幋鐐茬ザ?JSON 闂傚倷绀侀幖顐﹀磹缁嬫５娲晲閸涱亝鐎婚梺闈涚箚閹冲洭宕戦幘缁樺仺闂傚牊绋戞禒姗€姊</div>
+                    <div>Only user-provided subscriptions are stored.</div>
                         </div>
                         <div class="appletv-panel-item">
-                            <div style="color:#fff; font-weight:700;">闂傚倷绀佸﹢杈╁垝椤栨粍鏆滃┑鐘插€甸弸搴ㄦ煏韫囧鈧洟宕归崒鐐村€甸柨婵嗛娴滅偤鏌</div>
-                            <div style="color:#888; font-size:12px; margin-top:6px;">缂傚倸鍊烽悞锕傘€冭箛娑樼婵炴垶姘ㄩ崡姘舵煙缂併垹鏋熼柛瀣儔閺屾盯顢曢敐鍥╃暤濠电偞鍤崶銊ヤ化闂佹悶鍎滈崟鍨棧闂備胶纭堕弲娑樜涘┑瀣仒妞ゆ洍鍋撻柟铏矒閹粙妫冨☉姘礃闂</div>
+                    <div style="font-weight:800; color:#e5e7eb; margin-bottom:6px;">Plugin-required sources</div>
+                    <div>csp_xxx, jar, py, and js sources are identified for future runtime support, but not executed automatically.</div>
                         </div>
                     </div>
                 </div>
@@ -3932,7 +3932,7 @@
                         class="fas fa-times"></i></button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 25px; font-size: 1.5rem;">
-                        <i class="fas fa-cog" style="margin-right: 10px; color: #e50914;"></i>闂傚倷鑳堕…鍫ヮ敄閸涱垱宕查柟鐗堟緲鍥撮梺浼欑到閺堫剚鍒婃總鍛婄厱闁圭偓顨呴幊蹇涙倵?
+                    <h3><i class="fas fa-sliders-h"></i> Player Settings</h3>
                     </h2>
 
 
@@ -4083,8 +4083,8 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">闂傚倸鍊搁崐鎼佸箠韫囨稑绀夋俊顖欑秿濞戞鏆嗛柛鏇ㄥ厴閹稿嫰妫呴銏″婵﹤婀遍懞鍗烆潩閼哥數鍘介梺鍐叉惈鐎氼剟鎯冮悜妯肩</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">闂傚倷鑳堕…鍫㈡崲閹寸偟绠惧┑鐘蹭迹濞戞埃鍋撳☉娆欏叕缂佽鲸妫冮弻鈥愁吋鎼粹€崇闂侀€炲苯澧い锔炬暬楠炲棝宕橀鑲╊槹濡炪倖鐗楁笟妤呭触閸岀偞鈷戦柛婵嗗婢с垽鏌涙惔娑樷偓妤呭极椤旇￥浜归柟鐑樻尭濞堛儵姊鸿ぐ鎺戜喊闁告鏅▎銏ゅ蓟閵夛妇鍘</div>
+                        <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">Prefer external player for heavy streams</div>
+                        <div>4K, HEVC, HDR, and cloud-drive URLs can be routed to mpv.net or MPC.</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="hideRandomRow" @change="saveSettings('hideRandomRow')">
@@ -4096,8 +4096,8 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">闂備礁鎼ˇ顐﹀疾濞戞◤娲晝閸屾氨顔呴梺闈涚墕椤︻垳绮婚敐澶嬬厵闂侇叏缂氱花濂告煟椤忓啰鐭欓柡灞剧洴楠炲洭顢楁担鍛婎仩婵</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">闂備礁鎼ˇ顐﹀疾濞戞◤娲晝閸屾氨顔呴梺闈涚墕椤︿即鍩涢弴銏㈠彄闁搞儯鍔嶉埛鎰磼閵婏箑鍝洪柡宀嬬秮閸╋繝宕熼銈嗩嚄婵犵數鍋炶ぐ鍐箠韫囨洜鐭欏鑸靛姦閺佸洭鏌ｅΟ铏癸紞闁哄棛濮电换娑㈠箣閻愭潙纰嶇紓浣割槸缂嶅﹪宕洪埀顒併亜閹哄棗浜鹃梺绋匡攻閹倿骞冮幐搴ｇ懝闁逞屽墮閻ｅ嘲顫滈埀顒€鐣烽妸鈺婃晣鐟滃秹寮</div>
+                        <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">Use local proxy when headers are required</div>
+                        <div>Proxy playback requests through 127.0.0.1 so Referer, User-Agent, Cookie, Authorization, and Range can be forwarded.</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="filterNsfw" @change="saveSettings('filterNsfw')">
@@ -4107,7 +4107,7 @@
 
                     <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
-                            <i class="fas fa-external-link-alt" style="color:#60a5fa; margin-right:8px;"></i>MPC 婵犵數濮伴崹濂稿春閺嶎厽鍋嬮柣妯款嚙绾惧潡鏌熺紒銏犳灈缂佺姷绮妵鍕箻鐠虹儤鐎鹃梺鍝勵槸缂嶅﹪寮?                        </div>
+                    <h4><i class="fas fa-desktop"></i> MPC external player</h4>
                         <div style="display:flex; gap:8px;">
                                 <input v-model="playerSettings.mpcExePath" type="text" placeholder="MPC-HC / MPC-BE exe path"
                                 style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
@@ -4117,7 +4117,7 @@
                             <button class="btn-info" @click="validateMpcPath" :disabled="mpcValidationLoading"
                                 style="border:0; padding:8px 12px; font-size:12px;">
                                 <i :class="['fas', mpcValidationLoading ? 'fa-spinner fa-spin' : 'fa-check-circle']"></i>
-                                婵犲痉鏉库偓妤佹叏閹绢喗鍎楀〒姘ｅ亾闁?
+                                Validate
                             </button>
                         </div>
                         <div v-if="mpcValidation"
@@ -4125,8 +4125,8 @@
                             <strong :style="{ color: mpcValidation.valid ? '#22c55e' : '#f87171' }">
                                 MPC path {{ mpcValidation.valid ? 'valid' : 'invalid' }}
                             </strong>
-                            <span> 闂?{{ mpcValidation.reason }}</span>
-                            <span v-if="mpcValidation.playerType && mpcValidation.playerType !== 'unknown'"> 闂?{{ mpcValidation.playerType }}</span>
+                        <span v-if="mpcValidation.reason">{{ mpcValidation.reason }}</span>
+                        <span v-if="mpcValidation.playerType">{{ mpcValidation.playerType }}</span>
                             <div style="color:#8f98aa;">{{ mpcValidation.message }}</div>
                         </div>
                         <div style="display:flex; gap:8px; margin-top:12px;">
@@ -4146,8 +4146,8 @@
                             <strong :style="{ color: mpvValidation.valid ? '#22c55e' : '#f87171' }">
                                 mpv path {{ mpvValidation.valid ? 'valid' : 'invalid' }}
                             </strong>
-                            <span> 闂?{{ mpvValidation.reason }}</span>
-                            <span v-if="mpvValidation.playerType && mpvValidation.playerType !== 'unknown'"> 闂?{{ mpvValidation.playerType }}</span>
+                        <span v-if="mpvValidation.reason">{{ mpvValidation.reason }}</span>
+                        <span v-if="mpvValidation.playerType">{{ mpvValidation.playerType }}</span>
                             <div style="color:#8f98aa;">{{ mpvValidation.message }}</div>
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
@@ -4162,27 +4162,27 @@
                                 </select>
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.fullscreenOnStart" style="accent-color:#e50914;"> 闂傚倷鑳堕…鍫㈡崲閸儱绀夌€光偓閸曨剙鍓甸梺绯曞墲缁嬫垹鎲撮敂濮愪簻闁哄秲鍔忔竟妯兼偖?
+                                <input type="checkbox" v-model="playerSettings.fullscreenOnStart" style="accent-color:#e50914;"> Start fullscreen
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.closeMpcAfterPlayback" style="accent-color:#e50914;"> 闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥ┑鍌氭啞閸嬧晜銇勯幒鎴濐仼缂佲偓閸岀偞鐓欓柟顖涙緲琚氶梺?
+                                <input type="checkbox" v-model="playerSettings.closeMpcAfterPlayback" style="accent-color:#e50914;"> Close external player after playback
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcFor4K" style="accent-color:#e50914;"> 4K 闂傚倷鐒﹀鍨焽閸ф绀夌€光偓閸曞﹤娲︾换婵嗩潩椤撶姴濮奸梻渚€娼ч…顓㈡⒔閸曨厺鐒婇柨鐔哄У閻撴盯鏌嶈閸撶喖鐛崱姘兼Ъ闂?
+                                <input type="checkbox" v-model="playerSettings.useMpcFor4K" style="accent-color:#e50914;"> Use MPC for 4K streams
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForHEVC" style="accent-color:#e50914;"> HEVC 闂傚倷鐒﹀鍨焽閸ф绀夌€光偓閸曞﹤娲︾换婵嗩潩椤撶姴濮奸梻渚€娼ч…顓㈡⒔閸曨厺鐒婇柨鐔哄У閻撴盯鏌嶈閸撶喖鐛崱姘兼Ъ闂?
+                                <input type="checkbox" v-model="playerSettings.useMpcForHEVC" style="accent-color:#e50914;"> Use MPC for HEVC/H.265
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForHDR" style="accent-color:#e50914;"> HDR 闂傚倷鐒﹀鍨焽閸ф绀夌€光偓閸曞﹤娲︾换婵嗩潩椤撶姴濮奸梻渚€娼ч…顓㈡⒔閸曨厺鐒婇柨鐔哄У閻撴盯鏌嶈閸撶喖鐛崱姘兼Ъ闂?
+                                <input type="checkbox" v-model="playerSettings.useMpcForHDR" style="accent-color:#e50914;"> Use MPC for HDR
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> 缂傚倸鍊搁崐鎼佸疮椤栫偛鍨傞柣鐔稿櫞妤﹁法鐤€闁圭虎鍨遍弫鐘绘⒑瑜版帒浜伴柛鐘愁殜瀵疇绠涢幙鍐數闂佺厧鎽滈弫鍛婃櫠閻㈠憡鐓曢幖娣灪鐏忥附顨ラ悙杈捐€挎い銏★耿閹垽宕ㄦ繝鍐暘闂?                            </label>
-                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useLocalProxy" style="accent-color:#e50914;"> 婵犵數鍋犻幓顏嗙礊閳ь剚绻涙径瀣鐎殿噮鍋婃俊鑸靛緞婵犲倻褰夋俊鐐€栧濠氬磻閹惧绡€闁逞屽墰閳ь剚绋掗…鍥€呴悜鑺ョ叆婵犻潧妫欐径鍕煕?
+                                <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> Use MPC for cloud-drive streams
+                            </label>
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;"><input type="checkbox" v-model="playerSettings.useLocalProxy" style="accent-color:#e50914;"> Use local proxy for header-aware playback
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                婵犵數鍋涢顓熷垔鐎电绶ら柛褎顨呯粻鏍р攽閻樻彃顏柛妤佺閵囧嫰寮介妸銊ヮ棟缂?
+                                LocalProxy port
                                 <input type="number" v-model.number="playerSettings.localProxyPort" min="1024" max="65535"
                                     style="width:90px; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:10px; padding:6px 8px; font-size:12px;">
                             </label>
@@ -4191,19 +4191,19 @@
                             <button class="btn-play" @click="savePlayerSettings" :disabled="playerSettingsSaving"
                                 style="border:0; padding:9px 16px; font-size:13px;">
                                 <i :class="['fas', playerSettingsSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i>
-                                婵犵數鍎戠徊钘壝洪敂鐐床闁稿瞼鍋為崑銈夋煏婵炵偓娅呯紒鐘电帛閵囧嫰骞樼捄鐑樼€鹃梺鍝勵槸缂嶅﹪寮?                            </button>
+                                Save settings</button>
                             <button class="btn-info" @click="loadProxyStatus" :disabled="proxyStatusLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyStatusLoading ? 'fa-spinner fa-spin' : 'fa-network-wired']"></i>
-                                婵犵數鍋涢顓熷垔鐎电绶ら柛褎顨呯粻鏍р攽閻樺弶澶勯柛瀣姍閺屻倝宕妷顔芥瘜闂?                            </button>
+                                Proxy status</button>
                             <button class="btn-info" @click="checkProxyPort" :disabled="proxyPortCheckLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyPortCheckLoading ? 'fa-spinner fa-spin' : 'fa-plug']"></i>
-                                濠电姷顣藉Σ鍛村磻閳ь剟鏌涚€ｎ偅灏扮紒缁樼洴瀵爼骞嬮鐐插婵＄偑鍊曞ù姘跺礈閻旈鏆?                            </button>
+                                Check port</button>
                             <button class="btn-info" @click="runProxyRangeSelfTest" :disabled="proxyRangeTestLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyRangeTestLoading ? 'fa-spinner fa-spin' : 'fa-wave-square']"></i>
-                                Range 闂傚倷鑳堕崢褔銆冩惔銏㈩洸婵犻潧鐟?
+                                Range self-test
                             </button>
                             <button class="btn-info" @click="runProxyHeadSelfTest" :disabled="proxyHeadTestLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
@@ -4228,15 +4228,15 @@
                                 LocalProxy {{ proxyStatus.proxy && proxyStatus.proxy.running ? 'running' : 'stopped' }}
                             </strong>
                             <span v-if="proxyStatus.proxy && proxyStatus.proxy.running">
-                                闂?{{ proxyStatus.proxy.host }}:{{ proxyStatus.proxy.port }}
+                                at {{ proxyStatus.proxy.host }}:{{ proxyStatus.proxy.port }}
                             </span>
-                            <span> 闂?configured {{ proxyStatus.settings && proxyStatus.settings.localProxyPort }}</span>
+                            <span> configured {{ proxyStatus.settings && proxyStatus.settings.localProxyPort }}</span>
                             <div style="color:#8f98aa;">
                                 enabled: {{ proxyStatus.settings && proxyStatus.settings.useLocalProxy ? 'yes' : 'no' }}
-                                闂?requested: {{ proxyStatus.proxy && proxyStatus.proxy.requestedPort || 'n/a' }}
-                                闂?fallback: {{ proxyStatus.proxy && proxyStatus.proxy.fallbackUsed ? 'yes' : 'no' }}
-                                闂?active entries: {{ proxyStatus.proxy ? proxyStatus.proxy.activeEntries : 0 }}
-                                闂?expired entries: {{ proxyStatus.proxy ? proxyStatus.proxy.expiredEntries : 0 }}
+                                requested: {{ proxyStatus.proxy && proxyStatus.proxy.requestedPort || 'n/a' }}
+                                fallback: {{ proxyStatus.proxy && proxyStatus.proxy.fallbackUsed ? 'yes' : 'no' }}
+                                active entries: {{ proxyStatus.proxy ? proxyStatus.proxy.activeEntries : 0 }}
+                                expired entries: {{ proxyStatus.proxy ? proxyStatus.proxy.expiredEntries : 0 }}
                             </div>
                             <div v-if="proxyStatus.proxy && proxyStatus.proxy.fallbackReason" style="color:#fbbf24;">
                                 fallback reason: {{ proxyStatus.proxy.fallbackReason }}
@@ -4247,7 +4247,7 @@
                             <strong :style="{ color: proxyPortCheck.available ? '#22c55e' : '#f87171' }">
                                 Port {{ proxyPortCheck.port }} {{ proxyPortCheck.available ? 'available' : 'unavailable' }}
                             </strong>
-                            <span> 闂?{{ proxyPortCheck.reason }}</span>
+                            <span> {{ proxyPortCheck.reason }}</span>
                             <div v-if="proxyPortCheck.message" style="color:#8f98aa;">{{ proxyPortCheck.message }}</div>
                         </div>
                         <div v-if="proxyRangeTest"
@@ -4255,12 +4255,12 @@
                             <strong :style="{ color: proxyRangeTest.ok ? '#22c55e' : '#f87171' }">
                                 Range self-test {{ proxyRangeTest.ok ? 'passed' : 'failed' }}
                             </strong>
-                            <span> 闂?HTTP {{ proxyRangeTest.statusCode || 'n/a' }}</span>
-                            <span v-if="proxyRangeTest.contentRange"> 闂?{{ proxyRangeTest.contentRange }}</span>
+                            <span> HTTP {{ proxyRangeTest.statusCode || 'n/a' }}</span>
+                            <span v-if="proxyRangeTest.contentRange"> {{ proxyRangeTest.contentRange }}</span>
                             <div style="color:#8f98aa;">
                                 proxy port: {{ proxyRangeTest.proxyPort || 'n/a' }}
-                                闂?body: {{ proxyRangeTest.bodyLength || 0 }} bytes
-                                闂?length: {{ proxyRangeTest.contentLength || 0 }}
+                                body: {{ proxyRangeTest.bodyLength || 0 }} bytes
+                                length: {{ proxyRangeTest.contentLength || 0 }}
                             </div>
                             <div v-if="proxyRangeTest.error" style="color:#fca5a5;">{{ proxyRangeTest.error }}</div>
                         </div>
@@ -4269,12 +4269,12 @@
                             <strong :style="{ color: proxyHeadTest.ok ? '#22c55e' : '#f87171' }">
                                 HEAD self-test {{ proxyHeadTest.ok ? 'passed' : 'failed' }}
                             </strong>
-                            <span> 闂?HTTP {{ proxyHeadTest.statusCode || 'n/a' }}</span>
-                            <span> 闂?length {{ proxyHeadTest.contentLength || 0 }}</span>
+                            <span> HTTP {{ proxyHeadTest.statusCode || 'n/a' }}</span>
+                            <span> length {{ proxyHeadTest.contentLength || 0 }}</span>
                             <div style="color:#8f98aa;">
                                 proxy port: {{ proxyHeadTest.proxyPort || 'n/a' }}
-                                闂?ranges: {{ proxyHeadTest.acceptRanges || 'n/a' }}
-                                闂?type: {{ proxyHeadTest.contentType || 'n/a' }}
+                                ranges: {{ proxyHeadTest.acceptRanges || 'n/a' }}
+                                type: {{ proxyHeadTest.contentType || 'n/a' }}
                             </div>
                             <div v-if="proxyHeadTest.error" style="color:#fca5a5;">{{ proxyHeadTest.error }}</div>
                         </div>
@@ -4283,11 +4283,11 @@
                             <strong :style="{ color: proxyExpiryTest.ok ? '#22c55e' : '#f87171' }">
                                 Expiry self-test {{ proxyExpiryTest.ok ? 'passed' : 'failed' }}
                             </strong>
-                            <span> 闂?expired HTTP {{ proxyExpiryTest.expiredStatusCode || 'n/a' }}</span>
-                            <span> 闂?rejected {{ proxyExpiryTest.expiredRejected ? 'yes' : 'no' }}</span>
+                            <span> expired HTTP {{ proxyExpiryTest.expiredStatusCode || 'n/a' }}</span>
+                            <span> rejected {{ proxyExpiryTest.expiredRejected ? 'yes' : 'no' }}</span>
                             <div style="color:#8f98aa;">
                                 proxy port: {{ proxyExpiryTest.proxyPort || 'n/a' }}
-                                闂?expires: {{ proxyExpiryTest.proxyExpiresAt || 'n/a' }}
+                                expires: {{ proxyExpiryTest.proxyExpiresAt || 'n/a' }}
                             </div>
                             <div v-if="proxyExpiryTest.error" style="color:#fca5a5;">{{ proxyExpiryTest.error }}</div>
                         </div>
@@ -4296,11 +4296,11 @@
                             <strong :style="{ color: proxyM3u8Test.ok ? '#22c55e' : '#f87171' }">
                                 HLS rewrite self-test {{ proxyM3u8Test.ok ? 'passed' : 'failed' }}
                             </strong>
-                            <span> 闂?HTTP {{ proxyM3u8Test.statusCode || 'n/a' }}</span>
-                            <span> 闂?rewritten URLs {{ proxyM3u8Test.rewrittenUrls || 0 }}</span>
+                            <span> HTTP {{ proxyM3u8Test.statusCode || 'n/a' }}</span>
+                            <span> rewritten URLs {{ proxyM3u8Test.rewrittenUrls || 0 }}</span>
                             <div style="color:#8f98aa;">
                                 proxy port: {{ proxyM3u8Test.proxyPort || 'n/a' }}
-                                闂?child headers: {{ proxyM3u8Test.childReferersOk ? 'ok' : 'check failed' }}
+                                child headers: {{ proxyM3u8Test.childReferersOk ? 'ok' : 'check failed' }}
                             </div>
                             <div v-if="proxyM3u8Test.error" style="color:#fca5a5;">{{ proxyM3u8Test.error }}</div>
                         </div>
@@ -4308,17 +4308,17 @@
 
                     <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
-                            <i class="fas fa-plug" style="color:#f59e0b; margin-right:8px;"></i>TVBox 闂傚倷绀佸﹢杈╁垝椤栨粍鏆滃┑鐘插€甸弸搴ㄦ煏韫囧﹤澧插ù婧垮€濋弻鐔兼焽閿曗偓閻忛亶鏌￠埀顒佺鐎ｎ偆鍘?                        </div>
+                            TVBox plugin runtime</div>
                         <div style="color:#999; font-size:12px; line-height:1.7; margin-bottom:12px;">
-                            闂佽崵鍠愮划搴㈡櫠濡ゅ懎绠伴柛娑橈攻濞呯娀鏌ｅΟ娆惧殭闁活厽顨嗛妵鍕疀閹炬剚浠圭紓渚囧枤閺佸骞冨Δ鍛仭闂侇叏闄勭瑧闂備礁鎲￠悷銉ф崲閹拌埇鈧懏绺界粙璇俱劑鏌ㄩ弴妤€浜炬繝銏ｆ硾缁夊綊寮诲☉銏犵婵犻潧娴傚Λ鐐差渻閵堝繐鐦滈柛鎾跺枛瀵偄顓奸崪浣瑰兊閻庤娲栧ú锕傦綖濮樿埖鈷戦柛娑橈工娣囶垶鏌涚€ｎ亝鍤€闁靛洦鍔欏畷姗€鍩￠崘鐐カ闂佽崵濞€缂傛艾鈻嶉敐澶婄劦妞ゆ巻鍋撻柛銏＄叀閸╃偤宕橀鑲╃杸闂佸疇顫夐崕铏閹灐褰掓晲閸偄娈愬┑顔硷功閸嬫挾鎹㈠☉銏犵骇闁规惌鍘奸崜鍗炩攽閻橆偄浜炬繛鏉戝悑濞兼瑧鈧?Java闂傚倷绶氬褍螞閺傛娓婚柟鐑樻⒐瀹曞弶鎱ㄥΟ璇差暢闁?Bridge 闂傚倸鍊烽悞锕€顭垮Ο鑲╃煋闁割偅娲橀崑顏堟煕閳╁啰鈯曢柡鍜佸墯缁绘盯骞嬮悜鍡樼暭闂佽崵鍠愮换鍌炴箒闂佺绻樺Λ鎸庣閵忋倖鐓曢柕鍫濇閻帞鈧娲樼换鍫熶繆閹间焦鏅濋柍褜鍓熼崺娑㈠籍閸喎浠╁┑鐐村灦椤洭鎮為柨瀣ㄤ簻闁规儳纾粔鐑樻叏婵犲倶鍋㈢€规洏鍔戝鍫曞箣閻戝棔娌梻?spider.jar闂傚倷绶氬褍螞閺冨牆鍨傛い?闂?js闂?                        </div>
+                            Optional trusted runtime support for TVBox plugin sources. The app can recognize plugin-required sources now; Java CatVod Bridge is used only when you explicitly enable and configure it.
                         <div style="display:grid; gap:8px;">
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
                                 <input type="checkbox" v-model="pluginRuntimeSettings.enableJavaCatvod" style="accent-color:#e50914;">
-                                闂傚倷绀侀幉锟犲礄瑜版帒鍨傞柟鎯版閺?Java CatVod Bridge 闂傚倷绀侀幉锟犲垂闂堟党娑樜旈崥?
+                                Enable trusted local Java CatVod Bridge
                             </label>
-                            <input v-model="pluginRuntimeSettings.javaPath" type="text" placeholder="java.exe 闂備浇宕垫慨宕囨媰閿曞倸鍨傞柟娈垮枟椤愪粙鏌ｉ幇顔煎妺闁哄拋鍓涢埀顒€鍘滈崑鎾绘煃瑜滈崜鐔奉嚕閹惰棄鐒垫い鎺戝€荤壕濂告倶閻愯泛袚闁诡垰鐗撻弻娑⑩€﹂幋婵堜画闂佺懓鍢查幊鎰板箲閸曨垰惟闁挎棁濮ら鍦磽閸屾瑧璐伴柛銊╂涧閻ｇ兘鎮介棃娑樼亰?PATH"
+                            <input v-model="pluginRuntimeSettings.javaPath" type="text" placeholder="java.exe path, optional when java is already in PATH"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
-                            <input v-model="pluginRuntimeSettings.catvodBridgeJarPath" type="text" placeholder="闂傚倷绀侀幖顐︽偋濠婂牆绀堟慨姗嗗厴閺€锕傛煃?CatVod Bridge jar 闂備浇宕垫慨宕囨媰閿曞倸鍨傞柟娈垮枟椤愪粙鏌ｉ幇顔煎妺闁哄拋鍓熼幃姗€鎮欑捄杞版睏闂佽崵鍠愮换鍫ュ箖瑜版帒鐐婃い蹇撶Т濞堫參鎮峰鍕凡婵炲眰鍔戦獮蹇曗偓锝庡枛椤懘鏌曢崼婵囷紞婵?jar"
+                            <input v-model="pluginRuntimeSettings.catvodBridgeJarPath" type="text" placeholder="CatVod Bridge jar path"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
                             <input v-model="pluginRuntimeSettings.trustedSpiderJarPath" type="text" placeholder="Trusted local Spider jar path (manual only)"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
@@ -4342,7 +4342,7 @@
                         <div v-if="pluginRuntimes.length" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
                             <span v-for="runtime in pluginRuntimes" :key="runtime.id"
                                 style="padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.08); color:#ddd; font-size:11px;">
-                                {{ runtime.id }} 闂?{{ runtime.status }}
+                        <span>{{ runtime.id }} {{ runtime.status }}</span>
                             </span>
                         </div>
                         <div style="display:grid; gap:6px; margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:11px; line-height:1.6;">
@@ -4360,10 +4360,10 @@
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
                             <button class="btn-info" @click="checkJavaCatvodRuntime" style="border:0; padding:8px 12px;">
-                                <i class="fas fa-vial"></i> 濠电姷顣藉Σ鍛村磻閳ь剟鏌涚€ｎ偅灏扮紒?Java
+                    <i class="fas fa-mug-hot"></i> Check Java
                             </button>
                             <button class="btn-info" @click="checkExternalHttpBridge" style="border:0; padding:8px 12px;">
-                                <i class="fas fa-network-wired"></i> 濠电姷顣藉Σ鍛村磻閳ь剟鏌涚€ｎ偅灏扮紒?HTTP Bridge
+                    <i class="fas fa-network-wired"></i> Check HTTP Bridge
                             </button>
                             <button class="btn-info" @click="buildLocalJavaBridge" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-hammer"></i> Build Java Bridge
@@ -4379,8 +4379,8 @@
                             </button>
                             <button class="btn-play" @click="savePluginRuntimeSettings" :disabled="pluginRuntimeSaving"
                                 style="border:0; padding:9px 16px; font-size:13px;">
-                                <i :class="['fas', pluginRuntimeSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i>
-                                婵犵數鍎戠徊钘壝洪敂鐐床闁稿瞼鍋為崑銈夋煏婵犲繘妾ù婧垮€濋弻鐔兼焽閿曗偓閻忛亶鏌￠埀顒佺鐎ｎ偆鍘?                            </button>
+                                <i :class="['fas', pluginRuntimeSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i> {{ pluginRuntimeSaving ? 'Saving...' : 'Save plugin runtime' }}</button>
+
                             <span v-if="pluginRuntimeMessage" style="color:#aaa; font-size:12px;">{{ pluginRuntimeMessage }}</span>
                         </div>
                     </div>
@@ -4390,7 +4390,7 @@
                         style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
                         <div style="color: #ff6b6b; font-size: 13px;">
                             <i class="fas fa-info-circle" style="margin-right: 8px;"></i>
-                            闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸嬵亪鏌涢埄鍏狀亪顢氭潏銊﹀弿婵☆垰鎼弳杈ㄧ箾閸粌宓嗛柡灞剧洴瀵剛鎷犻幓鎺濈€辩紓鍌欒兌缁垰顫濋妸鈺佺劦妞ゆ帊鑳堕埊鏇㈡煥閺囥劌浜炴俊鍙夊姇閳规垹鈧綆浜為ˇ顐︽⒒娴ｅ摜浠㈡い鎴濇閹繝鍩€椤掍椒绻嗛柣鎰典簻閳ь剚顨婂顐ゆ嫚瀹割喚鍔锋繛鏉戝悑濞兼瑧鎲撮敃鍌氱閺夊牆澧界粙濠氭煛閸涱喗鍊愰柡灞稿墲閹峰懘宕妷銉毇闂備椒绱紞鍡涘礈閻斿鍤曟い鎰╁€愰崑鎾绘濞戞瑥鏆堥梺浼欑秮娴滆泛顕ｉ崼鏇炵厸濞达絿鎳撻ˇ鈺呮⒑绾懐鍫柛濠冪箓椤曪綁顢曢敃鈧柋鍥煟閺冨洦銆冮柛?
+                            Plugin runtimes are optional. Only enable a trusted local bridge that you configured yourself; unknown TVBox plugin code is never executed automatically.
                         </div>
                     </div>
                 </div>
@@ -4416,13 +4416,13 @@
                                 infoModalData.vote_average ? infoModalData.vote_average.toFixed(1) : 'N/A' }}</span>
                             <span>{{ (infoModalData.release_date || infoModalData.first_air_date || '').split('-')[0]
                                 }}</span>
-                            <span v-if="infoModalData.runtime">{{ infoModalData.runtime }} 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ亞顔</span>
+                            <span v-if="infoModalData.runtime">{{ infoModalData.runtime }} min</span>
                         </div>
                             {{ infoModalData.overview || 'No overview available.' }}
                         <div class="info-modal-btns">
                             <button class="btn-play"
                                 @click="showInfoModal = false; autoSearch(infoModalData.title || infoModalData.name, infoModalData.original_title || infoModalData.original_name)">
-                                <i class="fas fa-play"></i> 缂傚倸鍊烽悞锕傚蓟閵娾晩鏁勯柛娑卞幘閺嗐倝鏌涢埄鍐槈缂佺姷绮妵鍕箻鐠虹儤鐎鹃梺?
+                            <i class="fas fa-play"></i> Play
                             </button>
                         </div>
                     </div>
@@ -4432,7 +4432,7 @@
 
         <!-- 闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡ê霉閿濆洤鍔嬮悗姘哺閺屻劑寮崶顭戞闂佸憡鎸诲姗€鈥?(闂佽崵鍠愮划鍫ュ础閾忣偆顩查悹楦裤€€閺嬪秶鈧厜鍋撻柍褜鍓熷顐︻敋閳ь剙鐣峰鈧俊姝岊槼闁? 闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?-->
         <div class="detail-overlay" :class="{ active: showDetail }">
-            <div class="close-btn" tabindex="1" role="button" aria-label="闂傚倷鑳堕…鍫㈡崲閹寸偟绠惧┑鐘蹭迹? @click="closeDetail"
+                    <div class="close-btn" tabindex="1" role="button" aria-label="Close detail" @click="closeDetail"
                 @keydown.enter="closeDetail"><i class="fas fa-times"></i></div>
 
             <!-- 濠碘槅鍋撶徊浠嬪疮椤栫偛鐤?闂傚倷绀侀幉锛勬暜閹烘嚦娑㈠籍閸噥妫呴梺鍐叉惈閹冲繘藟閸儲鐓忛煫鍥э工婢ц尙绱?-->
@@ -4441,34 +4441,34 @@
                 <div style="background:#1c1c1e; border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:22px; width:100%; max-width:480px; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
                         <div style="font-size:16px; font-weight:bold; color:#fff;">
-                            <i class="fas fa-share-alt" style="color:#e50914; margin-right:8px;"></i>闂傚倷绀侀幉锛勬暜閹烘嚦娑㈠籍閸噥妫呴梺鍐叉惈閹冲氦绻氬┑鐘殿暜缁辨洟宕?currentGroup && currentGroup.name }}闂?
+                    <h4 style="margin:0; font-size:18px;">Share {{ currentGroup && currentGroup.name }}</h4>
                         </div>
-                        <button @click="showSharePanel = false" aria-label="闂傚倷鑳堕…鍫㈡崲閹寸偟绠惧┑鐘蹭迹? style="background:none; border:none; color:#888; font-size:22px; line-height:1; cursor:pointer;">&times;</button>
+                    <button @click="showSharePanel = false" aria-label="Close share panel" style="background:transparent; border:0; color:#fff; font-size:20px;"><i class="fas fa-times"></i></button>
                     </div>
 
                     <!-- 缂傚倸鍊风拋鏌ュ磻閹剧粯鐓曟繛鍡楃Т閸旀粓鏌涢悙宸Ч妞ゃ劊鍎甸幃娆撳箵閹烘挻鐦ｉ柣鐔哥矋婢瑰棝藟閹邦喚涓嶆繛鎴欏焺閺佸啴鏌ㄥ┑鍡樺櫧闁靛牆缍婂娲川婵犲倻鐟ㄥ┑鈽嗗亝濡啫螞?-->
                     <div class="share-soc-row">
-                        <button class="share-soc" @click="shareTo('wechat')"><span class="ico" style="background:#07c160;"><i class="fab fa-weixin"></i></span><div>闂佽娴烽弫濠氬磻婵犲洤绐楅柡鍥╁枔閳</div></button>
+                        <button class="share-soc" @click="shareTo('wechat')"><span class="ico" style="background:#10b981;"><i class="fab fa-weixin"></i></span><div>WeChat</div></button>
                         <button class="share-soc" @click="shareTo('qq')"><span class="ico" style="background:#12b7f5;"><i class="fab fa-qq"></i></span><div>QQ</div></button>
                         <button class="share-soc" @click="shareTo('telegram')"><span class="ico" style="background:#229ed9;"><i class="fab fa-telegram"></i></span><div>Telegram</div></button>
                         <button class="share-soc" @click="shareTo('whatsapp')"><span class="ico" style="background:#25d366;"><i class="fab fa-whatsapp"></i></span><div>WhatsApp</div></button>
                         <button class="share-soc" @click="shareTo('facebook')"><span class="ico" style="background:#1877f2;"><i class="fab fa-facebook-f"></i></span><div>Facebook</div></button>
                         <button class="share-soc" @click="shareTo('x')"><span class="ico" style="background:#000; border:1px solid #555;"><i class="fab fa-twitter"></i></span><div>X</div></button>
                         <button class="share-soc" @click="shareTo('instagram')"><span class="ico" style="background:linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888);"><i class="fab fa-instagram"></i></span><div>Instagram</div></button>
-                        <button class="share-soc" @click="shareTo('native')"><span class="ico" style="background:#444;"><i class="fas fa-ellipsis-h"></i></span><div>闂傚倷绀侀幖顐⒚洪敃鈧…鍥р枎閹?App</div></button>
+                        <button class="share-soc" @click="shareTo('native')"><span class="ico" style="background:#64748b;"><i class="fas fa-share-alt"></i></span><div>System App</div></button>
                     </div>
 
                     <!-- 婵犵數濮伴崹鐓庘枖濞戞氨鐭撻柟缁㈠枛閺勩儲淇婇妶鍛櫤闁绘搫缍侀弻锝夊箛闂堟稑顫╂繝?-->
                     <div style="display:flex; gap:8px; margin-bottom:14px;">
                         <input readonly :value="shareUrl" onclick="this.select()"
                             style="flex:1; min-width:0; box-sizing:border-box; background:#2a2a2a; border:1px solid #3a3a3a; color:#ccc; border-radius:10px; padding:11px 12px; font-size:12px;">
-                        <button @click="confirmShare" style="background:linear-gradient(135deg,#e50914,#b00610); color:#fff; border:none; border-radius:10px; padding:11px 20px; font-weight:bold; cursor:pointer; white-space:nowrap;">婵犵數濮伴崹鐓庘枖濞戞氨鐭撻柟缁㈠枛閺</button>
+                        <button class="btn-info" @click="confirmShare" style="border:0; padding:0 14px;"><i class="fas fa-copy"></i> Copy</button>
                     </div>
 
                     <!-- 闂佽瀛╅鏍窗閹烘纾婚柟鐐灱閺€鑺ャ亜閺冨倵鎷￠柛搴㈠姈娣囧﹪鎮欓幓鎺嗗亾閸噮娼?-->
                     <label v-if="shareSeconds > 0" style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#ddd; font-size:13px;">
                         <input type="checkbox" v-model="shareIncludeTime" style="width:16px; height:16px; accent-color:#e50914;">
-                        <span>闂佽瀛╅鏍窗閹烘纾婚柟鐐灱閺€鑺ャ亜閺冨倵鎷￠柛搴㈠姈娣囧﹪鎮欓幓鎺嗗亾閸噮娼?<b style="color:#fff;">{{ formatSeconds(shareSeconds) }}</b></span>
+                            Include current time <b style="color:#fff;">{{ formatSeconds(shareSeconds) }}</b>
                     </label>
                 </div>
             </div>
@@ -4480,7 +4480,7 @@
                     <div>
                         <h1 class="video-title">{{ currentGroup.name }}</h1>
                         <div class="video-meta">
-                            濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾跺缂佺姷绮妵鍕箻鐠虹儤鐎鹃梺? <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span>
+                            Current source: <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span>
                             <span v-if="currentSource"
                                 :style="sourceOriginBadgeStyle(currentSource)"
                                 style="margin-left:8px; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px;">
@@ -4496,22 +4496,22 @@
                             <i class="fas fa-external-link-alt"></i> mpv.net
                         </button>
                         <button class="btn-cast" tabindex="2" @click="copyCurrentPlayUrl" aria-label="Copy play URL">
-                            <i class="fas fa-copy"></i> 婵犵數濮伴崹鐓庘枖濞戞氨鐭撻柟缁㈠枛閺勩儲淇婇妶鍛櫣闁圭懓鐖奸弻鈩冨緞鐎ｎ亶鍤嬬紓?
+                            <i class="fas fa-copy"></i> Copy URL
                         </button>
                         <button class="btn-cast" tabindex="2" @click="copyCurrentProxyUrl" aria-label="Copy proxy URL">
-                            <i class="fas fa-shield-alt"></i> 婵犵數鍋涢顓熷垔鐎电绶ら柛褎顨呯粻鏍р攽閻樺弶鎼愰柟鐟扮埣閺屸剝寰勭€ｎ亶鍤嬬紓?
+                            <i class="fas fa-shield-alt"></i> Copy proxy URL
                         </button>
                         <button class="btn-cast" tabindex="2" @click="diagnoseCurrentPlayback" aria-label="Playback diagnostics">
                             <i :class="['fas', playbackDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-stethoscope']"></i> Diagnose
                         </button>
                         <button class="btn-cast" tabindex="2" @click="showSettingsModal = true; loadPlayerSettings()"
                             aria-label="Player settings">
-                            <i class="fas fa-sliders-h"></i> 闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡ê銆掑锝呬壕閻?                        </button>
+                            <i class="fas fa-sliders-h"></i> Player</button>
                         <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="Share">
-                            <i class="fas fa-share-alt"></i> 闂傚倷绀侀幉锛勬暜閹烘嚦娑㈠籍閸噥妫?
+                            <i class="fas fa-share-alt"></i> Share
                         </button>
                         <button class="btn-cast" tabindex="2" @click="castVideo">
-                            <i class="fas fa-tv"></i> 婵犵數鍋為崹鍫曞箰閹绢喖纾婚柟鍓х帛閳锋垶绻涢崱妯哄姢闁哄鍠庨埞鎴︻敊閸忕厧绐涙繛?
+                            <i class="fas fa-tv"></i> Cast
                         </button>
                     </div>
                 </div>
@@ -4520,7 +4520,7 @@
                 <div class="player-box" style="position: relative;">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
                     <div v-if="shouldRecommendExternalPlayer()" style="position:absolute; left:18px; bottom:18px; z-index:80; max-width:520px; background:rgba(0,0,0,0.78); border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 14px; font-size:12px; backdrop-filter:blur(14px);">
-                        闂傚倷娴囬～澶嬬娴犲绀夐煫鍥ㄦ尵閺嗭附淇婇婊呭笡濠殿垱鎸抽幃褰掑箒閹烘垵顬夐梺鍝勬缁绘劙鈥﹂崸妤佸殝闁汇垽娼ч埛宀勬⒑缁嬪灝顒㈤柟鍛婂▕閻涱喖顫滈埀顒勩€佸鈧幃銏ゅ川婵犲啰鐣梻鍌欑窔濞艰崵绱為崱娑欏亗濠㈣泛鏈～鏇㈡煟閵婏腹鎷?playbackClassification && playbackClassification.recommendedPlayer === 'mpv' ? 'mpv.net' : 'MPC' }}
+                        Recommended external player: {{ playbackClassification && playbackClassification.recommendedPlayer === 'mpv' ? 'mpv.net' : 'MPC' }}
                         <div v-if="playbackClassification && playbackClassification.reason" style="color:#cbd5e1; margin-top:4px;">
                             {{ playbackClassification.reason }}
                         </div>
@@ -4535,17 +4535,17 @@
                         </div>
                         <div style="color:#cbd5e1; line-height:1.55;">
                             Player: {{ playbackDiagnostics.classification && playbackDiagnostics.classification.recommendedPlayer }}
-                            <span v-if="playbackDiagnostics.classification && playbackDiagnostics.classification.reason"> 闂?{{ playbackDiagnostics.classification.reason }}</span>
+                            <span v-if="playbackDiagnostics.classification && playbackDiagnostics.classification.reason"> {{ playbackDiagnostics.classification.reason }}</span>
                         </div>
                         <div style="color:#94a3b8; line-height:1.55;">
                             URL: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.format }}
-                            闂?{{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.sourceKind }}
-                            闂?headers: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.hasHeaders ? 'yes' : 'no' }}
-                            闂?expires: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.expiresInSeconds !== null ? playbackDiagnostics.playUrl.expiresInSeconds + 's' : 'n/a' }}
+                            kind: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.sourceKind }}
+                            headers: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.hasHeaders ? 'yes' : 'no' }}
+                            expires: {{ playbackDiagnostics.playUrl && playbackDiagnostics.playUrl.expiresInSeconds !== null ? playbackDiagnostics.playUrl.expiresInSeconds + 's' : 'n/a' }}
                         </div>
                         <div v-if="playbackDiagnostics.issues && playbackDiagnostics.issues.length" style="margin-top:8px; display:grid; gap:6px;">
                             <div v-for="issue in playbackDiagnostics.issues" :key="issue.code" style="padding:7px 9px; border-radius:9px; background:rgba(251,191,36,0.12); color:#fde68a;">
-                                {{ issue.severity }} 闂?{{ issue.code }} 闂?{{ issue.message }}
+                                {{ issue.severity }} / {{ issue.code }} / {{ issue.message }}
                             </div>
                         </div>
                         <div v-if="playbackDiagnostics.recommendations && playbackDiagnostics.recommendations.length" style="margin-top:8px; display:grid; gap:5px; color:#bfdbfe;">
@@ -4558,7 +4558,7 @@
                         <i class="fas fa-sync-alt fa-spin"
                             style="font-size: 24px; color: #e50914; margin-bottom: 10px;"></i>
                         <div style="color: #fff; font-weight: bold;">{{ autoRetryMessage }}</div>
-                        <div style="color: #888; font-size: 12px; margin-top: 5px;">濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾跺闁搞倕锕ラ妵鍕疀閹炬剚浠奸悶姘卞枛濮婃椽宕ㄦ繝鍌滅懆濠电偠顕滅粻鎴︽偩?..</div>
+                        <div style="color: #888; font-size: 12px; margin-top: 5px;">Trying the next available source...</div>
                     </div>
                 </div>
 
@@ -4566,10 +4566,10 @@
                 <div class="controls-area">
                     <!-- 闂傚倷绀侀幉锟犲箰閸℃稑鐐婇柕濞垮妼娴滄牜绱撻崒娆掑厡濠殿噮鍙冨畷鎴﹀箻鐡?-->
                     <div class="mb-4" v-if="currentSource">
-                        <div class="panel-title">闂傚倷绀侀幉锟犲箰閸℃稑绀嬫い鎰╁灩椤ュ秶绱撻崒娆掑厡濠殿噮鍙冨畷鎴﹀箻鐡</div>
+                        <div class="panel-title">Overview</div>
                         <p
                             style="color: #999; font-size: 13px; line-height: 1.7; max-height: 80px; overflow-y: auto; margin: 0;">
-                            <span v-if="loadingDetail"><i class="fas fa-spinner fa-spin"></i> 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞р偓閺?..</span>
+                            <span v-if="loadingDetail"><i class="fas fa-spinner fa-spin"></i> Loading detail...</span>
                             {{ stripHtml(currentSource.vod_content) || 'No overview available.' }}
                         </p>
                     </div>
@@ -4577,10 +4577,10 @@
                     <!-- 缂傚倸鍊烽悞锕€鐣峰鈧畷鏇熺節濮橆厼鍓规俊銈忕到閸燁垶鎮炵拠宸唵閻犺桨璀﹂崕蹇斻亜?-->
                     <div class="mb-4">
                         <div class="panel-title" style="display: flex; align-items: center;">
-                            闂傚倷绀侀幉锛勬暜閹烘嚚娲晝閳ь剟鎮鹃悜鑺ュ殤妞ゆ帒鍊归敍蹇涙⒑閸忕厧澧柛銊﹀▕閹?
+                            Playback sources
                             <span v-if="isTestingSources"
                                 style="font-size: 12px; color: #888; font-weight: normal; margin-left: 10px;">
-                                <i class="fas fa-spinner fa-spin"></i> 濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾斥枙闁革富鍘搁崑鎾绘晲鎼粹剝鐏€闂?..
+                                <i class="fas fa-spinner fa-spin"></i> Testing sources...
                             </span>
                             <span v-else @click="refreshSources"
                                 style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
@@ -4598,18 +4598,18 @@
                             style="font-size: 11px; color: #666; margin-bottom: 10px; display: flex; gap: 15px; align-items: center;">
                             <span style="display: flex; align-items: center; gap: 4px;">
                                 <span
-                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">闂傚倷鑳堕崕鐢稿疾濠靛瑤澶愬箛椤旇棄搴</span>
-                                闂傚倷鐒﹀鍨焽閸ф绀夌€广儱顦弰銉︾箾閹寸偞鐨戦柛妤佺閵囧嫰寮介妸褏鐓佺紓浣鸿檸閸ㄥ爼寮婚悢鐓庣畳闁圭儤鍨垫慨銈咁渻閵堝棙鈷愰柣妤冨Т椤?
+                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">Fast</span>
+                                available source
                             </span>
                             <span style="display: flex; align-items: center; gap: 4px;">
                                 <span
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">婵犵數鍋為崹鍫曞箹閳哄懎鐭楅柍褜鍓氱换</span>
-                                闂傚倸鍊风欢锟犲磻閸涱喚鈹嶉柧蹇氼潐瀹曟煡鏌涢幇銊︽珖妞も晝鍏橀弻銊モ攽閸℃ê顦╅梺绋匡功閸嬨倝骞冪憴鍕闁告稑锕ゆ禒鏉戔攽?
+                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">Slow</span>
+                                may take longer
                             </span>
                             <span style="display: flex; align-items: center; gap: 4px;">
                                 <span
-                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">闂傚倷绀侀幖顐︽偋閸℃瑧鐭撻悗娑櫳戦崣</span>
-                                闂傚倷绀侀幖顐︽偋閸℃瑧鐭撻悗娑櫳戦崣蹇涙煟閺冨倸甯堕梻鍌ゅ灦閺屾洘绻涜婵傛梻妲愰幘鏂ユ斀闁绘劕鐡ㄧ紞鎴炪亜閹存繍妯€闁糕斁鍋?
+                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">TVBox</span>
+                                subscription source
                             </span>
                         </div>
 
@@ -4628,21 +4628,21 @@
                                 <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
                                 <span v-if="source._testType === 'direct'"
                                     style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    闂傚倷鑳堕崕鐢稿疾濠靛瑤澶愬箛椤旇棄搴?
+                                    Direct
                                 </span>
                                 <span v-else-if="source._testType === 'proxy'"
                                     style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    婵犵數鍋為崹鍫曞箹閳哄懎鐭楅柍褜鍓氱换?
+                                    Proxy
                                 </span>
                                 <span v-else
                                     style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    闂傚倷绀侀幖顐︽偋閸℃瑧鐭撻悗娑櫳戦崣?
+                                    TVBox
                                 </span>
                             </div>
                             <!-- 闂傚倷绶氶埀顒佺〒閳规帡鏌涢妸銈囩煓闁糕斁鍋撳銈嗗笒閸婃悂寮搁弮鍫熺厱闁靛牆鎳忛幑锝夋煙閻熸澘顏い銏＄☉椤繈顢楅崒妤€浜惧┑鐘崇閳锋帡鏌涘☉鍗炴灍闁抽攱甯楅妵?-->
                             <div v-if="slowSources.length > 0 && fastSources.length > 0"
                                 style="width: 100%; font-size: 11px; color: #666; padding: 8px 0; border-top: 1px solid #333; margin-top: 5px;">
-                                <i class="fas fa-hourglass-half"></i> 闂備礁鎼ˇ顖炴偋閸℃稑鐤い鏍仜閻鏌涢幇鍏哥敖婵☆偒鍨堕弻銈夊箛娴ｅ摜浠梺?({{ slowSources.length }})
+                                <i class="fas fa-hourglass-half"></i> Slower sources ({{ slowSources.length }})
                             </div>
                             <!-- 闂傚倷绶氶埀顒佺〒閳规帡鏌涢妸銈囩煓闁糕斁鍋撳銈嗗笒閸婃悂寮搁弮鍫熺厱闁靛牆鎳忛幑锝夋煙?-->
                             <div v-for="(source, index) in slowSources" class="source-pill"
@@ -4658,15 +4658,15 @@
                                 <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
                                 <span v-if="source._testType === 'direct'"
                                     style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    闂傚倷鑳堕崕鐢稿疾濠靛瑤澶愬箛椤旇棄搴?
+                                    Direct
                                 </span>
                                 <span v-else-if="source._testType === 'proxy'"
                                     style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    婵犵數鍋為崹鍫曞箹閳哄懎鐭楅柍褜鍓氱换?
+                                    Proxy
                                 </span>
                                 <span v-else
                                     style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    闂傚倷绀侀幖顐︽偋閸℃瑧鐭撻悗娑櫳戦崣?
+                                    TVBox
                                 </span>
                             </div>
                         </div>
@@ -4676,15 +4676,15 @@
                             class="text-center py-4"
                             style="background: rgba(255,0,0,0.1); border-radius: 8px; border: 1px solid rgba(255,0,0,0.2);">
                             <i class="fas fa-exclamation-triangle text-warning" style="font-size: 24px;"></i>
-                            <div class="mt-2" style="color: #ff6b6b;">闂傚倷绀佸﹢閬嶃€傛禒瀣；闁瑰墽绮悡娑㈡煕椤愶絿绠ユ俊顖楀亾闂備線娼荤徊濂稿础閸愬樊娼栭柛褎顨呴獮銏＄箾閸℃ê鐏ラ悹浣圭叀濮婅櫣绮旈崱妤€鏆為柣顓燁殘缁辨帒螖閳ь剟藝闂堟稓鏆﹂柨婵嗩樈閺佸秵绻濇繝鍌氼仾婵</div>
-                            <div class="mt-1" style="font-size: 12px; color: #888;">闂備浇宕垫慨鏉懨洪鈶哄骞樼拠鑼幗闂侀潧绻堥崐鏇犳喆閿曞倸绠规繛锝庡墮婵″吋绻涢崨顐㈢伈闁诡喖缍婂畷鍫曞Ω閿旂虎妲伴梻浣规偠閸斿﹪宕濇惔銏㈩洸缂佸绨遍弨钘夆攽閻樻彃顏粭鎴︽⒒娴ｇ儤鍤€闁告艾顑囬崚鎺撴償閵娿儳锛滈梺闈浥堥弲娑氱矆閸岀偞鐓涢柛顐犲灪閺嗏晠姊洪幆褍鈧潡骞冪涵鍜佹Щ闁诲孩鍑归崢楣冩嚍</div>
+                            <div class="mt-2" style="color: #ff6b6b;">No playable sources were found.</div>
+                            <div class="mt-1" style="font-size: 12px; color: #888;">Try refreshing sources, importing another subscription, or choosing a different line.</div>
                         </div>
                     </div>
 
                     <!-- 闂傚倸鍊风欢锟犲磻閸曨垁鍥濞戞帗鐏冮梺鎸庢礀閸婂摜绮堥崱妯圭箚闁靛牆鎳庨銉╂煃?(闂傚倷鑳堕…鍫㈡崲閸儱绀夌€光偓閸曞灚鏅╅梺鍝勫暙閸婅崵澹曟ィ鍐╃厵閻庣數顭堟禒褍顭? -->
                     <div>
                         <div class="panel-title" style="display: flex; align-items: center;">
-                            闂傚倸鍊风欢锟犲磻閸曨垁鍥濞戞帗鐏冮梺鎸庢礀閸婂摜绮荤紒妯镐簻闁规崘娉涢弸鎴︽煛?
+                            Episodes
                             <span @click="refreshEpisodes"
                                 style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
                                 :style="{ opacity: refreshingEpisodes ? 0.5 : 1, pointerEvents: refreshingEpisodes ? 'none' : 'auto' }"
@@ -4697,7 +4697,7 @@
                         </div>
                         <div v-if="loadingDetail" class="text-center py-5 text-muted"><i
                                 class="fas fa-spinner fa-spin"></i>
-                            闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞р偓閺?..</div>
+                            Loading episodes...</div>
                         <div v-else class="ep-grid">
                             <div v-for="ep in episodeList" class="ep-btn" :class="{ active: currentUrl === ep.url }"
                                 @click="play(ep.url)">
