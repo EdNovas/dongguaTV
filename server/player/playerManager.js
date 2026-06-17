@@ -247,21 +247,30 @@ class PlayerManager {
             recommendations.push('Open Settings and configure a valid MPC-HC or MPC-BE executable path.');
         }
 
+        if (classification.recommendedPlayer === 'mpv' && !mpvValidation.valid) {
+            issues.push({
+                code: 'mpv-not-ready',
+                severity: 'warning',
+                message: 'mpv.net is recommended, but the configured mpv path is not valid.'
+            });
+            recommendations.push('Open Settings and configure a valid mpv.net executable path.');
+        }
+
         if (headerNames.length > 0 && settings.useLocalProxy === false) {
             issues.push({
                 code: 'headers-without-proxy',
                 severity: 'warning',
                 message: 'This playback URL needs custom headers, but LocalProxy is disabled.'
             });
-            recommendations.push('Enable LocalProxy so MPC/internal playback can receive Referer, Cookie, User-Agent, or Authorization headers.');
+            recommendations.push('Enable LocalProxy so external/internal playback can receive Referer, Cookie, User-Agent, or Authorization headers.');
         }
 
-        if (classification.recommendedPlayer === 'mpc') {
+        if (classification.recommendedPlayer === 'mpc' || classification.recommendedPlayer === 'mpv') {
             recommendations.push(classification.reason);
         }
 
         if (input.format === 'm3u8' && headerNames.length > 0) {
-            recommendations.push('For HLS with headers, use the LocalProxy URL or the MPC button instead of copying the raw URL.');
+            recommendations.push('For HLS with headers, use the LocalProxy URL or an external-player button instead of copying the raw URL.');
         }
 
         if (issues.length === 0) {

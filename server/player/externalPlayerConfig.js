@@ -3,7 +3,7 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const DEFAULT_PLAYER_SETTINGS = {
-    defaultPlayer: 'mpc',
+    defaultPlayer: 'mpv',
     mpcExePath: '',
     mpcArgsTemplate: '/play /fullscreen /close "{url}"',
     mpvExePath: '',

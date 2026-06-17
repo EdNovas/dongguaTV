@@ -7,7 +7,7 @@ This Windows desktop build keeps the original DongguaTV search, detail, and inte
 - Apple TV style desktop shell.
 - User-provided TVBox subscription intake.
 - Plugin-required source identification without executing unknown jar, py, or js code.
-- MPC-HC / MPC-BE external playback support.
+- mpv.net external playback as the preferred Windows 10 high-bitrate player, with MPC-HC / MPC-BE kept as a compatible external-player option.
 - Local playback proxy bound to `127.0.0.1`.
 - Runtime data stored under Electron `userData/runtime`.
 - First-run setup checklist backed by `GET /api/desktop/status`.
@@ -32,15 +32,15 @@ The app creates these files when missing:
 - `player-settings.json`
 - `plugin-runtime-settings.json`
 
-`GET /api/desktop/status` returns a setup checklist for runtime file presence, subscription count, MPC validation, default player, LocalProxy enablement, LocalProxy port availability, and next actions. The first-run guide displays this checklist before linking to subscriptions and player settings.
+`GET /api/desktop/status` returns a setup checklist for runtime file presence, subscription count, external-player validation, default player, LocalProxy enablement, LocalProxy port availability, and next actions. The first-run guide displays this checklist before linking to subscriptions and player settings.
 
 The same desktop status response includes `appInfo` with the packaged app version, platform, architecture, and runtime versions so Settings can confirm which Windows build is being diagnosed.
 
 Subscription URL import, local JSON import, subscription refresh, and subscription deletion reload desktop status through the shared subscription data path, so the first-run guide reflects the current userData state without restarting the app.
 
-Settings now include a desktop readiness panel that reuses `GET /api/desktop/status` to show subscription, source, live-channel, MPC, LocalProxy, checklist, and next-action state after the first-run guide has been dismissed.
+Settings now include a desktop readiness panel that reuses `GET /api/desktop/status` to show subscription, source, live-channel, external-player, LocalProxy, checklist, and next-action state after the first-run guide has been dismissed.
 
-The readiness panel also provides a one-click setup check that refreshes desktop status, LocalProxy status, LocalProxy port availability, and MPC validation without launching an external player.
+The readiness panel also provides a one-click setup check that refreshes desktop status, LocalProxy status, LocalProxy port availability, and external-player validation without launching an external player.
 
 Desktop status includes `sourceBreakdown` so Settings can show HTTP-ready sources, plugin-required sources, unsupported sources, enabled/disabled counts, and source distributions without executing subscription plugin code.
 
@@ -52,7 +52,7 @@ If live channels are imported but all are invalid or marked error, readiness nex
 
 Source enable/disable changes and source health checks refresh desktop readiness immediately, so Settings source counts do not require reopening the app.
 
-Desktop status includes machine-readable `readinessIssues` with blocking flags and messages for missing subscriptions, missing playable content, MPC validation, LocalProxy, runtime files, and LocalProxy port warnings.
+Desktop status includes machine-readable `readinessIssues` with blocking flags and messages for missing subscriptions, missing playable content, external-player validation, LocalProxy, runtime files, and LocalProxy port warnings.
 
 Desktop status also includes `readinessSummary` with blocker count, warning count, total issue count, primary blocking code, and a `readyForPlayback` boolean for quick UI checks.
 
@@ -71,7 +71,21 @@ npm run dist
 
 `npm run dist:desktop` is kept as an alias for the Windows Electron package.
 
-## MPC Setup
+## External Player Setup
+
+The default external player is `mpv`, intended for `mpv.net` on Windows 10. Open Settings, detect or paste the local mpv.net executable path, then save settings.
+
+On this workstation the detected mpv.net path is:
+
+```text
+D:\DELL\mpvnet\mpvnet.exe
+```
+
+Settings validates mpv.net through `POST /api/player/validate-mpv`. High-bitrate 4K, HEVC/H.265, HDR, cloud-drive-style URLs, MKV files, and live URLs with custom headers recommend the configured external player. With the default settings, that means mpv.net.
+
+The app passes the media URL as a separate `spawn` argument, not through a shell command string.
+
+## MPC Compatibility
 
 Open Settings, then either detect or paste the local MPC executable path.
 
@@ -82,11 +96,9 @@ Common paths checked:
 - `C:\Program Files\MPC-BE x64\mpc-be64.exe`
 - `C:\Program Files\MPC-BE\mpc-be.exe`
 
-The app passes the media URL as a separate `spawn` argument, not through a shell command string.
-
 Settings can validate the configured MPC path through `POST /api/player/validate-mpc`. The validation is non-executing: it checks that the path exists, is a file, ends in `.exe`, and looks like an MPC-HC or MPC-BE executable.
 
-mpv/mpv.net is supported as the first external-player fallback through `mpvExePath`. The app can detect mpv.net from Windows OpenWith registry entries, validate the executable through `POST /api/player/validate-mpv`, and open playback URLs through `POST /api/player/open-mpv` with the URL passed as a separate `spawn` argument.
+mpv/mpv.net is supported through `mpvExePath`. The app can detect mpv.net from Windows OpenWith registry entries, validate the executable through `POST /api/player/validate-mpv`, and open playback URLs through `POST /api/player/open-mpv` with the URL passed as a separate `spawn` argument.
 
 ## TVBox Import
 
@@ -177,18 +189,18 @@ When a source cannot play:
 - `plugin-required`: CatVod/Spider runtime is required and not installed.
 - `unsupported`: the source is not an HTTP-compatible source in this version.
 - `error`: health check or import failed.
-- Missing MPC path: configure Settings > MPC external player.
+- Missing external-player path: configure Settings > External player and save a valid mpv.net path.
 - Local proxy issue: check `player-settings.json` `localProxyPort` and whether the port is occupied.
 - Current playback: use the player header `Proxy URL` button to register the current PlayUrlResult with LocalProxy and copy the local `127.0.0.1` URL for external player testing.
-- Current playback recommendation: the player overlay calls `POST /api/player/classify` so MPC recommendations use the same backend rules as external playback dispatch.
-- Current playback diagnostics: the player header `Diagnose` action calls `POST /api/player/diagnose` and shows a redacted, token-safe summary of player recommendation, MPC readiness, LocalProxy status, headers, expiry, issues, and suggested fixes.
+- Current playback recommendation: the player overlay calls `POST /api/player/classify` so external-player recommendations use the same backend rules as playback dispatch.
+- Current playback diagnostics: the player header `Diagnose` action calls `POST /api/player/diagnose` and shows a redacted, token-safe summary of player recommendation, mpv.net/MPC readiness, LocalProxy status, headers, expiry, issues, and suggested fixes.
 - Playback classifier: when sources do not provide full metadata, the backend also infers 4K, HEVC/H.265, HDR, cloud-drive, MKV, and live-header hints from the URL before recommending a player.
 - Source diagnostics: use Subscriptions > Diagnose on the specific source to see unsupported/plugin/runtime reasons.
 - Search diagnostics: when search returns no results, use the inline Search Diagnostics panel to see whether the issue is missing built-in search sites, disabled TVBox sources, plugin-required sources, unsupported sources, or Local Java Bridge state.
 
 ## Live TV
 
-The Live TV panel lists channels parsed from user-provided TVBox `lives`, M3U/M3U8, and TXT inputs. Channel cards can open the internal player or launch MPC. Live channels with custom headers are passed to MPC through the existing player API and LocalProxy path. Internal playback also registers a LocalProxy URL first when headers are present and local proxy is enabled.
+The Live TV panel lists channels parsed from user-provided TVBox `lives`, M3U/M3U8, and TXT inputs. Channel cards can open the internal player or launch an external player. Live channels with custom headers are passed to mpv.net or MPC through the existing player API and LocalProxy path. Internal playback also registers a LocalProxy URL first when headers are present and local proxy is enabled.
 
 Live TV supports group filtering, channel search, and paged loading for large channel lists. Group chips call the filtered live-channel API, and the search box matches channel names or group names without executing any plugin source code. The UI loads channels in batches and exposes a Load More button when additional matches are available.
 

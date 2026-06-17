@@ -1,7 +1,7 @@
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
-const { DEFAULT_PLAYER_SETTINGS, validateMpcPath } = require('../player/externalPlayerConfig');
+const { DEFAULT_PLAYER_SETTINGS, validateMpcPath, validateMpvPath } = require('../player/externalPlayerConfig');
 const { DEFAULT_PLUGIN_RUNTIME_SETTINGS } = require('../adapters/tvbox/pluginRuntime');
 const packageInfo = require('../../package.json');
 
@@ -117,6 +117,16 @@ async function getDesktopStatus(dataDir) {
     const contentReady = sourceBreakdown.playableHttp > 0 || liveBreakdown.playable > 0;
     const playerSettings = readJson(path.join(dataDir, 'player-settings.json'), DEFAULT_PLAYER_SETTINGS);
     const mpcValidation = validateMpcPath(playerSettings.mpcExePath);
+    const mpvValidation = validateMpvPath(playerSettings.mpvExePath);
+    const defaultPlayer = playerSettings.defaultPlayer || DEFAULT_PLAYER_SETTINGS.defaultPlayer;
+    const externalPlayerValidation = defaultPlayer === 'mpv'
+        ? { player: 'mpv', label: 'mpv.net', validation: mpvValidation }
+        : defaultPlayer === 'mpc'
+            ? { player: 'mpc', label: 'MPC', validation: mpcValidation }
+            : mpvValidation.valid
+                ? { player: 'mpv', label: 'mpv.net', validation: mpvValidation }
+                : { player: 'mpc', label: 'MPC', validation: mpcValidation };
+    const externalPlayerReady = externalPlayerValidation.validation.valid;
     const localProxyPort = Number(playerSettings.localProxyPort || DEFAULT_PLAYER_SETTINGS.localProxyPort);
     const localProxyPortAvailable = await isPortAvailable(localProxyPort);
     const requiredFiles = Object.keys(DEFAULT_JSON_FILES).map(fileName => ({
@@ -159,13 +169,13 @@ async function getDesktopStatus(dataDir) {
                         : 'No TVBox HTTP-ready sources or live channels have been imported yet.'
         },
         {
-            id: 'mpc',
-            label: 'MPC external player',
-            ok: mpcValidation.valid,
-            severity: mpcValidation.valid ? 'ok' : 'warning',
-            message: mpcValidation.valid
-                ? `${mpcValidation.playerType} is configured.`
-                : mpcValidation.message
+            id: 'external-player',
+            label: 'External player',
+            ok: externalPlayerReady,
+            severity: externalPlayerReady ? 'ok' : 'warning',
+            message: externalPlayerReady
+                ? `${externalPlayerValidation.label} is configured.`
+                : `${externalPlayerValidation.label}: ${externalPlayerValidation.validation.message}`
         },
         {
             id: 'default-player',
@@ -180,7 +190,7 @@ async function getDesktopStatus(dataDir) {
             ok: !!playerSettings.useLocalProxy,
             severity: playerSettings.useLocalProxy ? 'ok' : 'warning',
             message: playerSettings.useLocalProxy
-                ? 'LocalProxy is enabled for headers, Range, HLS, and MPC playback.'
+                ? 'LocalProxy is enabled for headers, Range, HLS, and external playback.'
                 : 'LocalProxy is disabled; links with headers may fail in external players.'
         },
         {
@@ -201,14 +211,14 @@ async function getDesktopStatus(dataDir) {
             nextActions.push('Check live channel URLs; imported live entries are empty or marked error.');
         }
     }
-    if (!mpcValidation.valid) nextActions.push('Configure a valid MPC-HC or MPC-BE executable path.');
+    if (!externalPlayerReady) nextActions.push(`Configure a valid ${externalPlayerValidation.label} executable path.`);
     if (!playerSettings.useLocalProxy) nextActions.push('Enable LocalProxy for high-bitrate, header-protected, and cloud-drive links.');
     if (!localProxyPortAvailable) nextActions.push('Keep the fallback port behavior or change the LocalProxy port in Settings.');
     if (nextActions.length === 0) nextActions.push('Setup looks ready for local playback testing.');
     const setupComplete = setupChecklist.every(item => item.ok || item.severity !== 'error')
         && subscriptions.length > 0
         && contentReady
-        && mpcValidation.valid
+        && externalPlayerReady
         && !!playerSettings.useLocalProxy;
     const readinessIssues = [];
     if (!allRequiredFilesExist) {
@@ -240,13 +250,13 @@ async function getDesktopStatus(dataDir) {
                 : 'Imported sources are plugin-required, unsupported, disabled, or otherwise not HTTP-ready.'
         });
     }
-    if (!mpcValidation.valid) {
+    if (!externalPlayerReady) {
         readinessIssues.push({
-            code: 'mpc-invalid',
-            label: 'MPC player',
+            code: 'external-player-invalid',
+            label: 'External player',
             severity: 'warning',
             blocking: true,
-            message: mpcValidation.message
+            message: `${externalPlayerValidation.label}: ${externalPlayerValidation.validation.message}`
         });
     }
     if (!playerSettings.useLocalProxy) {
@@ -290,13 +300,28 @@ async function getDesktopStatus(dataDir) {
         liveChannels: liveChannels.length,
         liveBreakdown,
         player: {
-            defaultPlayer: playerSettings.defaultPlayer,
+            defaultPlayer,
             mpcConfigured: !!playerSettings.mpcExePath,
             mpcValidation: {
                 valid: mpcValidation.valid,
                 reason: mpcValidation.reason,
                 playerType: mpcValidation.playerType,
                 message: mpcValidation.message
+            },
+            mpvConfigured: !!playerSettings.mpvExePath,
+            mpvValidation: {
+                valid: mpvValidation.valid,
+                reason: mpvValidation.reason,
+                playerType: mpvValidation.playerType,
+                message: mpvValidation.message
+            },
+            externalPlayer: {
+                defaultPlayer,
+                playerType: externalPlayerValidation.player,
+                label: externalPlayerValidation.label,
+                valid: externalPlayerReady,
+                reason: externalPlayerValidation.validation.reason,
+                message: externalPlayerValidation.validation.message
             },
             useLocalProxy: !!playerSettings.useLocalProxy,
             localProxyPort,

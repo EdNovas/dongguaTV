@@ -80,6 +80,22 @@ function hasCustomHeaders(headers) {
     return Object.keys(headers || {}).some(key => Boolean(headers[key]));
 }
 
+function getPreferredExternalPlayer(playerSettings) {
+    return playerSettings.defaultPlayer === 'mpv' ? 'mpv' : 'mpc';
+}
+
+function externalPlayerLabel(player) {
+    return player === 'mpv' ? 'mpv.net' : 'MPC';
+}
+
+function recommendExternal(playerSettings, reason) {
+    const recommendedPlayer = getPreferredExternalPlayer(playerSettings);
+    return {
+        recommendedPlayer,
+        reason: reason.replace('{player}', externalPlayerLabel(recommendedPlayer))
+    };
+}
+
 function classifyPlayUrl(playUrlResult, settings) {
     const input = playUrlResult || {};
     const playerSettings = settings || {};
@@ -92,31 +108,32 @@ function classifyPlayUrl(playUrlResult, settings) {
     const customHeaders = hasCustomHeaders(input.headers);
 
     if ((quality.includes('4k') || quality.includes('2160')) && playerSettings.useMpcFor4K) {
-        return { recommendedPlayer: 'mpc', reason: '4K source is better handled by MPC on Windows.' };
+        return recommendExternal(playerSettings, '4K source is better handled by {player} on Windows.');
     }
 
     if ((codec.includes('hevc') || codec.includes('h265') || codec.includes('h.265') || codec.includes('hvc1')) && playerSettings.useMpcForHEVC) {
-        return { recommendedPlayer: 'mpc', reason: 'HEVC/H.265 source is better handled by MPC on Windows.' };
+        return recommendExternal(playerSettings, 'HEVC/H.265 source is better handled by {player} on Windows.');
     }
 
     if (hdr && playerSettings.useMpcForHDR) {
-        return { recommendedPlayer: 'mpc', reason: 'HDR source is better handled by MPC on Windows.' };
+        return recommendExternal(playerSettings, 'HDR source is better handled by {player} on Windows.');
     }
 
     if (sourceKind === 'cloud-drive' && playerSettings.useMpcForCloudDrive) {
-        return { recommendedPlayer: 'mpc', reason: 'Cloud-drive style URL is better handled by MPC.' };
+        return recommendExternal(playerSettings, 'Cloud-drive style URL is better handled by {player}.');
     }
 
     if (format === 'mkv') {
-        return { recommendedPlayer: 'mpc', reason: 'MKV container is better handled by MPC.' };
+        return recommendExternal(playerSettings, 'MKV container is better handled by {player}.');
     }
 
     if (sourceKind === 'live' && customHeaders) {
-        return { recommendedPlayer: 'mpc', reason: 'Live URL with custom headers is safer through LocalProxy and MPC.' };
+        return recommendExternal(playerSettings, 'Live URL with custom headers is safer through LocalProxy and {player}.');
     }
 
     if (format === 'm3u8' && sourceKind === 'live') {
-        return { recommendedPlayer: playerSettings.defaultPlayer === 'mpc' ? 'mpc' : 'internal', reason: 'Live HLS can use the internal player unless the user prefers MPC.' };
+        const preferred = ['mpc', 'mpv'].includes(playerSettings.defaultPlayer) ? playerSettings.defaultPlayer : 'internal';
+        return { recommendedPlayer: preferred, reason: 'Live HLS can use the internal player unless the user prefers an external player.' };
     }
 
     return {
@@ -131,5 +148,6 @@ module.exports = {
     inferQuality,
     inferCodec,
     inferHdr,
-    inferSourceKind
+    inferSourceKind,
+    getPreferredExternalPlayer
 };

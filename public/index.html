@@ -3626,7 +3626,7 @@
                         <i class="fas fa-broadcast-tower" style="margin-right: 10px; color: #60a5fa;"></i>Live TV
                     </h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
-                        直播频道来自你导入的 TVBox / M3U / TXT 订阅，不内置任何第三方直播源。普通 M3U8 可尝试内置播放，带 headers 的频道建议使用 MPC。
+                        直播频道来自你导入的 TVBox / M3U / TXT 订阅，不内置任何第三方直播源。普通 M3U8 可尝试内置播放，带 headers 的频道建议使用 mpv.net。
                     </div>
                     <div v-if="liveGroups.length > 0" style="margin-top:20px;">
                         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
@@ -3736,7 +3736,7 @@
                         <i class="fas fa-magic" style="color:#60a5fa; margin-right:10px;"></i>首次设置
                     </h2>
                     <div style="color:#aaa; font-size:14px; line-height:1.8;">
-                        建议先完成两件事：导入你自己的 TVBox 订阅链接，并配置 MPC-HC / MPC-BE 路径。高码率 4K、HEVC、HDR 和网盘源会优先推荐外部播放器。
+                        建议先完成两件事：导入你自己的 TVBox 订阅链接，并配置 mpv.net 路径。高码率 4K、HEVC、HDR 和网盘源会优先推荐外部播放器。
                     </div>
                     <div v-if="desktopStatus && desktopStatus.setupChecklist"
                         style="margin-top:18px; display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px;">
@@ -3763,7 +3763,7 @@
                         </button>
                         <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSettingsModal=true; loadPlayerSettings()"
                             style="text-align:left; color:#fff; cursor:pointer;">
-                            <div style="font-weight:800;">配置 MPC</div>
+                            <div style="font-weight:800;">配置 mpv.net</div>
                             <div style="color:#888; font-size:12px; margin-top:6px;">保存本机播放器路径和本地代理端口</div>
                         </button>
                     </div>
@@ -3943,7 +3943,7 @@
                                     <i class="fas fa-clipboard-check" style="color:#60a5fa; margin-right:8px;"></i>Desktop readiness
                                 </div>
                                 <div style="color:#9ca3af; font-size:12px; margin-top:4px;">
-                                    userData runtime, subscriptions, MPC, and LocalProxy
+                                    userData runtime, subscriptions, external player, and LocalProxy
                                 </div>
                                 <div v-if="desktopStatus.checkedAt" style="color:#6b7280; font-size:11px; margin-top:4px;">
                                     Last checked: {{ formatLocalTimestamp(desktopStatus.checkedAt) }}
@@ -4012,9 +4012,9 @@
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">MPC</div>
-                                <div :style="{ color: desktopStatus.player && desktopStatus.player.mpcValidation && desktopStatus.player.mpcValidation.valid ? '#22c55e' : '#fbbf24', fontWeight:'800', marginTop:'4px' }">
-                                    {{ desktopStatus.player && desktopStatus.player.mpcValidation && desktopStatus.player.mpcValidation.valid ? 'Valid' : 'Missing' }}
+                                <div style="color:#9ca3af; font-size:11px;">External</div>
+                                <div :style="{ color: desktopStatus.player && desktopStatus.player.externalPlayer && desktopStatus.player.externalPlayer.valid ? '#22c55e' : '#fbbf24', fontWeight:'800', marginTop:'4px' }">
+                                    {{ desktopStatus.player && desktopStatus.player.externalPlayer && desktopStatus.player.externalPlayer.valid ? (desktopStatus.player.externalPlayer.label || 'Valid') : 'Missing' }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
@@ -4167,16 +4167,16 @@
                                 <input type="checkbox" v-model="playerSettings.closeMpcAfterPlayback" style="accent-color:#e50914;"> 播完关闭
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcFor4K" style="accent-color:#e50914;"> 4K 用 MPC
+                                <input type="checkbox" v-model="playerSettings.useMpcFor4K" style="accent-color:#e50914;"> 4K 用外部播放器
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForHEVC" style="accent-color:#e50914;"> HEVC 用 MPC
+                                <input type="checkbox" v-model="playerSettings.useMpcForHEVC" style="accent-color:#e50914;"> HEVC 用外部播放器
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForHDR" style="accent-color:#e50914;"> HDR 用 MPC
+                                <input type="checkbox" v-model="playerSettings.useMpcForHDR" style="accent-color:#e50914;"> HDR 用外部播放器
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> 网盘源用 MPC
+                                <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> 网盘源用外部播放器
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
                                 <input type="checkbox" v-model="playerSettings.useLocalProxy" style="accent-color:#e50914;"> 使用本地代理
@@ -4518,8 +4518,8 @@
                 <!-- 2. 中部：超大播放器 -->
                 <div class="player-box" style="position: relative;">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
-                    <div v-if="shouldRecommendMpc()" style="position:absolute; left:18px; bottom:18px; z-index:80; max-width:520px; background:rgba(0,0,0,0.78); border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 14px; font-size:12px; backdrop-filter:blur(14px);">
-                        推荐使用 MPC 播放，以获得更稳定的高码率播放体验。
+                    <div v-if="shouldRecommendExternalPlayer()" style="position:absolute; left:18px; bottom:18px; z-index:80; max-width:520px; background:rgba(0,0,0,0.78); border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 14px; font-size:12px; backdrop-filter:blur(14px);">
+                        推荐使用外部播放器：{{ playbackClassification && playbackClassification.recommendedPlayer === 'mpv' ? 'mpv.net' : 'MPC' }}
                         <div v-if="playbackClassification && playbackClassification.reason" style="color:#cbd5e1; margin-top:4px;">
                             {{ playbackClassification.reason }}
                         </div>
@@ -5064,7 +5064,7 @@
                     liveFavorites: [],
                     showLiveFavoritesOnly: false,
                     playerSettings: {
-                        defaultPlayer: 'mpc',
+                        defaultPlayer: 'mpv',
                         mpcExePath: '',
                         fullscreenOnStart: true,
                         closeMpcAfterPlayback: true,
@@ -6413,9 +6413,9 @@
                     };
                 },
 
-                shouldRecommendMpc() {
+                shouldRecommendExternalPlayer() {
                     if (this.playbackClassification && this.playbackClassification.recommendedPlayer) {
-                        return this.playbackClassification.recommendedPlayer === 'mpc';
+                        return ['mpc', 'mpv'].includes(this.playbackClassification.recommendedPlayer);
                     }
                     const result = this.buildCurrentPlayUrlResult();
                     return result.quality === '4k' || result.codec === 'hevc' || result.hdr || result.sourceKind === 'cloud-drive' || result.format === 'mkv' || (result.sourceKind === 'live' && Object.keys(result.headers || {}).length > 0);
