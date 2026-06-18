@@ -20,6 +20,9 @@
 | 2026-06-19T00:00:00Z | Real playback chain via `量子资源(切)` -> `莲花童子哪吒[电影解说]` | pass | `/api/player/classify` recommended `mpv`; `/api/player/diagnose` passed; `/api/player/proxy-url` returned `http://127.0.0.1:9979/play/...`; proxied playlist preview returned `#EXTM3U` with nested `127.0.0.1:9979/play/...` rewrite; `/api/player/open-mpv` returned success; running `mpvnet.exe` command line contained the LocalProxy URL rather than the raw source URL |
 | 2026-06-19T00:00:00Z | Plugin-required diagnostics | pass | Sampled `次元城` and `Tg豆瓣` both returned `plugin-runtime-required` with stub Java bridge guidance; no subscription-provided jar was executed |
 | 2026-06-19T00:00:00Z | Live channel sampling from encoded subscription | pass with mixed reachability | `GET /api/live/channels?group=央视&limit=3` returned channels; sampled live URLs returned HTTP `200`, `000`, and `200` respectively, proving list parsing works while endpoint reachability varies per line |
+| 2026-06-19T00:00:00Z | Expanded AppleCMS HTTP-ready sweep across 8 sources | mixed | `量子资源` remained searchable and healthy; `光速资源` and `新浪资源` also returned live search results for current titles; `FOX`, `番茄`, `樱花`, and `酷点` stayed searchable-in-config but returned zero hits for sampled titles; `卧龙`, `神速`, and `想看` showed health-check errors in this session |
+| 2026-06-19T00:00:00Z | Additional HTTP source probe for `光速资源(切)` and `新浪资源(切)` | pass | `长安的荔枝` and `庆余年 第二季` were searchable; sampled play entries returned HTTP `200`; detail previews exposed paired `play/...` and `play/.../index.m3u8` URLs |
+| 2026-06-19T00:00:00Z | Live playback chain via `CCTV1` sample from encoded subscription | pass | `/api/player/classify` recommended `mpv` for live HLS under current settings; `/api/player/proxy-url` returned `127.0.0.1:9979/play/...`; proxied playlist preview returned `#EXTM3U` with rewritten nested proxy segment URLs; `/api/player/open-mpv` returned success; running `mpvnet.exe` command line contained the LocalProxy live URL |
 
 ## Changed Files
 
@@ -30,5 +33,5 @@
 ## Known Gaps
 
 - Only 3 representative subscriptions were validated in this phase; broader source coverage remains pending.
-- Live-channel parsing is proven, but no live channel was run through mpv in this phase.
+- Live-channel parsing and one live `mpv` playback chain are proven, but only a small sample was exercised.
 - Sampled AppleCMS sources show mixed current availability; broader per-source health mapping remains pending.
