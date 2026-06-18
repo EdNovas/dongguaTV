@@ -68,7 +68,7 @@
     <!-- SW 闂傚倷鑳剁划顖炪€冮崨瀛樺亱濠电姴鍋婇懓鍧楁煛婢跺寒鍤︽繛鎴欏灩閻掑灚銇勯幒鍡椾壕闂傚洤顦甸幃妤呮晲鎼存繄鍑归柣搴亢鐏忔瑩鍩€椤掍緡鍟忛柛鐘崇墵楠炴牠顢曢敃鈧弰銉︿繆閵堝懏鍣归柛妤佸▕閹鈽夊▍铏灴閹繝鍩€椤掑嫭鈷戦柟绋挎捣閳藉鏌ｅΔ鈧Λ娑㈠箲閵忋倕鐒垫い鎺嗗亾妞ゎ亜鍟存俊鍫曞醇椤愩垺顔勬繝鐢靛Л閸嬫挻銇勮箛鎾跺閻庢艾顦甸弻宥堫檨闁告挻鐟╅、姘舵晲婢跺﹦鍔﹀銈嗗笂缁€浣烘閻愬搫绾ч柛顐ｇ箓閳锋梻绱掗埀?-->
     <script data-cfasync="false">
         (function () {
-            var REQUIRED_SW_VERSION = 'v24';
+            var REQUIRED_SW_VERSION = 'v25';
             var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
 
             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞濠电姴楠搁弲鐘绘⒑閼测斁鎷￠柛鎾寸洴閹偓闁告侗鍘稿Σ鍫ユ煙閹规劕鍚圭紒杈ㄥ缁辨帞绱掑Ο鐓庮潷缂備礁顑呴ˇ鐢搞€侀弮鍫濆耿婵°倕锕ュВ澶愭⒒娴ｅ憡鎯堥柣妤佺矒瀹曟粌顫濇潏鈺佸触婵犵數濮电喊宥夊磻閻樼粯鐓曢柍鈺佸暞閻ㄦ垹绱掗悩宕囧⒌闁哄被鍔岄埥澶娢熸笟顖涱唲缂傚倷鐒﹂〃鍛此囬棃娑氭殾婵☆垯璀﹂崥瀣熆鐠虹尨鏀绘い蹇曞枑缁?
@@ -98,7 +98,7 @@
                             caches.keys().then(function (names) {
                                 names.forEach(function (name) {
                                     if (name.indexOf(REQUIRED_SW_VERSION) === -1) {
-                                        // console.log('[DongguaTV] log');
+                                        // Delete outdated service-worker cache entries.
                                         caches.delete(name);
                                     }
                                 });
@@ -3841,7 +3841,7 @@
                             </div>
                             <div v-if="sub.metadata && sub.metadata.parserDiagnostics"
                                 style="color:#8f98aa; font-size:11px; margin-top:8px;">
-                                parser: {{ sub.metadata.parserDiagnostics.configKind || 'tvbox-config' }} / {{ sub.metadata.parserDiagnostics.parseMode || 'strict' }}
+                                parser: {{ sub.metadata.parserDiagnostics.configKind || 'tvbox-config' }} / {{ sub.metadata.parserDiagnostics.decodeMode || 'plain-text' }} / {{ sub.metadata.parserDiagnostics.parseMode || 'strict' }}
                             </div>
                             <div v-if="sub.metadata && (sub.metadata.jar || sub.metadata.spider)"
                                 style="color:#888; font-size:11px; margin-top:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
@@ -4922,11 +4922,9 @@
                     const ip = (await response.text()).trim();
                     if (ip && /^[\d\.]+$/.test(ip)) {  // 缂傚倸鍊烽懗鑸垫叏椤撱垹纾婚柟鍓х帛閻撴洘淇婇妶鍕妽缂佲偓閸愵喗鐓熸俊銈傚亾閻庢稈鏅犻妴?IPv4 闂傚倷绀侀幖顐ょ矓閸洖鍌ㄧ憸蹇撐?
                         clientPublicIP = ip;
-                        console.log('[DongguaTV] log');
                     }
                 }
             } catch (e) {
-                console.warn('[DongguaTV] warning');
                 // 婵犵數濮伴崹娲磿閼测晛鍨濋柛鎾楀嫬鏋傞梺鎸庢⒒閺咁偊鍩㈤弮鍌楀亾楠炲灝鍔氭い锔垮嵆閸┿垺鎯旈埦鈧弨钘夘熆鐠洪缚瀚伴柛鎾崇－缁辨帗娼忛妸褏鐤勯悗娈垮櫍濞佳囶敇婵傜宸濇い鎾楀嫬灏冪紓鍌氬€烽悞锕€螞韫囨稑鍨傛い鏍ㄧ矋椤洖霉閸忓吋缍戦柛鎰ㄥ亾闂佽崵鍠愰悷銉р偓姘煎墰缁﹪鏁傞崜褏锛滄繝銏ｆ硾椤﹂亶宕濆鍡欑瘈闁?IP 闂傚倷鐒﹂幃鍫曞磿閹惰棄纾婚柕鍫濐槸閻掑灚銇勯幋锝嗩棄濞存粎鍋撶换婵嬪閿濆棛銆愰柣搴㈠嚬閸ｏ綁鐛?
             }
         }
@@ -5160,7 +5158,6 @@
 
                         // 3. 闂傚倷绀侀幉锟犫€﹂崶顒€绐楅柟鎹愵嚙閺?App 婵犳鍠楃敮妤冪矙閹烘せ鈧箓宕奸妷顔芥櫍闁荤姴娲ゅΟ濠囧吹閺囥垺鐓冪憸婊堝礈閻旈鏆?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵?
                         if (isNative) {
-                            console.log('[DongguaTV] log');
                             return true;
                         }
 
@@ -5179,7 +5176,6 @@
                         const isTVUA = tvKeywords.some(k => ua.includes(k));
 
                         if (isTVUA) {
-                            console.log('[DongguaTV] log');
                         }
                         return isTVUA;
                     })(),
@@ -5250,8 +5246,6 @@
                 }
             },
             async mounted() {
-                console.log('[DongguaTV] log');
-                console.log('[DongguaTV] log');
                 this.loadLiveFavorites();
 
                 // 濠碘槅鍋撶徊浠嬪疮椤栫偛绠?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鐓熼柣妯夸含椤︼箑顭胯缁瑩骞?
@@ -5542,7 +5536,6 @@
                             ? parsed.filter(channel => channel && channel.name && channel.url)
                             : [];
                     } catch (error) {
-                        console.warn('[DongguaTV] warning');
                         this.liveFavorites = [];
                     }
                 },
@@ -5940,7 +5933,6 @@
                             }
                         }
                     } catch (error) {
-                        console.warn('[DongguaTV] warning');
                     }
                 },
 
@@ -6726,12 +6718,10 @@
                         // 婵犵數鍎戠徊钘壝洪敂鐐床闁稿瞼鍋為崑?CORS 婵犵數鍋涢顓熷垔鐎电绶ら柛褎顨呯粻?URL闂傚倷鐒︾€笛呯矙閹达附鍋嬮煫鍥ㄧ☉閺嬩線鏌曢崼婵囶棤妞も晜鐓￠獮鏍庨鈧埀顒侇殜婵″爼顢曢敐鍥╃槇閻熸粌閰ｅ畷婵單旈崨顔间户?API 婵犵數鍋為崹鍫曞箹閳哄懎鐭楅柍褜鍓氱换娑㈠级閹寸儐妫﹂梺?
                         if (config.cors_proxy_url) {
                             this.corsProxyUrl = config.cors_proxy_url;
-                            console.log('[DongguaTV] log');
                         }
 
                         // Vercel 闂傚倷鑳堕…鍫㈡崲閹烘鍌ㄧ憸鏃堛€佸▎鎾崇疀闁哄娉曢悾閬嶆偡濠婂啴鍙勯挊鐔兼煕濞戝崬濮?
                         if (config.enable_local_image_cache === false) {
-                            console.log('[DongguaTV] log');
                             // 闂傚倷鐒﹂幃鍫曞磿閹惰棄纾婚柕鍫濐槸閻掑灚銇勯幋锝嗩棄濞存粓绠栧娲川婵犲倻鐟插┑鐘灪閿曘垽骞冮悙顒傞檮缂佸瀵чˉ?CDN
                             this.TMDB_IMG_URL = "https://image.tmdb.org/t/p/w342";
                             this.TMDB_BACKDROP_URL = "https://image.tmdb.org/t/p/original";
@@ -6761,7 +6751,6 @@
                             console.error('[InitApp] Failed to load content rows', e);
                         }
                     } else {
-                        console.warn('[DongguaTV] warning');
                         updateStatus('Loading status updated');
                     }
 
@@ -6815,7 +6804,6 @@
                             if (this.watchHistory.length !== history.length) {
                                 this.saveWatchHistoryToStorage();
                             }
-                            console.log('[DongguaTV] log');
                             this.$nextTick(() => this.updateHistoryScrollNeeded());
                         }
                     } catch (e) {
@@ -6857,7 +6845,6 @@
                         }
 
                         if (keysToRemove.length > 0) {
-                            console.log('[DongguaTV] log');
                             keysToRemove.forEach(key => localStorage.removeItem(key));
                         }
                     } catch (e) {
@@ -6872,7 +6859,6 @@
                         store(this.watchHistory);
                     } catch (e) {
                         // 濠碘槅鍋撶徊浠嬪疮椤栨粎鐭嗗鑸靛姈閻?闂傚倸鍊烽悞锕€顭垮Ο鑲╃煋鐟滅増宕犻悜钘夌＜婵犲﹤瀚崕閬嶆⒑閸涘﹦鈽夐柣掳鍔戦、鎾斥枎閹惧鍘搁梺鍛婂姦閸樼晫娑垫ィ鍐╃厱闁靛鍎查幑锝夋煟閵夘喕娴锋い锕€顕槐鎺楀Ω閵婏妇銆婄紓渚囧枛椤兘宕洪埀顒併亜閹烘垵顏柡鍜佸墰閳ь剙鍘滈崑鎾绘煕閺囥劋绨界紒杈ㄥ哺濮婅櫣绮欑捄銊ь唶缂備礁顦遍幊鎾烩€﹂崶顒€围闁糕檧鏅滄禒妯衡攽閳藉棗鐏ユい顐㈩槹缁嬪濮€閻欌偓閻斿棝鏌熼娆忓祮闁告繄鍎ょ换娑㈠箻瀹曞洤鐓熼悗娈垮櫘閸撶喖鐛箛鎾舵殕闁逞屽墰缁粯绻濆顒傤啇闁哄鐗婂畷姗€顢橀搹鍦＜閺夊牄鍔庨幊鍥┾偓瑙勬磸閸庨潧鐣烽悡搴樻斀濠电姴鍊昏ぐ鏌ユ⒑鐠囧弶鎹ｉ柟铏崌瀵敻顢楅崟顐ｈ緢闂佹寧绻傚ú銊ノ涢鐐寸厾闁归绀侀悘锝夋煟閺傛寧鍤囬柡灞剧洴楠炴帡骞欓崘鈺冩毌闂備線娼уΛ妤呭疮閺夋垹鏆﹂柕澶涢檮閸庣喐绻濋棃娑氬ⅱ濮濆洨绱撻崒娆戭槮妞わ缚绮欏畷褰掑箯鐏炶姹楁繝銏ｆ硾椤戝懐娆㈤悙鍨枑婵犻潧鐗婇～?
-                        console.warn('[DongguaTV] warning');
                         try {
                             // 闂傚倸鍊搁崐鍝モ偓姘煎墰缁棃鎳滃▓鎸庮啍?闂傚倷鐒︾€笛呯矙閹烘鍎楁い鏃€鍎抽崹婵嬪箹濞ｎ剙濡奸悗姘樀閺屽秷顧侀柛鎾磋壘椤?8 闂傚倷绀侀幖顐λ囬锕€鐒垫い鎺戝暙閻ㄨ櫣绱掗悩杈╃煓闁哄矉缍侀弫鎰板幢濞嗘劕娅戦梻浣风串缂嶅棝宕滈悢濂夊殨妞ゆ劑鍊愰崑鎾绘偨濞堣法鍔稿┑鐐茬墢婵炩偓闁诡喛顫夌粭鐔碱敍濮樺彉鐢婚梻浣告惈濡盯宕伴弽顓犲祦闁硅揪瀵岄弫瀣煕閳╁啰鎳呮い锔诲櫍濮婅櫣绮欑捄銊ь唹濠电姭鍋撻柛锔诲幘缁€濠囨煙鏉堝墽鐣遍柛灞诲妿缁辨挻鎷呮慨鎴簽缁晠寮堕幊銊ョ秺閺佹劙宕卞Ο鐑樻闁荤偞鐨滈崘鍓у數闂佸壊鍋勫Λ妤呭箠韫囨稒鍋?vod_play_url/vod_content
                             const slim = this.watchHistory.map((item, idx) => {
@@ -6888,12 +6874,10 @@
                                 };
                             });
                             store(slim);
-                            console.log('[DongguaTV] log');
                         } catch (e2) {
                             try {
                                 // 闂傚倸鍊搁崐鍝モ偓姘煎墰缁棃鎳滃▓鎸庮啍?闂傚倷鐒︾€笛呯矙閹烘鍎楁い鏃€鍎抽崹婵嬪箹濞ｎ剙鐏柍鐟扮У缁绘繈妫冨☉姘杸濠电偛鐗嗛惌鍌炲蓟閿熺姴閱囨慨姗嗗厸婢规洟姊?15 闂?
                                 store(this.watchHistory.slice(0, 15));
-                                console.log('[DongguaTV] log');
                             } catch (e3) {
                                 console.error('[WatchHistory] Failed to persist fallback watch history', e3);
                             }
@@ -6944,7 +6928,6 @@
 
                         const serverHistory = data.history;
 
-                        console.log('[DongguaTV] log');
 
                         // 濠碘槅鍋撶徊浠嬪疮椤栫偛鏋?闂傚倷绀侀幖顐︽偋閸℃瑧鐭撻悗娑櫳戦崣蹇涙煟閺冨倸甯堕梻鍌ゅ灦閺屾洘绻涢崹顔瑰亾濡ゅ懎绐楁慨妞诲亾闁哄本绋栫粻娑㈠箻鐠鸿　鍙￠梻浣割吔閺夊灝濮﹂梺璇″櫍缁犳牗淇婇悜绛嬫晬婵犲﹤鎳愬畷鍫曟⒒娴ｅ憡鎯堥柣妤€妫涚划鏃傗偓娑櫳戦崣蹇涙煟閺冨倸甯堕梻鍌ゅ灦閺屾洘绻濊箛娑欘€嶅┑鐐茬墕閻栧ジ寮婚悢鐑樺珰闁炽儴娅曢悘鎾斥攽閻愭潙绲绘繛纭风節閻涱噣骞掑Δ鈧敮濡炪値鍘介崹鍫曟嚋瑜版帗鈷戦柣鎴旀櫆濞呭棝鏌ｅΔ渚囨當闁挎洏鍨虹€靛ジ寮堕幋鐐茬ザ?
                         // 闂備浇顕х换鎰崲閹邦儵娑樷枎韫囥儴鈧潡鏌涢妷顔煎缂佲偓婢舵劖鐓冮柕澶堝妽閻濐亪鏌ｅ┑鍕偓婵嬪蓟濞戞鐔兼倻濮楀棙顥ｉ柣鐔哥矋婵粙宕洪弽褜鐒芥い蹇撶墱閺佸棗霉閿濆浂鐒剧紒銊ｅ劜缁绘盯骞嬮悙鏉戞殫闂佺绨洪崐鏇㈡晝閵忊€愁嚤闁哄鍨跺畵宥夋⒑缂佹﹩娈旈柣妤€绻戠粩鐔煎箛椤旂懓浜?
@@ -6956,7 +6939,6 @@
                         const localOnlyItems = this.watchHistory.filter(item => !serverNames.has(item.name));
 
                         if (localOnlyItems.length > 0) {
-                            console.log('[DongguaTV] log');
                             localOnlyItems.forEach(item => newHistory.push(item));
                         }
 
@@ -6974,10 +6956,8 @@
                         const hasChanges = JSON.stringify(this.watchHistory) !== JSON.stringify(newHistory);
 
                         if (hasChanges) {
-                            console.log('[DongguaTV] log');
                             this.watchHistory = newHistory;
                         } else {
-                            console.log('[DongguaTV] log');
                         }
 
                         // 婵犵數鍎戠徊钘壝洪敂鐐床闁稿瞼鍋為崑銈夋煏婵炵偓娅呯紒鈧崱娑欑厽婵°倐鍋撻柣妤€锕獮蹇涙焼瀹ュ棛鍘遍梺鎸庢磵閸嬫捇骞栫€涙鐭屾俊鍙夊姇閳诲酣骞囬瑙勭亙闁诲骸绠嶉崕閬嶆偄閸℃稑鍗抽柕蹇曞Х閻撴垿姊洪悷鎵憼缂佽鍊垮鎻掆枎閹邦喚顔曢梺绯曗偓宕囩濠⒀勭叀閹粙顢涘杈┬ㄩ梺鍝勮嫰閹冲繒绮悢鍝ョ瘈闁告洦鍙庡Σ?
@@ -7058,7 +7038,6 @@
                                 history: historyToSync
                             })
                         });
-                        console.log('[DongguaTV] log');
                     } catch (e) {
                         console.error('[HistorySync] Failed to push history', e);
                     }
@@ -7083,7 +7062,6 @@
                         // sendBeacon 缂傚倷鑳堕搹搴ㄥ矗鎼淬劌绐楅柡鍥╁У瀹曞弶鎱ㄥ鍡楀箲濞存粍绮撻弻锝夊閻樺啿鏆堝┑鈩冦仠閸旀垿寮诲☉婊呯杸闁哄倸绨遍弸娆忊攽閳藉棗浜濋柟绋垮暱椤曪綁顢氶埀顒勫箠濠婂牆鍨傛い鎰剁秵閸熲偓闂傚倷鑳堕、濠囶敋閺嶎厼绐楅柡鍥╁Т婵剟鏌涢幇闈涙灍闁搞倕瀚伴弻锕€螣娓氼垱笑缂備礁寮跺钘夘潖?
                         if (navigator.sendBeacon) {
                             navigator.sendBeacon('/api/history/push', new Blob([data], { type: 'application/json' }));
-                            console.log('[DongguaTV] log');
                         }
                     } catch (e) {
                         console.error('[HistorySync] Beacon push failed', e);
@@ -7134,7 +7112,6 @@
                             fresh.sources.forEach(s => {
                                 if (s.site_key && !existKeys.has(s.site_key)) merged.push(s);
                             });
-                            console.log('[DongguaTV] log');
                             groupData = { ...groupData, sources: merged };
                         }
                     }
@@ -7186,7 +7163,6 @@
                     }
 
                     this.saveWatchHistoryToStorage();
-                    console.log('[DongguaTV] log');
                 },
 
                 // 濠电姷鏁搁崑鐐哄箰閹间礁绠犳俊顖濄€€閺嬪秹骞栨潏鍓хɑ闁哥姴妫濋弻娑氫沪閸撗呯厑缂備胶濮甸悷鈺呭蓟濞戞鐔兼倻濮楀棙顥ｉ柣?
@@ -7203,12 +7179,10 @@
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ token: this.syncToken })
                                 });
-                                console.log('[DongguaTV] log');
                             } catch (e) {
                                 console.error('[HistorySync] Failed to clear remote history', e);
                             }
                         }
-                        console.log('[DongguaTV] log');
                     }
                 },
 
@@ -7238,7 +7212,6 @@
                         this.syncToken = '';
                         this.watchHistory = [];
 
-                        console.log('[DongguaTV] log');
 
                         // 闂傚倷绀侀幉锛勬暜閿熺姴缁╅梺顒€绉撮拑鐔封攽閻樻彃鏆斿ù婊勭矒閺岋綁濮€閻樺啿鏆堝┑鈩冦仠閸旀垿寮婚敓鐘茬妞ゆ劏鎳囬幐鍐⒑闂堟稒澶勬慨妯稿姂閸┾偓妞ゆ帒瀚☉褎淇婇锝囨创闁诡喓鍎遍…銊╁礋椤掑倻肖闂備浇顫夐崕鎶藉疮閸噮鍤曢柧蹇ｅ亗缁?
                         window.location.reload();
@@ -7292,10 +7265,8 @@
                     try {
                         if (key === 'hideRandomRow') {
                             localStorage.setItem('donggua_hide_random', this.hideRandomRow ? 'true' : 'false');
-                            console.log('[DongguaTV] log');
                         } else if (key === 'filterNsfw') {
                             localStorage.setItem('donggua_filter_nsfw', this.filterNsfw ? 'true' : 'false');
-                            console.log('[DongguaTV] log');
                             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞濠电姴楠稿▓銊╂⒑闁偛鑻晶瀵糕偓瑙勬磸閸庣敻銆佸☉妯锋瀻闁瑰瓨绻冨▍鎾绘⒑閸濆嫷妲撮柡鍛☉鐓ら柨鏇炲€哥粻顕€鏌曢崼婵愭Ч闁哄拋鍓熼幃姗€鎮欓幓鎺嗘寖濡炪倕绻愰幗婊呮閹烘柧娌柤鎭掑劜閸庢挾绱撻崒姘毙㈡い鎴濐槸閻ｅ嘲顭ㄩ崘鎯ф倯闂佹悶鍎崝搴ㄥ汲閻樼粯鈷掗柛灞剧閸ｅ湱绱掔紒妯虹仴闁崇懓鍟撮崺鈧い鎺戝閻撴洟鏌熼悜妯绘儎婵炲牊鐟╅弻鏇㈠幢濡も偓閺嗙喖鏌熷畡閭﹀剶闁糕斁鍓濋幏鍛存倻濡崵鏉归梻鍌氬€烽悞锕併亹閸愵亞鐭撻柣銏㈩焾閽冪喎鈹戦悩鍙夋悙缂佲偓婢舵劖鐓熸俊顖滃帶閸斿绱?
                             if (this.filterNsfw) {
                                 this.rowLists.randomRow = null;
@@ -7348,7 +7319,6 @@
                         // 缂傚倸鍊烽悞锕傚蓟閵娾晩鏁勯柛娑卞幘閺嗐倝鏌涢埄鍐槈閻熸瑱绠撻幃姗€鎮欐担鍐╊€楅梺鍛婃煥鐎氫即寮诲☉銏犵闁哄倹顑欓弳顓炩攽閻橆偄浜鹃梺鎼炲労閸撴瑧绮堟径鎰厓闁靛鍔嶉悵顏堟煟?
                         this.pushHistoryToServer(true);
                         this.$nextTick(() => this.updateHistoryScrollNeeded());
-                        console.log('[DongguaTV] log');
                     }
                 },
 
@@ -7756,7 +7726,6 @@
                         }
                     } catch (e) {
                         // 2. 婵犵數濮伴崹鐓庘枖濞戞◤娲敇閵忕姷鍔﹀銈嗗坊閸嬫挻銇勮閸嬫挾绱撴担鎴掑惈婵炲牊浠?sohu.com闂傚倷鐒︾€笛呯矙閹达附鍋嬪┑鐘叉搐缁犳牠鏌熼幆鏉啃撻柛瀣灴閺岀喖寮堕崹顕呮殺缂備讲鍋撳鑸靛姈閻撴洟鏌曟径鍫濆妞ゃ儱顦甸弻娑㈡倷鐎涙ê鍞夐梺鍝勮嫰閹虫﹢骞冮姀鐘垫殝闂侇叏绠戦弫浠嬫⒒婵犲骸浜滄繛鏉戝€垮畷鎴﹀箻閼告娼?
-                        console.log('[DongguaTV] log');
                         try {
                             const res = await fetchWithTimeout('https://pv.sohu.com/cityjson?ie=utf-8', 3000);
                             if (res.ok) {
@@ -7773,11 +7742,9 @@
                                     }
                                 }
                             } else {
-                                console.warn('[DongguaTV] warning');
                             }
                         } catch (e2) {
                             // 3. 闂傚倷绀侀幖顐︽偋閸愵喖纾婚柟鎯у绾捐棄霉閿濆懏鎲稿褎娲橀妵鍕晜鐠囨彃鈷嬮梺鍝勮嫰閹冲繐顕ラ崟顐熸婵浜畷绂杔oudflare Trace闂傚倷鐒︾€笛呯矙閹达附鍋嬮柛鈩冾樅閻熸嫈鏃€鎷呴崫銉х嵁闂備礁鎼粙渚€宕戦崨鏉戞辈闊洦绋掗悡娆撴煛婢跺鐏ユ繛鍫氭櫇缁?
-                            console.log('[DongguaTV] log');
                             try {
                                 const res = await fetchWithTimeout('https://www.cloudflare.com/cdn-cgi/trace', 3000);
                                 if (res.ok) {
@@ -7786,18 +7753,15 @@
                                     if (matches && matches[1] === 'CN') isCN = true;
                                 }
                             } catch (e3) {
-                                console.warn('[DongguaTV] warning');
                             }
                         }
                     }
 
                     if (isCN) {
-                        console.log('[DongguaTV] log');
                         TMDB_BASE_URL = proxyUrl + '/3';
                         TMDB_IMG_URL = proxyUrl + '/t/p/w342';
                         TMDB_BACKDROP_URL = proxyUrl + '/t/p/original';
                     } else {
-                        console.log('[DongguaTV] log');
                     }
                 },
 
@@ -7940,7 +7904,6 @@
                         const playName = p.get('play');
                         if (!playName) return;
                         this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, done: false };
-                        console.log('[DongguaTV] log');
                         this.autoSearch(playName);
                     } catch (e) { }
                 },
@@ -8048,23 +8011,19 @@
                 async requestWakeLock() {
                     // 濠电姷顣藉Σ鍛村磻閳ь剟鏌涚€ｎ偅宕岄柡宀嬬磿娴狅妇鎷犻幓鎺戭潥缂傚倷妞掑ù鍥х暦閻㈢绠熼柟缁㈠枛闁卞洦绻濋棃娑欏窛鐟滅増绮撳娲传閸曨偒浼岄梺鎼炲妺閸楁娊鐛崱妯肩懝闁逞屽墮椤曪綁濡搁埡濠冩櫖濠电偞鍨堕…鍥?Screen Wake Lock API
                     if (!('wakeLock' in navigator)) {
-                        console.log('[DongguaTV] log');
                         return;
                     }
 
                     // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞濠电姴楠搁弲鐘绘⒑閼测斁鎷￠柛鎾寸洴閹偓闁告稑鐡ㄩ悡?Wake Lock闂傚倷鐒︾€笛呯矙閹寸偟闄勯柡鍐ㄥ€荤粻鏂款熆閼搁潧濮堥柣鎾冲€婚埀顒€绠嶉崕閬嶅箯鐎ｎ€絾绻濆顓炰化闂佹悶鍎洪崜姘跺极闁秵鐓?
                     if (this.wakeLock) {
-                        console.log('[DongguaTV] log');
                         return;
                     }
 
                     try {
                         this.wakeLock = await navigator.wakeLock.request('screen');
-                        console.log('[DongguaTV] log');
 
                         // 闂傚倷鑳堕崕鐢稿疾濠婂牆鍨傞柣銏㈩焾缁?Wake Lock 闂備浇宕甸崑鐐哄礄瑜版帒纾婚柛鈩冪⊕閻掗箖鎮楅棃娑欐喐缁炬儳銈搁弻锝夊籍閸屾艾浠樺┑鐐叉噽閸嬨倝寮婚敓鐘茬劦妞ゆ帒瀚粻濠氭煕濞戝崬鐏ｆい锔规櫆缁绘繄鍠婂Ο宄颁壕闁告劖绁撮崑鎾诲箹娴ｇ鐎棅顐㈡处缁嬫垹绮婚弻銉︾厪闊洢鍎崇壕鍧楁煕閵娿劌浜圭紒杈ㄥ笒閳藉濮€閵忋垺姣囬梻渚€娼уΛ妤吽囬崹顐＄箚閻庢稒蓱婵挳鎮峰▎蹇擃仹缂侇噮鍨堕弻锝堢疀閹惧墎顔囩紓浣虹帛閸旀鍩€椤掆偓閻忔岸鎮￠敓鐘叉瀬?
                         this.wakeLock.addEventListener('release', () => {
-                            console.log('[DongguaTV] log');
                             this.wakeLock = null;
                         });
 
@@ -8075,12 +8034,10 @@
                                 if (!this.wakeLock) {
                                     try {
                                         this.wakeLock = await navigator.wakeLock.request('screen');
-                                        console.log('[DongguaTV] log');
                                         this.wakeLock.addEventListener('release', () => {
                                             this.wakeLock = null;
                                         });
                                     } catch (e) {
-                                        console.log('[DongguaTV] log');
                                     }
                                 }
                             }
@@ -8093,7 +8050,6 @@
                         }
 
                     } catch (err) {
-                        console.log('[DongguaTV] log');
                         // 闂備焦鐪归崺鍕垂闁秵鍋ら柡鍥舵緛缂嶆牠鏌涢埄鍐槈闁稿被鍔戦弻锝夊籍閸喐鏆犵紓浣插亾闁割偁鍎查悡銉︾箾閹寸偟鎳勯柣銊﹀灴閺屸剝鎷呮笟顖滃姼闁轰礁鐗撻弻锝呂熼搹閫涚驳闂佸搫妫岄弲鐘差潖濞差亜绠甸柟鐑樻⒒椤撹櫣绱撻崒姘毙㈡俊顐ｇ箖娣囧﹦鈧稒蓱婵挳鏌ｉ幋鐑囪€挎俊璇х秮濮婂搫效閸パ呬患闂佽绻戞穱娲疮椤栫偞鍊垫繛鍫濈仢閺嬫稓绱掔拠鑼ⅵ闁糕斁鍋撳銈嗗灱濞夋洟宕濆鍥╃＜濞达綀妫勯崥褰掓煙閸欏灏︾€规洜鍘ч埞鎴﹀炊閳轰胶绋婇梻鍌氬€搁崐鍝モ偓姘煎弮瀹曟繈寮撮姀鐘虫К濠德板€曢崯鐗堛仚?
                     }
                 },
@@ -8103,9 +8059,7 @@
                     if (this.wakeLock) {
                         try {
                             await this.wakeLock.release();
-                            console.log('[DongguaTV] log');
                         } catch (e) {
-                            console.log('[DongguaTV] log');
                         }
                         this.wakeLock = null;
                     }
@@ -8808,7 +8762,6 @@
 
                     // 闂備浇宕垫慨宕囨濮樿翰鈧倿鏁傞崜褏顦梺鎼炲労娴滄绂嶈ぐ鎺撶厵闁诡垎鍐╂瘣濡炪們鍊曢幊妯侯潖婵犳艾骞㈡俊銈勭贰濡繝姊洪崫鍕棤闁哥姵鐗曢悾鐑藉Ψ閵夘喖鎮戦梺鎼炲劚濡盯宕戦妶澶婃瀬鐎广儱娲ｅ▽顏堟煢濡警妲洪柍褜鍓欓妶鎼佸蓟閻旇偐宓侀柛顭戝枤娴犲ジ姊虹拠鈥虫灍妞ゃ劌鐗婄粋宥囩矙鎼存挻鏂€婵犵數濮寸€氼厾鐟ф繝鐢靛剳缁茶棄煤閿旂偓宕查柛鏇ㄥ灠濮规煡鏌嶈閸撶喖寮婚妸銉㈡婵☆垳鍘ч。鍝勨攽閻橆偄浜惧銈呯箰鐎氥劑鍩€椤掍礁娴€规洏鍔戦、娑樜旀担瑙勭彈婵犵數鍋為崹鍫曞蓟閵娾晩鏁勯柛娑卞枟濞呯娀鏌ｅΟ鑲╁笡闁搞倖姊婚埀顒傛嚀鐎氼厼顭垮Ο鐓庣筏闁秆勵殕閻撱儲绻涢幋鐑嗘畼缂佹稑绻掔槐?
                     const previousEpName = this.episodeList?.find(ep => ep.url === this.currentUrl)?.name;
-                    console.log('[DongguaTV] log');
 
                     this.episodeList = [];
 
@@ -8816,7 +8769,6 @@
 
                         // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞?source 闂佽姘﹂～澶愭偤閺囩姳鐒婃繛鍡樺灥閸ㄦ繈鏌ㄩ悢鍝勑㈤悗?vod_play_url闂傚倷鐒︾€笛呯矙閹达附鍋嬪┑鐘插亞閻掍粙鏌ｉ姀鐘冲暈闁搞倕锕ラ妵鍕疀閹炬剚浠奸梺绉嗗喛韬柡灞剧☉閳诲酣骞掗幋锝嗘毐婵＄偑鍊栭弻銊ッ洪埡鍛﹂柟鐗堟緲閸楄櫕銇勮箛鎾搭棤妞わ富鍋婂娲箰鎼达絺妲堥梺娲诲墰閸樠呭弲闂佺鍕垫當缂佺姵濞婇弻鏇熷緞閸績鍋撻弴銏犵厺闊洦绋掗悡?
                         if (source.vod_play_url) {
-                            console.log('[DongguaTV] log');
                             this.parseEpisodes(source.vod_play_url, previousEpName);
                             this.loadingDetail = false;
                             return;
@@ -8836,7 +8788,6 @@
 
                         // 濠碘槅鍋撶徊浠嬪船?await 闂傚倷绀侀幖顐︽偋韫囨稑绐楅柡宥庣仜濞戙垹閿ゆ俊銈勭娴犳椽姊洪棃娑辩叚缂佺姵鍨块幃锟犲即閵忥紕鍘卞┑鐐叉閿氶柣蹇嬪劦閺屾稖绠涢弬鍡╀邯椤㈡瑨绠涘☉妯碱唽闂佸湱鍎ら崹褰掑焵椤掆偓閵堟悂寮婚悢鑲╁祦闁割煈鍠氭禒鍏肩節閳封偓閸屾粎鐓撳┑顔硷工濞尖€崇暦闁稁鏁囬柣妯兼暩瀹曡泛鈹戦悙鏉戠仸闁圭鐖煎畷褰掑捶椤撶噥娼熼梺鍝勫暊閸嬫挻绻涢悡搴吋鐎规洖鐖兼俊鎼佹晝閳ь剟鎮為崫銉х＝闁稿本鐟ч崝宥夋煙缁嬫鐓奸柟顔缴戝鍕箛椤撶喐鐝柣搴″帨閸嬫捇鏌涢弴銊ュ姰闁冲搫鍊归崣蹇旂節闂堟稑顏╅柣蹇ｄ簻閳规垿鍩勯崘鈺佲偓鎰偓娈垮櫘閸犳盯藝閹绘帩鐔嗙憸宀€鍒掑▎鎾崇畺婵☆垵娅ｉ弳鍡涙煕閹板吀绨芥い鏃€甯￠幃宄邦煥閸涱収鏆梺鍦焾閹诧繝寮查崼鏇熷亹閻犲洩灏欓鎺戭渻閵堝棙灏甸柛鐘冲姍瀵儼銇愰幒鎾跺幈闂佹寧绻傚ù鐑藉储濠婂懐纾奸弶鍫涘妿閹冲嫮绱掔€ｎ亶妯€妤犵偞鎹囬獮鎺楀箣閺冣偓鐎垫牠姊?
                         if (mySeq !== _navSeq) {
-                            console.warn('[DongguaTV] warning');
                             this.loadingDetail = false;
                             return;
                         }
@@ -8846,7 +8797,7 @@
                             this.currentSource.vod_content = detail.vod_content || detail.vod_blurb || '';
                             this.parseEpisodes(detail.vod_play_url, previousEpName);
                         }
-                    } catch (e) { console.log('[DongguaTV] log'); }
+                    } catch (e) {  }
                     this.loadingDetail = false;
                 },
 
@@ -8864,7 +8815,6 @@
 
                         // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞?vod_id 婵犵數鍋為崹鍫曞箰閸濄儳鐭撻柟缁㈠枟閸嬨倝鏌曟繛鐐珔闁圭鍩栭妵鍕敇閻旈顑傜紓浣插亾闁告洦鍨遍悡娑㈡煕閹邦剙顏╅柟鍐查叄閵嗗倹绺介崨濠勫幈濠碘槅鍨抽崕銈壦夊鍛枑闁哄鐏濋。鎶芥煙瀹勯偊鍎旂€殿喖澧庨幑鍕Ω椤噮鍙冨娲箰鎼达絺妲堝銇扁偓閸嬫挾绱撴担浠嬪摵缂佽鐗撳濠氬川椤撗勫兊閻庤娲栧ú銊╂偩濞差亝鈷戦柣鐔告緲閹垹绱掗濂稿弰鐎规洘甯℃俊鎼佸煛閸屾碍顓鹃柣搴ｆ嚀鐎氼厼顭垮Ο鐓庣筏?
                         if (!vodId && this.currentGroup?.name) {
-                            console.log('[DongguaTV] log');
                             try {
                                 const searchRes = await fetch(`/api/search?wd=${encodeURIComponent(this.currentGroup.name)}&site_key=${encodeURIComponent(source.site_key)}`);
                                 const searchData = await searchRes.json();
@@ -8876,16 +8826,13 @@
                                     if (match) {
                                         vodId = match.vod_id;
                                         source.vod_id = vodId;  // 缂傚倸鍊搁崐鎼佸磹瑜版帒绠伴柟闂寸劍閸嬨倝鏌曟繝蹇擃洭妞も晝鍏橀弻鏇熷緞閸繂濮跺┑陇灏欓弫濠氬蓟濞戞﹩娼╂い鎺嶇劍瀹曟娊姊?
-                                        console.log('[DongguaTV] log');
                                     }
                                 }
                             } catch (searchErr) {
-                                console.warn('[DongguaTV] warning');
                             }
                         }
 
                         if (!vodId) {
-                            console.warn('[DongguaTV] warning');
                             return;
                         }
 
@@ -8894,7 +8841,6 @@
                         const data = await res.json();
                         // 濠碘槅鍋撶徊浠嬪船?await 闂傚倷绀侀幖顐︽偋韫囨稑绐楅柡宥庣仜濞戙垹閿ゆ俊銈勭娴犳椽姊洪棃娑辩叚缂佺姵鍨块幃锟犲即閵忥紕鍘卞┑鐐叉閿氶柣蹇嬪劦閺屾稖绠涢弬鍡╀邯椤㈡瑨绠涘☉妯碱唽闂佸湱鍎ら崹褰掑焵椤掆偓閵堟悂寮婚悢鑲╁祦闁割煈鍠氭禒鍏肩節閳封偓閸屾粎鐓撳┑?闂備浇宕垫慨宥夊礃椤垳鐥紓鍌欑贰閻撳牓宕板鍗炲灊闁宠桨璁查弸搴㈢箾閸℃ê鐏╅柣娑栧劜缁绘盯骞嬮悙鏉戣敿闂佹悶鍔屽﹢鍗炍ｉ幇鏉跨睄闁逞屽墮椤洦绻濆顒傚€為梺闈涱煭缁犳垿鎮為崫銉х＝闁稿本鐟ч崝宥夋煙缁嬫鐓奸柟顔缴戝鍕箛椤撶喐鐝柣搴″帨閸嬫捇鏌涢弴銊ょ敖缂佽鲸宀稿铏圭矙鐠恒劎顔囩紓浣割槸绾绢參骞夋导鏉戝耿婵炴垶顭囬ˇ顓㈡偡濠婂啰鐏辩紒顕呭幖閻ｆ繈宕熼鑺ュ瘶闂備胶纭堕崜婵婃懌濠电偛鐗嗛悥濂稿蓟濞戙垹绠抽柟鍨暞閻ｄ粙姊洪棃娑欘棞闁哥喍鍗抽獮鍐敋閳ь剟銆侀弴銏℃櫜闁糕槅鍘剧粈鍫ユ⒒娴ｅ憡鍟為柟绋挎瀹曢亶鍩￠崒婵嗙厴闂?
                         if (mySeq !== _navSeq || this.currentSource !== reqSource || this.currentGroup !== reqGroup) {
-                            console.warn('[DongguaTV] warning');
                             return;
                         }
                         if (data.list && data.list.length > 0) {
@@ -8923,9 +8869,6 @@
                             if (currentEpName && oldUrl) {
                                 const updatedEp = this.episodeList.find(ep => ep.name === currentEpName);
                                 if (updatedEp && updatedEp.url && updatedEp.url !== oldUrl) {
-                                    console.log('[DongguaTV] log');
-                                    console.log('[DongguaTV] log');
-                                    console.log('[DongguaTV] log');
                                     this.play(updatedEp.url);
                                 }
                             }
@@ -8939,7 +8882,6 @@
                                 }
                             }
                         } else {
-                            console.warn('[DongguaTV] warning');
                         }
                     } catch (e) {
                         console.error('[DongguaTV] refreshEpisodes missing searchName');
@@ -8953,7 +8895,6 @@
                     if (!this.currentGroup || this.isTestingSources) return;
                     this.refreshingSources = true;
                     this.isTestingSources = true;
-                    console.log('[DongguaTV] log');
                     // 濠碘槅鍋撶徊浠嬪船?闂備浇宕垫慨鎶芥倿閿曗偓椤灝螣閼测晝顦悗骞垮劚椤︻垶鎯屽Δ鍛厵閺夊牆澧界粙鑽も偓瑙勬礃婵炲﹪寮婚敓鐘茬闁靛鍎洪弳銏犫攽閻愯尙澧涢柛銊ョ秺閸┾偓妞ゆ垼娉曠粊宄邦熆閻熸壆澧︾€规洘妞藉畷銊╊敊闁款垱鐏冨┑鐘垫暩婵娊鎳楅崼鏇熷仭闁瑰墽绮悡?
                     const mySeq = _navSeq;
                     const reqGroup = this.currentGroup;
@@ -8975,12 +8916,10 @@
 
                         // 濠碘槅鍋撶徊浠嬪船?await 闂傚倷绀侀幖顐︽偋韫囨稑绐楅柡宥庣仜濞戙垹閿ゆ俊銈勭娴犳椽姊洪棃娑辩叚缂佺姵鍨块幃锟犲即閵忥紕鍘卞┑鐐叉閿氶柣蹇嬪劦閺屾稖绠涢弬鍡╀邯椤㈡瑨绠涘☉妯碱唽闂佸湱鍎ら崹褰掑焵椤掆偓閵堟悂寮婚悢鑲╁祦闁割煈鍠氭禒鍏肩節閳封偓閸屾粎鐓撳┑顔硷工濞尖€崇暦闁稁鏁囬柣妯兼暩瀹曡泛鈹戦悙鏉戠仸闁圭鐖煎畷褰掑捶椤撶噥娼熼梺鍝勫暊閸嬫挻绻涢悡搴吋鐎规洖鐖兼俊鎼佹晝閳ь剟鎮為崫銉х＝闁稿本鐟ч崝宥夋煙缁嬫鐓奸柟顔缴戝鍕箛椤撶喐鐝柣搴″帨閸嬫捇鏌涢弴銊ょ敖缂佽鲸宀稿铏圭矙鐠恒劎顔囩紓浣割槺閸忔﹢濡撮崨鎼晝闁挎棁妫勯崜顕€姊洪崫鍕犻柛鏂跨Ч閹繝鍩€椤掑嫭鈷戦柛娑橈攻鐎垫瑩鏌涘☉鍗炴灓闁哄棛濮风槐鎾存媴閻熸壆顦ㄩ梺绋块椤兘骞嗙仦淇卞亝闁告劑鍔庨ˇ顐⑩攽鎺抽崐鏇犫偓姘ュ姂閸┾偓妞ゆ巻鍋撻柛鐔告尦瀵偄顓兼径濠囧敹闂侀潧锛婇埀顒勫煛娴ｅ弶顫嶉梺鍦亾濞兼瑧寰婄拠宸唵鐟滃瞼鍒掑▎鎾虫瀬?
                         if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
-                            console.warn('[DongguaTV] warning');
                             return;
                         }
 
                         if (!data.list || data.list.length === 0) {
-                            console.log('[DongguaTV] log');
                             return;
                         }
 
@@ -9080,7 +9019,6 @@
 
                         // 濠碘槅鍋撶徊浠嬪船?濠电姷鏁搁崑鐐差焽濞嗘搩鏁勫鑸靛姇閻掑灚銇勯幒鎴濃偓鎼佸几閹寸偟绡€闁逞屽墴閺佹捇鎮╅弬銉﹀闂佽閰ｅ褔骞夐敓鐘叉辈闊洦绋掗悡娆撴煛婢跺鐏ユ俊鑼跺吹閹叉悂鎮ч崼銏犲绩闂佺娅曢〃濠囧箰婵犲啫绶炲┑鐘插€归濂告⒒娴ｅ憡鍟為悽顖涘笒鐓ら柨鏇楀亾闁伙絿鍏樺濠氬Ψ閵壯屾Ф闁荤喐绮嶉弻銊╁煝閺冨牊鏅濋柛灞剧⊕濞呮牕鈹戦鏂や緵闁稿鎳忕粙澶愬閳垛晛浜炬繛鍫濈仢閺嬫盯鏌涢悢椋庯紞闁瑰箍鍨藉畷姗€顢欓悡搴ｅ綁闂備胶绮Λ浣糕枍閿濆應鏋栭柕蹇嬪€栭悡?
                         if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
-                            console.warn('[DongguaTV] warning');
                             return;
                         }
 
@@ -9095,11 +9033,9 @@
                         if (currentSiteKey) {
                             const found = this.currentGroup.sources.find(s => s.site_key === currentSiteKey);
                             if (found) {
-                                console.log('[DongguaTV] log');
                             }
                         }
 
-                        console.log('[DongguaTV] log');
                     } catch (e) {
                         console.error('[Sources] Failed to refresh sources', e);
                     } finally {
@@ -9131,9 +9067,7 @@
                             const found = this.episodeList.find(ep => normalize(ep.name) === normalizedTarget);
                             if (found) {
                                 targetEp = found;
-                                console.log('[DongguaTV] log');
                             } else {
-                                console.log('[DongguaTV] log');
                             }
                         }
                         this.play(targetEp.url);
@@ -9153,17 +9087,11 @@
                     // 濠碘槅鍋撶徊浠嬪疮椤栫偛鏋?闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡ê銆掑锝呬壕閻庢鍣崳锝咁嚕閻㈠憡鍋ㄩ柣銏☆問閸熷秹姊绘担鍝ョШ闁哄懓灏欑划鍫熺瑹閳ь剟骞嗛崼銉ュ耿婵炴垶鑹剧粊锕傛⒑閸濆嫭宸濋柛瀣枛瀹曞搫螖閳ь剟婀?
                     this.requestWakeLock();
 
-                    console.log('[DongguaTV] log');
-                    console.log('[DongguaTV] log');
-                    console.log('[DongguaTV] log');
-                    console.log('[DongguaTV] log');
-                    console.log('[DongguaTV] log');
 
                     // 濠电姷顣藉Σ鍛村磻閳ь剟鏌涚€ｎ偅宕岄柡宀嬬磿娴狅妇鎷犻幓鎺戭潛缂傚倸鍊哥粔鎾敄婢跺﹦鏆︽繝濠傚枤閸氬鏌涢妷鎴濆閺嬪啴姊洪懡銈呅￠悹鈧敃鍌氬瀭闁告鍊ｉ敐澶婄濞达絾鐡曡闂備焦瀵уú鏍磹鐟欏嫮顩锋慨妞诲亾闁诡喚鍏樺鏉戭潩椤撗勨枈濠电姷鏁搁崑娑樏洪銏犵畺濞寸姴顑呮儫闂侀潧鐗嗛幊蹇涘汲閺囥垺鈷?
                     let finalUrl = url;
                     if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
                         finalUrl = `${this.currentSource._proxyUrl}/?url=${encodeURIComponent(url)}`;
-                        console.log('[DongguaTV] log');
                     }
 
                     // 濠碘槅鍋撶徊浠嬪疮椤栨粎鐭嗗鑸靛姈閻?濠德板€楁慨鐑藉磻濞戙垺鍊舵繝闈涱儏缁犵喖鏌嶉埡浣告殲濞存嚎鍊濋弻娑㈠Ψ閿濆懎顬夋繝娈垮枔閸ㄤ粙寮婚妸銉㈡婵炲棗绻愰幗鐢告⒑闁偛鑻晶顖毲庨崶顏咁仩闁?Cloudflare Worker 婵犵數鍋涢顓熷垔鐎电绶ら柛褎顨呯粻鏍р攽閻樻彃鏆炲ù婧垮€濋弻娑㈠Ψ閿濆懎顬夋繝?DISCONTINUITY 濠德板€楁慨鐑藉磻濞戙垺鍊舵繝闈涱儏缁犵喖鏌ㄩ悢鍝勑㈤柛鎰ㄥ亾闂備焦鎮堕崕顕€寮查埡鍛?
@@ -9175,9 +9103,7 @@
                     if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && this.corsProxyUrl) {
                         finalUrl = this.corsProxyUrl + '/?url=' + encodeURIComponent(finalUrl);
                         adFilterProxyUsed = true;
-                        console.log('[DongguaTV] log');
                     } else if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && !this.corsProxyUrl) {
-                        console.warn('[DongguaTV] warning');
                     }
 
                     // 闂傚倷绀侀悿鍥р枖閺囩喎鍨旈悗闈涙憸缁?setupErrorHandling 闂傚倷绀侀幉锟犳偡椤栨稓顩叉繝濠傚枦閼版寧銇勮箛鎾村珔缂佽鲸妫冮弻鈥愁吋鎼达絽甯ラ梺绋跨應閸ャ劎鍘遍梺鍦劋閹搁箖鍩ユ径宀€纾介柛灞剧⊕瀹曞本顨ラ悙杈捐€挎い銏★耿閹垽宕ㄦ繝鍐暘闂傚倷绶氬鑽ゅ緤婵犳艾绀夌€广儱鎷嬪〒濠氭煕鐏炲墽鐭岀痪鎯с偢閺岀喓鈧稒顭囩粻姗€鏌￠崱妯荤凡闁宠棄顦甸獮姗€顢涘顐㈩棜濠电姷鏁搁崑娑樜涚仦杞匡綁宕熼鐕佹綗濠电娀娼ч鍛矆閸岀偞鐓曟い鎰剁稻缁€鍐煥濞戞瑦顥堥柡灞剧洴瀵€燁槼闁革絽鎽滅槐鎺楀矗濡搫绁悗瑙勬礃閿曘垽骞婇敓鐘参ч柛銉ｅ妼閻?婵犵妲呴崑鎾跺緤妤ｅ啯鍋嬮柡鍐ㄧ墛閻?play()"闂傚倷鐒﹂惇褰掑礉瀹€鈧埀顒佸嚬閸撶喖骞嗛崶顒夋晢闁告洦鍓涢崝鎼佹⒑闂堟侗鐒鹃柛搴や含缁辩偞绗熼埀顒€顫?
@@ -9194,12 +9120,10 @@
                         const handleError = (source) => {
                             // 濠碘槅鍋撶徊浠嬪船?闂傚倷鐒﹀鍨焽閸ф绀夌€广儱顦弰銉︾箾閹寸儑渚涢柛鐔锋嚇閺岀喓绱掑Ο铏圭懆闂佽楠搁妶鎼佸蓟閻旇偐宓侀柛顭戝枤娴犲ジ姊虹化鏇熸珔闁活厼鍊搁悾宄邦潩妫版繃鏅濋梺闈涚墕濡盯寮抽悩缁樷拺闁告稑锕ョ€垫瑧鈧箍鍎卞ú銊┧囬…顩攁vSeq 闂傚倷绀侀幉锟犳偡閿曞倹鏅梺璇查叄濞佳冾嚕閸撲胶鐭?this._activePlaySeq 闂傚倷绀侀幖顐︽偋濠婂嫮顩查柨婵嗩檧缂嶆牠鏌ㄩ弴鐐测偓绋课?play() 闂傚倷绀侀幉锛勬暜閿熺姴缁╅梺顒€绉撮拑鐔封攽閻樺弶鎼愮紒鈧崱娑欏仺妞ゆ牭绲介弸銈囩磼閳ь剟宕卞☉娆戝帗?闂傚倸顭崑鍕洪妸鈺佺柧妞ゆ劧绠戝Ч鏌ユ煙閻楀牊绶茬紒顐㈢Ф閹叉悂寮崼婵囩€繝鐢靛Т鐎氼厾鈧?
                             if (this._activePlaySeq !== _navSeq) {
-                                console.log('[DongguaTV] log');
                                 return;
                             }
                             // 濠电姵顔栭崰妤冩崲閹邦喖绶ら柦妯侯檧閼版寧銇勮箛鎾村櫤濞存嚎鍊栫换娑㈠箣閻愮數鐓犻梺琛″亾闁芥ê顥㈣ぐ鎺撳亼闁告侗鍨遍崑褔姊虹拠鈥虫灈闁挎洦浜滈悾鐑藉醇閺囩喎鈧兘鎮跺☉鎺嗗亾閸忓懎顥氶梻渚€鈧偛鑻晶鎾煛鐏炲€熷妞ゆ挸銈稿畷濂稿閳辨帪绠撳娲传閸曨偅娈哄銈嗘⒐閸旀危閹邦兘鏀藉┑鐘插閺夋悂姊烘导娆戝埌闁哄牜鍓欓埢鎾绘晲婢跺鍘电紒鍓у閿氬ù婊堢畺濮婃椽宕崟顓烆暫濡炪倧濡囬弫璇差嚕椤愶絿绡€闁告洦鍓欓悵鏉款渻閵堝棛澧﹂柛濠冾殘缁牓宕熼鐘碉紲濠电偞鍨堕敃鈺佄ｉ崫銉х＜闁告挷绀侀弸娑㈡煛鐏炲€熷妞ゆ挸銈稿畷濂稿閳辨帪濡囩槐鎾诲磼濞嗘垵濡介梺鍦焾椤兘骞冨Ο璇茬窞闁归偊鍘藉▍?
                             if (this._proxyRetrying) {
-                                console.log('[DongguaTV] log');
                                 return;
                             }
                             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞閻庯綆鍋勯鎾绘煟閻樺厖鑸柛鏂跨Ч瀵疇绠涢幘浣烘嚀椤劑宕橀埡濠冾棧缂傚倷鑳舵慨瀵哥矓閻熸壆鏆﹂柕濠忓缁♀偓闂佸憡渚楅崹鎶芥偩閸濆嫧鏀介柣妯烘▕閻掗箖鏌涙繝鍐╁磳鐎规洦鍓熼、妤呭礋椤掆偓娴犫晠姊虹化鏇燁潑闁告ê澧界划鍫熷緞閹邦厾鍘遍棅顐㈡处閹哥偓鏅堕弴鐔虹闁告瑥顦辨晶鐢告煛鐏炶姤鍤囬柛鈹惧亾濡炪倖甯掔€氼剛绮堥崱娑欑厵婵炲牆鐏濋弸鐔虹磼缂併垹鐏︾€殿喖鐖奸崺锟犲礃閵娿倖顫曢梻渚€娼荤徊浠嬪箺濠婂牆绠?
@@ -9207,7 +9131,6 @@
                                 this._proxyRetried = true;
                                 this._proxyRetrying = true;
                                 const fb = this._activeOriginalUrl;
-                                console.log('[DongguaTV] log');
                                 dp.switchVideo({ url: fb, type: 'hls' });
                                 // 闂傚倷鐒﹂幃鍫曞磿閹惰棄纾婚柕鍫濐槸閻掑灚銇勯幋锝嗩棄濞存粓绠栧娲川婵犲懎顥濆┑鐐差嚟閸忔﹢骞冨ú顏勭闁绘浜崜銊╂煛婢跺﹦澧愰柡鍛☉閻ｇ兘寮撮姀锛勫幈闂佸綊鍋婇崜娑欑墡闂備浇顫夐幃鍌涚鐠轰警鍤曢柕濞炬櫅缁犲鏌涘☉鍗炵仯妞わ讣绠穡itchVideo 婵犵數鍋為崹鍫曞箰閸濄儳鐭撶€规洖娲﹂～鏇灻归悡搴ｆ憼闁搞倕锕ラ妵鍕疀閹炬剚浠奸悶姘卞枛濮婃椽宕烽鈩冾€楅梺鍛娒肩划娆忣嚕椤掍胶鐟归柍褜鍓熷?
                                 const onMeta = () => {
@@ -9233,7 +9156,6 @@
                     };
 
                     if (!dp) {
-                        console.log('[DongguaTV] log');
                         dp = new DPlayer({
                             container: document.getElementById('dplayer'),
                             theme: '#e50914',
@@ -9297,7 +9219,6 @@
 
                         // 濠碘槅鍋撶徊浠嬪疮椤栫偛绠?闂傚倷鑳堕…鍫㈡崲閸儱绀夌€光偓閸曨剙鍓甸梺绯曞墲椤洭銆呴弻銉﹀€甸柨婵嗗€瑰▍鍡樸亜閹邦亞鐭欓柡宀嬬秮閸╋繝宕掑鍙樻樊闂?- 婵犵數鍋犻幓顏嗙礊閳ь剚绻涙径瀣鐎?Capacitor 闂傚倷绀佸﹢杈╁垝椤栨粍鏆滃┑鐘插€甸弸搴ㄦ煏韫囧ň鍋撳畷鍥╃嵁闂備礁鎲″ú锕傚储娴犲纾归柣鎰劋閻撴盯鏌涢幇鐢靛帥闁稿孩鎸荤换娑㈠级閹寸儐妫﹂悗瑙勬处娴滄粓鎮惧┑瀣劦妞ゆ帊鐒﹂崣蹇涙煙闂傚顦︾紒鐘冲灥闇夐柨婵嗘噺鐠愶繝鏌?
                         const handleEnterFullscreen = async () => {
-                            console.log('[DongguaTV] log');
 
                             // 1. 闂傚倸鍊搁崐鎼佸箠韫囨稑绀夋俊顖欑秿濞戞鏆嗛柍褜鍓熼崺鈧い鎴ｆ硶缁佸嘲顭块悷鎵ⅵ鐎规洘妞藉畷銊╁级閹存繂鏁?
                             const navbar = document.querySelector('.navbar-custom');
@@ -9313,18 +9234,16 @@
                                         await StatusBar.setOverlaysWebView({ overlay: true });
                                         // 闂傚倷鑳剁划顖滄暜閻斿皝鏋栨繛鎴欏灩缁犳牗淇婇妶鍛櫤闁抽攱娲熼弻鐔兼焽閿曗偓閻忊剝銇勯妷锕€鐏撮柡宀嬬到铻ｉ柛顭戝枤閸橆偊姊洪柅鐐茶嫰閸樻悂鏌ｉ幒鐐电暤闁?
                                         await StatusBar.hide();
-                                        console.log('[DongguaTV] log');
                                     }
-                                } catch (e) { console.warn('[DongguaTV] warning'); }
+                                } catch (e) {  }
 
                                 try {
                                     // 闂傚倸鍊风粈渚€濡靛Ο鑲╃焼濞撴埃鍋撻柟顕€绠栭獮鍡涒€栭鍌氭灈妞ゃ垺妫冨畷鐔碱敇閻旇櫣小
                                     const { ScreenOrientation } = window.Capacitor.Plugins;
                                     if (ScreenOrientation) {
                                         await ScreenOrientation.lock({ orientation: 'landscape' });
-                                        console.log('[DongguaTV] log');
                                     }
-                                } catch (e) { console.warn('[DongguaTV] warning'); }
+                                } catch (e) {  }
                             }
 
                             // 3. Web API fallback
@@ -9336,7 +9255,6 @@
                         };
 
                         const handleExitFullscreen = async () => {
-                            console.log('[DongguaTV] log');
 
                             // 1. 闂傚倷娴囬鏍储瑜版帒鍨傜憸鐗堝吹閸ヮ剚鍤戞い鎴ｆ娴滄儳霉閿濆懎鏆欐い銉ョЧ閺屾盯鍩℃担鐟版畻閻?
                             const navbar = document.querySelector('.navbar-custom');
@@ -9352,18 +9270,16 @@
                                         await StatusBar.show();
                                         // 闂傚倷娴囬鏍储瑜版帒鍨傜憸鐗堝吹?WebView 婵犵數鍋為崹鍫曞箰閸濄儳鐭撻柣鎴濐潟閳ь剙鎳橀、鏇㈡晜閽樺澹嗛梻浣告惈缁嬩線宕戦崟顓犳噮闂傚倷娴囬鏍礂濞戙垺鍊块柨鏇炲€归崑?
                                         await StatusBar.setOverlaysWebView({ overlay: false });
-                                        console.log('[DongguaTV] log');
                                     }
-                                } catch (e) { console.warn('[DongguaTV] warning'); }
+                                } catch (e) {  }
 
                                 try {
                                     // 闂備浇宕甸崰鎰版偡鏉堚晝绀婂〒姘ｅ亾鐎殿喓鍔戦弫鎰板炊閿旇棄濯伴梻濠庡亜濞诧箓骞愭ィ鍐炬晩閹兼番鍔嶉悡娑㈡煕鐏炲墽鐭嬮柛銈傚亾闂?
                                     const { ScreenOrientation } = window.Capacitor.Plugins;
                                     if (ScreenOrientation) {
                                         await ScreenOrientation.unlock();
-                                        console.log('[DongguaTV] log');
                                     }
-                                } catch (e) { console.warn('[DongguaTV] warning'); }
+                                } catch (e) {  }
                             }
 
                             // 3. Web API fallback
@@ -9395,7 +9311,6 @@
                                             const isOpen = settingBox.classList.contains('dplayer-setting-box-open');
                                             // 闂佽崵鍠愮划搴㈡櫠濡ゅ懎绠插〒姘ｅ亾妞ゃ垺鐟╁鎾偐閻㈢绱存俊鐐€栭弻銊╂倶濠靛牏绀婇柛娑樼摠閻撴洘淇婇妶鍕妽缂佲偓閸愵煈鐔嗙憸婵堢不閹达富鏁嬮柨婵嗩槸閻掑灚銇勯幒鎴濐仼缂侇偄绉归幃瑙勬媴閸涘﹨纭€缂備讲鍋撳璺虹灱绾惧ジ鏌涚仦鍓ф噯闁稿繐鐭傞弻鈩冩媴闂堟稈鍋撳┑瀣摕闁糕剝渚楅弫濠囨煙椤栧棗鍟敮顏堟⒑鐠囪尙绠抽柛瀣洴瀹曟劗鎷犲ù瀣亖闂佺鎻梽鍕磹閻戣姤鐓熼柣鏂挎啞缁跺弶鎱ㄩ敐鍜冨伐闂囧绻濇繝鍌氭灓闁稿骸瀛╃换?
                                             mask.style.pointerEvents = isOpen ? 'none' : 'auto';
-                                            console.log('[DongguaTV] log');
 
                                             // 闂傚倷鑳堕幊鎾绘倶濮樿泛绠伴柛婵勫劜椤洟鏌熸潏楣冩闁搞倖娲樼换婵囩節閸屾碍娈紓浣插亾閻庯綆鍠楅悡娑㈡煕閹伴潧寮鹃柛鐔锋川缁辨帗娼忛妸褏鐣靛銈嗘穿缂嶄礁鐣烽锕€绀嬫い鎰╁€曢獮鈧梻鍌欑閹诧紕鏁敓鐘茬哗闂侇剙绉撮拑鐔封攽閻樻彃鏆熼柍缁樻閺屽秷顧侀柛鎾寸懇閸┿垺鎯旈妸銉т紜闂佸搫鍊堕崕杈ㄧ閸撗€鍋撻獮鍨姎妞わ富鍋婂畷鎴﹀箻缂佹ê浜滈梺鍏肩ゴ閺呮盯鎷忕€ｎ偆绠?
                                             try {
@@ -9414,7 +9329,7 @@
                                                         });
                                                     }
                                                 }
-                                            } catch (e) { console.warn('[DongguaTV] warning'); }
+                                            } catch (e) {  }
 
                                             // 闂傚倷绀侀幉锛勬暜濡ゅ啯宕查柛宀€鍎戠紞鏍煙閻楀牊绶茬紒鈧?闂傚倷绀侀幖顐も偓姘煎墯閺呰埖绂掔€ｎ€附鎱ㄥΟ鍧楀摵鐎规洖顦甸幃妤呭捶椤撶倫銉х磼閻樺磭澧甸柡宀嬬到铻栭柍褜鍓欑叅闁靛牆顦闂佸搫鍟悧濠囧磻鐎ｎ喗鐓曢柕澶嬪灥閹冲酣寮?UI
                                             if (isOpen && window.skipManager) {
@@ -9626,13 +9541,11 @@
                                             if (settingOrigin) {
                                                 settingOrigin.classList.remove('dplayer-setting-box-hide');
                                             }
-                                            console.log('[DongguaTV] log');
                                         }
                                         wasOpenBeforeClick = false; // 闂傚倸鍊烽悞锕併亹閸愵亞鐭撻柛顐ｆ礃閸嬵亪鏌涢埄鍐姇闁稿鍔欓弻銈夊传閵夘喗姣岄梺?
                                     });
                                 }
 
-                                console.log('[DongguaTV] log');
                             }
                         }, 500);
 
@@ -9648,7 +9561,6 @@
                             // 2. 濠碘槅鍋撶徊浠嬪疮椤栫偛绠?闂備浇宕垫慨鎾敄閸涙潙鐤ù鍏兼綑閺?Android 闂傚倷绀侀幉锟犫€﹂崶顒€绐楅柟鎹愵嚙閺嬩線鏌熼幑鎰靛殭缂佲偓閸岀偞鐓忓┑鐐茬仢閸斻倖绻涢悡搴ｇ劯闁哄瞼鍠栭獮渚€骞掗幋婵嗩潛闁荤喐绮庢晶妤呮儎椤栫偛鏋佺€广儱顦柋鍥煃鐠鸿櫣姘ㄩ柡鍛Т椤?padding + 闂傚倷绀侀幖顐﹀疮椤愶富鏁勯柛顐ｇ贩瑜版帒骞㈡俊鐐灮閸犳牠銆侀弮鍫濈妞ゆ挾鍠撶粔?+ 闂傚倸鍊搁崐鎼佸箠韫囨稑绀夋俊顖欑秿濞戞鏆嗛柛鏇ㄥ墮娴滃綊姊洪悡搴㈡喐妞わ絼绮欏畷鎴﹀箻鐎涙ê顎撻梺闈╁瘜閸樺ジ鎮為崸妤佲拺?
                             if (window.AndroidFullscreen) {
                                 window.AndroidFullscreen.enter();
-                                console.log('[DongguaTV] log');
                             }
 
                             // 3. Capacitor StatusBar 闂傚倷绀佸﹢杈╁垝椤栨粍鏆滃┑鐘插€甸弸搴ㄦ煏韫囧鈧牠寮查鍕厱妞ゆ劧绲块惌宀€绱掔€ｎ亷宸ラ柍钘夘樀楠炴﹢鎼归锝呭壍婵＄偑鍊х€靛矂宕滈悢鐓庣畺濞寸姴顑傞埀顒婄畵楠炴帡寮崒銈喰?
@@ -9656,9 +9568,7 @@
                                 try {
                                     await StatusBar.setOverlaysWebView({ overlay: true });
                                     await StatusBar.hide();
-                                    console.log('[DongguaTV] log');
                                 } catch (e) {
-                                    console.warn('[DongguaTV] warning');
                                 }
                             }
 
@@ -9676,7 +9586,6 @@
                             // 2. 濠碘槅鍋撶徊浠嬪疮椤栫偛绠?闂備浇宕垫慨鎾敄閸涙潙鐤ù鍏兼綑閺?Android 闂傚倷绀侀幉锟犫€﹂崶顒€绐楅柟鎹愵嚙閺嬩線鏌熼崜褏甯涢柣鎺戭煼閺屽秷顧侀柛鎾跺枎閻ｅ嘲鈻庨幘鍏呯炊闂佸憡娲﹂崑鍕鎼淬劍鐓熼煫鍥ㄦ礀娴犳粎绱掔紒妯虹仼闁轰緡鍣ｉ獮姗€顢欓懖鈺冨幀闂備焦瀵х换鍌滄崲閹烘梻鐭嗛柛鏇ㄥ灡閻撴瑦銇勯幘瀵哥煀闁诲繆鏅滈妵?padding + 闂備浇宕甸崰鎰版偡鏉堚晝绀婂〒姘ｅ亾鐎殿喓鍔戦弫鎰緞婵犲喚妫熼梻浣藉吹閸犳挻鏅跺Δ鍛９?+ 闂傚倷绀侀幖顐も偓姘煎墯閺呰埖绂掔€ｎ€附鎱ㄥΟ鍨厫闁稿鍔欓弻銈夊传閵夘喗姣岄梺绋款儐閹稿骞忛崨鏉戞嵍妞ゆ挾鍋熼崝褰掓⒒?
                             if (window.AndroidFullscreen) {
                                 window.AndroidFullscreen.exit();
-                                console.log('[DongguaTV] log');
                             }
 
                             // 3. Capacitor StatusBar 闂傚倷绀佸﹢杈╁垝椤栨粍鏆滃┑鐘插€甸弸搴ㄦ煏韫囧鈧牠寮查鍕厱妞ゆ劧绲块惌宀€绱掔€ｎ亷宸ラ柍钘夘樀楠炴﹢鎼归锝呭壍婵＄偑鍊х€靛矂宕滈悢鐓庣畺濞寸姴顑傞埀顒婄畵楠炴帡寮崒銈喰?
@@ -9684,9 +9593,7 @@
                                 try {
                                     await StatusBar.show();
                                     await StatusBar.setOverlaysWebView({ overlay: false });
-                                    console.log('[DongguaTV] log');
                                 } catch (e) {
-                                    console.warn('[DongguaTV] warning');
                                 }
                             }
 
@@ -10048,7 +9955,6 @@
                         };
 
                         // 濠电姷鏁搁崑娑⑺囬銏犵鐎广儱顦粈鍫澝归悡搴ｆ憼闁哄拋鍓氶幈銊モ攽閸喓顔巓gressKey 闂傚倷鑳剁划顖滃垝瀹ュ拋鐔嗘俊顖滃皑閼版寧銇勮箛鎾跺闁告瑥锕ラ妵鍕冀閵娿劌顥濋悶姘卞枛濮婅櫣鎷犻垾鍐插箰濠电偞娼欏ú顓€佸鈧畷顐﹀Ψ瑜岀粭澶娾攽鎺抽崐鏇㈠疮椤栫偞鍋╅梺顒€绉甸悡銉︾箾閹寸倖鎴濓耿娴煎瓨鐓熼柨鏂垮帨閸嬫捇寮妷锔锯偓濠氭⒒閸曨偅鍠橀柟顖氬暣閹垽宕楅悡搴濈紦?getProgressKey() 闂傚倷绀侀崥瀣磿閹惰棄搴婇柤鑹扮堪娴?
-                        console.log('[DongguaTV] log');
 
                         // 闂傚倷娴囬鏍储瑜版帒鍨傜憸鐗堝吹閸ヮ剙钃熼柕澶堝劤椤旀帒顪冮妶鍡樺暗闁哥姵鍔欏鎯般亹閹烘垹楠囬梺鍐叉惈閸婂鍩ユ径鎰€?
                         let progressRestored = false;
@@ -10061,11 +9967,6 @@
                             try {
                                 const currentKey = getProgressKey();
                                 const saved = localStorage.getItem(currentKey);
-                                console.log('[DongguaTV] log');
-                                console.log('[DongguaTV] log');
-                                console.log('[DongguaTV] log');
-                                console.log('[DongguaTV] log');
-                                console.log('[DongguaTV] log');
 
                                 if (saved) {
                                     const savedData = JSON.parse(saved);
@@ -10074,18 +9975,14 @@
                                     const now = new Date();
                                     const daysDiff = (now - savedDate) / (1000 * 60 * 60 * 24);
 
-                                    console.log('[DongguaTV] log');
-                                    console.log('[DongguaTV] log');
 
                                     // 闂傚倷绀侀幉锟犳偡椤栨稓顩叉繝闈涙川椤╅攱銇勯弮鍥棄缂?0婵犵數濮伴崹褰掓倶閸儱鐤炬繛鎴欏灩閼稿綊鏌熺紒銏犳灍闁稿骸绉归弻娑㈠即閵娿儲鐏撶紓浣哄Т椤兘鐛弽銊︾秶闁硅鍔﹂崥鍛磽娴ｄ粙鍝虹紒璇插暟缁瑦寰勯幇顒傜潉闂佹悶鍎弲婵嬵敊閹烘鐓欓柤鍦瑜把呯磼閻樺啿鐏ラ柨鏇樺灲椤㈡棃宕煎┑鍡欏綁濠电姰鍨煎▔娑㈩敄閸℃せ鏋嶉煫鍥ㄧ⊕閻撶娀鏌ｉ幘鎶筋€楅柡鍡樼懄缁绘盯骞撻幒鎾充淮閻?
                                     const isTimeOK = daysDiff < 30;
                                     const isMinOK = savedTime > 60;  // 闂傚倷鑳堕崢褔宕查弻銉ョ柈闁秆勵殕閸庡秵銇勯弽顐沪闁稿孩鍨块幃妤呮晲鎼粹€崇缂?闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ亞顔?
                                     const isMaxOK = dp.video.duration && savedTime < dp.video.duration - 120;  // 闂備浇宕垫慨鐑藉磿閵堝洦宕查柛鏇ㄥ灙閳ь剚鐗犲畷鍫曞煛閸愵亷绱查梻浣筋潐閸庡磭澹曢銏犵柈?2闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ亞顔?
 
-                                    console.log('[DongguaTV] log');
 
                                     if (isTimeOK && isMinOK && isMaxOK) {
-                                        console.log('[DongguaTV] log');
 
                                         // 闂備浇宕垫慨鎶芥倿閿曗偓椤灝螣閼测晝顦悗骞垮劚濞诧箑鐣锋径鎰€甸柛锔诲幖鏍＄紓浣风贰閸ｏ綁寮诲☉銏犵鐎规洖娉﹂妶鍡欑闁割偆鍠庨悘瀵糕偓娈垮櫘閸ｏ絽鐣锋總绋垮嵆闁绘洖鍊婚崥?
                                         const beforeSeek = dp.video.currentTime;
@@ -10095,24 +9992,18 @@
                                         // 闂佽娴烽崑锝夊磹閺嶎厼纾块柤娴嬫櫆瀹曞弶绻濇繝鍌氭偐婵炴垯鍨归悞鍨亜閹烘垵顏╅柦鍐枛閺屾洘寰勯崼婵嗩瀷闂佺瀛╅悡鈥愁嚕閸洘鍊婚柛鈩冾殔椤亜鈹戦垾鍐茬骇闁诡喖鍊搁悾鐑藉Ψ閳哄倹娅嗛梺鑺ッˇ杈ㄧ閿濆鈷?
                                         setTimeout(() => {
                                             const afterSeek = dp.video.currentTime;
-                                            console.log('[DongguaTV] log');
 
                                             if (Math.abs(afterSeek - savedTime) < 10) {
-                                                console.log('[DongguaTV] log');
                                             } else {
-                                                console.log('[DongguaTV] log');
                                             }
                                         }, 1000);
 
                                         dp.notice(`Resume from ${Math.floor(savedTime / 60)}:${String(Math.floor(savedTime % 60)).padStart(2, '0')}`, 3000);
                                     } else {
-                                        console.log('[DongguaTV] log');
                                     }
                                 } else {
-                                    console.log('[DongguaTV] log');
                                 }
                             } catch (e) {
-                                console.log('[DongguaTV] log');
                             }
                             progressRestored = true;
                         });
@@ -10136,7 +10027,6 @@
                             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞閻忕偞鍎崇壕顖氣攽閻樼粯娑ч柣妤佺矒閹鎳犻鍌滐紳婵炶揪缍€椤浜搁銏＄厽?< 2闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ亞顔囬梺鐟板⒔缁垶寮查鍌楀亾閸忓浜鹃梺鍛婂姉閸嬫挾绱炴繝鍐闁瑰鍋炵亸顓㈡煙绾板崬浜伴柟顕€绠栭、妤呭礋椤愩値鍟嬫俊鐐€栭幐鍫曞礉鎼达絿鐭嗗璺侯儑缁犻箖鏌熼幑鎰彧闁搞倕娲︾换娑㈠川椤撶儐鍔夊┑鐐跺椤曆囧煡婢跺á鐔哥瑹椤栨碍鏆?
                             if (duration > 0 && currentTime > duration - 120) {
                                 localStorage.removeItem(getProgressKey());
-                                console.log('[DongguaTV] log');
                                 // 闂傚倷绀侀幖顐⒚洪妶澶嬪仱闁靛ň鏅涢拑鐔封攽閻樻彃顏柛鐘叉閺屾稓浠﹂崜褏鐓佺紓浣哄У閻熲晠寮诲☉妯滅喖鎮滃鍡橆棧闁荤喐绮嶅姗€鎮ユ總绋挎瀬鐎广儱顦柋鍥煥濠靛棙宸濇い鏃€甯￠弻?00%闂?
                                 if (movieName) {
                                     this.addToWatchHistory(movieName, poster, episodeName, duration, duration, this.currentGroup);
@@ -10163,7 +10053,6 @@
                                     this.addToWatchHistory(movieName, poster, episodeName, currentTime, duration, this.currentGroup);
                                 }
                             } catch (e) {
-                                console.log('[DongguaTV] log');
                             }
                         };
 
@@ -10197,7 +10086,6 @@
                         // 闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡ê霉閿濆牊顏犵痪鎯с偢閺岀喖骞嗚閹界娀鎮樿箛鎾搭棦闁哄矉绻濆畷姗€顢橀悙闈涘缚缂傚倷鐒﹂弻銊┾€﹀畡閭︽綎濞寸姴顑呭洿闂佸壊鍋侀崹濠氼敊閹烘鐓欓柤鍦瑜把呯磼閻樺啿娴い銏＄懇瀹曞爼顢旈崒娆愮潖?
                         dp.on('ended', () => {
                             localStorage.removeItem(getProgressKey());
-                            console.log('[DongguaTV] log');
                             // 闂傚倷绀侀幖顐⒚洪妶澶嬪仱闁靛ň鏅涢拑鐔封攽閻樻彃顏柛鐘叉閺屾稓浠﹂崜褏鐓佺紓浣哄У閻熲晠寮诲☉妯滅喖鎮滃鍡橆棧闁荤喐绮嶅姗€鎮ユ總绋挎瀬鐎广儱顦柋鍥煥濠靛棙宸濇い鏃€甯￠弻?00%闂?
                             const movieName = this.currentGroup?.name || '';
                             const poster = this.currentGroup?.pic || '';
@@ -10215,7 +10103,6 @@
                         });
 
                     } else {
-                        console.log('[DongguaTV] log');
 
                         // 闂傚倷绀侀幖顐ょ矓閺夋嚚娲Χ婢跺﹪妫峰銈嗙墱閸嬫稓绮堝畝鍕厸鐎广儱楠搁獮妤呮煠閼碱剙鈻堥柡灞稿墲閹峰懐鎲撮崟顓炲殥闂備浇顕栭崰妤€煤濠婂懎鍨?
                         const normalizeEpisodeName = (name) => {
@@ -10248,8 +10135,6 @@
                         };
 
                         const progressKey = getProgressKey();
-                        console.log('[DongguaTV] log');
-                        console.log('[DongguaTV] log');
 
                         let progressRestored = false;
 
@@ -10260,7 +10145,6 @@
                         const _oldHls = (dp.plugins && dp.plugins.hls) || null;
 
                         dp.switchVideo({ url: finalUrl, type: 'hls' });
-                        console.log('[DongguaTV] log');
 
                         if (_oldHls) {
                             let _destroyed = false;  // 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柛顐ｆ处閺?'playing' 婵?5s 闂傚倷鑳堕…鍫㈡崲閹寸姴鍨濈€光偓閳ь剟鎳為柆宥呯闁兼亽鍎抽崢鎺楁倵楠炲灝鍔氶柟宄邦儏鍗卞┑鐘崇閳锋垿骞栫€涙ɑ灏ù婊勫劤閳?
@@ -10302,24 +10186,18 @@
 
                         // 闂傚倷娴囬鏍储瑜版帒鍨傜憸鐗堝吹閸ヮ剙钃熼柕澶堝劜椤ユ繈姊洪悷鏉挎Щ闁活厼鐗嗛…鍥箳閹宠櫕鐩幃褔宕煎┑鍫滄偅婵犵數鍋涢悧濠囧垂鐠轰警鐒介悹鍥ㄧゴ濡插牊淇婇娆掝劅闁?
                         const restoreHandler = () => {
-                            console.log('[DongguaTV] log');
-                            console.log('[DongguaTV] log');
 
                             // 濠碘槅鍋撶徊浠嬪疮椤栨氨鏆?闂傚倷娴囬鏍储瑜版帒鍨傜憸鐗堝吹閸ヮ剙钃熼柕澶堝劤閿涙瑩鎮楅獮鍨姎妞わ富鍋婂畷鎴﹀箻缂佹ê浜滃┑鐐跺蔼椤曆囧疾椤撶姷纾?(濠电姵顔栭崳顖滃緤閻ｅ本宕查柟杈惧瘜閺佸啫鈹戦崒婊庣劸缂佲偓閸℃稒鐓曢柕澶涚到婵″ジ骞栭弶鎴含闁诡喖鍢查埢搴ょ疀閺冩垶锛嗘俊鐐€х徊浠嬫偉婵傜钃熼柛顐犲劜閸ゅ秹鏌曟径妯烘灍闁抽攱娲熷?
                             ensurePlaybackSpeed(dp);
 
                             if (progressRestored) {
-                                console.log('[DongguaTV] log');
                                 return;
                             }
                             progressRestored = true;
 
-                            console.log('[DongguaTV] log');
-                            console.log('[DongguaTV] log');
 
                             try {
                                 const saved = localStorage.getItem(progressKey);
-                                console.log('[DongguaTV] log');
 
                                 if (saved) {
                                     const savedData = JSON.parse(saved);
@@ -10327,32 +10205,25 @@
                                     const savedDate = new Date(savedData.date);
                                     const daysDiff = (new Date() - savedDate) / (1000 * 60 * 60 * 24);
 
-                                    console.log('[DongguaTV] log');
 
                                     const isTimeOK = daysDiff < 7;
                                     const isMinOK = savedTime > 10;
                                     const isMaxOK = dp.video.duration && savedTime < dp.video.duration - 30;
 
-                                    console.log('[DongguaTV] log');
 
                                     if (isTimeOK && isMinOK && isMaxOK) {
                                         setTimeout(() => {
-                                            console.log('[DongguaTV] log');
                                             dp.seek(savedTime);
                                             dp.notice('Resume playback', 2000);
 
                                             setTimeout(() => {
-                                                console.log('[DongguaTV] log');
                                             }, 1000);
                                         }, 500);
                                     } else {
-                                        console.log('[DongguaTV] log');
                                     }
                                 } else {
-                                    console.log('[DongguaTV] log');
                                 }
                             } catch (e) {
-                                console.log('[DongguaTV] log');
                             }
                         };
 
@@ -10621,7 +10492,6 @@
                                         }
                                     });
 
-                                    console.log('[DongguaTV] log');
 
                                     // 5. 闂傚倷鑳堕崢褔銆冩惔銏㈩洸婵犲﹤瀚崣蹇涙煃閸濆嫭鍣洪柍閿嬫礋閺岀喖鏌囬敃鈧悘鈩冦亜閵夛箑鐏撮柡宀€鍠撻幐鈺傚緞婵犲倹娈梺缁樻尰閸ㄥ潡寮?(5缂傚倸鍊风粈渚€藝閹殿喗鏆滄俊銈傚亾閾荤偤鏌曢崼婵愭Ц缂佺姾鍋愰埀顒€绠嶉崕杈┾偓姘煎枤缁瑦绻濋崶銊у幈濠殿喗锕╅崜娆擃敆閵忋倖鍋ｉ柟閭︿簻瀹撳棛鈧?
                                     let tvHideTimer = null;
@@ -10687,7 +10557,6 @@
                                     playPauseBtn.focus();
                                 }
                             } catch (e) {
-                                console.log('[DongguaTV] log');
                             }
                         }, 1500);  // 闂佽娴烽崑锝夊磹閺囥垺鍋夊┑鍌滎焾濮规煡姊洪鈧粔瀵哥矆?1.5 缂傚倸鍊风粈渚€藝閹殿喗鏆滈柣鎰惈閻忚櫕淇婇婵嗗惞闁崇懓绉电换婵嬫濞戞瑯妫為悗娈垮枛濞硷繝骞冨鈧幃娆撴嚑椤掑偆鍞堕梻浣风串缂嶅棝宕滈悢鑲╁祦?
                     }
@@ -10713,7 +10582,6 @@
                         this.isAutoRetrying = true;
                         const nextSource = allSources[currentIndex + 1];
                         this.autoRetryMessage = `Trying next source after ${failingSource?.site_name || 'current source'} failed...`;
-                        console.log('[DongguaTV] log');
 
                         setTimeout(() => {
                             this.isAutoRetrying = false;
@@ -10730,7 +10598,6 @@
                             const v = dp && dp.video;
                             const isPlayable = v && !v.error && (v.readyState >= 2 || (v.buffered && v.buffered.length > 0));
                             if (isPlayable) {
-                                console.log('[DongguaTV] log');
                                 this.autoRetryMessage = '';
                                 this.playbackErrorCount = 0;  // 闂傚倷鑳堕…鍫㈡崲鐎ｎ€㈠綊宕堕澶嬫櫓闂婎偄娲︾粙鎴犳喆閿曞倸绠归弶鍫濆⒔閹ジ鏌℃笟鈧粻鏍蓟閵堝憛褔宕惰婵垹鈹戦悩顐壕闂佺偨鍎查崜姘焽娴煎瓨鐓ユ繝闈涙閸ｅ嘲霉濠婂啨鍋㈤柟顔肩秺楠炲洭鍩℃担绋款潛闂備礁鎽滈崯鍧楀磻閹剧粯鈷戦柛娑橈工缁旈箖鏌涙繝鍐╃闁?
                                 return;
@@ -10761,7 +10628,6 @@
 
                     if (currentIndex < this.episodeList.length - 1) {
                         const nextEp = this.episodeList[currentIndex + 1];
-                        console.log('[DongguaTV] log');
 
                         if (auto) {
                             if (typeof dp !== 'undefined' && dp.notice) dp.notice(`Next episode: ${nextEp.name}`, 3000);

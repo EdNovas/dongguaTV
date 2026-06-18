@@ -937,9 +937,12 @@ app.get('/api/desktop/status', async (req, res) => {
 });
 
 function sendTvboxError(res, error, statusCode = 500) {
-    res.status(statusCode).json({
+    const payload = {
         error: error && error.message ? error.message : 'TVBox adapter error'
-    });
+    };
+    if (error && error.code) payload.code = error.code;
+    if (error && error.payloadKind) payload.payloadKind = error.payloadKind;
+    res.status(statusCode).json(payload);
 }
 
 function isHttpUrl(value) {

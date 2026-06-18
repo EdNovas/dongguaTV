@@ -1,6 +1,6 @@
 // Service Worker with Image Caching for dongguaTV
-// v24: HTML 改为 Stale-While-Revalidate；ad-filter.js 精简(去死代码)
-const CACHE_VERSION = 'v24';
+// v25: refresh cached HTML after TVBox decoder and runtime log updates
+const CACHE_VERSION = 'v25';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 

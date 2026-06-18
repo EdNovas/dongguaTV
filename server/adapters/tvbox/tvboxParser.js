@@ -1,4 +1,5 @@
 const fs = require('fs');
+const crypto = require('crypto');
 
 function removeLineCommentsPreservingStrings(text) {
     const input = String(text || '').replace(/^\uFEFF/, '');
@@ -192,18 +193,98 @@ function detectBinaryPayload(buffer) {
     return null;
 }
 
+function createPayloadError(message, code, payloadKind) {
+    const error = new Error(message);
+    error.code = code;
+    if (payloadKind) error.payloadKind = payloadKind;
+    return error;
+}
+
 function toPayloadText(payload) {
     if (Buffer.isBuffer(payload)) {
         const binaryKind = detectBinaryPayload(payload);
         if (binaryKind) {
-            const error = new Error(`Unsupported TVBox payload: ${binaryKind}. The URL returned binary/image data instead of JSON.`);
-            error.code = 'binary-payload';
-            error.payloadKind = binaryKind;
-            throw error;
+            throw createPayloadError(
+                `Unsupported TVBox image config: ${binaryKind}. Image-steganography configs are recognized but not decoded in this version.`,
+                'image-config-unsupported',
+                binaryKind
+            );
         }
         return payload.toString('utf8');
     }
     return String(payload || '');
+}
+
+function padFongMiSecret(value) {
+    const text = String(value || '');
+    if (!text || text.length > 16) {
+        throw createPayloadError('Invalid FongMi encoded config key or IV.', 'encoded-config-invalid');
+    }
+    return text.padEnd(16, '0');
+}
+
+function decodeFongMiCbcPayload(text) {
+    const compact = String(text || '').replace(/\s+/g, '');
+    if (!compact.startsWith('2423') || !/^[0-9a-f]+$/i.test(compact) || compact.length % 2 !== 0) {
+        return null;
+    }
+
+    const envelope = Buffer.from(compact, 'hex').toString('utf8').toLowerCase();
+    const keyStart = envelope.indexOf('$#');
+    const keyEnd = envelope.indexOf('#$', keyStart + 2);
+    const encryptedStart = compact.indexOf('2324') + 4;
+    const encryptedEnd = compact.length - 26;
+    if (keyStart < 0 || keyEnd < 0 || encryptedStart < 4 || encryptedEnd <= encryptedStart) {
+        throw createPayloadError('Invalid FongMi AES-CBC config envelope.', 'encoded-config-invalid');
+    }
+
+    const key = padFongMiSecret(envelope.slice(keyStart + 2, keyEnd));
+    const iv = padFongMiSecret(envelope.slice(-13));
+    try {
+        const decipher = crypto.createDecipheriv('aes-128-cbc', Buffer.from(key), Buffer.from(iv));
+        const decrypted = Buffer.concat([
+            decipher.update(Buffer.from(compact.slice(encryptedStart, encryptedEnd), 'hex')),
+            decipher.final()
+        ]);
+        return decrypted.toString('utf8');
+    } catch (error) {
+        throw createPayloadError('Failed to decode FongMi AES-CBC TVBox config.', 'encoded-config-decode-failed');
+    }
+}
+
+function decodeFongMiBase64Payload(text) {
+    const input = String(text || '');
+    const marker = input.match(/[A-Za-z0-9]{8}\*\*/);
+    if (!marker) return null;
+    const encoded = input.slice(input.indexOf(marker[0]) + 10).replace(/\s+/g, '');
+    if (!encoded) {
+        throw createPayloadError('Invalid FongMi Base64 config envelope.', 'encoded-config-invalid');
+    }
+    try {
+        return Buffer.from(encoded, 'base64').toString('utf8');
+    } catch (error) {
+        throw createPayloadError('Failed to decode FongMi Base64 TVBox config.', 'encoded-config-decode-failed');
+    }
+}
+
+function decodeTextPayload(text, diagnostics) {
+    const input = String(text || '').trim();
+    const base64Decoded = decodeFongMiBase64Payload(input);
+    if (base64Decoded !== null) {
+        diagnostics.decodeMode = 'fongmi-base64';
+        diagnostics.decodedLength = base64Decoded.length;
+        return base64Decoded;
+    }
+
+    const cbcDecoded = decodeFongMiCbcPayload(input);
+    if (cbcDecoded !== null) {
+        diagnostics.decodeMode = 'fongmi-aes-cbc';
+        diagnostics.decodedLength = cbcDecoded.length;
+        return cbcDecoded;
+    }
+
+    diagnostics.decodeMode = 'plain-text';
+    return text;
 }
 
 function parseWarehouseEntriesFromText(text) {
@@ -310,14 +391,16 @@ function normalizeParsedConfig(parsed, diagnostics, originalText) {
 }
 
 function parseTvboxJson(payload) {
-    const text = toPayloadText(payload);
-    const trimmed = text.trim();
+    const payloadText = toPayloadText(payload);
     const diagnostics = {
-        payloadLength: text.length,
-        payloadPrefix: trimmed.slice(0, 80).replace(/\s+/g, ' '),
+        payloadLength: payloadText.length,
+        payloadKind: Buffer.isBuffer(payload) ? 'buffer' : 'text',
         parseMode: 'unknown',
-        configKind: 'unknown'
+        configKind: 'unknown',
+        decodeMode: 'unknown'
     };
+    const text = decodeTextPayload(payloadText, diagnostics);
+    const trimmed = text.trim();
 
     if (/^<!doctype html|^<html[\s>]/i.test(trimmed)) {
         const error = new Error('Unsupported TVBox payload: HTML page returned instead of JSON.');
@@ -383,7 +466,8 @@ async function loadTvboxConfig(input, httpClient) {
                 configKind: 'inline-config',
                 parseMode: 'inline-object',
                 payloadLength: 0,
-                payloadPrefix: ''
+                payloadKind: 'inline-object',
+                decodeMode: 'none'
             }
         };
     }
