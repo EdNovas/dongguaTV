@@ -8416,7 +8416,21 @@
                     // 🔧 关键：测速前先把所有线路标记为"测速中"(latency='...')，否则并发池里尚未轮到的线路
                     //    会保留初始的 999ms 而被显示出来（懒加载：未测速的不显示，测出结果后再出现）
                     this.currentGroup.sources.forEach(s => { s.latency = '...'; });
-                    await runWithConcurrency(this.currentGroup.sources, 6, latencyWorker);
+                    // 🗄️ 缓存优先：命中(测通项3天/不可用项12h内)直接套用、跳过测速请求(detail 起播时由 switchSource 按需拉取)；
+                    //    未命中才真测、测完写回缓存。allowDead=true：这是全量测速(含代理)，可缓存不可用态(9999)。
+                    const cachedWorker = async (source) => {
+                        const c = this._siteHealthGet(source.site_key);
+                        if (c) {
+                            source.latency = c.latency; source._testType = c._testType;
+                            source._useProxy = c._useProxy; source._proxyUrl = c._proxyUrl;
+                            checkEarlyReturn();
+                            return source;
+                        }
+                        await latencyWorker(source);
+                        this._siteHealthSet(source.site_key, source, true);
+                        return source;
+                    };
+                    await runWithConcurrency(this.currentGroup.sources, 6, cachedWorker);
                     clearTimeout(earlyReturnTimer);
                     // 🧭 测速期间用户可能已切换到别的剧（此时 isTestingSources 归 B 所有），丢弃本次结果
                     if (_openSeq !== _navSeq) return;
@@ -8805,7 +8819,10 @@
                         };
 
                         // 🚦 限并发逐批测速（测全部源、最多 6 并发）
-                        await runWithConcurrency(sources, 6, latencyWorker);
+                        // 🗄️ "刷新线路"是手动重测(恢复通道)：强制真测(不读缓存)，测完写回缓存。
+                        //    allowDead=false：此路径测速无代理分支(proxy-only 源会误判)，只许缓存 direct/proxy 成功态，不缓存不可用态。
+                        const cachedWorker = async (source) => { await latencyWorker(source); this._siteHealthSet(source.site_key, source, false); return source; };
+                        await runWithConcurrency(sources, 6, cachedWorker);
 
                         // 🧭 测速期间用户可能已切换剧集：丢弃过期结果
                         if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
@@ -8898,6 +8915,42 @@
                     const m = epName.match(/第\s*0*(\d+)\s*[集话話期]/) || epName.match(/\bep\.?\s*0*(\d+)/i) || epName.match(/^0*(\d+)$/);
                     const num = m ? parseInt(m[1], 10) : null;
                     return this.currentGroup.name + '|' + (num != null && !isNaN(num) ? num : epName);
+                },
+                // 🗄️ 资源站健康度本地缓存(跨剧集, 3天)：site_key → {latency,testType,useProxy,proxyUrl,ts}。
+                //    本地连不通的资源站基本不会再通，缓存上次测速结果 → 刷新页面/?play= 深链/换剧都直接套用、跳过重测；
+                //    本地不通的站(latency 高)自然沉底/视为不可用，省去重复测速。手动"刷新线路"会强制重测并刷新本缓存。
+                _siteHealthGet(siteKey) {
+                    if (!siteKey) return null;
+                    try {
+                        const m = JSON.parse(localStorage.getItem('donggua_site_health') || '{}') || {};
+                        const r = m[siteKey];
+                        if (r && typeof r.latency === 'number') {
+                            // 不可用项(9999)缓存短(12h)便于恢复；测通的(direct/proxy)缓存 3 天免重测
+                            const ttl = r.latency >= 9000 ? 12 * 3600 * 1000 : 3 * 24 * 3600 * 1000;
+                            if ((Date.now() - (r.ts || 0)) < ttl) {
+                                return { latency: r.latency, _testType: r.testType || null, _useProxy: !!r.useProxy, _proxyUrl: r.proxyUrl || null };
+                            }
+                        }
+                    } catch (e) { }
+                    return null;
+                },
+                // allowDead: 仅当本次是"全量测速"(openDetail，含 direct+proxy+server 全试过)才允许缓存不可用态(9999)。
+                // refreshSources 的测速无 proxy 分支(proxy-only 源会被误判 server/9999)，故它只许缓存 direct/proxy 成功态。
+                _siteHealthSet(siteKey, source, allowDead) {
+                    if (!siteKey || !source || typeof source.latency !== 'number') return;  // 中间态('...') 不存
+                    const tt = source._testType;
+                    const isGood = (tt === 'direct' || tt === 'proxy') && source.latency < 9000;  // 客户端真测通,配置(代理)可靠
+                    const isDead = source.latency >= 9000;
+                    // 只缓存：①客户端真测通的(direct/proxy) ②彻底全量测过仍不可用的(allowDead 的 9999)。
+                    // server 兜底态(客户端没测通、仅服务器能连)不缓存——下次仍真测，给客户端重试 direct/proxy 的机会。
+                    if (!isGood && !(isDead && allowDead)) return;
+                    try {
+                        const MAXTTL = 3 * 24 * 3600 * 1000, now = Date.now();
+                        const m = JSON.parse(localStorage.getItem('donggua_site_health') || '{}') || {};
+                        m[siteKey] = { latency: source.latency, testType: tt || null, useProxy: !!source._useProxy, proxyUrl: source._proxyUrl || null, ts: now };
+                        for (const k of Object.keys(m)) { if (now - (m[k].ts || 0) > MAXTTL) delete m[k]; }  // 剪枝过期
+                        localStorage.setItem('donggua_site_health', JSON.stringify(m));
+                    } catch (e) { }
                 },
                 play(url) {
                     this.currentUrl = url;
