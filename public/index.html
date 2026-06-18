@@ -10065,6 +10065,24 @@
                             }, { passive: true });
                         }
 
+                        // 📱 iOS：原生全屏(webkitEnterFullscreen)会把视频交给系统播放器 → 我们 DOM 上的上下滑手势
+                        //    (音量/亮度/快进退)全部失效，还会被 iOS 自带"上下滑退出全屏"覆盖。把"真全屏"按钮在 iOS 上
+                        //    改走"页面全屏"(CSS 全屏、视频留在 DOM)：手势照常工作、弹幕/自定义控件都在，也没有原生全屏可被误退。
+                        //    (.dplayer-full-icon=真全屏 与 .dplayer-full-in-icon=页面全屏 是兄弟节点，捕获阶段只拦前者、不影响后者)
+                        {
+                            const _ua = navigator.userAgent || '';
+                            const _isiOS = /iPhone|iPad|iPod/.test(_ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(_ua));
+                            if (_isiOS) {
+                                container.addEventListener('click', (e) => {
+                                    if (e.target.closest('.dplayer-full-icon') && !e.target.closest('.dplayer-full-in-icon')) {
+                                        e.preventDefault();
+                                        e.stopImmediatePropagation();  // 阻止 DPlayer 进原生全屏
+                                        try { dp.fullScreen.request('web'); } catch (err) { }
+                                    }
+                                }, true);  // 捕获阶段，先于 DPlayer 自己的点击处理器
+                            }
+                        }
+
                         // 双击检测
                         // 双击检测
                         container.addEventListener('touchend', (e) => {
