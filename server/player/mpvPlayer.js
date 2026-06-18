@@ -1,5 +1,5 @@
-const fs = require('fs');
 const { spawn } = require('child_process');
+const { validateMpvPath } = require('./externalPlayerConfig');
 
 function buildMpvArgs(url, settings) {
     const args = [];
@@ -13,11 +13,11 @@ function playWithMpv(url, settings) {
         throw new Error('Playback URL is required.');
     }
     const exePath = settings && settings.mpvExePath;
-    if (!exePath) {
-        throw new Error('mpv/mpv.net executable path is not configured.');
-    }
-    if (!fs.existsSync(exePath)) {
-        throw new Error('Configured mpv/mpv.net executable was not found.');
+    const validation = validateMpvPath(exePath);
+    if (!validation.valid) {
+        const error = new Error(validation.message || 'Configured mpv/mpv.net executable is not valid.');
+        error.code = validation.reason || 'invalid-mpv-path';
+        throw error;
     }
 
     const child = spawn(exePath, buildMpvArgs(url, settings), {
@@ -27,7 +27,10 @@ function playWithMpv(url, settings) {
     });
 
     child.unref();
-    return { ok: true };
+    return {
+        ok: true,
+        playerType: validation.playerType
+    };
 }
 
 module.exports = {
