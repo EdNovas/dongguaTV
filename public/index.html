@@ -8475,7 +8475,7 @@
                     this.previewLocked = false;  // 🔒 退出预览锁定态
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
                     this._deepLinkTargetEp = '';  // 清除未消费的深链目标集数，避免串到下一部剧
-                    this._lastDanmakuId = null;   // 🗨️ 复位弹幕标识，下次打开重新加载弹幕
+                    this._lastDanmakuKey = null;  // 🗨️ 复位弹幕标识，下次打开别的剧时重新加载弹幕
                     this._clearDeepLinkTimers();
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
@@ -8888,6 +8888,17 @@
                         unlimited: false
                     };
                 },
+                // 弹幕"是否需要重载"的判定键：剧名 + 集号(归一化)。换源时不同站点集名写法常不同
+                // (第6集/第06集/06/6/EP6)，但同一集弹幕是一样的，归一化后同集=同键 → 不重拉/不闪烁。
+                // 注意：发给服务器的弹幕 id 仍是原始集名(不影响第三方匹配)，这里只用于"要不要重载"的比较。
+                _danmakuKey() {
+                    if (!this.currentGroup || !this.currentGroup.name) return '';
+                    const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    const epName = ((cur && cur.name) || '').trim();
+                    const m = epName.match(/第\s*0*(\d+)\s*[集话話期]/) || epName.match(/\bep\.?\s*0*(\d+)/i) || epName.match(/^0*(\d+)$/);
+                    const num = m ? parseInt(m[1], 10) : null;
+                    return this.currentGroup.name + '|' + (num != null && !isNaN(num) ? num : epName);
+                },
                 play(url) {
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
@@ -8990,8 +9001,10 @@
                     // 🗨️ 本集弹幕配置(弹幕开启且匹配到剧名时返回，否则 undefined)。
                     //    仅当"集数变化"(id 变)时才在 switchVideo 里重载弹幕——同集换源/代理回退不重载，避免弹幕闪烁与重复拉取。
                     const danmakuOpt = this._buildDanmakuOption();
-                    const danmakuReload = !!danmakuOpt && danmakuOpt.id !== this._lastDanmakuId;
-                    if (danmakuOpt) this._lastDanmakuId = danmakuOpt.id;
+                    // 用归一化键判定重载：同剧同集(集号相同)换源不重拉弹幕；换集(集号变)才重拉。
+                    const danmakuKey = this._danmakuKey();
+                    const danmakuReload = !!danmakuOpt && danmakuKey !== this._lastDanmakuKey;
+                    if (danmakuOpt) this._lastDanmakuKey = danmakuKey;
 
                     if (!dp) {
                         console.log('[播放器] 创建新的 DPlayer 实例');
