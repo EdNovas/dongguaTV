@@ -3513,6 +3513,7 @@
                             </div>
                             <div style="color:#8f98aa; font-size:12px; margin-top:4px;">
                                 TVBox diagnostics show built-in search, HTTP sources, plugin-required sources, and local bridge status without executing unknown plugins.
+                            </div>
                         </div>
                         <button class="btn-info" @click="loadSearchDiagnostics" :disabled="searchDiagnosticsLoading"
                             style="border:0; padding:8px 12px; font-size:12px;">
@@ -3584,6 +3585,7 @@
                     </div>
                 </div>
             </div>
+        </div>
         </div>
 
         <!-- 闂傚倷鑳堕…鍫㈡崲閹寸偟绠惧┑鐘蹭迹?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掆偓閳规垿鎮欑€涙ê鍓归梺鍝ュУ瀹€鎼佸箖?(婵?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鈷戦柛婵嗗閺嗐垽鏌涢埡鍌滃ⅹ閾伙絽顭跨捄铏圭伇闁活厼妫濋弻锝咁潩椤掑娈剁紓浣插亾濠㈣埖鍔栭埛鎴炪亜閹寸偛鍔ら柛鏃€绮撻幃浠嬵敍濮樺崬鐓熼悗瑙勬礃婵炲﹥淇婇幖浣肝ч柛銉㈡櫆閸犳帡姊绘担鍛婂暈闁荤噥鍨跺畷褰掑醇閺囩偟鍔﹀銈嗗坊閸嬫挻銇勯敂璇叉珝闁硅櫕鐟╅獮瀣晜鐟欙絾瀵戦梻浣告啞閻熴儵藝娴犲绀堝Δ锝呭暞閸嬶綁鏌涢妷銊︾【闁诲繈鍎抽幃? -->
@@ -3924,6 +3926,7 @@
                     </div>
                 </div>
             </div>
+        </div>
         </div>
 
         <div class="info-modal-overlay" v-if="showSettingsModal" @click.self="showSettingsModal = false">
@@ -4396,6 +4399,8 @@
                 </div>
             </div>
         </div>
+        </div>
+        </div>
 
         <!-- 闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?TMDb 闂傚倷鐒﹂惇褰掑垂閽樺鐒界憸搴ｇ紦娴犲鍐€妞ゆ劧绲介悵浼存⒑閹稿孩顥嗘俊顐㈠瀹曟粓骞嶉鐟颁壕婵炲牆鐏濋弸娑欑節閳ь剟鏌嗗鍡椾粧?闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?-->
         <div class="info-modal-overlay" v-if="showInfoModal" @click.self="showInfoModal = false">
@@ -4489,19 +4494,24 @@
                         </div>
                     </div>
                     <div style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn-cast" tabindex="2" @click="openCurrentWithMpc" aria-label="Play with MPC">
+                        <button class="btn-cast" tabindex="2" data-testid="playback-open-mpc"
+                            @click="openCurrentWithMpc" aria-label="Play with MPC">
                             <i class="fas fa-external-link-alt"></i> MPC
                         </button>
-                        <button class="btn-cast" tabindex="2" @click="openCurrentWithMpv" aria-label="Use mpv.net">
+                        <button class="btn-cast" tabindex="2" data-testid="playback-open-mpv"
+                            @click="openCurrentWithMpv" aria-label="Use mpv.net">
                             <i class="fas fa-external-link-alt"></i> mpv.net
                         </button>
-                        <button class="btn-cast" tabindex="2" @click="copyCurrentPlayUrl" aria-label="Copy play URL">
+                        <button class="btn-cast" tabindex="2" data-testid="playback-copy-url"
+                            @click="copyCurrentPlayUrl" aria-label="Copy play URL">
                             <i class="fas fa-copy"></i> Copy URL
                         </button>
-                        <button class="btn-cast" tabindex="2" @click="copyCurrentProxyUrl" aria-label="Copy proxy URL">
+                        <button class="btn-cast" tabindex="2" data-testid="playback-copy-proxy"
+                            @click="copyCurrentProxyUrl" aria-label="Copy proxy URL">
                             <i class="fas fa-shield-alt"></i> Copy proxy URL
                         </button>
-                        <button class="btn-cast" tabindex="2" @click="diagnoseCurrentPlayback" aria-label="Playback diagnostics">
+                        <button class="btn-cast" tabindex="2" data-testid="playback-diagnose"
+                            @click="diagnoseCurrentPlayback" aria-label="Playback diagnostics">
                             <i :class="['fas', playbackDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-stethoscope']"></i> Diagnose
                         </button>
                         <button class="btn-cast" tabindex="2" @click="showSettingsModal = true; loadPlayerSettings()"
@@ -4514,6 +4524,28 @@
                             <i class="fas fa-tv"></i> Cast
                         </button>
                     </div>
+                </div>
+
+                <div v-if="playbackAction" data-testid="playback-action-status"
+                    :style="{
+                        margin: '0 0 12px',
+                        padding: '10px 14px',
+                        borderRadius: '10px',
+                        border: playbackAction.status === 'error' ? '1px solid rgba(248,113,113,.45)' : playbackAction.status === 'working' ? '1px solid rgba(96,165,250,.4)' : '1px solid rgba(34,197,94,.4)',
+                        background: playbackAction.status === 'error' ? 'rgba(127,29,29,.28)' : playbackAction.status === 'working' ? 'rgba(30,64,175,.24)' : 'rgba(20,83,45,.28)',
+                        color: playbackAction.status === 'error' ? '#fecaca' : playbackAction.status === 'working' ? '#bfdbfe' : '#bbf7d0',
+                        fontSize: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '9px'
+                    }">
+                    <i :class="['fas', playbackAction.status === 'working' ? 'fa-spinner fa-spin' : playbackAction.status === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle']"></i>
+                    <strong>{{ playbackAction.message }}</strong>
+                    <span v-if="playbackAction.proxyUrl" style="color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                        LocalProxy {{ playbackAction.proxyUrl }}
+                    </span>
+                    <button @click="playbackAction = null" aria-label="Dismiss playback status"
+                        style="margin-left:auto; background:none; border:0; color:inherit; cursor:pointer; font-size:16px;">&times;</button>
                 </div>
 
                 <!-- 2. 婵犵數鍋為崹鍫曞箹閳哄懎鐭楅柛鎰靛枛绾惧潡鏌熺紒銏犳灍闁哄拋鍓氶幈銊ノ熼搹鐧哥礊閻庢稒绻冪换婵嬪閻橀潧鐏梺鍛婃处閸撴瑩宕繝鍥ㄢ拺閻炴稈鈧厖澹曢梻浣筋嚃閸ㄥ酣宕熼鐐电▕ -->
@@ -4617,6 +4649,7 @@
                         <div class="source-list" v-if="fastSources.length > 0 || slowSources.length > 0">
                             <!-- 闂傚倸顭崑鍕归崒鐐茬；濠电姴娲ら悞鍨亜閹烘垵鈧悂寮搁弮鍫熺厱闁靛牆鎳忛幑锝夋煙?-->
                             <div v-for="(source, index) in fastSources" class="source-pill"
+                                data-testid="playback-source"
                                 :class="{ active: currentSource?.site_key === source.site_key }" :tabindex="10 + index"
                                 @click="switchSource(source)" @keydown.enter="switchSource(source)">
                                 <span>{{ source.site_name }}</span>
@@ -4646,6 +4679,7 @@
                             </div>
                             <!-- 闂傚倷绶氶埀顒佺〒閳规帡鏌涢妸銈囩煓闁糕斁鍋撳銈嗗笒閸婃悂寮搁弮鍫熺厱闁靛牆鎳忛幑锝夋煙?-->
                             <div v-for="(source, index) in slowSources" class="source-pill"
+                                data-testid="playback-source"
                                 :class="{ active: currentSource?.site_key === source.site_key }" style="opacity: 0.7;"
                                 :tabindex="100 + index" @click="switchSource(source)"
                                 @keydown.enter="switchSource(source)">
@@ -5029,6 +5063,7 @@
                     playbackClassificationLoading: false,
                     playbackDiagnostics: null,
                     playbackDiagnosticsLoading: false,
+                    playbackAction: null,
                     watchHistory: [],  // 闂傚倷鐒﹀鍨焽閸ф绀夌€广儱顦弰銉︾箾閹寸偟顣查柛鐘叉閺屾稓浠﹂崜褏鐓佺紓浣哄У閻熲晠寮诲☉妯滅喖鎮滃鍡橆棧闁荤喐绮嶅妯绘櫠鎼淬劌绠悗锝庡枛缁狙囨偣閹帒濡块崡?
                     wakeLock: null,  // Screen Wake Lock 闂備浇顕уù鐑藉极閹间降鈧焦绻濋崶銊ョ樁闂佸憡娲﹂崹閬嶅疾椤掑嫭鐓曟い鎰Т閻忣亪鏌￠崱妤冪闂囧绻濇繝鍌氭殶闁告垵婀辩槐鎺旂磼濡搫鎽靛Δ鐘靛仦閸旀牠骞忛崨鏉戜紶闁靛濡囩粔铏繆閵堝洤啸闁稿鍋涚叅闁哄稁鍘介崑澶愭煠閸濄儲鏆╂い鈺佸级閵囧嫰寮撮悙鎼￥缂備讲鍋?
 
@@ -6410,6 +6445,20 @@
                     };
                 },
 
+                setPlaybackAction(kind, status, message, details = {}) {
+                    this.playbackAction = {
+                        kind,
+                        status,
+                        message,
+                        proxyUrl: details.proxyUrl || null,
+                        updatedAt: new Date().toISOString()
+                    };
+                },
+
+                clearPlaybackAction() {
+                    this.playbackAction = null;
+                },
+
                 shouldRecommendExternalPlayer() {
                     if (this.playbackClassification && this.playbackClassification.recommendedPlayer) {
                         return ['mpc', 'mpv'].includes(this.playbackClassification.recommendedPlayer);
@@ -6449,10 +6498,11 @@
 
                 async diagnoseCurrentPlayback() {
                     if (!this.currentUrl) {
-                        this.showMiniToast && this.showMiniToast('Done');
+                        this.setPlaybackAction('diagnose', 'error', 'No playback URL is available.');
                         return;
                     }
                     this.playbackDiagnosticsLoading = true;
+                    this.setPlaybackAction('diagnose', 'working', 'Checking playback configuration...');
                     try {
                         const response = await fetch('/api/player/diagnose', {
                             method: 'POST',
@@ -6462,7 +6512,11 @@
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.playbackDiagnostics = data;
-                        this.showMiniToast && this.showMiniToast(data.ok ? 'Self-test passed' : 'Self-test failed');
+                        this.setPlaybackAction(
+                            'diagnose',
+                            data.ok ? 'success' : 'error',
+                            data.ok ? 'Playback diagnostics passed.' : 'Playback diagnostics found issues.'
+                        );
                     } catch (error) {
                         this.playbackDiagnostics = {
                             ok: false,
@@ -6475,6 +6529,7 @@
                             }],
                             recommendations: ['Check the current source, player settings, and LocalProxy status.']
                         };
+                        this.setPlaybackAction('diagnose', 'error', error.message || 'Playback diagnostics failed.');
                     } finally {
                         this.playbackDiagnosticsLoading = false;
                     }
@@ -6482,9 +6537,10 @@
 
                 async openCurrentWithMpc() {
                     if (!this.currentUrl) {
-                        this.showMiniToast && this.showMiniToast('Done');
+                        this.setPlaybackAction('mpc', 'error', 'No playback URL is available.');
                         return;
                     }
+                    this.setPlaybackAction('mpc', 'working', 'Starting MPC...');
                     try {
                         const response = await fetch('/api/player/open-mpc', {
                             method: 'POST',
@@ -6493,9 +6549,14 @@
                         });
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
-                        this.showMiniToast && this.showMiniToast('Done');
+                        this.setPlaybackAction(
+                            'mpc',
+                            'success',
+                            data.proxyUrl ? 'MPC started through LocalProxy.' : 'MPC started.',
+                            data
+                        );
                     } catch (error) {
-                        alert(error.message || 'Operation failed');
+                        this.setPlaybackAction('mpc', 'error', error.message || 'Failed to start MPC.');
                         this.showSettingsModal = true;
                         this.loadPlayerSettings();
                     }
@@ -6503,9 +6564,10 @@
 
                 async openCurrentWithMpv() {
                     if (!this.currentUrl) {
-                        this.showMiniToast && this.showMiniToast('Done');
+                        this.setPlaybackAction('mpv', 'error', 'No playback URL is available.');
                         return;
                     }
+                    this.setPlaybackAction('mpv', 'working', 'Starting mpv.net...');
                     try {
                         const response = await fetch('/api/player/open-mpv', {
                             method: 'POST',
@@ -6514,9 +6576,14 @@
                         });
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
-                        this.showMiniToast && this.showMiniToast('Done');
+                        this.setPlaybackAction(
+                            'mpv',
+                            'success',
+                            data.proxyUrl ? 'mpv.net started through LocalProxy.' : 'mpv.net started.',
+                            data
+                        );
                     } catch (error) {
-                        alert(error.message || 'Operation failed');
+                        this.setPlaybackAction('mpv', 'error', error.message || 'Failed to start mpv.net.');
                         this.showSettingsModal = true;
                         this.loadPlayerSettings();
                     }
@@ -6636,12 +6703,18 @@
 
                 async copyTextToClipboard(text, successMessage, promptMessage) {
                     const value = String(text || '');
-                    if (!value) return;
+                    if (!value) {
+                        this.setPlaybackAction('copy', 'error', 'No playback URL is available.');
+                        return false;
+                    }
                     try {
                         await navigator.clipboard.writeText(value);
-                        this.showMiniToast && this.showMiniToast(successMessage || 'Playback started');
+                        this.setPlaybackAction('copy', 'success', successMessage || 'Playback URL copied.');
+                        return true;
                     } catch (error) {
                         window.prompt(promptMessage || 'Copy this value', value);
+                        this.setPlaybackAction('copy', 'success', 'Copy prompt opened.');
+                        return true;
                     }
                 },
 
@@ -6674,15 +6747,15 @@
 
                 async copyCurrentPlayUrl() {
                     const url = this.currentUrl || '';
-                    if (!url) return;
-                    await this.copyTextToClipboard(url, 'URL copied', 'Copy URL');
+                    await this.copyTextToClipboard(url, 'Playback URL copied.', 'Copy playback URL');
                 },
 
                 async copyCurrentProxyUrl() {
                     if (!this.currentUrl) {
-                        this.showMiniToast && this.showMiniToast('Done');
+                        this.setPlaybackAction('proxy', 'error', 'No playback URL is available.');
                         return;
                     }
+                    this.setPlaybackAction('proxy', 'working', 'Creating LocalProxy URL...');
                     try {
                         const response = await fetch('/api/player/proxy-url', {
                             method: 'POST',
@@ -6691,9 +6764,14 @@
                         });
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
-                        await this.copyTextToClipboard(data.proxyUrl, 'Proxy URL copied', 'Copy proxy URL');
+                        const copied = await this.copyTextToClipboard(data.proxyUrl, 'LocalProxy URL copied.', 'Copy LocalProxy URL');
+                        if (copied) {
+                            this.setPlaybackAction('proxy', 'success', 'LocalProxy URL copied.', {
+                                proxyUrl: data.proxyUrl
+                            });
+                        }
                     } catch (error) {
-                        this.showMiniToast && this.showMiniToast(error.message || 'Operation failed');
+                        this.setPlaybackAction('proxy', 'error', error.message || 'Failed to create LocalProxy URL.');
                     }
                 },
 
@@ -8718,6 +8796,9 @@
                 },
                 closeDetail() {
                     this.showDetail = false;
+                    this.clearPlaybackAction();
+                    this.playbackDiagnostics = null;
+                    this.playbackClassification = null;
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
 
@@ -8756,6 +8837,10 @@
                     document.documentElement.style.overflow = '';
                 },
                 async switchSource(source) {
+                    this.clearPlaybackAction();
+                    this.playbackDiagnostics = null;
+                    this.playbackClassification = null;
+                    this.autoRetryMessage = '';
                     this.currentSource = source;
                     this.loadingDetail = true;
                     const mySeq = _navSeq;  // 濠碘槅鍋撶徊浠嬪船?闂備浇宕垫慨鎶芥倿閿曗偓椤灝螣閼测晝顦悗骞垮劚濞茬娀宕戦幘瀛樺闁告劦鐓堝Λ鍫ユ⒑缁洘娅呴柟鍐茬箳缁瑦寰勭€ｎ剛鐦堟繛杈剧秬濞咃綁骞夐鈧娲传閸曨偀鍋撶粙妫靛綊宕熼鐕佹綗濠电偛妫欓幐鍝モ偓姘槹閵囧嫯绠涢幘鎼￥婵犮垼娉涚€氫即骞冨Δ鈧埥澶娾枎濡厧濮烘繝鐢靛仜閻楀﹪宕归悽绋跨厴闁告劦鍠栫粻娑㈡煟濡も偓閻楀懐鍒?await 闂備浇宕垫慨鏉懨归崟顖涒挃闁告洦鍨扮壕鍧楃叓閸ャ劎鈯曢柡鍜佸墴閹﹢鎮欓棃娑楀闂佺硶鏅涢崐鍨潖婵犳艾纾兼繛鎴炵懅缁嬪洭鎮峰鍛暭闁绘搫绻濋獮濠偽旈崨顔肩檮婵犮垼娉涢敃锕傚焵椤掆偓閵堟悂寮婚悢鑲╁祦闁割煈鍠氭禒鍏肩節閳封偓閸屾粎鐓撳┑顔硷工濞尖€崇暦闁稁鏁囬柣妯活問濡?
@@ -9075,6 +9160,7 @@
                 },
                 play(url) {
                     this.currentUrl = url;
+                    this.clearPlaybackAction();
                     this.playbackClassification = null;
                     this.playbackDiagnostics = null;
                     this.refreshPlaybackClassification(url);
