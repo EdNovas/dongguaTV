@@ -54,3 +54,13 @@
 | 2026-06-19T07:59:00Z | `npm.cmd run build` | pass | Syntax/build check remained green after localization |
 
 Localization files: `public/index.html`, `tools/test-localization-ui.js`, and `package.json`.
+
+## Interaction And Complete Localization Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-19T08:49:00Z | Visible review of Settings and Subscriptions in the in-app browser | pass | Core settings, runtime diagnostics, plugin controls, subscription instructions, and action buttons display in Simplified Chinese; explicit Back buttons are present |
+| 2026-06-19T08:50:00Z | Subscription refresh button | pass | Visible success feedback changed to `订阅数据已刷新`; the previous false `Subscription operation failed` state no longer appears on initial load |
+| 2026-06-19T08:50:00Z | Settings proxy-status button | pass | Visible feedback changed to `代理状态已更新` |
+| 2026-06-19T08:51:00Z | `npm.cmd run test:localization-ui` | pass | Automated click regression verified Settings Back, proxy feedback, Subscriptions Back, subscription refresh feedback, and absence of misleading heavy-stream toggle copy |
+| 2026-06-19T08:51:00Z | `npm.cmd run build` | pass | Syntax/build check remained green |

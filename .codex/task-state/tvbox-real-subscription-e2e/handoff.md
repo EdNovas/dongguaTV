@@ -66,3 +66,7 @@
 - Settings includes a persisted selector for Simplified Chinese, English, and Japanese.
 - `npm run test:localization-ui` verifies all three languages against the live local app and restores Simplified Chinese after the test.
 - Next visual action: keep the preview open and revise layout, size, color, and menu ordering from direct user feedback.
+- Follow-up interaction repair completed: Settings, Subscriptions, Live, first-run guide, and playback detail now expose explicit Back actions.
+- The incorrect Settings copy-to-control mapping was fixed: `hideRandomRow` is labeled as hiding random recommendations, and `filterNsfw` is labeled as adult-content filtering.
+- Subscription loading no longer pre-populates a failure message; refresh, save, detection, and proxy actions now show immediate progress/result feedback.
+- `npm run test:localization-ui` now performs click-level regression checks, not only static text checks.

@@ -71,3 +71,11 @@
 - Automated review: `npm run test:localization-ui` passed for navigation, search, settings, HTML language, and persisted preference.
 - Build review: `npm run build` passed after the localization change.
 - Residual scope: secondary diagnostic and deeply nested operational strings can be localized incrementally during the next visual review.
+
+## Interaction Repair Review
+
+- Fixed a functional mismatch where two Settings switches displayed external-player/proxy descriptions while actually controlling random-row visibility and adult-content filtering.
+- Fixed the false subscription failure message shown during normal loading.
+- Added explicit Back actions to core modal/detail surfaces.
+- Added visible action feedback and automated click checks for proxy status and subscription refresh.
+- The in-app browser is intentionally left on the Subscriptions panel with the successful refresh state visible for human review.

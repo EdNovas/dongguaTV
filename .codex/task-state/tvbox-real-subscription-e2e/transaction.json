@@ -55,6 +55,31 @@
           "backup": "backups/20260619T075727Z/package.json"
         }
       ]
+    },
+    {
+      "id": "20260619T082411Z",
+      "created_at": "2026-06-19T08:24:11Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "public/index.html",
+          "existed": true,
+          "sha256": "f32b9e1d3549c2654a85013cad6de7d68bd61b563d26486d6c2eb2d591ba3f93",
+          "backup": "backups/20260619T082411Z/public/index.html"
+        },
+        {
+          "path": "tools/test-localization-ui.js",
+          "existed": true,
+          "sha256": "696267988181e283e2c86aebc724c255e9bc24ab32125847c04e216f52054900",
+          "backup": "backups/20260619T082411Z/tools/test-localization-ui.js"
+        },
+        {
+          "path": "package.json",
+          "existed": true,
+          "sha256": "1775f47aaab01556f2f493f660ee9ee4e3197f5a70be6d890624c8e4ad7095af",
+          "backup": "backups/20260619T082411Z/package.json"
+        }
+      ]
     }
   ],
   "restores": []

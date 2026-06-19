@@ -2353,71 +2353,6 @@
             background: rgba(255, 255, 255, 0.2);
         }
 
-        .info-modal-back {
-            position: sticky;
-            top: 0;
-            z-index: 12;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin: 18px 0 0 22px;
-            padding: 9px 13px;
-            border: 1px solid rgba(255, 255, 255, 0.16);
-            border-radius: 8px;
-            background: rgba(17, 19, 24, 0.92);
-            color: #f9fafb;
-            font-size: 13px;
-            font-weight: 750;
-            cursor: pointer;
-            backdrop-filter: blur(16px);
-        }
-
-        .info-modal-back:hover {
-            background: rgba(255, 255, 255, 0.14);
-        }
-
-        .modal-action-feedback {
-            display: inline-flex;
-            align-items: center;
-            gap: 7px;
-            min-height: 32px;
-            padding: 7px 10px;
-            border-radius: 8px;
-            font-size: 12px;
-            line-height: 1.4;
-        }
-
-        .modal-action-feedback.success {
-            color: #bbf7d0;
-            background: rgba(20, 83, 45, 0.28);
-            border: 1px solid rgba(34, 197, 94, 0.34);
-        }
-
-        .modal-action-feedback.error {
-            color: #fecaca;
-            background: rgba(127, 29, 29, 0.26);
-            border: 1px solid rgba(248, 113, 113, 0.34);
-        }
-
-        .detail-back-button {
-            position: fixed;
-            top: 22px;
-            left: 22px;
-            z-index: 2147483400;
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            padding: 9px 13px;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            border-radius: 8px;
-            background: rgba(10, 12, 16, 0.88);
-            color: #fff;
-            font-size: 13px;
-            font-weight: 750;
-            cursor: pointer;
-            backdrop-filter: blur(14px);
-        }
-
         .info-modal-backdrop {
             position: absolute;
             top: 0;
@@ -3452,12 +3387,12 @@
                     </div>
                     <span class="expand-toggle" :class="{ expanded: expandedRows[key] }" @click="toggleRowExpand(key)"
                         v-show="rowLists[key] && rowLists[key].length > 0">
-                        {{ expandedRows[key] ? t('common.collapse') : t('common.expand') }}
+                        {{ expandedRows[key] ? 'Collapse' : 'Expand' }}
                         <i class="fas fa-chevron-down"></i>
                     </span>
                     <!-- 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婇柕濞р偓閺嬫牕顪冮妶鍡樺暗闁哥姴娴峰濠囧捶椤撶姷锛滈梺?-->
                     <span v-if="!rowLists[key]" style="margin-left: 15px; color: #666; font-size: 12px;">
-                        <i class="fas fa-spinner fa-spin"></i> {{ t('common.loading') }}
+                        <i class="fas fa-spinner fa-spin"></i> Loading...
                     </span>
                 </div>
                 <!-- 闂傚倷绀侀幉锟犲礉閺囥垹绠犻幖鎼厛閺佸﹪鏌熼悧鍫熺凡缂佲偓瀹€鍕厽婵﹩鍓﹂崵鐔虹磼閳ь剟宕熼娑氬幐闂佸壊鍋呯换宥呂ｈぐ鎺撶厸闁糕剝鐟ラ弸娑欘殽閻愭潙鐏存い銏＄懇閹崇偤濡烽鍙繈姊绘担鍛婃儓閻庢凹鍓氶弲鑸电鐎ｎ€附鎱ㄥΟ鍨厫闁?-->
@@ -3557,69 +3492,69 @@
                 <div class="spinner-border text-danger" role="status">
                     <span class="visually-hidden">Loading...</span>
                 </div>
-                <div class="mt-2 text-muted small" v-if="groupedList.length > 0">{{ t('search.loadingMore') }}</div>
-                <div class="mt-2 text-muted small" v-else>{{ t('search.searching') }}</div>
+                <div class="mt-2 text-muted small" v-if="groupedList.length > 0">Loading more sources...</div>
+                <div class="mt-2 text-muted small" v-else>Searching...</div>
             </div>
 
             <div v-if="!loading && groupedList.length === 0"
                 style="padding: 42px 20px 60px; margin-top: -20px; max-width: 860px; margin-left:auto; margin-right:auto;">
                 <div class="text-center">
                     <i class="fas fa-search" style="font-size: 44px; color: #555; margin-bottom: 18px;"></i>
-                    <h4 style="color: #ddd; margin-bottom: 12px;">{{ t('search.noResults') }}“{{ keyword }}”</h4>
+                    <h4 style="color: #ddd; margin-bottom: 12px;">No results for "{{ keyword }}"</h4>
                     <div style="color: #888; font-size: 14px; line-height: 1.8;">
-                        {{ t('search.noResultsHint') }}
+                        Try another keyword, refresh sources, or import a TVBox subscription.
                 </div>
 
                 <div style="margin-top:24px; border:1px solid rgba(255,255,255,0.12); border-radius:18px; background:rgba(255,255,255,0.06); padding:18px; text-align:left; box-shadow:0 20px 60px rgba(0,0,0,0.22);">
                     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
                         <div>
                             <div style="color:#fff; font-weight:800; font-size:15px;">
-                                <i class="fas fa-stethoscope" style="color:#f59e0b; margin-right:8px;"></i>{{ t('search.diagnostics') }}
+                                <i class="fas fa-stethoscope" style="color:#f59e0b; margin-right:8px;"></i>Search Diagnostics
                             </div>
                             <div style="color:#8f98aa; font-size:12px; margin-top:4px;">
-                                {{ t('search.diagnosticsDescription') }}
+                                TVBox diagnostics show built-in search, HTTP sources, plugin-required sources, and local bridge status without executing unknown plugins.
                             </div>
                         </div>
                         <button class="btn-info" @click="loadSearchDiagnostics" :disabled="searchDiagnosticsLoading"
                             style="border:0; padding:8px 12px; font-size:12px;">
                             <i :class="['fas', searchDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
-                            {{ searchDiagnosticsLoading ? t('common.refreshing') : t('common.refresh') }}
+                            {{ searchDiagnosticsLoading ? 'Refreshing' : 'Refresh' }}
                         </button>
                     </div>
 
                     <div v-if="searchDiagnosticsLoading && !searchDiagnostics"
                         style="color:#9ca3af; font-size:13px; padding:16px 0 4px;">
-                        {{ t('search.loadingDiagnostics') }}
+                        Loading diagnostics...
                     </div>
 
                     <div v-if="searchDiagnostics" style="margin-top:16px;">
                         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px;">
                             <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
-                                <div style="color:#8f98aa; font-size:11px;">{{ t('search.builtIn') }}</div>
+                                <div style="color:#8f98aa; font-size:11px;">Built-in search</div>
                                 <div style="color:#fff; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.nativeSearchSites) || 0 }}</div>
                             </div>
                             <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
-                                <div style="color:#8f98aa; font-size:11px;">{{ t('search.tvbox') }}</div>
+                                <div style="color:#8f98aa; font-size:11px;">TVBox search</div>
                                 <div style="color:#fff; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.searchableTvboxSources) || 0 }}</div>
                             </div>
                             <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
-                                <div style="color:#8f98aa; font-size:11px;">{{ t('common.pluginRequired') }}</div>
+                                <div style="color:#8f98aa; font-size:11px;">Plugin-required</div>
                                 <div style="color:#fbbf24; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.pluginRequiredSources) || 0 }}</div>
                             </div>
                             <div style="border-radius:14px; background:rgba(0,0,0,0.22); padding:12px;">
-                                <div style="color:#8f98aa; font-size:11px;">{{ t('common.unsupported') }}</div>
+                                <div style="color:#8f98aa; font-size:11px;">Unsupported</div>
                                 <div style="color:#f87171; font-size:22px; font-weight:800;">{{ (searchDiagnostics.counts && searchDiagnostics.counts.unsupportedSources) || 0 }}</div>
                             </div>
                         </div>
 
                         <div style="margin-top:14px; display:grid; gap:10px;">
                             <div style="color:#cfd3dc; font-size:13px; line-height:1.7;">
-                                {{ localizeRuntimeText(searchDiagnostics.message) }}
+                                {{ searchDiagnostics.message }}
                             </div>
                             <div style="color:#9ca3af; font-size:12px;">
-                                {{ t('search.localBridge') }}:
+                                Local Java Bridge:
                                 <strong :style="{ color: searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.running ? '#22c55e' : '#fbbf24' }">
-                                    {{ searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.running ? t('status.running') : t('status.stopped') }}
+                                    {{ searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.running ? 'running' : 'stopped' }}
                                 </strong>
                                 <span v-if="searchDiagnostics.localJavaBridge && searchDiagnostics.localJavaBridge.baseUrl">
                                     / {{ searchDiagnostics.localJavaBridge.baseUrl }} / {{ searchDiagnostics.localJavaBridge.mode || 'stub' }}
@@ -3630,7 +3565,7 @@
                             </div>
                             <ul v-if="searchDiagnostics.actions && searchDiagnostics.actions.length"
                                 style="margin:0 0 0 18px; padding:0; color:#cfd3dc; font-size:12px; line-height:1.8;">
-                                <li v-for="action in searchDiagnostics.actions" :key="action">{{ localizeRuntimeText(action) }}</li>
+                                <li v-for="action in searchDiagnostics.actions" :key="action">{{ action }}</li>
                             </ul>
                         </div>
                     </div>
@@ -3658,7 +3593,7 @@
             <div class="tv-icon-wrapper">
                 <i class="fas fa-times"></i>
             </div>
-                            <span>{{ t('footer.exitTv') }}</span>
+                            <span>Exit TV</span>
             <div class="tv-glow"></div>
         </div>
 
@@ -3667,21 +3602,21 @@
                 <!-- TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鍊垫繛鍫濈仢閺嬫捇鏌涚€ｎ偅宕岄柡?(闂?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鈷戦柛婵嗗閺嗐垽鏌涢埡鍌滃ⅹ閾伙絽顭跨捄铏圭伇闁活厼妫濋弻锝咁潩椤掑娈剁紓浣插亾濠㈣埖鍔栭悡鐔搞亜椤愵偄澧┑陇娅ｇ槐鎺椻€﹂幋婵嗩潻濡炪倖娲╃紞渚€宕洪埀顒併亜閹烘垵顏╅悷? -->
                 <div v-if="!isTVMode" class="tv-mode-toggle" @click="toggleTVMode" title="Enter TV mode">
                     <i class="fas fa-tv"></i>
-                        <span>{{ t('footer.tvMode') }}</span>
+                        <span>TV Mode</span>
                 </div>
                 <!-- 闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸嬵亪鏌涢埄鍐槈缂佺姵婢橀…鍧楁嚋闂堟稑顫嶉柣?-->
-                <div class="tv-mode-toggle" @click="showSettingsModal = true; loadPlayerSettings()" :title="t('settings.title')">
+                <div class="tv-mode-toggle" @click="showSettingsModal = true; loadPlayerSettings()" title="Player settings">
                     <i class="fas fa-cog"></i>
                         <span>{{ t('nav.settings') }}</span>
                 </div>
                 <!-- 闂傚倸鍊风欢锟犲磻閳ь剟鏌涚€ｎ偅宕岄柡灞剧洴楠炲鏁愰崱鈺€鍝楁繝鐢靛仜閹冲矂宕曢幘顔嘉﹂柟鐗堟緲閸楁娊鏌ｉ弮鍫婵☆垰妫濆?-->
-                <div class="tv-mode-toggle" @click="confirmLogout" :title="t('footer.logout')">
+                <div class="tv-mode-toggle" @click="confirmLogout" title="Logout">
                     <i class="fas fa-sign-out-alt"></i>
-                        <span>{{ t('footer.logout') }}</span>
+                        <span>Logout</span>
                 </div>
             </div>
             <div style="font-size:10px; margin-top:10px; opacity:0.5; user-select: none;">
-                {{ t('footer.dataCredit') }}
+                Data provided by TMDb & Maccms APIs
             </div>
         </div>
 
@@ -3689,20 +3624,17 @@
         <div class="info-modal-overlay" v-if="showLivePanel" @click.self="showLivePanel = false">
             <div class="info-modal" style="max-width: 760px;">
                 <button class="info-modal-close" @click="showLivePanel = false"><i class="fas fa-times"></i></button>
-                <button class="info-modal-back" @click="closeAppPanel('live')">
-                    <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
-                </button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.55rem;">
                         <i class="fas fa-broadcast-tower" style="margin-right: 10px; color: #60a5fa;"></i>{{ t('feature.liveTitle') }}
                     </h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
-                        {{ t('live.description') }}</div>
+                        Live channels are loaded from user-owned TVBox, M3U, or TXT subscriptions. Channels with headers can use the local proxy for external players.</div>
                     <div v-if="liveGroups.length > 0" style="margin-top:20px;">
                         <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
                             <button class="btn-info" @click="selectLiveGroup('')"
                                 :style="liveActiveGroup === '' ? 'border:0; padding:7px 12px; font-size:12px; background:rgba(96,165,250,0.28); color:#fff;' : 'border:0; padding:7px 12px; font-size:12px;'">
-                            {{ t('common.all') }} {{ liveGroups.reduce((sum, group) => sum + (group.count || 0), 0) }}
+                            All {{ liveGroups.reduce((sum, group) => sum + (group.count || 0), 0) }}
                             </button>
                             <button v-for="group in liveGroups" :key="group.name" class="btn-info" @click="selectLiveGroup(group.name)"
                                 :style="liveActiveGroup === group.name ? 'border:0; padding:7px 12px; font-size:12px; background:rgba(96,165,250,0.28); color:#fff;' : 'border:0; padding:7px 12px; font-size:12px;'">
@@ -3710,7 +3642,7 @@
                             </button>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
-                            <input v-model.trim="liveSearch" @input="debouncedLoadLiveChannels" type="search" :placeholder="t('live.searchPlaceholder')"
+                            <input v-model.trim="liveSearch" @input="debouncedLoadLiveChannels" type="search" placeholder="Search live channels"
                                 style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:10px 12px; font-size:12px;">
                             <button class="btn-info" @click="loadLiveChannels" :disabled="liveLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
@@ -3719,15 +3651,15 @@
                             <button class="btn-info" @click="toggleLiveFavoritesOnly"
                                 :style="showLiveFavoritesOnly ? 'border:0; padding:9px 12px; font-size:12px; background:rgba(251,191,36,0.25); color:#fff;' : 'border:0; padding:9px 12px; font-size:12px;'">
                                 <i class="fas fa-star" :style="showLiveFavoritesOnly ? 'color:#fbbf24;' : ''"></i>
-                                {{ t('live.favorites') }} {{ liveFavorites.length }}
+                                Favorites {{ liveFavorites.length }}
                             </button>
                             <button class="btn-info" @click="clearLiveFilters" :disabled="liveLoading || (!liveActiveGroup && !liveSearch && !showLiveFavoritesOnly)"
                                 style="border:0; padding:9px 12px; font-size:12px;">
-                                {{ t('common.clear') }}
+                                Clear
                             </button>
                         </div>
                         <div style="color:#8f98aa; font-size:11px; margin-bottom:10px;">
-                            {{ t('live.channels') }} {{ displayLiveChannels.length }} / {{ liveDisplayTotal }} <span v-if="showLiveFavoritesOnly"> / {{ t('live.favorites') }}</span><span v-if="liveActiveGroup"> / {{ liveActiveGroup }}</span><span v-if="liveSearch"> / "{{ liveSearch }}"</span>
+                            Channels {{ displayLiveChannels.length }} / {{ liveDisplayTotal }} <span v-if="showLiveFavoritesOnly"> / Favorites</span><span v-if="liveActiveGroup"> / {{ liveActiveGroup }}</span><span v-if="liveSearch"> / "{{ liveSearch }}"</span>
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; max-height:260px; overflow:auto;">
                             <div v-for="channel in displayLiveChannels" :key="favoriteLiveKey(channel)"
@@ -3745,12 +3677,12 @@
                                 <div style="color:#888; font-size:11px; margin-top:4px;">{{ channel.group }}</div>
                                 <div v-if="channel.headers && Object.keys(channel.headers).length"
                                     style="color:#fbbf24; font-size:10px; margin-top:5px;">
-                                    <i class="fas fa-shield-alt"></i> {{ t('live.proxyRecommended') }}
+                                    <i class="fas fa-shield-alt"></i> headers: proxy recommended for MPC/mpv
                                 </div>
                                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
                                     <button class="btn-info" @click="playLiveChannel(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
-                                    <i class="fas fa-play"></i> {{ t('common.play') }}
+                                    <i class="fas fa-play"></i> Play
                                     </button>
                                     <button class="btn-info" @click="openLiveChannelWithMpc(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
@@ -3762,36 +3694,36 @@
                                     </button>
                                     <button class="btn-info" @click="copyLiveChannelUrl(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
-                                <i class="fas fa-copy"></i> {{ t('common.copyUrl') }}
+                                <i class="fas fa-copy"></i> Copy URL
                                     </button>
                                     <button v-if="channel.headers && Object.keys(channel.headers).length" class="btn-info"
                                         @click="copyLiveChannelProxyUrl(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
-                                <i class="fas fa-shield-alt"></i> {{ t('common.copyProxyUrl') }}
+                                <i class="fas fa-shield-alt"></i> Copy proxy URL
                                     </button>
                                 </div>
                             </div>
                         </div>
                         <div v-if="!liveLoading && displayLiveChannels.length === 0"
                             style="color:#9ca3af; font-size:12px; padding:18px 0; text-align:center;">
-                            {{ showLiveFavoritesOnly ? t('live.noFavorites') : t('live.noChannels') }}
+                            {{ showLiveFavoritesOnly ? 'No favorite channels yet.' : 'No live channels found.' }}
                         </div>
                         <div v-if="liveCanLoadMore" style="display:flex; justify-content:center; margin-top:14px;">
                             <button class="btn-info" @click="loadMoreLiveChannels" :disabled="liveLoading"
                                 style="border:0; padding:9px 16px; font-size:12px;">
                                 <i :class="['fas', liveLoading ? 'fa-spinner fa-spin' : 'fa-chevron-down']"></i>
-                                {{ t('common.loadMore') }}
+                                Load more
                             </button>
                         </div>
                     </div>
                     <div class="appletv-panel-list" v-else>
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">M3U / M3U8</div>
-                        <span>{{ t('live.onlyImported') }}</span>
+                        <span>Only user-imported live subscriptions are shown here.</span>
                         </div>
                         <div class="appletv-panel-item">
-                        <div style="font-weight:800; color:#e5e7eb; margin-bottom:6px;">{{ t('live.playlistSupport') }}</div>
-                        <div>{{ t('live.importHint') }}</div>
+                        <div style="font-weight:800; color:#e5e7eb; margin-bottom:6px;">TXT / M3U playlist support</div>
+                        <div>Import live sources from your own subscription URLs.</div>
                         </div>
                     </div>
                 </div>
@@ -3801,15 +3733,12 @@
         <div class="info-modal-overlay" v-if="showFirstRunGuide" @click.self="dismissFirstRunGuide">
             <div class="info-modal" style="max-width: 760px;">
                 <button class="info-modal-close" @click="dismissFirstRunGuide"><i class="fas fa-times"></i></button>
-                <button class="info-modal-back" @click="dismissFirstRunGuide">
-                    <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
-                </button>
                 <div style="padding: 30px;">
                     <h2 style="color:#fff; margin-bottom:12px; font-size:1.6rem;">
-                        {{ t('guide.title') }}</h2>
+                        First Run Guide</h2>
 
                     <div style="color:#aaa; font-size:14px; line-height:1.8;">
-                        {{ t('guide.description') }}
+                        Configure the app for Windows desktop playback: import your own TVBox subscriptions, choose mpv.net or MPC for heavy 4K streams, and keep plugin sources disabled until a trusted runtime is configured.
                     </div><div v-if="desktopStatus && desktopStatus.setupChecklist"
                         style="margin-top:18px; display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:10px;">
                         <div v-for="item in desktopStatus.setupChecklist" :key="item.id"
@@ -3817,30 +3746,30 @@
                             <div style="display:flex; align-items:center; gap:8px; color:#fff; font-weight:800; font-size:13px;">
                                 <i :class="['fas', item.ok ? 'fa-check-circle' : item.severity === 'error' ? 'fa-times-circle' : 'fa-exclamation-circle']"
                                     :style="{ color: item.ok ? '#22c55e' : item.severity === 'error' ? '#f87171' : '#fbbf24' }"></i>
-                                {{ localizeRuntimeText(item.label) }}
+                                {{ item.label }}
                             </div>
-                            <div style="color:#9ca3af; font-size:12px; line-height:1.55; margin-top:6px;">{{ localizeRuntimeText(item.message) }}</div>
+                            <div style="color:#9ca3af; font-size:12px; line-height:1.55; margin-top:6px;">{{ item.message }}</div>
                         </div>
                     </div>
                     <div v-if="desktopStatus && desktopStatus.nextActions && desktopStatus.nextActions.length"
                         style="margin-top:14px; padding:12px 14px; border-radius:14px; background:rgba(96,165,250,0.1); color:#bfdbfe; font-size:12px; line-height:1.7;">
-                        <div style="color:#fff; font-weight:800; margin-bottom:4px;">{{ t('settings.nextActions') }}</div>
-                        <div v-for="action in desktopStatus.nextActions" :key="action">- {{ localizeRuntimeText(action) }}</div>
+                        <div style="color:#fff; font-weight:800; margin-bottom:4px;">Next actions</div>
+                        <div v-for="action in desktopStatus.nextActions" :key="action">- {{ action }}</div>
                     </div>
                     <div class="appletv-panel-list" style="margin-top:18px;">
                         <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSubscriptionPanel=true; loadSubscriptionData()"
                             style="text-align:left; color:#fff; cursor:pointer;">
-                        <h3>{{ t('guide.importTitle') }}</h3>
-                        <p>{{ t('guide.importDescription') }}</p>
+                        <h3>Import subscriptions</h3>
+                        <p>Add your own TVBox JSON, M3U, or TXT subscription. Plugin sources are identified but not executed automatically.</p>
                         </button>
                         <button class="appletv-panel-item" @click="showFirstRunGuide=false; showSettingsModal=true; loadPlayerSettings()"
                             style="text-align:left; color:#fff; cursor:pointer;">
-                        <h3>{{ t('guide.playerTitle') }}</h3>
-                        <p>{{ t('guide.playerDescription') }}</p>
+                        <h3>Configure mpv.net</h3>
+                        <p>Use mpv.net or MPC for high bitrate 4K, HEVC, HDR, and cloud-drive streams.</p>
                         </button>
                     </div>
                     <button class="btn-info" @click="dismissFirstRunGuide" style="border:0; margin-top:18px;">
-                        {{ t('common.gotIt') }}
+                        Got it
                     </button>
                 </div>
             </div>
@@ -3850,42 +3779,34 @@
             <div class="info-modal" style="max-width: 820px;">
                 <button class="info-modal-close" @click="showSubscriptionPanel = false"><i
                         class="fas fa-times"></i></button>
-                <button class="info-modal-back" data-testid="subscription-back" @click="closeAppPanel('subscriptions')">
-                    <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
-                </button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.55rem;">
                         <i class="fas fa-rss"></i> {{ t('subscriptions.title') }}</h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
-                        {{ t('subscriptions.description') }}
+                        Import only your own TVBox JSON URLs or local JSON files. The app stores sites, lives, parses, and plugin-required markers, but it does not execute csp_xxx, spider.jar, py, or js plugins automatically.
                     </div><div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,240px); gap:10px; margin-top:20px;">
-                        <input v-model="subscriptionUrl" type="url" :placeholder="t('subscriptions.urlPlaceholder')"
+                        <input v-model="subscriptionUrl" type="url" placeholder="TVBox JSON URL"
                             style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:12px 14px;">
-                        <input v-model="subscriptionName" type="text" :placeholder="t('subscriptions.namePlaceholder')"
+                        <input v-model="subscriptionName" type="text" placeholder="Subscription name"
                             style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:14px; padding:12px 14px;">
                     </div>
                     <div style="display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap;">
                         <button class="btn-play" @click="importTvboxSubscription" :disabled="subscriptionLoading"
                             style="border:0;">
                             <i :class="['fas', subscriptionLoading ? 'fa-spinner fa-spin' : 'fa-plus']"></i>
-                            {{ subscriptionLoading ? t('subscriptions.importing') : t('subscriptions.import') }}
+                            {{ subscriptionLoading ? 'Importing...' : 'Import subscription' }}
                         </button>
                         <button class="btn-info" @click="$refs.tvboxJsonFile && $refs.tvboxJsonFile.click()" :disabled="subscriptionLoading"
                             style="border:0;">
-                    <i class="fas fa-file-import"></i> {{ t('subscriptions.importFile') }}
+                    <i class="fas fa-file-import"></i> Import local JSON
                         </button>
                         <input ref="tvboxJsonFile" type="file" accept=".json,application/json"
                             style="display:none;" @change="importTvboxSubscriptionFile">
-                        <button class="btn-info" data-testid="subscription-refresh" @click="loadSubscriptionData({ feedback: true })" :disabled="subscriptionLoading"
+                        <button class="btn-info" @click="loadSubscriptionData" :disabled="subscriptionLoading"
                             style="border:0;">
-                    <i class="fas fa-sync-alt"></i> {{ t('subscriptions.refreshAll') }}
+                    <i class="fas fa-sync-alt"></i> Refresh all
                         </button>
-                        <span v-if="subscriptionMessage" class="modal-action-feedback success">
-                            <i class="fas fa-check-circle"></i>{{ subscriptionMessage }}
-                        </span>
-                        <span v-if="subscriptionError" class="modal-action-feedback error">
-                            <i class="fas fa-exclamation-circle"></i>{{ subscriptionError }}
-                        </span>
+                        <span v-if="subscriptionError" style="color:#ff6b6b; font-size:12px;">{{ subscriptionError }}</span>
                     </div>
 
                     <div v-if="subscriptions.length > 0" style="margin-top:22px; display:grid; gap:12px;">
@@ -3913,12 +3834,12 @@
                                 </div>
                             </div>
                             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
-                                <span style="color:#ddd; font-size:12px;">{{ t('subscriptions.sites') }} {{ sub.summary && sub.summary.sites || 0 }}</span>
-                                <span style="color:#ddd; font-size:12px;">{{ t('subscriptions.live') }} {{ sub.summary && sub.summary.lives || 0 }}</span>
-                                <span style="color:#93c5fd; font-size:12px;">{{ t('subscriptions.warehouses') }} {{ sub.summary && sub.summary.warehouses || 0 }}</span>
-                                <span v-if="sub.summary && sub.summary.expandedWarehouses" style="color:#60a5fa; font-size:12px;">{{ t('subscriptions.expanded') }} {{ sub.summary.expandedWarehouses }}</span>
-                                <span style="color:#fbbf24; font-size:12px;">{{ t('subscriptions.plugin') }} {{ sub.summary && sub.summary.pluginRequired || 0 }}</span>
-                                <span style="color:#f87171; font-size:12px;">{{ t('common.unsupported') }} {{ sub.summary && sub.summary.unsupported || 0 }}</span>
+                                <span style="color:#ddd; font-size:12px;">sites {{ sub.summary && sub.summary.sites || 0 }}</span>
+                                <span style="color:#ddd; font-size:12px;">live {{ sub.summary && sub.summary.lives || 0 }}</span>
+                                <span style="color:#93c5fd; font-size:12px;">warehouses {{ sub.summary && sub.summary.warehouses || 0 }}</span>
+                                <span v-if="sub.summary && sub.summary.expandedWarehouses" style="color:#60a5fa; font-size:12px;">expanded {{ sub.summary.expandedWarehouses }}</span>
+                                <span style="color:#fbbf24; font-size:12px;">plugin {{ sub.summary && sub.summary.pluginRequired || 0 }}</span>
+                                <span style="color:#f87171; font-size:12px;">unsupported {{ sub.summary && sub.summary.unsupported || 0 }}</span>
                             </div>
                             <div v-if="sub.metadata && sub.metadata.parserDiagnostics"
                                 style="color:#8f98aa; font-size:11px; margin-top:8px;">
@@ -3932,7 +3853,7 @@
                     </div>
 
                     <div v-if="tvboxSources.length > 0" style="margin-top:22px;">
-                <strong>{{ t('subscriptions.sourceSummary') }}</strong>
+                <strong>Source Summary</strong>
                         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; max-height:300px; overflow:auto;">
                             <div v-for="source in tvboxSources" :key="source.id"
                                 style="border:1px solid rgba(255,255,255,0.1); border-radius:14px; background:rgba(255,255,255,0.05); padding:12px;">
@@ -3953,11 +3874,11 @@
                                 </div>
                                 <button class="btn-info" @click="diagnoseTvboxSource(source)" :disabled="subscriptionLoading"
                                     style="border:0; padding:6px 10px; margin-top:10px; font-size:11px;">
-                                    <i class="fas fa-stethoscope"></i> {{ t('common.diagnose') }}
+                                    <i class="fas fa-stethoscope"></i> Diagnose
                                 </button>
                                 <button class="btn-info" @click="healthCheckTvboxSource(source)" :disabled="subscriptionLoading || sourceHealthLoading[source.id]"
                                     style="border:0; padding:6px 10px; margin-top:10px; margin-left:6px; font-size:11px;">
-                                    <i :class="['fas', sourceHealthLoading[source.id] ? 'fa-spinner fa-spin' : 'fa-heartbeat']"></i> {{ t('common.healthCheck') }}
+                                    <i :class="['fas', sourceHealthLoading[source.id] ? 'fa-spinner fa-spin' : 'fa-heartbeat']"></i> Health
                                 </button>
                                 <div v-if="sourceHealthResult(source)"
                                     style="margin-top:8px; padding:7px 9px; border-radius:10px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:11px; line-height:1.5;">
@@ -3988,7 +3909,7 @@
                                     </ul>
                                 </div>
                                 <div v-if="source.status === 'plugin-required'" style="color:#aaa; font-size:11px; line-height:1.6; margin-top:8px;">
-                                    {{ t('subscriptions.pluginRuntimeNotice') }}
+                                    This source requires a CatVod/Spider runtime. It is recognized and can be managed, but unknown plugin code is not executed automatically.
                             </div>
                         </div>
                     </div>
@@ -3996,11 +3917,11 @@
                     <div class="appletv-panel-list" v-if="subscriptions.length === 0">
                         <div class="appletv-panel-item">
                             <div style="color:#fff; font-weight:700;">TVBox JSON</div>
-                    <div>{{ t('subscriptions.onlyUserProvided') }}</div>
+                    <div>Only user-provided subscriptions are stored.</div>
                         </div>
                         <div class="appletv-panel-item">
-                    <div style="font-weight:800; color:#e5e7eb; margin-bottom:6px;">{{ t('common.pluginRequired') }}</div>
-                    <div>{{ t('subscriptions.pluginRuntimeNotice') }}</div>
+                    <div style="font-weight:800; color:#e5e7eb; margin-bottom:6px;">Plugin-required sources</div>
+                    <div>csp_xxx, jar, py, and js sources are identified for future runtime support, but not executed automatically.</div>
                         </div>
                     </div>
                 </div>
@@ -4012,12 +3933,9 @@
             <div class="info-modal" style="max-width: 760px;">
                 <button class="info-modal-close" @click="showSettingsModal = false"><i
                         class="fas fa-times"></i></button>
-                <button class="info-modal-back" data-testid="settings-back" @click="closeAppPanel('settings')">
-                    <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
-                </button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 25px; font-size: 1.5rem;">
-                        <i class="fas fa-sliders-h"></i> {{ t('settings.title') }}
+                    <h3><i class="fas fa-sliders-h"></i> {{ t('settings.title') }}</h3>
                     </h2>
 
                     <div
@@ -4049,7 +3967,7 @@
                                     {{ t('settings.desktopReadinessDescription') }}
                                 </div>
                                 <div v-if="desktopStatus.checkedAt" style="color:#6b7280; font-size:11px; margin-top:4px;">
-                                    {{ t('settings.lastChecked') }}: {{ formatLocalTimestamp(desktopStatus.checkedAt) }}
+                                    Last checked: {{ formatLocalTimestamp(desktopStatus.checkedAt) }}
                                 </div>
                             </div>
                             <span
@@ -4059,71 +3977,71 @@
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-top:12px;">
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.version') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Version</div>
                                 <div style="color:#fff; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.appInfo && desktopStatus.appInfo.version || 'unknown' }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('nav.sources') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Subscriptions</div>
                                 <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.subscriptions || 0 }}</div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.sources') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Sources</div>
                                 <div style="color:#fff; font-weight:800; margin-top:4px;">{{ desktopStatus.sources || 0 }}</div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.blockers') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Blockers</div>
                                 <div :style="{ color: desktopStatus.readinessSummary && desktopStatus.readinessSummary.blockingIssueCount ? '#fbbf24' : '#22c55e', fontWeight:'800', marginTop:'4px' }">
                                     {{ desktopStatus.readinessSummary && desktopStatus.readinessSummary.blockingIssueCount || 0 }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.warnings') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Warnings</div>
                                 <div style="color:#93c5fd; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.readinessSummary && desktopStatus.readinessSummary.warningIssueCount || 0 }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.httpReady') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">HTTP-ready</div>
                                 <div style="color:#22c55e; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.sourceBreakdown && desktopStatus.sourceBreakdown.playableHttp || 0 }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.plugins') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Plugins</div>
                                 <div style="color:#fbbf24; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.sourceBreakdown && desktopStatus.sourceBreakdown.byStatus && desktopStatus.sourceBreakdown.byStatus['plugin-required'] || 0 }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('common.unsupported') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Unsupported</div>
                                 <div style="color:#f87171; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.sourceBreakdown && desktopStatus.sourceBreakdown.byStatus && desktopStatus.sourceBreakdown.byStatus.unsupported || 0 }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.liveReady') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Live-ready</div>
                                 <div style="color:#22c55e; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.liveBreakdown && desktopStatus.liveBreakdown.playable || 0 }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.liveErrors') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Live errors</div>
                                 <div style="color:#f87171; font-weight:800; margin-top:4px;">
                                     {{ desktopStatus.liveBreakdown && desktopStatus.liveBreakdown.error || 0 }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.externalPlayer') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">External</div>
                                 <div :style="{ color: desktopStatus.player && desktopStatus.player.externalPlayer && desktopStatus.player.externalPlayer.valid ? '#22c55e' : '#fbbf24', fontWeight:'800', marginTop:'4px' }">
-                                    {{ desktopStatus.player && desktopStatus.player.externalPlayer && desktopStatus.player.externalPlayer.valid ? (desktopStatus.player.externalPlayer.label || t('status.valid')) : t('status.missing') }}
+                                    {{ desktopStatus.player && desktopStatus.player.externalPlayer && desktopStatus.player.externalPlayer.valid ? (desktopStatus.player.externalPlayer.label || 'Valid') : 'Missing' }}
                                 </div>
                             </div>
                             <div style="padding:10px; border-radius:12px; background:rgba(0,0,0,0.18);">
-                                <div style="color:#9ca3af; font-size:11px;">{{ t('settings.proxy') }}</div>
+                                <div style="color:#9ca3af; font-size:11px;">Proxy</div>
                                 <div :style="{ color: desktopStatus.player && desktopStatus.player.useLocalProxy ? '#22c55e' : '#fbbf24', fontWeight:'800', marginTop:'4px' }">
-                                    {{ desktopStatus.player && desktopStatus.player.useLocalProxy ? t('status.enabled') : t('status.disabled') }}
+                                    {{ desktopStatus.player && desktopStatus.player.useLocalProxy ? 'Enabled' : 'Disabled' }}
                                 </div>
                             </div>
                         </div>
@@ -4134,27 +4052,27 @@
                                 <i :class="['fas', item.ok ? 'fa-check-circle' : item.severity === 'error' ? 'fa-times-circle' : 'fa-exclamation-circle']"
                                     :style="{ color: item.ok ? '#22c55e' : item.severity === 'error' ? '#f87171' : '#fbbf24', marginTop:'2px' }"></i>
                                 <div>
-                                    <strong style="color:#fff;">{{ localizeRuntimeText(item.label) }}</strong>
-                                    <div style="color:#9ca3af;">{{ localizeRuntimeText(item.message) }}</div>
+                                    <strong style="color:#fff;">{{ item.label }}</strong>
+                                    <div style="color:#9ca3af;">{{ item.message }}</div>
                                 </div>
                             </div>
                         </div>
                         <div v-if="desktopStatus.nextActions && desktopStatus.nextActions.length"
                             style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(96,165,250,0.1); color:#bfdbfe; font-size:12px; line-height:1.6;">
-                            <strong style="color:#fff;">{{ t('settings.nextActions') }}</strong>
-                            <div v-for="action in desktopStatus.nextActions" :key="action">- {{ localizeRuntimeText(action) }}</div>
+                            <strong style="color:#fff;">Next actions</strong>
+                            <div v-for="action in desktopStatus.nextActions" :key="action">- {{ action }}</div>
                         </div>
                         <div v-if="desktopStatus.readinessIssues && desktopStatus.readinessIssues.length"
                             style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(251,191,36,0.08); color:#e5e7eb; font-size:12px; line-height:1.55;">
-                            <strong style="color:#fff;">{{ t('settings.readinessIssues') }}</strong>
+                            <strong style="color:#fff;">Readiness issues</strong>
                             <div v-for="issue in desktopStatus.readinessIssues" :key="issue.code"
                                 style="display:flex; gap:8px; align-items:flex-start; margin-top:6px;">
                                 <i :class="['fas', issue.blocking ? 'fa-exclamation-triangle' : 'fa-info-circle']"
                                     :style="{ color: issue.blocking ? '#fbbf24' : '#93c5fd', marginTop:'2px' }"></i>
                                 <div>
-                                    <span style="font-weight:800;">{{ localizeRuntimeText(issue.label) }}</span>
-                                    <span style="color:#9ca3af;"> / {{ issue.blocking ? t('status.blocking') : t('status.warning') }}</span>
-                                    <div style="color:#cfd3dc;">{{ localizeRuntimeText(issue.message) }}</div>
+                                    <span style="font-weight:800;">{{ issue.label }}</span>
+                                    <span style="color:#9ca3af;"> / {{ issue.blocking ? 'blocking' : 'warning' }}</span>
+                                    <div style="color:#cfd3dc;">{{ issue.message }}</div>
                                 </div>
                             </div>
                         </div>
@@ -4162,17 +4080,17 @@
                             <button class="btn-play" @click="runDesktopReadinessCheck" :disabled="desktopSelfCheckLoading"
                                 style="border:0; padding:8px 12px; font-size:12px;">
                                 <i :class="['fas', desktopSelfCheckLoading ? 'fa-spinner fa-spin' : 'fa-vial']"></i>
-                                {{ desktopSelfCheckLoading ? t('common.checking') : t('settings.runSetupCheck') }}
+                                Run setup check
                             </button>
                             <button class="btn-info" @click="loadDesktopStatus" style="border:0; padding:8px 12px; font-size:12px;">
-                                <i class="fas fa-sync-alt"></i> {{ t('settings.refreshReadiness') }}
+                                <i class="fas fa-sync-alt"></i> Refresh readiness
                             </button>
                             <button class="btn-info" @click="showSettingsModal=false; showSubscriptionPanel=true; loadSubscriptionData()"
                                 style="border:0; padding:8px 12px; font-size:12px;">
-                                <i class="fas fa-rss"></i> {{ t('settings.openSubscriptions') }}
+                                <i class="fas fa-rss"></i> Open subscriptions
                             </button>
                             <button class="btn-info" @click="showSettingsModal=false; showFirstRunGuide=true" style="border:0; padding:8px 12px; font-size:12px;">
-                                <i class="fas fa-magic"></i> {{ t('settings.showGuide') }}
+                                <i class="fas fa-magic"></i> Show guide
                             </button>
                         </div>
                         <div v-if="desktopSelfCheckMessage" style="color:#9ca3af; font-size:12px; margin-top:8px;">
@@ -4184,8 +4102,8 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
-                        <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">{{ t('settings.hideRandomTitle') }}</div>
-                        <div>{{ t('settings.hideRandomDescription') }}</div>
+                        <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">Prefer external player for heavy streams</div>
+                        <div>4K, HEVC, HDR, and cloud-drive URLs can be routed to mpv.net or MPC.</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="hideRandomRow" @change="saveSettings('hideRandomRow')">
@@ -4197,8 +4115,8 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
-                        <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">{{ t('settings.filterNsfwTitle') }}</div>
-                        <div>{{ t('settings.filterNsfwDescription') }}</div>
+                        <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">Use local proxy when headers are required</div>
+                        <div>Proxy playback requests through 127.0.0.1 so Referer, User-Agent, Cookie, Authorization, and Range can be forwarded.</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="filterNsfw" @change="saveSettings('filterNsfw')">
@@ -4208,9 +4126,9 @@
 
                     <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
-                    <h4><i class="fas fa-desktop"></i> {{ t('settings.externalPlayer') }}</h4>
-                        <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                <input v-model="playerSettings.mpcExePath" type="text" :placeholder="t('settings.mpcPathPlaceholder')"
+                    <h4><i class="fas fa-desktop"></i> MPC external player</h4>
+                        <div style="display:flex; gap:8px;">
+                                <input v-model="playerSettings.mpcExePath" type="text" placeholder="MPC-HC / MPC-BE exe path"
                                 style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
                             <button class="btn-info" @click="detectMpcPath" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-search"></i>
@@ -4218,7 +4136,7 @@
                             <button class="btn-info" @click="validateMpcPath" :disabled="mpcValidationLoading"
                                 style="border:0; padding:8px 12px; font-size:12px;">
                                 <i :class="['fas', mpcValidationLoading ? 'fa-spinner fa-spin' : 'fa-check-circle']"></i>
-                                {{ mpcValidationLoading ? t('common.checking') : t('common.validate') }}
+                                Validate
                             </button>
                         </div>
                         <div v-if="mpcValidation"
@@ -4230,8 +4148,8 @@
                         <span v-if="mpcValidation.playerType">{{ mpcValidation.playerType }}</span>
                             <div style="color:#8f98aa;">{{ mpcValidation.message }}</div>
                         </div>
-                        <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
-                            <input v-model="playerSettings.mpvExePath" type="text" :placeholder="t('settings.mpvPathPlaceholder')"
+                        <div style="display:flex; gap:8px; margin-top:12px;">
+                            <input v-model="playerSettings.mpvExePath" type="text" placeholder="mpv / mpv.net exe path"
                                 style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
                             <button class="btn-info" @click="detectMpvPath" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-search"></i> mpv
@@ -4239,7 +4157,7 @@
                             <button class="btn-info" @click="validateMpvPath" :disabled="mpvValidationLoading"
                                 style="border:0; padding:8px 12px; font-size:12px;">
                                 <i :class="['fas', mpvValidationLoading ? 'fa-spinner fa-spin' : 'fa-check-circle']"></i>
-                                {{ mpvValidationLoading ? t('common.checking') : t('common.validate') }}
+                                Validate
                             </button>
                         </div>
                         <div v-if="mpvValidation"
@@ -4253,103 +4171,100 @@
                         </div>
                         <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px;">
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                {{ t('settings.defaultPlayer') }}
+                                Default
                                 <select v-model="playerSettings.defaultPlayer"
                                     style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:10px; padding:6px 8px; font-size:12px;">
                                     <option value="mpc">MPC</option>
                                     <option value="mpv">mpv.net</option>
-                                    <option value="internal">{{ t('settings.internalPlayer') }}</option>
+                                    <option value="internal">Internal</option>
                                     <option value="vlc">VLC</option>
                                 </select>
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.fullscreenOnStart" style="accent-color:#e50914;"> {{ t('settings.startFullscreen') }}
+                                <input type="checkbox" v-model="playerSettings.fullscreenOnStart" style="accent-color:#e50914;"> Start fullscreen
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.closeMpcAfterPlayback" style="accent-color:#e50914;"> {{ t('settings.closeAfterPlayback') }}
+                                <input type="checkbox" v-model="playerSettings.closeMpcAfterPlayback" style="accent-color:#e50914;"> Close external player after playback
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcFor4K" style="accent-color:#e50914;"> {{ t('settings.useMpc4k') }}
+                                <input type="checkbox" v-model="playerSettings.useMpcFor4K" style="accent-color:#e50914;"> Use MPC for 4K streams
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForHEVC" style="accent-color:#e50914;"> {{ t('settings.useMpcHevc') }}
+                                <input type="checkbox" v-model="playerSettings.useMpcForHEVC" style="accent-color:#e50914;"> Use MPC for HEVC/H.265
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForHDR" style="accent-color:#e50914;"> {{ t('settings.useMpcHdr') }}
+                                <input type="checkbox" v-model="playerSettings.useMpcForHDR" style="accent-color:#e50914;"> Use MPC for HDR
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> {{ t('settings.useMpcCloud') }}
+                                <input type="checkbox" v-model="playerSettings.useMpcForCloudDrive" style="accent-color:#e50914;"> Use MPC for cloud-drive streams
                             </label>
-                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;"><input type="checkbox" v-model="playerSettings.useLocalProxy" style="accent-color:#e50914;"> {{ t('settings.useLocalProxy') }}
+                            <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;"><input type="checkbox" v-model="playerSettings.useLocalProxy" style="accent-color:#e50914;"> Use local proxy for header-aware playback
                             </label>
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
-                                {{ t('settings.proxyPort') }}
+                                LocalProxy port
                                 <input type="number" v-model.number="playerSettings.localProxyPort" min="1024" max="65535"
                                     style="width:90px; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:10px; padding:6px 8px; font-size:12px;">
                             </label>
                         </div>
-                        <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
-                            <button class="btn-play" data-testid="settings-save" @click="savePlayerSettings" :disabled="playerSettingsSaving"
+                        <div style="display:flex; align-items:center; gap:10px; margin-top:14px;">
+                            <button class="btn-play" @click="savePlayerSettings" :disabled="playerSettingsSaving"
                                 style="border:0; padding:9px 16px; font-size:13px;">
                                 <i :class="['fas', playerSettingsSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i>
-                                {{ playerSettingsSaving ? t('common.saving') : t('settings.save') }}</button>
-                            <button class="btn-info" data-testid="proxy-status" @click="loadProxyStatus(true)" :disabled="proxyStatusLoading"
+                                Save settings</button>
+                            <button class="btn-info" @click="loadProxyStatus" :disabled="proxyStatusLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyStatusLoading ? 'fa-spinner fa-spin' : 'fa-network-wired']"></i>
-                                {{ proxyStatusLoading ? t('common.checking') : t('settings.proxyStatus') }}</button>
+                                Proxy status</button>
                             <button class="btn-info" @click="checkProxyPort" :disabled="proxyPortCheckLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyPortCheckLoading ? 'fa-spinner fa-spin' : 'fa-plug']"></i>
-                                {{ proxyPortCheckLoading ? t('common.checking') : t('settings.checkPort') }}</button>
+                                Check port</button>
                             <button class="btn-info" @click="runProxyRangeSelfTest" :disabled="proxyRangeTestLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyRangeTestLoading ? 'fa-spinner fa-spin' : 'fa-wave-square']"></i>
-                                {{ proxyRangeTestLoading ? t('common.testing') : t('settings.rangeTest') }}
+                                Range self-test
                             </button>
                             <button class="btn-info" @click="runProxyHeadSelfTest" :disabled="proxyHeadTestLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyHeadTestLoading ? 'fa-spinner fa-spin' : 'fa-heading']"></i>
-                                {{ proxyHeadTestLoading ? t('common.testing') : t('settings.headTest') }}
+                                HEAD self-test
                             </button>
                             <button class="btn-info" @click="runProxyExpirySelfTest" :disabled="proxyExpiryTestLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyExpiryTestLoading ? 'fa-spinner fa-spin' : 'fa-hourglass-end']"></i>
-                                {{ proxyExpiryTestLoading ? t('common.testing') : t('settings.expiryTest') }}
+                                Expiry self-test
                             </button>
                             <button class="btn-info" @click="runProxyM3u8SelfTest" :disabled="proxyM3u8TestLoading"
                                 style="border:0; padding:9px 12px; font-size:12px;">
                                 <i :class="['fas', proxyM3u8TestLoading ? 'fa-spinner fa-spin' : 'fa-stream']"></i>
-                                {{ proxyM3u8TestLoading ? t('common.testing') : t('settings.hlsTest') }}
+                                HLS self-test
                             </button>
-                            <span v-if="playerSettingsMessage" :class="['modal-action-feedback', playerSettingsMessageType]">
-                                <i :class="['fas', playerSettingsMessageType === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle']"></i>
-                                {{ playerSettingsMessage }}
-                            </span>
+                            <span v-if="playerSettingsMessage" style="color:#aaa; font-size:12px;">{{ playerSettingsMessage }}</span>
                         </div>
                         <div v-if="proxyStatus"
                             style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
                             <strong :style="{ color: proxyStatus.proxy && proxyStatus.proxy.running ? '#22c55e' : '#fbbf24' }">
-                                LocalProxy {{ proxyStatus.proxy && proxyStatus.proxy.running ? t('status.running') : t('status.stopped') }}
+                                LocalProxy {{ proxyStatus.proxy && proxyStatus.proxy.running ? 'running' : 'stopped' }}
                             </strong>
                             <span v-if="proxyStatus.proxy && proxyStatus.proxy.running">
-                                {{ t('settings.atAddress') }} {{ proxyStatus.proxy.host }}:{{ proxyStatus.proxy.port }}
+                                at {{ proxyStatus.proxy.host }}:{{ proxyStatus.proxy.port }}
                             </span>
-                            <span> {{ t('settings.configuredPort') }} {{ proxyStatus.settings && proxyStatus.settings.localProxyPort }}</span>
+                            <span> configured {{ proxyStatus.settings && proxyStatus.settings.localProxyPort }}</span>
                             <div style="color:#8f98aa;">
-                                {{ t('settings.enabled') }}: {{ proxyStatus.settings && proxyStatus.settings.useLocalProxy ? t('common.yes') : t('common.no') }}
-                                {{ t('settings.requestedPort') }}: {{ proxyStatus.proxy && proxyStatus.proxy.requestedPort || 'n/a' }}
-                                {{ t('settings.fallback') }}: {{ proxyStatus.proxy && proxyStatus.proxy.fallbackUsed ? t('common.yes') : t('common.no') }}
-                                {{ t('settings.activeEntries') }}: {{ proxyStatus.proxy ? proxyStatus.proxy.activeEntries : 0 }}
-                                {{ t('settings.expiredEntries') }}: {{ proxyStatus.proxy ? proxyStatus.proxy.expiredEntries : 0 }}
+                                enabled: {{ proxyStatus.settings && proxyStatus.settings.useLocalProxy ? 'yes' : 'no' }}
+                                requested: {{ proxyStatus.proxy && proxyStatus.proxy.requestedPort || 'n/a' }}
+                                fallback: {{ proxyStatus.proxy && proxyStatus.proxy.fallbackUsed ? 'yes' : 'no' }}
+                                active entries: {{ proxyStatus.proxy ? proxyStatus.proxy.activeEntries : 0 }}
+                                expired entries: {{ proxyStatus.proxy ? proxyStatus.proxy.expiredEntries : 0 }}
                             </div>
                             <div v-if="proxyStatus.proxy && proxyStatus.proxy.fallbackReason" style="color:#fbbf24;">
-                                {{ t('settings.fallbackReason') }}: {{ proxyStatus.proxy.fallbackReason }}
+                                fallback reason: {{ proxyStatus.proxy.fallbackReason }}
                             </div>
                         </div>
                         <div v-if="proxyPortCheck"
                             style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
                             <strong :style="{ color: proxyPortCheck.available ? '#22c55e' : '#f87171' }">
-                                {{ t('settings.port') }} {{ proxyPortCheck.port }} {{ proxyPortCheck.available ? t('status.available') : t('status.unavailable') }}
+                                Port {{ proxyPortCheck.port }} {{ proxyPortCheck.available ? 'available' : 'unavailable' }}
                             </strong>
                             <span> {{ proxyPortCheck.reason }}</span>
                             <div v-if="proxyPortCheck.message" style="color:#8f98aa;">{{ proxyPortCheck.message }}</div>
@@ -4357,7 +4272,7 @@
                         <div v-if="proxyRangeTest"
                             style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
                             <strong :style="{ color: proxyRangeTest.ok ? '#22c55e' : '#f87171' }">
-                                {{ t('settings.rangeTest') }} {{ proxyRangeTest.ok ? t('status.passed') : t('status.failed') }}
+                                Range self-test {{ proxyRangeTest.ok ? 'passed' : 'failed' }}
                             </strong>
                             <span> HTTP {{ proxyRangeTest.statusCode || 'n/a' }}</span>
                             <span v-if="proxyRangeTest.contentRange"> {{ proxyRangeTest.contentRange }}</span>
@@ -4371,7 +4286,7 @@
                         <div v-if="proxyHeadTest"
                             style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
                             <strong :style="{ color: proxyHeadTest.ok ? '#22c55e' : '#f87171' }">
-                                {{ t('settings.headTest') }} {{ proxyHeadTest.ok ? t('status.passed') : t('status.failed') }}
+                                HEAD self-test {{ proxyHeadTest.ok ? 'passed' : 'failed' }}
                             </strong>
                             <span> HTTP {{ proxyHeadTest.statusCode || 'n/a' }}</span>
                             <span> length {{ proxyHeadTest.contentLength || 0 }}</span>
@@ -4385,7 +4300,7 @@
                         <div v-if="proxyExpiryTest"
                             style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
                             <strong :style="{ color: proxyExpiryTest.ok ? '#22c55e' : '#f87171' }">
-                                {{ t('settings.expiryTest') }} {{ proxyExpiryTest.ok ? t('status.passed') : t('status.failed') }}
+                                Expiry self-test {{ proxyExpiryTest.ok ? 'passed' : 'failed' }}
                             </strong>
                             <span> expired HTTP {{ proxyExpiryTest.expiredStatusCode || 'n/a' }}</span>
                             <span> rejected {{ proxyExpiryTest.expiredRejected ? 'yes' : 'no' }}</span>
@@ -4398,7 +4313,7 @@
                         <div v-if="proxyM3u8Test"
                             style="margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:12px; line-height:1.6;">
                             <strong :style="{ color: proxyM3u8Test.ok ? '#22c55e' : '#f87171' }">
-                                {{ t('settings.hlsTest') }} {{ proxyM3u8Test.ok ? t('status.passed') : t('status.failed') }}
+                                HLS rewrite self-test {{ proxyM3u8Test.ok ? 'passed' : 'failed' }}
                             </strong>
                             <span> HTTP {{ proxyM3u8Test.statusCode || 'n/a' }}</span>
                             <span> rewritten URLs {{ proxyM3u8Test.rewrittenUrls || 0 }}</span>
@@ -4412,28 +4327,28 @@
 
                     <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
-                            {{ t('plugin.title') }}</div>
+                            TVBox plugin runtime</div>
                         <div style="color:#999; font-size:12px; line-height:1.7; margin-bottom:12px;">
-                            {{ t('plugin.description') }}
+                            Optional trusted runtime support for TVBox plugin sources. The app can recognize plugin-required sources now; Java CatVod Bridge is used only when you explicitly enable and configure it.
                         <div style="display:grid; gap:8px;">
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
                                 <input type="checkbox" v-model="pluginRuntimeSettings.enableJavaCatvod" style="accent-color:#e50914;">
-                                {{ t('plugin.enableBridge') }}
+                                Enable trusted local Java CatVod Bridge
                             </label>
-                            <input v-model="pluginRuntimeSettings.javaPath" type="text" :placeholder="t('plugin.javaPath')"
+                            <input v-model="pluginRuntimeSettings.javaPath" type="text" placeholder="java.exe path, optional when java is already in PATH"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
-                            <input v-model="pluginRuntimeSettings.catvodBridgeJarPath" type="text" :placeholder="t('plugin.bridgeJarPath')"
+                            <input v-model="pluginRuntimeSettings.catvodBridgeJarPath" type="text" placeholder="CatVod Bridge jar path"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
-                            <input v-model="pluginRuntimeSettings.trustedSpiderJarPath" type="text" :placeholder="t('plugin.spiderJarPath')"
+                            <input v-model="pluginRuntimeSettings.trustedSpiderJarPath" type="text" placeholder="Trusted local Spider jar path (manual only)"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
-                            <input v-model="pluginRuntimeSettings.trustedSpiderClassName" type="text" :placeholder="t('plugin.spiderClass')"
+                            <input v-model="pluginRuntimeSettings.trustedSpiderClassName" type="text" placeholder="Trusted Spider class name, e.g. com.example.Spider"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
-                            <input v-model="pluginRuntimeSettings.trustedSpiderExt" type="text" :placeholder="t('plugin.spiderExt')"
+                            <input v-model="pluginRuntimeSettings.trustedSpiderExt" type="text" placeholder="Trusted Spider ext, optional"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
-                            <input v-model="pluginRuntimeSettings.externalHttpBaseUrl" type="text" :placeholder="t('plugin.httpBridgeUrl')"
+                            <input v-model="pluginRuntimeSettings.externalHttpBaseUrl" type="text" placeholder="External HTTP Bridge URL, optional"
                                 style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
                             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:8px;">
-                                <input v-model.number="pluginRuntimeSettings.localJavaBridgePort" type="number" min="1024" max="65535" :placeholder="t('plugin.bridgePort')"
+                                <input v-model.number="pluginRuntimeSettings.localJavaBridgePort" type="number" min="1024" max="65535" placeholder="Local Java Bridge Port"
                                     style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
                                 <select v-model="pluginRuntimeSettings.localJavaBridgeMode"
                                     style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
@@ -4446,44 +4361,44 @@
                         <div v-if="pluginRuntimes.length" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
                             <span v-for="runtime in pluginRuntimes" :key="runtime.id"
                                 style="padding:6px 10px; border-radius:999px; background:rgba(255,255,255,0.08); color:#ddd; font-size:11px;">
-                        <span>{{ runtime.id }} {{ localizeRuntimeText(runtime.status) }}</span>
+                        <span>{{ runtime.id }} {{ runtime.status }}</span>
                             </span>
                         </div>
                         <div style="display:grid; gap:6px; margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:11px; line-height:1.6;">
                             <div>
-                                <strong style="color:#fff;">{{ t('plugin.localBridge') }}:</strong>
+                                <strong style="color:#fff;">Local Java Bridge:</strong>
                                 <span :style="{ color: localJavaBridgeStatus.running ? '#22c55e' : '#9ca3af' }">
-                                    {{ localJavaBridgeStatus.running ? t('status.running') : t('status.stopped') }}
+                                    {{ localJavaBridgeStatus.running ? 'running' : 'stopped' }}
                                 </span>
                                 <span v-if="localJavaBridgeStatus.pid"> PID {{ localJavaBridgeStatus.pid }}</span>
                             </div>
-                            <div>URL: {{ localJavaBridgeStatus.baseUrl || t('plugin.notConfigured') }}</div>
-                            <div>{{ t('plugin.mode') }}: {{ localJavaBridgeStatus.mode || pluginRuntimeSettings.localJavaBridgeMode || 'stub' }}</div>
-                            <div style="word-break:break-all;">Jar: {{ localJavaBridgeStatus.jarPath || pluginRuntimeSettings.catvodBridgeJarPath || t('plugin.notBuilt') }}</div>
-                            <div>{{ t('plugin.trustedSpider') }}: {{ localJavaBridgeStatus.trustedSpiderJarConfigured ? t('plugin.jarOk') : t('plugin.jarMissing') }} / {{ localJavaBridgeStatus.trustedSpiderClassName || pluginRuntimeSettings.trustedSpiderClassName || t('plugin.classMissing') }}</div>
+                            <div>URL: {{ localJavaBridgeStatus.baseUrl || 'not configured' }}</div>
+                            <div>Mode: {{ localJavaBridgeStatus.mode || pluginRuntimeSettings.localJavaBridgeMode || 'stub' }}</div>
+                            <div style="word-break:break-all;">Jar: {{ localJavaBridgeStatus.jarPath || pluginRuntimeSettings.catvodBridgeJarPath || 'not built' }}</div>
+                            <div>Trusted Spider: {{ localJavaBridgeStatus.trustedSpiderJarConfigured ? 'jar ok' : 'jar missing' }} / {{ localJavaBridgeStatus.trustedSpiderClassName || pluginRuntimeSettings.trustedSpiderClassName || 'class not set' }}</div>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
                             <button class="btn-info" @click="checkJavaCatvodRuntime" style="border:0; padding:8px 12px;">
-                    <i class="fas fa-mug-hot"></i> {{ t('plugin.checkJava') }}
+                    <i class="fas fa-mug-hot"></i> Check Java
                             </button>
                             <button class="btn-info" @click="checkExternalHttpBridge" style="border:0; padding:8px 12px;">
-                    <i class="fas fa-network-wired"></i> {{ t('plugin.checkHttp') }}
+                    <i class="fas fa-network-wired"></i> Check HTTP Bridge
                             </button>
                             <button class="btn-info" @click="buildLocalJavaBridge" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
-                                <i class="fas fa-hammer"></i> {{ t('plugin.build') }}
+                                <i class="fas fa-hammer"></i> Build Java Bridge
                             </button>
                             <button class="btn-info" @click="startLocalJavaBridge" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
-                                <i class="fas fa-play-circle"></i> {{ t('plugin.start') }}
+                                <i class="fas fa-play-circle"></i> Start Local Bridge
                             </button>
                             <button class="btn-info" @click="refreshLocalJavaBridgeStatus" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
-                                <i class="fas fa-sync-alt"></i> {{ t('plugin.refresh') }}
+                                <i class="fas fa-sync-alt"></i> Refresh Bridge
                             </button>
                             <button class="btn-info" @click="stopLocalJavaBridge" :disabled="pluginRuntimeSaving || !localJavaBridgeStatus.running" style="border:0; padding:8px 12px;">
-                                <i class="fas fa-stop-circle"></i> {{ t('plugin.stop') }}
+                                <i class="fas fa-stop-circle"></i> Stop Local Bridge
                             </button>
                             <button class="btn-play" @click="savePluginRuntimeSettings" :disabled="pluginRuntimeSaving"
                                 style="border:0; padding:9px 16px; font-size:13px;">
-                                <i :class="['fas', pluginRuntimeSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i> {{ pluginRuntimeSaving ? t('common.saving') : t('plugin.save') }}</button>
+                                <i :class="['fas', pluginRuntimeSaving ? 'fa-spinner fa-spin' : 'fa-save']"></i> {{ pluginRuntimeSaving ? 'Saving...' : 'Save plugin runtime' }}</button>
 
                             <span v-if="pluginRuntimeMessage" style="color:#aaa; font-size:12px;">{{ pluginRuntimeMessage }}</span>
                         </div>
@@ -4494,7 +4409,7 @@
                         style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
                         <div style="color: #ff6b6b; font-size: 13px;">
                             <i class="fas fa-info-circle" style="margin-right: 8px;"></i>
-                            {{ t('plugin.securityNotice') }}
+                            Plugin runtimes are optional. Only enable a trusted local bridge that you configured yourself; unknown TVBox plugin code is never executed automatically.
                         </div>
                     </div>
                 </div>
@@ -4538,9 +4453,6 @@
 
         <!-- 闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?闂傚倷绀佸﹢閬嶆惞鎼淬劌鍌ㄥù鐘差儏濡ê霉閿濆洤鍔嬮悗姘哺閺屻劑寮崶顭戞闂佸憡鎸诲姗€鈥?(闂佽崵鍠愮划鍫ュ础閾忣偆顩查悹楦裤€€閺嬪秶鈧厜鍋撻柍褜鍓熷顐︻敋閳ь剙鐣峰鈧俊姝岊槼闁? 闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?-->
         <div class="detail-overlay" :class="{ active: showDetail }">
-                    <button class="detail-back-button" v-if="showDetail" data-testid="detail-back" @click="closeDetail">
-                        <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
-                    </button>
                     <div class="close-btn" tabindex="1" role="button" aria-label="Close detail" @click="closeDetail"
                 @keydown.enter="closeDetail"><i class="fas fa-times"></i></div>
 
@@ -4550,7 +4462,7 @@
                 <div style="background:#1c1c1e; border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:22px; width:100%; max-width:480px; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
                         <div style="font-size:16px; font-weight:bold; color:#fff;">
-                    <h4 style="margin:0; font-size:18px;">{{ t('detail.share') }} {{ currentGroup && currentGroup.name }}</h4>
+                    <h4 style="margin:0; font-size:18px;">Share {{ currentGroup && currentGroup.name }}</h4>
                         </div>
                     <button @click="showSharePanel = false" aria-label="Close share panel" style="background:transparent; border:0; color:#fff; font-size:20px;"><i class="fas fa-times"></i></button>
                     </div>
@@ -4571,7 +4483,7 @@
                     <div style="display:flex; gap:8px; margin-bottom:14px;">
                         <input readonly :value="shareUrl" onclick="this.select()"
                             style="flex:1; min-width:0; box-sizing:border-box; background:#2a2a2a; border:1px solid #3a3a3a; color:#ccc; border-radius:10px; padding:11px 12px; font-size:12px;">
-                        <button class="btn-info" @click="confirmShare" style="border:0; padding:0 14px;"><i class="fas fa-copy"></i> {{ t('common.copy') }}</button>
+                        <button class="btn-info" @click="confirmShare" style="border:0; padding:0 14px;"><i class="fas fa-copy"></i> Copy</button>
                     </div>
 
                     <!-- 闂佽瀛╅鏍窗閹烘纾婚柟鐐灱閺€鑺ャ亜閺冨倵鎷￠柛搴㈠姈娣囧﹪鎮欓幓鎺嗗亾閸噮娼?-->
@@ -4589,7 +4501,7 @@
                     <div>
                         <h1 class="video-title">{{ currentGroup.name }}</h1>
                         <div class="video-meta">
-                            {{ t('detail.currentSource') }}: <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span>
+                            Current source: <span class="text-white fw-bold">{{ currentSource && currentSource.site_name }}</span>
                             <span v-if="currentSource"
                                 :style="sourceOriginBadgeStyle(currentSource)"
                                 style="margin-left:8px; font-size:10px; font-weight:800; padding:2px 7px; border-radius:999px;">
@@ -4608,24 +4520,24 @@
                         </button>
                         <button class="btn-cast" tabindex="2" data-testid="playback-copy-url"
                             @click="copyCurrentPlayUrl" aria-label="Copy play URL">
-                            <i class="fas fa-copy"></i> {{ t('common.copyUrl') }}
+                            <i class="fas fa-copy"></i> Copy URL
                         </button>
                         <button class="btn-cast" tabindex="2" data-testid="playback-copy-proxy"
                             @click="copyCurrentProxyUrl" aria-label="Copy proxy URL">
-                            <i class="fas fa-shield-alt"></i> {{ t('common.copyProxyUrl') }}
+                            <i class="fas fa-shield-alt"></i> Copy proxy URL
                         </button>
                         <button class="btn-cast" tabindex="2" data-testid="playback-diagnose"
                             @click="diagnoseCurrentPlayback" aria-label="Playback diagnostics">
-                            <i :class="['fas', playbackDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-stethoscope']"></i> {{ t('common.diagnose') }}
+                            <i :class="['fas', playbackDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-stethoscope']"></i> Diagnose
                         </button>
                         <button class="btn-cast" tabindex="2" @click="showSettingsModal = true; loadPlayerSettings()"
                             aria-label="Player settings">
-                            <i class="fas fa-sliders-h"></i> {{ t('feature.playerTitle') }}</button>
+                            <i class="fas fa-sliders-h"></i> Player</button>
                         <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="Share">
-                            <i class="fas fa-share-alt"></i> {{ t('detail.share') }}
+                            <i class="fas fa-share-alt"></i> Share
                         </button>
                         <button class="btn-cast" tabindex="2" @click="castVideo">
-                            <i class="fas fa-tv"></i> {{ t('detail.cast') }}
+                            <i class="fas fa-tv"></i> Cast
                         </button>
                     </div>
                 </div>
@@ -4656,7 +4568,7 @@
                 <div class="player-box" style="position: relative;">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
                     <div v-if="shouldRecommendExternalPlayer()" style="position:absolute; left:18px; bottom:18px; z-index:80; max-width:520px; background:rgba(0,0,0,0.78); border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 14px; font-size:12px; backdrop-filter:blur(14px);">
-                        {{ t('detail.recommendedPlayer') }}: {{ playbackClassification && playbackClassification.recommendedPlayer === 'mpv' ? 'mpv.net' : 'MPC' }}
+                        Recommended external player: {{ playbackClassification && playbackClassification.recommendedPlayer === 'mpv' ? 'mpv.net' : 'MPC' }}
                         <div v-if="playbackClassification && playbackClassification.reason" style="color:#cbd5e1; margin-top:4px;">
                             {{ playbackClassification.reason }}
                         </div>
@@ -4665,12 +4577,12 @@
                     <div v-if="playbackDiagnostics" style="position:absolute; right:18px; bottom:18px; z-index:82; width:min(520px, calc(100% - 36px)); max-height:48%; overflow:auto; background:rgba(4,8,18,0.9); border:1px solid rgba(148,163,184,0.32); color:#e5e7eb; border-radius:12px; padding:12px 14px; font-size:12px; backdrop-filter:blur(14px); box-shadow:0 18px 50px rgba(0,0,0,0.45);">
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:8px;">
                             <strong :style="{ color: playbackDiagnostics.ok ? '#22c55e' : '#fbbf24' }">
-                                {{ t('detail.playbackDiagnostics') }} {{ playbackDiagnostics.ok ? t('status.ok') : t('status.needsAttention') }}
+                                Playback diagnostics {{ playbackDiagnostics.ok ? 'ok' : 'needs attention' }}
                             </strong>
                             <button @click="playbackDiagnostics = null" style="background:none; border:0; color:#94a3b8; cursor:pointer; font-size:16px; line-height:1;">&times;</button>
                         </div>
                         <div style="color:#cbd5e1; line-height:1.55;">
-                            {{ t('feature.playerTitle') }}: {{ playbackDiagnostics.classification && playbackDiagnostics.classification.recommendedPlayer }}
+                            Player: {{ playbackDiagnostics.classification && playbackDiagnostics.classification.recommendedPlayer }}
                             <span v-if="playbackDiagnostics.classification && playbackDiagnostics.classification.reason"> {{ playbackDiagnostics.classification.reason }}</span>
                         </div>
                         <div style="color:#94a3b8; line-height:1.55;">
@@ -5206,181 +5118,8 @@
                 'settings.languageDescription': '切换后立即生效，并在下次启动时保留。',
                 'settings.desktopReadiness': '桌面环境状态',
                 'settings.desktopReadinessDescription': '检查用户数据、订阅源、外部播放器与本地代理。',
-                'common.back': '返回',
-                'common.refresh': '刷新',
-                'common.refreshing': '正在刷新',
-                'common.clear': '清除',
-                'common.all': '全部',
-                'common.loadMore': '加载更多',
-                'common.copyUrl': '复制地址',
-                'common.copyProxyUrl': '复制代理地址',
-                'common.pluginRequired': '需要插件运行时',
-                'common.unsupported': '不支持',
-                'common.diagnose': '诊断',
-                'common.healthCheck': '健康检查',
-                'common.validate': '验证',
-                'common.checking': '正在检查',
-                'common.testing': '正在测试',
-                'common.saving': '正在保存',
-                'common.yes': '是',
-                'common.no': '否',
-                'common.gotIt': '知道了',
-                'common.expand': '展开',
-                'common.collapse': '收起',
-                'common.loading': '正在加载…',
-                'common.copy': '复制',
-                'search.noResults': '没有找到：',
-                'search.noResultsHint': '请换一个关键词，刷新订阅源，或导入自己的 TVBox 订阅。',
-                'search.diagnostics': '搜索诊断',
-                'search.diagnosticsDescription': '检查内置搜索、普通 HTTP 源、插件型源和本地桥接状态，不会执行未知插件。',
-                'search.loadingDiagnostics': '正在加载诊断信息…',
-                'search.builtIn': '内置搜索',
-                'search.tvbox': 'TVBox 搜索',
-                'search.localBridge': '本地 Java 桥接',
-                'search.loadingMore': '正在加载更多线路…',
-                'search.searching': '正在搜索…',
-                'live.description': '这里显示用户自行导入的 TVBox、M3U 或 TXT 直播频道；需要请求头的频道可通过本地代理交给外部播放器。',
-                'live.searchPlaceholder': '搜索直播频道',
-                'live.favorites': '收藏',
-                'live.channels': '频道',
-                'live.proxyRecommended': '该线路带请求头，建议 MPC/mpv 使用本地代理',
-                'live.noFavorites': '还没有收藏频道。',
-                'live.noChannels': '没有找到直播频道。',
-                'live.onlyImported': '这里只显示用户自行导入的直播订阅。',
-                'live.playlistSupport': '支持 TXT / M3U 播放列表',
-                'live.importHint': '请从自己的订阅地址导入直播源。',
-                'guide.title': '首次使用引导',
-                'guide.description': '为 Windows 桌面播放完成基础设置：导入自己的 TVBox 订阅，为高码率 4K 选择 mpv.net 或 MPC，并在配置可信运行时前保持插件型源禁用。',
-                'guide.importTitle': '导入订阅源',
-                'guide.importDescription': '添加自己的 TVBox JSON、M3U 或 TXT 订阅。插件型源只识别，不会自动执行。',
-                'guide.playerTitle': '配置 mpv.net',
-                'guide.playerDescription': '高码率 4K、HEVC、HDR 和网盘线路优先使用 mpv.net 或 MPC。',
-                'subscriptions.description': '仅导入你自己的 TVBox JSON 地址或本地 JSON 文件。应用会保存站点、直播、解析器和插件标记，但不会自动执行 csp_xxx、spider.jar、py 或 js 插件。',
-                'subscriptions.urlPlaceholder': 'TVBox JSON 订阅地址',
-                'subscriptions.namePlaceholder': '订阅名称',
-                'subscriptions.import': '导入订阅',
-                'subscriptions.importing': '正在导入…',
-                'subscriptions.importFile': '导入本地 JSON',
-                'subscriptions.refreshAll': '全部刷新',
-                'subscriptions.sites': '站点',
-                'subscriptions.live': '直播',
-                'subscriptions.warehouses': '多仓',
-                'subscriptions.expanded': '已展开',
-                'subscriptions.plugin': '插件型',
-                'subscriptions.sourceSummary': '源概览',
-                'subscriptions.pluginRuntimeNotice': '该源需要 CatVod/Spider 运行时。当前可以识别和管理，但不会自动执行未知插件代码。',
-                'subscriptions.onlyUserProvided': '这里只保存用户自己提供的订阅。',
-                'subscriptions.refreshed': '订阅数据已刷新',
-                'subscriptions.urlRequired': '请先填写 TVBox JSON 订阅地址',
-                'subscriptions.imported': '订阅导入成功',
-                'subscriptions.refreshFailed': '订阅数据刷新失败',
-                'subscriptions.operationFailed': '订阅操作失败',
-                'settings.lastChecked': '上次检查',
-                'settings.version': '版本',
-                'settings.sources': '影视源',
-                'settings.blockers': '阻塞项',
-                'settings.warnings': '警告',
-                'settings.httpReady': 'HTTP 可用',
-                'settings.plugins': '插件型源',
-                'settings.liveReady': '直播可用',
-                'settings.liveErrors': '直播错误',
-                'settings.externalPlayer': '外部播放器',
-                'settings.proxy': '本地代理',
-                'settings.nextActions': '下一步操作',
-                'settings.readinessIssues': '环境问题',
-                'settings.runSetupCheck': '运行环境检查',
-                'settings.refreshReadiness': '刷新状态',
-                'settings.openSubscriptions': '打开订阅源',
-                'settings.showGuide': '显示引导',
-                'settings.hideRandomTitle': '隐藏随机推荐栏目',
-                'settings.hideRandomDescription': '关闭后首页不再显示随机推荐，不影响其他影视栏目。',
-                'settings.filterNsfwTitle': '过滤成人内容',
-                'settings.filterNsfwDescription': '在搜索和推荐中尽量隐藏成人内容。',
-                'settings.mpcPathPlaceholder': 'MPC-HC / MPC-BE 程序路径',
-                'settings.mpvPathPlaceholder': 'mpv / mpv.net 程序路径',
-                'settings.defaultPlayer': '默认播放器',
-                'settings.internalPlayer': '内置播放器',
-                'settings.startFullscreen': '启动时全屏',
-                'settings.closeAfterPlayback': '播放结束后关闭外部播放器',
-                'settings.useMpc4k': '4K 线路使用 MPC',
-                'settings.useMpcHevc': 'HEVC/H.265 线路使用 MPC',
-                'settings.useMpcHdr': 'HDR 线路使用 MPC',
-                'settings.useMpcCloud': '网盘线路使用 MPC',
-                'settings.useLocalProxy': '需要请求头时使用本地代理',
-                'settings.proxyPort': '本地代理端口',
-                'settings.save': '保存设置',
-                'settings.proxyStatus': '代理状态',
-                'settings.checkPort': '检查端口',
-                'settings.rangeTest': 'Range 测试',
-                'settings.headTest': 'HEAD 测试',
-                'settings.expiryTest': '过期测试',
-                'settings.hlsTest': 'HLS 测试',
-                'settings.atAddress': '地址',
-                'settings.configuredPort': '配置端口',
-                'settings.enabled': '已启用',
-                'settings.requestedPort': '请求端口',
-                'settings.fallback': '备用端口',
-                'settings.activeEntries': '有效链接',
-                'settings.expiredEntries': '过期链接',
-                'settings.fallbackReason': '备用原因',
-                'settings.port': '端口',
-                'settings.saved': '播放器设置已保存',
-                'settings.statusLoaded': '代理状态已更新',
-                'settings.mpcDetected': '已找到 MPC',
-                'settings.mpcNotFound': '未检测到 MPC，请手动选择程序路径',
-                'settings.mpvDetected': '已找到 mpv.net',
-                'settings.mpvNotFound': '未检测到 mpv.net，请手动选择程序路径',
-                'plugin.title': 'TVBox 插件运行时',
-                'plugin.description': '这里仅配置用户信任的 TVBox 插件运行环境。应用会识别插件型源；只有在你明确启用并配置后才会使用 Java CatVod 桥接。',
-                'plugin.enableBridge': '启用可信本地 Java CatVod 桥接',
-                'plugin.javaPath': 'java.exe 路径；已加入 PATH 时可留空',
-                'plugin.bridgeJarPath': 'CatVod Bridge jar 路径',
-                'plugin.spiderJarPath': '可信本地 Spider jar 路径（仅手动配置）',
-                'plugin.spiderClass': '可信 Spider 类名，例如 com.example.Spider',
-                'plugin.spiderExt': '可信 Spider 扩展参数，可选',
-                'plugin.httpBridgeUrl': '外部 HTTP Bridge 地址，可选',
-                'plugin.bridgePort': '本地 Java 桥接端口',
-                'plugin.localBridge': '本地 Java 桥接',
-                'plugin.notConfigured': '未配置',
-                'plugin.mode': '模式',
-                'plugin.notBuilt': '尚未构建',
-                'plugin.trustedSpider': '可信 Spider',
-                'plugin.jarOk': 'jar 正常',
-                'plugin.jarMissing': '缺少 jar',
-                'plugin.classMissing': '未设置类名',
-                'plugin.checkJava': '检查 Java',
-                'plugin.checkHttp': '检查 HTTP 桥接',
-                'plugin.build': '构建 Java 桥接',
-                'plugin.start': '启动本地桥接',
-                'plugin.refresh': '刷新桥接状态',
-                'plugin.stop': '停止本地桥接',
-                'plugin.save': '保存插件运行时',
-                'plugin.securityNotice': '插件运行时是可选功能。只启用你自己配置并信任的本地桥接；应用不会自动执行未知的 TVBox 插件代码。',
-                'footer.exitTv': '退出电视模式',
-                'footer.tvMode': '电视模式',
-                'footer.logout': '退出登录',
-                'footer.dataCredit': '影视资料由 TMDb 与 MacCMS 接口提供',
-                'detail.share': '分享',
-                'detail.cast': '投屏',
-                'detail.currentSource': '当前线路',
-                'detail.recommendedPlayer': '推荐外部播放器',
-                'detail.playbackDiagnostics': '播放诊断',
                 'status.ready': '已就绪',
-                'status.needsSetup': '需要设置',
-                'status.running': '运行中',
-                'status.stopped': '已停止',
-                'status.available': '可用',
-                'status.unavailable': '不可用',
-                'status.passed': '通过',
-                'status.failed': '失败'
-                ,'status.valid': '有效'
-                ,'status.missing': '缺失'
-                ,'status.enabled': '已启用'
-                ,'status.disabled': '已禁用'
-                ,'status.blocking': '阻塞'
-                ,'status.warning': '警告'
-                ,'status.ok': '正常'
-                ,'status.needsAttention': '需要处理'
+                'status.needsSetup': '需要设置'
             },
             'en-US': {
                 'nav.main': 'Main navigation',
@@ -5452,181 +5191,8 @@
                 'settings.languageDescription': 'Changes apply immediately and are kept for the next launch.',
                 'settings.desktopReadiness': 'Desktop readiness',
                 'settings.desktopReadinessDescription': 'Check user data, subscriptions, external player, and LocalProxy.',
-                'common.back': 'Back',
-                'common.refresh': 'Refresh',
-                'common.refreshing': 'Refreshing',
-                'common.clear': 'Clear',
-                'common.all': 'All',
-                'common.loadMore': 'Load more',
-                'common.copyUrl': 'Copy URL',
-                'common.copyProxyUrl': 'Copy proxy URL',
-                'common.pluginRequired': 'Plugin runtime required',
-                'common.unsupported': 'Unsupported',
-                'common.diagnose': 'Diagnose',
-                'common.healthCheck': 'Health',
-                'common.validate': 'Validate',
-                'common.checking': 'Checking',
-                'common.testing': 'Testing',
-                'common.saving': 'Saving',
-                'common.yes': 'yes',
-                'common.no': 'no',
-                'common.gotIt': 'Got it',
-                'common.expand': 'Expand',
-                'common.collapse': 'Collapse',
-                'common.loading': 'Loading...',
-                'common.copy': 'Copy',
-                'search.noResults': 'No results for ',
-                'search.noResultsHint': 'Try another keyword, refresh sources, or import your own TVBox subscription.',
-                'search.diagnostics': 'Search Diagnostics',
-                'search.diagnosticsDescription': 'Check built-in search, HTTP sources, plugin-required sources, and local bridge status without executing unknown plugins.',
-                'search.loadingDiagnostics': 'Loading diagnostics...',
-                'search.builtIn': 'Built-in search',
-                'search.tvbox': 'TVBox search',
-                'search.localBridge': 'Local Java Bridge',
-                'search.loadingMore': 'Loading more sources...',
-                'search.searching': 'Searching...',
-                'live.description': 'User-imported TVBox, M3U, and TXT live channels appear here. Header-aware channels can use LocalProxy with external players.',
-                'live.searchPlaceholder': 'Search live channels',
-                'live.favorites': 'Favorites',
-                'live.channels': 'Channels',
-                'live.proxyRecommended': 'Headers detected; LocalProxy is recommended for MPC/mpv',
-                'live.noFavorites': 'No favorite channels yet.',
-                'live.noChannels': 'No live channels found.',
-                'live.onlyImported': 'Only user-imported live subscriptions are shown here.',
-                'live.playlistSupport': 'TXT / M3U playlist support',
-                'live.importHint': 'Import live sources from your own subscription URLs.',
-                'guide.title': 'First Run Guide',
-                'guide.description': 'Configure Windows desktop playback: import your own TVBox subscriptions, choose mpv.net or MPC for heavy 4K streams, and keep plugin sources disabled until a trusted runtime is configured.',
-                'guide.importTitle': 'Import subscriptions',
-                'guide.importDescription': 'Add your own TVBox JSON, M3U, or TXT subscription. Plugin sources are identified but not executed automatically.',
-                'guide.playerTitle': 'Configure mpv.net',
-                'guide.playerDescription': 'Use mpv.net or MPC for high bitrate 4K, HEVC, HDR, and cloud-drive streams.',
-                'subscriptions.description': 'Import only your own TVBox JSON URLs or local JSON files. Sites, lives, parses, and plugin markers are stored, but csp_xxx, spider.jar, py, or js plugins are never executed automatically.',
-                'subscriptions.urlPlaceholder': 'TVBox JSON URL',
-                'subscriptions.namePlaceholder': 'Subscription name',
-                'subscriptions.import': 'Import subscription',
-                'subscriptions.importing': 'Importing...',
-                'subscriptions.importFile': 'Import local JSON',
-                'subscriptions.refreshAll': 'Refresh all',
-                'subscriptions.sites': 'sites',
-                'subscriptions.live': 'live',
-                'subscriptions.warehouses': 'warehouses',
-                'subscriptions.expanded': 'expanded',
-                'subscriptions.plugin': 'plugin',
-                'subscriptions.sourceSummary': 'Source Summary',
-                'subscriptions.pluginRuntimeNotice': 'This source requires a CatVod/Spider runtime. It can be identified and managed, but unknown plugin code is not executed automatically.',
-                'subscriptions.onlyUserProvided': 'Only user-provided subscriptions are stored.',
-                'subscriptions.refreshed': 'Subscription data refreshed',
-                'subscriptions.urlRequired': 'Enter a TVBox JSON subscription URL first',
-                'subscriptions.imported': 'Subscription imported',
-                'subscriptions.refreshFailed': 'Failed to refresh subscription data',
-                'subscriptions.operationFailed': 'Subscription operation failed',
-                'settings.lastChecked': 'Last checked',
-                'settings.version': 'Version',
-                'settings.sources': 'Sources',
-                'settings.blockers': 'Blockers',
-                'settings.warnings': 'Warnings',
-                'settings.httpReady': 'HTTP-ready',
-                'settings.plugins': 'Plugins',
-                'settings.liveReady': 'Live-ready',
-                'settings.liveErrors': 'Live errors',
-                'settings.externalPlayer': 'External player',
-                'settings.proxy': 'Proxy',
-                'settings.nextActions': 'Next actions',
-                'settings.readinessIssues': 'Readiness issues',
-                'settings.runSetupCheck': 'Run setup check',
-                'settings.refreshReadiness': 'Refresh readiness',
-                'settings.openSubscriptions': 'Open subscriptions',
-                'settings.showGuide': 'Show guide',
-                'settings.hideRandomTitle': 'Hide random recommendations',
-                'settings.hideRandomDescription': 'Remove the random rail from Home without affecting other rows.',
-                'settings.filterNsfwTitle': 'Filter adult content',
-                'settings.filterNsfwDescription': 'Hide adult content from search and recommendations where possible.',
-                'settings.mpcPathPlaceholder': 'MPC-HC / MPC-BE executable path',
-                'settings.mpvPathPlaceholder': 'mpv / mpv.net executable path',
-                'settings.defaultPlayer': 'Default player',
-                'settings.internalPlayer': 'Internal',
-                'settings.startFullscreen': 'Start fullscreen',
-                'settings.closeAfterPlayback': 'Close external player after playback',
-                'settings.useMpc4k': 'Use MPC for 4K streams',
-                'settings.useMpcHevc': 'Use MPC for HEVC/H.265',
-                'settings.useMpcHdr': 'Use MPC for HDR',
-                'settings.useMpcCloud': 'Use MPC for cloud-drive streams',
-                'settings.useLocalProxy': 'Use LocalProxy for header-aware playback',
-                'settings.proxyPort': 'LocalProxy port',
-                'settings.save': 'Save settings',
-                'settings.proxyStatus': 'Proxy status',
-                'settings.checkPort': 'Check port',
-                'settings.rangeTest': 'Range self-test',
-                'settings.headTest': 'HEAD self-test',
-                'settings.expiryTest': 'Expiry self-test',
-                'settings.hlsTest': 'HLS self-test',
-                'settings.atAddress': 'at',
-                'settings.configuredPort': 'configured',
-                'settings.enabled': 'enabled',
-                'settings.requestedPort': 'requested',
-                'settings.fallback': 'fallback',
-                'settings.activeEntries': 'active entries',
-                'settings.expiredEntries': 'expired entries',
-                'settings.fallbackReason': 'fallback reason',
-                'settings.port': 'Port',
-                'settings.saved': 'Player settings saved',
-                'settings.statusLoaded': 'Proxy status updated',
-                'settings.mpcDetected': 'MPC detected',
-                'settings.mpcNotFound': 'MPC was not detected; choose the executable manually',
-                'settings.mpvDetected': 'mpv.net detected',
-                'settings.mpvNotFound': 'mpv.net was not detected; choose the executable manually',
-                'plugin.title': 'TVBox plugin runtime',
-                'plugin.description': 'Configure only trusted TVBox plugin runtimes. Plugin sources are recognized now; the Java CatVod Bridge is used only when you explicitly enable and configure it.',
-                'plugin.enableBridge': 'Enable trusted local Java CatVod Bridge',
-                'plugin.javaPath': 'java.exe path; optional when Java is already in PATH',
-                'plugin.bridgeJarPath': 'CatVod Bridge jar path',
-                'plugin.spiderJarPath': 'Trusted local Spider jar path (manual only)',
-                'plugin.spiderClass': 'Trusted Spider class, e.g. com.example.Spider',
-                'plugin.spiderExt': 'Trusted Spider ext, optional',
-                'plugin.httpBridgeUrl': 'External HTTP Bridge URL, optional',
-                'plugin.bridgePort': 'Local Java Bridge port',
-                'plugin.localBridge': 'Local Java Bridge',
-                'plugin.notConfigured': 'not configured',
-                'plugin.mode': 'Mode',
-                'plugin.notBuilt': 'not built',
-                'plugin.trustedSpider': 'Trusted Spider',
-                'plugin.jarOk': 'jar ok',
-                'plugin.jarMissing': 'jar missing',
-                'plugin.classMissing': 'class not set',
-                'plugin.checkJava': 'Check Java',
-                'plugin.checkHttp': 'Check HTTP Bridge',
-                'plugin.build': 'Build Java Bridge',
-                'plugin.start': 'Start Local Bridge',
-                'plugin.refresh': 'Refresh Bridge',
-                'plugin.stop': 'Stop Local Bridge',
-                'plugin.save': 'Save plugin runtime',
-                'plugin.securityNotice': 'Plugin runtimes are optional. Enable only a trusted local bridge you configured yourself; unknown TVBox plugin code is never executed automatically.',
-                'footer.exitTv': 'Exit TV',
-                'footer.tvMode': 'TV Mode',
-                'footer.logout': 'Logout',
-                'footer.dataCredit': 'Data provided by TMDb and MacCMS APIs',
-                'detail.share': 'Share',
-                'detail.cast': 'Cast',
-                'detail.currentSource': 'Current source',
-                'detail.recommendedPlayer': 'Recommended external player',
-                'detail.playbackDiagnostics': 'Playback diagnostics',
                 'status.ready': 'Ready',
-                'status.needsSetup': 'Needs setup',
-                'status.running': 'running',
-                'status.stopped': 'stopped',
-                'status.available': 'available',
-                'status.unavailable': 'unavailable',
-                'status.passed': 'passed',
-                'status.failed': 'failed'
-                ,'status.valid': 'Valid'
-                ,'status.missing': 'Missing'
-                ,'status.enabled': 'Enabled'
-                ,'status.disabled': 'Disabled'
-                ,'status.blocking': 'blocking'
-                ,'status.warning': 'warning'
-                ,'status.ok': 'ok'
-                ,'status.needsAttention': 'needs attention'
+                'status.needsSetup': 'Needs setup'
             },
             'ja-JP': {
                 'nav.main': 'メインナビゲーション',
@@ -5698,181 +5264,8 @@
                 'settings.languageDescription': '変更はすぐに反映され、次回起動時も保持されます。',
                 'settings.desktopReadiness': 'デスクトップ環境',
                 'settings.desktopReadinessDescription': 'ユーザーデータ、配信元、外部プレーヤー、ローカルプロキシを確認します。',
-                'common.back': '戻る',
-                'common.refresh': '更新',
-                'common.refreshing': '更新中',
-                'common.clear': 'クリア',
-                'common.all': 'すべて',
-                'common.loadMore': 'さらに読み込む',
-                'common.copyUrl': 'URLをコピー',
-                'common.copyProxyUrl': 'プロキシURLをコピー',
-                'common.pluginRequired': 'プラグイン実行環境が必要',
-                'common.unsupported': '未対応',
-                'common.diagnose': '診断',
-                'common.healthCheck': '状態確認',
-                'common.validate': '確認',
-                'common.checking': '確認中',
-                'common.testing': 'テスト中',
-                'common.saving': '保存中',
-                'common.yes': 'はい',
-                'common.no': 'いいえ',
-                'common.gotIt': '了解',
-                'common.expand': '展開',
-                'common.collapse': '折りたたむ',
-                'common.loading': '読み込み中…',
-                'common.copy': 'コピー',
-                'search.noResults': '結果がありません：',
-                'search.noResultsHint': '別のキーワードを試すか、配信元を更新して自分のTVBox購読を追加してください。',
-                'search.diagnostics': '検索診断',
-                'search.diagnosticsDescription': '不明なプラグインを実行せず、内蔵検索、HTTP配信元、プラグイン型配信元、ローカルブリッジを確認します。',
-                'search.loadingDiagnostics': '診断情報を読み込み中…',
-                'search.builtIn': '内蔵検索',
-                'search.tvbox': 'TVBox検索',
-                'search.localBridge': 'ローカルJavaブリッジ',
-                'search.loadingMore': '配信元をさらに読み込み中…',
-                'search.searching': '検索中…',
-                'live.description': 'ユーザーが追加したTVBox、M3U、TXTのライブチャンネルを表示します。ヘッダーが必要なチャンネルはローカルプロキシを利用できます。',
-                'live.searchPlaceholder': 'ライブチャンネルを検索',
-                'live.favorites': 'お気に入り',
-                'live.channels': 'チャンネル',
-                'live.proxyRecommended': 'ヘッダーが必要なため、MPC/mpvではローカルプロキシを推奨',
-                'live.noFavorites': 'お気に入りはまだありません。',
-                'live.noChannels': 'ライブチャンネルが見つかりません。',
-                'live.onlyImported': 'ユーザーが追加したライブ購読のみ表示します。',
-                'live.playlistSupport': 'TXT / M3Uプレイリスト対応',
-                'live.importHint': '自分の購読URLからライブ配信元を追加してください。',
-                'guide.title': '初回設定ガイド',
-                'guide.description': 'Windowsデスクトップ再生を設定します。自分のTVBox購読を追加し、高画質4Kにはmpv.netまたはMPCを選び、信頼できる実行環境を設定するまでプラグイン型配信元を無効にします。',
-                'guide.importTitle': '購読を追加',
-                'guide.importDescription': '自分のTVBox JSON、M3U、TXT購読を追加します。プラグイン型配信元は識別のみで自動実行しません。',
-                'guide.playerTitle': 'mpv.netを設定',
-                'guide.playerDescription': '高ビットレート4K、HEVC、HDR、クラウドドライブにはmpv.netまたはMPCを使用します。',
-                'subscriptions.description': '自分のTVBox JSON URLまたはローカルJSONのみ追加してください。サイト、ライブ、解析、プラグイン情報は保存しますが、未知のcsp、jar、py、jsは自動実行しません。',
-                'subscriptions.urlPlaceholder': 'TVBox JSON購読URL',
-                'subscriptions.namePlaceholder': '購読名',
-                'subscriptions.import': '購読を追加',
-                'subscriptions.importing': '追加中…',
-                'subscriptions.importFile': 'ローカルJSONを追加',
-                'subscriptions.refreshAll': 'すべて更新',
-                'subscriptions.sites': 'サイト',
-                'subscriptions.live': 'ライブ',
-                'subscriptions.warehouses': '倉庫',
-                'subscriptions.expanded': '展開済み',
-                'subscriptions.plugin': 'プラグイン型',
-                'subscriptions.sourceSummary': '配信元の概要',
-                'subscriptions.pluginRuntimeNotice': 'この配信元にはCatVod/Spider実行環境が必要です。識別と管理はできますが、未知のプラグインコードは自動実行しません。',
-                'subscriptions.onlyUserProvided': 'ユーザーが追加した購読のみ保存します。',
-                'subscriptions.refreshed': '購読データを更新しました',
-                'subscriptions.urlRequired': 'TVBox JSON購読URLを入力してください',
-                'subscriptions.imported': '購読を追加しました',
-                'subscriptions.refreshFailed': '購読データの更新に失敗しました',
-                'subscriptions.operationFailed': '購読操作に失敗しました',
-                'settings.lastChecked': '最終確認',
-                'settings.version': 'バージョン',
-                'settings.sources': '配信元',
-                'settings.blockers': '問題',
-                'settings.warnings': '警告',
-                'settings.httpReady': 'HTTP利用可',
-                'settings.plugins': 'プラグイン型',
-                'settings.liveReady': 'ライブ利用可',
-                'settings.liveErrors': 'ライブエラー',
-                'settings.externalPlayer': '外部プレーヤー',
-                'settings.proxy': 'ローカルプロキシ',
-                'settings.nextActions': '次の操作',
-                'settings.readinessIssues': '環境の問題',
-                'settings.runSetupCheck': '環境を確認',
-                'settings.refreshReadiness': '状態を更新',
-                'settings.openSubscriptions': '購読を開く',
-                'settings.showGuide': 'ガイドを表示',
-                'settings.hideRandomTitle': 'ランダムおすすめを隠す',
-                'settings.hideRandomDescription': 'ホームのランダム欄だけを非表示にします。',
-                'settings.filterNsfwTitle': '成人向けコンテンツを除外',
-                'settings.filterNsfwDescription': '検索とおすすめから成人向けコンテンツをできるだけ隠します。',
-                'settings.mpcPathPlaceholder': 'MPC-HC / MPC-BE実行ファイル',
-                'settings.mpvPathPlaceholder': 'mpv / mpv.net実行ファイル',
-                'settings.defaultPlayer': '既定のプレーヤー',
-                'settings.internalPlayer': '内蔵プレーヤー',
-                'settings.startFullscreen': '全画面で開始',
-                'settings.closeAfterPlayback': '再生後に外部プレーヤーを閉じる',
-                'settings.useMpc4k': '4KにMPCを使用',
-                'settings.useMpcHevc': 'HEVC/H.265にMPCを使用',
-                'settings.useMpcHdr': 'HDRにMPCを使用',
-                'settings.useMpcCloud': 'クラウドドライブにMPCを使用',
-                'settings.useLocalProxy': 'ヘッダー再生にローカルプロキシを使用',
-                'settings.proxyPort': 'ローカルプロキシのポート',
-                'settings.save': '設定を保存',
-                'settings.proxyStatus': 'プロキシ状態',
-                'settings.checkPort': 'ポート確認',
-                'settings.rangeTest': 'Rangeテスト',
-                'settings.headTest': 'HEADテスト',
-                'settings.expiryTest': '期限テスト',
-                'settings.hlsTest': 'HLSテスト',
-                'settings.atAddress': 'アドレス',
-                'settings.configuredPort': '設定ポート',
-                'settings.enabled': '有効',
-                'settings.requestedPort': '要求ポート',
-                'settings.fallback': '代替',
-                'settings.activeEntries': '有効リンク',
-                'settings.expiredEntries': '期限切れリンク',
-                'settings.fallbackReason': '代替理由',
-                'settings.port': 'ポート',
-                'settings.saved': 'プレーヤー設定を保存しました',
-                'settings.statusLoaded': 'プロキシ状態を更新しました',
-                'settings.mpcDetected': 'MPCを検出しました',
-                'settings.mpcNotFound': 'MPCが見つかりません。手動で選択してください',
-                'settings.mpvDetected': 'mpv.netを検出しました',
-                'settings.mpvNotFound': 'mpv.netが見つかりません。手動で選択してください',
-                'plugin.title': 'TVBoxプラグイン実行環境',
-                'plugin.description': '信頼できるTVBoxプラグイン実行環境だけを設定します。Java CatVodブリッジは明示的に有効化して設定した場合のみ使用します。',
-                'plugin.enableBridge': '信頼できるローカルJava CatVodブリッジを有効化',
-                'plugin.javaPath': 'java.exeのパス（PATH設定済みなら省略可）',
-                'plugin.bridgeJarPath': 'CatVod Bridge jarのパス',
-                'plugin.spiderJarPath': '信頼できるローカルSpider jarのパス',
-                'plugin.spiderClass': '信頼できるSpiderクラス名',
-                'plugin.spiderExt': '信頼できるSpider拡張値（任意）',
-                'plugin.httpBridgeUrl': '外部HTTP Bridge URL（任意）',
-                'plugin.bridgePort': 'ローカルJavaブリッジのポート',
-                'plugin.localBridge': 'ローカルJavaブリッジ',
-                'plugin.notConfigured': '未設定',
-                'plugin.mode': 'モード',
-                'plugin.notBuilt': '未ビルド',
-                'plugin.trustedSpider': '信頼済みSpider',
-                'plugin.jarOk': 'jar正常',
-                'plugin.jarMissing': 'jarなし',
-                'plugin.classMissing': 'クラス未設定',
-                'plugin.checkJava': 'Javaを確認',
-                'plugin.checkHttp': 'HTTPブリッジを確認',
-                'plugin.build': 'Javaブリッジをビルド',
-                'plugin.start': 'ローカルブリッジを開始',
-                'plugin.refresh': 'ブリッジを更新',
-                'plugin.stop': 'ローカルブリッジを停止',
-                'plugin.save': 'プラグイン設定を保存',
-                'plugin.securityNotice': 'プラグイン実行環境は任意です。自分で設定して信頼できるローカルブリッジだけを有効にし、不明なTVBoxプラグインコードは自動実行しません。',
-                'footer.exitTv': 'TVモードを終了',
-                'footer.tvMode': 'TVモード',
-                'footer.logout': 'ログアウト',
-                'footer.dataCredit': '映像情報はTMDbとMacCMS APIから提供',
-                'detail.share': '共有',
-                'detail.cast': 'キャスト',
-                'detail.currentSource': '現在の配信元',
-                'detail.recommendedPlayer': '推奨外部プレーヤー',
-                'detail.playbackDiagnostics': '再生診断',
                 'status.ready': '準備完了',
-                'status.needsSetup': '設定が必要',
-                'status.running': '実行中',
-                'status.stopped': '停止中',
-                'status.available': '利用可',
-                'status.unavailable': '利用不可',
-                'status.passed': '成功',
-                'status.failed': '失敗'
-                ,'status.valid': '有効'
-                ,'status.missing': '不足'
-                ,'status.enabled': '有効'
-                ,'status.disabled': '無効'
-                ,'status.blocking': '要対応'
-                ,'status.warning': '警告'
-                ,'status.ok': '正常'
-                ,'status.needsAttention': '確認が必要'
+                'status.needsSetup': '設定が必要'
             }
         };
 
@@ -5924,7 +5317,6 @@
                     subscriptionName: '',
                     subscriptionLoading: false,
                     subscriptionError: '',
-                    subscriptionMessage: '',
                     subscriptions: [],
                     tvboxSources: [],
                     sourceDiagnostics: {},
@@ -5956,7 +5348,6 @@
                     },
                     playerSettingsSaving: false,
                     playerSettingsMessage: '',
-                    playerSettingsMessageType: 'success',
                     mpcValidation: null,
                     mpcValidationLoading: false,
                     mpvValidation: null,
@@ -6399,82 +5790,6 @@
                     const fallback = UI_TRANSLATIONS['en-US'];
                     return active[key] || fallback[key] || key;
                 },
-                localizeRuntimeText(value) {
-                    const text = String(value || '');
-                    if (!text || this.uiLanguage === 'en-US') return text;
-
-                    const dictionaries = {
-                        'zh-CN': {
-                            'Runtime config files': '运行时配置文件',
-                            'All runtime JSON files exist in userData.': '用户数据目录中的运行时 JSON 配置完整。',
-                            'User subscriptions': '用户订阅',
-                            'No user TVBox subscription has been imported yet.': '尚未导入用户自己的 TVBox 订阅。',
-                            'HTTP-ready sources': 'HTTP 可用源',
-                            'No TVBox HTTP-ready sources or live channels have been imported yet.': '尚未导入可直接使用的 TVBox HTTP 源或直播频道。',
-                            'External player': '外部播放器',
-                            'Default player': '默认播放器',
-                            'Default player is mpv.': '当前默认播放器为 mpv。',
-                            'LocalProxy': '本地代理',
-                            'LocalProxy is enabled for headers, Range, HLS, and external playback.': '本地代理已启用，可处理请求头、Range、HLS 与外部播放器。',
-                            'LocalProxy port': '本地代理端口',
-                            'Subscriptions': '订阅源',
-                            'Import your own TVBox JSON subscription.': '导入你自己的 TVBox JSON 订阅。',
-                            'Configure a valid mpv.net executable path.': '配置有效的 mpv.net 程序路径。',
-                            'Keep the fallback port behavior or change the LocalProxy port in Settings.': '保留自动备用端口，或在设置中更换本地代理端口。',
-                            'Import your own TVBox JSON subscription before testing playback.': '测试播放前，请先导入你自己的 TVBox JSON 订阅。',
-                            'Open Subscriptions to refresh sources, then try the search again.': '打开订阅源刷新数据，然后重新搜索。',
-                            'not-installed': '未安装'
-                        },
-                        'ja-JP': {
-                            'Runtime config files': '実行環境設定ファイル',
-                            'All runtime JSON files exist in userData.': 'ユーザーデータ内の実行環境JSON設定は揃っています。',
-                            'User subscriptions': 'ユーザー購読',
-                            'No user TVBox subscription has been imported yet.': 'ユーザーのTVBox購読はまだ追加されていません。',
-                            'HTTP-ready sources': 'HTTP利用可能な配信元',
-                            'No TVBox HTTP-ready sources or live channels have been imported yet.': '利用可能なTVBox HTTP配信元またはライブチャンネルはまだありません。',
-                            'External player': '外部プレーヤー',
-                            'Default player': '既定のプレーヤー',
-                            'Default player is mpv.': '既定のプレーヤーはmpvです。',
-                            'LocalProxy': 'ローカルプロキシ',
-                            'LocalProxy is enabled for headers, Range, HLS, and external playback.': 'ローカルプロキシはヘッダー、Range、HLS、外部再生に有効です。',
-                            'LocalProxy port': 'ローカルプロキシのポート',
-                            'Subscriptions': '購読',
-                            'Import your own TVBox JSON subscription.': '自分のTVBox JSON購読を追加してください。',
-                            'Configure a valid mpv.net executable path.': '有効なmpv.net実行ファイルを設定してください。',
-                            'Keep the fallback port behavior or change the LocalProxy port in Settings.': '自動代替ポートを使うか、設定でポートを変更してください。',
-                            'Import your own TVBox JSON subscription before testing playback.': '再生テスト前に自分のTVBox JSON購読を追加してください。',
-                            'Open Subscriptions to refresh sources, then try the search again.': '購読を開いて更新し、もう一度検索してください。',
-                            'not-installed': '未インストール'
-                        }
-                    };
-
-                    const dictionary = dictionaries[this.uiLanguage] || {};
-                    if (dictionary[text]) return dictionary[text];
-
-                    if (this.uiLanguage === 'zh-CN') {
-                        let match = text.match(/^(.+): mpv\/mpv\.net executable path is not configured\.$/);
-                        if (match) return `${match[1]}：尚未配置 mpv/mpv.net 程序路径。`;
-                        match = text.match(/^Port (\d+) is currently unavailable; the app will try nearby fallback ports\.$/);
-                        if (match) return `端口 ${match[1]} 当前不可用，应用会尝试附近的备用端口。`;
-                        match = text.match(/^Port (\d+) is unavailable; playback can still try fallback ports\.$/);
-                        if (match) return `端口 ${match[1]} 不可用，播放时仍可尝试备用端口。`;
-                        match = text.match(/^Port (\d+) is available before LocalProxy starts\.$/);
-                        if (match) return `端口 ${match[1]} 当前可用，可启动本地代理。`;
-                    }
-
-                    if (this.uiLanguage === 'ja-JP') {
-                        let match = text.match(/^(.+): mpv\/mpv\.net executable path is not configured\.$/);
-                        if (match) return `${match[1]}：mpv/mpv.net実行ファイルが未設定です。`;
-                        match = text.match(/^Port (\d+) is currently unavailable; the app will try nearby fallback ports\.$/);
-                        if (match) return `ポート${match[1]}は使用できないため、近くの代替ポートを試します。`;
-                        match = text.match(/^Port (\d+) is unavailable; playback can still try fallback ports\.$/);
-                        if (match) return `ポート${match[1]}は使用できませんが、再生時に代替ポートを試せます。`;
-                        match = text.match(/^Port (\d+) is available before LocalProxy starts\.$/);
-                        if (match) return `ポート${match[1]}は使用可能で、ローカルプロキシを開始できます。`;
-                    }
-
-                    return text;
-                },
                 changeUiLanguage() {
                     if (!['zh-CN', 'en-US', 'ja-JP'].includes(this.uiLanguage)) {
                         this.uiLanguage = 'zh-CN';
@@ -6485,12 +5800,6 @@
                     } catch (error) {
                         console.error('[Settings] Failed to save UI language', error);
                     }
-                },
-                closeAppPanel(panel) {
-                    if (panel === 'live') this.showLivePanel = false;
-                    if (panel === 'subscriptions') this.showSubscriptionPanel = false;
-                    if (panel === 'settings') this.showSettingsModal = false;
-                    this.activeAppleNav = 'home';
                 },
                 isTvboxSource(source) {
                     return !!(source && (source.source_origin === 'tvbox' || String(source.site_key || '').startsWith('tvbox:')));
@@ -6644,19 +5953,14 @@
                     });
                 },
 
-                async loadSubscriptionData(options = {}) {
-                    const feedback = !!options.feedback;
-                    this.subscriptionError = '';
-                    if (feedback) this.subscriptionMessage = this.t('common.refreshing');
+                async loadSubscriptionData() {
                     try {
+                        this.subscriptionError = 'Subscription operation failed';
                         const [subRes, sourceRes, groupRes] = await Promise.all([
                             fetch('/api/subscriptions'),
                             fetch('/api/sources'),
                             fetch('/api/live/groups')
                         ]);
-                        if (!subRes.ok || !sourceRes.ok || !groupRes.ok) {
-                            throw new Error(this.t('subscriptions.refreshFailed'));
-                        }
                         const subData = await subRes.json();
                         const sourceData = await sourceRes.json();
                         const groupData = await groupRes.json();
@@ -6668,13 +5972,8 @@
                         if (typeof this.loadDesktopStatus === 'function') {
                             await this.loadDesktopStatus();
                         }
-                        if (feedback) {
-                            this.subscriptionMessage = this.t('subscriptions.refreshed');
-                            this.showMiniToast && this.showMiniToast(this.t('subscriptions.refreshed'));
-                        }
                     } catch (error) {
-                        this.subscriptionMessage = '';
-                        this.subscriptionError = error.message || this.t('subscriptions.refreshFailed');
+                        this.subscriptionError = error.message || 'Subscription operation failed';
                     }
                 },
 
@@ -6733,13 +6032,11 @@
                 async importTvboxSubscription() {
                     const url = (this.subscriptionUrl || '').trim();
                     if (!url) {
-                        this.subscriptionMessage = '';
-                        this.subscriptionError = this.t('subscriptions.urlRequired');
+                        this.subscriptionError = 'Subscription operation failed';
                         return;
                     }
                     this.subscriptionLoading = true;
-                    this.subscriptionError = '';
-                    this.subscriptionMessage = this.t('subscriptions.importing');
+                    this.subscriptionError = 'Subscription operation failed';
                     try {
                         const response = await fetch('/api/subscriptions/import', {
                             method: 'POST',
@@ -6754,11 +6051,9 @@
                         this.subscriptionUrl = '';
                         this.subscriptionName = '';
                         await this.loadSubscriptionData();
-                        this.subscriptionMessage = this.t('subscriptions.imported');
-                        this.showMiniToast && this.showMiniToast(this.t('subscriptions.imported'));
+                        this.showMiniToast && this.showMiniToast('Done');
                     } catch (error) {
-                        this.subscriptionMessage = '';
-                        this.subscriptionError = error.message || this.t('subscriptions.operationFailed');
+                        this.subscriptionError = error.message || 'Subscription operation failed';
                     } finally {
                         this.subscriptionLoading = false;
                     }
@@ -6770,8 +6065,7 @@
                     if (!file) return;
 
                     this.subscriptionLoading = true;
-                    this.subscriptionError = '';
-                    this.subscriptionMessage = this.t('subscriptions.importing');
+                    this.subscriptionError = 'Subscription operation failed';
                     try {
                         const text = await file.text();
                         let config;
@@ -6798,11 +6092,9 @@
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.subscriptionName = '';
                         await this.loadSubscriptionData();
-                        this.subscriptionMessage = this.t('subscriptions.imported');
-                        this.showMiniToast && this.showMiniToast(this.t('subscriptions.imported'));
+                        this.showMiniToast && this.showMiniToast('Done');
                     } catch (error) {
-                        this.subscriptionMessage = '';
-                        this.subscriptionError = error.message || this.t('subscriptions.operationFailed');
+                        this.subscriptionError = error.message || 'Subscription operation failed';
                     } finally {
                         this.subscriptionLoading = false;
                         if (input) input.value = '';
@@ -6981,7 +6273,6 @@
                 },
 
                 async loadPlayerSettings() {
-                    this.playerSettingsMessage = '';
                     try {
                         const response = await fetch('/api/player/settings');
                         const data = await response.json();
@@ -6990,7 +6281,6 @@
                         }
                     } catch (error) {
                         this.playerSettingsMessage = error.message || 'Player settings operation failed';
-                        this.playerSettingsMessageType = 'error';
                     }
                     this.loadPluginRuntimeSettings();
                     this.loadProxyStatus();
@@ -6999,8 +6289,7 @@
 
                 async savePlayerSettings() {
                     this.playerSettingsSaving = true;
-                    this.playerSettingsMessage = this.t('common.saving');
-                    this.playerSettingsMessageType = 'success';
+                    this.playerSettingsMessage = 'Player settings updated';
                     try {
                         const response = await fetch('/api/player/settings', {
                             method: 'PATCH',
@@ -7018,32 +6307,27 @@
                         this.proxyM3u8Test = null;
                         await this.loadProxyStatus();
                         await this.loadDesktopStatus();
-                        this.playerSettingsMessage = this.t('settings.saved');
-                        this.playerSettingsMessageType = 'success';
-                        this.showMiniToast && this.showMiniToast(this.t('settings.saved'));
+                        this.playerSettingsMessage = 'Player settings updated';
                     } catch (error) {
                         this.playerSettingsMessage = error.message || 'Player settings operation failed';
-                        this.playerSettingsMessageType = 'error';
                     } finally {
                         this.playerSettingsSaving = false;
                     }
                 },
 
                 async detectMpcPath() {
-                    this.playerSettingsMessage = this.t('common.checking');
-                    this.playerSettingsMessageType = 'success';
+                    this.playerSettingsMessage = 'Player settings updated';
                     try {
                         const response = await fetch('/api/player/detect-mpc', { method: 'POST' });
                         const data = await response.json();
                         if (data.found && data.recommended) {
                             this.playerSettings.mpcExePath = data.recommended;
-                            this.playerSettingsMessage = `${this.t('settings.mpcDetected')}: ${data.recommended}`;
+                            this.playerSettingsMessage = 'Player settings updated';
                         } else {
-                            this.playerSettingsMessage = this.t('settings.mpcNotFound');
+                            this.playerSettingsMessage = 'Player settings updated';
                         }
                     } catch (error) {
                         this.playerSettingsMessage = error.message || 'Player settings operation failed';
-                        this.playerSettingsMessageType = 'error';
                     }
                 },
 
@@ -7074,8 +6358,6 @@
                 },
 
                 async detectMpvPath() {
-                    this.playerSettingsMessage = this.t('common.checking');
-                    this.playerSettingsMessageType = 'success';
                     try {
                         const response = await fetch('/api/player/detect-mpv', { method: 'POST' });
                         const data = await response.json();
@@ -7083,13 +6365,12 @@
                         if (data.found && data.recommended) {
                             this.playerSettings.mpvExePath = data.recommended;
                             this.playerSettings.defaultPlayer = 'mpv';
-                            this.playerSettingsMessage = `${this.t('settings.mpvDetected')}: ${data.recommended}`;
+                            this.playerSettingsMessage = 'Player settings updated';
                         } else {
-                            this.playerSettingsMessage = this.t('settings.mpvNotFound');
+                            this.playerSettingsMessage = 'Player settings updated';
                         }
                     } catch (error) {
                         this.playerSettingsMessage = error.message || 'Player settings operation failed';
-                        this.playerSettingsMessageType = 'error';
                     }
                 },
 
@@ -7119,21 +6400,13 @@
                     }
                 },
 
-                async loadProxyStatus(showFeedback = false) {
+                async loadProxyStatus() {
                     this.proxyStatusLoading = true;
-                    if (showFeedback) {
-                        this.playerSettingsMessage = this.t('common.checking');
-                        this.playerSettingsMessageType = 'success';
-                    }
                     try {
                         const response = await fetch('/api/player/proxy-status');
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.proxyStatus = data;
-                        if (showFeedback) {
-                            this.playerSettingsMessage = this.t('settings.statusLoaded');
-                            this.showMiniToast && this.showMiniToast(this.t('settings.statusLoaded'));
-                        }
                     } catch (error) {
                         this.proxyStatus = {
                             settings: {
@@ -7152,10 +6425,6 @@
                             },
                             error: error.message || 'Operation failed'
                         };
-                        if (showFeedback) {
-                            this.playerSettingsMessage = error.message || 'Operation failed';
-                            this.playerSettingsMessageType = 'error';
-                        }
                     } finally {
                         this.proxyStatusLoading = false;
                     }

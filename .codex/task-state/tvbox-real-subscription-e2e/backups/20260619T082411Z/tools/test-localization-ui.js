@@ -55,7 +55,7 @@ async function readUi(win) {
         nav: Array.from(document.querySelectorAll('.appletv-nav-item span'))
             .map(node => node.textContent.trim()),
         searchPlaceholder: document.querySelector('.search-input')?.getAttribute('placeholder') || '',
-        settingsTitle: document.querySelector('.info-modal h2')?.textContent.trim() || '',
+        settingsTitle: document.querySelector('.info-modal h3')?.textContent.trim() || '',
         languageOptions: Array.from(document.querySelectorAll('.info-modal select option'))
             .slice(0, 3)
             .map(node => node.textContent.trim()),
@@ -71,51 +71,6 @@ function verifyLanguage(language, state) {
     assert.equal(state.searchPlaceholder, expected[language].searchPlaceholder);
     assert.equal(state.settingsTitle, expected[language].settingsTitle);
     assert.deepEqual(state.languageOptions, ['简体中文', 'English', '日本語']);
-}
-
-async function verifyChineseInteractions(win) {
-    await setLanguage(win, 'zh-CN');
-    const settings = await win.webContents.executeJavaScript(`(() => ({
-        back: document.querySelector('[data-testid="settings-back"]')?.textContent.trim() || '',
-        text: document.querySelector('.info-modal')?.innerText || '',
-        misleadingToggle: (document.querySelector('.info-modal')?.innerText || '').includes('Prefer external player for heavy streams')
-    }))()`);
-    assert.equal(settings.back, '返回');
-    assert.match(settings.text, /隐藏随机推荐栏目/);
-    assert.match(settings.text, /过滤成人内容/);
-    assert.match(settings.text, /外部播放器/);
-    assert.match(settings.text, /保存设置/);
-    assert.equal(settings.misleadingToggle, false);
-    assert.doesNotMatch(settings.text, /Runtime config files|No user TVBox subscription|Prefer external player|Save settings|Proxy status/);
-
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="proxy-status"]').click()`);
-    await waitFor(win, `window.vueApp.playerSettingsMessage === '代理状态已更新'`);
-
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="settings-back"]').click()`);
-    await waitFor(win, '!window.vueApp.showSettingsModal');
-
-    await win.webContents.executeJavaScript(`(() => {
-        window.vueApp.showSubscriptionPanel = true;
-        window.vueApp.loadSubscriptionData();
-    })()`);
-    await waitFor(win, 'document.querySelector("[data-testid=\\"subscription-back\\"]")');
-    await waitFor(win, '!window.vueApp.subscriptionLoading');
-    const subscription = await win.webContents.executeJavaScript(`(() => ({
-        back: document.querySelector('[data-testid="subscription-back"]')?.textContent.trim() || '',
-        text: document.querySelector('.info-modal')?.innerText || '',
-        error: window.vueApp.subscriptionError
-    }))()`);
-    assert.equal(subscription.back, '返回');
-    assert.match(subscription.text, /仅导入你自己的 TVBox JSON 地址/);
-    assert.match(subscription.text, /导入订阅/);
-    assert.match(subscription.text, /全部刷新/);
-    assert.equal(subscription.error, '');
-
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="subscription-refresh"]').click()`);
-    await waitFor(win, `window.vueApp.subscriptionMessage === '订阅数据已刷新'`);
-
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="subscription-back"]').click()`);
-    await waitFor(win, '!window.vueApp.showSubscriptionPanel');
 }
 
 app.whenReady().then(async () => {
@@ -142,7 +97,6 @@ app.whenReady().then(async () => {
             verifyLanguage(language, results[language]);
         }
 
-        await verifyChineseInteractions(win);
         await setLanguage(win, 'zh-CN');
         console.log(JSON.stringify({
             ok: true,

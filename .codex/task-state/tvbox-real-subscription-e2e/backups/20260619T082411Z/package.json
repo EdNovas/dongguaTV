@@ -1,0 +1,93 @@
+{
+  "name": "dongguatv-enhanced-desktop",
+  "version": "1.0.54",
+  "description": "Windows desktop Apple TV style DongguaTV client with TVBox subscription intake and mpv.net playback support.",
+  "author": "DongguaTV Enhanced",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "desktop": "electron .",
+    "build": "node --check server.js && node --check main.js && node --check tools/catvod-bridge/server.js && node --check tools/catvod-bridge/javaBridgeSupervisor.js",
+    "dist": "electron-builder --win",
+    "dist:desktop": "electron-builder --win",
+    "bridge:catvod": "node tools/catvod-bridge/server.js",
+    "bridge:catvod:check": "node --check tools/catvod-bridge/server.js && node --check tools/catvod-bridge/javaBridgeSupervisor.js",
+    "bridge:java:build": "powershell -ExecutionPolicy Bypass -File tools/catvod-runtime-bridge-java/build.ps1",
+    "test:tvbox-parser": "node tools/test-tvbox-parser.js",
+    "test:tvbox-real-qa": "node tools/test-tvbox-real-qa.js",
+    "test:player-upstream": "node tools/test-player-upstream.js",
+    "test:player-stack": "node tools/test-player-stack.js",
+    "test:playback-ui": "electron tools/test-playback-ui.js",
+    "test:localization-ui": "electron tools/test-localization-ui.js"
+  },
+  "dependencies": {
+    "@capacitor/screen-orientation": "^8.0.0",
+    "@capacitor/status-bar": "^8.0.0",
+    "axios": "^1.6.0",
+    "better-sqlite3": "^12.5.0",
+    "body-parser": "^1.20.2",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.2.1",
+    "node-cache": "^5.1.2"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "electron": "^32.3.3",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.donggua.tv.enhanced",
+    "productName": "DongguaTV Enhanced",
+    "directories": {
+      "output": "dist-desktop"
+    },
+    "files": [
+      "api/**",
+      "server/**",
+      "public/**",
+      "server.js",
+      "main.js",
+      "proxy-server.js",
+      "db.template.json",
+      "cloudflare-*.js",
+      ".env.example",
+      "package.json",
+      "node_modules/**"
+    ],
+    "extraResources": [
+      {
+        "from": "tools/catvod-bridge",
+        "to": "catvod-bridge",
+        "filter": [
+          "**/*",
+          "!bridge-config.json"
+        ]
+      },
+      {
+        "from": "tools/catvod-runtime-bridge-java",
+        "to": "catvod-runtime-bridge-java",
+        "filter": [
+          "**/*",
+          "!build/**",
+          "!dist/**"
+        ]
+      },
+      {
+        "from": "docs",
+        "to": "docs",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}
