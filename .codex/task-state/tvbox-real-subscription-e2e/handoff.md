@@ -73,3 +73,7 @@
 - Search diagnostics stale-English report was traced to Service Worker `v25` returning cached HTML. Cache version is now `v26`, and navigation HTML uses network-first behavior.
 - The search diagnostics card now reuses `handleAppleNav` for Subscriptions and Settings, matching the working sidebar path.
 - Modal Back buttons are fixed to the viewport so they remain visible on long settings content.
+- All homepage resources now use newest-first ordering. The first three rails are `最近更新`, `最新电影`, and `最新剧集`; category rails, hero content, and search groups share the same date-priority rule.
+- Cards display complete release/first-air dates instead of year-only labels.
+- `npm run test:newest-order-ui`, `npm run test:localization-ui`, and `npm run build` pass.
+- Visible browser verification checked all 20 loaded rails: 20 descending, 0 failures.

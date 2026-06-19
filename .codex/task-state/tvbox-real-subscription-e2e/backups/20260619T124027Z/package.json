@@ -19,8 +19,7 @@
     "test:player-upstream": "node tools/test-player-upstream.js",
     "test:player-stack": "node tools/test-player-stack.js",
     "test:playback-ui": "electron tools/test-playback-ui.js",
-    "test:localization-ui": "electron tools/test-localization-ui.js",
-    "test:newest-order-ui": "electron tools/test-newest-order-ui.js"
+    "test:localization-ui": "electron tools/test-localization-ui.js"
   },
   "dependencies": {
     "@capacitor/screen-orientation": "^8.0.0",

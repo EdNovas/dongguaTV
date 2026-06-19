@@ -74,3 +74,21 @@ Localization files: `public/index.html`, `tools/test-localization-ui.js`, and `p
 | 2026-06-19T10:56:00Z | Service Worker cache upgrade | pass | Cache version advanced from `v25` to `v26`; HTML navigation changed to network-first so UI updates no longer remain hidden behind stale cached pages |
 | 2026-06-19T10:58:00Z | `npm.cmd run test:localization-ui` | pass | Real no-result search flow and diagnostic interaction assertions passed for Chinese, alongside English/Japanese switching checks |
 | 2026-06-19T10:58:00Z | `npm.cmd run build` | pass | Build now includes syntax validation for `public/sw.js` |
+
+## Newest-First Resource Ordering Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-19T12:40:27Z | Scoped rollback snapshot | pass | Snapshot `20260619T124027Z` captured `public/index.html`, `server.js`, and `package.json` |
+| 2026-06-19T12:48:00Z | `npm run test:newest-order-ui` | pass | Verified date parsing, deduplication, newest-first sorting, search-group ordering, and all 20 row configs fixed to `newest` |
+| 2026-06-19T12:49:00Z | `npm run test:localization-ui` | pass | Chinese, English, and Japanese UI regression remained green |
+| 2026-06-19T12:52:00Z | `npm run build` | pass | Server, Electron main process, Service Worker, and CatVod bridge syntax checks passed |
+| 2026-06-19T12:54:00Z | Visible in-app browser review at `http://127.0.0.1:31386/` | pass | Homepage labels changed to `最近更新`, `最新电影`, and `最新剧集`; cards display full `YYYY-MM-DD` dates |
+| 2026-06-19T12:55:00Z | Browser DOM check across all resource rails | pass | 20 rows checked, 0 failures; every loaded row was descending by full release/first-air date |
+
+Ordering behavior:
+
+- Homepage hero, mixed updates, movies, series, and all category rails use release/first-air date descending.
+- Load-more results are merged, deduplicated, and sorted again.
+- Search groups use `vod_time`, `vod_pubdate`, `vod_addtime`, then `vod_year`; undated results remain available but sort after dated results.
+- Third-party source dates are stored as metadata only; no source URL is hardcoded.

@@ -3442,12 +3442,13 @@
                     <div class="section-title">
                         <!-- 婵犵數鍋涢顓熸叏閹绢喖绠犻幖鎼厛閺佸銇勯弮鍌氫壕闁?sortMode 闂?discover 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷槈濮橆厼浠忓銈嗗姧缁犳垿宕ｆ繝鍥ㄧ厱闁圭偓銇炲鎺斿垝閻㈠憡鈷戦柛娑橈工缁楁帗绻涚拠褏鐣遍柣锝囧厴瀵濡烽妷褍鈧偤姊虹紒妯哄Е闁告挻鐩畷?-->
                         <i :class="['fas', config.icon, config.sortMode ? 'sort-toggle-icon' : '', config.sortMode]"
-                            :style="{ cursor: 'default' }"
-                            :title="config.sortMode ? t('sort.newestFirst') : ''"></i>
+                            @click.stop="config.sortMode ? toggleSortMode(key) : null"
+                            :style="{ cursor: config.sortMode ? 'pointer' : 'default' }"
+                            :title="config.sortMode ? ('Sort: ' + (config.sortMode === 'newest' ? 'Newest' : 'Popular')) : ''"></i>
                         {{ t(config.titleKey) }}
                         <!-- 婵犵數鍋涢顓熸叏閹绢喖绠犻幖鎼厛閺?discover 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷槈濮橆厼浠忓銈嗗姧缁犳垿宕ｆ繝鍥ㄧ厱闁圭偓銇炲鎺斿垝閻㈠憡鈷戦柛锔诲幖閸斿鎮介娑樼闁兼椽浜堕、姗€鎮╅崘鍙夌€梻浣告贡閸庛倝骞愭ィ鍐ㄥ瀭?-->
-                        <span v-if="config.sortMode" class="sort-indicator">
-                            {{ t('sort.new') }}
+                        <span v-if="config.sortMode && config.path.includes('/discover/')" class="sort-indicator">
+                            {{ config.sortMode === 'newest' ? t('sort.new') : t('sort.hot') }}
                         </span>
                     </div>
                     <span class="expand-toggle" :class="{ expanded: expandedRows[key] }" @click="toggleRowExpand(key)"
@@ -3467,7 +3468,6 @@
                         <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]" aria-label="Scroll left"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                         <div class="hot-row" :ref="key" @scroll="onRowScroll(key)">
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
-                                :data-release-date="item.release_date || item.first_air_date || ''"
                                 @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
                                 <div class="poster-wrap">
                                     <img :src="getPosterUrl(item.poster_path)" loading="lazy"
@@ -3477,7 +3477,8 @@
                                         ? item.vote_average.toFixed(1) : 'N/A' }}</div>
                                 </div>
                                 <div class="movie-name">{{ item.title || item.name }}</div>
-                                <div class="movie-date">{{ item.release_date || item.first_air_date || '' }}
+                                <div class="movie-date">{{ (item.release_date || item.first_air_date ||
+                                    '').split('-')[0] }}
                                 </div>
                             </div>
                         </div>
@@ -3486,7 +3487,6 @@
                     <!-- 闂備浇顕х换鎺楀磻閻愯娲冀椤愶綆娼熼梺纭呮彧闂勫嫰宕戦幇鐗堢厾闁告縿鍎洪弳顖炴煕鐎ｎ偅灏扮紒妤冨枑缁绘繈宕熼鐘茬倞闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ€儱顭跨捄铏圭伇缁鹃箖绠栭弻鐔衡偓鐢殿焾娴犙冾熆鐟欏嫬濮嶉柟顔荤矙椤㈡稑顫濋浣诡唲闂?-->
                     <div class="grid-expanded" v-show="expandedRows[key]">
                         <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id"
-                            :data-release-date="item.release_date || item.first_air_date || ''"
                             @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
                             <div class="poster-wrap">
                                 <img :src="getPosterUrl(item.poster_path)"
@@ -3495,7 +3495,7 @@
                                     ? item.vote_average.toFixed(1) : 'N/A' }}</div>
                             </div>
                             <div class="movie-name">{{ item.title || item.name }}</div>
-                            <div class="movie-date">{{ item.release_date || item.first_air_date || '' }}
+                            <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0] }}
                             </div>
                         </div>
                         <!-- 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ€儱顭块懜闈涘缂佺姴纾幉绋款吋婢跺﹥妲┑掳鍊曢幊搴ｇ矆?-->
@@ -5181,9 +5181,9 @@
                 'feature.sourcesMeta': '管理 TVBox 与本地订阅源',
                 'feature.playerTitle': '播放器',
                 'feature.playerMeta': '外部播放器与播放偏好',
-                'row.random': '最近更新',
-                'row.movies': '最新电影',
-                'row.series': '最新剧集',
+                'row.random': '随机推荐',
+                'row.movies': '热门电影',
+                'row.series': '热门剧集',
                 'row.chinese': '国产剧集',
                 'row.us': '欧美剧集',
                 'row.krjp': '日韩剧集',
@@ -5203,7 +5203,6 @@
                 'row.history': '历史',
                 'sort.new': '最新',
                 'sort.hot': '热门',
-                'sort.newestFirst': '按最新时间排列',
                 'subscriptions.title': '订阅源',
                 'settings.title': '播放器与应用设置',
                 'settings.language': '界面语言',
@@ -5428,9 +5427,9 @@
                 'feature.sourcesMeta': 'Manage TVBox and local sources',
                 'feature.playerTitle': 'Player',
                 'feature.playerMeta': 'External players and playback preferences',
-                'row.random': 'Recent Updates',
-                'row.movies': 'Latest Movies',
-                'row.series': 'Latest Series',
+                'row.random': 'Random Picks',
+                'row.movies': 'Hot Movies',
+                'row.series': 'Hot Series',
                 'row.chinese': 'Chinese Series',
                 'row.us': 'US Series',
                 'row.krjp': 'Korean and Japanese Series',
@@ -5450,7 +5449,6 @@
                 'row.history': 'History',
                 'sort.new': 'NEW',
                 'sort.hot': 'HOT',
-                'sort.newestFirst': 'Newest first',
                 'subscriptions.title': 'Subscriptions',
                 'settings.title': 'Player and App Settings',
                 'settings.language': 'Interface language',
@@ -5675,9 +5673,9 @@
                 'feature.sourcesMeta': 'TVBox とローカル配信元を管理',
                 'feature.playerTitle': 'プレーヤー',
                 'feature.playerMeta': '外部プレーヤーと再生設定',
-                'row.random': '最近の更新',
-                'row.movies': '最新映画',
-                'row.series': '最新ドラマ',
+                'row.random': 'ランダムおすすめ',
+                'row.movies': '人気映画',
+                'row.series': '人気ドラマ',
                 'row.chinese': '中国ドラマ',
                 'row.us': '欧米ドラマ',
                 'row.krjp': '韓国・日本ドラマ',
@@ -5697,7 +5695,6 @@
                 'row.history': '歴史',
                 'sort.new': '最新',
                 'sort.hot': '人気',
-                'sort.newestFirst': '新しい順',
                 'subscriptions.title': '配信元',
                 'settings.title': 'プレーヤーとアプリ設定',
                 'settings.language': '表示言語',
@@ -6094,9 +6091,9 @@
                     viewPages: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮堕悧鐘诲箚閸繍鍚嬮柛婊€绀佸▓銊╂⒑闁偛鑻晶瀵糕偓娈垮櫘閸ｏ絽鐣峰鍕闁革富鍘藉▓鎼佹⒒娴ｅ憡鎯堥悶姘煎亰瀹曟洟宕樼拠褑鈧潡鏌涘☉鍗炴灁濞存粍绮撻弻锝夊閵忊剝姣勯梺?{ movieRow: 1, ... }
                     pageLoadingKeys: {}, // 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柛顐ｆ处閺佸棙绻涢幋娆忕仾闁绘挸鍊婚埀顒€绠嶉崕閬嶅箯鐎ｎ€絾绻濆鍗炲絼闂佹悶鍎村▔娑欑娴煎瓨鐓冪憸婊堝礈濞戙垹绐楅柟鎹愵嚙绾惧鏌ㄥ┑鍡╂Ц缂佲偓閸曨垱鍋ｉ柛銉ｅ妼缁茬粯銇勯顒傜М鐎?{ movieRow: true, ... }
                     rowConfigs: {
-                        randomRow: { titleKey: 'row.random', icon: 'fa-clock', path: 'MIXED', params: '', page: 1, sortMode: 'newest' },
-                        movieRow: { titleKey: 'row.movies', icon: 'fa-film', path: '/discover/movie', params: '', page: 1, sortMode: 'newest' },
-                        tvRow: { titleKey: 'row.series', icon: 'fa-tv', path: '/discover/tv', params: '', page: 1, sortMode: 'newest' },
+                        randomRow: { titleKey: 'row.random', icon: 'fa-random', path: 'MIXED', params: '', page: 1 },
+                        movieRow: { titleKey: 'row.movies', icon: 'fa-film', path: '/trending/movie/week', params: '', page: 1 },
+                        tvRow: { titleKey: 'row.series', icon: 'fa-tv', path: '/trending/tv/week', params: '', page: 1 },
                         cnRow: { titleKey: 'row.chinese', icon: 'fa-dragon', path: '/discover/tv', params: 'with_origin_country=CN', page: 1, sortMode: 'newest' },
                         usRow: { titleKey: 'row.us', icon: 'fa-flag-usa', path: '/discover/tv', params: 'with_origin_country=US', page: 1, sortMode: 'newest' },
                         krjpRow: { titleKey: 'row.krjp', icon: 'fa-mask', path: '/discover/tv', params: 'with_origin_country=KR|JP', page: 1, sortMode: 'newest' },
@@ -6349,17 +6346,7 @@
                     const groups = {};
                     this.rawList.forEach(item => {
                         const name = item.vod_name;
-                        if (!groups[name]) {
-                            groups[name] = {
-                                name: name,
-                                pic: item.vod_pic,
-                                sources: [],
-                                newestTime: this.mediaDateValue(item),
-                                year: item.vod_year || ''
-                            };
-                        }
-                        groups[name].newestTime = Math.max(groups[name].newestTime, this.mediaDateValue(item));
-                        if (!groups[name].year && item.vod_year) groups[name].year = item.vod_year;
+                        if (!groups[name]) groups[name] = { name: name, pic: item.vod_pic, sources: [] };
                         const isDefault = (url) => !url || url.includes('mac_default') || url.includes('nopic');
                         if (isDefault(groups[name].pic) && !isDefault(item.vod_pic)) groups[name].pic = item.vod_pic;
                         // 濠电姷鏁搁崑娑⑺囨禒瀣亗濠㈣泛鏈～鏇灻归崗鍏肩稇闁绘劕锕弻娑㈠箻濡も偓閸犳岸寮抽鍕拺闁硅偐鍋涢崝銈夋煕鐎ｃ劌鈧繈宕洪埀顒併亜閹达絾顥夊ù?handleImgError)闂佽娴烽幊鎾诲箟闄囬妵鎰板礃椤帟鈧寧銇勮箛鎾跺缂佺姾顫夌换婵囩節閸屾稑娅ｉ梺?onmessage 婵犵數鍋為崹鍫曞箹閳哄懎鍌ㄩ柣锝呭閸嬫捇宕归銈囩厜閻庢鍣崜鐔奉嚕閸洖鍨傛い鏃€鍎崇敮鎾绘⒑閸濆嫷妲搁柣妤€妫欓弲鍫曟寠婢跺棙鐏侀梺鐟邦嚟閸嬫垶绂嶅鍫熺厽闁绘梻鍘ф禍鐗堜繆閺屻儰鎲鹃柡宀嬬秮閹瑩宕ｆ径娑氬窛缂?
@@ -6370,11 +6357,7 @@
                             latency: item.latency || 999
                         });
                     });
-                    return Object.values(groups).sort((a, b) => {
-                        return b.newestTime - a.newestTime
-                            || b.sources.length - a.sources.length
-                            || String(a.name || '').localeCompare(String(b.name || ''), this.uiLanguage);
-                    });
+                    return Object.values(groups).sort((a, b) => b.sources.length - a.sources.length);
                 },
                 // 闂傚倸顭崑鍕归崒鐐茬；濠电姴娲ら悞鍨亜閹烘垵鈧悂寮搁弮鍫熺厱闁靛牆鎳忛幑锝夋煙?(闂佽娴烽崑锝夊磹閺嶎厼纾块柤娴嬫櫆瀹?< 600ms)
                 fastSources() {
@@ -9182,61 +9165,6 @@
                 },
 
                 // 闂傚倷绀侀幉鈥愁潖缂佹ɑ鍙忛柟顖ｇ亹瑜版帒鐐婃い鎺嗗亾缁绢厸鍋撻梻浣告惈濞诧箑鐣濋幖浣稿惞閻庯綆鍋呴崣蹇涙煙閻戞ɑ灏甸柣顓烇功閳ь剝顫夊ú婊堝窗閺嵮屽殨妞ゆ劧闄勯崑瀣煕椤愶絿绠橀柕?
-                mediaDateValue(item) {
-                    if (!item) return 0;
-                    const candidates = [
-                        item.release_date,
-                        item.first_air_date,
-                        item.vod_time,
-                        item.vod_pubdate,
-                        item.vod_addtime,
-                        item.vod_year,
-                        item.year
-                    ];
-
-                    for (const value of candidates) {
-                        if (value === null || value === undefined || value === '') continue;
-                        if (typeof value === 'number' || /^\d{10,13}$/.test(String(value).trim())) {
-                            const numeric = Number(value);
-                            if (Number.isFinite(numeric) && numeric > 1000000000) {
-                                return numeric < 100000000000 ? numeric * 1000 : numeric;
-                            }
-                        }
-
-                        const text = String(value).trim();
-                        const parsed = Date.parse(text);
-                        if (!Number.isNaN(parsed)) return parsed;
-                        const yearMatch = text.match(/\b(19|20)\d{2}\b/);
-                        if (yearMatch) return Date.UTC(Number(yearMatch[0]), 0, 1);
-                    }
-                    return 0;
-                },
-
-                mediaIdentity(item) {
-                    if (!item) return '';
-                    const type = item.media_type || item.type || (item.first_air_date ? 'tv' : 'movie');
-                    return item.id !== undefined && item.id !== null
-                        ? `${type}:${item.id}`
-                        : `${type}:${item.title || item.name || item.vod_name || ''}:${this.mediaDateValue(item)}`;
-                },
-
-                sortMediaNewest(items) {
-                    const unique = new Map();
-                    (Array.isArray(items) ? items : []).forEach(item => {
-                        const key = this.mediaIdentity(item);
-                        if (!unique.has(key)) unique.set(key, item);
-                    });
-                    return Array.from(unique.values()).sort((a, b) => {
-                        const popularityA = Number(a.popularity || a.vote_count || 0);
-                        const popularityB = Number(b.popularity || b.vote_count || 0);
-                        const titleA = a.title || a.name || a.vod_name || '';
-                        const titleB = b.title || b.name || b.vod_name || '';
-                        return this.mediaDateValue(b) - this.mediaDateValue(a)
-                            || popularityB - popularityA
-                            || String(titleA).localeCompare(String(titleB), this.uiLanguage);
-                    });
-                },
-
                 fetchRow(key, loadMore = false) {
                     if (key === 'randomRow') {
                         return this.fetchRandomMixed(loadMore);
@@ -9257,10 +9185,12 @@
                     let sortParam = '';
                     if (config.sortMode && config.path.includes('/discover/')) {
                         const isMovie = config.path.includes('/movie');
-                        const sortField = isMovie ? 'primary_release_date.desc' : 'first_air_date.desc';
-                        const limitField = isMovie ? 'primary_release_date.lte' : 'first_air_date.lte';
-                        const today = new Date().toISOString().slice(0, 10);
-                        sortParam = `&sort_by=${sortField}&${limitField}=${today}`;
+                        if (config.sortMode === 'newest') {
+                            const dateField = isMovie ? 'primary_release_date.desc' : 'first_air_date.desc';
+                            sortParam = `&sort_by=${dateField}&vote_count.gte=10`;
+                        } else {
+                            sortParam = '&sort_by=popularity.desc';
+                        }
                     }
 
                     const url = `/api/tmdb-proxy?path=${encodeURIComponent(config.path)}&page=${config.page}&${config.params}${sortParam}`;
@@ -9273,13 +9203,13 @@
                                     config.totalPages = data.total_pages;
                                 }
                                 // 缂傚倷鑳堕搹搴ㄥ矗鎼淬劌绐楅柡鍥╁У瀹曞弶鎱ㄥΟ鎸庣【濞磋偐濮烽埀顒€绠嶉崕閬嶅箠閹邦喒鍋撻悷閭︽Ш闁逞屽墯椤旀牠宕伴弽顐ｅ床闁瑰瓨绶峰ú顏勯敜婵°倐鍋撴俊?
-                                const mediaType = config.path.includes('/tv') ? 'tv' : 'movie';
-                                const incoming = data.results.map(item => ({
-                                    ...item,
-                                    media_type: item.media_type || mediaType
-                                }));
-                                const existing = loadMore ? (this.rowLists[key] || []) : [];
-                                this.rowLists[key] = this.sortMediaNewest([...existing, ...incoming]);
+                                if (!this.rowLists[key]) {
+                                    this.rowLists[key] = data.results;
+                                } else if (loadMore) {
+                                    this.rowLists[key].push(...data.results);
+                                } else {
+                                    this.rowLists[key] = data.results;
+                                }
                             }
                         })
                         .catch(err => console.error(`Fetch error for ${key}:`, err));
@@ -9362,57 +9292,7 @@
                 },
 
                 // 濠碘槅鍋撶徊浠嬪疮椤愩倗涓?闂傚倷绀侀幖顐ょ矓閸洍鈧箓宕奸姀銏㈠婵°倧绲介崯顖炲疾椤掍焦鍙忔慨妤€妫楁晶顔锯偓娈垮枦濞夋洜妲愰幒妤婃晝闁靛鍠栧▓顓㈡⒑缁洘娅呮俊顐ｇ箓椤繘骞戦幇顔炬澑闂佸搫鍟犻崑鎾剁磼閵婏妇顣茬紒缁樼洴閺佹劖寰勭€ｎ偅娈搁梻浣筋嚃閸ㄤ即鎯岄崒鐐靛祦閹兼番鍔岀粻濠氭煕閹邦垰鐨洪柟?(婵犵數鍋炲娆撳触鐎ｎ喗鏅梺璇查閻忔岸鎮￠敓鐘茬畺鐟滄柨鐣锋總鍓叉晢闁稿本绮庡畷璺衡攽閻愯埖褰х紓宥佸亾濠电偛顦板ú鐔奉嚕椤愶箑围濠㈣泛锕﹂惈鍕⒑闂堟侗妾ч梻鍕瀹曟椽宕掑鍛紲婵犮垼娉涢敃锕€鐡梻浣哄劦閸撴繈鎮疯閳藉鎮介崜鍙夋櫓闂佺厧顫曢崐妤咁敊閺冨倻纾介柛灞捐壘閳ь剙缍婇獮鎰板箹娴ｇ懓浠遍梺闈浥堥弲娑橆啅濠靛鐓欓悗娑櫭粭鈺呮煕?
-                async fetchNewestMixed(loadMore = false) {
-                    const config = this.rowConfigs.randomRow;
-                    if (!config) return Promise.resolve();
-
-                    if (loadMore) {
-                        if (config.totalPages && config.page >= config.totalPages) return Promise.resolve();
-                        config.page++;
-                    } else {
-                        config.page = 1;
-                    }
-
-                    const today = new Date().toISOString().slice(0, 10);
-                    const requests = [
-                        {
-                            type: 'movie',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/movie')}&page=${config.page}&sort_by=primary_release_date.desc&primary_release_date.lte=${today}`
-                        },
-                        {
-                            type: 'tv',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/tv')}&page=${config.page}&sort_by=first_air_date.desc&first_air_date.lte=${today}`
-                        }
-                    ];
-
-                    try {
-                        const results = await Promise.all(requests.map(async request => {
-                            const response = await tmdbFetch(request.url);
-                            const data = await response.json();
-                            return {
-                                type: request.type,
-                                totalPages: Number(data.total_pages || 1),
-                                items: Array.isArray(data.results) ? data.results : []
-                            };
-                        }));
-                        config.totalPages = Math.min(...results.map(result => result.totalPages));
-
-                        const incoming = results.flatMap(result => result.items.map(item => ({
-                            ...item,
-                            media_type: result.type
-                        })));
-                        const existing = loadMore ? (this.rowLists.randomRow || []) : [];
-                        this.rowLists.randomRow = this.sortMediaNewest([...existing, ...incoming]);
-                    } catch (error) {
-                        console.error('[RecentUpdates] Failed to load newest mixed media', error);
-                    }
-                },
-
-                fetchRandomMixed(loadMore = false) {
-                    return this.fetchNewestMixed(loadMore);
-                },
-
-                async fetchLegacyRandomMixed(loadMore = false) {
+                async fetchRandomMixed(loadMore = false) {
                     const config = this.rowConfigs.randomRow;
                     if (!config) return Promise.resolve();
 
@@ -9498,26 +9378,11 @@
                 },
 
                 fetchHero() {
-                    const today = new Date().toISOString().slice(0, 10);
-                    const requests = [
-                        {
-                            type: 'movie',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/movie')}&page=1&sort_by=primary_release_date.desc&primary_release_date.lte=${today}`
-                        },
-                        {
-                            type: 'tv',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/tv')}&page=1&sort_by=first_air_date.desc&first_air_date.lte=${today}`
-                        }
-                    ];
-                    return Promise.all(requests.map(async request => {
-                        const response = await tmdbFetch(request.url);
-                        const data = await response.json();
-                        return (data.results || []).map(item => ({ ...item, media_type: request.type }));
-                    }))
-                        .then(resultSets => {
-                            const results = this.sortMediaNewest(resultSets.flat());
-                            if (results.length) {
-                                this.heroList = results.filter(i => i.backdrop_path).slice(0, 5).map(item => ({
+                    return tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent('/trending/all/week')}`)
+                        .then(res => res.json())
+                        .then(data => {
+                            if (data.results) {
+                                this.heroList = data.results.filter(i => i.backdrop_path).slice(0, 5).map(item => ({
                                     title: item.title || item.name,
                                     originalTitle: item.original_title || item.original_name || '',  // 闂傚倷绀侀幉锟犫€﹂崶顒€绐楅幖鎼厜缂嶆牠鏌熼悧鍫熺凡闁告劏鍋撻梻浣规偠閸庢椽宕滈敃鍌氭辈妞ゆ牜鍋為悡銉︾箾閹寸儐鐒藉褝绠撻弻宥堫檨闁告挻宀搁幊婵囥偅閸愨晛浜梺鍓插亝濞叉牠宕ｆ繝鍐︿簻闁哄秲鍔庣粻鎾淬亜韫囧骸宓嗛柡宀嬬節瀹曟帒顫濋鐘亽缂?
                                     overview: item.overview || 'No overview available.',

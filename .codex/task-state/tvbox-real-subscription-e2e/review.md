@@ -86,3 +86,13 @@
 - Advanced the cache to `v26` and switched HTML navigation to network-first.
 - Reproduced `梦魔绝镇` and verified the complete no-result diagnostics view in Chinese.
 - Verified Refresh, Subscriptions, Settings, panel Back, and Home interactions.
+
+## Newest-First Ordering Review
+
+- Replaced trending/random homepage ordering with a fixed newest-first policy.
+- Mixed movie/series updates are fetched by release or first-air date, merged, deduplicated, and sorted.
+- Search results preserve richer update date fields and group titles by their newest known source record.
+- Full dates are visible under cards so ordering can be reviewed without developer tools.
+- Automated checks passed: `npm run test:newest-order-ui`, `npm run test:localization-ui`, and `npm run build`.
+- Human-visible browser check passed across all 20 loaded rows with no descending-order failures.
+- Residual risk: third-party search APIs may omit or misreport update dates; these items are kept and placed after reliably dated items.
