@@ -23,15 +23,20 @@
 | 2026-06-19T00:00:00Z | Expanded AppleCMS HTTP-ready sweep across 8 sources | mixed | `量子资源` remained searchable and healthy; `光速资源` and `新浪资源` also returned live search results for current titles; `FOX`, `番茄`, `樱花`, and `酷点` stayed searchable-in-config but returned zero hits for sampled titles; `卧龙`, `神速`, and `想看` showed health-check errors in this session |
 | 2026-06-19T00:00:00Z | Additional HTTP source probe for `光速资源(切)` and `新浪资源(切)` | pass | `长安的荔枝` and `庆余年 第二季` were searchable; sampled play entries returned HTTP `200`; detail previews exposed paired `play/...` and `play/.../index.m3u8` URLs |
 | 2026-06-19T00:00:00Z | Live playback chain via `CCTV1` sample from encoded subscription | pass | `/api/player/classify` recommended `mpv` for live HLS under current settings; `/api/player/proxy-url` returned `127.0.0.1:9979/play/...`; proxied playlist preview returned `#EXTM3U` with rewritten nested proxy segment URLs; `/api/player/open-mpv` returned success; running `mpvnet.exe` command line contained the LocalProxy live URL |
+| 2026-06-19T00:00:00Z | Added reusable QA script `tools/test-tvbox-real-qa.js` and package script `test:tvbox-real-qa` | pass | Script reads external config only, launches isolated runtime, imports subscriptions, samples HTTP/live playback, verifies proxy and optional mpv launch, then writes a JSON report without hardcoding third-party sources into the repo |
+| 2026-06-19T00:00:00Z | `node --check tools/test-tvbox-real-qa.js`; `npm.cmd run test:tvbox-real-qa`; `npm.cmd run build` | pass | Real QA report generated at `D:\CodexWorks\tmp\dongguatv-e2e-script-20260619\artifacts\tvbox-real-qa-report.json`; report covered 3 representative subscriptions, 3 HTTP samples, and 1 live playback chain; build check remained green |
 
 ## Changed Files
 
 - `.codex/task-state/tvbox-real-subscription-e2e/task.md`
 - `.codex/task-state/tvbox-real-subscription-e2e/evidence.md`
 - `.codex/task-state/tvbox-real-subscription-e2e/handoff.md`
+- `package.json`
+- `tools/test-tvbox-real-qa.js`
 
 ## Known Gaps
 
 - Only 3 representative subscriptions were validated in this phase; broader source coverage remains pending.
 - Live-channel parsing and one live `mpv` playback chain are proven, but only a small sample was exercised.
 - Sampled AppleCMS sources show mixed current availability; broader per-source health mapping remains pending.
+- The reusable QA script currently depends on an external config file or environment variable; no in-repo sample config is kept by design because third-party subscription URLs must not be hardcoded.

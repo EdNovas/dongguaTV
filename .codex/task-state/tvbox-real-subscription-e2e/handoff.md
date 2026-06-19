@@ -22,12 +22,17 @@
 - `量子资源` search/detail works, but some returned play URLs are already upstream-expired and must be sampled live rather than assumed valid.
 - Live stack status:
 - One `CCTV1` live line from the encoded subscription completed `LocalProxy -> rewritten m3u8 -> mpv.net` verification successfully.
+- Automation status:
+- A reusable runner now exists at `tools/test-tvbox-real-qa.js`.
+- `package.json` now exposes `npm run test:tvbox-real-qa`.
+- The runner requires `--config <file>` or `TEST_TVBOX_QA_CONFIG` / `TEST_TVBOX_QA_JSON`; it intentionally does not embed subscription URLs in the repository.
+- A verified external test config and report were produced under `D:\CodexWorks\tmp\dongguatv-e2e-script-20260619\artifacts`.
 
 ## Exact Next Action
 
 - Run focused regression checks and create a phase checkpoint commit for the evidence artifacts.
 - If continuing the matrix, extend beyond the current 3 strongest HTTP candidates and capture a compact ranked availability table for all 21 AppleCMS-derived sources.
-- Consider packaging the real-subscription matrix workflow into a reusable local QA script under `tools/` so future reruns are not shell-only.
+- Consider extending the new QA runner with a compact ranking mode so all 21 AppleCMS-derived sources can be scanned in one report instead of only named samples.
 
 ## Blockers
 

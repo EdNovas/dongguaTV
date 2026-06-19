@@ -3,6 +3,20 @@
   "task": "tvbox-real-subscription-e2e",
   "repo": "D:\\CodexWorks\\dongguaTV-enhanced-app",
   "created_at": "2026-06-18T22:36:30Z",
-  "snapshots": [],
+  "snapshots": [
+    {
+      "id": "20260619T052416Z",
+      "created_at": "2026-06-19T05:24:16Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "package.json",
+          "existed": true,
+          "sha256": "6f4eaacf3181079221402d1bf35c86c8c5e0794326b2651723b092a2472bfae0",
+          "backup": "backups/20260619T052416Z/package.json"
+        }
+      ]
+    }
+  ],
   "restores": []
 }
