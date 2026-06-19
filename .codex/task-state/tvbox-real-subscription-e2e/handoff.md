@@ -27,12 +27,16 @@
 - `package.json` now exposes `npm run test:tvbox-real-qa`.
 - The runner requires `--config <file>` or `TEST_TVBOX_QA_CONFIG` / `TEST_TVBOX_QA_JSON`; it intentionally does not embed subscription URLs in the repository.
 - A verified external test config and report were produced under `D:\CodexWorks\tmp\dongguatv-e2e-script-20260619\artifacts`.
+- Batch ranking status:
+- The runner now supports `autoScanHttpSources` to scan all eligible HTTP-ready candidates inside one imported subscription.
+- Latest ranked AppleCMS scan result: `19` sources scanned, with `2 http-ready`, `2 searchable-no-live-play-url`, `7 no-hit`, `8 health-error`.
+- Current top pair from that ranked scan: `光速资源(切)` and `新浪资源(切)`.
 
 ## Exact Next Action
 
 - Run focused regression checks and create a phase checkpoint commit for the evidence artifacts.
 - If continuing the matrix, extend beyond the current 3 strongest HTTP candidates and capture a compact ranked availability table for all 21 AppleCMS-derived sources.
-- Consider extending the new QA runner with a compact ranking mode so all 21 AppleCMS-derived sources can be scanned in one report instead of only named samples.
+- Consider adding an export-friendly markdown or CSV summary mode on top of the new ranking output so non-technical review is easier.
 
 ## Blockers
 

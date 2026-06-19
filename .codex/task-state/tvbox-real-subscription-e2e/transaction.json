@@ -16,6 +16,19 @@
           "backup": "backups/20260619T052416Z/package.json"
         }
       ]
+    },
+    {
+      "id": "20260619T054815Z",
+      "created_at": "2026-06-19T05:48:15Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "tools/test-tvbox-real-qa.js",
+          "existed": true,
+          "sha256": "e15a23fe91f198070382ea0cb00d9f1257bec80495a0f0731c51bb4bcc3da6cc",
+          "backup": "backups/20260619T054815Z/tools/test-tvbox-real-qa.js"
+        }
+      ]
     }
   ],
   "restores": []

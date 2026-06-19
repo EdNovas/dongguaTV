@@ -25,6 +25,9 @@
 | 2026-06-19T00:00:00Z | Live playback chain via `CCTV1` sample from encoded subscription | pass | `/api/player/classify` recommended `mpv` for live HLS under current settings; `/api/player/proxy-url` returned `127.0.0.1:9979/play/...`; proxied playlist preview returned `#EXTM3U` with rewritten nested proxy segment URLs; `/api/player/open-mpv` returned success; running `mpvnet.exe` command line contained the LocalProxy live URL |
 | 2026-06-19T00:00:00Z | Added reusable QA script `tools/test-tvbox-real-qa.js` and package script `test:tvbox-real-qa` | pass | Script reads external config only, launches isolated runtime, imports subscriptions, samples HTTP/live playback, verifies proxy and optional mpv launch, then writes a JSON report without hardcoding third-party sources into the repo |
 | 2026-06-19T00:00:00Z | `node --check tools/test-tvbox-real-qa.js`; `npm.cmd run test:tvbox-real-qa`; `npm.cmd run build` | pass | Real QA report generated at `D:\CodexWorks\tmp\dongguatv-e2e-script-20260619\artifacts\tvbox-real-qa-report.json`; report covered 3 representative subscriptions, 3 HTTP samples, and 1 live playback chain; build check remained green |
+| 2026-06-19T00:00:00Z | Extended QA runner with automatic HTTP source scan and ranking mode | pass | Runner now supports `autoScanHttpSources` per subscription, scoring HTTP candidates by health, search hit, and playback probe result, then emitting a ranked report |
+| 2026-06-19T00:00:00Z | `npm.cmd run test:tvbox-real-qa` with `autoScanHttpSources` enabled for Pastebin AppleCMS sample | pass | Ranked scan covered 19 searchable HTTP candidates; summary: `http-ready=2`, `searchable-no-live-play-url=2`, `no-hit=7`, `health-error=8`; top verified sources were `光速资源(切)` and `新浪资源(切)` with HTTP `200` probe pairs |
+| 2026-06-19T00:00:00Z | `npm.cmd run build` after ranking-mode update | pass | Syntax/build check remained green after adding batch scan mode |
 
 ## Changed Files
 
@@ -40,3 +43,4 @@
 - Live-channel parsing and one live `mpv` playback chain are proven, but only a small sample was exercised.
 - Sampled AppleCMS sources show mixed current availability; broader per-source health mapping remains pending.
 - The reusable QA script currently depends on an external config file or environment variable; no in-repo sample config is kept by design because third-party subscription URLs must not be hardcoded.
+- The new batch ranking mode currently scans only HTTP-ready candidates filtered by existing support/status flags; plugin-required sources remain intentionally excluded from this ranking table.

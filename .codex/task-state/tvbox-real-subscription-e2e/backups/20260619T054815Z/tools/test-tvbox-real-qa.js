@@ -184,36 +184,6 @@ function summarizeSearchResult(searchResult) {
     };
 }
 
-function scoreHttpOutcome(result) {
-    let score = 0;
-    if (result.healthStatus === 'available') score += 3;
-    if (result.healthStatus === 'partial') score += 2;
-    if (result.search && result.search.count > 0) score += Math.min(result.search.count, 20);
-    const probes = result.playbackProbes || [];
-    if (probes.some(probe => probe.status === 200)) score += 50;
-    else if (probes.some(probe => probe.status >= 300 && probe.status < 500)) score += 8;
-    else if (probes.length > 0) score += 1;
-    return score;
-}
-
-function classifyHttpOutcome(result) {
-    if (result.error) return 'runner-error';
-    if (result.healthStatus === 'error' && (!result.search || result.search.count === 0)) return 'health-error';
-    if (result.playbackProbes && result.playbackProbes.some(probe => probe.status === 200)) return 'http-ready';
-    if (result.detail && result.detail.candidateCount > 0) return 'searchable-no-live-play-url';
-    if (result.search && result.search.count > 0) return 'searchable-no-detail-probe';
-    if (result.healthStatus === 'available' || result.healthStatus === 'partial') return 'no-hit';
-    return 'unknown';
-}
-
-function summarizeScanCounts(results) {
-    return (results || []).reduce((accumulator, item) => {
-        const key = classifyHttpOutcome(item);
-        accumulator[key] = (accumulator[key] || 0) + 1;
-        return accumulator;
-    }, {});
-}
-
 async function runHttpSample(baseUrl, source, sample) {
     const siteKey = `tvbox:${source.id}`;
     const health = await fetchJson(baseUrl, 'post', '/api/source-health-check', { sourceId: source.id }).catch(error => ({
@@ -283,136 +253,6 @@ async function runHttpSample(baseUrl, source, sample) {
     };
     result.playerChain = await runPlayerChain(baseUrl, playUrlResult, sample.openMpv === true, sample.killNewMpvAfterOpen !== false);
     return result;
-}
-
-async function runHttpSourceScan(baseUrl, source, scanConfig) {
-    const siteKey = `tvbox:${source.id}`;
-    const health = await fetchJson(baseUrl, 'post', '/api/source-health-check', { sourceId: source.id }).catch(error => ({
-        status: 'error',
-        error: error.message
-    }));
-    const result = {
-        sourceId: source.id,
-        sourceName: source.name,
-        sourceKey: source.key,
-        api: source.api,
-        supportLevel: source.supportLevel,
-        searchable: source.searchable !== false,
-        enabled: source.enabled !== false,
-        healthStatus: health.status || 'error',
-        keywords: []
-    };
-
-    const keywords = Array.isArray(scanConfig.keywords) ? scanConfig.keywords : [];
-    const perKeywordLimit = Number(scanConfig.maxKeywordSources || 0);
-
-    for (const keyword of keywords) {
-        const search = await fetchJson(
-            baseUrl,
-            'get',
-            `/api/search?wd=${encodeURIComponent(keyword)}&site_key=${encodeURIComponent(siteKey)}`
-        );
-        const summary = summarizeSearchResult(search);
-        result.keywords.push({
-            keyword,
-            ...summary
-        });
-        if (summary.firstId) {
-            result.matchedKeyword = keyword;
-            result.search = summary;
-            break;
-        }
-        if (perKeywordLimit > 0 && result.keywords.length >= perKeywordLimit) {
-            break;
-        }
-    }
-
-    if (!result.search || !result.search.firstId || scanConfig.probeDetail === false) {
-        result.outcome = classifyHttpOutcome(result);
-        result.score = scoreHttpOutcome(result);
-        return result;
-    }
-
-    const detail = await fetchJson(
-        baseUrl,
-        'get',
-        `/api/detail?id=${encodeURIComponent(result.search.firstId)}&site_key=${encodeURIComponent(siteKey)}&nocache=1`
-    );
-    const item = detail && detail.list && detail.list[0] ? detail.list[0] : null;
-    const candidates = extractProbeCandidates(item && item.vod_play_url);
-    result.detail = {
-        vodName: item && item.vod_name || result.search.firstName,
-        playFrom: item && item.vod_play_from || '',
-        candidateCount: candidates.length
-    };
-
-    if (candidates.length > 0 && scanConfig.probePlayback !== false) {
-        result.playbackProbes = [];
-        for (const candidate of candidates.slice(0, Number(scanConfig.maxProbeUrls || 2))) {
-            result.playbackProbes.push({
-                url: candidate,
-                ...(await probeUrl(candidate))
-            });
-        }
-    }
-
-    const successful = (result.playbackProbes || []).find(probe => probe.status === 200);
-    if (successful && scanConfig.runPlayerChain === true) {
-        const playUrlResult = {
-            url: successful.url,
-            format: successful.url.toLowerCase().includes('.m3u8') ? 'm3u8' : 'unknown',
-            quality: 'unknown',
-            codec: 'unknown',
-            hdr: false,
-            sourceKind: 'normal',
-            headers: {},
-            sourceId: source.id,
-            sourceName: source.name,
-            title: result.detail.vodName || result.search.firstName
-        };
-        result.playerChain = await runPlayerChain(
-            baseUrl,
-            playUrlResult,
-            scanConfig.openMpv === true,
-            scanConfig.killNewMpvAfterOpen !== false
-        );
-    }
-
-    result.outcome = classifyHttpOutcome(result);
-    result.score = scoreHttpOutcome(result);
-    return result;
-}
-
-async function runAutoHttpScan(baseUrl, imported, scanConfig) {
-    const sources = (imported.sources || [])
-        .filter(source => source.enabled !== false)
-        .filter(source => source.searchable !== false)
-        .filter(source => ['basic', 'full'].includes(String(source.supportLevel || '')))
-        .filter(source => ['partial', 'available'].includes(String(source.status || '')));
-
-    const limitedSources = Number(scanConfig.maxSources || 0) > 0
-        ? sources.slice(0, Number(scanConfig.maxSources))
-        : sources;
-
-    const results = [];
-    for (const source of limitedSources) {
-        results.push(await runHttpSourceScan(baseUrl, source, scanConfig));
-    }
-
-    const ranked = results.slice().sort((left, right) => {
-        if ((right.score || 0) !== (left.score || 0)) return (right.score || 0) - (left.score || 0);
-        if ((right.search && right.search.count || 0) !== (left.search && left.search.count || 0)) {
-            return (right.search && right.search.count || 0) - (left.search && left.search.count || 0);
-        }
-        return String(left.sourceName || '').localeCompare(String(right.sourceName || ''), 'zh-CN');
-    });
-
-    return {
-        scannedSources: ranked.length,
-        keywords: scanConfig.keywords || [],
-        summary: summarizeScanCounts(ranked),
-        ranked
-    };
 }
 
 async function runPlayerChain(baseUrl, playUrlResult, openMpv, killNewMpvAfterOpen) {
@@ -615,10 +455,6 @@ async function main() {
                     continue;
                 }
                 entry.httpSamples.push(await runHttpSample(baseUrl, sourceMatch, sample));
-            }
-
-            if (definition.autoScanHttpSources) {
-                entry.httpScan = await runAutoHttpScan(baseUrl, imported, definition.autoScanHttpSources);
             }
 
             if (definition.liveSample) {
