@@ -44,3 +44,13 @@
 - Sampled AppleCMS sources show mixed current availability; broader per-source health mapping remains pending.
 - The reusable QA script currently depends on an external config file or environment variable; no in-repo sample config is kept by design because third-party subscription URLs must not be hardcoded.
 - The new batch ranking mode currently scans only HTTP-ready candidates filtered by existing support/status flags; plugin-required sources remain intentionally excluded from this ranking table.
+
+## Desktop Localization Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-19T07:58:00Z | Visible desktop review at `http://127.0.0.1:31386/` | pass | Primary Apple TV navigation and surfaces default to Simplified Chinese; Settings exposes Simplified Chinese, English, and Japanese |
+| 2026-06-19T07:59:00Z | `npm.cmd run test:localization-ui` | pass | Verified all 9 navigation labels, search placeholder, settings title, HTML language, and persisted preference for `zh-CN`, `en-US`, and `ja-JP`; restored Simplified Chinese before exit |
+| 2026-06-19T07:59:00Z | `npm.cmd run build` | pass | Syntax/build check remained green after localization |
+
+Localization files: `public/index.html`, `tools/test-localization-ui.js`, and `package.json`.

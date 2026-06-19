@@ -59,3 +59,10 @@
 - `transaction.json`
 
 > This is a derived resume summary. Source files and fresh checks take precedence.
+
+## Desktop Localization Checkpoint
+
+- Simplified Chinese is now the default language for the main desktop navigation and primary Apple TV surfaces.
+- Settings includes a persisted selector for Simplified Chinese, English, and Japanese.
+- `npm run test:localization-ui` verifies all three languages against the live local app and restores Simplified Chinese after the test.
+- Next visual action: keep the preview open and revise layout, size, color, and menu ordering from direct user feedback.

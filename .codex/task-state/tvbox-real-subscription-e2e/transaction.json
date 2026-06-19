@@ -29,6 +29,32 @@
           "backup": "backups/20260619T054815Z/tools/test-tvbox-real-qa.js"
         }
       ]
+    },
+    {
+      "id": "20260619T074523Z",
+      "created_at": "2026-06-19T07:45:23Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "public/index.html",
+          "existed": true,
+          "sha256": "a98a2045b48f212ba45db676e1af661dbdb2dfdde448c993010081170be6d019",
+          "backup": "backups/20260619T074523Z/public/index.html"
+        }
+      ]
+    },
+    {
+      "id": "20260619T075727Z",
+      "created_at": "2026-06-19T07:57:27Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "package.json",
+          "existed": true,
+          "sha256": "86128c0443d59664dfce04dd5d472443b820bfe0749598e85e37c4e89e15da80",
+          "backup": "backups/20260619T075727Z/package.json"
+        }
+      ]
     }
   ],
   "restores": []

@@ -3209,15 +3209,15 @@
 
     <div id="app" v-cloak>
         <div class="appletv-shell">
-            <aside class="appletv-sidebar" :aria-label="t('nav.main')">
+            <aside class="appletv-sidebar" aria-label="Main navigation">
                 <button class="appletv-sidebar-brand" @click="handleAppleNav({ id: 'home', action: 'home' })"
-                    :title="t('nav.homeTitle')">
+                    title="DongguaTV Home">
                     <img src="icon.png" alt="DongguaTV">
                 </button>
                 <button v-for="item in appleNavItems" :key="item.id" class="appletv-nav-item"
-                    :class="{ active: activeAppleNav === item.id }" @click="handleAppleNav(item)" :title="t(item.labelKey)">
+                    :class="{ active: activeAppleNav === item.id }" @click="handleAppleNav(item)" :title="item.label">
                     <i :class="['fas', item.icon]"></i>
-                    <span>{{ t(item.labelKey) }}</span>
+                    <span>{{ item.label }}</span>
                 </button>
             </aside>
 
@@ -3244,15 +3244,15 @@
                     <div class="hero-bg" :style="{ backgroundImage: 'url(' + item.backdrop + ')' }"></div>
                     <div class="hero-overlay">
                         <div class="hero-content">
-                            <div class="hero-tag">{{ t('hero.featured') }} TOP {{ index + 1 }}</div>
+                            <div class="hero-tag">Featured TOP {{ index + 1 }}</div>
                             <h1 class="hero-title">{{ item.title }}</h1>
                             <p class="hero-desc">{{ item.overview }}</p>
                             <div class="hero-btns" style="display: flex; gap: 15px; flex-wrap: wrap;">
                                 <button class="btn-play" @click="autoSearch(item.title, item.originalTitle)"><i
                                         class="fas fa-play"></i>
-                                    {{ t('common.play') }}</button>
+                                    Play</button>
                                 <button class="btn-info" @click="showMovieInfo(item.rawData)"><i
-                                        class="fas fa-info-circle"></i> {{ t('common.details') }}</button>
+                                        class="fas fa-info-circle"></i> Details</button>
                             </div>
                         </div>
                     </div>
@@ -3266,7 +3266,7 @@
             <div class="search-box-wrapper" :class="{ 'compact': !searched && scrollY > 400 }">
                 <i class="fas fa-search search-icon" @click="doSearch"></i>
                 <input type="text" v-model="keyword" @keyup.enter="doSearch" @input="debouncedSearch"
-                    class="search-input" :placeholder="t('search.placeholder')">
+                    class="search-input" placeholder="Search movies, series, anime, live channels, or sources...">
             </div>
         </div>
 
@@ -3339,7 +3339,7 @@
                     <div class="cat-icon" :style="{ background: item.color }">
                         <i :class="['fas', item.icon]"></i>
                     </div>
-                    <span>{{ t(item.labelKey) }}</span>
+                    <span>{{ item.name }}</span>
                 </div>
             </div>
             <!-- 闂傚倷绀侀幉锟犲蓟閿濆绀夌€广儱顦悞鍨亜閹达絽鍔甸柛蹇撶焸閺屸剝鎷呯憴鍕３濡ょ姷鍋涢澶愮嵁閸ヮ剦鏁婇柣锝呮湰濞堝憡绻濆▓鍨灍閻㈩垱顨堥崚鎺斾沪閻ｅ本娈?Rows -->
@@ -3347,23 +3347,23 @@
                 <button class="appletv-feature-card" @click="handleAppleNav({ id: 'live', action: 'live' })">
                     <span class="appletv-feature-icon"><i class="fas fa-broadcast-tower"></i></span>
                     <span>
-                        <span class="appletv-feature-title">{{ t('feature.liveTitle') }}</span>
-                        <span class="appletv-feature-meta">{{ t('feature.liveMeta') }}</span>
+                        <span class="appletv-feature-title">Live TV</span>
+                        <span class="appletv-feature-meta">Live channels from user subscriptions</span>
                     </span>
                 </button>
                 <button class="appletv-feature-card"
                     @click="handleAppleNav({ id: 'subscriptions', action: 'subscriptions' })">
                     <span class="appletv-feature-icon"><i class="fas fa-rss"></i></span>
                     <span>
-                        <span class="appletv-feature-title">{{ t('feature.sourcesTitle') }}</span>
-                        <span class="appletv-feature-meta">{{ t('feature.sourcesMeta') }}</span>
+                        <span class="appletv-feature-title">Source Picks</span>
+                        <span class="appletv-feature-meta">Manage TVBox and local sources</span>
                     </span>
                 </button>
                 <button class="appletv-feature-card" @click="handleAppleNav({ id: 'settings', action: 'settings' })">
                     <span class="appletv-feature-icon"><i class="fas fa-sliders-h"></i></span>
                     <span>
-                        <span class="appletv-feature-title">{{ t('feature.playerTitle') }}</span>
-                        <span class="appletv-feature-meta">{{ t('feature.playerMeta') }}</span>
+                        <span class="appletv-feature-title">Player</span>
+                        <span class="appletv-feature-meta">External players and playback preferences</span>
                     </span>
                 </button>
             </div>
@@ -3379,10 +3379,10 @@
                             @click.stop="config.sortMode ? toggleSortMode(key) : null"
                             :style="{ cursor: config.sortMode ? 'pointer' : 'default' }"
                             :title="config.sortMode ? ('Sort: ' + (config.sortMode === 'newest' ? 'Newest' : 'Popular')) : ''"></i>
-                        {{ t(config.titleKey) }}
+                        {{ config.title }}
                         <!-- 婵犵數鍋涢顓熸叏閹绢喖绠犻幖鎼厛閺?discover 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷槈濮橆厼浠忓銈嗗姧缁犳垿宕ｆ繝鍥ㄧ厱闁圭偓銇炲鎺斿垝閻㈠憡鈷戦柛锔诲幖閸斿鎮介娑樼闁兼椽浜堕、姗€鎮╅崘鍙夌€梻浣告贡閸庛倝骞愭ィ鍐ㄥ瀭?-->
                         <span v-if="config.sortMode && config.path.includes('/discover/')" class="sort-indicator">
-                            {{ config.sortMode === 'newest' ? t('sort.new') : t('sort.hot') }}
+                            {{ config.sortMode === 'newest' ? 'NEW' : 'HOT' }}
                         </span>
                     </div>
                     <span class="expand-toggle" :class="{ expanded: expandedRows[key] }" @click="toggleRowExpand(key)"
@@ -3460,7 +3460,7 @@
                 </button>
                 <div class="section-header mb-0 ms-3 ms-md-4">
                     <div class="section-line"></div>
-                    <div class="section-title">{{ t('search.resultsFor') }} "{{ keyword }}"</div>
+                    <div class="section-title">Search Results for "{{ keyword }}"</div>
                 </div>
             </div>
 
@@ -3573,14 +3573,14 @@
                     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;">
                         <button class="btn-info" @click="showSubscriptionPanel=true; loadSubscriptionData()"
                             style="border:0; padding:9px 14px; font-size:12px;">
-                            <i class="fas fa-rss"></i> {{ t('nav.sources') }}</button>
+                            <i class="fas fa-rss"></i> Subscriptions</button>
                         <button class="btn-info" @click="showSettingsModal=true; loadPlayerSettings(); loadPluginRuntimeSettings()"
                             style="border:0; padding:9px 14px; font-size:12px;">
-                            <i class="fas fa-cog"></i> {{ t('nav.settings') }}
+                            <i class="fas fa-cog"></i> Settings
                         </button>
                         <button class="btn btn-outline-danger" @click="clearSearch"
                             style="border-radius: 20px; padding: 8px 18px;">
-                            <i class="fas fa-home"></i> {{ t('nav.home') }}
+                            <i class="fas fa-home"></i> Home
                         </button>
                     </div>
                 </div>
@@ -3607,7 +3607,7 @@
                 <!-- 闂備浇宕垫慨宕囩矆娴ｈ娅犲ù鐘差儐閸嬵亪鏌涢埄鍐槈缂佺姵婢橀…鍧楁嚋闂堟稑顫嶉柣?-->
                 <div class="tv-mode-toggle" @click="showSettingsModal = true; loadPlayerSettings()" title="Player settings">
                     <i class="fas fa-cog"></i>
-                        <span>{{ t('nav.settings') }}</span>
+                        <span>Settings</span>
                 </div>
                 <!-- 闂傚倸鍊风欢锟犲磻閳ь剟鏌涚€ｎ偅宕岄柡灞剧洴楠炲鏁愰崱鈺€鍝楁繝鐢靛仜閹冲矂宕曢幘顔嘉﹂柟鐗堟緲閸楁娊鏌ｉ弮鍫婵☆垰妫濆?-->
                 <div class="tv-mode-toggle" @click="confirmLogout" title="Logout">
@@ -3626,7 +3626,7 @@
                 <button class="info-modal-close" @click="showLivePanel = false"><i class="fas fa-times"></i></button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.55rem;">
-                        <i class="fas fa-broadcast-tower" style="margin-right: 10px; color: #60a5fa;"></i>{{ t('feature.liveTitle') }}
+                        <i class="fas fa-broadcast-tower" style="margin-right: 10px; color: #60a5fa;"></i>Live TV
                     </h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
                         Live channels are loaded from user-owned TVBox, M3U, or TXT subscriptions. Channels with headers can use the local proxy for external players.</div>
@@ -3781,7 +3781,7 @@
                         class="fas fa-times"></i></button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 12px; font-size: 1.55rem;">
-                        <i class="fas fa-rss"></i> {{ t('subscriptions.title') }}</h2>
+                        <i class="fas fa-rss"></i> Subscriptions</h2>
                     <div style="color: #aaa; font-size: 14px; line-height: 1.8;">
                         Import only your own TVBox JSON URLs or local JSON files. The app stores sites, lives, parses, and plugin-required markers, but it does not execute csp_xxx, spider.jar, py, or js plugins automatically.
                     </div><div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(180px,240px); gap:10px; margin-top:20px;">
@@ -3935,24 +3935,8 @@
                         class="fas fa-times"></i></button>
                 <div style="padding: 30px;">
                     <h2 style="color: #fff; margin-bottom: 25px; font-size: 1.5rem;">
-                    <h3><i class="fas fa-sliders-h"></i> {{ t('settings.title') }}</h3>
+                    <h3><i class="fas fa-sliders-h"></i> Player Settings</h3>
                     </h2>
-
-                    <div
-                        style="display:flex; justify-content:space-between; align-items:center; gap:18px; padding:16px; margin-bottom:18px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">
-                        <div>
-                            <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">
-                                <i class="fas fa-language" style="color:#60a5fa; margin-right:8px;"></i>{{ t('settings.language') }}
-                            </div>
-                            <div style="color:#9ca3af; font-size:12px;">{{ t('settings.languageDescription') }}</div>
-                        </div>
-                        <select v-model="uiLanguage" @change="changeUiLanguage"
-                            style="min-width:150px; background:#17191f; color:#fff; border:1px solid rgba(255,255,255,0.18); border-radius:8px; padding:9px 12px;">
-                            <option value="zh-CN">简体中文</option>
-                            <option value="en-US">English</option>
-                            <option value="ja-JP">日本語</option>
-                        </select>
-                    </div>
 
 
                     <!-- Desktop readiness panel -->
@@ -3961,10 +3945,10 @@
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
                             <div>
                                 <div style="color:#fff; font-size:15px; font-weight:800;">
-                                    <i class="fas fa-clipboard-check" style="color:#60a5fa; margin-right:8px;"></i>{{ t('settings.desktopReadiness') }}
+                                    <i class="fas fa-clipboard-check" style="color:#60a5fa; margin-right:8px;"></i>Desktop readiness
                                 </div>
                                 <div style="color:#9ca3af; font-size:12px; margin-top:4px;">
-                                    {{ t('settings.desktopReadinessDescription') }}
+                                    userData runtime, subscriptions, external player, and LocalProxy
                                 </div>
                                 <div v-if="desktopStatus.checkedAt" style="color:#6b7280; font-size:11px; margin-top:4px;">
                                     Last checked: {{ formatLocalTimestamp(desktopStatus.checkedAt) }}
@@ -3972,7 +3956,7 @@
                             </div>
                             <span
                                 :style="{ color: desktopStatus.setupComplete ? '#22c55e' : '#fbbf24', fontSize:'12px', fontWeight:'800' }">
-                                {{ desktopStatus.setupComplete ? t('status.ready') : t('status.needsSetup') }}
+                                {{ desktopStatus.setupComplete ? 'Ready' : 'Needs setup' }}
                             </span>
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; margin-top:12px;">
@@ -5047,228 +5031,6 @@
             } catch (e) { }
         }
 
-        const UI_TRANSLATIONS = {
-            'zh-CN': {
-                'nav.main': '主导航',
-                'nav.homeTitle': '冬瓜TV 首页',
-                'nav.home': '首页',
-                'nav.search': '搜索',
-                'nav.movies': '电影',
-                'nav.series': '剧集',
-                'nav.anime': '动漫',
-                'nav.variety': '综艺',
-                'nav.live': '直播',
-                'nav.sources': '订阅源',
-                'nav.settings': '设置',
-                'hero.featured': '精选',
-                'common.play': '播放',
-                'common.details': '详情',
-                'search.placeholder': '搜索电影、剧集、动漫、直播频道或订阅源...',
-                'search.resultsFor': '搜索结果',
-                'category.movies': '电影',
-                'category.series': '剧集',
-                'category.chinese': '国产',
-                'category.us': '欧美',
-                'category.krjp': '日韩',
-                'category.anime': '动漫',
-                'category.scifi': '科幻',
-                'category.action': '动作',
-                'category.comedy': '喜剧',
-                'category.crime': '犯罪',
-                'category.romance': '爱情',
-                'category.family': '家庭',
-                'category.documentary': '纪录片',
-                'category.war': '战争',
-                'category.horror': '恐怖',
-                'category.mystery': '悬疑',
-                'category.fantasy': '奇幻',
-                'category.variety': '综艺',
-                'category.history': '历史',
-                'feature.liveTitle': '电视直播',
-                'feature.liveMeta': '来自用户订阅的直播频道',
-                'feature.sourcesTitle': '订阅源管理',
-                'feature.sourcesMeta': '管理 TVBox 与本地订阅源',
-                'feature.playerTitle': '播放器',
-                'feature.playerMeta': '外部播放器与播放偏好',
-                'row.random': '随机推荐',
-                'row.movies': '热门电影',
-                'row.series': '热门剧集',
-                'row.chinese': '国产剧集',
-                'row.us': '欧美剧集',
-                'row.krjp': '日韩剧集',
-                'row.anime': '动漫推荐',
-                'row.scifi': '科幻与奇幻',
-                'row.action': '动作电影',
-                'row.comedy': '喜剧',
-                'row.crime': '犯罪与悬疑',
-                'row.romance': '爱情',
-                'row.family': '家庭',
-                'row.documentary': '纪录片',
-                'row.war': '战争',
-                'row.horror': '恐怖',
-                'row.mystery': '悬疑',
-                'row.fantasy': '奇幻',
-                'row.variety': '综艺',
-                'row.history': '历史',
-                'sort.new': '最新',
-                'sort.hot': '热门',
-                'subscriptions.title': '订阅源',
-                'settings.title': '播放器与应用设置',
-                'settings.language': '界面语言',
-                'settings.languageDescription': '切换后立即生效，并在下次启动时保留。',
-                'settings.desktopReadiness': '桌面环境状态',
-                'settings.desktopReadinessDescription': '检查用户数据、订阅源、外部播放器与本地代理。',
-                'status.ready': '已就绪',
-                'status.needsSetup': '需要设置'
-            },
-            'en-US': {
-                'nav.main': 'Main navigation',
-                'nav.homeTitle': 'DongguaTV Home',
-                'nav.home': 'Home',
-                'nav.search': 'Search',
-                'nav.movies': 'Movies',
-                'nav.series': 'Series',
-                'nav.anime': 'Anime',
-                'nav.variety': 'Variety',
-                'nav.live': 'Live',
-                'nav.sources': 'Sources',
-                'nav.settings': 'Settings',
-                'hero.featured': 'Featured',
-                'common.play': 'Play',
-                'common.details': 'Details',
-                'search.placeholder': 'Search movies, series, anime, live channels, or sources...',
-                'search.resultsFor': 'Search results for',
-                'category.movies': 'Movies',
-                'category.series': 'Series',
-                'category.chinese': 'Chinese',
-                'category.us': 'US',
-                'category.krjp': 'KR/JP',
-                'category.anime': 'Anime',
-                'category.scifi': 'Sci-Fi',
-                'category.action': 'Action',
-                'category.comedy': 'Comedy',
-                'category.crime': 'Crime',
-                'category.romance': 'Romance',
-                'category.family': 'Family',
-                'category.documentary': 'Documentary',
-                'category.war': 'War',
-                'category.horror': 'Horror',
-                'category.mystery': 'Mystery',
-                'category.fantasy': 'Fantasy',
-                'category.variety': 'Variety',
-                'category.history': 'History',
-                'feature.liveTitle': 'Live TV',
-                'feature.liveMeta': 'Live channels from user subscriptions',
-                'feature.sourcesTitle': 'Source Picks',
-                'feature.sourcesMeta': 'Manage TVBox and local sources',
-                'feature.playerTitle': 'Player',
-                'feature.playerMeta': 'External players and playback preferences',
-                'row.random': 'Random Picks',
-                'row.movies': 'Hot Movies',
-                'row.series': 'Hot Series',
-                'row.chinese': 'Chinese Series',
-                'row.us': 'US Series',
-                'row.krjp': 'Korean and Japanese Series',
-                'row.anime': 'Anime',
-                'row.scifi': 'Sci-Fi and Fantasy',
-                'row.action': 'Action',
-                'row.comedy': 'Comedy',
-                'row.crime': 'Crime and Mystery',
-                'row.romance': 'Romance',
-                'row.family': 'Family',
-                'row.documentary': 'Documentary',
-                'row.war': 'War',
-                'row.horror': 'Horror',
-                'row.mystery': 'Mystery',
-                'row.fantasy': 'Fantasy',
-                'row.variety': 'Variety',
-                'row.history': 'History',
-                'sort.new': 'NEW',
-                'sort.hot': 'HOT',
-                'subscriptions.title': 'Subscriptions',
-                'settings.title': 'Player and App Settings',
-                'settings.language': 'Interface language',
-                'settings.languageDescription': 'Changes apply immediately and are kept for the next launch.',
-                'settings.desktopReadiness': 'Desktop readiness',
-                'settings.desktopReadinessDescription': 'Check user data, subscriptions, external player, and LocalProxy.',
-                'status.ready': 'Ready',
-                'status.needsSetup': 'Needs setup'
-            },
-            'ja-JP': {
-                'nav.main': 'メインナビゲーション',
-                'nav.homeTitle': 'DongguaTV ホーム',
-                'nav.home': 'ホーム',
-                'nav.search': '検索',
-                'nav.movies': '映画',
-                'nav.series': 'ドラマ',
-                'nav.anime': 'アニメ',
-                'nav.variety': 'バラエティ',
-                'nav.live': 'ライブ',
-                'nav.sources': '配信元',
-                'nav.settings': '設定',
-                'hero.featured': 'おすすめ',
-                'common.play': '再生',
-                'common.details': '詳細',
-                'search.placeholder': '映画、ドラマ、アニメ、ライブ、配信元を検索...',
-                'search.resultsFor': '検索結果',
-                'category.movies': '映画',
-                'category.series': 'ドラマ',
-                'category.chinese': '中国',
-                'category.us': '欧米',
-                'category.krjp': '韓国・日本',
-                'category.anime': 'アニメ',
-                'category.scifi': 'SF',
-                'category.action': 'アクション',
-                'category.comedy': 'コメディ',
-                'category.crime': '犯罪',
-                'category.romance': '恋愛',
-                'category.family': 'ファミリー',
-                'category.documentary': 'ドキュメンタリー',
-                'category.war': '戦争',
-                'category.horror': 'ホラー',
-                'category.mystery': 'ミステリー',
-                'category.fantasy': 'ファンタジー',
-                'category.variety': 'バラエティ',
-                'category.history': '歴史',
-                'feature.liveTitle': 'ライブTV',
-                'feature.liveMeta': 'ユーザー購読のライブチャンネル',
-                'feature.sourcesTitle': '配信元の管理',
-                'feature.sourcesMeta': 'TVBox とローカル配信元を管理',
-                'feature.playerTitle': 'プレーヤー',
-                'feature.playerMeta': '外部プレーヤーと再生設定',
-                'row.random': 'ランダムおすすめ',
-                'row.movies': '人気映画',
-                'row.series': '人気ドラマ',
-                'row.chinese': '中国ドラマ',
-                'row.us': '欧米ドラマ',
-                'row.krjp': '韓国・日本ドラマ',
-                'row.anime': 'アニメ',
-                'row.scifi': 'SF・ファンタジー',
-                'row.action': 'アクション',
-                'row.comedy': 'コメディ',
-                'row.crime': '犯罪・ミステリー',
-                'row.romance': '恋愛',
-                'row.family': 'ファミリー',
-                'row.documentary': 'ドキュメンタリー',
-                'row.war': '戦争',
-                'row.horror': 'ホラー',
-                'row.mystery': 'ミステリー',
-                'row.fantasy': 'ファンタジー',
-                'row.variety': 'バラエティ',
-                'row.history': '歴史',
-                'sort.new': '最新',
-                'sort.hot': '人気',
-                'subscriptions.title': '配信元',
-                'settings.title': 'プレーヤーとアプリ設定',
-                'settings.language': '表示言語',
-                'settings.languageDescription': '変更はすぐに反映され、次回起動時も保持されます。',
-                'settings.desktopReadiness': 'デスクトップ環境',
-                'settings.desktopReadinessDescription': 'ユーザーデータ、配信元、外部プレーヤー、ローカルプロキシを確認します。',
-                'status.ready': '準備完了',
-                'status.needsSetup': '設定が必要'
-            }
-        };
-
         createApp({
             data() {
                 return {
@@ -5389,24 +5151,16 @@
                         trustedSpiderClassName: '',
                         trustedSpiderExtConfigured: false
                     },
-                    uiLanguage: (function () {
-                        try {
-                            const saved = localStorage.getItem('donggua_ui_language');
-                            return ['zh-CN', 'en-US', 'ja-JP'].includes(saved) ? saved : 'zh-CN';
-                        } catch (error) {
-                            return 'zh-CN';
-                        }
-                    })(),
                     appleNavItems: [
-                        { id: 'home', labelKey: 'nav.home', icon: 'fa-home', action: 'home' },
-                        { id: 'search', labelKey: 'nav.search', icon: 'fa-search', action: 'search' },
-                        { id: 'movie', labelKey: 'nav.movies', icon: 'fa-film', action: 'row', rowKey: 'movieRow' },
-                        { id: 'series', labelKey: 'nav.series', icon: 'fa-tv', action: 'row', rowKey: 'tvRow' },
-                        { id: 'anime', labelKey: 'nav.anime', icon: 'fa-ghost', action: 'row', rowKey: 'animeRow' },
-                        { id: 'variety', labelKey: 'nav.variety', icon: 'fa-microphone-alt', action: 'row', rowKey: 'varietyRow' },
-                        { id: 'live', labelKey: 'nav.live', icon: 'fa-broadcast-tower', action: 'live' },
-                        { id: 'subscriptions', labelKey: 'nav.sources', icon: 'fa-rss', action: 'subscriptions' },
-                        { id: 'settings', labelKey: 'nav.settings', icon: 'fa-cog', action: 'settings' }
+                        { id: 'home', label: 'Home', icon: 'fa-home', action: 'home' },
+                        { id: 'search', label: 'Search', icon: 'fa-search', action: 'search' },
+                        { id: 'movie', label: 'Movies', icon: 'fa-film', action: 'row', rowKey: 'movieRow' },
+                        { id: 'series', label: 'Series', icon: 'fa-tv', action: 'row', rowKey: 'tvRow' },
+                        { id: 'anime', label: 'Anime', icon: 'fa-ghost', action: 'row', rowKey: 'animeRow' },
+                        { id: 'variety', label: 'Variety', icon: 'fa-microphone-alt', action: 'row', rowKey: 'varietyRow' },
+                        { id: 'live', label: 'Live', icon: 'fa-broadcast-tower', action: 'live' },
+                        { id: 'subscriptions', label: 'Sources', icon: 'fa-rss', action: 'subscriptions' },
+                        { id: 'settings', label: 'Settings', icon: 'fa-cog', action: 'settings' }
                     ],
                     hideRandomRow: (function () { try { return localStorage.getItem('donggua_hide_random') === 'true'; } catch (e) { return false; } })(),  // 闂傚倸鍊搁崐鎼佸箠韫囨稑绀夋俊顖欑秿濞戞鏆嗛柛鏇ㄥ厴閹稿嫰妫呴銏″婵﹤婀遍懞鍗烆潩閼哥數鍘介梺鍐叉惈鐎氼剟鎯冮悜妯肩?
                     filterNsfw: (function () { try { return localStorage.getItem('donggua_filter_nsfw') !== 'false'; } catch (e) { return true; } })(),  // 闂備礁鎼ˇ顐﹀疾濞戞◤娲晝閸屾氨顔?NSFW 闂傚倷绀侀幉锟犲礉閺囥垹绠犻幖鎼厛閺佸﹪鏌熼幍顔碱暭闁哄拋鍓熼弻娑㈩敃閻樻彃濮㈤柣銏╁灡閻╊垶骞冪憴鍕闂傚牊绋堥崑鎾诲即閻樻剚娼熼梺纭呮彧缁犳垹鎲撮敂濮愪簻闁哄秲鍎遍埀顒侇殘缁?
@@ -5479,55 +5233,54 @@
                     viewPages: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮堕悧鐘诲箚閸繍鍚嬮柛婊€绀佸▓銊╂⒑闁偛鑻晶瀵糕偓娈垮櫘閸ｏ絽鐣峰鍕闁革富鍘藉▓鎼佹⒒娴ｅ憡鎯堥悶姘煎亰瀹曟洟宕樼拠褑鈧潡鏌涘☉鍗炴灁濞存粍绮撻弻锝夊閵忊剝姣勯梺?{ movieRow: 1, ... }
                     pageLoadingKeys: {}, // 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柛顐ｆ处閺佸棙绻涢幋娆忕仾闁绘挸鍊婚埀顒€绠嶉崕閬嶅箯鐎ｎ€絾绻濆鍗炲絼闂佹悶鍎村▔娑欑娴煎瓨鐓冪憸婊堝礈濞戙垹绐楅柟鎹愵嚙绾惧鏌ㄥ┑鍡╂Ц缂佲偓閸曨垱鍋ｉ柛銉ｅ妼缁茬粯銇勯顒傜М鐎?{ movieRow: true, ... }
                     rowConfigs: {
-                        randomRow: { titleKey: 'row.random', icon: 'fa-random', path: 'MIXED', params: '', page: 1 },
-                        movieRow: { titleKey: 'row.movies', icon: 'fa-film', path: '/trending/movie/week', params: '', page: 1 },
-                        tvRow: { titleKey: 'row.series', icon: 'fa-tv', path: '/trending/tv/week', params: '', page: 1 },
-                        cnRow: { titleKey: 'row.chinese', icon: 'fa-dragon', path: '/discover/tv', params: 'with_origin_country=CN', page: 1, sortMode: 'newest' },
-                        usRow: { titleKey: 'row.us', icon: 'fa-flag-usa', path: '/discover/tv', params: 'with_origin_country=US', page: 1, sortMode: 'newest' },
-                        krjpRow: { titleKey: 'row.krjp', icon: 'fa-mask', path: '/discover/tv', params: 'with_origin_country=KR|JP', page: 1, sortMode: 'newest' },
-                        animeRow: { titleKey: 'row.anime', icon: 'fa-ghost', path: '/discover/tv', params: 'with_genres=16', page: 1, sortMode: 'newest' },
-                        scifiRow: { titleKey: 'row.scifi', icon: 'fa-rocket', path: '/discover/movie', params: 'with_genres=878,14', page: 1, sortMode: 'newest' },
-                        actionRow: { titleKey: 'row.action', icon: 'fa-bomb', path: '/discover/movie', params: 'with_genres=28', page: 1, sortMode: 'newest' },
-                        comedyRow: { titleKey: 'row.comedy', icon: 'fa-laugh-squint', path: '/discover/movie', params: 'with_genres=35', page: 1, sortMode: 'newest' },
-                        crimeRow: { titleKey: 'row.crime', icon: 'fa-user-secret', path: '/discover/movie', params: 'with_genres=80,9648', page: 1, sortMode: 'newest' },
-                        romanceRow: { titleKey: 'row.romance', icon: 'fa-heart', path: '/discover/movie', params: 'with_genres=10749', page: 1, sortMode: 'newest' },
-                        familyRow: { titleKey: 'row.family', icon: 'fa-home', path: '/discover/movie', params: 'with_genres=10751', page: 1, sortMode: 'newest' },
-                        docRow: { titleKey: 'row.documentary', icon: 'fa-video', path: '/discover/movie', params: 'with_genres=99', page: 1, sortMode: 'newest' },
-                        warRow: { titleKey: 'row.war', icon: 'fa-fighter-jet', path: '/discover/movie', params: 'with_genres=10752', page: 1, sortMode: 'newest' },
-                        horrorRow: { titleKey: 'row.horror', icon: 'fa-skull', path: '/discover/movie', params: 'with_genres=27', page: 1, sortMode: 'newest' },
-                        mysteryRow: { titleKey: 'row.mystery', icon: 'fa-search', path: '/discover/movie', params: 'with_genres=9648', page: 1, sortMode: 'newest' },
-                        fantasyRow: { titleKey: 'row.fantasy', icon: 'fa-hat-wizard', path: '/discover/movie', params: 'with_genres=14', page: 1, sortMode: 'newest' },
-                        varietyRow: { titleKey: 'row.variety', icon: 'fa-microphone-alt', path: '/discover/tv', params: 'with_genres=10764', page: 1, sortMode: 'newest' },
-                        historyRow: { titleKey: 'row.history', icon: 'fa-landmark', path: '/discover/movie', params: 'with_genres=36', page: 1, sortMode: 'newest' }
+                        randomRow: { title: 'Random Picks', icon: 'fa-random', path: 'MIXED', params: '', page: 1 },
+                        movieRow: { title: 'Hot Movies', icon: 'fa-film', path: '/trending/movie/week', params: '', page: 1 },
+                        tvRow: { title: 'Hot Series', icon: 'fa-tv', path: '/trending/tv/week', params: '', page: 1 },
+                        cnRow: { title: 'Chinese Series', icon: 'fa-dragon', path: '/discover/tv', params: 'with_origin_country=CN', page: 1, sortMode: 'newest' },
+                        usRow: { title: 'US Series', icon: 'fa-flag-usa', path: '/discover/tv', params: 'with_origin_country=US', page: 1, sortMode: 'newest' },
+                        krjpRow: { title: 'Korean and Japanese Series', icon: 'fa-mask', path: '/discover/tv', params: 'with_origin_country=KR|JP', page: 1, sortMode: 'newest' },
+                        animeRow: { title: 'Anime', icon: 'fa-ghost', path: '/discover/tv', params: 'with_genres=16', page: 1, sortMode: 'newest' },
+                        scifiRow: { title: 'Sci-Fi and Fantasy', icon: 'fa-rocket', path: '/discover/movie', params: 'with_genres=878,14', page: 1, sortMode: 'newest' },
+                        actionRow: { title: 'Action', icon: 'fa-bomb', path: '/discover/movie', params: 'with_genres=28', page: 1, sortMode: 'newest' },
+                        comedyRow: { title: 'Comedy', icon: 'fa-laugh-squint', path: '/discover/movie', params: 'with_genres=35', page: 1, sortMode: 'newest' },
+                        crimeRow: { title: 'Crime and Mystery', icon: 'fa-user-secret', path: '/discover/movie', params: 'with_genres=80,9648', page: 1, sortMode: 'newest' },
+                        romanceRow: { title: 'Romance', icon: 'fa-heart', path: '/discover/movie', params: 'with_genres=10749', page: 1, sortMode: 'newest' },
+                        familyRow: { title: 'Family', icon: 'fa-home', path: '/discover/movie', params: 'with_genres=10751', page: 1, sortMode: 'newest' },
+                        docRow: { title: 'Documentary', icon: 'fa-video', path: '/discover/movie', params: 'with_genres=99', page: 1, sortMode: 'newest' },
+                        warRow: { title: 'War', icon: 'fa-fighter-jet', path: '/discover/movie', params: 'with_genres=10752', page: 1, sortMode: 'newest' },
+                        horrorRow: { title: 'Horror', icon: 'fa-skull', path: '/discover/movie', params: 'with_genres=27', page: 1, sortMode: 'newest' },
+                        mysteryRow: { title: 'Mystery', icon: 'fa-search', path: '/discover/movie', params: 'with_genres=9648', page: 1, sortMode: 'newest' },
+                        fantasyRow: { title: 'Fantasy', icon: 'fa-hat-wizard', path: '/discover/movie', params: 'with_genres=14', page: 1, sortMode: 'newest' },
+                        varietyRow: { title: 'Variety', icon: 'fa-microphone-alt', path: '/discover/tv', params: 'with_genres=10764', page: 1, sortMode: 'newest' },
+                        historyRow: { title: 'History', icon: 'fa-landmark', path: '/discover/movie', params: 'with_genres=36', page: 1, sortMode: 'newest' }
                     },
 
                     movieList: [], tvList: [], list_cn: [], list_krjp: [],
                     list_scifi: [], list_action: [], list_comedy: [], list_horror: [],
                     categories: [
-                        { name: 'Movies', labelKey: 'category.movies', icon: 'fa-film', action: 'scroll', value: 'movieRow', color: 'linear-gradient(135deg, #FF512F 0%, #DD2476 100%)' },
-                        { name: 'Series', labelKey: 'category.series', icon: 'fa-tv', action: 'scroll', value: 'tvRow', color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
-                        { name: 'Chinese', labelKey: 'category.chinese', icon: 'fa-dragon', action: 'scroll', value: 'cnRow', color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
-                        { name: 'US', labelKey: 'category.us', icon: 'fa-flag-usa', action: 'scroll', value: 'usRow', color: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)' },
-                        { name: 'KR/JP', labelKey: 'category.krjp', icon: 'fa-mask', action: 'scroll', value: 'krjpRow', color: 'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)' },
-                        { name: 'Anime', labelKey: 'category.anime', icon: 'fa-ghost', action: 'scroll', value: 'animeRow', color: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' },
-                        { name: 'Sci-Fi', labelKey: 'category.scifi', icon: 'fa-rocket', action: 'scroll', value: 'scifiRow', color: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
-                        { name: 'Action', labelKey: 'category.action', icon: 'fa-bomb', action: 'scroll', value: 'actionRow', color: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)' },
-                        { name: 'Comedy', labelKey: 'category.comedy', icon: 'fa-laugh-squint', action: 'scroll', value: 'comedyRow', color: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' },
-                        { name: 'Crime', labelKey: 'category.crime', icon: 'fa-user-secret', action: 'scroll', value: 'crimeRow', color: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' },
-                        { name: 'Romance', labelKey: 'category.romance', icon: 'fa-heart', action: 'scroll', value: 'romanceRow', color: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' },
-                        { name: 'Family', labelKey: 'category.family', icon: 'fa-home', action: 'scroll', value: 'familyRow', color: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' },
-                        { name: 'Documentary', labelKey: 'category.documentary', icon: 'fa-video', action: 'scroll', value: 'docRow', color: 'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)' },
-                        { name: 'War', labelKey: 'category.war', icon: 'fa-fighter-jet', action: 'scroll', value: 'warRow', color: 'linear-gradient(135deg, #ff0844 0%, #ffb199 100%)' },
-                        { name: 'Horror', labelKey: 'category.horror', icon: 'fa-skull', action: 'scroll', value: 'horrorRow', color: 'linear-gradient(135deg, #434343 0%, #000000 100%)' },
-                        { name: 'Mystery', labelKey: 'category.mystery', icon: 'fa-search', action: 'scroll', value: 'mysteryRow', color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
-                        { name: 'Fantasy', labelKey: 'category.fantasy', icon: 'fa-hat-wizard', action: 'scroll', value: 'fantasyRow', color: 'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)' },
-                        { name: 'Variety', labelKey: 'category.variety', icon: 'fa-microphone-alt', action: 'scroll', value: 'varietyRow', color: 'linear-gradient(135deg, #d299c2 0%, #fef9d7 100%)' },
-                        { name: 'History', labelKey: 'category.history', icon: 'fa-landmark', action: 'scroll', value: 'historyRow', color: 'linear-gradient(135deg, #accbee 0%, #e7f0fd 100%)' }
+                        { name: 'Movies', icon: 'fa-film', action: 'scroll', value: 'movieRow', color: 'linear-gradient(135deg, #FF512F 0%, #DD2476 100%)' },
+                        { name: 'Series', icon: 'fa-tv', action: 'scroll', value: 'tvRow', color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
+                        { name: 'Chinese', icon: 'fa-dragon', action: 'scroll', value: 'cnRow', color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
+                        { name: 'US', icon: 'fa-flag-usa', action: 'scroll', value: 'usRow', color: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)' },
+                        { name: 'KR/JP', icon: 'fa-mask', action: 'scroll', value: 'krjpRow', color: 'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)' },
+                        { name: 'Anime', icon: 'fa-ghost', action: 'scroll', value: 'animeRow', color: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' },
+                        { name: 'Sci-Fi', icon: 'fa-rocket', action: 'scroll', value: 'scifiRow', color: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
+                        { name: 'Action', icon: 'fa-bomb', action: 'scroll', value: 'actionRow', color: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)' },
+                        { name: 'Comedy', icon: 'fa-laugh-squint', action: 'scroll', value: 'comedyRow', color: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' },
+                        { name: 'Crime', icon: 'fa-user-secret', action: 'scroll', value: 'crimeRow', color: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' },
+                        { name: 'Romance', icon: 'fa-heart', action: 'scroll', value: 'romanceRow', color: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' },
+                        { name: 'Family', icon: 'fa-home', action: 'scroll', value: 'familyRow', color: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' },
+                        { name: 'Documentary', icon: 'fa-video', action: 'scroll', value: 'docRow', color: 'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)' },
+                        { name: 'War', icon: 'fa-fighter-jet', action: 'scroll', value: 'warRow', color: 'linear-gradient(135deg, #ff0844 0%, #ffb199 100%)' },
+                        { name: 'Horror', icon: 'fa-skull', action: 'scroll', value: 'horrorRow', color: 'linear-gradient(135deg, #434343 0%, #000000 100%)' },
+                        { name: 'Mystery', icon: 'fa-search', action: 'scroll', value: 'mysteryRow', color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
+                        { name: 'Fantasy', icon: 'fa-hat-wizard', action: 'scroll', value: 'fantasyRow', color: 'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)' },
+                        { name: 'Variety', icon: 'fa-microphone-alt', action: 'scroll', value: 'varietyRow', color: 'linear-gradient(135deg, #d299c2 0%, #fef9d7 100%)' },
+                        { name: 'History', icon: 'fa-landmark', action: 'scroll', value: 'historyRow', color: 'linear-gradient(135deg, #accbee 0%, #e7f0fd 100%)' }
                     ]
                 }
             },
             async mounted() {
-                document.documentElement.lang = this.uiLanguage;
                 this.loadLiveFavorites();
 
                 // 濠碘槅鍋撶徊浠嬪疮椤栫偛绠?TV 濠电姷顣藉Σ鍛村垂椤忓牆鐒垫い鎺嗗亾缁剧虎鍘惧☉鐢稿焵椤掑嫭鐓熼柣妯夸含椤︼箑顭胯缁瑩骞?
@@ -5785,22 +5538,6 @@
                 }
             },
             methods: {
-                t(key) {
-                    const active = UI_TRANSLATIONS[this.uiLanguage] || UI_TRANSLATIONS['zh-CN'];
-                    const fallback = UI_TRANSLATIONS['en-US'];
-                    return active[key] || fallback[key] || key;
-                },
-                changeUiLanguage() {
-                    if (!['zh-CN', 'en-US', 'ja-JP'].includes(this.uiLanguage)) {
-                        this.uiLanguage = 'zh-CN';
-                    }
-                    document.documentElement.lang = this.uiLanguage;
-                    try {
-                        localStorage.setItem('donggua_ui_language', this.uiLanguage);
-                    } catch (error) {
-                        console.error('[Settings] Failed to save UI language', error);
-                    }
-                },
                 isTvboxSource(source) {
                     return !!(source && (source.source_origin === 'tvbox' || String(source.site_key || '').startsWith('tvbox:')));
                 },
@@ -8484,7 +8221,7 @@
 
                     // 闂傚倷绀侀幉锛勬暜閹烘嚚娲晝閳ь剟鎮鹃悜钘夌闁瑰箍鍔庨崰鏍垂閹呮殾闁搞儮鏅╅弨?
                     config.sortMode = config.sortMode === 'newest' ? 'popular' : 'newest';
-                    console.log(`[Rows] Sort mode ${this.t(config.titleKey)} -> ${config.sortMode}`);
+                    console.log(`[Rows] Sort mode ${config.title} -> ${config.sortMode}`);
 
                     // 闂傚倷绀侀幉锟犲蓟閿濆绀夐幖娣妼閺嬩礁螖閿濆懎鏆欓柡瀣╃窔閺屾盯顢曢妶鍛亖婵炲瓨绮犻崹鍫曞蓟閵娿儮妲堟繛鍡樺笒椤ユ繈姊洪崨濞氭垹绮欓幋锝呯倒闂備胶鍋ㄩ崕閬嶅疮閸啩?
                     let rowEl = this.$refs[key];

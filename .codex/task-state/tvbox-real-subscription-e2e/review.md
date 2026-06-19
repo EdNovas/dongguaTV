@@ -64,3 +64,10 @@
 
 - Evidence checkpoint recorded. Functional relay validation now includes a reusable QA runner plus verified HTTP-ready, live, and plugin-required samples. Final acceptance is still pending broader source coverage and any additional ranking or packaging work we decide to add.
 - Evidence checkpoint recorded. Functional relay validation now includes a reusable QA runner, verified HTTP-ready/live/plugin-required samples, and a ranked AppleCMS HTTP candidate scan. Final acceptance is still pending any output-polish or broader source-family expansion we decide to add.
+
+## Desktop Localization Review
+
+- Visible review: Simplified Chinese is the default; Simplified Chinese, English, and Japanese switch immediately in Settings.
+- Automated review: `npm run test:localization-ui` passed for navigation, search, settings, HTML language, and persisted preference.
+- Build review: `npm run build` passed after the localization change.
+- Residual scope: secondary diagnostic and deeply nested operational strings can be localized incrementally during the next visual review.
