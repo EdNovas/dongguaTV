@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "desktop": "electron .",
-    "build": "node --check server.js && node --check main.js && node --check tools/catvod-bridge/server.js && node --check tools/catvod-bridge/javaBridgeSupervisor.js",
+    "build": "node --check server.js && node --check main.js && node --check public/sw.js && node --check tools/catvod-bridge/server.js && node --check tools/catvod-bridge/javaBridgeSupervisor.js",
     "dist": "electron-builder --win",
     "dist:desktop": "electron-builder --win",
     "bridge:catvod": "node tools/catvod-bridge/server.js",

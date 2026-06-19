@@ -64,3 +64,13 @@ Localization files: `public/index.html`, `tools/test-localization-ui.js`, and `p
 | 2026-06-19T08:50:00Z | Settings proxy-status button | pass | Visible feedback changed to `代理状态已更新` |
 | 2026-06-19T08:51:00Z | `npm.cmd run test:localization-ui` | pass | Automated click regression verified Settings Back, proxy feedback, Subscriptions Back, subscription refresh feedback, and absence of misleading heavy-stream toggle copy |
 | 2026-06-19T08:51:00Z | `npm.cmd run build` | pass | Syntax/build check remained green |
+
+## Search Diagnostics Cache And Interaction Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-19T10:54:00Z | Reproduced user search `梦魔绝镇` in the visible in-app browser | pass | No-result title, hint, diagnostics heading, counters, runtime state, recommendations, footer, and Back action all rendered in Simplified Chinese |
+| 2026-06-19T10:55:00Z | Search diagnostics action buttons | pass | Refresh remained responsive; Subscriptions and Settings opened through the shared sidebar navigation path; Back closed both panels; Home cleared search |
+| 2026-06-19T10:56:00Z | Service Worker cache upgrade | pass | Cache version advanced from `v25` to `v26`; HTML navigation changed to network-first so UI updates no longer remain hidden behind stale cached pages |
+| 2026-06-19T10:58:00Z | `npm.cmd run test:localization-ui` | pass | Real no-result search flow and diagnostic interaction assertions passed for Chinese, alongside English/Japanese switching checks |
+| 2026-06-19T10:58:00Z | `npm.cmd run build` | pass | Build now includes syntax validation for `public/sw.js` |

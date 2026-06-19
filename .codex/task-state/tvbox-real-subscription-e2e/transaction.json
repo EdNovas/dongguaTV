@@ -80,6 +80,31 @@
           "backup": "backups/20260619T082411Z/package.json"
         }
       ]
+    },
+    {
+      "id": "20260619T104541Z",
+      "created_at": "2026-06-19T10:45:41Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "public/index.html",
+          "existed": true,
+          "sha256": "1079966aaa72d95175247a99a4075d683836576515bd4b65a19f8668d5725171",
+          "backup": "backups/20260619T104541Z/public/index.html"
+        },
+        {
+          "path": "public/sw.js",
+          "existed": true,
+          "sha256": "cdbafbebb4e93fac470e921a4cf4078602fc463e861bd8737dca597392dc0754",
+          "backup": "backups/20260619T104541Z/public/sw.js"
+        },
+        {
+          "path": "tools/test-localization-ui.js",
+          "existed": true,
+          "sha256": "ccbceba310c5f3ec5b7f1155d864dbba7193d3be8465a9742e473e91e28308ca",
+          "backup": "backups/20260619T104541Z/tools/test-localization-ui.js"
+        }
+      ]
     }
   ],
   "restores": []

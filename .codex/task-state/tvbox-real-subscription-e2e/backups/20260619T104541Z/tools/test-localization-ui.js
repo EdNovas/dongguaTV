@@ -116,44 +116,6 @@ async function verifyChineseInteractions(win) {
 
     await win.webContents.executeJavaScript(`document.querySelector('[data-testid="subscription-back"]').click()`);
     await waitFor(win, '!window.vueApp.showSubscriptionPanel');
-
-    await win.webContents.executeJavaScript(`(() => {
-        const vm = window.vueApp;
-        vm.showSettingsModal = false;
-        vm.showSubscriptionPanel = false;
-        vm.keyword = '不存在的测试片名987654321';
-        vm.doSearch();
-    })()`);
-    await waitFor(win, 'window.vueApp.searched && !window.vueApp.loading', 60000);
-    await waitFor(win, 'document.querySelector("[data-testid=\\"search-diagnostics-refresh\\"]")', 60000);
-    await waitFor(win, 'window.vueApp.searchDiagnostics && !window.vueApp.searchDiagnosticsLoading', 60000);
-    const diagnostics = await win.webContents.executeJavaScript(`(() => {
-        const text = document.body.innerText;
-        return {
-            text,
-            hasRefresh: Boolean(document.querySelector('[data-testid="search-diagnostics-refresh"]')),
-            hasSubscriptions: Boolean(document.querySelector('[data-testid="search-open-subscriptions"]')),
-            hasSettings: Boolean(document.querySelector('[data-testid="search-open-settings"]')),
-            hasHome: Boolean(document.querySelector('[data-testid="search-go-home"]'))
-        };
-    })()`);
-    assert.match(diagnostics.text, /没有找到：“不存在的测试片名987654321”/);
-    assert.match(diagnostics.text, /搜索诊断/);
-    assert.match(diagnostics.text, /搜索会使用内置 HTTP 站点/);
-    assert.match(diagnostics.text, /请尝试其他片名/);
-    assert.doesNotMatch(diagnostics.text, /No results for|Search Diagnostics|Try alternate titles/);
-    assert.equal(diagnostics.hasRefresh, true);
-    assert.equal(diagnostics.hasSubscriptions, true);
-    assert.equal(diagnostics.hasSettings, true);
-    assert.equal(diagnostics.hasHome, true);
-
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="search-open-settings"]').click()`);
-    await waitFor(win, 'window.vueApp.showSettingsModal');
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="settings-back"]').click()`);
-    await waitFor(win, '!window.vueApp.showSettingsModal');
-
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="search-go-home"]').click()`);
-    await waitFor(win, '!window.vueApp.searched');
 }
 
 app.whenReady().then(async () => {

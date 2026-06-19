@@ -1,6 +1,6 @@
 // Service Worker with Image Caching for dongguaTV
-// v26: network-first navigation so desktop UI updates are visible immediately
-const CACHE_VERSION = 'v26';
+// v25: refresh cached HTML after TVBox decoder and runtime log updates
+const CACHE_VERSION = 'v25';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 
@@ -79,20 +79,20 @@ self.addEventListener('fetch', event => {
     // 相比原 Network-First：老用户不再每次重下 ~80-150KB(gzip) HTML，回访明显更快。
     if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
         event.respondWith(
-            caches.open(STATIC_CACHE).then(async cache => {
-                const cached = await cache.match(event.request);
-                try {
-                    const network = await fetch(event.request, { cache: 'no-store' });
-                    if (network && network.status === 200) {
-                        await cache.put(event.request, network.clone());
-                    }
-                    return network;
-                } catch (error) {
-                    return cached
-                        || (await cache.match('./index.html'))
-                        || new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
-                }
-            })
+            caches.open(STATIC_CACHE).then(cache =>
+                cache.match(event.request).then(cached => {
+                    const network = fetch(event.request)
+                        .then(response => {
+                            if (response && response.status === 200) {
+                                cache.put(event.request, response.clone());
+                            }
+                            return response;
+                        })
+                        .catch(() => cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' }));
+                    // 有缓存先秒开，后台 network 静默更新；无缓存则等网络
+                    return cached || network;
+                })
+            )
         );
         return;
     }

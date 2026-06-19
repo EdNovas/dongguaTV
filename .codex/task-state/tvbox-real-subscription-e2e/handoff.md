@@ -70,3 +70,6 @@
 - The incorrect Settings copy-to-control mapping was fixed: `hideRandomRow` is labeled as hiding random recommendations, and `filterNsfw` is labeled as adult-content filtering.
 - Subscription loading no longer pre-populates a failure message; refresh, save, detection, and proxy actions now show immediate progress/result feedback.
 - `npm run test:localization-ui` now performs click-level regression checks, not only static text checks.
+- Search diagnostics stale-English report was traced to Service Worker `v25` returning cached HTML. Cache version is now `v26`, and navigation HTML uses network-first behavior.
+- The search diagnostics card now reuses `handleAppleNav` for Subscriptions and Settings, matching the working sidebar path.
+- Modal Back buttons are fixed to the viewport so they remain visible on long settings content.

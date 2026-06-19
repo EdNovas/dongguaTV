@@ -79,3 +79,10 @@
 - Added explicit Back actions to core modal/detail surfaces.
 - Added visible action feedback and automated click checks for proxy status and subscription refresh.
 - The in-app browser is intentionally left on the Subscriptions panel with the successful refresh state visible for human review.
+
+## Search Diagnostics Cache Review
+
+- Confirmed the user's English screenshot came from stale Service Worker HTML, not the current translation table.
+- Advanced the cache to `v26` and switched HTML navigation to network-first.
+- Reproduced `梦魔绝镇` and verified the complete no-result diagnostics view in Chinese.
+- Verified Refresh, Subscriptions, Settings, panel Back, and Home interactions.

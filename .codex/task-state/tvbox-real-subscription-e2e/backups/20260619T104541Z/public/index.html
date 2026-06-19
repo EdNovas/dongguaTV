@@ -68,7 +68,7 @@
     <!-- SW 闂傚倷鑳剁划顖炪€冮崨瀛樺亱濠电姴鍋婇懓鍧楁煛婢跺寒鍤︽繛鎴欏灩閻掑灚銇勯幒鍡椾壕闂傚洤顦甸幃妤呮晲鎼存繄鍑归柣搴亢鐏忔瑩鍩€椤掍緡鍟忛柛鐘崇墵楠炴牠顢曢敃鈧弰銉︿繆閵堝懏鍣归柛妤佸▕閹鈽夊▍铏灴閹繝鍩€椤掑嫭鈷戦柟绋挎捣閳藉鏌ｅΔ鈧Λ娑㈠箲閵忋倕鐒垫い鎺嗗亾妞ゎ亜鍟存俊鍫曞醇椤愩垺顔勬繝鐢靛Л閸嬫挻銇勮箛鎾跺閻庢艾顦甸弻宥堫檨闁告挻鐟╅、姘舵晲婢跺﹦鍔﹀銈嗗笂缁€浣烘閻愬搫绾ч柛顐ｇ箓閳锋梻绱掗埀?-->
     <script data-cfasync="false">
         (function () {
-            var REQUIRED_SW_VERSION = 'v26';
+            var REQUIRED_SW_VERSION = 'v25';
             var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
 
             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞濠电姴楠搁弲鐘绘⒑閼测斁鎷￠柛鎾寸洴閹偓闁告侗鍘稿Σ鍫ユ煙閹规劕鍚圭紒杈ㄥ缁辨帞绱掑Ο鐓庮潷缂備礁顑呴ˇ鐢搞€侀弮鍫濆耿婵°倕锕ュВ澶愭⒒娴ｅ憡鎯堥柣妤佺矒瀹曟粌顫濇潏鈺佸触婵犵數濮电喊宥夊磻閻樼粯鐓曢柍鈺佸暞閻ㄦ垹绱掗悩宕囧⒌闁哄被鍔岄埥澶娢熸笟顖涱唲缂傚倷鐒﹂〃鍛此囬棃娑氭殾婵☆垯璀﹂崥瀣熆鐠虹尨鏀绘い蹇曞枑缁?
@@ -2354,14 +2354,13 @@
         }
 
         .info-modal-back {
-            position: fixed;
-            top: 22px;
-            left: 22px;
-            z-index: 10020;
+            position: sticky;
+            top: 0;
+            z-index: 12;
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            margin: 0;
+            margin: 18px 0 0 22px;
             padding: 9px 13px;
             border: 1px solid rgba(255, 255, 255, 0.16);
             border-radius: 8px;
@@ -3522,7 +3521,7 @@
             <div class="d-flex align-items-center gap-2 mb-5 mt-2">
                 <button class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2" @click="goHome"
                     style="color: #fff; border-color: rgba(255,255,255,0.3);">
-                    <i class="fas fa-arrow-left me-0 me-md-2"></i><span class="d-none d-md-inline">{{ t('common.back') }}</span>
+                    <i class="fas fa-arrow-left me-0 me-md-2"></i><span class="d-none d-md-inline">Back</span>
                 </button>
                 <div class="section-header mb-0 ms-3 ms-md-4">
                     <div class="section-line"></div>
@@ -3581,7 +3580,7 @@
                                 {{ t('search.diagnosticsDescription') }}
                             </div>
                         </div>
-                        <button class="btn-info" data-testid="search-diagnostics-refresh" @click="loadSearchDiagnostics" :disabled="searchDiagnosticsLoading"
+                        <button class="btn-info" @click="loadSearchDiagnostics" :disabled="searchDiagnosticsLoading"
                             style="border:0; padding:8px 12px; font-size:12px;">
                             <i :class="['fas', searchDiagnosticsLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
                             {{ searchDiagnosticsLoading ? t('common.refreshing') : t('common.refresh') }}
@@ -3637,16 +3636,14 @@
                     </div>
 
                     <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;">
-                        <button class="btn-info" data-testid="search-open-subscriptions"
-                            @click="handleAppleNav({ id: 'subscriptions', action: 'subscriptions' })"
+                        <button class="btn-info" @click="showSubscriptionPanel=true; loadSubscriptionData()"
                             style="border:0; padding:9px 14px; font-size:12px;">
                             <i class="fas fa-rss"></i> {{ t('nav.sources') }}</button>
-                        <button class="btn-info" data-testid="search-open-settings"
-                            @click="handleAppleNav({ id: 'settings', action: 'settings' })"
+                        <button class="btn-info" @click="showSettingsModal=true; loadPlayerSettings(); loadPluginRuntimeSettings()"
                             style="border:0; padding:9px 14px; font-size:12px;">
                             <i class="fas fa-cog"></i> {{ t('nav.settings') }}
                         </button>
-                        <button class="btn btn-outline-danger" data-testid="search-go-home" @click="clearSearch"
+                        <button class="btn btn-outline-danger" @click="clearSearch"
                             style="border-radius: 20px; padding: 8px 18px;">
                             <i class="fas fa-home"></i> {{ t('nav.home') }}
                         </button>
@@ -3692,7 +3689,7 @@
         <div class="info-modal-overlay" v-if="showLivePanel" @click.self="showLivePanel = false">
             <div class="info-modal" style="max-width: 760px;">
                 <button class="info-modal-close" @click="showLivePanel = false"><i class="fas fa-times"></i></button>
-                <button class="info-modal-back" @click="showLivePanel=false; activeAppleNav='home'">
+                <button class="info-modal-back" @click="closeAppPanel('live')">
                     <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
                 </button>
                 <div style="padding: 30px;">
@@ -3853,7 +3850,7 @@
             <div class="info-modal" style="max-width: 820px;">
                 <button class="info-modal-close" @click="showSubscriptionPanel = false"><i
                         class="fas fa-times"></i></button>
-                <button class="info-modal-back" data-testid="subscription-back" @click="showSubscriptionPanel=false; activeAppleNav='home'">
+                <button class="info-modal-back" data-testid="subscription-back" @click="closeAppPanel('subscriptions')">
                     <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
                 </button>
                 <div style="padding: 30px;">
@@ -4015,7 +4012,7 @@
             <div class="info-modal" style="max-width: 760px;">
                 <button class="info-modal-close" @click="showSettingsModal = false"><i
                         class="fas fa-times"></i></button>
-                <button class="info-modal-back" data-testid="settings-back" @click="showSettingsModal=false; activeAppleNav='home'">
+                <button class="info-modal-back" data-testid="settings-back" @click="closeAppPanel('settings')">
                     <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
                 </button>
                 <div style="padding: 30px;">
@@ -6426,8 +6423,6 @@
                             'Keep the fallback port behavior or change the LocalProxy port in Settings.': '保留自动备用端口，或在设置中更换本地代理端口。',
                             'Import your own TVBox JSON subscription before testing playback.': '测试播放前，请先导入你自己的 TVBox JSON 订阅。',
                             'Open Subscriptions to refresh sources, then try the search again.': '打开订阅源刷新数据，然后重新搜索。',
-                            'Search uses built-in HTTP sites plus compatible user TVBox HTTP/MacCMS sources. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.': '搜索会使用内置 HTTP 站点以及用户导入的兼容 TVBox HTTP/MacCMS 源。插件型 TVBox 源只做识别和诊断，不会直接执行订阅中的插件代码。',
-                            'Try alternate titles, Chinese names, or shorter keywords.': '请尝试其他片名、中文名称或更短的关键词。',
                             'not-installed': '未安装'
                         },
                         'ja-JP': {
@@ -6449,8 +6444,6 @@
                             'Keep the fallback port behavior or change the LocalProxy port in Settings.': '自動代替ポートを使うか、設定でポートを変更してください。',
                             'Import your own TVBox JSON subscription before testing playback.': '再生テスト前に自分のTVBox JSON購読を追加してください。',
                             'Open Subscriptions to refresh sources, then try the search again.': '購読を開いて更新し、もう一度検索してください。',
-                            'Search uses built-in HTTP sites plus compatible user TVBox HTTP/MacCMS sources. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.': '検索には内蔵HTTPサイトと、ユーザーが追加した互換TVBox HTTP/MacCMS配信元を使用します。プラグイン型TVBox配信元は識別と診断のみで、購読内のプラグインコードは直接実行しません。',
-                            'Try alternate titles, Chinese names, or shorter keywords.': '別の題名、中国語名、または短いキーワードを試してください。',
                             'not-installed': '未インストール'
                         }
                     };
