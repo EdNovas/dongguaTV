@@ -1269,6 +1269,103 @@ app.get('/api/live/groups', (req, res) => {
     }
 });
 
+async function probeLiveChannelUrl({ url, headers = {}, timeoutMs = 8000 }) {
+    const targetUrl = String(url || '').trim();
+    if (!/^https?:\/\//i.test(targetUrl)) {
+        return {
+            ok: false,
+            status: 'error',
+            reason: 'invalid-url',
+            message: 'Live channel URL is missing or invalid.'
+        };
+    }
+
+    const allowedHeaders = {};
+    for (const [key, value] of Object.entries(headers || {})) {
+        const lower = key.toLowerCase();
+        if (['user-agent', 'referer', 'origin', 'accept', 'cookie', 'authorization'].includes(lower) && value) {
+            allowedHeaders[key] = value;
+        }
+    }
+    if (!Object.keys(allowedHeaders).some(key => key.toLowerCase() === 'user-agent')) {
+        allowedHeaders['User-Agent'] = 'DongguaTV-Enhanced/1.0';
+    }
+    if (!Object.keys(allowedHeaders).some(key => key.toLowerCase() === 'accept')) {
+        allowedHeaders.Accept = '*/*';
+    }
+
+    const startedAt = Date.now();
+    try {
+        const response = await axios.get(targetUrl, {
+            headers: allowedHeaders,
+            responseType: 'stream',
+            timeout: Math.max(1000, Math.min(Number(timeoutMs) || 8000, 20000)),
+            maxRedirects: 5,
+            validateStatus: status => status >= 200 && status < 500
+        });
+
+        const chunks = [];
+        let total = 0;
+        await new Promise((resolve, reject) => {
+            const streamBody = response.data;
+            const finish = () => resolve();
+            streamBody.on('data', chunk => {
+                chunks.push(chunk);
+                total += chunk.length;
+                if (total >= 8192) {
+                    streamBody.destroy();
+                    finish();
+                }
+            });
+            streamBody.on('end', finish);
+            streamBody.on('close', finish);
+            streamBody.on('error', reject);
+        });
+
+        const preview = Buffer.concat(chunks, Math.min(total, 8192)).toString('utf8');
+        const isPlaylist = preview.trimStart().startsWith('#EXTM3U');
+        const httpOk = response.status >= 200 && response.status < 300;
+        return {
+            ok: httpOk,
+            status: httpOk ? 'available' : 'error',
+            httpStatus: response.status,
+            contentType: response.headers['content-type'] || '',
+            playlist: isPlaylist,
+            elapsedMs: Date.now() - startedAt,
+            reason: httpOk ? (isPlaylist ? 'playlist-ok' : 'http-ok') : 'http-error',
+            message: httpOk
+                ? (isPlaylist ? 'Live playlist is reachable.' : 'Live URL is reachable.')
+                : `Live URL returned HTTP ${response.status}.`
+        };
+    } catch (error) {
+        const timeout = error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '');
+        return {
+            ok: false,
+            status: 'error',
+            httpStatus: null,
+            contentType: '',
+            playlist: false,
+            elapsedMs: Date.now() - startedAt,
+            reason: timeout ? 'timeout' : 'network-error',
+            message: timeout ? 'Live URL timed out.' : 'Live URL probe failed.'
+        };
+    }
+}
+
+app.post('/api/live/probe', async (req, res) => {
+    try {
+        const body = req.body || {};
+        const result = await probeLiveChannelUrl({
+            url: body.url,
+            headers: body.headers || {},
+            timeoutMs: body.timeoutMs
+        });
+        res.json(result);
+    } catch (error) {
+        sendTvboxError(res, error, 400);
+    }
+});
+
 app.post('/api/source-health-check', async (req, res) => {
     try {
         const sourceId = req.body && req.body.sourceId;

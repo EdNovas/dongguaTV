@@ -112,3 +112,10 @@
 - Added launch metadata to external-player APIs so future UI/debug output can show `mpv.net` plus the spawned process id.
 - Automated checks passed: `npm run test:player-stack` and `npm run build`.
 - Residual risk: live endpoints drift by provider; unreachable individual channels should be treated as line health issues, not import/parser failures.
+
+## Live Channel Health Review
+
+- Added a safe per-channel live probe API that reports availability without returning raw stream URLs or sensitive header values.
+- Added localized Live panel health controls so users can tell whether a channel is available, timed out, or returned an HTTP error before blaming the app.
+- Verified real mixed results from the imported `饭太硬` list: `浙江新闻` available, `CCTV1` timed out in this session.
+- Service Worker cache was advanced to `v27` so the updated Live panel is not hidden behind stale cached HTML.

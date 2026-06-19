@@ -1,6 +1,6 @@
 // Service Worker with Image Caching for dongguaTV
-// v26: network-first navigation so desktop UI updates are visible immediately
-const CACHE_VERSION = 'v26';
+// v27: live-channel health UI and network-first navigation updates
+const CACHE_VERSION = 'v27';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 

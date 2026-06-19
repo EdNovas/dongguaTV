@@ -128,3 +128,20 @@ Live playback conclusion:
 - The imported image-hidden subscription now supports live-channel parsing and current-line playback through LocalProxy.
 - Some CCTV lines timed out in this session; the app should present per-line reachability rather than treating the whole subscription as broken.
 - The external-player launch path now gives enough metadata to distinguish "spawned successfully" from "stream/player exited later."
+
+## Live Channel Health UI Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-19T23:05:00Z | Added `POST /api/live/probe` | pass | Endpoint probes one user-imported live URL with allowed playback headers and returns only status metadata, HTTP status, playlist flag, elapsed time, and reason |
+| 2026-06-19T23:08:00Z | Added Live panel per-channel health button | pass | Channel cards now expose a localized `检查 / Check / 確認` action and show per-line available/timeout/error feedback |
+| 2026-06-19T23:11:00Z | `npm run build` | pass | Server, Electron main process, Service Worker, and CatVod bridge syntax checks passed |
+| 2026-06-19T23:14:00Z | Real probe against imported `饭太硬` live channels | mixed | `浙江新闻` returned `ok=true`, `reason=playlist-ok`, HTTP `200`; `CCTV1` returned `ok=false`, `reason=timeout` |
+| 2026-06-19T23:19:00Z | Static HTML verification through local preview server | pass | `curl` against `http://127.0.0.1:31386/index.html` returned Service Worker `v27` and the new `live.check` bindings |
+| 2026-06-19T23:25:00Z | `npm run test:localization-ui`; `npm run build` | pass | Chinese/Japanese/English UI regression passed after making `showSubscriptionPanel` an explicit reactive data field |
+
+Behavior notes:
+
+- Live health is intentionally per-channel because imported IPTV lists drift; a subscription can be valid while individual lines time out.
+- The health endpoint does not return the raw URL or sensitive header values to the UI.
+- Service Worker cache version was advanced to `v27` so the new Live UI can replace older cached HTML.

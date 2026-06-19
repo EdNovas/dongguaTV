@@ -68,7 +68,7 @@
     <!-- SW 闂傚倷鑳剁划顖炪€冮崨瀛樺亱濠电姴鍋婇懓鍧楁煛婢跺寒鍤︽繛鎴欏灩閻掑灚銇勯幒鍡椾壕闂傚洤顦甸幃妤呮晲鎼存繄鍑归柣搴亢鐏忔瑩鍩€椤掍緡鍟忛柛鐘崇墵楠炴牠顢曢敃鈧弰銉︿繆閵堝懏鍣归柛妤佸▕閹鈽夊▍铏灴閹繝鍩€椤掑嫭鈷戦柟绋挎捣閳藉鏌ｅΔ鈧Λ娑㈠箲閵忋倕鐒垫い鎺嗗亾妞ゎ亜鍟存俊鍫曞醇椤愩垺顔勬繝鐢靛Л閸嬫挻銇勮箛鎾跺閻庢艾顦甸弻宥堫檨闁告挻鐟╅、姘舵晲婢跺﹦鍔﹀銈嗗笂缁€浣烘閻愬搫绾ч柛顐ｇ箓閳锋梻绱掗埀?-->
     <script data-cfasync="false">
         (function () {
-            var REQUIRED_SW_VERSION = 'v26';
+            var REQUIRED_SW_VERSION = 'v27';
             var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
 
             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞濠电姴楠搁弲鐘绘⒑閼测斁鎷￠柛鎾寸洴閹偓闁告侗鍘稿Σ鍫ユ煙閹规劕鍚圭紒杈ㄥ缁辨帞绱掑Ο鐓庮潷缂備礁顑呴ˇ鐢搞€侀弮鍫濆耿婵°倕锕ュВ澶愭⒒娴ｅ憡鎯堥柣妤佺矒瀹曟粌顫濇潏鈺佸触婵犵數濮电喊宥夊磻閻樼粯鐓曢柍鈺佸暞閻ㄦ垹绱掗悩宕囧⒌闁哄被鍔岄埥澶娢熸笟顖涱唲缂傚倷鐒﹂〃鍛此囬棃娑氭殾婵☆垯璀﹂崥瀣熆鐠虹尨鏀绘い蹇曞枑缁?
@@ -3750,7 +3750,17 @@
                                     style="color:#fbbf24; font-size:10px; margin-top:5px;">
                                     <i class="fas fa-shield-alt"></i> {{ t('live.proxyRecommended') }}
                                 </div>
+                                <div v-if="liveHealthResults[favoriteLiveKey(channel)]"
+                                    :style="liveHealthResults[favoriteLiveKey(channel)].ok ? 'color:#34d399; font-size:10px; margin-top:5px;' : 'color:#f87171; font-size:10px; margin-top:5px;'">
+                                    <i :class="['fas', liveHealthResults[favoriteLiveKey(channel)].ok ? 'fa-check-circle' : 'fa-exclamation-circle']"></i>
+                                    {{ liveHealthResults[favoriteLiveKey(channel)].message }}
+                                    <span v-if="liveHealthResults[favoriteLiveKey(channel)].elapsedMs"> · {{ liveHealthResults[favoriteLiveKey(channel)].elapsedMs }}ms</span>
+                                </div>
                                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+                                    <button class="btn-info" @click="probeLiveChannel(channel)" :disabled="liveHealthLoading[favoriteLiveKey(channel)] || channel.status === 'error'"
+                                        style="border:0; padding:6px 10px; font-size:11px;">
+                                        <i :class="['fas', liveHealthLoading[favoriteLiveKey(channel)] ? 'fa-spinner fa-spin' : 'fa-stethoscope']"></i> {{ t('live.check') }}
+                                    </button>
                                     <button class="btn-info" @click="playLiveChannel(channel)" :disabled="channel.status === 'error'"
                                         style="border:0; padding:6px 10px; font-size:11px;">
                                     <i class="fas fa-play"></i> {{ t('common.play') }}
@@ -5247,6 +5257,12 @@
                 'live.searchPlaceholder': '搜索直播频道',
                 'live.favorites': '收藏',
                 'live.channels': '频道',
+                'live.check': '检查',
+                'live.checking': '正在检查线路…',
+                'live.available': '线路可用',
+                'live.unavailable': '线路不可用',
+                'live.timeout': '线路超时',
+                'live.checkFailed': '线路检查失败',
                 'live.proxyRecommended': '该线路带请求头，建议 MPC/mpv 使用本地代理',
                 'live.noFavorites': '还没有收藏频道。',
                 'live.noChannels': '没有找到直播频道。',
@@ -5494,6 +5510,12 @@
                 'live.searchPlaceholder': 'Search live channels',
                 'live.favorites': 'Favorites',
                 'live.channels': 'Channels',
+                'live.check': 'Check',
+                'live.checking': 'Checking line...',
+                'live.available': 'Line available',
+                'live.unavailable': 'Line unavailable',
+                'live.timeout': 'Line timed out',
+                'live.checkFailed': 'Line check failed',
                 'live.proxyRecommended': 'Headers detected; LocalProxy is recommended for MPC/mpv',
                 'live.noFavorites': 'No favorite channels yet.',
                 'live.noChannels': 'No live channels found.',
@@ -5741,6 +5763,12 @@
                 'live.searchPlaceholder': 'ライブチャンネルを検索',
                 'live.favorites': 'お気に入り',
                 'live.channels': 'チャンネル',
+                'live.check': '確認',
+                'live.checking': '回線を確認中…',
+                'live.available': '回線は利用可能',
+                'live.unavailable': '回線は利用不可',
+                'live.timeout': '回線がタイムアウト',
+                'live.checkFailed': '回線確認に失敗',
                 'live.proxyRecommended': 'ヘッダーが必要なため、MPC/mpvではローカルプロキシを推奨',
                 'live.noFavorites': 'お気に入りはまだありません。',
                 'live.noChannels': 'ライブチャンネルが見つかりません。',
@@ -5926,6 +5954,7 @@
                     desktopSelfCheckLoading: false,
                     desktopSelfCheckMessage: '',
                     activeAppleNav: 'home',
+                    showSubscriptionPanel: false,
                     subscriptionUrl: '',
                     subscriptionName: '',
                     subscriptionLoading: false,
@@ -5948,6 +5977,8 @@
                     liveHasMore: false,
                     liveFavorites: [],
                     showLiveFavoritesOnly: false,
+                    liveHealthResults: {},
+                    liveHealthLoading: {},
                     playerSettings: {
                         defaultPlayer: 'mpv',
                         mpcExePath: '',
@@ -7620,6 +7651,64 @@
                         headers: (channel && channel.headers) || {},
                         expiresAt: null
                     };
+                },
+
+                describeLiveHealth(data) {
+                    if (!data) return '';
+                    if (data.ok) {
+                        return data.playlist ? `${this.t('live.available')} · HLS` : this.t('live.available');
+                    }
+                    if (data.reason === 'timeout') return this.t('live.timeout');
+                    if (data.httpStatus) return `${this.t('live.unavailable')} · HTTP ${data.httpStatus}`;
+                    return data.message || this.t('live.checkFailed');
+                },
+
+                async probeLiveChannel(channel) {
+                    if (!channel || !channel.url) {
+                        this.showMiniToast && this.showMiniToast(this.t('live.checkFailed'));
+                        return;
+                    }
+                    const key = this.favoriteLiveKey(channel);
+                    this.liveHealthLoading = { ...this.liveHealthLoading, [key]: true };
+                    this.liveHealthResults = {
+                        ...this.liveHealthResults,
+                        [key]: {
+                            ok: false,
+                            message: this.t('live.checking'),
+                            elapsedMs: null
+                        }
+                    };
+                    try {
+                        const response = await fetch('/api/live/probe', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                url: channel.url,
+                                headers: channel.headers || {},
+                                timeoutMs: 8000
+                            })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Request failed');
+                        const result = {
+                            ...data,
+                            message: this.describeLiveHealth(data)
+                        };
+                        this.liveHealthResults = { ...this.liveHealthResults, [key]: result };
+                        this.showMiniToast && this.showMiniToast(result.message);
+                    } catch (error) {
+                        const result = {
+                            ok: false,
+                            status: 'error',
+                            reason: 'probe-failed',
+                            message: error.message || this.t('live.checkFailed'),
+                            elapsedMs: null
+                        };
+                        this.liveHealthResults = { ...this.liveHealthResults, [key]: result };
+                        this.showMiniToast && this.showMiniToast(result.message);
+                    } finally {
+                        this.liveHealthLoading = { ...this.liveHealthLoading, [key]: false };
+                    }
                 },
 
                 async playLiveChannel(channel) {

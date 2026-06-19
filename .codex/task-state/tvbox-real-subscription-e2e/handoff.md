@@ -79,3 +79,4 @@
 - Visible browser verification checked all 20 loaded rails: 20 descending, 0 failures.
 - Image-hidden TVBox configs are now decoded when they contain embedded FongMi Base64 or visible JSON. The user-provided image config imported successfully as `jpeg-image` / `fongmi-base64`, producing 48 plugin-required sites and 2880 live channels in isolated runtime testing.
 - A live sample from that imported subscription (`浙江新闻`) completed `LiveChannel -> LocalProxy -> mpv.net` validation. API launch metadata now includes `pid` and `playerType`, which should make future playback diagnostics clearer for non-technical review.
+- The Live panel now has per-channel health checks backed by `POST /api/live/probe`, with localized labels and Service Worker cache version `v27`. Real probes showed `浙江新闻` reachable and `CCTV1` timed out, so future UI should frame this as line drift rather than import failure.
