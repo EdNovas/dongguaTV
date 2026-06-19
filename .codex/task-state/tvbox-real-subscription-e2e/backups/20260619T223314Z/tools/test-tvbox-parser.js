@@ -43,19 +43,9 @@ const encrypted = parseTvboxJson(encodeFongMiCbc(fixture));
 assert.strictEqual(encrypted.sites[0].key, 'fixture');
 assert.strictEqual(encrypted._parserDiagnostics.decodeMode, 'fongmi-aes-cbc');
 
-const imageWrapped = parseTvboxJson(Buffer.concat([
-    Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
-    Buffer.from('JFIF\0\0fake-image-padding\0'),
-    Buffer.from(`imgcfg01**${Buffer.from(fixture).toString('base64')}`),
-    Buffer.from([0xff, 0xd9])
-]));
-assert.strictEqual(imageWrapped.sites[0].key, 'fixture');
-assert.strictEqual(imageWrapped._parserDiagnostics.payloadBinaryKind, 'jpeg-image');
-assert.strictEqual(imageWrapped._parserDiagnostics.decodeMode, 'fongmi-base64');
-
 assert.throws(
     () => parseTvboxJson(Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10])),
     error => error && error.code === 'image-config-unsupported'
 );
 
-console.log('TVBox parser fixtures passed: plain, Base64, AES-CBC, image Base64, image diagnostic.');
+console.log('TVBox parser fixtures passed: plain, Base64, AES-CBC, image diagnostic.');

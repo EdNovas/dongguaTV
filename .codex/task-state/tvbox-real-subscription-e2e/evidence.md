@@ -92,3 +92,22 @@ Ordering behavior:
 - Load-more results are merged, deduplicated, and sorted again.
 - Search groups use `vod_time`, `vod_pubdate`, `vod_addtime`, then `vod_year`; undated results remain available but sort after dated results.
 - Third-party source dates are stored as metadata only; no source URL is hardcoded.
+
+## TVBox Image Config Decode Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-19T22:33:14Z | Scoped rollback snapshot | pass | Snapshot `20260619T223314Z` captured `server/adapters/tvbox/tvboxParser.js` and `tools/test-tvbox-parser.js` |
+| 2026-06-19T22:34:00Z | Live probe of user-provided TVBox URL | pass | Response headers reported image content and the payload bytes were JPEG/JFIF, not direct JSON |
+| 2026-06-19T22:40:00Z | Parser update for image-config payloads | pass | JPEG/BMP/GIF/PNG image configs are recognized; embedded FongMi Base64 or visible JSON is extracted only when the decoded text has TVBox config signals |
+| 2026-06-19T22:43:00Z | `npm run test:tvbox-parser` | pass | Plain JSON, Base64, AES-CBC, image Base64, and unsupported-image diagnostics all passed |
+| 2026-06-19T22:45:00Z | `npm run build` | pass | Server, Electron main process, Service Worker, and CatVod bridge syntax checks passed |
+| 2026-06-19T22:48:00Z | Direct parser check against downloaded image payload | pass | Decoded as `jpeg-image` with `fongmi-base64`; parsed `48` sites, `8` live definitions, and detected a `spider` marker |
+| 2026-06-19T22:50:00Z | Real API import through `POST /api/subscriptions/import` on isolated runtime `31386` | pass | Imported subscription status `available`; summary: `48` sites, `2880` expanded live channels, `48` plugin-required sources, `0` unsupported |
+| 2026-06-19T22:55:00Z | Visible in-app browser review of Subscriptions panel | pass | The panel shows `饭太硬`, `站点 48`, `直播 2880`, `插件型 48`, `不支持 0`, and no `Unsupported TVBox image config` / `jpeg-image` error |
+
+Behavior notes:
+
+- The import no longer fails with `Unsupported TVBox image config: jpeg-image` for compatible image-hidden TVBox configs.
+- `csp_*` and spider-based sources from this subscription remain classified as `plugin-required`; the app still does not execute unknown jar, py, js, or csp plugin code.
+- Live-channel expansion is parsed and stored normally; individual live endpoints can still drift or fail independently at playback time.

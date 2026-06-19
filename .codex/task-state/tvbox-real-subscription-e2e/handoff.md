@@ -77,3 +77,4 @@
 - Cards display complete release/first-air dates instead of year-only labels.
 - `npm run test:newest-order-ui`, `npm run test:localization-ui`, and `npm run build` pass.
 - Visible browser verification checked all 20 loaded rails: 20 descending, 0 failures.
+- Image-hidden TVBox configs are now decoded when they contain embedded FongMi Base64 or visible JSON. The user-provided image config imported successfully as `jpeg-image` / `fongmi-base64`, producing 48 plugin-required sites and 2880 live channels in isolated runtime testing.

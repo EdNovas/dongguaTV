@@ -130,6 +130,25 @@
           "backup": "backups/20260619T124027Z/package.json"
         }
       ]
+    },
+    {
+      "id": "20260619T223314Z",
+      "created_at": "2026-06-19T22:33:14Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "server/adapters/tvbox/tvboxParser.js",
+          "existed": true,
+          "sha256": "ad620322f68eb49d95aef1b4f66e1ec8314d4f56aa5faebc1501bf17ce02d772",
+          "backup": "backups/20260619T223314Z/server/adapters/tvbox/tvboxParser.js"
+        },
+        {
+          "path": "tools/test-tvbox-parser.js",
+          "existed": true,
+          "sha256": "21ac92eb1082cd1a2ca1c05888202855e7b659cb4ebc0da59c5c7c04f46b32ec",
+          "backup": "backups/20260619T223314Z/tools/test-tvbox-parser.js"
+        }
+      ]
     }
   ],
   "restores": []

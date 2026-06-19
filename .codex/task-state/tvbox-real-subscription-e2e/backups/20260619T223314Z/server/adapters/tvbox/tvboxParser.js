@@ -189,7 +189,6 @@ function detectBinaryPayload(buffer) {
     if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) return 'png-image';
     if (buffer.subarray(0, 4).toString('ascii') === 'GIF8') return 'gif-image';
     if (buffer.subarray(0, 4).toString('ascii') === 'RIFF' && buffer.subarray(8, 12).toString('ascii') === 'WEBP') return 'webp-image';
-    if (buffer[0] === 0x42 && buffer[1] === 0x4d) return 'bmp-image';
     if (buffer[0] === 0x50 && buffer[1] === 0x4b) return 'zip-like-binary';
     return null;
 }
@@ -201,64 +200,15 @@ function createPayloadError(message, code, payloadKind) {
     return error;
 }
 
-function hasJsonSignal(text) {
-    return /"?(sites|parses|lives|spider|wallpaper|storeHouse|storehouse|urls)"?\s*:/i.test(String(text || ''));
-}
-
-function extractFongMiBase64FromBinary(buffer) {
-    const text = buffer.toString('latin1');
-    const markerPattern = /[A-Za-z0-9]{8}\*\*/g;
-    let marker;
-
-    while ((marker = markerPattern.exec(text)) !== null) {
-        const payloadStart = marker.index + marker[0].length;
-        let payloadEnd = payloadStart;
-        while (payloadEnd < text.length && /[A-Za-z0-9+/=\s]/.test(text[payloadEnd])) {
-            payloadEnd += 1;
-        }
-
-        const encoded = text.slice(payloadStart, payloadEnd).replace(/\s+/g, '');
-        if (encoded.length < 32) continue;
-
-        try {
-            const decoded = Buffer.from(encoded, 'base64').toString('utf8');
-            if (hasJsonSignal(decoded)) {
-                return `${marker[0]}${encoded}`;
-            }
-        } catch (error) {
-            // Keep scanning; image binary can contain accidental marker-like text.
-        }
-    }
-
-    return null;
-}
-
-function extractJsonTextFromBinary(buffer) {
-    const text = buffer.toString('utf8');
-    const candidate = extractFirstJsonCandidate(text);
-    return hasJsonSignal(candidate) ? candidate : null;
-}
-
-function decodeImageSteganographyPayload(buffer, binaryKind) {
-    const fongMiBase64 = extractFongMiBase64FromBinary(buffer);
-    if (fongMiBase64) return fongMiBase64;
-
-    const jsonText = extractJsonTextFromBinary(buffer);
-    if (jsonText) return jsonText;
-
-    throw createPayloadError(
-        `Unsupported TVBox image config: ${binaryKind}. Image-steganography configs were recognized, but no supported embedded TVBox JSON or FongMi Base64 payload was found.`,
-        'image-config-unsupported',
-        binaryKind
-    );
-}
-
 function toPayloadText(payload) {
     if (Buffer.isBuffer(payload)) {
         const binaryKind = detectBinaryPayload(payload);
         if (binaryKind) {
-            if (binaryKind.endsWith('-image')) return decodeImageSteganographyPayload(payload, binaryKind);
-            throw createPayloadError(`Unsupported TVBox binary config: ${binaryKind}.`, 'binary-config-unsupported', binaryKind);
+            throw createPayloadError(
+                `Unsupported TVBox image config: ${binaryKind}. Image-steganography configs are recognized but not decoded in this version.`,
+                'image-config-unsupported',
+                binaryKind
+            );
         }
         return payload.toString('utf8');
     }
@@ -441,12 +391,10 @@ function normalizeParsedConfig(parsed, diagnostics, originalText) {
 }
 
 function parseTvboxJson(payload) {
-    const binaryPayloadKind = Buffer.isBuffer(payload) ? detectBinaryPayload(payload) : null;
     const payloadText = toPayloadText(payload);
     const diagnostics = {
         payloadLength: payloadText.length,
         payloadKind: Buffer.isBuffer(payload) ? 'buffer' : 'text',
-        payloadBinaryKind: binaryPayloadKind,
         parseMode: 'unknown',
         configKind: 'unknown',
         decodeMode: 'unknown'

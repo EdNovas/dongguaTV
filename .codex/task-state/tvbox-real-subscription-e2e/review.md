@@ -96,3 +96,11 @@
 - Automated checks passed: `npm run test:newest-order-ui`, `npm run test:localization-ui`, and `npm run build`.
 - Human-visible browser check passed across all 20 loaded rows with no descending-order failures.
 - Residual risk: third-party search APIs may omit or misreport update dates; these items are kept and placed after reliably dated items.
+
+## TVBox Image Config Decode Review
+
+- Fixed the user-visible import failure for compatible image-hidden TVBox configs that previously stopped at `Unsupported TVBox image config: jpeg-image`.
+- The parser now detects image payloads and extracts embedded FongMi Base64 or visible JSON only when the decoded content looks like a TVBox config.
+- Real API import of the user-provided image config succeeded in an isolated runtime: `48` sites, `2880` live channels, `48` plugin-required sources, and `0` unsupported entries.
+- Safety boundary remains intact: plugin-required `csp_*` and spider sources are identified but not executed.
+- Automated checks passed: `npm run test:tvbox-parser` and `npm run build`.
