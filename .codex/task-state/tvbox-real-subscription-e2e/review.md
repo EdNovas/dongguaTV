@@ -104,3 +104,11 @@
 - Real API import of the user-provided image config succeeded in an isolated runtime: `48` sites, `2880` live channels, `48` plugin-required sources, and `0` unsupported entries.
 - Safety boundary remains intact: plugin-required `csp_*` and spider sources are identified but not executed.
 - Automated checks passed: `npm run test:tvbox-parser` and `npm run build`.
+
+## FanTaiYing Live Playback Review
+
+- Verified that imported live channels can move through `LiveChannel -> PlayUrlResult -> LocalProxy -> mpv.net`.
+- A live `浙江新闻` sample returned a valid HLS playlist through `127.0.0.1:9979`, including local proxy rewrites for child segments.
+- Added launch metadata to external-player APIs so future UI/debug output can show `mpv.net` plus the spawned process id.
+- Automated checks passed: `npm run test:player-stack` and `npm run build`.
+- Residual risk: live endpoints drift by provider; unreachable individual channels should be treated as line health issues, not import/parser failures.

@@ -111,3 +111,20 @@ Behavior notes:
 - The import no longer fails with `Unsupported TVBox image config: jpeg-image` for compatible image-hidden TVBox configs.
 - `csp_*` and spider-based sources from this subscription remain classified as `plugin-required`; the app still does not execute unknown jar, py, js, or csp plugin code.
 - Live-channel expansion is parsed and stored normally; individual live endpoints can still drift or fail independently at playback time.
+
+## FanTaiYing Live Playback Chain Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-19T22:48:00Z | Temporary player settings for isolated preview runtime | pass | `D:\DELL\mpvnet\mpvnet.exe` validated as `mpv.net`; default player set to `mpv`; LocalProxy enabled on `9979` |
+| 2026-06-19T22:49:00Z | Live-channel sample probe from imported `饭太硬` subscription | mixed | 48 channels sampled; 8 returned HTTP `200` and valid `#EXTM3U`; 40 timed out upstream, proving source-line drift rather than parser failure |
+| 2026-06-19T22:49:00Z | LocalProxy preview for live sample `浙江新闻` | pass | Proxy returned HTTP `200`, playlist started with `#EXTM3U`, and segment URLs were rewritten to local `127.0.0.1:9979/play/...` entries |
+| 2026-06-19T22:51:00Z | Added player launch metadata | pass | `open-mpv` and `open-mpc` now return launch metadata such as `pid` and `playerType` for clearer desktop diagnostics |
+| 2026-06-19T22:52:00Z | `npm run test:player-stack`; `npm run build` | pass | Player stack and syntax/build checks remained green after launch metadata update |
+| 2026-06-19T22:54:00Z | Restarted preview server and retested `open-mpv` with `浙江新闻` | pass | API returned `ok: true`, `playerType: mpv.net`, a process id, and a localhost proxy playback URL |
+
+Live playback conclusion:
+
+- The imported image-hidden subscription now supports live-channel parsing and current-line playback through LocalProxy.
+- Some CCTV lines timed out in this session; the app should present per-line reachability rather than treating the whole subscription as broken.
+- The external-player launch path now gives enough metadata to distinguish "spawned successfully" from "stream/player exited later."

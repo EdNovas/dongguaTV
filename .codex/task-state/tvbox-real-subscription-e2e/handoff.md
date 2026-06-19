@@ -78,3 +78,4 @@
 - `npm run test:newest-order-ui`, `npm run test:localization-ui`, and `npm run build` pass.
 - Visible browser verification checked all 20 loaded rails: 20 descending, 0 failures.
 - Image-hidden TVBox configs are now decoded when they contain embedded FongMi Base64 or visible JSON. The user-provided image config imported successfully as `jpeg-image` / `fongmi-base64`, producing 48 plugin-required sites and 2880 live channels in isolated runtime testing.
+- A live sample from that imported subscription (`浙江新闻`) completed `LiveChannel -> LocalProxy -> mpv.net` validation. API launch metadata now includes `pid` and `playerType`, which should make future playback diagnostics clearer for non-technical review.

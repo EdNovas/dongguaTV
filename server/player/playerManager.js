@@ -498,10 +498,11 @@ class PlayerManager {
         const settings = this.getSettings();
         const classification = classifyPlayUrl(input, settings);
         const proxy = settings.useLocalProxy ? await this.localProxy.register(input, settings) : null;
-        playWithMpc(proxy ? proxy.proxyUrl : input.url, settings);
+        const launch = playWithMpc(proxy ? proxy.proxyUrl : input.url, settings);
         return {
             ok: true,
             proxyUrl: proxy ? proxy.proxyUrl : null,
+            launch,
             recommendedPlayer: classification.recommendedPlayer,
             reason: classification.reason
         };
@@ -512,10 +513,11 @@ class PlayerManager {
         const settings = this.getSettings();
         const classification = classifyPlayUrl(input, settings);
         const proxy = settings.useLocalProxy ? await this.localProxy.register(input, settings) : null;
-        playWithMpv(proxy ? proxy.proxyUrl : input.url, settings);
+        const launch = playWithMpv(proxy ? proxy.proxyUrl : input.url, settings);
         return {
             ok: true,
             proxyUrl: proxy ? proxy.proxyUrl : null,
+            launch,
             recommendedPlayer: classification.recommendedPlayer,
             reason: classification.reason
         };

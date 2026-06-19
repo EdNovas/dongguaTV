@@ -29,6 +29,7 @@ function playWithMpv(url, settings) {
     child.unref();
     return {
         ok: true,
+        pid: child.pid,
         playerType: validation.playerType
     };
 }

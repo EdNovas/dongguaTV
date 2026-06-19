@@ -29,7 +29,7 @@ function playWithMpc(url, settings) {
     });
 
     child.unref();
-    return { ok: true };
+    return { ok: true, pid: child.pid };
 }
 
 module.exports = {
