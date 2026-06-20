@@ -18,6 +18,7 @@
     "test:tvbox-home-ranking": "node tools/test-tvbox-home-ranking.js",
     "test:tvbox-home-endpoint": "node tools/test-tvbox-home-endpoint.js",
     "test:plugin-bridge-search": "node tools/test-plugin-bridge-search.js",
+    "test:java-bridge-reflect": "node tools/test-java-bridge-reflect.js",
     "test:tvbox-real-qa": "node tools/test-tvbox-real-qa.js",
     "test:player-upstream": "node tools/test-player-upstream.js",
     "test:player-stack": "node tools/test-player-stack.js",
