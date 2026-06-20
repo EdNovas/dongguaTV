@@ -9370,13 +9370,58 @@
                         : `${type}:${item.title || item.name || item.vod_name || ''}:${this.mediaDateValue(item)}`;
                 },
 
+                isLowQualityHomeItem(item) {
+                    if (!item) return true;
+                    const blockWords = [
+                        '短剧', '微短剧', '竖屏', '爽文', '霸总', '女总裁', '战神', '赘婿',
+                        '闪婚', '离婚后', '重生', '逆袭', '全集', '合集', '一口气',
+                        '完整版', '短剧版', '抖音短剧', '快手短剧', '小程序短剧',
+                        '解说', '电影解说', '电视剧解说'
+                    ];
+                    const text = [
+                        item.title, item.name, item.vod_name, item.overview, item.description,
+                        item.desc, item.type, item.category, item.type_name, item.vod_class,
+                        item.remarks, item.vod_remarks
+                    ].filter(Boolean).join(' ');
+                    if (blockWords.some(word => text.includes(word))) return true;
+
+                    const rating = Number(item.vote_average || item.score || item.rate || item.rating || item.vod_score || 0);
+                    const year = this.mediaDateValue(item);
+                    const hasPoster = !!(item.poster_path || item.backdrop_path || item.vod_pic || item.pic || item.poster);
+                    return !year && rating === 0 && !hasPoster;
+                },
+
+                homeQualityRankScore(item) {
+                    const rating = Number(item.vote_average || item.score || item.rate || item.rating || item.vod_score || 0);
+                    const voteCount = Number(item.vote_count || item.votes || item.comment_count || item.play_count || 0);
+                    const popularity = Number(item.popularity || 0);
+                    const timestamp = this.mediaDateValue(item);
+                    const year = timestamp ? new Date(timestamp).getUTCFullYear() : 0;
+                    let score = 0;
+
+                    score += rating > 0 ? rating * 10 : -20;
+                    score += Math.log10(voteCount + 1) * 8;
+                    score += Math.log10(popularity + 1) * 10;
+
+                    if (year >= 2026) score += 8;
+                    else if (year >= 2025) score += 6;
+                    else if (year >= 2023) score += 4;
+                    else if (year >= 2020) score += 2;
+
+                    if (item.poster_path || item.backdrop_path || item.vod_pic || item.pic || item.poster) score += 3;
+                    if (item.overview || item.desc || item.vod_blurb || item.content || item.description) score += 2;
+                    if (timestamp || item.year || item.vod_year) score += 2;
+                    if (rating === 0) score -= 15;
+                    return score;
+                },
+
                 sortMediaNewest(items) {
                     const unique = new Map();
                     (Array.isArray(items) ? items : []).forEach(item => {
                         const key = this.mediaIdentity(item);
                         if (!unique.has(key)) unique.set(key, item);
                     });
-                    return Array.from(unique.values()).sort((a, b) => {
+                    return Array.from(unique.values()).filter(item => !this.isLowQualityHomeItem(item)).sort((a, b) => {
                         const popularityA = Number(a.popularity || a.vote_count || 0);
                         const popularityB = Number(b.popularity || b.vote_count || 0);
                         const titleA = a.title || a.name || a.vod_name || '';
@@ -9393,14 +9438,12 @@
                         const key = this.mediaIdentity(item);
                         if (!unique.has(key)) unique.set(key, item);
                     });
-                    return Array.from(unique.values()).sort((a, b) => {
-                        const popularityA = Number(a.popularity || 0);
-                        const popularityB = Number(b.popularity || 0);
+                    return Array.from(unique.values()).filter(item => !this.isLowQualityHomeItem(item)).sort((a, b) => {
                         const votesA = Number(a.vote_count || 0);
                         const votesB = Number(b.vote_count || 0);
                         const titleA = a.title || a.name || a.vod_name || '';
                         const titleB = b.title || b.name || b.vod_name || '';
-                        return popularityB - popularityA
+                        return this.homeQualityRankScore(b) - this.homeQualityRankScore(a)
                             || votesB - votesA
                             || this.mediaDateValue(b) - this.mediaDateValue(a)
                             || String(titleA).localeCompare(String(titleB), this.uiLanguage);

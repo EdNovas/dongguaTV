@@ -49,7 +49,8 @@ app.whenReady().then(async () => {
                 { id: 2, media_type: 'movie', title: 'Newest', release_date: '2026-06-18', popularity: 1 },
                 { id: 3, media_type: 'tv', name: 'Middle', first_air_date: '2025-08-20', popularity: 50 },
                 { id: 2, media_type: 'movie', title: 'Duplicate', release_date: '2026-06-18', popularity: 1 },
-                { id: 4, media_type: 'movie', title: 'Unknown date', popularity: 999 }
+                { id: 4, media_type: 'movie', title: 'Unknown date', popularity: 999 },
+                { id: 5, media_type: 'tv', name: '霸总短剧合集', first_air_date: '2026-06-19', popularity: 500 }
             ];
             const newestSorted = vm.sortMediaNewest(sample);
             const popularSorted = vm.sortMediaPopular(sample);
@@ -65,6 +66,11 @@ app.whenReady().then(async () => {
                 newestDates: newestSorted.map(item => vm.mediaDateValue(item)),
                 popularTitles: popularSorted.map(item => item.title || item.name),
                 popularScores: popularSorted.map(item => Number(item.popularity || 0)),
+                popularQualityScores: popularSorted.map(item => vm.homeQualityRankScore(item)),
+                lowQualityChecks: {
+                    unknown: vm.isLowQualityHomeItem(sample[4]),
+                    shortDrama: vm.isLowQualityHomeItem(sample[5])
+                },
                 groupedNames: vm.groupedList.map(item => item.name),
                 rowConfigs: Object.fromEntries(Object.entries(vm.rowConfigs).map(([key, config]) => [
                     key,
@@ -77,10 +83,12 @@ app.whenReady().then(async () => {
         })()`);
 
         assert.notEqual(result.ok, false, result.error);
-        assert.deepEqual(result.newestTitles, ['Newest', 'Middle', 'Older', 'Unknown date']);
+        assert.deepEqual(result.newestTitles, ['Newest', 'Middle', 'Older']);
         assert.ok(result.newestDates.every((value, index, array) => index === 0 || array[index - 1] >= value));
-        assert.deepEqual(result.popularTitles, ['Unknown date', 'Older', 'Middle', 'Newest']);
-        assert.ok(result.popularScores.every((value, index, array) => index === 0 || array[index - 1] >= value));
+        assert.deepEqual(result.popularTitles, ['Older', 'Middle', 'Newest']);
+        assert.ok(result.popularQualityScores.every((value, index, array) => index === 0 || array[index - 1] >= value));
+        assert.equal(result.lowQualityChecks.unknown, true);
+        assert.equal(result.lowQualityChecks.shortDrama, true);
         assert.deepEqual(result.groupedNames, ['2026 item', '2025 item', '2023 item']);
         assert.equal(result.rowConfigs.randomRow.sortMode, 'popular');
         assert.equal(result.rowConfigs.movieRow.path, '/discover/movie');
