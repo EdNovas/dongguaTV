@@ -145,3 +145,22 @@ Behavior notes:
 - Live health is intentionally per-channel because imported IPTV lists drift; a subscription can be valid while individual lines time out.
 - The health endpoint does not return the raw URL or sensitive header values to the UI.
 - Service Worker cache version was advanced to `v27` so the new Live UI can replace older cached HTML.
+
+## Hot-First Homepage Ranking Correction Evidence
+
+| Time | Command or check | Exit/status | Result or artifact |
+|---|---|---|---|
+| 2026-06-20T07:23:46Z | Restarted local preview server on `127.0.0.1:31386` | pass | Reloaded current `public/index.html` from `D:\CodexWorks\dongguaTV-enhanced-app` with temp data under `D:\CodexWorks\tmp\dongguatv-visual-preview\runtime` |
+| 2026-06-20T07:26:00Z | `npm run test:newest-order-ui` | pass | Verified both newest sorting and popular sorting; all 20 homepage row configs now default to `popular`; first rows are `热播推荐`, `热门电影`, and `热门剧集` |
+| 2026-06-20T07:28:00Z | `npm run test:localization-ui` | pass | Chinese/Japanese/English UI regression passed with clean UTF-8 assertions and explicit modal Back button checks |
+| 2026-06-20T07:31:00Z | `npm run test:tvbox-parser`; `npm run test:player-stack` | pass | TVBox parser and external-player/LocalProxy regression remained green |
+| 2026-06-20T07:32:00Z | `npm run build` | pass | Server, Electron main process, Service Worker, and CatVod bridge syntax checks passed |
+| 2026-06-20T07:34:00Z | Live TMDb proxy comparison | pass | `primary_release_date.desc` returned zero-vote, near-zero-popularity obscure same-day records; `popularity.desc` and `trending/all/week` returned higher-signal titles with meaningful popularity/vote counts |
+
+Ranking behavior:
+
+- The user's TVBox/欧歌 comparison showed that a useful影视首页 should behave like `热播/推荐/源内高质量入口`, not a raw database "newest uploaded metadata" feed.
+- Homepage hero and mixed recommendation now use weekly trending data.
+- Movie, series, and category rails default to `popularity.desc` with a small vote-count floor instead of `primary_release_date.desc` / `first_air_date.desc`.
+- The newest-first sorter is still kept and tested for places where date ordering is explicitly useful, but it is no longer the homepage default.
+- Search result grouping still uses source update dates where available; undated or weakly dated items remain available but should not dominate the main homepage.

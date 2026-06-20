@@ -1,8 +1,15 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { app, BrowserWindow } = require('electron');
 
 const appUrl = process.env.LOCALIZATION_QA_URL || 'http://127.0.0.1:31386/';
 const targetUrl = `${appUrl}${appUrl.includes('?') ? '&' : '?'}localizationQa=${Date.now()}`;
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donggua-localization-'));
+
+app.setPath('userData', userDataDir);
+app.commandLine.appendSwitch('disable-gpu');
 
 const expected = {
     'zh-CN': {
@@ -21,6 +28,13 @@ const expected = {
         settingsTitle: 'Player and App Settings'
     }
 };
+
+function cleanupAndExit(code) {
+    try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+    } catch {}
+    app.exit(code);
+}
 
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -45,7 +59,7 @@ async function setLanguage(win, language) {
         vm.$forceUpdate();
     })()`);
     await waitFor(win, 'document.querySelector(".info-modal select")');
-    await delay(100);
+    await waitFor(win, 'document.querySelector("[data-testid=\\"settings-back\\"]")?.innerText.trim()');
 }
 
 async function readUi(win) {
@@ -76,7 +90,7 @@ function verifyLanguage(language, state) {
 async function verifyChineseInteractions(win) {
     await setLanguage(win, 'zh-CN');
     const settings = await win.webContents.executeJavaScript(`(() => ({
-        back: document.querySelector('[data-testid="settings-back"]')?.textContent.trim() || '',
+        back: document.querySelector('[data-testid="settings-back"]')?.innerText.trim() || '',
         text: document.querySelector('.info-modal')?.innerText || '',
         misleadingToggle: (document.querySelector('.info-modal')?.innerText || '').includes('Prefer external player for heavy streams')
     }))()`);
@@ -101,7 +115,7 @@ async function verifyChineseInteractions(win) {
     await waitFor(win, 'document.querySelector("[data-testid=\\"subscription-back\\"]")');
     await waitFor(win, '!window.vueApp.subscriptionLoading');
     const subscription = await win.webContents.executeJavaScript(`(() => ({
-        back: document.querySelector('[data-testid="subscription-back"]')?.textContent.trim() || '',
+        back: document.querySelector('[data-testid="subscription-back"]')?.innerText.trim() || '',
         text: document.querySelector('.info-modal')?.innerText || '',
         error: window.vueApp.subscriptionError
     }))()`);
@@ -187,9 +201,9 @@ app.whenReady().then(async () => {
             checkedLanguages: Object.keys(results),
             languageOptions: results['zh-CN'].languageOptions
         }, null, 2));
-        app.exit(0);
+        cleanupAndExit(0);
     } catch (error) {
         console.error(error.stack || error.message);
-        app.exit(1);
+        cleanupAndExit(1);
     }
 });

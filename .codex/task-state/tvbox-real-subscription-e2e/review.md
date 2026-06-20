@@ -97,6 +97,14 @@
 - Human-visible browser check passed across all 20 loaded rows with no descending-order failures.
 - Residual risk: third-party search APIs may omit or misreport update dates; these items are kept and placed after reliably dated items.
 
+## Hot-First Homepage Ranking Review
+
+- The newest-first homepage policy above was superseded on 2026-06-20 after comparison with TVBox/欧歌 behavior and the user's visual feedback.
+- Root cause: raw date sorting promoted metadata that was technically new but had almost no popularity or vote signal, which made the homepage feel lower quality than TVBox-style hot/recommended lists.
+- Fix: homepage hero and mixed recommendations now use weekly trending data; normal rails default to popularity-first with a vote-count floor. Newest sorting remains available and tested for explicit date-first contexts.
+- Automated checks passed: `npm run test:newest-order-ui`, `npm run test:localization-ui`, `npm run test:tvbox-parser`, `npm run test:player-stack`, and `npm run build`.
+- Residual risk: TMDb popularity/trending still differs from individual TVBox provider recommendations; true TVBox parity would require provider-side category/recommendation adapters per source family.
+
 ## TVBox Image Config Decode Review
 
 - Fixed the user-visible import failure for compatible image-hidden TVBox configs that previously stopped at `Unsupported TVBox image config: jpeg-image`.

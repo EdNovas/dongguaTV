@@ -3443,11 +3443,11 @@
                         <!-- 婵犵數鍋涢顓熸叏閹绢喖绠犻幖鎼厛閺佸銇勯弮鍌氫壕闁?sortMode 闂?discover 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷槈濮橆厼浠忓銈嗗姧缁犳垿宕ｆ繝鍥ㄧ厱闁圭偓銇炲鎺斿垝閻㈠憡鈷戦柛娑橈工缁楁帗绻涚拠褏鐣遍柣锝囧厴瀵濡烽妷褍鈧偤姊虹紒妯哄Е闁告挻鐩畷?-->
                         <i :class="['fas', config.icon, config.sortMode ? 'sort-toggle-icon' : '', config.sortMode]"
                             :style="{ cursor: 'default' }"
-                            :title="config.sortMode ? t('sort.newestFirst') : ''"></i>
+                            :title="config.sortMode === 'newest' ? t('sort.newestFirst') : t('sort.popularFirst')"></i>
                         {{ t(config.titleKey) }}
                         <!-- 婵犵數鍋涢顓熸叏閹绢喖绠犻幖鎼厛閺?discover 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷槈濮橆厼浠忓銈嗗姧缁犳垿宕ｆ繝鍥ㄧ厱闁圭偓銇炲鎺斿垝閻㈠憡鈷戦柛锔诲幖閸斿鎮介娑樼闁兼椽浜堕、姗€鎮╅崘鍙夌€梻浣告贡閸庛倝骞愭ィ鍐ㄥ瀭?-->
                         <span v-if="config.sortMode" class="sort-indicator">
-                            {{ t('sort.new') }}
+                            {{ config.sortMode === 'newest' ? t('sort.new') : t('sort.hot') }}
                         </span>
                     </div>
                     <span class="expand-toggle" :class="{ expanded: expandedRows[key] }" @click="toggleRowExpand(key)"
@@ -5191,9 +5191,9 @@
                 'feature.sourcesMeta': '管理 TVBox 与本地订阅源',
                 'feature.playerTitle': '播放器',
                 'feature.playerMeta': '外部播放器与播放偏好',
-                'row.random': '最近更新',
-                'row.movies': '最新电影',
-                'row.series': '最新剧集',
+                'row.random': '热播推荐',
+                'row.movies': '热门电影',
+                'row.series': '热门剧集',
                 'row.chinese': '国产剧集',
                 'row.us': '欧美剧集',
                 'row.krjp': '日韩剧集',
@@ -5214,6 +5214,7 @@
                 'sort.new': '最新',
                 'sort.hot': '热门',
                 'sort.newestFirst': '按最新时间排列',
+                'sort.popularFirst': '按热度排列',
                 'subscriptions.title': '订阅源',
                 'settings.title': '播放器与应用设置',
                 'settings.language': '界面语言',
@@ -5444,9 +5445,9 @@
                 'feature.sourcesMeta': 'Manage TVBox and local sources',
                 'feature.playerTitle': 'Player',
                 'feature.playerMeta': 'External players and playback preferences',
-                'row.random': 'Recent Updates',
-                'row.movies': 'Latest Movies',
-                'row.series': 'Latest Series',
+                'row.random': 'Trending Picks',
+                'row.movies': 'Hot Movies',
+                'row.series': 'Hot Series',
                 'row.chinese': 'Chinese Series',
                 'row.us': 'US Series',
                 'row.krjp': 'Korean and Japanese Series',
@@ -5467,6 +5468,7 @@
                 'sort.new': 'NEW',
                 'sort.hot': 'HOT',
                 'sort.newestFirst': 'Newest first',
+                'sort.popularFirst': 'Popular first',
                 'subscriptions.title': 'Subscriptions',
                 'settings.title': 'Player and App Settings',
                 'settings.language': 'Interface language',
@@ -5697,9 +5699,9 @@
                 'feature.sourcesMeta': 'TVBox とローカル配信元を管理',
                 'feature.playerTitle': 'プレーヤー',
                 'feature.playerMeta': '外部プレーヤーと再生設定',
-                'row.random': '最近の更新',
-                'row.movies': '最新映画',
-                'row.series': '最新ドラマ',
+                'row.random': '話題のおすすめ',
+                'row.movies': '人気映画',
+                'row.series': '人気ドラマ',
                 'row.chinese': '中国ドラマ',
                 'row.us': '欧米ドラマ',
                 'row.krjp': '韓国・日本ドラマ',
@@ -5720,6 +5722,7 @@
                 'sort.new': '最新',
                 'sort.hot': '人気',
                 'sort.newestFirst': '新しい順',
+                'sort.popularFirst': '人気順',
                 'subscriptions.title': '配信元',
                 'settings.title': 'プレーヤーとアプリ設定',
                 'settings.language': '表示言語',
@@ -6125,26 +6128,26 @@
                     viewPages: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮堕悧鐘诲箚閸繍鍚嬮柛婊€绀佸▓銊╂⒑闁偛鑻晶瀵糕偓娈垮櫘閸ｏ絽鐣峰鍕闁革富鍘藉▓鎼佹⒒娴ｅ憡鎯堥悶姘煎亰瀹曟洟宕樼拠褑鈧潡鏌涘☉鍗炴灁濞存粍绮撻弻锝夊閵忊剝姣勯梺?{ movieRow: 1, ... }
                     pageLoadingKeys: {}, // 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柛顐ｆ处閺佸棙绻涢幋娆忕仾闁绘挸鍊婚埀顒€绠嶉崕閬嶅箯鐎ｎ€絾绻濆鍗炲絼闂佹悶鍎村▔娑欑娴煎瓨鐓冪憸婊堝礈濞戙垹绐楅柟鎹愵嚙绾惧鏌ㄥ┑鍡╂Ц缂佲偓閸曨垱鍋ｉ柛銉ｅ妼缁茬粯銇勯顒傜М鐎?{ movieRow: true, ... }
                     rowConfigs: {
-                        randomRow: { titleKey: 'row.random', icon: 'fa-clock', path: 'MIXED', params: '', page: 1, sortMode: 'newest' },
-                        movieRow: { titleKey: 'row.movies', icon: 'fa-film', path: '/discover/movie', params: '', page: 1, sortMode: 'newest' },
-                        tvRow: { titleKey: 'row.series', icon: 'fa-tv', path: '/discover/tv', params: '', page: 1, sortMode: 'newest' },
-                        cnRow: { titleKey: 'row.chinese', icon: 'fa-dragon', path: '/discover/tv', params: 'with_origin_country=CN', page: 1, sortMode: 'newest' },
-                        usRow: { titleKey: 'row.us', icon: 'fa-flag-usa', path: '/discover/tv', params: 'with_origin_country=US', page: 1, sortMode: 'newest' },
-                        krjpRow: { titleKey: 'row.krjp', icon: 'fa-mask', path: '/discover/tv', params: 'with_origin_country=KR|JP', page: 1, sortMode: 'newest' },
-                        animeRow: { titleKey: 'row.anime', icon: 'fa-ghost', path: '/discover/tv', params: 'with_genres=16', page: 1, sortMode: 'newest' },
-                        scifiRow: { titleKey: 'row.scifi', icon: 'fa-rocket', path: '/discover/movie', params: 'with_genres=878,14', page: 1, sortMode: 'newest' },
-                        actionRow: { titleKey: 'row.action', icon: 'fa-bomb', path: '/discover/movie', params: 'with_genres=28', page: 1, sortMode: 'newest' },
-                        comedyRow: { titleKey: 'row.comedy', icon: 'fa-laugh-squint', path: '/discover/movie', params: 'with_genres=35', page: 1, sortMode: 'newest' },
-                        crimeRow: { titleKey: 'row.crime', icon: 'fa-user-secret', path: '/discover/movie', params: 'with_genres=80,9648', page: 1, sortMode: 'newest' },
-                        romanceRow: { titleKey: 'row.romance', icon: 'fa-heart', path: '/discover/movie', params: 'with_genres=10749', page: 1, sortMode: 'newest' },
-                        familyRow: { titleKey: 'row.family', icon: 'fa-home', path: '/discover/movie', params: 'with_genres=10751', page: 1, sortMode: 'newest' },
-                        docRow: { titleKey: 'row.documentary', icon: 'fa-video', path: '/discover/movie', params: 'with_genres=99', page: 1, sortMode: 'newest' },
-                        warRow: { titleKey: 'row.war', icon: 'fa-fighter-jet', path: '/discover/movie', params: 'with_genres=10752', page: 1, sortMode: 'newest' },
-                        horrorRow: { titleKey: 'row.horror', icon: 'fa-skull', path: '/discover/movie', params: 'with_genres=27', page: 1, sortMode: 'newest' },
-                        mysteryRow: { titleKey: 'row.mystery', icon: 'fa-search', path: '/discover/movie', params: 'with_genres=9648', page: 1, sortMode: 'newest' },
-                        fantasyRow: { titleKey: 'row.fantasy', icon: 'fa-hat-wizard', path: '/discover/movie', params: 'with_genres=14', page: 1, sortMode: 'newest' },
-                        varietyRow: { titleKey: 'row.variety', icon: 'fa-microphone-alt', path: '/discover/tv', params: 'with_genres=10764', page: 1, sortMode: 'newest' },
-                        historyRow: { titleKey: 'row.history', icon: 'fa-landmark', path: '/discover/movie', params: 'with_genres=36', page: 1, sortMode: 'newest' }
+                        randomRow: { titleKey: 'row.random', icon: 'fa-fire', path: 'MIXED', params: '', page: 1, sortMode: 'popular' },
+                        movieRow: { titleKey: 'row.movies', icon: 'fa-film', path: '/discover/movie', params: '', page: 1, sortMode: 'popular' },
+                        tvRow: { titleKey: 'row.series', icon: 'fa-tv', path: '/discover/tv', params: '', page: 1, sortMode: 'popular' },
+                        cnRow: { titleKey: 'row.chinese', icon: 'fa-dragon', path: '/discover/tv', params: 'with_origin_country=CN', page: 1, sortMode: 'popular' },
+                        usRow: { titleKey: 'row.us', icon: 'fa-flag-usa', path: '/discover/tv', params: 'with_origin_country=US', page: 1, sortMode: 'popular' },
+                        krjpRow: { titleKey: 'row.krjp', icon: 'fa-mask', path: '/discover/tv', params: 'with_origin_country=KR|JP', page: 1, sortMode: 'popular' },
+                        animeRow: { titleKey: 'row.anime', icon: 'fa-ghost', path: '/discover/tv', params: 'with_genres=16', page: 1, sortMode: 'popular' },
+                        scifiRow: { titleKey: 'row.scifi', icon: 'fa-rocket', path: '/discover/movie', params: 'with_genres=878,14', page: 1, sortMode: 'popular' },
+                        actionRow: { titleKey: 'row.action', icon: 'fa-bomb', path: '/discover/movie', params: 'with_genres=28', page: 1, sortMode: 'popular' },
+                        comedyRow: { titleKey: 'row.comedy', icon: 'fa-laugh-squint', path: '/discover/movie', params: 'with_genres=35', page: 1, sortMode: 'popular' },
+                        crimeRow: { titleKey: 'row.crime', icon: 'fa-user-secret', path: '/discover/movie', params: 'with_genres=80,9648', page: 1, sortMode: 'popular' },
+                        romanceRow: { titleKey: 'row.romance', icon: 'fa-heart', path: '/discover/movie', params: 'with_genres=10749', page: 1, sortMode: 'popular' },
+                        familyRow: { titleKey: 'row.family', icon: 'fa-home', path: '/discover/movie', params: 'with_genres=10751', page: 1, sortMode: 'popular' },
+                        docRow: { titleKey: 'row.documentary', icon: 'fa-video', path: '/discover/movie', params: 'with_genres=99', page: 1, sortMode: 'popular' },
+                        warRow: { titleKey: 'row.war', icon: 'fa-fighter-jet', path: '/discover/movie', params: 'with_genres=10752', page: 1, sortMode: 'popular' },
+                        horrorRow: { titleKey: 'row.horror', icon: 'fa-skull', path: '/discover/movie', params: 'with_genres=27', page: 1, sortMode: 'popular' },
+                        mysteryRow: { titleKey: 'row.mystery', icon: 'fa-search', path: '/discover/movie', params: 'with_genres=9648', page: 1, sortMode: 'popular' },
+                        fantasyRow: { titleKey: 'row.fantasy', icon: 'fa-hat-wizard', path: '/discover/movie', params: 'with_genres=14', page: 1, sortMode: 'popular' },
+                        varietyRow: { titleKey: 'row.variety', icon: 'fa-microphone-alt', path: '/discover/tv', params: 'with_genres=10764', page: 1, sortMode: 'popular' },
+                        historyRow: { titleKey: 'row.history', icon: 'fa-landmark', path: '/discover/movie', params: 'with_genres=36', page: 1, sortMode: 'popular' }
                     },
 
                     movieList: [], tvList: [], list_cn: [], list_krjp: [],
@@ -9326,6 +9329,32 @@
                     });
                 },
 
+                sortMediaPopular(items) {
+                    const unique = new Map();
+                    (Array.isArray(items) ? items : []).forEach(item => {
+                        const key = this.mediaIdentity(item);
+                        if (!unique.has(key)) unique.set(key, item);
+                    });
+                    return Array.from(unique.values()).sort((a, b) => {
+                        const popularityA = Number(a.popularity || 0);
+                        const popularityB = Number(b.popularity || 0);
+                        const votesA = Number(a.vote_count || 0);
+                        const votesB = Number(b.vote_count || 0);
+                        const titleA = a.title || a.name || a.vod_name || '';
+                        const titleB = b.title || b.name || b.vod_name || '';
+                        return popularityB - popularityA
+                            || votesB - votesA
+                            || this.mediaDateValue(b) - this.mediaDateValue(a)
+                            || String(titleA).localeCompare(String(titleB), this.uiLanguage);
+                    });
+                },
+
+                sortMediaForMode(items, mode = 'popular') {
+                    return mode === 'newest'
+                        ? this.sortMediaNewest(items)
+                        : this.sortMediaPopular(items);
+                },
+
                 fetchRow(key, loadMore = false) {
                     if (key === 'randomRow') {
                         return this.fetchRandomMixed(loadMore);
@@ -9346,10 +9375,15 @@
                     let sortParam = '';
                     if (config.sortMode && config.path.includes('/discover/')) {
                         const isMovie = config.path.includes('/movie');
-                        const sortField = isMovie ? 'primary_release_date.desc' : 'first_air_date.desc';
-                        const limitField = isMovie ? 'primary_release_date.lte' : 'first_air_date.lte';
-                        const today = new Date().toISOString().slice(0, 10);
-                        sortParam = `&sort_by=${sortField}&${limitField}=${today}`;
+                        if (config.sortMode === 'newest') {
+                            const sortField = isMovie ? 'primary_release_date.desc' : 'first_air_date.desc';
+                            const limitField = isMovie ? 'primary_release_date.lte' : 'first_air_date.lte';
+                            const today = new Date().toISOString().slice(0, 10);
+                            sortParam = `&sort_by=${sortField}&${limitField}=${today}`;
+                        } else {
+                            const adultParam = this.filterNsfw ? '&include_adult=false' : '';
+                            sortParam = `&sort_by=popularity.desc&vote_count.gte=5${adultParam}`;
+                        }
                     }
 
                     const url = `/api/tmdb-proxy?path=${encodeURIComponent(config.path)}&page=${config.page}&${config.params}${sortParam}`;
@@ -9368,7 +9402,7 @@
                                     media_type: item.media_type || mediaType
                                 }));
                                 const existing = loadMore ? (this.rowLists[key] || []) : [];
-                                this.rowLists[key] = this.sortMediaNewest([...existing, ...incoming]);
+                                this.rowLists[key] = this.sortMediaForMode([...existing, ...incoming], config.sortMode);
                             }
                         })
                         .catch(err => console.error(`Fetch error for ${key}:`, err));
@@ -9451,7 +9485,7 @@
                 },
 
                 // 濠碘槅鍋撶徊浠嬪疮椤愩倗涓?闂傚倷绀侀幖顐ょ矓閸洍鈧箓宕奸姀銏㈠婵°倧绲介崯顖炲疾椤掍焦鍙忔慨妤€妫楁晶顔锯偓娈垮枦濞夋洜妲愰幒妤婃晝闁靛鍠栧▓顓㈡⒑缁洘娅呮俊顐ｇ箓椤繘骞戦幇顔炬澑闂佸搫鍟犻崑鎾剁磼閵婏妇顣茬紒缁樼洴閺佹劖寰勭€ｎ偅娈搁梻浣筋嚃閸ㄤ即鎯岄崒鐐靛祦閹兼番鍔岀粻濠氭煕閹邦垰鐨洪柟?(婵犵數鍋炲娆撳触鐎ｎ喗鏅梺璇查閻忔岸鎮￠敓鐘茬畺鐟滄柨鐣锋總鍓叉晢闁稿本绮庡畷璺衡攽閻愯埖褰х紓宥佸亾濠电偛顦板ú鐔奉嚕椤愶箑围濠㈣泛锕﹂惈鍕⒑闂堟侗妾ч梻鍕瀹曟椽宕掑鍛紲婵犮垼娉涢敃锕€鐡梻浣哄劦閸撴繈鎮疯閳藉鎮介崜鍙夋櫓闂佺厧顫曢崐妤咁敊閺冨倻纾介柛灞捐壘閳ь剙缍婇獮鎰板箹娴ｇ懓浠遍梺闈浥堥弲娑橆啅濠靛鐓欓悗娑櫭粭鈺呮煕?
-                async fetchNewestMixed(loadMore = false) {
+                async fetchTrendingMixed(loadMore = false) {
                     const config = this.rowConfigs.randomRow;
                     if (!config) return Promise.resolve();
 
@@ -9462,17 +9496,11 @@
                         config.page = 1;
                     }
 
-                    const today = new Date().toISOString().slice(0, 10);
-                    const requests = [
-                        {
-                            type: 'movie',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/movie')}&page=${config.page}&sort_by=primary_release_date.desc&primary_release_date.lte=${today}`
-                        },
-                        {
-                            type: 'tv',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/tv')}&page=${config.page}&sort_by=first_air_date.desc&first_air_date.lte=${today}`
-                        }
-                    ];
+                    const path = config.sortMode === 'newest' ? '/trending/all/day' : '/trending/all/week';
+                    const requests = [{
+                        type: 'mixed',
+                        url: `/api/tmdb-proxy?path=${encodeURIComponent(path)}&page=${config.page}`
+                    }];
 
                     try {
                         const results = await Promise.all(requests.map(async request => {
@@ -9488,17 +9516,17 @@
 
                         const incoming = results.flatMap(result => result.items.map(item => ({
                             ...item,
-                            media_type: result.type
+                            media_type: item.media_type || (item.first_air_date ? 'tv' : 'movie')
                         })));
                         const existing = loadMore ? (this.rowLists.randomRow || []) : [];
-                        this.rowLists.randomRow = this.sortMediaNewest([...existing, ...incoming]);
+                        this.rowLists.randomRow = this.sortMediaForMode([...existing, ...incoming], config.sortMode);
                     } catch (error) {
-                        console.error('[RecentUpdates] Failed to load newest mixed media', error);
+                        console.error('[TrendingMixed] Failed to load mixed media', error);
                     }
                 },
 
                 fetchRandomMixed(loadMore = false) {
-                    return this.fetchNewestMixed(loadMore);
+                    return this.fetchTrendingMixed(loadMore);
                 },
 
                 async fetchLegacyRandomMixed(loadMore = false) {
@@ -9587,24 +9615,20 @@
                 },
 
                 fetchHero() {
-                    const today = new Date().toISOString().slice(0, 10);
-                    const requests = [
-                        {
-                            type: 'movie',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/movie')}&page=1&sort_by=primary_release_date.desc&primary_release_date.lte=${today}`
-                        },
-                        {
-                            type: 'tv',
-                            url: `/api/tmdb-proxy?path=${encodeURIComponent('/discover/tv')}&page=1&sort_by=first_air_date.desc&first_air_date.lte=${today}`
-                        }
-                    ];
+                    const requests = [{
+                        type: 'mixed',
+                        url: `/api/tmdb-proxy?path=${encodeURIComponent('/trending/all/week')}&page=1`
+                    }];
                     return Promise.all(requests.map(async request => {
                         const response = await tmdbFetch(request.url);
                         const data = await response.json();
-                        return (data.results || []).map(item => ({ ...item, media_type: request.type }));
+                        return (data.results || []).map(item => ({
+                            ...item,
+                            media_type: item.media_type || (item.first_air_date ? 'tv' : 'movie')
+                        }));
                     }))
                         .then(resultSets => {
-                            const results = this.sortMediaNewest(resultSets.flat());
+                            const results = this.sortMediaPopular(resultSets.flat());
                             if (results.length) {
                                 this.heroList = results.filter(i => i.backdrop_path).slice(0, 5).map(item => ({
                                     title: item.title || item.name,

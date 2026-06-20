@@ -60,6 +60,14 @@
 
 > This is a derived resume summary. Source files and fresh checks take precedence.
 
+## Homepage Ranking Correction Checkpoint
+
+- Updated: 2026-06-20T07:35:00Z
+- User-visible issue: the newest-first homepage looked worse than TVBox/欧歌 because it promoted raw same-day metadata records with little or no audience signal.
+- Current decision: default homepage ranking is hot/trending-first. The first rows are `热播推荐`, `热门电影`, and `热门剧集`; newest sorting remains implemented and tested for explicit date-first contexts.
+- Evidence: live proxy comparison showed `primary_release_date.desc` returning near-zero-popularity, zero-vote obscure records, while `popularity.desc` and `trending/all/week` returned higher-signal items.
+- Latest checks passed: `npm run test:newest-order-ui`, `npm run test:localization-ui`, `npm run test:tvbox-parser`, `npm run test:player-stack`, and `npm run build`.
+
 ## Desktop Localization Checkpoint
 
 - Simplified Chinese is now the default language for the main desktop navigation and primary Apple TV surfaces.
