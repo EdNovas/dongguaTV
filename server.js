@@ -1020,15 +1020,42 @@ function getTvboxSearchSites() {
         }));
 }
 
+function isPluginBridgeSearchEnabled() {
+    const settings = pluginRuntimeRegistry.getSettings();
+    return !!String(settings.externalHttpBaseUrl || '').trim();
+}
+
+function getPluginBridgeSearchSites() {
+    if (!isPluginBridgeSearchEnabled()) return [];
+    return tvboxService.listSources()
+        .filter(source => isPluginRequiredSource(source) && source.enabled !== false && source.searchable !== false)
+        .map(source => ({
+            key: `plugin:${source.id}`,
+            name: `[TVBox Plugin] ${source.name}`,
+            api: `plugin-bridge://${source.id}`,
+            active: source.enabled !== false,
+            sourceOrigin: 'tvbox-plugin',
+            sourceId: source.id,
+            pluginSourceId: source.id,
+            sourceType: 'plugin-required',
+            supportLevel: 'plugin-required'
+        }));
+}
+
 function getAllSearchSites() {
     return [
         ...(getDB().sites || []),
-        ...getTvboxSearchSites()
+        ...getTvboxSearchSites(),
+        ...getPluginBridgeSearchSites()
     ];
 }
 
 function findSearchSite(siteKey) {
     return getAllSearchSites().find(site => site.key === siteKey);
+}
+
+function isPluginBridgeSearchSite(site) {
+    return !!(site && site.pluginSourceId && site.sourceOrigin === 'tvbox-plugin');
 }
 
 function isPluginRequiredSource(source) {
@@ -1164,6 +1191,53 @@ async function callPluginSourceBridge(sourceId, operation, params) {
     const payload = buildPluginBridgePayload(operation, source, params);
     const response = await pluginRuntimeRegistry.callExternalHttpBridge(operation, payload);
     return { source, response };
+}
+
+async function searchSiteKeyword(site, keyword, options = {}) {
+    if (isPluginBridgeSearchSite(site)) {
+        const { source, response } = await callPluginSourceBridge(site.pluginSourceId, 'search', {
+            keyword,
+            wd: keyword,
+            page: options.page || 1,
+            raw: { keyword, siteKey: site.key }
+        });
+        const normalized = normalizePluginSearchResult(response, source);
+        return normalized.list.map(item => ({
+            ...item,
+            site_key: site.key,
+            site_name: site.name,
+            source_origin: 'tvbox-plugin'
+        }));
+    }
+
+    const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: keyword });
+    const { data } = await fetchWithProxyFallback(searchUrl, { timeout: options.timeout || 8000 }, site.key);
+    return data.list ? data.list.map(item => ({
+        vod_id: item.vod_id,
+        vod_name: item.vod_name,
+        vod_pic: item.vod_pic,
+        vod_remarks: item.vod_remarks,
+        vod_year: item.vod_year,
+        vod_time: item.vod_time,
+        vod_pubdate: item.vod_pubdate,
+        vod_addtime: item.vod_addtime,
+        vod_content: item.vod_content,
+        vod_play_from: item.vod_play_from,
+        vod_play_url: item.vod_play_url,
+        type_name: item.type_name,
+        site_key: site.key,
+        site_name: site.name,
+        source_origin: site.sourceOrigin || 'native'
+    })) : [];
+}
+
+async function fetchPluginBridgeDetail(site, id) {
+    const { source, response } = await callPluginSourceBridge(site.pluginSourceId, 'detail', {
+        id,
+        vod_id: id,
+        raw: { id, siteKey: site.key }
+    });
+    return normalizePluginDetailResult(response, source);
 }
 
 app.post('/api/subscriptions/import', async (req, res) => {
@@ -1410,6 +1484,7 @@ app.get('/api/search/diagnostics', (req, res) => {
         const tvboxSources = tvboxService.listSources();
         const enabledSources = tvboxSources.filter(source => source.enabled !== false);
         const searchableTvboxSites = getTvboxSearchSites();
+        const pluginBridgeSearchSites = getPluginBridgeSearchSites();
         const pluginRequired = enabledSources.filter(source => source.status === 'plugin-required' || source.sourceType === 'plugin-required');
         const unsupported = enabledSources.filter(source => source.status === 'unsupported' || source.supportLevel === 'unsupported');
         const httpCompatible = enabledSources.filter(source =>
@@ -1430,6 +1505,9 @@ app.get('/api/search/diagnostics', (req, res) => {
         if (pluginRequired.length > 0 && localJavaBridge.running) {
             actions.push('Local Java Bridge is running, but current Java bridge stub mode does not execute real CatVod plugins yet.');
         }
+        if (pluginBridgeSearchSites.length > 0) {
+            actions.push(`${pluginBridgeSearchSites.length} plugin-required source(s) are routed through the configured Bridge for controlled search.`);
+        }
         if (unsupported.length > 0) {
             actions.push(`${unsupported.length} enabled TVBox source(s) are unsupported in this version; disable or hide them if they add noise.`);
         }
@@ -1448,6 +1526,7 @@ app.get('/api/search/diagnostics', (req, res) => {
                 enabledTvboxSources: enabledSources.length,
                 httpCompatibleTvboxSources: httpCompatible.length,
                 searchableTvboxSources: searchableTvboxSites.length,
+                pluginBridgeSearchSources: pluginBridgeSearchSites.length,
                 pluginRequiredSources: pluginRequired.length,
                 unsupportedSources: unsupported.length,
                 disabledTvboxSources: tvboxSources.length - enabledSources.length
@@ -1458,7 +1537,7 @@ app.get('/api/search/diagnostics', (req, res) => {
                 mode: localJavaBridge.mode,
                 jarConfigured: !!localJavaBridge.jarPath
             },
-            message: 'Search uses built-in HTTP sites plus compatible user TVBox HTTP/MacCMS sources. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.',
+            message: 'Search uses built-in HTTP sites, compatible user TVBox HTTP/MacCMS sources, and trusted configured Bridge routes for plugin-required sources. Subscription plugin code is not executed directly by DongguaTV.',
             actions
         });
     } catch (error) {
@@ -2354,17 +2433,7 @@ app.get('/api/search', async (req, res) => {
                 return;
             }
             try {
-                const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: keyword });
-                const { data } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
-                const list = data.list ? data.list.map(item => ({
-                    vod_id: item.vod_id,
-                    vod_name: item.vod_name,
-                    vod_pic: item.vod_pic,
-                    vod_play_url: item.vod_play_url,
-                    site_key: site.key,
-                    site_name: site.name,
-                    source_origin: site.sourceOrigin || 'native'
-                })) : [];
+                const list = await searchSiteKeyword(site, keyword, { timeout: 8000 });
                 cacheManager.set('search', cacheKey, { list }, 3600);
                 allResults.push(...list);
             } catch (err) {
@@ -2429,31 +2498,7 @@ app.get('/api/search', async (req, res) => {
                         console.log(`[SSE Search] ${site.name} -> ${searchKeywords.length > 1 ? searchKeywords.join(' | ') : kw}`);
                     }
 
-                    // 构建请求 URL（带参数）
-                    const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: kw });
-
-                    // 使用带代理回退的请求
-                    const { data, usedProxy } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
-
-                    if (usedProxy && kw === searchKeywords[0]) {
-                        console.log(`[SSE Search] ${site.name} 通过代理获取结果`);
-                    }
-
-                    const list = data.list ? data.list.map(item => ({
-                        vod_id: item.vod_id,
-                        vod_name: item.vod_name,
-                        vod_pic: item.vod_pic,
-                        vod_remarks: item.vod_remarks,
-                        vod_year: item.vod_year,
-                        vod_time: item.vod_time,
-                        vod_pubdate: item.vod_pubdate,
-                        vod_addtime: item.vod_addtime,
-                        type_name: item.type_name,
-                        vod_content: item.vod_content,
-                        vod_play_from: item.vod_play_from,
-                        vod_play_url: item.vod_play_url,
-                        source_origin: site.sourceOrigin || 'native'
-                    })) : [];
+                    const list = await searchSiteKeyword(site, kw, { timeout: 8000 });
 
                     // 缓存结果 (1小时)
                     cacheManager.set('search', cacheKey, { list }, 3600);
@@ -2527,26 +2572,9 @@ app.post('/api/search', async (req, res) => {
     try {
         console.log(`[Search] ${site.name} -> ${keyword}`);
 
-        // 构建请求 URL
-        const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: keyword });
-        const { data } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
-
-        // 简单的数据清洗
+        const list = await searchSiteKeyword(site, keyword, { timeout: 8000 });
         const result = {
-            list: data.list ? data.list.map(item => ({
-                vod_id: item.vod_id,
-                vod_name: item.vod_name,
-                vod_pic: item.vod_pic,
-                vod_remarks: item.vod_remarks,
-                vod_year: item.vod_year,
-                vod_time: item.vod_time,
-                vod_pubdate: item.vod_pubdate,
-                vod_addtime: item.vod_addtime,
-                type_name: item.type_name,
-                site_key: site.key,
-                site_name: site.name,
-                source_origin: site.sourceOrigin || 'native'
-            })) : []
+            list
         };
 
         cacheManager.set('search', cacheKey, result, 3600); // 缓存1小时
@@ -2579,6 +2607,26 @@ app.get('/api/detail', async (req, res) => {
     }
 
     try {
+        if (isPluginBridgeSearchSite(site)) {
+            console.log(`[Detail Plugin] ${site.name} -> ID: ${id}`);
+            const normalized = await fetchPluginBridgeDetail(site, id);
+            if (normalized.list && normalized.list.length > 0) {
+                const detail = normalized.list[0];
+                cacheManager.set('detail', cacheKey, detail, 1800);
+                return res.json({
+                    list: [detail],
+                    bridgeStatus: normalized.status,
+                    bridgeMessage: normalized.message
+                });
+            }
+            return res.status(404).json({
+                error: 'Not found',
+                list: [],
+                bridgeStatus: normalized.status,
+                bridgeMessage: normalized.message
+            });
+        }
+
         console.log(`[Detail] ${site.name} -> ID: ${id}`);
 
         // 构建请求 URL
@@ -2614,6 +2662,17 @@ app.post('/api/detail', async (req, res) => {
     }
 
     try {
+        if (isPluginBridgeSearchSite(site)) {
+            console.log(`[Detail Plugin] ${site.name} -> ID: ${id}`);
+            const normalized = await fetchPluginBridgeDetail(site, id);
+            if (normalized.list && normalized.list.length > 0) {
+                const detail = normalized.list[0];
+                cacheManager.set('detail', cacheKey, detail, 1800);
+                return res.json(detail);
+            }
+            return res.status(404).json({ error: 'Not found', list: [], bridgeStatus: normalized.status, bridgeMessage: normalized.message });
+        }
+
         console.log(`[Detail] ${site.name} -> ID: ${id}`);
 
         // 构建请求 URL
