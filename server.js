@@ -1880,6 +1880,14 @@ app.post('/api/plugin-runtimes/java-catvod/start-local', async (req, res) => {
     }
 });
 
+app.post('/api/plugin-runtimes/java-catvod/reflect-self-test', async (req, res) => {
+    try {
+        res.json(await pluginRuntimeRegistry.runJavaReflectSelfTest());
+    } catch (error) {
+        res.status(400).json({ ok: false, error: error.message || 'Failed to run Java Bridge Reflect self-test' });
+    }
+});
+
 app.post('/api/plugin-runtimes/java-catvod/stop-local', (req, res) => {
     try {
         res.json(pluginRuntimeRegistry.stopLocalJavaBridge());

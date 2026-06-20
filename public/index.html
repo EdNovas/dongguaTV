@@ -4550,6 +4550,18 @@
                             <div style="word-break:break-all;">Jar: {{ localJavaBridgeStatus.jarPath || pluginRuntimeSettings.catvodBridgeJarPath || t('plugin.notBuilt') }}</div>
                             <div>{{ t('plugin.trustedSpider') }}: {{ localJavaBridgeStatus.trustedSpiderJarConfigured ? t('plugin.jarOk') : t('plugin.jarMissing') }} / {{ localJavaBridgeStatus.trustedSpiderClassName || pluginRuntimeSettings.trustedSpiderClassName || t('plugin.classMissing') }}</div>
                         </div>
+                        <div v-if="javaReflectSelfTest"
+                            style="display:grid; gap:5px; margin-top:8px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:11px; line-height:1.6;">
+                            <strong :style="{ color: javaReflectSelfTest.ok ? '#22c55e' : '#f87171' }">
+                                {{ t('plugin.reflectSelfTest') }} {{ javaReflectSelfTest.ok ? t('status.passed') : t('status.failed') }}
+                            </strong>
+                            <div v-if="javaReflectSelfTest.ok">{{ t('plugin.selfTestScope') }}</div>
+                            <div v-if="javaReflectSelfTest.java" style="word-break:break-all;">Java: {{ javaReflectSelfTest.java.executable }}</div>
+                            <div v-if="javaReflectSelfTest.searchTitle">Search: {{ javaReflectSelfTest.searchTitle }}</div>
+                            <div v-if="javaReflectSelfTest.detailTitle">Detail: {{ javaReflectSelfTest.detailTitle }}</div>
+                            <div v-if="javaReflectSelfTest.playUrl" style="word-break:break-all;">Play: {{ javaReflectSelfTest.playUrl }}</div>
+                            <div v-if="javaReflectSelfTest.error" style="color:#fca5a5;">{{ javaReflectSelfTest.error }}</div>
+                        </div>
                         <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
                             <button class="btn-info" @click="checkJavaCatvodRuntime" style="border:0; padding:8px 12px;">
                     <i class="fas fa-mug-hot"></i> {{ t('plugin.checkJava') }}
@@ -4562,6 +4574,9 @@
                             </button>
                             <button class="btn-info" @click="startLocalJavaBridge" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-play-circle"></i> {{ t('plugin.start') }}
+                            </button>
+                            <button class="btn-info" @click="runJavaReflectSelfTest" :disabled="pluginRuntimeSaving || javaReflectSelfTestLoading" style="border:0; padding:8px 12px;">
+                                <i :class="['fas', javaReflectSelfTestLoading ? 'fa-spinner fa-spin' : 'fa-vial']"></i> {{ t('plugin.reflectSelfTest') }}
                             </button>
                             <button class="btn-info" @click="refreshLocalJavaBridgeStatus" :disabled="pluginRuntimeSaving" style="border:0; padding:8px 12px;">
                                 <i class="fas fa-sync-alt"></i> {{ t('plugin.refresh') }}
@@ -5445,6 +5460,14 @@
                 'plugin.jarMissing': '缺少 jar',
                 'plugin.classMissing': '未设置类名',
                 'plugin.checkJava': '检查 Java',
+                'plugin.reflectSelfTest': 'Reflect 自检',
+                'plugin.selfTestScope': '仅使用临时本地假 Spider，不执行任何订阅插件。',
+                'plugin.selfTestPassed': 'Reflect 自检通过',
+                'plugin.selfTestFailed': 'Reflect 自检失败',
+                'plugin.runtimeUpdated': '插件运行时已更新',
+                'plugin.operationFailed': '插件运行时操作失败',
+                'plugin.javaAvailable': 'Java 可用',
+                'plugin.javaUnavailable': 'Java 不可用',
                 'plugin.checkHttp': '检查 HTTP 桥接',
                 'plugin.build': '构建 Java 桥接',
                 'plugin.start': '启动本地桥接',
@@ -5699,6 +5722,14 @@
                 'plugin.jarMissing': 'jar missing',
                 'plugin.classMissing': 'class not set',
                 'plugin.checkJava': 'Check Java',
+                'plugin.reflectSelfTest': 'Reflect self-test',
+                'plugin.selfTestScope': 'Uses only a temporary local fake Spider; no subscription plugin is executed.',
+                'plugin.selfTestPassed': 'Reflect self-test passed',
+                'plugin.selfTestFailed': 'Reflect self-test failed',
+                'plugin.runtimeUpdated': 'Plugin runtime updated',
+                'plugin.operationFailed': 'Plugin runtime operation failed',
+                'plugin.javaAvailable': 'Java available',
+                'plugin.javaUnavailable': 'Java unavailable',
                 'plugin.checkHttp': 'Check HTTP Bridge',
                 'plugin.build': 'Build Java Bridge',
                 'plugin.start': 'Start Local Bridge',
@@ -5953,6 +5984,14 @@
                 'plugin.jarMissing': 'jarなし',
                 'plugin.classMissing': 'クラス未設定',
                 'plugin.checkJava': 'Javaを確認',
+                'plugin.reflectSelfTest': 'Reflect自己診断',
+                'plugin.selfTestScope': '一時的なローカルの偽Spiderだけを使用し、購読プラグインは実行しません。',
+                'plugin.selfTestPassed': 'Reflect自己診断成功',
+                'plugin.selfTestFailed': 'Reflect自己診断失敗',
+                'plugin.runtimeUpdated': 'プラグイン実行環境を更新しました',
+                'plugin.operationFailed': 'プラグイン実行環境の操作に失敗しました',
+                'plugin.javaAvailable': 'Java利用可能',
+                'plugin.javaUnavailable': 'Java利用不可',
                 'plugin.checkHttp': 'HTTPブリッジを確認',
                 'plugin.build': 'Javaブリッジをビルド',
                 'plugin.start': 'ローカルブリッジを開始',
@@ -6175,6 +6214,8 @@
                     pluginRuntimes: [],
                     pluginRuntimeSaving: false,
                     pluginRuntimeMessage: '',
+                    javaReflectSelfTest: null,
+                    javaReflectSelfTestLoading: false,
                     localJavaBridgeStatus: {
                         running: false,
                         pid: null,
@@ -7603,13 +7644,13 @@
                             this.localJavaBridgeStatus = { ...this.localJavaBridgeStatus, ...localStatusData };
                         }
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     }
                 },
 
                 async savePluginRuntimeSettings() {
                     this.pluginRuntimeSaving = true;
-                    this.pluginRuntimeMessage = 'Plugin runtime updated';
+                    this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     try {
                         const response = await fetch('/api/plugin-runtimes/settings', {
                             method: 'PATCH',
@@ -7620,31 +7661,35 @@
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...data.settings };
                         await this.loadPluginRuntimeSettings();
-                        this.pluginRuntimeMessage = 'Plugin runtime updated';
+                        this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     } finally {
                         this.pluginRuntimeSaving = false;
                     }
                 },
 
                 async checkJavaCatvodRuntime() {
-                    this.pluginRuntimeMessage = 'Plugin runtime updated';
+                    this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     try {
                         await this.savePluginRuntimeSettings();
                         const response = await fetch('/api/plugin-runtimes/java-catvod/check', { method: 'POST' });
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
+                        if (data.available && data.executable) {
+                            this.pluginRuntimeSettings.javaPath = data.executable;
+                            await this.savePluginRuntimeSettings();
+                        }
                         this.pluginRuntimeMessage = data.available
-                            ? `Java available ${data.version || ''}`.trim()
-                            : `Java unavailable${data.error ? ': ' + data.error : ''}`;
+                            ? `${this.t('plugin.javaAvailable')} ${data.version || ''}`.trim()
+                            : `${this.t('plugin.javaUnavailable')}${data.error ? ': ' + data.error : ''}`;
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     }
                 },
 
                 async checkExternalHttpBridge() {
-                    this.pluginRuntimeMessage = 'Plugin runtime updated';
+                    this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     try {
                         await this.savePluginRuntimeSettings();
                         const response = await fetch('/api/plugin-runtimes/external-http/check', { method: 'POST' });
@@ -7655,13 +7700,13 @@
                             : `External HTTP Bridge ${data.status || 'unavailable'}${data.error ? ': ' + data.error : ''}`;
                         await this.loadPluginRuntimeSettings();
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     }
                 },
 
                 async buildLocalJavaBridge() {
                     this.pluginRuntimeSaving = true;
-                    this.pluginRuntimeMessage = 'Plugin runtime updated';
+                    this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     try {
                         await this.savePluginRuntimeSettings();
                         const response = await fetch('/api/plugin-runtimes/java-catvod/build-local', { method: 'POST' });
@@ -7672,7 +7717,7 @@
                         await this.refreshLocalJavaBridgeStatus();
                         this.pluginRuntimeMessage = `Java Bridge built: ${data.jarPath || ''}`.trim();
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     } finally {
                         this.pluginRuntimeSaving = false;
                     }
@@ -7680,7 +7725,7 @@
 
                 async startLocalJavaBridge() {
                     this.pluginRuntimeSaving = true;
-                    this.pluginRuntimeMessage = 'Plugin runtime updated';
+                    this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     try {
                         await this.savePluginRuntimeSettings();
                         const response = await fetch('/api/plugin-runtimes/java-catvod/start-local', { method: 'POST' });
@@ -7691,8 +7736,38 @@
                         await this.refreshLocalJavaBridgeStatus();
                         this.pluginRuntimeMessage = `Local Java Bridge running at ${data.baseUrl || ''}`.trim();
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     } finally {
+                        this.pluginRuntimeSaving = false;
+                    }
+                },
+
+                async runJavaReflectSelfTest() {
+                    this.pluginRuntimeSaving = true;
+                    this.javaReflectSelfTestLoading = true;
+                    this.javaReflectSelfTest = null;
+                    this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
+                    try {
+                        await this.savePluginRuntimeSettings();
+                        const response = await fetch('/api/plugin-runtimes/java-catvod/reflect-self-test', { method: 'POST' });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Request failed');
+                        this.javaReflectSelfTest = data;
+                        if (data.settings) {
+                            this.pluginRuntimeSettings = { ...this.pluginRuntimeSettings, ...data.settings };
+                        } else if (data.java && data.java.executable) {
+                            this.pluginRuntimeSettings.javaPath = data.java.executable;
+                        }
+                        await this.loadPluginRuntimeSettings();
+                        this.pluginRuntimeMessage = data.ok ? this.t('plugin.selfTestPassed') : this.t('plugin.selfTestFailed');
+                    } catch (error) {
+                        this.javaReflectSelfTest = {
+                            ok: false,
+                            error: error.message || this.t('plugin.operationFailed')
+                        };
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
+                    } finally {
+                        this.javaReflectSelfTestLoading = false;
                         this.pluginRuntimeSaving = false;
                     }
                 },
@@ -7704,22 +7779,22 @@
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.localJavaBridgeStatus = { ...this.localJavaBridgeStatus, ...data };
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     }
                 },
 
                 async stopLocalJavaBridge() {
                     this.pluginRuntimeSaving = true;
-                    this.pluginRuntimeMessage = 'Plugin runtime updated';
+                    this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     try {
                         const response = await fetch('/api/plugin-runtimes/java-catvod/stop-local', { method: 'POST' });
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.localJavaBridgeStatus = { ...this.localJavaBridgeStatus, ...data };
                         await this.loadPluginRuntimeSettings();
-                        this.pluginRuntimeMessage = 'Plugin runtime updated';
+                        this.pluginRuntimeMessage = this.t('plugin.runtimeUpdated');
                     } catch (error) {
-                        this.pluginRuntimeMessage = error.message || 'Plugin runtime operation failed';
+                        this.pluginRuntimeMessage = error.message || this.t('plugin.operationFailed');
                     } finally {
                         this.pluginRuntimeSaving = false;
                     }

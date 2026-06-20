@@ -1,4 +1,7 @@
 const fs = require('fs');
+const http = require('http');
+const net = require('net');
+const os = require('os');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
 const { ExternalHttpBridgeClient } = require('./externalHttpBridge');
@@ -82,6 +85,63 @@ function resolveJavaExecutable(javaPath) {
     return findToolInCommonJdkRoots('java') || 'java';
 }
 
+function javaHomeFromExecutable(executable) {
+    const value = String(executable || '').trim();
+    if (!value || value.toLowerCase() === 'java') return '';
+    const binDir = path.dirname(value);
+    if (path.basename(binDir).toLowerCase() !== 'bin') return '';
+    const javaHome = path.dirname(binDir);
+    return fs.existsSync(path.join(javaHome, 'bin', 'java.exe')) ? javaHome : '';
+}
+
+function hasJdkTools(javaHome) {
+    return !!(
+        javaHome &&
+        fs.existsSync(path.join(javaHome, 'bin', 'java.exe')) &&
+        fs.existsSync(path.join(javaHome, 'bin', 'javac.exe')) &&
+        fs.existsSync(path.join(javaHome, 'bin', 'jar.exe'))
+    );
+}
+
+function findJdkHome(preferredJavaExecutable) {
+    const directHome = javaHomeFromExecutable(preferredJavaExecutable);
+    if (hasJdkTools(directHome)) return directHome;
+    if (hasJdkTools(process.env.JAVA_HOME)) return process.env.JAVA_HOME;
+
+    const roots = [
+        'C:\\Program Files\\Microsoft',
+        'C:\\Program Files\\Java',
+        'C:\\Program Files\\Eclipse Adoptium',
+        'C:\\Program Files\\Zulu'
+    ];
+    for (const root of roots) {
+        if (!fs.existsSync(root)) continue;
+        if (hasJdkTools(root)) return root;
+        const dirs = fs.readdirSync(root, { withFileTypes: true })
+            .filter(entry => entry.isDirectory() && /jdk|openjdk|temurin|zulu/i.test(entry.name))
+            .map(entry => path.join(root, entry.name))
+            .sort()
+            .reverse();
+        for (const dir of dirs) {
+            if (hasJdkTools(dir)) return dir;
+        }
+    }
+    return '';
+}
+
+function resolveJdkTools(javaExecutable) {
+    const javaHome = findJdkHome(javaExecutable);
+    if (!javaHome) {
+        throw new Error('A JDK with java, javac, and jar is required for Java Bridge Reflect self-test.');
+    }
+    return {
+        javaHome,
+        java: path.join(javaHome, 'bin', 'java.exe'),
+        javac: path.join(javaHome, 'bin', 'javac.exe'),
+        jar: path.join(javaHome, 'bin', 'jar.exe')
+    };
+}
+
 function checkJavaRuntime(javaPath) {
     const executable = resolveJavaExecutable(javaPath);
     const result = spawnSync(executable, ['-version'], {
@@ -129,13 +189,19 @@ function buildLocalJavaBridge(dataDir) {
 
     const paths = getLocalJavaBridgePaths(dataDir);
     fs.mkdirSync(paths.outputDir, { recursive: true });
-    const result = spawnSync('powershell', [
+    const javaHome = findJdkHome(javaCheck.executable);
+    const buildArgs = [
         '-ExecutionPolicy',
         'Bypass',
         '-File',
-        buildScript,
-        '-OutDir',
-        paths.outputDir
+        buildScript
+    ];
+    if (javaHome) {
+        buildArgs.push('-JavaHome', javaHome);
+    }
+    buildArgs.push('-OutDir', paths.outputDir);
+    const result = spawnSync('powershell', [
+        ...buildArgs
     ], {
         encoding: 'utf8',
         timeout: 60000,
@@ -309,6 +375,198 @@ async function startLocalJavaBridge(dataDir, httpClient) {
     };
 }
 
+function freeLoopbackPort() {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+            const port = server.address().port;
+            server.close(() => resolve(port));
+        });
+    });
+}
+
+function postJson(url, payload) {
+    return new Promise((resolve, reject) => {
+        const body = JSON.stringify(payload || {});
+        const request = http.request(url, {
+            method: 'POST',
+            headers: {
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(body)
+            }
+        }, response => {
+            let text = '';
+            response.setEncoding('utf8');
+            response.on('data', chunk => { text += chunk; });
+            response.on('end', () => {
+                try {
+                    const json = JSON.parse(text || '{}');
+                    if (response.statusCode >= 400) {
+                        reject(new Error(json.error || `HTTP ${response.statusCode}`));
+                        return;
+                    }
+                    resolve(json);
+                } catch (error) {
+                    reject(new Error(`Invalid JSON response: ${text.slice(0, 200)}`));
+                }
+            });
+        });
+        request.on('error', reject);
+        request.write(body);
+        request.end();
+    });
+}
+
+function runChecked(command, args, options = {}) {
+    const result = spawnSync(command, args, {
+        encoding: 'utf8',
+        timeout: options.timeout || 60000,
+        cwd: options.cwd || process.cwd(),
+        shell: false
+    });
+    if (result.status !== 0) {
+        throw new Error(`${command} failed: ${result.stderr || result.stdout || (result.error && result.error.message) || 'unknown error'}`);
+    }
+    return result;
+}
+
+function writeFakeSpiderSource(spiderSrc) {
+    fs.mkdirSync(spiderSrc, { recursive: true });
+    fs.writeFileSync(path.join(spiderSrc, 'FakeSpider.java'), `
+package com.example;
+
+import java.util.List;
+
+public class FakeSpider {
+    public void init(String ext) {}
+
+    public String searchContent(String keyword, boolean quick) {
+        return "{\\"list\\":[{\\"vod_id\\":\\"reflect-1\\",\\"vod_name\\":\\"Reflect Search " + keyword + "\\",\\"vod_pic\\":\\"https://example.test/reflect.jpg\\",\\"vod_remarks\\":\\"reflect\\"}]}";
+    }
+
+    public String detailContent(List<String> ids) {
+        String id = ids == null || ids.isEmpty() ? "reflect-1" : ids.get(0);
+        return "{\\"list\\":[{\\"vod_id\\":\\"" + id + "\\",\\"vod_name\\":\\"Reflect Detail\\",\\"vod_play_from\\":\\"reflect\\",\\"vod_play_url\\":\\"HD$https://example.test/reflect.m3u8\\"}]}";
+    }
+
+    public String playerContent(String flag, String id, List<String> flags) {
+        return "{\\"url\\":\\"https://example.test/play/" + id + ".m3u8\\",\\"headers\\":{\\"User-Agent\\":\\"DongguaTV-Test\\"}}";
+    }
+}
+`, 'utf8');
+}
+
+async function runJavaReflectSelfTest(dataDir, httpClient) {
+    const settings = readPluginRuntimeSettings(dataDir);
+    const javaCheck = checkJavaRuntime(settings.javaPath);
+    if (!javaCheck.available) {
+        throw new Error(`Java is not available: ${javaCheck.error || javaCheck.executable}`);
+    }
+    const tools = resolveJdkTools(javaCheck.executable);
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donggua-java-reflect-self-test-'));
+    const bridgeOut = path.join(tempDir, 'bridge');
+    const spiderSrc = path.join(tempDir, 'spider-src', 'com', 'example');
+    const spiderClasses = path.join(tempDir, 'spider-classes');
+    const spiderJar = path.join(tempDir, 'fake-spider.jar');
+    let child = null;
+
+    try {
+        const sourceDir = getJavaBridgeSourceDir(dataDir);
+        const buildScript = path.join(sourceDir, 'build.ps1');
+        if (!fs.existsSync(buildScript)) {
+            throw new Error('Local Java bridge build script was not found.');
+        }
+        runChecked('powershell', [
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            buildScript,
+            '-JavaHome',
+            tools.javaHome,
+            '-OutDir',
+            bridgeOut
+        ], { timeout: 120000 });
+        const bridgeJar = path.join(bridgeOut, 'catvod-runtime-bridge.jar');
+        if (!fs.existsSync(bridgeJar)) {
+            throw new Error('Java bridge self-test build finished but jar was not created.');
+        }
+
+        fs.mkdirSync(spiderClasses, { recursive: true });
+        writeFakeSpiderSource(spiderSrc);
+        runChecked(tools.javac, ['-encoding', 'UTF-8', '-d', spiderClasses, path.join(spiderSrc, 'FakeSpider.java')]);
+        runChecked(tools.jar, ['cf', spiderJar, '-C', spiderClasses, '.']);
+        if (!fs.existsSync(spiderJar)) {
+            throw new Error('Java Bridge Reflect self-test fake Spider jar was not created.');
+        }
+
+        const port = await freeLoopbackPort();
+        const baseUrl = `http://127.0.0.1:${port}`;
+        child = spawn(tools.java, [
+            '-jar',
+            bridgeJar,
+            '--host',
+            '127.0.0.1',
+            '--port',
+            String(port),
+            '--mode',
+            'reflect',
+            '--spider-jar',
+            spiderJar,
+            '--spider-class',
+            'com.example.FakeSpider',
+            '--spider-ext',
+            'self-test'
+        ], {
+            stdio: ['ignore', 'ignore', 'ignore'],
+            windowsHide: true,
+            shell: false
+        });
+
+        await waitForBridgeHealth(httpClient, baseUrl);
+        const search = await postJson(`${baseUrl}/runtime/search`, {
+            params: { keyword: 'Joy', quick: false }
+        });
+        const detail = await postJson(`${baseUrl}/runtime/detail`, {
+            params: { id: 'reflect-1' }
+        });
+        const play = await postJson(`${baseUrl}/runtime/play`, {
+            params: { flag: 'HD', id: 'reflect-1' }
+        });
+
+        const searchTitle = search && search.result && search.result.list && search.result.list[0] && search.result.list[0].vod_name;
+        const detailTitle = detail && detail.result && detail.result.list && detail.result.list[0] && detail.result.list[0].vod_name;
+        const playUrl = play && play.result && play.result.url;
+        if (searchTitle !== 'Reflect Search Joy' || detailTitle !== 'Reflect Detail' || !/reflect-1\.m3u8/.test(playUrl || '')) {
+            throw new Error('Java Bridge Reflect self-test returned unexpected search/detail/play results.');
+        }
+
+        const nextSettings = savePluginRuntimeSettings(dataDir, {
+            javaPath: tools.java
+        });
+        return {
+            ok: true,
+            mode: 'reflect',
+            java: {
+                executable: tools.java,
+                javaHome: tools.javaHome,
+                version: javaCheck.version
+            },
+            bridgeBuilt: true,
+            fakeSpiderOnly: true,
+            searchTitle,
+            detailTitle,
+            playUrl,
+            settings: nextSettings
+        };
+    } finally {
+        if (child) child.kill();
+        try {
+            fs.rmSync(tempDir, { recursive: true, force: true });
+        } catch (error) {}
+    }
+}
+
 function stopLocalJavaBridge(dataDir) {
     const settings = readPluginRuntimeSettings(dataDir);
     const localBaseUrl = `http://127.0.0.1:${Number(settings.localJavaBridgePort || DEFAULT_PLUGIN_RUNTIME_SETTINGS.localJavaBridgePort)}`;
@@ -425,6 +683,9 @@ function createDefaultPluginRuntimeRegistry(dataDir, httpClient) {
         startLocalJavaBridge() {
             return startLocalJavaBridge(dataDir, httpClient);
         },
+        runJavaReflectSelfTest() {
+            return runJavaReflectSelfTest(dataDir, httpClient);
+        },
         stopLocalJavaBridge() {
             return stopLocalJavaBridge(dataDir);
         },
@@ -443,5 +704,6 @@ module.exports = {
     readPluginRuntimeSettings,
     savePluginRuntimeSettings,
     checkJavaRuntime,
+    runJavaReflectSelfTest,
     createDefaultPluginRuntimeRegistry
 };
