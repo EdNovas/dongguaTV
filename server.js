@@ -15,6 +15,11 @@ const { promisify } = require('util');
 const pipeline = promisify(stream.pipeline);
 const { createTvboxService } = require('./server/adapters/tvbox');
 const { createDefaultPluginRuntimeRegistry } = require('./server/adapters/tvbox/pluginRuntime');
+const {
+    normalizeVodItem,
+    mergeAndRankVodItems,
+    splitRecommendationRows
+} = require('./server/adapters/tvbox/recommendationRanker');
 const { ensureDesktopState, getDesktopStatus } = require('./server/desktop/startupState');
 const { PlayerManager } = require('./server/player/playerManager');
 
@@ -1437,6 +1442,125 @@ app.get('/api/search/diagnostics', (req, res) => {
         });
     } catch (error) {
         res.status(400).json({ error: error.message || 'Failed to build search diagnostics' });
+    }
+});
+
+async function fetchSourceRecommendationItems(site, options = {}) {
+    const maxPages = Math.max(1, Math.min(3, Number(options.pages || 1)));
+    const timeout = Math.max(2500, Math.min(10000, Number(options.timeout || 6500)));
+    const items = [];
+    const errors = [];
+
+    for (let page = 1; page <= maxPages; page += 1) {
+        const attempts = [
+            { ac: 'detail', pg: page },
+            { ac: 'videolist', pg: page }
+        ];
+        let pageLoaded = false;
+        for (const params of attempts) {
+            try {
+                const url = buildVodApiUrl(site.api, params);
+                const { data } = await fetchWithProxyFallback(url, { timeout }, site.key);
+                const list = Array.isArray(data && data.list) ? data.list : [];
+                if (list.length > 0) {
+                    for (const raw of list) {
+                        const item = normalizeVodItem(raw, site);
+                        if (item) items.push(item);
+                    }
+                    pageLoaded = true;
+                    break;
+                }
+            } catch (error) {
+                errors.push({
+                    page,
+                    ac: params.ac,
+                    message: String(error.message || error).slice(0, 180)
+                });
+            }
+        }
+        if (!pageLoaded && page > 1) break;
+    }
+
+    return { items, errors };
+}
+
+app.get('/api/recommendations/tvbox-home', async (req, res) => {
+    try {
+        const sourceLimit = Math.max(1, Math.min(12, Number(req.query.sourceLimit || 8)));
+        const pages = Math.max(1, Math.min(3, Number(req.query.pages || 1)));
+        const limitPerRow = Math.max(8, Math.min(48, Number(req.query.limit || 24)));
+        const nativeSites = getDB().sites || [];
+        const tvboxSources = tvboxService.listSources();
+        const enabledSources = tvboxSources.filter(source => source.enabled !== false);
+        const pluginRequiredSources = enabledSources.filter(isPluginRequiredSource);
+        const compatibleSites = getAllSearchSites()
+            .filter(site => site && site.active !== false && isHttpUrl(site.api))
+            .slice(0, sourceLimit);
+
+        const diagnostics = [];
+        const allItems = [];
+        let scannedSources = 0;
+
+        for (const site of compatibleSites) {
+            const cacheKey = `${site.key || site.name}:p${pages}:v2`;
+            const cached = cacheManager.get('tvbox-home', cacheKey);
+            if (cached && Array.isArray(cached.items)) {
+                scannedSources += 1;
+                allItems.push(...cached.items);
+                diagnostics.push({
+                    siteKey: site.key,
+                    siteName: site.name,
+                    status: 'cached',
+                    count: cached.items.length,
+                    errors: []
+                });
+                continue;
+            }
+
+            const result = await fetchSourceRecommendationItems(site, { pages });
+            scannedSources += 1;
+            allItems.push(...result.items);
+            cacheManager.set('tvbox-home', cacheKey, { items: result.items }, 1800);
+            diagnostics.push({
+                siteKey: site.key,
+                siteName: site.name,
+                status: result.items.length > 0 ? 'available' : 'empty',
+                count: result.items.length,
+                errors: result.errors.slice(0, 3)
+            });
+        }
+
+        const ranked = mergeAndRankVodItems(allItems);
+        const rows = splitRecommendationRows(ranked, limitPerRow);
+        const hasRows = Object.values(rows).some(row => row.length > 0);
+        const localJavaBridge = pluginRuntimeRegistry.getLocalJavaBridgeStatus();
+
+        res.json({
+            ok: true,
+            mode: hasRows ? 'source-native' : 'fallback-required',
+            rows,
+            rankedCount: ranked.length,
+            compatibleSources: compatibleSites.length,
+            scannedSources,
+            nativeSearchSites: nativeSites.length,
+            tvboxSources: tvboxSources.length,
+            pluginRequiredSources: pluginRequiredSources.length,
+            localJavaBridge: {
+                running: !!localJavaBridge.running,
+                mode: localJavaBridge.mode
+            },
+            fallbackReason: hasRows
+                ? ''
+                : compatibleSites.length === 0
+                    ? 'no-compatible-http-sources'
+                    : 'compatible-sources-returned-no-home-list',
+            message: hasRows
+                ? 'Homepage uses compatible user/native HTTP sources before TMDb fallback.'
+                : 'No source-native homepage rows were available. Plugin-required TVBox sources need a CatVod runtime bridge before they can provide TVBox-like rows.',
+            diagnostics
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to build TVBox homepage recommendations' });
     }
 });
 

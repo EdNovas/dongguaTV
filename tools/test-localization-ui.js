@@ -141,6 +141,7 @@ async function verifyChineseInteractions(win) {
     await waitFor(win, 'window.vueApp.searched && !window.vueApp.loading', 60000);
     await waitFor(win, 'document.querySelector("[data-testid=\\"search-diagnostics-refresh\\"]")', 60000);
     await waitFor(win, 'window.vueApp.searchDiagnostics && !window.vueApp.searchDiagnosticsLoading', 60000);
+    await waitFor(win, 'document.body.innerText.includes("没有找到") || document.body.innerText.includes("娌℃湁鎵惧埌")', 60000);
     const diagnostics = await win.webContents.executeJavaScript(`(() => {
         const text = document.body.innerText;
         return {

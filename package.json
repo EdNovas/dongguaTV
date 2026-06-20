@@ -15,6 +15,8 @@
     "bridge:catvod:check": "node --check tools/catvod-bridge/server.js && node --check tools/catvod-bridge/javaBridgeSupervisor.js",
     "bridge:java:build": "powershell -ExecutionPolicy Bypass -File tools/catvod-runtime-bridge-java/build.ps1",
     "test:tvbox-parser": "node tools/test-tvbox-parser.js",
+    "test:tvbox-home-ranking": "node tools/test-tvbox-home-ranking.js",
+    "test:tvbox-home-endpoint": "node tools/test-tvbox-home-endpoint.js",
     "test:tvbox-real-qa": "node tools/test-tvbox-real-qa.js",
     "test:player-upstream": "node tools/test-player-upstream.js",
     "test:player-stack": "node tools/test-player-stack.js",

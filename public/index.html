@@ -3467,17 +3467,16 @@
                         <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]" aria-label="Scroll left"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                         <div class="hot-row" :ref="key" @scroll="onRowScroll(key)">
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
-                                :data-release-date="item.release_date || item.first_air_date || ''"
-                                @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
+                                :data-release-date="rowItemDate(item)"
+                                @click="openRowItem(item)">
                                 <div class="poster-wrap">
-                                    <img :src="getPosterUrl(item.poster_path)" loading="lazy"
+                                    <img :src="rowItemPoster(item)" loading="lazy"
                                         @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                     <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
-                                        item.vote_average
-                                        ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                                        rowItemBadge(item) }}</div>
                                 </div>
-                                <div class="movie-name">{{ item.title || item.name }}</div>
-                                <div class="movie-date">{{ item.release_date || item.first_air_date || '' }}
+                                <div class="movie-name">{{ rowItemTitle(item) }}</div>
+                                <div class="movie-date">{{ rowItemDate(item) }}
                                 </div>
                             </div>
                         </div>
@@ -3486,16 +3485,15 @@
                     <!-- 闂備浇顕х换鎺楀磻閻愯娲冀椤愶綆娼熼梺纭呮彧闂勫嫰宕戦幇鐗堢厾闁告縿鍎洪弳顖炴煕鐎ｎ偅灏扮紒妤冨枑缁绘繈宕熼鐘茬倞闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ€儱顭跨捄铏圭伇缁鹃箖绠栭弻鐔衡偓鐢殿焾娴犙冾熆鐟欏嫬濮嶉柟顔荤矙椤㈡稑顫濋浣诡唲闂?-->
                     <div class="grid-expanded" v-show="expandedRows[key]">
                         <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id"
-                            :data-release-date="item.release_date || item.first_air_date || ''"
-                            @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
+                            :data-release-date="rowItemDate(item)"
+                            @click="openRowItem(item)">
                             <div class="poster-wrap">
-                                <img :src="getPosterUrl(item.poster_path)"
+                                <img :src="rowItemPoster(item)"
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
-                                <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average
-                                    ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                                <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ rowItemBadge(item) }}</div>
                             </div>
-                            <div class="movie-name">{{ item.title || item.name }}</div>
-                            <div class="movie-date">{{ item.release_date || item.first_air_date || '' }}
+                            <div class="movie-name">{{ rowItemTitle(item) }}</div>
+                            <div class="movie-date">{{ rowItemDate(item) }}
                             </div>
                         </div>
                         <!-- 闂傚倷绀侀幉锛勬暜閹烘嚦娑樷攽鐎ｎ€儱顭块懜闈涘缂佺姴纾幉绋款吋婢跺﹥妲┑掳鍊曢幊搴ｇ矆?-->
@@ -6124,6 +6122,9 @@
 
                     // === 闂傚倷绀侀幉锟犲蓟閿濆绀夌€广儱顦悞鍨亜閹达絾纭堕柛鏂跨У閵囧嫰顢旈崘顏嗙崲閻庤娲╃换婵嗩嚕閹绢喖顫呴柣妯垮蔼缁佸绱?===
                     rowLists: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮堕敃銏狀嚕閹惰姤鍋勯柣鎾虫捣椤?{ movieRow: [...], ... }
+                    recommendationMode: 'tmdb',
+                    recommendationDiagnostics: null,
+                    recommendationFallbackReason: '',
                     expandedRows: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮剁划宀勫煝閹捐绠ｉ柣妯块哺閸曞啴姊洪崫鍕窛闁稿鍠撴竟鏇熺節濮橆厾鍘藉┑鈽嗗灠閻忔繈鎮￠幇鐗堢厓?{ movieRow: true, ... }
                     viewPages: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮堕悧鐘诲箚閸繍鍚嬮柛婊€绀佸▓銊╂⒑闁偛鑻晶瀵糕偓娈垮櫘閸ｏ絽鐣峰鍕闁革富鍘藉▓鎼佹⒒娴ｅ憡鎯堥悶姘煎亰瀹曟洟宕樼拠褑鈧潡鏌涘☉鍗炴灁濞存粍绮撻弻锝夊閵忊剝姣勯梺?{ movieRow: 1, ... }
                     pageLoadingKeys: {}, // 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柛顐ｆ处閺佸棙绻涢幋娆忕仾闁绘挸鍊婚埀顒€绠嶉崕閬嶅箯鐎ｎ€絾绻濆鍗炲絼闂佹悶鍎村▔娑欑娴煎瓨鐓冪憸婊堝礈濞戙垹绐楅柟鎹愵嚙绾惧鏌ㄥ┑鍡╂Ц缂佲偓閸曨垱鍋ｉ柛銉ｅ妼缁茬粯銇勯顒傜М鐎?{ movieRow: true, ... }
@@ -8854,6 +8855,63 @@
                 },
 
                 // 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柤绋跨仛閸欏繘鏌涢鐘插姎缂佺姾顫夌换婵囩節閸屾稑娅ｉ梺?- 闂備礁鎼ˇ顖炴偋婵犲洤绠伴柟闂寸閻鏌涢埄鍐槈缂侇偄绉归幃瑙勩偊閹稿寒浠╅梺鍝勵槷缁瑩寮婚敓鐘茬妞ゆ挾鍋熼崢顐︽⒑鐠団€虫灈缁剧虎鍘煎嵄?
+                isSourceRecommendation(item) {
+                    return !!(item && (item.recommendation_origin === 'source-native' || item.vod_name || item.site_key));
+                },
+
+                rowItemTitle(item) {
+                    return this.isSourceRecommendation(item) ? (item.vod_name || item.name || item.title || '') : (item.title || item.name || '');
+                },
+
+                rowItemDate(item) {
+                    if (this.isSourceRecommendation(item)) {
+                        return item.vod_time || item.vod_pubdate || item.vod_addtime || item.vod_year || item.vod_remarks || '';
+                    }
+                    return item.release_date || item.first_air_date || '';
+                },
+
+                rowItemBadge(item) {
+                    if (this.isSourceRecommendation(item)) {
+                        const count = Number(item.source_count || (item.sources && item.sources.length) || 1);
+                        return count > 1 ? `${count}源` : (item.vod_remarks || item.type_name || '源');
+                    }
+                    return item && item.vote_average ? item.vote_average.toFixed(1) : 'N/A';
+                },
+
+                rowItemPoster(item) {
+                    if (this.isSourceRecommendation(item)) {
+                        return item.vod_pic || this.getPosterUrl('');
+                    }
+                    return this.getPosterUrl(item && item.poster_path);
+                },
+
+                openRowItem(item) {
+                    if (!this.isSourceRecommendation(item)) {
+                        return this.autoSearch(item.title || item.name, item.original_title || item.original_name);
+                    }
+                    const sources = Array.isArray(item.sources) && item.sources.length > 0 ? item.sources : [item];
+                    return this.openDetail({
+                        name: item.vod_name,
+                        pic: item.vod_pic,
+                        sources: sources.map(source => ({
+                            vod_id: source.vod_id,
+                            vod_name: source.vod_name || item.vod_name,
+                            vod_pic: source.vod_pic || item.vod_pic,
+                            vod_remarks: source.vod_remarks || item.vod_remarks,
+                            vod_year: source.vod_year || item.vod_year,
+                            vod_time: source.vod_time || item.vod_time,
+                            vod_pubdate: source.vod_pubdate || item.vod_pubdate,
+                            vod_addtime: source.vod_addtime || item.vod_addtime,
+                            type_name: source.type_name || item.type_name,
+                            vod_play_from: source.vod_play_from || item.vod_play_from,
+                            vod_play_url: source.vod_play_url || item.vod_play_url,
+                            site_key: source.site_key || item.site_key,
+                            site_name: source.site_name || item.site_name,
+                            source_origin: source.source_origin || item.source_origin || 'native'
+                        }))
+                    });
+                },
+
                 debouncedSearch() {
                     clearTimeout(this.searchTimer);
                     if (!this.keyword || this.keyword.length < 2) {
@@ -9440,8 +9498,47 @@
                 },
 
                 // 闂傚倷绀侀幉锛勬暜濡ゅ啯宕查柛宀€鍎戠紞鏍煙閻楀牊绶茬紒鈧畝鍕厸鐎广儱娴烽崢娑欑箾閹捐泛鍘撮柡?(婵犵數鍋炲娆撳触鐎ｎ喗鏅梻浣告啞钃遍柣鈺婂灠閻ｅ嘲鈹戠€ｎ偄浜归梺缁樺灦椤洭濡堕悧鍫滅箚妞ゆ劦鍓涚粙濠氭煟濡や焦绀嬮柟顖氱墦瀹曞崬鈽夊Ο鑲╁幀婵＄偑鍊栭悧妤冩崲瀹ュ拋鐒介悘鐐靛亾閸欏繘鏌熼悜妯诲暗闁活厼锕﹂埀?
-                fetchAllLists() {
+                async fetchTvboxHomeRecommendations() {
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
+                    try {
+                        const response = await fetch('/api/recommendations/tvbox-home?limit=24&sourceLimit=8&pages=1', {
+                            signal: controller.signal
+                        });
+                        const data = await response.json();
+                        this.recommendationDiagnostics = data;
+                        this.recommendationFallbackReason = data.fallbackReason || '';
+                        if (!data.ok || !data.rows) return false;
+                        const rowEntries = Object.entries(data.rows).filter(([, items]) => Array.isArray(items) && items.length > 0);
+                        if (rowEntries.length === 0) {
+                            this.recommendationMode = 'tmdb';
+                            return false;
+                        }
+                        rowEntries.forEach(([key, items]) => {
+                            if (!this.rowConfigs[key]) return;
+                            this.rowLists[key] = items;
+                            this.rowConfigs[key].page = 1;
+                            this.rowConfigs[key].totalPages = 1;
+                        });
+                        this.recommendationMode = data.mode || 'source-native';
+                        return true;
+                    } catch (error) {
+                        console.error('[TVBoxHome] Failed to load source-native recommendations', error);
+                        this.recommendationMode = 'tmdb';
+                        this.recommendationFallbackReason = 'request-failed';
+                        return false;
+                    } finally {
+                        clearTimeout(timeoutId);
+                    }
+                },
+
+                async fetchAllLists() {
                     const keys = Object.keys(this.rowConfigs);
+                    const sourceRowsLoaded = await this.fetchTvboxHomeRecommendations();
+                    if (sourceRowsLoaded) {
+                        console.log('[DongguaTV] source-native homepage recommendations loaded');
+                        return;
+                    }
 
                     // 闂備浇宕垫慨鎶芥倿閿曞倸纾块柟璺哄閸ヮ剦鏁嗛柍褜鍓濋悘瀣⒑闁偛鑻晶顕€妫佹径鎰€甸柨婵嗘噹椤ｅ磭绱掗埀顒勫礋椤愨偓瑜版帗鍋愰柛娆忣槸濞呇囨⒑鏉炰即妾烽柛濠冪墱缁顓奸崱妯哄妳闂侀潧绻嗗Σ鍕濮樿埖顥婃い鎰╁灪婢跺嫭銇勯妸锕€濮夋俊?
                     const viewportWidth = window.innerWidth;
