@@ -47,6 +47,38 @@ function getJson(url) {
     });
 }
 
+function requestJson(url, method, payload) {
+    return new Promise((resolve, reject) => {
+        const body = JSON.stringify(payload || {});
+        const req = http.request(url, {
+            method,
+            headers: {
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(body)
+            }
+        }, res => {
+            let text = '';
+            res.setEncoding('utf8');
+            res.on('data', chunk => { text += chunk; });
+            res.on('end', () => {
+                try {
+                    const parsed = JSON.parse(text);
+                    if (res.statusCode && res.statusCode >= 400) {
+                        reject(new Error(parsed.error || `HTTP ${res.statusCode}`));
+                    } else {
+                        resolve(parsed);
+                    }
+                } catch (error) {
+                    reject(new Error(`Invalid JSON from ${url}: ${text.slice(0, 200)}`));
+                }
+            });
+        });
+        req.on('error', reject);
+        req.write(body);
+        req.end();
+    });
+}
+
 (async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donggua-tvbox-home-'));
     let child = null;
@@ -144,6 +176,20 @@ function getJson(url) {
         assert.equal(result.manualRecommendations.matched, 1);
         assert.equal(result.rows.tvRow.some(item => item.vod_name.includes('庆余年')), true);
         assert.equal(result.rows.tvRow.find(item => item.vod_name.includes('庆余年')).recommendation_origin, 'manual');
+
+        const manualBefore = await getJson(`http://127.0.0.1:${appPort}/api/recommendations/manual-home`);
+        assert.equal(manualBefore.ok, true);
+        assert.equal(manualBefore.count, 2);
+        const manualSaved = await requestJson(`http://127.0.0.1:${appPort}/api/recommendations/manual-home`, 'PATCH', {
+            entries: [
+                { title: 'Manual API Item', type: 'movie', year: '2025', enabled: true }
+            ]
+        });
+        assert.equal(manualSaved.ok, true);
+        assert.equal(manualSaved.count, 1);
+        assert.equal(manualSaved.entries[0].title, 'Manual API Item');
+        const manualAfter = await getJson(`http://127.0.0.1:${appPort}/api/recommendations/manual-home`);
+        assert.equal(manualAfter.count, 1);
 
         console.log(JSON.stringify({
             ok: true,

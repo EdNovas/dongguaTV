@@ -628,6 +628,25 @@ class CacheManager {
     }
 
     // 定期清理过期缓存 (SQLite)
+    clear(category) {
+        if (this.type === 'memory' || this.type === 'json') {
+            if (!category || category === 'search') this.searchCache = {};
+            if (!category || category === 'detail') this.detailCache = {};
+            if (category && !['search', 'detail'].includes(category)) this.detailCache = {};
+            if (this.type === 'json') this.saveDisk();
+        } else if (this.type === 'sqlite' && this.db) {
+            try {
+                if (category) {
+                    this.db.prepare('DELETE FROM cache WHERE category = ?').run(category);
+                } else {
+                    this.db.prepare('DELETE FROM cache').run();
+                }
+            } catch (e) {
+                console.error('[SQLite Cache] Clear error:', e.message);
+            }
+        }
+    }
+
     cleanup() {
         if (this.type === 'sqlite' && this.db) {
             try {
@@ -1486,22 +1505,41 @@ async function fetchSourceRecommendationItems(site, options = {}) {
     return { items, errors };
 }
 
-function readManualHomeRecommendations() {
-    if (!fs.existsSync(HOME_RECOMMEND_FILE)) {
-        return [];
-    }
-    const raw = fs.readFileSync(HOME_RECOMMEND_FILE, 'utf8');
-    const parsed = JSON.parse(raw);
+function normalizeManualHomeRecommendations(parsed, options = {}) {
+    const includeDisabled = !!options.includeDisabled;
     if (!Array.isArray(parsed)) {
         throw new Error('home-recommend.json must be an array.');
     }
     return parsed.map((entry, index) => ({
         title: String(entry && entry.title || '').trim(),
-        type: String(entry && entry.type || '').trim(),
+        type: ['movie', 'tv', 'anime', 'variety', ''].includes(String(entry && entry.type || '').trim())
+            ? String(entry && entry.type || '').trim()
+            : '',
         year: String(entry && entry.year || '').trim(),
         enabled: entry && entry.enabled === false ? false : true,
         index
-    })).filter(entry => entry.enabled && entry.title);
+    })).filter(entry => entry.title && (includeDisabled || entry.enabled)).slice(0, 80);
+}
+
+function readManualHomeRecommendations(options = {}) {
+    if (!fs.existsSync(HOME_RECOMMEND_FILE)) {
+        return [];
+    }
+    const raw = fs.readFileSync(HOME_RECOMMEND_FILE, 'utf8');
+    return normalizeManualHomeRecommendations(JSON.parse(raw), options);
+}
+
+function writeManualHomeRecommendations(entries) {
+    const sanitized = normalizeManualHomeRecommendations(entries, { includeDisabled: true })
+        .map(entry => ({
+            title: entry.title,
+            type: entry.type,
+            year: entry.year,
+            enabled: entry.enabled
+        }));
+    fs.mkdirSync(RUNTIME_DATA_DIR, { recursive: true });
+    fs.writeFileSync(HOME_RECOMMEND_FILE, JSON.stringify(sanitized, null, 2), 'utf8');
+    return sanitized;
 }
 
 function scoreManualRecommendationMatch(entry, item) {
@@ -1679,6 +1717,36 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
         });
     } catch (error) {
         res.status(400).json({ error: error.message || 'Failed to build TVBox homepage recommendations' });
+    }
+});
+
+app.get('/api/recommendations/manual-home', (req, res) => {
+    try {
+        const entries = readManualHomeRecommendations({ includeDisabled: true });
+        res.json({
+            ok: true,
+            file: HOME_RECOMMEND_FILE,
+            entries,
+            count: entries.length
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to load manual home recommendations' });
+    }
+});
+
+app.patch('/api/recommendations/manual-home', (req, res) => {
+    try {
+        const entries = Array.isArray(req.body && req.body.entries) ? req.body.entries : [];
+        const saved = writeManualHomeRecommendations(entries);
+        cacheManager.clear && cacheManager.clear('manual-home');
+        res.json({
+            ok: true,
+            file: HOME_RECOMMEND_FILE,
+            entries: saved,
+            count: saved.length
+        });
+    } catch (error) {
+        res.status(400).json({ error: error.message || 'Failed to save manual home recommendations' });
     }
 });
 

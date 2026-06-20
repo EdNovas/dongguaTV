@@ -4217,6 +4217,83 @@
                         </label>
                     </div>
 
+                    <div style="padding:18px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+                            <div>
+                                <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">
+                                    <i class="fas fa-list-ol" style="color:#facc15; margin-right:8px;"></i>{{ t('settings.manualHomeTitle') }}
+                                </div>
+                                <div style="color:#9ca3af; font-size:12px; line-height:1.55; max-width:560px;">{{ t('settings.manualHomeDescription') }}</div>
+                            </div>
+                            <button class="btn-info" data-testid="manual-home-refresh" @click="loadManualHomeRecommendations(true)" :disabled="manualHomeLoading"
+                                style="border:0; padding:8px 12px; font-size:12px;">
+                                <i :class="['fas', manualHomeLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt']"></i>
+                                {{ t('common.refresh') }}
+                            </button>
+                        </div>
+                        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; align-items:center;">
+                            <input v-model="manualHomeDraft.title" type="text" :placeholder="t('settings.manualHomeName')"
+                                data-testid="manual-home-title"
+                                style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                            <select v-model="manualHomeDraft.type" data-testid="manual-home-type"
+                                style="background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                                <option value="tv">{{ t('settings.manualHomeSeries') }}</option>
+                                <option value="movie">{{ t('settings.manualHomeMovie') }}</option>
+                                <option value="anime">{{ t('settings.manualHomeAnime') }}</option>
+                                <option value="variety">{{ t('settings.manualHomeVariety') }}</option>
+                            </select>
+                            <input v-model="manualHomeDraft.year" type="text" :placeholder="t('settings.manualHomeYear')"
+                                data-testid="manual-home-year"
+                                style="min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
+                            <button class="btn-play" data-testid="manual-home-add" @click="addManualHomeRecommendation"
+                                style="border:0; padding:9px 14px; font-size:12px; white-space:nowrap;">
+                                <i class="fas fa-plus"></i> {{ t('settings.manualHomeAdd') }}
+                            </button>
+                        </div>
+                        <div v-if="manualHomeRecommendations.length"
+                            style="display:grid; gap:8px; margin-top:12px;">
+                            <div v-for="(entry, index) in manualHomeRecommendations" :key="index"
+                                style="display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:8px; align-items:center; padding:8px; border-radius:12px; background:rgba(255,255,255,0.05);">
+                                <input v-model="entry.title" type="text" :aria-label="t('settings.manualHomeName')"
+                                    style="min-width:0; background:#111318; border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:10px; padding:8px 10px; font-size:12px;">
+                                <select v-model="entry.type"
+                                    style="background:#111318; border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:10px; padding:8px 10px; font-size:12px;">
+                                    <option value="tv">{{ t('settings.manualHomeSeries') }}</option>
+                                    <option value="movie">{{ t('settings.manualHomeMovie') }}</option>
+                                    <option value="anime">{{ t('settings.manualHomeAnime') }}</option>
+                                    <option value="variety">{{ t('settings.manualHomeVariety') }}</option>
+                                </select>
+                                <input v-model="entry.year" type="text" :aria-label="t('settings.manualHomeYear')"
+                                    style="min-width:0; background:#111318; border:1px solid rgba(255,255,255,0.12); color:#fff; border-radius:10px; padding:8px 10px; font-size:12px;">
+                                <label style="display:flex; align-items:center; gap:6px; color:#cfd3dc; font-size:12px;">
+                                    <input type="checkbox" v-model="entry.enabled" style="accent-color:#e50914;"> {{ t('settings.manualHomeEnabled') }}
+                                </label>
+                                <button class="btn-info" @click="removeManualHomeRecommendation(index)"
+                                    style="border:0; padding:8px 10px; font-size:12px;">
+                                    <i class="fas fa-trash-alt"></i> {{ t('settings.manualHomeRemove') }}
+                                </button>
+                            </div>
+                        </div>
+                        <div v-else style="margin-top:12px; padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.05); color:#9ca3af; font-size:12px; line-height:1.55;">
+                            {{ t('settings.manualHomeEmpty') }}
+                        </div>
+                        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:12px;">
+                            <button class="btn-play" data-testid="manual-home-save" @click="saveManualHomeRecommendations" :disabled="manualHomeLoading"
+                                style="border:0; padding:9px 14px; font-size:12px;">
+                                <i :class="['fas', manualHomeLoading ? 'fa-spinner fa-spin' : 'fa-save']"></i>
+                                {{ t('settings.manualHomeSave') }}
+                            </button>
+                            <button class="btn-info" @click="refreshHomeAfterManualRecommendations" :disabled="manualHomeLoading"
+                                style="border:0; padding:9px 14px; font-size:12px;">
+                                <i class="fas fa-home"></i> {{ t('settings.manualHomeRefresh') }}
+                            </button>
+                            <span v-if="manualHomeMessage" :class="['modal-action-feedback', manualHomeMessageType]">
+                                <i :class="['fas', manualHomeMessageType === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle']"></i>
+                                {{ manualHomeMessage }}
+                            </span>
+                        </div>
+                    </div>
+
                     <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
                     <h4><i class="fas fa-desktop"></i> {{ t('settings.externalPlayer') }}</h4>
@@ -5911,6 +5988,73 @@
             }
         };
 
+        Object.assign(UI_TRANSLATIONS['zh-CN'], {
+            'settings.manualHomeTitle': '首页推荐名单',
+            'settings.manualHomeDescription': '只保存你自己添加的片名，用来校准首页榜单；不会内置第三方片单或影视源。',
+            'settings.manualHomeName': '片名',
+            'settings.manualHomeYear': '年份',
+            'settings.manualHomeType': '类型',
+            'settings.manualHomeMovie': '电影',
+            'settings.manualHomeSeries': '剧集',
+            'settings.manualHomeAnime': '动漫',
+            'settings.manualHomeVariety': '综艺',
+            'settings.manualHomeAdd': '添加',
+            'settings.manualHomeSave': '保存名单',
+            'settings.manualHomeRefresh': '刷新首页',
+            'settings.manualHomeEmpty': '还没有手动推荐。添加 3-10 个你认可的片名后，首页会优先从可用源里匹配。',
+            'settings.manualHomeEnabled': '启用',
+            'settings.manualHomeRemove': '删除',
+            'settings.manualHomeLoaded': '首页推荐名单已读取',
+            'settings.manualHomeSaved': '首页推荐名单已保存',
+            'settings.manualHomeTitleRequired': '请先填写片名',
+            'settings.manualHomeLoadFailed': '读取首页推荐名单失败',
+            'settings.manualHomeSaveFailed': '保存首页推荐名单失败'
+        });
+        Object.assign(UI_TRANSLATIONS['en-US'], {
+            'settings.manualHomeTitle': 'Home recommendation list',
+            'settings.manualHomeDescription': 'Stores only titles you add yourself to tune Home ranking; no third-party title list or source is built in.',
+            'settings.manualHomeName': 'Title',
+            'settings.manualHomeYear': 'Year',
+            'settings.manualHomeType': 'Type',
+            'settings.manualHomeMovie': 'Movie',
+            'settings.manualHomeSeries': 'Series',
+            'settings.manualHomeAnime': 'Anime',
+            'settings.manualHomeVariety': 'Variety',
+            'settings.manualHomeAdd': 'Add',
+            'settings.manualHomeSave': 'Save list',
+            'settings.manualHomeRefresh': 'Refresh Home',
+            'settings.manualHomeEmpty': 'No manual recommendations yet. Add 3-10 trusted titles and Home will try to match them from compatible sources.',
+            'settings.manualHomeEnabled': 'Enabled',
+            'settings.manualHomeRemove': 'Remove',
+            'settings.manualHomeLoaded': 'Home recommendation list loaded',
+            'settings.manualHomeSaved': 'Home recommendation list saved',
+            'settings.manualHomeTitleRequired': 'Enter a title first',
+            'settings.manualHomeLoadFailed': 'Failed to load Home recommendation list',
+            'settings.manualHomeSaveFailed': 'Failed to save Home recommendation list'
+        });
+        Object.assign(UI_TRANSLATIONS['ja-JP'], {
+            'settings.manualHomeTitle': 'ホーム推薦リスト',
+            'settings.manualHomeDescription': '自分で追加した作品名だけを保存してホーム順位を調整します。第三者の片名リストや配信元は内蔵しません。',
+            'settings.manualHomeName': '作品名',
+            'settings.manualHomeYear': '年',
+            'settings.manualHomeType': '種類',
+            'settings.manualHomeMovie': '映画',
+            'settings.manualHomeSeries': 'ドラマ',
+            'settings.manualHomeAnime': 'アニメ',
+            'settings.manualHomeVariety': 'バラエティ',
+            'settings.manualHomeAdd': '追加',
+            'settings.manualHomeSave': '保存',
+            'settings.manualHomeRefresh': 'ホーム更新',
+            'settings.manualHomeEmpty': '手動推薦はまだありません。信頼する作品を 3-10 件追加すると、対応ソースから優先して照合します。',
+            'settings.manualHomeEnabled': '有効',
+            'settings.manualHomeRemove': '削除',
+            'settings.manualHomeLoaded': 'ホーム推薦リストを読み込みました',
+            'settings.manualHomeSaved': 'ホーム推薦リストを保存しました',
+            'settings.manualHomeTitleRequired': '作品名を入力してください',
+            'settings.manualHomeLoadFailed': 'ホーム推薦リストの読み込みに失敗しました',
+            'settings.manualHomeSaveFailed': 'ホーム推薦リストの保存に失敗しました'
+        });
+
         createApp({
             data() {
                 return {
@@ -5992,6 +6136,11 @@
                         useLocalProxy: true,
                         localProxyPort: 9979
                     },
+                    manualHomeRecommendations: [],
+                    manualHomeDraft: { title: '', type: 'tv', year: '' },
+                    manualHomeLoading: false,
+                    manualHomeMessage: '',
+                    manualHomeMessageType: 'success',
                     playerSettingsSaving: false,
                     playerSettingsMessage: '',
                     playerSettingsMessageType: 'success',
@@ -7052,6 +7201,7 @@
                         this.playerSettingsMessageType = 'error';
                     }
                     this.loadPluginRuntimeSettings();
+                    this.loadManualHomeRecommendations();
                     this.loadProxyStatus();
                     this.loadDesktopStatus();
                 },
@@ -7086,6 +7236,101 @@
                     } finally {
                         this.playerSettingsSaving = false;
                     }
+                },
+
+                normalizeManualHomeEntry(entry) {
+                    return {
+                        title: String(entry && entry.title || '').trim(),
+                        type: ['movie', 'tv', 'anime', 'variety'].includes(String(entry && entry.type || '').trim())
+                            ? String(entry.type).trim()
+                            : 'tv',
+                        year: String(entry && entry.year || '').trim(),
+                        enabled: entry && entry.enabled === false ? false : true
+                    };
+                },
+
+                async loadManualHomeRecommendations(feedback = false) {
+                    this.manualHomeLoading = true;
+                    if (feedback) {
+                        this.manualHomeMessage = this.t('common.loading');
+                        this.manualHomeMessageType = 'success';
+                    }
+                    try {
+                        const response = await fetch('/api/recommendations/manual-home');
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Request failed');
+                        this.manualHomeRecommendations = Array.isArray(data.entries)
+                            ? data.entries.map(this.normalizeManualHomeEntry)
+                            : [];
+                        if (feedback) {
+                            this.manualHomeMessage = this.t('settings.manualHomeLoaded');
+                            this.manualHomeMessageType = 'success';
+                        }
+                    } catch (error) {
+                        this.manualHomeMessage = error.message || this.t('settings.manualHomeLoadFailed');
+                        this.manualHomeMessageType = 'error';
+                    } finally {
+                        this.manualHomeLoading = false;
+                    }
+                },
+
+                addManualHomeRecommendation() {
+                    const entry = this.normalizeManualHomeEntry(this.manualHomeDraft);
+                    if (!entry.title) {
+                        this.manualHomeMessage = this.t('settings.manualHomeTitleRequired');
+                        this.manualHomeMessageType = 'error';
+                        return;
+                    }
+                    const duplicateIndex = this.manualHomeRecommendations.findIndex(item =>
+                        String(item.title || '').trim() === entry.title && String(item.year || '').trim() === entry.year
+                    );
+                    if (duplicateIndex >= 0) {
+                        this.manualHomeRecommendations.splice(duplicateIndex, 1, entry);
+                    } else {
+                        this.manualHomeRecommendations.push(entry);
+                    }
+                    this.manualHomeDraft = { title: '', type: entry.type || 'tv', year: '' };
+                    this.manualHomeMessage = '';
+                },
+
+                removeManualHomeRecommendation(index) {
+                    this.manualHomeRecommendations.splice(index, 1);
+                },
+
+                async saveManualHomeRecommendations() {
+                    this.manualHomeLoading = true;
+                    this.manualHomeMessage = this.t('common.saving');
+                    this.manualHomeMessageType = 'success';
+                    try {
+                        const entries = this.manualHomeRecommendations
+                            .map(this.normalizeManualHomeEntry)
+                            .filter(entry => entry.title);
+                        const response = await fetch('/api/recommendations/manual-home', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ entries })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || 'Request failed');
+                        this.manualHomeRecommendations = Array.isArray(data.entries)
+                            ? data.entries.map(this.normalizeManualHomeEntry)
+                            : entries;
+                        this.manualHomeMessage = this.t('settings.manualHomeSaved');
+                        this.manualHomeMessageType = 'success';
+                        this.showMiniToast && this.showMiniToast(this.t('settings.manualHomeSaved'));
+                    } catch (error) {
+                        this.manualHomeMessage = error.message || this.t('settings.manualHomeSaveFailed');
+                        this.manualHomeMessageType = 'error';
+                    } finally {
+                        this.manualHomeLoading = false;
+                    }
+                },
+
+                async refreshHomeAfterManualRecommendations() {
+                    await this.saveManualHomeRecommendations();
+                    if (this.manualHomeMessageType === 'error') return;
+                    await this.fetchAllLists();
+                    this.showMiniToast && this.showMiniToast(this.t('settings.manualHomeRefresh'));
                 },
 
                 async detectMpcPath() {
