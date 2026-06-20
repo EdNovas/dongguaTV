@@ -53,7 +53,24 @@ function getJson(url) {
     const sourceServer = http.createServer((req, res) => {
         const url = new URL(req.url, 'http://127.0.0.1');
         if (url.searchParams.get('ac') === 'detail') {
+            const keyword = url.searchParams.get('wd') || '';
             res.setHeader('content-type', 'application/json; charset=utf-8');
+            if (keyword.includes('庆余年')) {
+                res.end(JSON.stringify({
+                    code: 1,
+                    list: [
+                        {
+                            vod_id: 'manual1',
+                            vod_name: '庆余年 第二季',
+                            vod_pic: 'https://example.test/joy.jpg',
+                            vod_year: '2024',
+                            type_name: '国产剧',
+                            vod_play_url: '01$https://example.test/joy.m3u8'
+                        }
+                    ]
+                }));
+                return;
+            }
             res.end(JSON.stringify({
                 code: 1,
                 list: [
@@ -94,6 +111,10 @@ function getJson(url) {
                 }
             ]
         }, null, 2));
+        fs.writeFileSync(path.join(dataDir, 'home-recommend.json'), JSON.stringify([
+            { title: '庆余年', type: 'tv', year: '2024' },
+            { title: '匹配不到的片名', type: 'movie', year: '2026' }
+        ], null, 2));
 
         const appPort = sourcePort + 1;
         child = spawn(process.execPath, ['server.js'], {
@@ -117,13 +138,18 @@ function getJson(url) {
         assert.equal(result.ok, true);
         assert.equal(result.mode, 'source-native');
         assert.equal(result.compatibleSources, 1);
-        assert.equal(result.rows.randomRow[0].vod_name, '流浪地球2 4K');
+        assert.equal(result.rows.randomRow.some(item => item.vod_name === '流浪地球2 4K'), true);
         assert.equal(result.rows.randomRow.some(item => item.vod_name.includes('短剧')), false);
+        assert.equal(result.manualRecommendations.entries, 2);
+        assert.equal(result.manualRecommendations.matched, 1);
+        assert.equal(result.rows.tvRow.some(item => item.vod_name.includes('庆余年')), true);
+        assert.equal(result.rows.tvRow.find(item => item.vod_name.includes('庆余年')).recommendation_origin, 'manual');
 
         console.log(JSON.stringify({
             ok: true,
             mode: result.mode,
             compatibleSources: result.compatibleSources,
+            manualRecommendations: result.manualRecommendations,
             top: result.rows.randomRow.slice(0, 3).map(item => ({
                 name: item.vod_name,
                 score: item.recommendation_score,

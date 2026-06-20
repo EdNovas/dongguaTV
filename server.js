@@ -16,6 +16,7 @@ const pipeline = promisify(stream.pipeline);
 const { createTvboxService } = require('./server/adapters/tvbox');
 const { createDefaultPluginRuntimeRegistry } = require('./server/adapters/tvbox/pluginRuntime');
 const {
+    normalizeVodTitle,
     normalizeVodItem,
     mergeAndRankVodItems,
     splitRecommendationRows
@@ -35,6 +36,7 @@ if (!process.env.VERCEL) {
 
 const DATA_FILE = path.join(RUNTIME_DATA_DIR, 'db.json');
 const TEMPLATE_FILE = path.join(__dirname, 'db.template.json');
+const HOME_RECOMMEND_FILE = path.join(RUNTIME_DATA_DIR, 'home-recommend.json');
 
 // 图片缓存目录 (仅本地/Docker 环境)
 const IMAGE_CACHE_DIR = path.join(RUNTIME_DATA_DIR, 'cache/images');
@@ -1484,6 +1486,113 @@ async function fetchSourceRecommendationItems(site, options = {}) {
     return { items, errors };
 }
 
+function readManualHomeRecommendations() {
+    if (!fs.existsSync(HOME_RECOMMEND_FILE)) {
+        return [];
+    }
+    const raw = fs.readFileSync(HOME_RECOMMEND_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+        throw new Error('home-recommend.json must be an array.');
+    }
+    return parsed.map((entry, index) => ({
+        title: String(entry && entry.title || '').trim(),
+        type: String(entry && entry.type || '').trim(),
+        year: String(entry && entry.year || '').trim(),
+        enabled: entry && entry.enabled === false ? false : true,
+        index
+    })).filter(entry => entry.enabled && entry.title);
+}
+
+function scoreManualRecommendationMatch(entry, item) {
+    const entryTitle = normalizeVodTitle(entry.title);
+    const itemTitle = normalizeVodTitle(item && item.vod_name);
+    if (!entryTitle || !itemTitle) return -1000;
+
+    let score = 0;
+    if (itemTitle === entryTitle) score += 100;
+    else if (itemTitle.includes(entryTitle) || entryTitle.includes(itemTitle)) score += 55;
+    else return -1000;
+
+    if (entry.year && String(item.vod_year || item.vod_time || item.vod_pubdate || '').includes(entry.year)) {
+        score += 25;
+    }
+    if (entry.type) {
+        const text = `${item.type_name || ''} ${item.vod_name || ''}`;
+        if (entry.type === 'movie' && /电影|动作|喜剧|爱情|科幻|悬疑|犯罪|恐怖|战争|剧情|纪录片/.test(text)) score += 12;
+        if (entry.type === 'tv' && /电视剧|连续剧|国产剧|欧美剧|日韩剧|韩剧|日剧|美剧|港剧|台剧|剧集/.test(text)) score += 12;
+        if (entry.type === 'anime' && /动漫|动画|番剧|漫画|少儿/.test(text)) score += 12;
+        if (entry.type === 'variety' && /综艺|真人秀|脱口秀|晚会|音乐/.test(text)) score += 12;
+    }
+    if (item.vod_pic) score += 4;
+    if (item.vod_play_url) score += 8;
+    return score;
+}
+
+async function fetchManualRecommendationItems(sites, options = {}) {
+    const timeout = Math.max(2500, Math.min(10000, Number(options.timeout || 6500)));
+    const entries = readManualHomeRecommendations();
+    const result = {
+        entries: entries.length,
+        matched: 0,
+        items: [],
+        errors: []
+    };
+    if (entries.length === 0 || !Array.isArray(sites) || sites.length === 0) {
+        return result;
+    }
+
+    for (const entry of entries) {
+        let best = null;
+        let bestScore = -1000;
+        for (const site of sites) {
+            const cacheKey = `${site.key || site.name}:${entry.title}:${entry.year}:v1`;
+            let list = null;
+            const cached = cacheManager.get('manual-home', cacheKey);
+            if (cached && Array.isArray(cached.list)) {
+                list = cached.list;
+            } else {
+                try {
+                    const searchUrl = buildVodApiUrl(site.api, { ac: 'detail', wd: entry.title });
+                    const { data } = await fetchWithProxyFallback(searchUrl, { timeout }, site.key);
+                    list = Array.isArray(data && data.list)
+                        ? data.list.map(raw => normalizeVodItem(raw, site)).filter(Boolean)
+                        : [];
+                    cacheManager.set('manual-home', cacheKey, { list }, 1800);
+                } catch (error) {
+                    result.errors.push({
+                        title: entry.title,
+                        siteKey: site.key,
+                        siteName: site.name,
+                        message: String(error.message || error).slice(0, 180)
+                    });
+                    continue;
+                }
+            }
+
+            for (const item of list) {
+                const score = scoreManualRecommendationMatch(entry, item);
+                if (score > bestScore) {
+                    bestScore = score;
+                    best = item;
+                }
+            }
+        }
+
+        if (best && bestScore > 0) {
+            result.matched += 1;
+            result.items.push({
+                ...best,
+                recommendation_origin: 'manual',
+                manual_title: entry.title,
+                manual_year: entry.year,
+                manual_type: entry.type
+            });
+        }
+    }
+    return result;
+}
+
 app.get('/api/recommendations/tvbox-home', async (req, res) => {
     try {
         const sourceLimit = Math.max(1, Math.min(12, Number(req.query.sourceLimit || 8)));
@@ -1530,6 +1639,9 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
             });
         }
 
+        const manualResult = await fetchManualRecommendationItems(compatibleSites, { timeout: 6500 });
+        allItems.push(...manualResult.items);
+
         const ranked = mergeAndRankVodItems(allItems);
         const rows = splitRecommendationRows(ranked, limitPerRow);
         const hasRows = Object.values(rows).some(row => row.length > 0);
@@ -1542,6 +1654,12 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
             rankedCount: ranked.length,
             compatibleSources: compatibleSites.length,
             scannedSources,
+            manualRecommendations: {
+                file: HOME_RECOMMEND_FILE,
+                entries: manualResult.entries,
+                matched: manualResult.matched,
+                errors: manualResult.errors.slice(0, 5)
+            },
             nativeSearchSites: nativeSites.length,
             tvboxSources: tvboxSources.length,
             pluginRequiredSources: pluginRequiredSources.length,

@@ -210,10 +210,11 @@ function mergeAndRankVodItems(items) {
             source_count: sourceCount,
             recommendation_score: score,
             recommendation_category: categoryForItem(best),
-            recommendation_origin: 'source-native',
+            recommendation_origin: best.recommendation_origin || 'source-native',
             recommendation_reason: sourceCount > 1
                 ? `multi-source:${sourceCount}`
-                : shortFormPenalty(best) > 0 ? 'downranked-short-form' : 'source-home',
+                : best.recommendation_origin === 'manual' ? 'manual-recommend'
+                    : shortFormPenalty(best) > 0 ? 'downranked-short-form' : 'source-home',
             sources: group.candidates.map(candidate => ({
                 vod_id: candidate.vod_id,
                 vod_name: candidate.vod_name,
