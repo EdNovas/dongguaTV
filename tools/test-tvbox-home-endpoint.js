@@ -118,7 +118,7 @@ function getJson(url) {
         assert.equal(result.mode, 'source-native');
         assert.equal(result.compatibleSources, 1);
         assert.equal(result.rows.randomRow[0].vod_name, '流浪地球2 4K');
-        assert.equal(result.rows.randomRow.findIndex(item => item.vod_name.includes('短剧')) > 0, true);
+        assert.equal(result.rows.randomRow.some(item => item.vod_name.includes('短剧')), false);
 
         console.log(JSON.stringify({
             ok: true,

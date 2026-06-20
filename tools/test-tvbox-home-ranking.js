@@ -4,6 +4,7 @@ const {
     mergeAndRankVodItems,
     splitRecommendationRows,
     shortFormPenalty,
+    isLowQualityRankItem,
     categoryForItem
 } = require('../server/adapters/tvbox/recommendationRanker');
 
@@ -61,6 +62,8 @@ const rows = splitRecommendationRows(ranked, 12);
 
 assert.equal(shortFormPenalty(shortDrama) > 0, true);
 assert.equal(shortFormPenalty(explainer) > 0, true);
+assert.equal(isLowQualityRankItem(shortDrama), true);
+assert.equal(isLowQualityRankItem(explainer), true);
 assert.equal(categoryForItem(mainstreamA), 'movie');
 assert.equal(categoryForItem(series), 'series');
 assert.equal(ranked[0].vod_name, '流浪地球2 4K');
@@ -68,8 +71,8 @@ assert.equal(ranked[0].source_count, 2);
 assert.equal(rows.randomRow[0].vod_name, '流浪地球2 4K');
 assert.equal(rows.movieRow.some(item => item.vod_name.includes('流浪地球2')), true);
 assert.equal(rows.tvRow.some(item => item.vod_name.includes('庆余年')), true);
-assert.equal(rows.randomRow.findIndex(item => item.vod_name.includes('短剧')) > 0, true);
-assert.equal(rows.randomRow.findIndex(item => item.vod_name.includes('解说')) > 0, true);
+assert.equal(rows.randomRow.some(item => item.vod_name.includes('短剧')), false);
+assert.equal(rows.randomRow.some(item => item.vod_name.includes('解说')), false);
 
 console.log(JSON.stringify({
     ok: true,

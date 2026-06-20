@@ -2,11 +2,26 @@ const SHORT_FORM_KEYWORDS = [
     '短剧',
     '微短剧',
     '爽文',
+    '霸总',
+    '女总裁',
+    '战神',
+    '赘婿',
+    '闪婚',
+    '离婚后',
+    '重生',
+    '逆袭',
     '竖屏',
     '小剧场',
     '网剧',
     '网络剧',
+    '全集',
     '合集',
+    '一口气',
+    '完整版',
+    '短剧版',
+    '抖音短剧',
+    '快手短剧',
+    '小程序短剧',
     '解说',
     '电影解说',
     '电视剧解说',
@@ -75,6 +90,32 @@ function shortFormPenalty(item) {
     return Math.min(120, penalty);
 }
 
+function isLowQualityRankItem(item) {
+    const haystack = [
+        item && item.vod_name,
+        item && item.name,
+        item && item.title,
+        item && item.type_name,
+        item && item.vod_class,
+        item && item.category,
+        item && item.vod_remarks,
+        item && item.remarks,
+        item && item.vod_content,
+        item && item.content,
+        item && item.description,
+        item && item.desc
+    ].map(textOf).join(' ');
+
+    if (SHORT_FORM_KEYWORDS.some(keyword => haystack.includes(keyword))) {
+        return true;
+    }
+
+    const score = Number(item && (item.score || item.rate || item.rating || item.vod_score || 0));
+    const year = textOf(item && (item.year || item.vod_year));
+    const hasPoster = !!textOf(item && (item.pic || item.vod_pic || item.poster));
+    return !year && score === 0 && !hasPoster;
+}
+
 function categoryForItem(item) {
     const text = [
         item && item.type_name,
@@ -137,6 +178,7 @@ function normalizeVodItem(item, site) {
 function mergeAndRankVodItems(items) {
     const groups = new Map();
     for (const item of items || []) {
+        if (isLowQualityRankItem(item)) continue;
         const key = normalizeVodTitle(item && item.vod_name);
         if (!key) continue;
         const group = groups.get(key) || {
@@ -227,6 +269,7 @@ module.exports = {
     normalizeVodTitle,
     latestTimestamp,
     shortFormPenalty,
+    isLowQualityRankItem,
     categoryForItem,
     scoreVodCandidate,
     normalizeVodItem,
