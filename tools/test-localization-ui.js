@@ -51,15 +51,19 @@ async function waitFor(win, expression, timeoutMs = 30000) {
 }
 
 async function setLanguage(win, language) {
-    await win.webContents.executeJavaScript(`(() => {
+    await win.webContents.executeJavaScript(`(async () => {
         const vm = window.vueApp;
         vm.uiLanguage = ${JSON.stringify(language)};
         vm.changeUiLanguage();
+        vm.closeOverlayPanels();
         vm.showSettingsModal = true;
-        vm.$forceUpdate();
+        vm.loadPlayerSettings();
+        await vm.$nextTick();
     })()`);
-    await waitFor(win, 'document.querySelector(".info-modal select")');
-    await waitFor(win, 'document.querySelector("[data-testid=\\"settings-back\\"]")?.innerText.trim()');
+    await waitFor(win, 'document.querySelector(".settings-modal select")');
+    await waitFor(win, 'document.querySelector(".settings-modal [data-testid=\\"settings-back\\"]")?.innerText.trim()');
+    await waitFor(win, 'document.querySelector(".settings-modal h2")?.textContent.trim()');
+    await waitFor(win, '!window.vueApp.proxyStatusLoading');
 }
 
 async function readUi(win) {
@@ -69,8 +73,8 @@ async function readUi(win) {
         nav: Array.from(document.querySelectorAll('.appletv-nav-item span'))
             .map(node => node.textContent.trim()),
         searchPlaceholder: document.querySelector('.search-input')?.getAttribute('placeholder') || '',
-        settingsTitle: document.querySelector('.info-modal h2')?.textContent.trim() || '',
-        languageOptions: Array.from(document.querySelectorAll('.info-modal select option'))
+        settingsTitle: document.querySelector('.settings-modal h2')?.textContent.trim() || '',
+        languageOptions: Array.from(document.querySelectorAll('.settings-modal select option'))
             .slice(0, 3)
             .map(node => node.textContent.trim()),
         savedLanguage: localStorage.getItem('donggua_ui_language')
@@ -90,9 +94,9 @@ function verifyLanguage(language, state) {
 async function verifyChineseInteractions(win) {
     await setLanguage(win, 'zh-CN');
     const settings = await win.webContents.executeJavaScript(`(() => ({
-        back: document.querySelector('[data-testid="settings-back"]')?.innerText.trim() || '',
-        text: document.querySelector('.info-modal')?.innerText || '',
-        misleadingToggle: (document.querySelector('.info-modal')?.innerText || '').includes('Prefer external player for heavy streams')
+        back: document.querySelector('.settings-modal [data-testid="settings-back"]')?.innerText.trim() || '',
+        text: document.querySelector('.settings-modal')?.innerText || '',
+        misleadingToggle: (document.querySelector('.settings-modal')?.innerText || '').includes('Prefer external player for heavy streams')
     }))()`);
     assert.equal(settings.back, '返回');
     assert.match(settings.text, /隐藏随机推荐栏目/);
@@ -102,13 +106,31 @@ async function verifyChineseInteractions(win) {
     assert.equal(settings.misleadingToggle, false);
     assert.doesNotMatch(settings.text, /Runtime config files|No user TVBox subscription|Prefer external player|Save settings|Proxy status/);
 
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="proxy-status"]').click()`);
-    await waitFor(win, `window.vueApp.playerSettingsMessage === '代理状态已更新'`);
+    await waitFor(win, 'document.querySelector(".settings-modal [data-testid=\\"proxy-status\\"]")');
+    await win.webContents.executeJavaScript(`new Promise(resolve => {
+        const button = document.querySelector('.settings-modal [data-testid="proxy-status"]');
+        if (button) button.scrollIntoView({ block: 'center', inline: 'nearest' });
+        setTimeout(() => {
+            const nextButton = document.querySelector('.settings-modal [data-testid="proxy-status"]');
+            if (nextButton) nextButton.click();
+            resolve();
+        }, 250);
+    })`);
+    await waitFor(win, 'window.vueApp.proxyStatus && !window.vueApp.proxyStatusLoading');
+    const proxyStatus = await win.webContents.executeJavaScript(`(() => ({
+        hasSettings: Boolean(window.vueApp.proxyStatus && window.vueApp.proxyStatus.settings),
+        hasProxy: Boolean(window.vueApp.proxyStatus && window.vueApp.proxyStatus.proxy),
+        message: window.vueApp.playerSettingsMessage || ''
+    }))()`);
+    assert.equal(proxyStatus.hasSettings, true);
+    assert.equal(proxyStatus.hasProxy, true);
+    assert.notEqual(proxyStatus.message, 'Operation failed');
 
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="settings-back"]').click()`);
+    await win.webContents.executeJavaScript(`document.querySelector('.settings-modal [data-testid="settings-back"]').click()`);
     await waitFor(win, '!window.vueApp.showSettingsModal');
 
     await win.webContents.executeJavaScript(`(() => {
+        window.vueApp.closeOverlayPanels();
         window.vueApp.showSubscriptionPanel = true;
         window.vueApp.loadSubscriptionData();
     })()`);
@@ -130,7 +152,6 @@ async function verifyChineseInteractions(win) {
 
     await win.webContents.executeJavaScript(`document.querySelector('[data-testid="subscription-back"]').click()`);
     await waitFor(win, '!window.vueApp.showSubscriptionPanel');
-
     await win.webContents.executeJavaScript(`(() => {
         const vm = window.vueApp;
         vm.showSettingsModal = false;
@@ -164,7 +185,7 @@ async function verifyChineseInteractions(win) {
 
     await win.webContents.executeJavaScript(`document.querySelector('[data-testid="search-open-settings"]').click()`);
     await waitFor(win, 'window.vueApp.showSettingsModal');
-    await win.webContents.executeJavaScript(`document.querySelector('[data-testid="settings-back"]').click()`);
+    await win.webContents.executeJavaScript(`document.querySelector('.settings-modal [data-testid="settings-back"]').click()`);
     await waitFor(win, '!window.vueApp.showSettingsModal');
 
     await win.webContents.executeJavaScript(`document.querySelector('[data-testid="search-go-home"]').click()`);

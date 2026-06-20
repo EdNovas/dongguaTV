@@ -2400,6 +2400,71 @@
             border: 1px solid rgba(248, 113, 113, 0.34);
         }
 
+        .settings-modal {
+            max-height: calc(100vh - 40px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-modal-body {
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+            padding: 30px;
+            scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
+            scrollbar-width: thin;
+        }
+
+        .settings-modal-header {
+            position: sticky;
+            top: -30px;
+            z-index: 5;
+            margin: -30px -30px 18px;
+            padding: 30px 30px 14px;
+            background: linear-gradient(180deg, #181818 0%, rgba(24, 24, 24, 0.98) 82%, rgba(24, 24, 24, 0.88) 100%);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(16px);
+        }
+
+        .settings-modal-header h2 {
+            color: #fff;
+            margin: 0 54px 14px 0;
+            font-size: 1.5rem;
+        }
+
+        .settings-quick-nav {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+        }
+
+        .settings-quick-nav::-webkit-scrollbar {
+            height: 0;
+        }
+
+        .settings-quick-nav button {
+            flex: 0 0 auto;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #e5e7eb;
+            padding: 8px 11px;
+            font-size: 12px;
+            font-weight: 750;
+            cursor: pointer;
+        }
+
+        .settings-quick-nav button:hover {
+            background: rgba(229, 9, 20, 0.2);
+            border-color: rgba(229, 9, 20, 0.48);
+            color: #fff;
+        }
+
+        .settings-section {
+            scroll-margin-top: 96px;
+        }
+
         .detail-back-button {
             position: fixed;
             top: 22px;
@@ -4020,18 +4085,38 @@
         </div>
 
         <div class="info-modal-overlay" v-if="showSettingsModal" @click.self="showSettingsModal = false">
-            <div class="info-modal" style="max-width: 760px;">
+            <div class="info-modal settings-modal" style="max-width: 860px;">
                 <button class="info-modal-close" @click="showSettingsModal = false"><i
                         class="fas fa-times"></i></button>
                 <button class="info-modal-back" data-testid="settings-back" @click="showSettingsModal=false; activeAppleNav='home'">
                     <i class="fas fa-arrow-left"></i>{{ t('common.back') }}
                 </button>
-                <div style="padding: 30px;">
-                    <h2 style="color: #fff; margin-bottom: 25px; font-size: 1.5rem;">
-                        <i class="fas fa-sliders-h"></i> {{ t('settings.title') }}
-                    </h2>
+                <div class="settings-modal-body" ref="settingsModalBody">
+                    <div class="settings-modal-header">
+                        <h2>
+                            <i class="fas fa-sliders-h"></i> {{ t('settings.title') }}
+                        </h2>
+                        <div class="settings-quick-nav" role="navigation" :aria-label="t('settings.quickNav')">
+                            <button type="button" @click="scrollSettingsSection('readiness')">
+                                <i class="fas fa-clipboard-check"></i> {{ t('settings.sectionReadiness') }}
+                            </button>
+                            <button type="button" @click="scrollSettingsSection('preferences')">
+                                <i class="fas fa-toggle-on"></i> {{ t('settings.sectionPreferences') }}
+                            </button>
+                            <button type="button" @click="scrollSettingsSection('home')">
+                                <i class="fas fa-list-ol"></i> {{ t('settings.sectionHome') }}
+                            </button>
+                            <button type="button" @click="scrollSettingsSection('player')">
+                                <i class="fas fa-desktop"></i> {{ t('settings.sectionPlayer') }}
+                            </button>
+                            <button type="button" @click="scrollSettingsSection('plugin')">
+                                <i class="fas fa-vial"></i> {{ t('settings.sectionPlugin') }}
+                            </button>
+                        </div>
+                    </div>
 
                     <div
+                        class="settings-section" data-settings-section="readiness"
                         style="display:flex; justify-content:space-between; align-items:center; gap:18px; padding:16px; margin-bottom:18px; border-radius:12px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">
                         <div>
                             <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">
@@ -4050,6 +4135,7 @@
 
                     <!-- Desktop readiness panel -->
                     <div v-if="desktopStatus"
+                        class="settings-section"
                         style="padding:14px; margin-bottom:18px; border-radius:16px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1);">
                         <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
                             <div>
@@ -4193,6 +4279,7 @@
 
                     <!-- Random row toggle -->
                     <div
+                        class="settings-section" data-settings-section="preferences"
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
                         <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">{{ t('settings.hideRandomTitle') }}</div>
@@ -4217,7 +4304,7 @@
                         </label>
                     </div>
 
-                    <div style="padding:18px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
+                    <div class="settings-section" data-settings-section="home" style="padding:18px 0; border-bottom:1px solid rgba(255,255,255,0.1);">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
                             <div>
                                 <div style="font-weight:800; color:#f9fafb; margin-bottom:4px;">
@@ -4294,9 +4381,10 @@
                         </div>
                     </div>
 
-                    <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
-                    <h4><i class="fas fa-desktop"></i> {{ t('settings.externalPlayer') }}</h4>
+                    <div class="settings-section" data-settings-section="player" style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <h4 style="color:#fff; margin:0 0 12px; font-size:15px; font-weight:800;">
+                            <i class="fas fa-desktop"></i> {{ t('settings.externalPlayer') }}
+                        </h4>
                         <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                 <input v-model="playerSettings.mpcExePath" type="text" :placeholder="t('settings.mpcPathPlaceholder')"
                                 style="flex:1; min-width:0; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:12px; padding:10px 12px; font-size:12px;">
@@ -4498,11 +4586,12 @@
                         </div>
                     </div>
 
-                    <div style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <div style="color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 12px;">
-                            {{ t('plugin.title') }}</div>
+                    <div class="settings-section" data-settings-section="plugin" style="padding: 18px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="color: #fff; font-size: 15px; font-weight: 800; margin-bottom: 12px;">
+                            <i class="fas fa-vial"></i> {{ t('plugin.title') }}</div>
                         <div style="color:#999; font-size:12px; line-height:1.7; margin-bottom:12px;">
                             {{ t('plugin.description') }}
+                        </div>
                         <div style="display:grid; gap:8px;">
                             <label style="display:flex; align-items:center; gap:8px; color:#bbb; font-size:12px;">
                                 <input type="checkbox" v-model="pluginRuntimeSettings.enableJavaCatvod" style="accent-color:#e50914;">
@@ -4602,8 +4691,6 @@
                     </div>
                 </div>
             </div>
-        </div>
-        </div>
         </div>
 
         <!-- 闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?TMDb 闂傚倷鐒﹂惇褰掑垂閽樺鐒界憸搴ｇ紦娴犲鍐€妞ゆ劧绲介悵浼存⒑閹稿孩顥嗘俊顐㈠瀹曟粓骞嶉鐟颁壕婵炲牆鐏濋弸娑欑節閳ь剟鏌嗗鍡椾粧?闂傚倷绀侀悿鍥涢崟顖氱疇濠㈣泛谩閿濆绀嬫い鏍ㄦ皑閸欌偓?-->
@@ -5307,6 +5394,12 @@
                 'sort.popularFirst': '按热度排列',
                 'subscriptions.title': '订阅源',
                 'settings.title': '播放器与应用设置',
+                'settings.quickNav': '设置快捷导航',
+                'settings.sectionReadiness': '环境',
+                'settings.sectionPreferences': '偏好',
+                'settings.sectionHome': '首页名单',
+                'settings.sectionPlayer': '播放器',
+                'settings.sectionPlugin': '插件运行时',
                 'settings.language': '界面语言',
                 'settings.languageDescription': '切换后立即生效，并在下次启动时保留。',
                 'settings.desktopReadiness': '桌面环境状态',
@@ -5569,6 +5662,12 @@
                 'sort.popularFirst': 'Popular first',
                 'subscriptions.title': 'Subscriptions',
                 'settings.title': 'Player and App Settings',
+                'settings.quickNav': 'Settings quick navigation',
+                'settings.sectionReadiness': 'Readiness',
+                'settings.sectionPreferences': 'Preferences',
+                'settings.sectionHome': 'Home list',
+                'settings.sectionPlayer': 'Player',
+                'settings.sectionPlugin': 'Plugin runtime',
                 'settings.language': 'Interface language',
                 'settings.languageDescription': 'Changes apply immediately and are kept for the next launch.',
                 'settings.desktopReadiness': 'Desktop readiness',
@@ -5831,6 +5930,12 @@
                 'sort.popularFirst': '人気順',
                 'subscriptions.title': '配信元',
                 'settings.title': 'プレーヤーとアプリ設定',
+                'settings.quickNav': '設定クイックナビ',
+                'settings.sectionReadiness': '環境',
+                'settings.sectionPreferences': '設定',
+                'settings.sectionHome': 'ホームリスト',
+                'settings.sectionPlayer': 'プレーヤー',
+                'settings.sectionPlugin': 'プラグイン',
                 'settings.language': '表示言語',
                 'settings.languageDescription': '変更はすぐに反映され、次回起動時も保持されます。',
                 'settings.desktopReadiness': 'デスクトップ環境',
@@ -6644,6 +6749,18 @@
                     const fallback = UI_TRANSLATIONS['en-US'];
                     return active[key] || fallback[key] || key;
                 },
+                scrollSettingsSection(section) {
+                    this.$nextTick(() => {
+                        const container = this.$refs.settingsModalBody;
+                        if (!container) return;
+                        const target = container.querySelector(`[data-settings-section="${section}"]`);
+                        if (!target) return;
+                        container.scrollTo({
+                            top: Math.max(0, target.offsetTop - 86),
+                            behavior: 'smooth'
+                        });
+                    });
+                },
                 localizeRuntimeText(value) {
                     const text = String(value || '');
                     if (!text || this.uiLanguage === 'en-US') return text;
@@ -6669,6 +6786,7 @@
                             'Import your own TVBox JSON subscription before testing playback.': '测试播放前，请先导入你自己的 TVBox JSON 订阅。',
                             'Open Subscriptions to refresh sources, then try the search again.': '打开订阅源刷新数据，然后重新搜索。',
                             'Search uses built-in HTTP sites plus compatible user TVBox HTTP/MacCMS sources. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.': '搜索会使用内置 HTTP 站点以及用户导入的兼容 TVBox HTTP/MacCMS 源。插件型 TVBox 源只做识别和诊断，不会直接执行订阅中的插件代码。',
+                            'Search uses built-in HTTP sites, compatible user TVBox HTTP/MacCMS sources, and trusted configured Bridge routes for plugin-required sources. Subscription plugin code is not executed directly by DongguaTV.': '搜索会使用内置 HTTP 站点、用户导入的兼容 TVBox HTTP/MacCMS 源，以及你手动配置可信 Bridge 后可用的插件型源路线。DongguaTV 不会直接执行订阅中的插件代码。',
                             'Try alternate titles, Chinese names, or shorter keywords.': '请尝试其他片名、中文名称或更短的关键词。',
                             'not-installed': '未安装'
                         },
@@ -6692,6 +6810,7 @@
                             'Import your own TVBox JSON subscription before testing playback.': '再生テスト前に自分のTVBox JSON購読を追加してください。',
                             'Open Subscriptions to refresh sources, then try the search again.': '購読を開いて更新し、もう一度検索してください。',
                             'Search uses built-in HTTP sites plus compatible user TVBox HTTP/MacCMS sources. TVBox plugin-required sources are identified and diagnosed, but subscription plugin code is not executed directly.': '検索には内蔵HTTPサイトと、ユーザーが追加した互換TVBox HTTP/MacCMS配信元を使用します。プラグイン型TVBox配信元は識別と診断のみで、購読内のプラグインコードは直接実行しません。',
+                            'Search uses built-in HTTP sites, compatible user TVBox HTTP/MacCMS sources, and trusted configured Bridge routes for plugin-required sources. Subscription plugin code is not executed directly by DongguaTV.': '検索には内蔵HTTPサイト、ユーザーが追加した互換TVBox HTTP/MacCMS配信元、手動で設定した信頼済みBridge経由のプラグイン型ルートを使用します。DongguaTVは購読内のプラグインコードを直接実行しません。',
                             'Try alternate titles, Chinese names, or shorter keywords.': '別の題名、中国語名、または短いキーワードを試してください。',
                             'not-installed': '未インストール'
                         }
@@ -6740,6 +6859,13 @@
                     if (panel === 'subscriptions') this.showSubscriptionPanel = false;
                     if (panel === 'settings') this.showSettingsModal = false;
                     this.activeAppleNav = 'home';
+                },
+                closeOverlayPanels() {
+                    this.showLivePanel = false;
+                    this.showSubscriptionPanel = false;
+                    this.showSettingsModal = false;
+                    this.showFirstRunGuide = false;
+                    this.showInfoModal = false;
                 },
                 isTvboxSource(source) {
                     return !!(source && (source.source_origin === 'tvbox' || String(source.site_key || '').startsWith('tvbox:')));
@@ -6833,8 +6959,7 @@
                 handleAppleNav(item) {
                     if (!item) return;
                     this.activeAppleNav = item.id || 'home';
-                    this.showLivePanel = false;
-                    this.showSubscriptionPanel = false;
+                    this.closeOverlayPanels();
 
                     if (item.action === 'home') {
                         this.goHome();
@@ -7470,8 +7595,13 @@
                         this.playerSettingsMessage = this.t('common.checking');
                         this.playerSettingsMessageType = 'success';
                     }
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 8000);
                     try {
-                        const response = await fetch('/api/player/proxy-status');
+                        const response = await fetch('/api/player/proxy-status', {
+                            cache: 'no-store',
+                            signal: controller.signal
+                        });
                         const data = await response.json();
                         if (!response.ok) throw new Error(data.error || 'Request failed');
                         this.proxyStatus = data;
@@ -7502,6 +7632,7 @@
                             this.playerSettingsMessageType = 'error';
                         }
                     } finally {
+                        clearTimeout(timeoutId);
                         this.proxyStatusLoading = false;
                     }
                 },
