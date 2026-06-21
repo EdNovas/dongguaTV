@@ -30,3 +30,11 @@
 ## Final Summary
 
 - Homepage selection now follows a TVBox-like independent hot-list model. Douban supplies current visible metadata; the user's configured TVBox/native sources remain the only path to detail and playback.
+## 2026-06-21 Full Category Loading Review
+
+- Intended scope: eliminate permanently loading homepage categories and expose substantially more content per category.
+- Actual files: `server/adapters/douban/homeProvider.js`, `server.js`, `public/index.html`, `public/sw.js`, and focused tests.
+- Acceptance proof: all 20 rows non-empty in live browser QA; representative expanded rows show 3-5 pages; collapsed rows render only 20 cards for performance.
+- Verification: provider test, endpoint test, homepage UI test, localization UI test, build, and Windows NSIS packaging all passed.
+- Residual risk: public metadata endpoints may change or temporarily throttle; existing fallback behavior remains available.
+- Reviewer action: inspect the visible preview at `http://127.0.0.1:31386/`, especially US, KR/JP, anime, and one movie genre expanded view.

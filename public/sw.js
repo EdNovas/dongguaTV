@@ -1,6 +1,6 @@
 // Service Worker with Image Caching for dongguaTV
-// v30: guarantee the startup overlay closes after homepage data loads
-const CACHE_VERSION = 'v30';
+// v31: load complete category lists and avoid stale partial homepage rows
+const CACHE_VERSION = 'v31';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 

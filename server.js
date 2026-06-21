@@ -1762,7 +1762,7 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
     try {
         const sourceLimit = Math.max(1, Math.min(24, Number(req.query.sourceLimit || 12)));
         const pages = Math.max(1, Math.min(3, Number(req.query.pages || 1)));
-        const limitPerRow = Math.max(8, Math.min(48, Number(req.query.limit || 24)));
+        const limitPerRow = Math.max(20, Math.min(100, Number(req.query.limit || 100)));
         const nativeSites = getDB().sites || [];
         const tvboxSources = tvboxService.listSources();
         const enabledSources = tvboxSources.filter(source => source.enabled !== false);
@@ -1784,7 +1784,7 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
             .update(compatibleSites.map(site => `${site.key}:${site.api}`).join('|'))
             .digest('hex')
             .slice(0, 12);
-        const aggregateCacheKey = `${sourceSignature}:p${pages}:l${limitPerRow}:d${DOUBAN_HOME_ENABLED ? 1 : 0}:v5`;
+        const aggregateCacheKey = `${sourceSignature}:p${pages}:l${limitPerRow}:d${DOUBAN_HOME_ENABLED ? 1 : 0}:v6`;
         const cachedAggregate = cacheManager.get('tvbox-home-aggregate', aggregateCacheKey);
         if (cachedAggregate && cachedAggregate.rows) {
             return res.json({

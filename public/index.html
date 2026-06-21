@@ -3531,7 +3531,7 @@
                     <div class="scroll-container" v-show="!expandedRows[key]">
                         <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]" aria-label="Scroll left"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                         <div class="hot-row" :ref="key" @scroll="onRowScroll(key)">
-                            <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
+                            <div class="hot-card" v-for="item in getCollapsedItems(key)" :key="item.id"
                                 :data-release-date="rowItemDate(item)"
                                 @click="openRowItem(item)">
                                 <div class="poster-wrap">
@@ -9226,6 +9226,10 @@
                     return items.slice(start, start + perPage);
                 },
 
+                getCollapsedItems(key) {
+                    return (this.rowLists[key] || []).slice(0, 20);
+                },
+
                 // 闂傚倷绀侀崥瀣磿閹惰棄搴婇柤鑹扮堪娴滃綊鏌涢妷顔煎缂佺姵鍨圭槐鎾存媴鐠囷紕鍔烽梺鍛婄憿閸嬫捇姊绘担瑙勩仧濞存粍绮撻、鏍ㄥ緞閹邦儵銉ヮ熆閼搁潧濮囬柡?
                 getTotalViewPages(key) {
                     const items = this.rowLists[key] || [];
@@ -10091,10 +10095,10 @@
                 // 闂傚倷绀侀幉锛勬暜濡ゅ啯宕查柛宀€鍎戠紞鏍煙閻楀牊绶茬紒鈧畝鍕厸鐎广儱娴烽崢娑欑箾閹捐泛鍘撮柡?(婵犵數鍋炲娆撳触鐎ｎ喗鏅梻浣告啞钃遍柣鈺婂灠閻ｅ嘲鈹戠€ｎ偄浜归梺缁樺灦椤洭濡堕悧鍫滅箚妞ゆ劦鍓涚粙濠氭煟濡や焦绀嬮柟顖氱墦瀹曞崬鈽夊Ο鑲╁幀婵＄偑鍊栭悧妤冩崲瀹ュ拋鐒介悘鐐靛亾閸欏繘鏌熼悜妯诲暗闁活厼锕﹂埀?
                 async fetchTvboxHomeRecommendations() {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 12000);
+                    const timeoutId = setTimeout(() => controller.abort(), 30000);
                     this.sourceRecommendationRows = {};
                     try {
-                        const response = await fetch('/api/recommendations/tvbox-home?limit=24&sourceLimit=24&pages=1', {
+                        const response = await fetch('/api/recommendations/tvbox-home?limit=100&sourceLimit=24&pages=1', {
                             signal: controller.signal,
                             cache: 'no-store'
                         });
@@ -10109,7 +10113,7 @@
                         }
                         rowEntries.forEach(([key, items]) => {
                             if (!this.rowConfigs[key]) return;
-                            const cleaned = this.mergeHomeRecommendationRows(items, [], 24);
+                            const cleaned = this.mergeHomeRecommendationRows(items, [], 100);
                             this.sourceRecommendationRows[key] = cleaned;
                             this.rowLists[key] = cleaned;
                             this.rowConfigs[key].page = 1;

@@ -68,11 +68,17 @@ app.whenReady().then(async () => {
         await waitFor(
             win,
             'window.vueApp.recommendationDiagnostics && Array.isArray(window.vueApp.rowLists.randomRow)',
-            45000
+            75000
         );
 
         const state = await win.webContents.executeJavaScript(`(() => {
             const vm = window.vueApp;
+            const requiredRows = [
+                'randomRow', 'movieRow', 'tvRow', 'cnRow', 'usRow', 'krjpRow',
+                'animeRow', 'scifiRow', 'actionRow', 'comedyRow', 'crimeRow',
+                'romanceRow', 'familyRow', 'docRow', 'warRow', 'horrorRow',
+                'mysteryRow', 'fantasyRow', 'varietyRow', 'historyRow'
+            ];
             const readRow = key => (vm.rowLists[key] || []).slice(0, 18).map(item => ({
                 title: vm.rowItemTitle(item),
                 origin: item.recommendation_origin || 'fallback',
@@ -85,6 +91,14 @@ app.whenReady().then(async () => {
                 random: readRow('randomRow'),
                 movies: readRow('movieRow'),
                 series: readRow('tvRow'),
+                rowCounts: Object.fromEntries(requiredRows.map(key => [
+                    key,
+                    (vm.rowLists[key] || []).length
+                ])),
+                viewPages: Object.fromEntries(requiredRows.map(key => [
+                    key,
+                    vm.getTotalViewPages(key)
+                ])),
                 diagnostics: {
                     compatibleSources: Number(vm.recommendationDiagnostics.compatibleSources || 0),
                     scannedSources: Number(vm.recommendationDiagnostics.scannedSources || 0),
@@ -101,6 +115,14 @@ app.whenReady().then(async () => {
         const blocked = state.random.filter(item => blockPattern.test(item.title));
         assert.ok(state.random.length > 0, 'Homepage recommendation row is empty.');
         assert.equal(blocked.length, 0, `Blocked homepage titles found: ${blocked.map(item => item.title).join(', ')}`);
+        const emptyRows = Object.entries(state.rowCounts)
+            .filter(([, count]) => Number(count) === 0)
+            .map(([key]) => key);
+        assert.deepEqual(emptyRows, [], `Homepage categories are empty: ${emptyRows.join(', ')}`);
+        assert.ok(state.rowCounts.usRow >= 20, 'US series category did not load a complete list.');
+        assert.ok(state.rowCounts.krjpRow >= 20, 'Korean/Japanese series category did not load a complete list.');
+        assert.ok(state.rowCounts.animeRow >= 20, 'Anime category did not load a complete list.');
+        assert.ok(state.viewPages.comedyRow >= 3, 'Expanded category still exposes two pages or fewer.');
         assert.ok(
             ['douban-source', 'douban', 'source-native', 'tmdb'].includes(state.mode),
             `Unexpected recommendation mode: ${state.mode}`

@@ -39,3 +39,13 @@
 - Douban is metadata only and may be temporarily unavailable or change its public mobile API; the application falls back to compatible user source rows and existing fallback data.
 - Plugin-required TVBox sources remain identified but are not executed without the separate CatVod runtime bridge.
 - The installer still uses the default Electron icon; this pre-existing packaging warning is outside the homepage ranking change.
+
+## Full Category Loading Checkpoint
+
+- All 20 homepage rows now have independent Douban-backed metadata.
+- Live verification returned 1,757 row items with no empty category.
+- Movie genre rows returned 98-100 items; US returned 50, KR/JP 57, anime 68 after source merging, and variety 37 after source merging.
+- The visible preview has no loading rows. Expanded pagination reports domestic 4 pages, US 3, KR/JP 3, anime 4, most movie genres 5, and variety 2 because its available list is smaller.
+- Each row retains up to 100 items for expanded pagination while collapsed rails render only the first 20 cards.
+- Regression checks passed: `test:douban-home-provider`, `test:tvbox-home-endpoint`, `test:homepage-ranking-ui`, `test:localization-ui`, and `npm run build`.
+- Screenshot: `D:\CodexWorks\tmp\donggua-home-ranking-preview.png`.

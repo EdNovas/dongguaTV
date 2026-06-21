@@ -34,3 +34,9 @@
 - `transaction.json`
 
 > This is a derived resume summary. Source files and fresh checks take precedence.
+## 2026-06-21 Full Category Loading Checkpoint
+
+- Homepage category loading is implemented and verified.
+- Preview service is running on `127.0.0.1:31386` with data under `D:\CodexWorks\tmp\donggua-preview-31386`.
+- Latest installer: `D:\CodexWorks\dongguaTV-enhanced-app\dist-desktop\DongguaTV Enhanced Setup 1.0.54.exe`.
+- Next action: collect user visual feedback on category selection and card ordering; no known empty/loading category remains.
