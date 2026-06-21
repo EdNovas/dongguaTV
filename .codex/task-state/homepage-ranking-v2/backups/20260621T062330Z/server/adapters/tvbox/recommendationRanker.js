@@ -22,15 +22,12 @@ const SHORT_FORM_KEYWORDS = [
     '抖音短剧',
     '快手短剧',
     '小程序短剧',
-    '动态漫',
-    '有声动漫',
     '解说',
     '电影解说',
     '电视剧解说',
     '讲电影',
     '看电影',
-    '盘点',
-    '体育赛事'
+    '盘点'
 ];
 
 const MAINSTREAM_HINTS = [
@@ -127,7 +124,7 @@ function categoryForItem(item) {
     ].map(textOf).join(' ');
     if (/综艺|真人秀|脱口秀|晚会|音乐/.test(text)) return 'variety';
     if (/动漫|动画|番剧|漫画|少儿/.test(text)) return 'anime';
-    if (/电视剧|连续剧|国产剧|欧美剧|日韩剧|韩剧|日剧|美剧|港剧|台剧|海外剧|泰剧|剧集/.test(text)) return 'series';
+    if (/电视剧|连续剧|国产剧|欧美剧|日韩剧|韩剧|日剧|美剧|港剧|台剧|剧集/.test(text)) return 'series';
     if (/电影|动作|喜剧|爱情|科幻|悬疑|犯罪|恐怖|战争|剧情|纪录片/.test(text)) return 'movie';
     return 'mixed';
 }
@@ -140,38 +137,18 @@ function scoreVodCandidate(item, sourceCount = 1) {
     ].map(textOf).join(' ');
     const hasPoster = !!textOf(item && item.vod_pic);
     const hasPlayable = !!textOf(item && item.vod_play_url);
-    const rating = Number(item && (item.vod_score || item.score || item.rating || item.rate || 0));
-    const year = Number(String(item && item.vod_year || '').match(/\b(19|20)\d{2}\b/)?.[0] || 0);
     const timestamp = latestTimestamp(item);
     const ageDays = timestamp > 0 ? Math.max(0, (Date.now() - timestamp) / 86400000) : 9999;
-    const recencyScore = timestamp > 0 ? Math.max(0, 12 - Math.min(12, ageDays / 90)) : 0;
-    const category = categoryForItem(item);
-    const categoryScore = category === 'series'
-        ? 24
-        : category === 'movie'
-            ? 22
-            : category === 'variety'
-                ? 6
-                : category === 'anime'
-                    ? 4
-                    : -18;
-    const mainstreamScore = MAINSTREAM_HINTS.some(keyword => text.includes(keyword)) ? 14 : 0;
-    const metadataScore = (year ? 8 : -10)
-        + (rating > 0 ? Math.min(100, rating * 10) : -12);
-    const eventPenalty = /(?:^|\s)(?:足球|篮球|网球|体育)(?:$|\s)|世界杯.*(?:VS|赛)|\d{1,2}月\d{1,2}日.*赛季/i.test(text)
-        ? 70
-        : 0;
+    const recencyScore = timestamp > 0 ? Math.max(0, 32 - Math.min(32, ageDays / 30)) : 0;
+    const mainstreamScore = MAINSTREAM_HINTS.some(keyword => text.includes(keyword)) ? 12 : 0;
 
     return Math.round(
         40
-        + Math.min(120, sourceCount * 28)
+        + Math.min(100, sourceCount * 22)
         + (hasPoster ? 18 : 0)
         + (hasPlayable ? 18 : 0)
         + recencyScore
         + mainstreamScore
-        + categoryScore
-        + metadataScore
-        - eventPenalty
         - shortFormPenalty(item)
     );
 }
@@ -185,7 +162,6 @@ function normalizeVodItem(item, site) {
         vod_pic: textOf(item.vod_pic || item.pic || item.poster || ''),
         vod_remarks: textOf(item.vod_remarks || item.remarks || ''),
         vod_year: textOf(item.vod_year || item.year || ''),
-        vod_score: textOf(item.vod_score || item.score || item.rating || item.rate || ''),
         vod_time: textOf(item.vod_time || item.time || ''),
         vod_pubdate: textOf(item.vod_pubdate || item.pubdate || ''),
         vod_addtime: textOf(item.vod_addtime || item.addtime || ''),
@@ -245,7 +221,6 @@ function mergeAndRankVodItems(items) {
                 vod_pic: candidate.vod_pic,
                 vod_remarks: candidate.vod_remarks,
                 vod_year: candidate.vod_year,
-                vod_score: candidate.vod_score,
                 vod_time: candidate.vod_time,
                 vod_pubdate: candidate.vod_pubdate,
                 vod_addtime: candidate.vod_addtime,
@@ -273,37 +248,16 @@ function splitRecommendationRows(items, limitPerRow = 24) {
         animeRow: [],
         varietyRow: []
     };
-    const buckets = {
-        movie: [],
-        series: [],
-        variety: [],
-        anime: []
-    };
     for (const item of items || []) {
         const category = item.recommendation_category || categoryForItem(item);
+        rows.randomRow.push(item);
         if (category === 'movie') rows.movieRow.push(item);
         if (category === 'series') rows.tvRow.push(item);
         if (category === 'anime') rows.animeRow.push(item);
         if (category === 'variety') rows.varietyRow.push(item);
-        if (buckets[category]) buckets[category].push(item);
         if (/国产|中国|大陆|华语|内地|港剧|台剧/.test(`${item.type_name || ''} ${item.vod_name || ''}`)) {
             rows.cnRow.push(item);
         }
-    }
-
-    const sequence = ['movie', 'series', 'movie', 'series', 'variety', 'anime'];
-    const positions = { movie: 0, series: 0, variety: 0, anime: 0 };
-    while (rows.randomRow.length < limitPerRow) {
-        let added = false;
-        for (const category of sequence) {
-            const next = buckets[category][positions[category]];
-            if (!next) continue;
-            positions[category] += 1;
-            rows.randomRow.push(next);
-            added = true;
-            if (rows.randomRow.length >= limitPerRow) break;
-        }
-        if (!added) break;
     }
 
     for (const key of Object.keys(rows)) {

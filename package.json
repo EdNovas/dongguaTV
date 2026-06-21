@@ -17,6 +17,7 @@
     "test:tvbox-parser": "node tools/test-tvbox-parser.js",
     "test:tvbox-home-ranking": "node tools/test-tvbox-home-ranking.js",
     "test:tvbox-home-endpoint": "node tools/test-tvbox-home-endpoint.js",
+    "test:douban-home-provider": "node tools/test-douban-home-provider.js",
     "test:plugin-bridge-search": "node tools/test-plugin-bridge-search.js",
     "test:java-bridge-reflect": "node tools/test-java-bridge-reflect.js",
     "test:java-bridge-self-test-api": "node tools/test-java-bridge-self-test-api.js",
@@ -25,7 +26,8 @@
     "test:player-stack": "node tools/test-player-stack.js",
     "test:playback-ui": "electron tools/test-playback-ui.js",
     "test:localization-ui": "electron tools/test-localization-ui.js",
-    "test:newest-order-ui": "electron tools/test-newest-order-ui.js"
+    "test:newest-order-ui": "electron tools/test-newest-order-ui.js",
+    "test:homepage-ranking-ui": "electron tools/test-homepage-ranking-ui.js"
   },
   "dependencies": {
     "@capacitor/screen-orientation": "^8.0.0",

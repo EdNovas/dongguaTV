@@ -108,9 +108,7 @@ function requestJson(url, method, payload) {
                 list: [
                     {
                         vod_id: 'm1',
-                        vod_name: url.pathname.includes('/tvbox/')
-                            ? '流浪地球2 4K'
-                            : '内置源不应优先',
+                        vod_name: '流浪地球2 4K',
                         vod_pic: 'https://example.test/poster.jpg',
                         vod_year: '2023',
                         type_name: '电影',
@@ -138,36 +136,13 @@ function requestJson(url, method, payload) {
         fs.writeFileSync(path.join(dataDir, 'db.json'), JSON.stringify({
             sites: [
                 {
-                    key: 'mock-native',
-                    name: 'Mock Native',
-                    api: `http://127.0.0.1:${sourcePort}/native/api.php/provide/vod/`,
+                    key: 'mock-maccms',
+                    name: 'Mock MacCMS',
+                    api: `http://127.0.0.1:${sourcePort}/api.php/provide/vod/`,
                     active: true
                 }
             ]
         }, null, 2));
-        fs.writeFileSync(path.join(dataDir, 'subscriptions.json'), JSON.stringify([
-            {
-                id: 'mock-subscription',
-                name: 'Mock TVBox Subscription',
-                sourceType: 'tvbox',
-                enabled: true,
-                status: 'available'
-            }
-        ], null, 2));
-        fs.writeFileSync(path.join(dataDir, 'sources.json'), JSON.stringify([
-            {
-                id: 'mock-tvbox-source',
-                sourceSubscriptionId: 'mock-subscription',
-                sourceType: 'maccms',
-                key: 'mock-tvbox',
-                name: 'Mock TVBox',
-                api: `http://127.0.0.1:${sourcePort}/tvbox/api.php/provide/vod/`,
-                searchable: true,
-                status: 'partial',
-                supportLevel: 'basic',
-                enabled: true
-            }
-        ], null, 2));
         fs.writeFileSync(path.join(dataDir, 'home-recommend.json'), JSON.stringify([
             { title: '庆余年', type: 'tv', year: '2024' },
             { title: '匹配不到的片名', type: 'movie', year: '2026' }
@@ -180,8 +155,7 @@ function requestJson(url, method, payload) {
                 ...process.env,
                 PORT: String(appPort),
                 DONGGUATV_DATA_DIR: dataDir,
-                TMDB_API_KEY: '',
-                DOUBAN_HOME_ENABLED: 'false'
+                TMDB_API_KEY: ''
             },
             stdio: ['ignore', 'pipe', 'pipe']
         });
@@ -192,20 +166,12 @@ function requestJson(url, method, payload) {
 
         await waitFor(`http://127.0.0.1:${appPort}/api/search/diagnostics`);
         const result = await getJson(`http://127.0.0.1:${appPort}/api/recommendations/tvbox-home?sourceLimit=1&pages=1`);
-        const blockedImageProxy = await fetch(
-            `http://127.0.0.1:${appPort}/api/douban-image?url=${encodeURIComponent('http://127.0.0.1/private.jpg')}`
-        );
 
         assert.equal(result.ok, true);
-        assert.equal(blockedImageProxy.status, 400);
         assert.equal(result.mode, 'source-native');
         assert.equal(result.compatibleSources, 1);
-        assert.equal(result.sourcePriority[0].origin, 'tvbox');
-        assert.match(result.sourcePriority[0].name, /TVBox/);
         assert.equal(result.rows.randomRow.some(item => item.vod_name === '流浪地球2 4K'), true);
-        assert.equal(result.rows.randomRow.some(item => item.vod_name === '内置源不应优先'), false);
         assert.equal(result.rows.randomRow.some(item => item.vod_name.includes('短剧')), false);
-        assert.equal(result.rowCounts.randomRow, result.rows.randomRow.length);
         assert.equal(result.manualRecommendations.entries, 2);
         assert.equal(result.manualRecommendations.matched, 1);
         assert.equal(result.rows.tvRow.some(item => item.vod_name.includes('庆余年')), true);

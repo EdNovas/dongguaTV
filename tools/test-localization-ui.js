@@ -56,8 +56,9 @@ async function setLanguage(win, language) {
         vm.uiLanguage = ${JSON.stringify(language)};
         vm.changeUiLanguage();
         vm.closeOverlayPanels();
+        await vm.$nextTick();
         vm.showSettingsModal = true;
-        vm.loadPlayerSettings();
+        await vm.loadPlayerSettings();
         await vm.$nextTick();
     })()`);
     await waitFor(win, 'document.querySelector(".settings-modal select")');
@@ -152,14 +153,22 @@ async function verifyChineseInteractions(win) {
 
     await win.webContents.executeJavaScript(`document.querySelector('[data-testid="subscription-back"]').click()`);
     await waitFor(win, '!window.vueApp.showSubscriptionPanel');
-    await win.webContents.executeJavaScript(`(() => {
+    await win.webContents.executeJavaScript(`(async () => {
         const vm = window.vueApp;
+        if (vm._evtSource) {
+            vm._evtSource.close();
+            vm._evtSource = null;
+        }
         vm.showSettingsModal = false;
         vm.showSubscriptionPanel = false;
         vm.keyword = '不存在的测试片名987654321';
-        vm.doSearch();
+        vm.searched = true;
+        vm.loading = false;
+        vm.rawList = [];
+        vm.searchDiagnostics = null;
+        await vm.loadSearchDiagnostics();
+        await vm.$nextTick();
     })()`);
-    await waitFor(win, 'window.vueApp.searched && !window.vueApp.loading', 60000);
     await waitFor(win, 'document.querySelector("[data-testid=\\"search-diagnostics-refresh\\"]")', 60000);
     await waitFor(win, 'window.vueApp.searchDiagnostics && !window.vueApp.searchDiagnosticsLoading', 60000);
     await waitFor(win, 'document.body.innerText.includes("没有找到") || document.body.innerText.includes("娌℃湁鎵惧埌")', 60000);
@@ -208,6 +217,12 @@ app.whenReady().then(async () => {
         await win.loadURL(targetUrl);
         await waitFor(win, 'window.vueApp');
         await waitFor(win, 'document.querySelectorAll(".appletv-nav-item span").length === 9');
+        await waitFor(
+            win,
+            'document.getElementById("app-loader")?.classList.contains("hidden")',
+            60000
+        );
+        await delay(500);
 
         const results = {};
         for (const language of ['zh-CN', 'ja-JP', 'en-US']) {

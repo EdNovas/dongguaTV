@@ -6420,7 +6420,6 @@
                     recommendationMode: 'tmdb',
                     recommendationDiagnostics: null,
                     recommendationFallbackReason: '',
-                    sourceRecommendationRows: {},
                     expandedRows: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮剁划宀勫煝閹捐绠ｉ柣妯块哺閸曞啴姊洪崫鍕窛闁稿鍠撴竟鏇熺節濮橆厾鍘藉┑鈽嗗灠閻忔繈鎮￠幇鐗堢厓?{ movieRow: true, ... }
                     viewPages: {}, // 闂備浇顕х€涒晝绮欓幒妤佹櫔闂備胶顭堥鍛矓閻熸壆鏆﹂柕澶嗘櫅缁€瀣亜閹烘埈妲归梻鍐╃矒濮婃椽宕ㄦ繝搴㈢暦濠电偛寮堕悧鐘诲箚閸繍鍚嬮柛婊€绀佸▓銊╂⒑闁偛鑻晶瀵糕偓娈垮櫘閸ｏ絽鐣峰鍕闁革富鍘藉▓鎼佹⒒娴ｅ憡鎯堥悶姘煎亰瀹曟洟宕樼拠褑鈧潡鏌涘☉鍗炴灁濞存粍绮撻弻锝夊閵忊剝姣勯梺?{ movieRow: 1, ... }
                     pageLoadingKeys: {}, // 闂傚倸鍊搁崐鎼佸疮椤愩埄鍤曢柛顐ｆ处閺佸棙绻涢幋娆忕仾闁绘挸鍊婚埀顒€绠嶉崕閬嶅箯鐎ｎ€絾绻濆鍗炲絼闂佹悶鍎村▔娑欑娴煎瓨鐓冪憸婊堝礈濞戙垹绐楅柟鎹愵嚙绾惧鏌ㄥ┑鍡╂Ц缂佲偓閸曨垱鍋ｉ柛銉ｅ妼缁茬粯銇勯顒傜М鐎?{ movieRow: true, ... }
@@ -9311,70 +9310,6 @@
                     return !!(item && (item.recommendation_origin === 'source-native' || item.vod_name || item.site_key));
                 },
 
-                homeRecommendationKey(item) {
-                    return String(this.rowItemTitle(item) || '')
-                        .replace(/[【\[\(（].*?[】\]\)）]/g, '')
-                        .replace(/第[一二三四五六七八九十0-9]+季/g, '')
-                        .replace(/\b(4k|8k|1080p|720p|2160p|hdr|h265|hevc|x265|x264|web-dl|bluray|bd|hd)\b/ig, '')
-                        .replace(/\b(19|20)\d{2}\b/g, '')
-                        .replace(/[\s._\-:：]+/g, '')
-                        .toLowerCase();
-                },
-
-                homeSourceCategory(item) {
-                    if (item && item.recommendation_category) return item.recommendation_category;
-                    const text = `${item && item.type_name || ''} ${this.rowItemTitle(item)}`;
-                    if (/综艺|真人秀|脱口秀|晚会|音乐/.test(text)) return 'variety';
-                    if (/动漫|动画|番剧|漫画|少儿/.test(text)) return 'anime';
-                    if (/电视剧|连续剧|国产剧|欧美剧|日韩剧|韩剧|日剧|美剧|港剧|台剧|海外剧|泰剧|剧集/.test(text)) return 'series';
-                    if (/电影|动作|喜剧|爱情|科幻|悬疑|犯罪|恐怖|战争|剧情|纪录片/.test(text)) return 'movie';
-                    return 'mixed';
-                },
-
-                homeSourceConfidence(item) {
-                    if (!this.isSourceRecommendation(item)) return 0;
-                    if (item.recommendation_origin === 'douban') return 100;
-                    if (item.recommendation_origin === 'manual') return 100;
-                    const sourceCount = Number(item.source_count || (item.sources && item.sources.length) || 1);
-                    const rating = Number(item.vod_score || item.score || item.rating || item.rate || 0);
-                    if (sourceCount >= 4) return 95;
-                    if (sourceCount >= 3) return 85;
-                    if (rating >= 7.5) return 82;
-                    if (sourceCount >= 2 && ['movie', 'series'].includes(this.homeSourceCategory(item))) return 65;
-                    return 40;
-                },
-
-                trustedHomeSourceItems(items, limit = 8) {
-                    const caps = { movie: 3, series: 3, variety: 1, anime: 1, mixed: 1 };
-                    const counts = { movie: 0, series: 0, variety: 0, anime: 0, mixed: 0 };
-                    const trusted = [];
-                    for (const item of items || []) {
-                        if (this.homeSourceConfidence(item) < 80) continue;
-                        const category = this.homeSourceCategory(item);
-                        if (counts[category] >= caps[category]) continue;
-                        counts[category] += 1;
-                        trusted.push(item);
-                        if (trusted.length >= limit) break;
-                    }
-                    return trusted;
-                },
-
-                mergeHomeRecommendationRows(primaryItems, fallbackItems, limit = 24) {
-                    const merged = [];
-                    const seen = new Set();
-                    const trustedPrimary = this.trustedHomeSourceItems(primaryItems);
-                    const trustedKeys = new Set(trustedPrimary.map(item => this.homeRecommendationKey(item)));
-                    const remainingPrimary = (primaryItems || []).filter(item => !trustedKeys.has(this.homeRecommendationKey(item)));
-                    [...trustedPrimary, ...(fallbackItems || []), ...remainingPrimary].forEach(item => {
-                        if (!item || this.isLowQualityHomeItem(item)) return;
-                        const key = this.homeRecommendationKey(item) || this.mediaIdentity(item);
-                        if (!key || seen.has(key)) return;
-                        seen.add(key);
-                        merged.push(item);
-                    });
-                    return merged.slice(0, Math.max(8, Number(limit) || 24));
-                },
-
                 rowItemTitle(item) {
                     return this.isSourceRecommendation(item) ? (item.vod_name || item.name || item.title || '') : (item.title || item.name || '');
                 },
@@ -9388,9 +9323,6 @@
 
                 rowItemBadge(item) {
                     if (this.isSourceRecommendation(item)) {
-                        if (item.recommendation_origin === 'douban') {
-                            return item.vod_remarks || item.type_name || '豆瓣热播';
-                        }
                         const count = Number(item.source_count || (item.sources && item.sources.length) || 1);
                         return count > 1 ? `${count}源` : (item.vod_remarks || item.type_name || '源');
                     }
@@ -9399,9 +9331,6 @@
 
                 rowItemPoster(item) {
                     if (this.isSourceRecommendation(item)) {
-                        if (item.recommendation_origin === 'douban' && item.vod_pic) {
-                            return `/api/douban-image?url=${encodeURIComponent(item.vod_pic)}`;
-                        }
                         return item.vod_pic || this.getPosterUrl('');
                     }
                     return this.getPosterUrl(item && item.poster_path);
@@ -9410,9 +9339,6 @@
                 openRowItem(item) {
                     if (!this.isSourceRecommendation(item)) {
                         return this.autoSearch(item.title || item.name, item.original_title || item.original_name);
-                    }
-                    if (item.recommendation_origin === 'douban') {
-                        return this.autoSearch(item.vod_name, item.vod_name);
                     }
                     const sources = Array.isArray(item.sources) && item.sources.length > 0 ? item.sources : [item];
                     return this.openDetail({
@@ -10027,16 +9953,8 @@
                                     ...item,
                                     media_type: item.media_type || mediaType
                                 }));
-                                const primary = this.sourceRecommendationRows[key] || [];
-                                const existingFallback = loadMore
-                                    ? (this.rowLists[key] || []).filter(item => !this.isSourceRecommendation(item))
-                                    : [];
-                                const fallback = this.sortMediaForMode([...existingFallback, ...incoming], config.sortMode);
-                                this.rowLists[key] = this.mergeHomeRecommendationRows(
-                                    primary,
-                                    fallback,
-                                    loadMore ? 48 : 24
-                                );
+                                const existing = loadMore ? (this.rowLists[key] || []) : [];
+                                this.rowLists[key] = this.sortMediaForMode([...existing, ...incoming], config.sortMode);
                             }
                         })
                         .catch(err => console.error(`Fetch error for ${key}:`, err));
@@ -10076,44 +9994,33 @@
                 // 闂傚倷绀侀幉锛勬暜濡ゅ啯宕查柛宀€鍎戠紞鏍煙閻楀牊绶茬紒鈧畝鍕厸鐎广儱娴烽崢娑欑箾閹捐泛鍘撮柡?(婵犵數鍋炲娆撳触鐎ｎ喗鏅梻浣告啞钃遍柣鈺婂灠閻ｅ嘲鈹戠€ｎ偄浜归梺缁樺灦椤洭濡堕悧鍫滅箚妞ゆ劦鍓涚粙濠氭煟濡や焦绀嬮柟顖氱墦瀹曞崬鈽夊Ο鑲╁幀婵＄偑鍊栭悧妤冩崲瀹ュ拋鐒介悘鐐靛亾閸欏繘鏌熼悜妯诲暗闁活厼锕﹂埀?
                 async fetchTvboxHomeRecommendations() {
                     const controller = new AbortController();
-                    const timeoutId = setTimeout(() => controller.abort(), 12000);
-                    this.sourceRecommendationRows = {};
+                    const timeoutId = setTimeout(() => controller.abort(), 3000);
                     try {
-                        const response = await fetch('/api/recommendations/tvbox-home?limit=24&sourceLimit=24&pages=1', {
-                            signal: controller.signal,
-                            cache: 'no-store'
+                        const response = await fetch('/api/recommendations/tvbox-home?limit=24&sourceLimit=8&pages=1', {
+                            signal: controller.signal
                         });
                         const data = await response.json();
                         this.recommendationDiagnostics = data;
                         this.recommendationFallbackReason = data.fallbackReason || '';
-                        if (!data.ok || !data.rows) return { loaded: false, rowCounts: {} };
+                        if (!data.ok || !data.rows) return false;
                         const rowEntries = Object.entries(data.rows).filter(([, items]) => Array.isArray(items) && items.length > 0);
                         if (rowEntries.length === 0) {
                             this.recommendationMode = 'tmdb';
-                            return { loaded: false, rowCounts: {} };
+                            return false;
                         }
                         rowEntries.forEach(([key, items]) => {
                             if (!this.rowConfigs[key]) return;
-                            const cleaned = this.mergeHomeRecommendationRows(items, [], 24);
-                            this.sourceRecommendationRows[key] = cleaned;
-                            this.rowLists[key] = cleaned;
+                            this.rowLists[key] = items;
                             this.rowConfigs[key].page = 1;
+                            this.rowConfigs[key].totalPages = 1;
                         });
                         this.recommendationMode = data.mode || 'source-native';
-                        return {
-                            loaded: true,
-                            rowCounts: Object.fromEntries(
-                                Object.entries(this.sourceRecommendationRows).map(([key, items]) => [
-                                    key,
-                                    this.trustedHomeSourceItems(items).length
-                                ])
-                            )
-                        };
+                        return true;
                     } catch (error) {
                         console.error('[TVBoxHome] Failed to load source-native recommendations', error);
                         this.recommendationMode = 'tmdb';
                         this.recommendationFallbackReason = 'request-failed';
-                        return { loaded: false, rowCounts: {} };
+                        return false;
                     } finally {
                         clearTimeout(timeoutId);
                     }
@@ -10121,12 +10028,11 @@
 
                 async fetchAllLists() {
                     const keys = Object.keys(this.rowConfigs);
-                    const sourceResult = await this.fetchTvboxHomeRecommendations();
-                    if (sourceResult.loaded) {
+                    const sourceRowsLoaded = await this.fetchTvboxHomeRecommendations();
+                    if (sourceRowsLoaded) {
                         console.log('[DongguaTV] source-native homepage recommendations loaded');
+                        return;
                     }
-                    const fallbackKeys = keys.filter(key => Number(sourceResult.rowCounts[key] || 0) < 8);
-                    if (fallbackKeys.length === 0) return;
 
                     // 闂備浇宕垫慨鎶芥倿閿曞倸纾块柟璺哄閸ヮ剦鏁嗛柍褜鍓濋悘瀣⒑闁偛鑻晶顕€妫佹径鎰€甸柨婵嗘噹椤ｅ磭绱掗埀顒勫礋椤愨偓瑜版帗鍋愰柛娆忣槸濞呇囨⒑鏉炰即妾烽柛濠冪墱缁顓奸崱妯哄妳闂侀潧绻嗗Σ鍕濮樿埖顥婃い鎰╁灪婢跺嫭銇勯妸锕€濮夋俊?
                     const viewportWidth = window.innerWidth;
@@ -10137,8 +10043,8 @@
                     console.log(`[DongguaTV] layout width=${viewportWidth}, touch=${isTouchDevice}, mobileUA=${isMobileUA}, mobile=${isMobile}`);
 
                     // 闂傚倷娴囬鏍磿閹间礁骞㈡俊銈傚亾妤犵偛顑嗙换娑㈠级閹存繃鍊梺鎸庡哺閹宕归銈呭绩闂佽桨绀佺粔鎾綖濠靛鏁冮柕鍫濇噺閻忓酣姊绘担渚劸缂佺粯鍔欓幃褔宕卞Ο璇插伎闂佺粯鍔曢悺銊︽叏濠婂厾褰掓偐瀹割喖鍓惧┑鐐茬摠濞茬喖骞冨鈧幃娆撴嚑椤掑偆鍞堕柣鐔哥矋婵晫浜稿▎鎾崇疅閻庢稒蓱婵挳鎮归崶锝呭⒉闂傚啯绮撳?(闂?婵?
-                    const priorityKeys = fallbackKeys.slice(0, 4);
-                    const deferredKeys = fallbackKeys.slice(4);
+                    const priorityKeys = keys.slice(0, 4);
+                    const deferredKeys = keys.slice(4);
 
                     console.log(`[DongguaTV] loading priority rows: ${priorityKeys.length}`);
 
@@ -10203,16 +10109,8 @@
                             ...item,
                             media_type: item.media_type || (item.first_air_date ? 'tv' : 'movie')
                         })));
-                        const primary = this.sourceRecommendationRows.randomRow || [];
-                        const existingFallback = loadMore
-                            ? (this.rowLists.randomRow || []).filter(item => !this.isSourceRecommendation(item))
-                            : [];
-                        const fallback = this.sortMediaForMode([...existingFallback, ...incoming], config.sortMode);
-                        this.rowLists.randomRow = this.mergeHomeRecommendationRows(
-                            primary,
-                            fallback,
-                            loadMore ? 48 : 24
-                        );
+                        const existing = loadMore ? (this.rowLists.randomRow || []) : [];
+                        this.rowLists.randomRow = this.sortMediaForMode([...existing, ...incoming], config.sortMode);
                     } catch (error) {
                         console.error('[TrendingMixed] Failed to load mixed media', error);
                     }

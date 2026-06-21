@@ -1,0 +1,46 @@
+{
+  "schema": "codex-task-transaction-v1",
+  "task": "homepage-ranking-v2",
+  "repo": "D:\\CodexWorks\\dongguaTV-enhanced-app",
+  "created_at": "2026-06-21T06:23:29Z",
+  "snapshots": [
+    {
+      "id": "20260621T062330Z",
+      "created_at": "2026-06-21T06:23:30Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "server.js",
+          "existed": true,
+          "sha256": "a633e10f10c99b71c3eef2111f5d890480ab25318a6207cb1f0b8f1004b13214",
+          "backup": "backups/20260621T062330Z/server.js"
+        },
+        {
+          "path": "server/adapters/tvbox/recommendationRanker.js",
+          "existed": true,
+          "sha256": "dd033610f55f842b23c04581bc0ff21255ba2f2c524b6e19cafdf2409c182b51",
+          "backup": "backups/20260621T062330Z/server/adapters/tvbox/recommendationRanker.js"
+        },
+        {
+          "path": "public/index.html",
+          "existed": true,
+          "sha256": "835321d3b4afea7dea6d8208fa08f361969a1c0e6a600e5c08abbec2a20d585e",
+          "backup": "backups/20260621T062330Z/public/index.html"
+        },
+        {
+          "path": "tools/test-tvbox-home-endpoint.js",
+          "existed": true,
+          "sha256": "10742ba4dcb3d556344b2e4cf63c3eaef4bc331e4cdf0f1840afa08b8edb9c82",
+          "backup": "backups/20260621T062330Z/tools/test-tvbox-home-endpoint.js"
+        },
+        {
+          "path": "tools/test-newest-order-ui.js",
+          "existed": true,
+          "sha256": "841f2390bf0bd0eeba3526e8109882ac41e2a213d440ac6d8a53d951aa01adba",
+          "backup": "backups/20260621T062330Z/tools/test-newest-order-ui.js"
+        }
+      ]
+    }
+  ],
+  "restores": []
+}

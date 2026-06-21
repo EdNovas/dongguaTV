@@ -54,42 +54,6 @@ app.whenReady().then(async () => {
             ];
             const newestSorted = vm.sortMediaNewest(sample);
             const popularSorted = vm.sortMediaPopular(sample);
-            const mergedHomeRow = vm.mergeHomeRecommendationRows([
-                {
-                    vod_id: 'source-1',
-                    vod_name: '流浪地球2 4K',
-                    vod_pic: 'https://example.test/source.jpg',
-                    vod_year: '2023',
-                    site_key: 'tvbox:test',
-                    recommendation_origin: 'source-native',
-                    source_count: 3
-                }
-            ], [
-                {
-                    id: 101,
-                    media_type: 'movie',
-                    title: '流浪地球2',
-                    poster_path: '/duplicate.jpg',
-                    release_date: '2023-01-22',
-                    vote_average: 8.2
-                },
-                {
-                    id: 102,
-                    media_type: 'movie',
-                    title: '正常热门电影',
-                    poster_path: '/fallback.jpg',
-                    release_date: '2025-01-01',
-                    vote_average: 7.8
-                },
-                {
-                    id: 103,
-                    media_type: 'tv',
-                    name: '霸总短剧合集',
-                    poster_path: '/short.jpg',
-                    first_air_date: '2026-01-01',
-                    vote_average: 9.9
-                }
-            ]);
 
             vm.rawList = [
                 { vod_name: '2023 item', vod_year: '2023', vod_pic: '', site_key: 'a' },
@@ -107,8 +71,6 @@ app.whenReady().then(async () => {
                     unknown: vm.isLowQualityHomeItem(sample[4]),
                     shortDrama: vm.isLowQualityHomeItem(sample[5])
                 },
-                mergedHomeTitles: mergedHomeRow.map(item => vm.rowItemTitle(item)),
-                mergedHomeOrigins: mergedHomeRow.map(item => item.recommendation_origin || 'tmdb'),
                 groupedNames: vm.groupedList.map(item => item.name),
                 rowConfigs: Object.fromEntries(Object.entries(vm.rowConfigs).map(([key, config]) => [
                     key,
@@ -127,8 +89,6 @@ app.whenReady().then(async () => {
         assert.ok(result.popularQualityScores.every((value, index, array) => index === 0 || array[index - 1] >= value));
         assert.equal(result.lowQualityChecks.unknown, true);
         assert.equal(result.lowQualityChecks.shortDrama, true);
-        assert.deepEqual(result.mergedHomeTitles, ['流浪地球2 4K', '正常热门电影']);
-        assert.deepEqual(result.mergedHomeOrigins, ['source-native', 'tmdb']);
         assert.deepEqual(result.groupedNames, ['2026 item', '2025 item', '2023 item']);
         assert.equal(result.rowConfigs.randomRow.sortMode, 'popular');
         assert.equal(result.rowConfigs.movieRow.path, '/discover/movie');

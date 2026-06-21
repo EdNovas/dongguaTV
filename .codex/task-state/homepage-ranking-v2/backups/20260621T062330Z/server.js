@@ -21,7 +21,6 @@ const {
     mergeAndRankVodItems,
     splitRecommendationRows
 } = require('./server/adapters/tvbox/recommendationRanker');
-const { fetchDoubanHomeRows } = require('./server/adapters/douban/homeProvider');
 const { ensureDesktopState, getDesktopStatus } = require('./server/desktop/startupState');
 const { PlayerManager } = require('./server/player/playerManager');
 
@@ -38,9 +37,6 @@ if (!process.env.VERCEL) {
 const DATA_FILE = path.join(RUNTIME_DATA_DIR, 'db.json');
 const TEMPLATE_FILE = path.join(__dirname, 'db.template.json');
 const HOME_RECOMMEND_FILE = path.join(RUNTIME_DATA_DIR, 'home-recommend.json');
-const DOUBAN_HOME_ENABLED = String(process.env.DOUBAN_HOME_ENABLED || 'true').toLowerCase() !== 'false';
-const DOUBAN_API_BASE = String(process.env.DOUBAN_API_BASE || '').trim();
-let lastSuccessfulHomeRecommendation = null;
 
 // 图片缓存目录 (仅本地/Docker 环境)
 const IMAGE_CACHE_DIR = path.join(RUNTIME_DATA_DIR, 'cache/images');
@@ -1588,50 +1584,6 @@ async function fetchSourceRecommendationItems(site, options = {}) {
     return { items, errors };
 }
 
-function dedupeRecommendationSites(sites) {
-    const seen = new Set();
-    return (sites || []).filter(site => {
-        const key = String(site && (site.api || site.key || site.name) || '').trim().toLowerCase();
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-}
-
-async function mapWithConcurrency(items, concurrency, worker) {
-    const queue = Array.isArray(items) ? items : [];
-    const results = new Array(queue.length);
-    let cursor = 0;
-
-    async function run() {
-        while (cursor < queue.length) {
-            const index = cursor;
-            cursor += 1;
-            results[index] = await worker(queue[index], index);
-        }
-    }
-
-    const workers = Array.from(
-        { length: Math.max(1, Math.min(Number(concurrency) || 1, queue.length || 1)) },
-        () => run()
-    );
-    await Promise.all(workers);
-    return results;
-}
-
-function mergeHomepageRows(primary, secondary, limit) {
-    const merged = [];
-    const seen = new Set();
-    for (const item of [...(primary || []), ...(secondary || [])]) {
-        const key = normalizeVodTitle(item && item.vod_name);
-        if (!key || seen.has(key)) continue;
-        seen.add(key);
-        merged.push(item);
-        if (merged.length >= limit) break;
-    }
-    return merged;
-}
-
 function normalizeManualHomeRecommendations(parsed, options = {}) {
     const includeDisabled = !!options.includeDisabled;
     if (!Array.isArray(parsed)) {
@@ -1760,155 +1712,64 @@ async function fetchManualRecommendationItems(sites, options = {}) {
 
 app.get('/api/recommendations/tvbox-home', async (req, res) => {
     try {
-        const sourceLimit = Math.max(1, Math.min(24, Number(req.query.sourceLimit || 12)));
+        const sourceLimit = Math.max(1, Math.min(12, Number(req.query.sourceLimit || 8)));
         const pages = Math.max(1, Math.min(3, Number(req.query.pages || 1)));
         const limitPerRow = Math.max(8, Math.min(48, Number(req.query.limit || 24)));
         const nativeSites = getDB().sites || [];
         const tvboxSources = tvboxService.listSources();
         const enabledSources = tvboxSources.filter(source => source.enabled !== false);
         const pluginRequiredSources = enabledSources.filter(isPluginRequiredSource);
-        const tvboxSites = getTvboxSearchSites()
-            .filter(site => site && site.active !== false && isHttpUrl(site.api));
-        const compatibleNativeSites = nativeSites
+        const compatibleSites = getAllSearchSites()
             .filter(site => site && site.active !== false && isHttpUrl(site.api))
-            .map(site => ({
-                ...site,
-                sourceOrigin: site.sourceOrigin || 'native'
-            }));
-        const compatibleSites = dedupeRecommendationSites([
-            ...tvboxSites,
-            ...compatibleNativeSites
-        ])
             .slice(0, sourceLimit);
-        const sourceSignature = crypto.createHash('sha1')
-            .update(compatibleSites.map(site => `${site.key}:${site.api}`).join('|'))
-            .digest('hex')
-            .slice(0, 12);
-        const aggregateCacheKey = `${sourceSignature}:p${pages}:l${limitPerRow}:d${DOUBAN_HOME_ENABLED ? 1 : 0}:v5`;
-        const cachedAggregate = cacheManager.get('tvbox-home-aggregate', aggregateCacheKey);
-        if (cachedAggregate && cachedAggregate.rows) {
-            return res.json({
-                ...cachedAggregate,
-                cache: {
-                    hit: true,
-                    stale: false,
-                    ttlSeconds: 1800
-                }
-            });
-        }
 
         const diagnostics = [];
         const allItems = [];
         let scannedSources = 0;
-        const doubanPromise = DOUBAN_HOME_ENABLED
-            ? fetchDoubanHomeRows({
-                httpClient: axios,
-                baseUrl: DOUBAN_API_BASE,
-                limit: limitPerRow,
-                normalizeTitle: normalizeVodTitle
-            }).catch(error => ({
-                ok: false,
-                provider: 'douban-recent-hot',
-                rows: {},
-                counts: { movie: 0, series: 0, variety: 0 },
-                error: String(error.message || error).slice(0, 180)
-            }))
-            : Promise.resolve({
-                ok: false,
-                provider: 'disabled',
-                rows: {},
-                counts: { movie: 0, series: 0, variety: 0 },
-                error: ''
-            });
 
-        const scanResults = await mapWithConcurrency(compatibleSites, compatibleSites.length, async site => {
-            const cacheKey = `${site.key || site.name}:p${pages}:v3`;
+        for (const site of compatibleSites) {
+            const cacheKey = `${site.key || site.name}:p${pages}:v2`;
             const cached = cacheManager.get('tvbox-home', cacheKey);
             if (cached && Array.isArray(cached.items)) {
-                return {
-                    items: cached.items,
-                    diagnostic: {
-                        sourceOrigin: site.sourceOrigin || 'native',
-                        siteKey: site.key,
-                        siteName: site.name,
-                        status: 'cached',
-                        count: cached.items.length,
-                        errors: []
-                    }
-                };
-            }
-
-            const result = await fetchSourceRecommendationItems(site, {
-                pages,
-                timeout: 3500
-            });
-            cacheManager.set('tvbox-home', cacheKey, { items: result.items }, 1800);
-            return {
-                items: result.items,
-                diagnostic: {
-                    sourceOrigin: site.sourceOrigin || 'native',
+                scannedSources += 1;
+                allItems.push(...cached.items);
+                diagnostics.push({
                     siteKey: site.key,
                     siteName: site.name,
-                    status: result.items.length > 0 ? 'available' : 'empty',
-                    count: result.items.length,
-                    errors: result.errors.slice(0, 3)
-                }
-            };
-        });
+                    status: 'cached',
+                    count: cached.items.length,
+                    errors: []
+                });
+                continue;
+            }
 
-        for (const result of scanResults) {
-            if (!result) continue;
+            const result = await fetchSourceRecommendationItems(site, { pages });
             scannedSources += 1;
-            allItems.push(...(result.items || []));
-            diagnostics.push(result.diagnostic);
+            allItems.push(...result.items);
+            cacheManager.set('tvbox-home', cacheKey, { items: result.items }, 1800);
+            diagnostics.push({
+                siteKey: site.key,
+                siteName: site.name,
+                status: result.items.length > 0 ? 'available' : 'empty',
+                count: result.items.length,
+                errors: result.errors.slice(0, 3)
+            });
         }
 
-        const manualResult = await fetchManualRecommendationItems(compatibleSites, { timeout: 5000 });
+        const manualResult = await fetchManualRecommendationItems(compatibleSites, { timeout: 6500 });
         allItems.push(...manualResult.items);
 
         const ranked = mergeAndRankVodItems(allItems);
-        const sourceRows = splitRecommendationRows(ranked, limitPerRow);
-        const doubanResult = await doubanPromise;
-        const rowKeys = new Set([
-            ...Object.keys(sourceRows),
-            ...Object.keys(doubanResult.rows || {})
-        ]);
-        const rows = {};
-        for (const key of rowKeys) {
-            rows[key] = mergeHomepageRows(
-                doubanResult.rows && doubanResult.rows[key],
-                sourceRows[key],
-                limitPerRow
-            );
-        }
+        const rows = splitRecommendationRows(ranked, limitPerRow);
         const hasRows = Object.values(rows).some(row => row.length > 0);
-        const hasDoubanRows = !!doubanResult.ok && Object.values(doubanResult.rows || {}).some(row => row.length > 0);
         const localJavaBridge = pluginRuntimeRegistry.getLocalJavaBridgeStatus();
-        const rowCounts = Object.fromEntries(
-            Object.entries(rows).map(([key, items]) => [key, Array.isArray(items) ? items.length : 0])
-        );
-        const payload = {
+
+        res.json({
             ok: true,
-            mode: hasDoubanRows
-                ? (ranked.length > 0 ? 'douban-source' : 'douban')
-                : hasRows ? 'source-native' : 'fallback-required',
+            mode: hasRows ? 'source-native' : 'fallback-required',
             rows,
-            rowCounts,
             rankedCount: ranked.length,
-            homepageCount: Object.values(rows).reduce((total, row) => total + row.length, 0),
-            douban: {
-                enabled: DOUBAN_HOME_ENABLED,
-                available: hasDoubanRows,
-                provider: doubanResult.provider,
-                counts: doubanResult.counts,
-                error: doubanResult.error || ''
-            },
             compatibleSources: compatibleSites.length,
-            sourcePriority: compatibleSites.map(site => ({
-                key: site.key,
-                name: site.name,
-                origin: site.sourceOrigin || 'native'
-            })),
             scannedSources,
             manualRecommendations: {
                 file: HOME_RECOMMEND_FILE,
@@ -1925,47 +1786,14 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
             },
             fallbackReason: hasRows
                 ? ''
-                : compatibleSites.length === 0 && !DOUBAN_HOME_ENABLED
+                : compatibleSites.length === 0
                     ? 'no-compatible-http-sources'
-                    : hasDoubanRows
-                        ? ''
-                        : 'homepage-metadata-and-compatible-sources-returned-no-list',
+                    : 'compatible-sources-returned-no-home-list',
             message: hasRows
-                ? hasDoubanRows
-                    ? 'Homepage uses Douban recent-hot metadata first, then compatible user HTTP sources and fallback data.'
-                    : 'Homepage uses compatible user/native HTTP sources before TMDb fallback.'
-                : 'No homepage metadata or source-native rows were available. Plugin-required TVBox sources need a CatVod runtime bridge before they can provide TVBox-like rows.',
-            diagnostics,
-            cache: {
-                hit: false,
-                stale: false,
-                ttlSeconds: 1800
-            }
-        };
-
-        if (hasRows) {
-            lastSuccessfulHomeRecommendation = {
-                signature: sourceSignature,
-                payload,
-                savedAt: new Date().toISOString()
-            };
-            cacheManager.set('tvbox-home-aggregate', aggregateCacheKey, payload, 1800);
-            return res.json(payload);
-        }
-
-        if (lastSuccessfulHomeRecommendation && lastSuccessfulHomeRecommendation.signature === sourceSignature) {
-            return res.json({
-                ...lastSuccessfulHomeRecommendation.payload,
-                cache: {
-                    hit: true,
-                    stale: true,
-                    savedAt: lastSuccessfulHomeRecommendation.savedAt
-                },
-                fallbackReason: 'using-last-successful-source-home'
-            });
-        }
-
-        res.json(payload);
+                ? 'Homepage uses compatible user/native HTTP sources before TMDb fallback.'
+                : 'No source-native homepage rows were available. Plugin-required TVBox sources need a CatVod runtime bridge before they can provide TVBox-like rows.',
+            diagnostics
+        });
     } catch (error) {
         res.status(400).json({ error: error.message || 'Failed to build TVBox homepage recommendations' });
     }
@@ -2971,56 +2799,6 @@ app.get('/api/tmdb-image/:size/:filename', async (req, res) => {
             try { fs.unlinkSync(localPath); } catch (e) { }
         }
         res.status(404).send('Image not found');
-    }
-});
-
-app.get('/api/douban-image', async (req, res) => {
-    let imageUrl;
-    try {
-        imageUrl = new URL(String(req.query.url || ''));
-    } catch {
-        return res.status(400).send('Invalid image URL');
-    }
-
-    const hostname = imageUrl.hostname.toLowerCase();
-    if (imageUrl.protocol !== 'https:' || !/(^|\.)doubanio\.com$/.test(hostname)) {
-        return res.status(400).send('Unsupported image host');
-    }
-
-    const extensionMatch = imageUrl.pathname.match(/\.(jpg|jpeg|png|webp)$/i);
-    const extension = extensionMatch ? extensionMatch[1].toLowerCase() : 'jpg';
-    const cacheName = `${crypto.createHash('sha256').update(imageUrl.href).digest('hex')}.${extension}`;
-    const localDir = path.join(IMAGE_CACHE_DIR, 'douban');
-    const localPath = path.join(localDir, cacheName);
-
-    if (fs.existsSync(localPath) && fs.statSync(localPath).size > 0) {
-        res.setHeader('Cache-Control', 'public, max-age=604800');
-        return res.sendFile(localPath);
-    }
-
-    try {
-        fs.mkdirSync(localDir, { recursive: true });
-        const response = await axios({
-            url: imageUrl.href,
-            method: 'GET',
-            responseType: 'stream',
-            timeout: 10000,
-            headers: {
-                Referer: 'https://m.douban.com/',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) DongguaTV/1.0',
-                Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
-            }
-        });
-        await pipeline(response.data, fs.createWriteStream(localPath));
-        cleanCacheIfNeeded();
-        res.setHeader('Cache-Control', 'public, max-age=604800');
-        return res.sendFile(localPath);
-    } catch (error) {
-        if (fs.existsSync(localPath)) {
-            try { fs.unlinkSync(localPath); } catch {}
-        }
-        console.error('[Douban Image Proxy Error]', String(error.message || error).slice(0, 160));
-        return res.status(404).send('Image not found');
     }
 });
 
