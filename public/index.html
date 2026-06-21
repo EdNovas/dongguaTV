@@ -68,7 +68,7 @@
     <!-- SW 闂傚倷鑳剁划顖炪€冮崨瀛樺亱濠电姴鍋婇懓鍧楁煛婢跺寒鍤︽繛鎴欏灩閻掑灚銇勯幒鍡椾壕闂傚洤顦甸幃妤呮晲鎼存繄鍑归柣搴亢鐏忔瑩鍩€椤掍緡鍟忛柛鐘崇墵楠炴牠顢曢敃鈧弰銉︿繆閵堝懏鍣归柛妤佸▕閹鈽夊▍铏灴閹繝鍩€椤掑嫭鈷戦柟绋挎捣閳藉鏌ｅΔ鈧Λ娑㈠箲閵忋倕鐒垫い鎺嗗亾妞ゎ亜鍟存俊鍫曞醇椤愩垺顔勬繝鐢靛Л閸嬫挻銇勮箛鎾跺閻庢艾顦甸弻宥堫檨闁告挻鐟╅、姘舵晲婢跺﹦鍔﹀銈嗗笂缁€浣烘閻愬搫绾ч柛顐ｇ箓閳锋梻绱掗埀?-->
     <script data-cfasync="false">
         (function () {
-            var REQUIRED_SW_VERSION = 'v27';
+            var REQUIRED_SW_VERSION = 'v30';
             var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
 
             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞濠电姴楠搁弲鐘绘⒑閼测斁鎷￠柛鎾寸洴閹偓闁告侗鍘稿Σ鍫ユ煙閹规劕鍚圭紒杈ㄥ缁辨帞绱掑Ο鐓庮潷缂備礁顑呴ˇ鐢搞€侀弮鍫濆耿婵°倕锕ュВ澶愭⒒娴ｅ憡鎯堥柣妤佺矒瀹曟粌顫濇潏鈺佸触婵犵數濮电喊宥夊磻閻樼粯鐓曢柍鈺佸暞閻ㄦ垹绱掗悩宕囧⒌闁哄被鍔岄埥澶娢熸笟顖涱唲缂傚倷鐒﹂〃鍛此囬棃娑氭殾婵☆垯璀﹂崥瀣熆鐠虹尨鏀绘い蹇曞枑缁?
@@ -5131,9 +5131,7 @@
                         localStorage.setItem(AUTH_EXPIRY_KEY, expiry.toString());
                     }
 
-                    if (window.startApp) {
-                        await window.startApp();
-                    }
+                    await startAppWhenReady();
 
                     hideLoginScreen();
                 } else {
@@ -5152,13 +5150,24 @@
         }
 
         // ========== 婵犵绱曢崑鎴﹀磹濡ゅ懎鏋侀悹鍥ф▕閻掕棄霉閸忓吋缍戠紒鈧径鎰厽婵☆垳鍘ч崝瀣磼娴ｅ嘲宓嗛柟顔款潐閹峰懘妫冨☉鎺戜壕婵炴垯鍨洪崕濠傤熆鐠哄ソ鈥斥槈閵忕姷鍔﹀銈嗗笒鐎氼剟鎷?==========
+        async function startAppWhenReady() {
+            for (let attempt = 0; attempt < 100; attempt += 1) {
+                if (typeof window.startApp === 'function') {
+                    await window.startApp();
+                    return true;
+                }
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+            throw new Error('Application startup function was not ready.');
+        }
+
         async function checkAuthStatus() {
             try {
                 const res = await fetch('/api/auth/check');
                 const data = await res.json();
 
                 if (!data.requirePassword) {
-                    window.startApp && window.startApp();
+                    await startAppWhenReady();
                     return;
                 }
 
@@ -5179,7 +5188,7 @@
                         const verifyData = await verifyRes.json();
 
                         if (verifyData.success) {
-                            window.startApp && window.startApp();
+                            await startAppWhenReady();
                             return;
                         }
                     }
@@ -5193,7 +5202,11 @@
 
             } catch (e) {
                 console.error('Auth check error:', e);
-                window.startApp && window.startApp();
+                try {
+                    await startAppWhenReady();
+                } catch (startupError) {
+                    console.error('Application startup error:', startupError);
+                }
             }
         }
 
@@ -8386,13 +8399,15 @@
                         } catch (e) {
                             console.error('[InitApp] Failed to load hero data', e);
                         }
-                        try {
-                            this.fetchAllLists();
-                        } catch (e) {
-                            console.error('[InitApp] Failed to load content rows', e);
-                        }
                     } else {
                         updateStatus('Loading status updated');
+                    }
+                    try {
+                        this.fetchAllLists().catch(e => {
+                            console.error('[InitApp] Failed to load content rows', e);
+                        });
+                    } catch (e) {
+                        console.error('[InitApp] Failed to start content rows', e);
                     }
 
                     // 3. 缂傚倸鍊风粈渚€藝椤栫偐鈧箑鐣￠幍铏€?Loading 闂傚倸鍊风欢锟犲礈閿曞倸绐楁慨妯挎硾绾?(濠德板€楁慨鐑藉磻閻樻祴鏋嶉柡鍥╁Т閸ㄦ繈鏌ㄩ弮鍥撳ù婧垮€濋弻娑㈠Ψ閿濆懎顬夐柣?
@@ -10122,6 +10137,8 @@
                 async fetchAllLists() {
                     const keys = Object.keys(this.rowConfigs);
                     const sourceResult = await this.fetchTvboxHomeRecommendations();
+                    const loader = document.getElementById('app-loader');
+                    if (loader) loader.classList.add('hidden');
                     if (sourceResult.loaded) {
                         console.log('[DongguaTV] source-native homepage recommendations loaded');
                     }

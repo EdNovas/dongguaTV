@@ -17,6 +17,9 @@
 | 2026-06-21 | Focused automated tests | pass | `test:douban-home-provider`, `test:tvbox-home-ranking`, `test:tvbox-home-endpoint`, `test:newest-order-ui`, `test:homepage-ranking-ui`, `test:localization-ui`, `test:tvbox-parser`, `test:player-stack`, and `test:playback-ui`. |
 | 2026-06-21 | Build | pass | `npm run build`. |
 | 2026-06-21 | Windows packaging | pass | `npm run dist`; `D:\CodexWorks\dongguaTV-enhanced-app\dist-desktop\DongguaTV Enhanced Setup 1.0.54.exe`, 84,988,913 bytes. |
+| 2026-06-21 | User-visible stale preview diagnosis | fixed | The preview server had stopped, leaving an offline Service Worker page that still showed old TMDB rows. A separate startup bug also skipped `fetchAllLists()` when no TMDB key was configured. |
+| 2026-06-21 | Natural startup regression | pass | `test:homepage-ranking-ui` now uses fresh browser data and no longer manually calls `fetchAllLists`; it verifies `douban-source` loads naturally without a TMDB key and the startup overlay is hidden. |
+| 2026-06-21 | Live browser acceptance | pass | Current visible tab at `http://127.0.0.1:31386/?refresh=v30-final` contains `爱情有烟火`, `南部档案`, and `莫离`; the old `凡人修仙传`/`仙逆` pair is absent from the homepage snapshot. |
 
 ## Changed Files
 

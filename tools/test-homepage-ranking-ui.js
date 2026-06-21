@@ -1,8 +1,11 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { app, BrowserWindow } = require('electron');
 
+const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donggua-homepage-ranking-'));
+app.setPath('userData', userDataDir);
 app.commandLine.appendSwitch('disable-gpu');
 
 const appUrl = process.env.HOMEPAGE_QA_URL || 'http://127.0.0.1:31386/';
@@ -14,6 +17,13 @@ const consoleMessages = [];
 
 function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function cleanupAndExit(code) {
+    try {
+        fs.rmSync(userDataDir, { recursive: true, force: true });
+    } catch {}
+    app.exit(code);
 }
 
 async function waitFor(win, expression, timeoutMs = 30000) {
@@ -53,7 +63,6 @@ app.whenReady().then(async () => {
             const vm = window.vueApp;
             vm.isAuthenticated = true;
             vm.dismissFirstRunGuide && vm.dismissFirstRunGuide();
-            vm.fetchAllLists();
             return true;
         })()`);
         await waitFor(
@@ -151,6 +160,12 @@ app.whenReady().then(async () => {
         await delay(800);
         const visualState = await win.webContents.executeJavaScript(`(() => ({
             loaderCount: document.querySelectorAll('#app-loader, .app-loader').length,
+            loaderVisible: Array.from(document.querySelectorAll('#app-loader, .app-loader')).some(node => {
+                const style = getComputedStyle(node);
+                return style.display !== 'none'
+                    && style.visibility !== 'hidden'
+                    && Number(style.opacity || 1) > 0.01;
+            }),
             cardCount: document.querySelectorAll('.hot-card').length,
             loadedPosterCount: Array.from(document.querySelectorAll('.hot-card img'))
                 .filter(img => img.complete && img.naturalWidth > 20).length,
@@ -158,7 +173,7 @@ app.whenReady().then(async () => {
                 .slice(0, 8)
                 .map(node => node.textContent.trim())
         }))()`);
-        assert.equal(visualState.loaderCount, 0, 'Startup loader is still visible during screenshot capture.');
+        assert.equal(visualState.loaderVisible, false, 'Startup loader is still visible during screenshot capture.');
         assert.ok(visualState.cardCount > 0, 'Homepage cards are missing during screenshot capture.');
         assert.ok(visualState.loadedPosterCount >= 5, 'Homepage posters did not load during screenshot capture.');
         const captures = [];
@@ -181,7 +196,7 @@ app.whenReady().then(async () => {
             doubanOpenRoute,
             ...state
         }, null, 2));
-        app.exit(0);
+        cleanupAndExit(0);
     } catch (error) {
         let state = null;
         try {
@@ -190,6 +205,10 @@ app.whenReady().then(async () => {
                 isAuthenticated: Boolean(window.vueApp && window.vueApp.isAuthenticated),
                 recommendationMode: window.vueApp && window.vueApp.recommendationMode,
                 hasDiagnostics: Boolean(window.vueApp && window.vueApp.recommendationDiagnostics),
+                appInitialized: Boolean(window.vueApp && window.vueApp._appInitialized),
+                hasStartApp: typeof window.startApp === 'function',
+                hasStartupWaitCode: document.documentElement.innerHTML.includes('async function startAppWhenReady'),
+                hasUnconditionalListLoad: document.documentElement.innerHTML.includes('this.fetchAllLists().catch'),
                 rowKeys: window.vueApp ? Object.keys(window.vueApp.rowLists || {}) : [],
                 bodyText: document.body.innerText.slice(0, 500)
             }))()`);
@@ -199,6 +218,6 @@ app.whenReady().then(async () => {
             state,
             consoleMessages
         }, null, 2));
-        app.exit(1);
+        cleanupAndExit(1);
     }
 });

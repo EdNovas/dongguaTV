@@ -1,6 +1,6 @@
 // Service Worker with Image Caching for dongguaTV
-// v27: live-channel health UI and network-first navigation updates
-const CACHE_VERSION = 'v27';
+// v30: guarantee the startup overlay closes after homepage data loads
+const CACHE_VERSION = 'v30';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 
