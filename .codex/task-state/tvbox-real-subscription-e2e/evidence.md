@@ -184,3 +184,5 @@ Ranking behavior:
   - `npm run test:tvbox-parser`
   - `npm run test:player-stack`
   - `npm run build`
+- Windows packaging passed with `npm run dist`.
+- Updated installer: `D:\CodexWorks\dongguaTV-enhanced-app\dist-desktop\DongguaTV Enhanced Setup 1.0.54.exe`, 84,993,101 bytes, SHA-256 `19DD9D00240FB1E06526E9BFB6503F82F79DCE2CD2149177123955E63660F3A8`.

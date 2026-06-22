@@ -49,6 +49,7 @@
 - Seven sources completed current search, detail, and playback-address reachability for the sample title.
 - Results are deliberately time-stamped because third-party source health can drift between scans.
 - Exact next action: user review of the source scan presentation and wording at `http://127.0.0.1:31386/`.
+- Updated NSIS installer was generated successfully after the feature commit.
 
 ## Changed Files
 

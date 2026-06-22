@@ -73,6 +73,7 @@
 - Current visible acceptance: 35 HTTP sources checked, 7 playable, 1 searchable but incomplete, and 132 plugin-required sources identified without execution.
 - Supporting screenshot: `D:\CodexWorks\tmp\donggua-source-availability-scan.png`.
 - Residual risk: a successful URL probe proves current reachability, not long-term stability or media correctness for every episode.
+- Packaging acceptance: the updated Windows NSIS installer was generated successfully.
 
 ## Desktop Localization Review
 
