@@ -2,7 +2,7 @@
 
 - Task ID: `tvbox-real-subscription-e2e`
 - Updated: 2026-06-18T22:36:30Z
-- Status: active
+- Status: completed
 
 ## Current State
 
@@ -41,6 +41,14 @@
 ## Blockers
 
 - None recorded.
+
+## 2026-06-22 Completion Checkpoint
+
+- The Subscriptions page now exposes a user-visible source availability scan instead of requiring engineering-only JSON reports.
+- Current live matrix covered all 35 enabled HTTP-compatible sources in the preview runtime and kept 132 plugin-required sources isolated.
+- Seven sources completed current search, detail, and playback-address reachability for the sample title.
+- Results are deliberately time-stamped because third-party source health can drift between scans.
+- Exact next action: user review of the source scan presentation and wording at `http://127.0.0.1:31386/`.
 
 ## Changed Files
 

@@ -68,8 +68,10 @@
     <!-- SW 闂傚倷鑳剁划顖炪€冮崨瀛樺亱濠电姴鍋婇懓鍧楁煛婢跺寒鍤︽繛鎴欏灩閻掑灚銇勯幒鍡椾壕闂傚洤顦甸幃妤呮晲鎼存繄鍑归柣搴亢鐏忔瑩鍩€椤掍緡鍟忛柛鐘崇墵楠炴牠顢曢敃鈧弰銉︿繆閵堝懏鍣归柛妤佸▕閹鈽夊▍铏灴閹繝鍩€椤掑嫭鈷戦柟绋挎捣閳藉鏌ｅΔ鈧Λ娑㈠箲閵忋倕鐒垫い鎺嗗亾妞ゎ亜鍟存俊鍫曞醇椤愩垺顔勬繝鐢靛Л閸嬫挻銇勮箛鎾跺閻庢艾顦甸弻宥堫檨闁告挻鐟╅、姘舵晲婢跺﹦鍔﹀銈嗗笂缁€浣烘閻愬搫绾ч柛顐ｇ箓閳锋梻绱掗埀?-->
     <script data-cfasync="false">
         (function () {
-            var REQUIRED_SW_VERSION = 'v30';
+            var REQUIRED_SW_VERSION = 'v32';
             var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
+            var QA_MODE = /(?:^|[?&])(?:localizationQa|_playbackQa)=/i.test(window.location.search);
+            if (QA_MODE) return;
 
             // 婵犵數濮烽。浠嬪焵椤掆偓閸熷潡鍩€椤掆偓缂嶅﹪骞冨Ο璇茬窞濠电姴楠搁弲鐘绘⒑閼测斁鎷￠柛鎾寸洴閹偓闁告侗鍘稿Σ鍫ユ煙閹规劕鍚圭紒杈ㄥ缁辨帞绱掑Ο鐓庮潷缂備礁顑呴ˇ鐢搞€侀弮鍫濆耿婵°倕锕ュВ澶愭⒒娴ｅ憡鎯堥柣妤佺矒瀹曟粌顫濇潏鈺佸触婵犵數濮电喊宥夊磻閻樼粯鐓曢柍鈺佸暞閻ㄦ垹绱掗悩宕囧⒌闁哄被鍔岄埥澶娢熸笟顖涱唲缂傚倷鐒﹂〃鍛此囬棃娑氭殾婵☆垯璀﹂崥瀣熆鐠虹尨鏀绘い蹇曞枑缁?
             if (localStorage.getItem(STORAGE_KEY)) return;
@@ -4008,7 +4010,48 @@
                     </div>
 
                     <div v-if="tvboxSources.length > 0" style="margin-top:22px;">
-                <strong>{{ t('subscriptions.sourceSummary') }}</strong>
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                            <strong>{{ t('subscriptions.sourceSummary') }}</strong>
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <input v-model.trim="sourceScanKeyword" :placeholder="t('subscriptions.scanKeywordPlaceholder')"
+                                    style="width:180px; background:#15171d; border:1px solid rgba(255,255,255,0.16); color:#fff; border-radius:10px; padding:8px 10px;">
+                                <button class="btn-info" data-testid="source-availability-scan" @click="scanSourceAvailability"
+                                    :disabled="sourceAvailabilityLoading || !sourceScanKeyword"
+                                    style="border:0; padding:8px 12px; font-size:12px;">
+                                    <i :class="['fas', sourceAvailabilityLoading ? 'fa-spinner fa-spin' : 'fa-wave-square']"></i>
+                                    {{ sourceAvailabilityLoading ? t('subscriptions.scanning') : t('subscriptions.scanSources') }}
+                                </button>
+                            </div>
+                        </div>
+                        <div v-if="sourceAvailabilityScan"
+                            style="margin-top:12px; border:1px solid rgba(255,255,255,0.12); background:rgba(0,0,0,0.22); border-radius:14px; padding:12px;">
+                            <div style="display:flex; gap:12px; flex-wrap:wrap; color:#cfd3dc; font-size:12px;">
+                                <span style="color:#22c55e;">{{ t('subscriptions.scanPlayable') }} {{ sourceScanCount('playable') }}</span>
+                                <span style="color:#fbbf24;">{{ t('subscriptions.scanSearchOnly') }} {{ sourceScanSearchOnlyCount() }}</span>
+                                <span style="color:#94a3b8;">{{ t('subscriptions.scanNoHit') }} {{ sourceScanCount('no-hit') }}</span>
+                                <span style="color:#f87171;">{{ t('subscriptions.scanFailed') }} {{ sourceScanFailureCount() }}</span>
+                                <span style="color:#fbbf24;">{{ t('subscriptions.plugin') }} {{ sourceAvailabilityScan.pluginRequired || 0 }}</span>
+                            </div>
+                            <div style="color:#8f98aa; font-size:11px; margin-top:6px;">
+                                {{ t('subscriptions.scanChecked') }} {{ sourceAvailabilityScan.scannedSources || 0 }}
+                                · {{ formatLocalTimestamp(sourceAvailabilityScan.checkedAt) }}
+                            </div>
+                            <div v-if="sourceAvailabilityScan.results && sourceAvailabilityScan.results.length"
+                                style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin-top:10px; max-height:220px; overflow:auto;">
+                                <div v-for="item in sourceAvailabilityScan.results" :key="item.sourceName"
+                                    style="background:rgba(255,255,255,0.05); border-radius:10px; padding:9px 10px; font-size:11px; color:#cfd3dc;">
+                                    <div style="display:flex; justify-content:space-between; gap:8px;">
+                                        <strong style="color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.sourceName }}</strong>
+                                        <span :style="{ color: sourceScanOutcomeColor(item.outcome), flexShrink: 0 }">
+                                            {{ sourceScanOutcomeLabel(item.outcome) }}
+                                        </span>
+                                    </div>
+                                    <div v-if="item.matchedTitle" style="color:#8f98aa; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                                        {{ item.matchedTitle }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; max-height:300px; overflow:auto;">
                             <div v-for="source in tvboxSources" :key="source.id"
                                 style="border:1px solid rgba(255,255,255,0.1); border-radius:14px; background:rgba(255,255,255,0.05); padding:12px;">
@@ -5485,6 +5528,21 @@
                 'subscriptions.expanded': '已展开',
                 'subscriptions.plugin': '插件型',
                 'subscriptions.sourceSummary': '源概览',
+                'subscriptions.scanKeywordPlaceholder': '检测片名，例如：哪吒',
+                'subscriptions.scanSources': '批量检测',
+                'subscriptions.scanning': '正在检测…',
+                'subscriptions.scanPlayable': '可搜索并播放',
+                'subscriptions.scanSearchOnly': '可搜索待修复',
+                'subscriptions.scanNoHit': '没有结果',
+                'subscriptions.scanFailed': '网络或线路失败',
+                'subscriptions.scanChecked': '已检测普通源',
+                'subscriptions.outcomePlayable': '可播放',
+                'subscriptions.outcomeNoPlayUrl': '无播放地址',
+                'subscriptions.outcomeDetailError': '详情失败',
+                'subscriptions.outcomePlayFailed': '线路失效',
+                'subscriptions.outcomeNoHit': '无结果',
+                'subscriptions.outcomeNetworkError': '网络失败',
+                'subscriptions.outcomeUnsupported': '不支持',
                 'subscriptions.pluginRuntimeNotice': '该源需要 CatVod/Spider 运行时。当前可以识别和管理，但不会自动执行未知插件代码。',
                 'subscriptions.onlyUserProvided': '这里只保存用户自己提供的订阅。',
                 'subscriptions.refreshed': '订阅数据已刷新',
@@ -5753,6 +5811,21 @@
                 'subscriptions.expanded': 'expanded',
                 'subscriptions.plugin': 'plugin',
                 'subscriptions.sourceSummary': 'Source Summary',
+                'subscriptions.scanKeywordPlaceholder': 'Test title, e.g. Ne Zha',
+                'subscriptions.scanSources': 'Scan sources',
+                'subscriptions.scanning': 'Scanning...',
+                'subscriptions.scanPlayable': 'Search and play',
+                'subscriptions.scanSearchOnly': 'Search only',
+                'subscriptions.scanNoHit': 'No result',
+                'subscriptions.scanFailed': 'Network or line failure',
+                'subscriptions.scanChecked': 'HTTP sources checked',
+                'subscriptions.outcomePlayable': 'Playable',
+                'subscriptions.outcomeNoPlayUrl': 'No play URL',
+                'subscriptions.outcomeDetailError': 'Detail failed',
+                'subscriptions.outcomePlayFailed': 'Line failed',
+                'subscriptions.outcomeNoHit': 'No result',
+                'subscriptions.outcomeNetworkError': 'Network failed',
+                'subscriptions.outcomeUnsupported': 'Unsupported',
                 'subscriptions.pluginRuntimeNotice': 'This source requires a CatVod/Spider runtime. It can be identified and managed, but unknown plugin code is not executed automatically.',
                 'subscriptions.onlyUserProvided': 'Only user-provided subscriptions are stored.',
                 'subscriptions.refreshed': 'Subscription data refreshed',
@@ -6021,6 +6094,21 @@
                 'subscriptions.expanded': '展開済み',
                 'subscriptions.plugin': 'プラグイン型',
                 'subscriptions.sourceSummary': '配信元の概要',
+                'subscriptions.scanKeywordPlaceholder': '確認する作品名',
+                'subscriptions.scanSources': '一括確認',
+                'subscriptions.scanning': '確認中…',
+                'subscriptions.scanPlayable': '検索・再生可',
+                'subscriptions.scanSearchOnly': '検索のみ',
+                'subscriptions.scanNoHit': '結果なし',
+                'subscriptions.scanFailed': '通信・回線エラー',
+                'subscriptions.scanChecked': '確認済みHTTP配信元',
+                'subscriptions.outcomePlayable': '再生可',
+                'subscriptions.outcomeNoPlayUrl': '再生URLなし',
+                'subscriptions.outcomeDetailError': '詳細取得失敗',
+                'subscriptions.outcomePlayFailed': '回線エラー',
+                'subscriptions.outcomeNoHit': '結果なし',
+                'subscriptions.outcomeNetworkError': '通信失敗',
+                'subscriptions.outcomeUnsupported': '未対応',
                 'subscriptions.pluginRuntimeNotice': 'この配信元にはCatVod/Spider実行環境が必要です。識別と管理はできますが、未知のプラグインコードは自動実行しません。',
                 'subscriptions.onlyUserProvided': 'ユーザーが追加した購読のみ保存します。',
                 'subscriptions.refreshed': '購読データを更新しました',
@@ -6267,6 +6355,9 @@
                     sourceDiagnostics: {},
                     sourceHealthResults: {},
                     sourceHealthLoading: {},
+                    sourceScanKeyword: '哪吒',
+                    sourceAvailabilityScan: null,
+                    sourceAvailabilityLoading: false,
                     liveGroups: [],
                     liveChannels: [],
                     liveActiveGroup: '',
@@ -6902,6 +6993,41 @@
                     if (!source || !source.id) return null;
                     return this.sourceHealthResults[source.id] || source.healthCheck || null;
                 },
+
+                sourceScanCount(outcome) {
+                    return Number(this.sourceAvailabilityScan && this.sourceAvailabilityScan.summary
+                        && this.sourceAvailabilityScan.summary[outcome] || 0);
+                },
+
+                sourceScanSearchOnlyCount() {
+                    return this.sourceScanCount('no-play-url') + this.sourceScanCount('detail-error');
+                },
+
+                sourceScanFailureCount() {
+                    return this.sourceScanCount('play-url-failed')
+                        + this.sourceScanCount('network-error')
+                        + this.sourceScanCount('unsupported');
+                },
+
+                sourceScanOutcomeLabel(outcome) {
+                    const keys = {
+                        playable: 'subscriptions.outcomePlayable',
+                        'no-play-url': 'subscriptions.outcomeNoPlayUrl',
+                        'detail-error': 'subscriptions.outcomeDetailError',
+                        'play-url-failed': 'subscriptions.outcomePlayFailed',
+                        'no-hit': 'subscriptions.outcomeNoHit',
+                        'network-error': 'subscriptions.outcomeNetworkError',
+                        unsupported: 'subscriptions.outcomeUnsupported'
+                    };
+                    return this.t(keys[outcome] || 'subscriptions.outcomeUnsupported');
+                },
+
+                sourceScanOutcomeColor(outcome) {
+                    if (outcome === 'playable') return '#22c55e';
+                    if (outcome === 'no-play-url' || outcome === 'detail-error') return '#fbbf24';
+                    if (outcome === 'no-hit') return '#94a3b8';
+                    return '#f87171';
+                },
                 favoriteLiveKey(channel) {
                     if (!channel) return '';
                     return String(channel.id || channel.url || `${channel.group || 'default'}::${channel.name || ''}`);
@@ -7312,6 +7438,30 @@
                             [source.id]: false
                         };
                         await this.loadDesktopStatus();
+                    }
+                },
+
+                async scanSourceAvailability() {
+                    const keyword = String(this.sourceScanKeyword || '').trim();
+                    if (!keyword || this.sourceAvailabilityLoading) return;
+                    this.sourceAvailabilityLoading = true;
+                    this.subscriptionError = '';
+                    this.subscriptionMessage = this.t('subscriptions.scanning');
+                    try {
+                        const response = await fetch('/api/source-availability-scan', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ keyword, maxSources: 40 })
+                        });
+                        const data = await response.json();
+                        if (!response.ok) throw new Error(data.error || this.t('subscriptions.operationFailed'));
+                        this.sourceAvailabilityScan = data;
+                        this.subscriptionMessage = `${this.t('subscriptions.scanChecked')} ${data.scannedSources || 0}`;
+                    } catch (error) {
+                        this.subscriptionMessage = '';
+                        this.subscriptionError = error.message || this.t('subscriptions.operationFailed');
+                    } finally {
+                        this.sourceAvailabilityLoading = false;
                     }
                 },
 
@@ -10093,7 +10243,7 @@
                 },
 
                 // 闂傚倷绀侀幉锛勬暜濡ゅ啯宕查柛宀€鍎戠紞鏍煙閻楀牊绶茬紒鈧畝鍕厸鐎广儱娴烽崢娑欑箾閹捐泛鍘撮柡?(婵犵數鍋炲娆撳触鐎ｎ喗鏅梻浣告啞钃遍柣鈺婂灠閻ｅ嘲鈹戠€ｎ偄浜归梺缁樺灦椤洭濡堕悧鍫滅箚妞ゆ劦鍓涚粙濠氭煟濡や焦绀嬮柟顖氱墦瀹曞崬鈽夊Ο鑲╁幀婵＄偑鍊栭悧妤冩崲瀹ュ拋鐒介悘鐐靛亾閸欏繘鏌熼悜妯诲暗闁活厼锕﹂埀?
-                async fetchTvboxHomeRecommendations() {
+                async fetchTvboxHomeRecommendations(retryCount = 0) {
                     const controller = new AbortController();
                     const timeoutId = setTimeout(() => controller.abort(), 30000);
                     this.sourceRecommendationRows = {};
@@ -10102,6 +10252,7 @@
                             signal: controller.signal,
                             cache: 'no-store'
                         });
+                        if (!response.ok) throw new Error(`Homepage request returned HTTP ${response.status}`);
                         const data = await response.json();
                         this.recommendationDiagnostics = data;
                         this.recommendationFallbackReason = data.fallbackReason || '';
@@ -10129,6 +10280,11 @@
                             )
                         };
                     } catch (error) {
+                        if (retryCount < 1) {
+                            console.warn('[TVBoxHome] Homepage request failed once; retrying.');
+                            await new Promise(resolve => setTimeout(resolve, 350));
+                            return this.fetchTvboxHomeRecommendations(retryCount + 1);
+                        }
                         console.error('[TVBoxHome] Failed to load source-native recommendations', error);
                         this.recommendationMode = 'tmdb';
                         this.recommendationFallbackReason = 'request-failed';
@@ -12698,7 +12854,8 @@
 
     <!-- Register Service Worker with Auto-Update -->
     <script data-cfasync="false">
-        if ('serviceWorker' in navigator) {
+        const skipServiceWorkerForQa = /(?:^|[?&])(?:localizationQa|_playbackQa)=/i.test(window.location.search);
+        if ('serviceWorker' in navigator && !skipServiceWorkerForQa) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
                     .then(reg => {

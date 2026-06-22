@@ -1481,6 +1481,197 @@ app.post('/api/source-health-check', async (req, res) => {
     }
 });
 
+function extractSourcePlaybackCandidates(vodPlayUrl, limit = 2) {
+    return String(vodPlayUrl || '')
+        .split('$$$')
+        .slice(0, 3)
+        .flatMap(group => group.split('#').slice(0, 3))
+        .map(entry => {
+            const match = entry.match(/\$(https?:\/\/.+)$/i);
+            return match ? match[1].trim() : '';
+        })
+        .filter(Boolean)
+        .slice(0, Math.max(1, Math.min(Number(limit) || 2, 4)));
+}
+
+async function probeSourcePlaybackCandidate(url, timeoutMs = 10000) {
+    const startedAt = Date.now();
+    try {
+        const response = await axios.get(url, {
+            timeout: Math.max(2000, Math.min(Number(timeoutMs) || 10000, 15000)),
+            maxRedirects: 5,
+            responseType: 'stream',
+            validateStatus: () => true,
+            headers: {
+                'User-Agent': 'DongguaTV-Enhanced/1.0',
+                Range: 'bytes=0-4095'
+            }
+        });
+        if (response.data && typeof response.data.destroy === 'function') {
+            response.data.destroy();
+        }
+        return {
+            ok: response.status >= 200 && response.status < 300,
+            httpStatus: response.status,
+            elapsedMs: Date.now() - startedAt
+        };
+    } catch (error) {
+        const timeout = error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '');
+        return {
+            ok: false,
+            httpStatus: null,
+            elapsedMs: Date.now() - startedAt,
+            reason: timeout ? 'timeout' : 'network-error'
+        };
+    }
+}
+
+function summarizeSourceAvailability(results) {
+    return (results || []).reduce((summary, item) => {
+        const key = item.outcome || 'unknown';
+        summary[key] = (summary[key] || 0) + 1;
+        return summary;
+    }, {});
+}
+
+app.post('/api/source-availability-scan', async (req, res) => {
+    try {
+        const keyword = String(req.body && req.body.keyword || '').trim();
+        if (!keyword) return res.status(400).json({ error: 'keyword is required' });
+
+        const subscriptionId = String(req.body && req.body.subscriptionId || '').trim();
+        const maxSources = Math.max(1, Math.min(Number(req.body && req.body.maxSources) || 40, 40));
+        const allSources = tvboxService.listSources()
+            .filter(source => source.enabled !== false)
+            .filter(source => !subscriptionId || source.sourceSubscriptionId === subscriptionId);
+        const pluginRequired = allSources.filter(isPluginRequiredSource).length;
+        const unsupported = allSources.filter(source =>
+            source.status === 'unsupported' || source.supportLevel === 'unsupported'
+        ).length;
+        const siteByKey = new Map(getTvboxSearchSites().map(site => [site.key, site]));
+        const candidates = allSources
+            .filter(source => !isPluginRequiredSource(source))
+            .filter(source => source.status !== 'unsupported' && source.supportLevel !== 'unsupported')
+            .filter(source => source.searchable !== false && isHttpUrl(source.api))
+            .slice(0, maxSources);
+
+        const results = await mapWithConcurrency(candidates, 4, async source => {
+            const site = siteByKey.get(`tvbox:${source.id}`);
+            const base = {
+                sourceName: source.name,
+                supportLevel: source.supportLevel,
+                status: source.status,
+                outcome: 'unknown',
+                searchCount: 0,
+                playableCandidates: 0
+            };
+            if (!site) {
+                return { ...base, outcome: 'unsupported' };
+            }
+
+            const health = await tvboxService.healthCheck(source.id).catch(() => ({
+                status: 'error',
+                reason: 'health-check-error'
+            }));
+            base.health = {
+                status: health.status || 'error',
+                latency: Number(health.latency || 0),
+                reason: health.reason || ''
+            };
+
+            let list;
+            try {
+                list = await searchSiteKeyword(site, keyword, { timeout: 8000 });
+            } catch (_) {
+                return { ...base, outcome: 'network-error' };
+            }
+            base.searchCount = Array.isArray(list) ? list.length : 0;
+            const first = list && list[0];
+            if (!first || !first.vod_id) {
+                return {
+                    ...base,
+                    outcome: health.status === 'error' ? 'network-error' : 'no-hit'
+                };
+            }
+
+            let detail;
+            try {
+                const detailUrl = buildVodApiUrl(site.api, { ac: 'detail', ids: first.vod_id });
+                const response = await fetchWithProxyFallback(detailUrl, { timeout: 8000 }, site.key);
+                detail = response.data && response.data.list && response.data.list[0];
+            } catch (_) {
+                return {
+                    ...base,
+                    matchedTitle: first.vod_name || keyword,
+                    outcome: 'detail-error'
+                };
+            }
+
+            const playbackCandidates = extractSourcePlaybackCandidates(detail && detail.vod_play_url, 2);
+            base.playableCandidates = playbackCandidates.length;
+            if (playbackCandidates.length === 0) {
+                return {
+                    ...base,
+                    matchedTitle: detail && detail.vod_name || first.vod_name || keyword,
+                    outcome: 'no-play-url'
+                };
+            }
+
+            const probes = [];
+            for (const candidate of playbackCandidates) {
+                probes.push(await probeSourcePlaybackCandidate(candidate));
+            }
+            const successful = probes.find(probe => probe.ok);
+            return {
+                ...base,
+                matchedTitle: detail && detail.vod_name || first.vod_name || keyword,
+                outcome: successful ? 'playable' : 'play-url-failed',
+                playback: {
+                    ok: !!successful,
+                    httpStatus: successful
+                        ? successful.httpStatus
+                        : probes.find(probe => probe.httpStatus)?.httpStatus || null,
+                    elapsedMs: successful
+                        ? successful.elapsedMs
+                        : Math.max(0, ...probes.map(probe => probe.elapsedMs || 0))
+                }
+            };
+        });
+
+        const outcomePriority = {
+            playable: 0,
+            'no-play-url': 1,
+            'detail-error': 2,
+            'play-url-failed': 3,
+            'no-hit': 4,
+            'network-error': 5,
+            unsupported: 6,
+            unknown: 7
+        };
+        results.sort((left, right) => {
+            const outcomeDiff = (outcomePriority[left.outcome] ?? 99) - (outcomePriority[right.outcome] ?? 99);
+            if (outcomeDiff !== 0) return outcomeDiff;
+            if ((right.searchCount || 0) !== (left.searchCount || 0)) {
+                return (right.searchCount || 0) - (left.searchCount || 0);
+            }
+            return String(left.sourceName || '').localeCompare(String(right.sourceName || ''), 'zh-CN');
+        });
+
+        res.json({
+            ok: true,
+            keyword,
+            checkedAt: new Date().toISOString(),
+            scannedSources: results.length,
+            pluginRequired,
+            unsupported,
+            summary: summarizeSourceAvailability(results),
+            results
+        });
+    } catch (error) {
+        sendTvboxError(res, error, 400);
+    }
+});
+
 app.get('/api/search/diagnostics', (req, res) => {
     try {
         const keyword = String(req.query.wd || '').trim();

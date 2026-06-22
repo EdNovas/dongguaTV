@@ -2,7 +2,7 @@
 
 - Task ID: `tvbox-real-subscription-e2e`
 - Updated: 2026-06-19T00:00:00Z
-- Verdict: pending
+- Verdict: ready for user review
 - Change type: review-only
 
 ## Decision Surface
@@ -64,6 +64,15 @@
 
 - Evidence checkpoint recorded. Functional relay validation now includes a reusable QA runner plus verified HTTP-ready, live, and plugin-required samples. Final acceptance is still pending broader source coverage and any additional ranking or packaging work we decide to add.
 - Evidence checkpoint recorded. Functional relay validation now includes a reusable QA runner, verified HTTP-ready/live/plugin-required samples, and a ranked AppleCMS HTTP candidate scan. Final acceptance is still pending any output-polish or broader source-family expansion we decide to add.
+
+## 2026-06-22 Availability Scan Review
+
+- Added an in-app, non-technical availability matrix for user-imported HTTP sources.
+- The matrix distinguishes playable, searchable-but-incomplete, no-result, expired-line, network-failed, plugin-required, and unsupported outcomes.
+- It does not expose full source or playback URLs in the report.
+- Current visible acceptance: 35 HTTP sources checked, 7 playable, 1 searchable but incomplete, and 132 plugin-required sources identified without execution.
+- Supporting screenshot: `D:\CodexWorks\tmp\donggua-source-availability-scan.png`.
+- Residual risk: a successful URL probe proves current reachability, not long-term stability or media correctness for every episode.
 
 ## Desktop Localization Review
 

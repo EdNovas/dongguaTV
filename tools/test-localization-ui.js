@@ -10,6 +10,7 @@ const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donggua-localization-
 
 app.setPath('userData', userDataDir);
 app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-features', 'ServiceWorker');
 
 const expected = {
     'zh-CN': {
@@ -50,19 +51,26 @@ async function waitFor(win, expression, timeoutMs = 30000) {
     throw new Error(`Timed out waiting for ${expression}`);
 }
 
+async function waitForStableNavigation(win, getLastNavigationAt, timeoutMs = 30000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (!win.webContents.isLoading() && Date.now() - getLastNavigationAt() >= 3000) {
+            return;
+        }
+        await delay(200);
+    }
+    throw new Error('Timed out waiting for Service Worker navigation to settle');
+}
+
 async function setLanguage(win, language) {
     await win.webContents.executeJavaScript(`(async () => {
         const vm = window.vueApp;
         vm.uiLanguage = ${JSON.stringify(language)};
         vm.changeUiLanguage();
-        vm.closeOverlayPanels();
-        await vm.$nextTick();
-        vm.showSettingsModal = true;
-        await vm.loadPlayerSettings();
+        vm.handleAppleNav({ id: 'settings', action: 'settings' });
         await vm.$nextTick();
     })()`);
     await waitFor(win, 'document.querySelector(".settings-modal select")');
-    await waitFor(win, 'document.querySelector(".settings-modal [data-testid=\\"settings-back\\"]")?.innerText.trim()');
     await waitFor(win, 'document.querySelector(".settings-modal h2")?.textContent.trim()');
     await waitFor(win, '!window.vueApp.proxyStatusLoading');
 }
@@ -130,22 +138,27 @@ async function verifyChineseInteractions(win) {
     await win.webContents.executeJavaScript(`document.querySelector('.settings-modal [data-testid="settings-back"]').click()`);
     await waitFor(win, '!window.vueApp.showSettingsModal');
 
-    await win.webContents.executeJavaScript(`(() => {
+    await win.webContents.executeJavaScript(`(async () => {
         window.vueApp.closeOverlayPanels();
         window.vueApp.showSubscriptionPanel = true;
-        window.vueApp.loadSubscriptionData();
+        await window.vueApp.loadSubscriptionData();
     })()`);
     await waitFor(win, 'document.querySelector("[data-testid=\\"subscription-back\\"]")');
     await waitFor(win, '!window.vueApp.subscriptionLoading');
     const subscription = await win.webContents.executeJavaScript(`(() => ({
         back: document.querySelector('[data-testid="subscription-back"]')?.innerText.trim() || '',
         text: document.querySelector('.info-modal')?.innerText || '',
+        scanButton: document.querySelector('[data-testid="source-availability-scan"]')?.innerText.trim() || '',
+        scanPlaceholder: document.querySelector('[data-testid="source-availability-scan"]')
+            ?.previousElementSibling?.getAttribute('placeholder') || '',
         error: window.vueApp.subscriptionError
     }))()`);
     assert.equal(subscription.back, '返回');
     assert.match(subscription.text, /仅导入你自己的 TVBox JSON 地址/);
     assert.match(subscription.text, /导入订阅/);
     assert.match(subscription.text, /全部刷新/);
+    assert.equal(subscription.scanButton, '\u6279\u91cf\u68c0\u6d4b');
+    assert.match(subscription.scanPlaceholder, /\u68c0\u6d4b\u7247\u540d/);
     assert.equal(subscription.error, '');
 
     await win.webContents.executeJavaScript(`document.querySelector('[data-testid="subscription-refresh"]').click()`);
@@ -212,6 +225,10 @@ app.whenReady().then(async () => {
             sandbox: true
         }
     });
+    let lastNavigationAt = Date.now();
+    win.webContents.on('did-start-navigation', () => {
+        lastNavigationAt = Date.now();
+    });
 
     try {
         await win.loadURL(targetUrl);
@@ -222,7 +239,20 @@ app.whenReady().then(async () => {
             'document.getElementById("app-loader")?.classList.contains("hidden")',
             60000
         );
-        await delay(500);
+        await waitFor(
+            win,
+            'window.vueApp && window.vueApp.recommendationDiagnostics && !window.vueApp.loading',
+            90000
+        );
+        await waitForStableNavigation(win, () => lastNavigationAt, 30000);
+        await waitFor(win, 'window.vueApp');
+        await waitFor(win, 'document.querySelectorAll(".appletv-nav-item span").length === 9');
+        await waitFor(
+            win,
+            'document.getElementById("app-loader")?.classList.contains("hidden")',
+            60000
+        );
+        await delay(300);
 
         const results = {};
         for (const language of ['zh-CN', 'ja-JP', 'en-US']) {

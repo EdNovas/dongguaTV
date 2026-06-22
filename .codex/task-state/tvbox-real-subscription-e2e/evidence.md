@@ -164,3 +164,23 @@ Ranking behavior:
 - Movie, series, and category rails default to `popularity.desc` with a small vote-count floor instead of `primary_release_date.desc` / `first_air_date.desc`.
 - The newest-first sorter is still kept and tested for places where date ordering is explicitly useful, but it is no longer the homepage default.
 - Search result grouping still uses source update dates where available; undated or weakly dated items remain available but should not dominate the main homepage.
+
+## 2026-06-22 User-Visible Source Availability Scan
+
+- Added `POST /api/source-availability-scan` for user-triggered, keyword-based validation of enabled HTTP-compatible TVBox sources.
+- The scan checks source health, search results, detail data, and up to two real playback candidates.
+- The API returns source names and status metadata only; it does not return source APIs, raw playback URLs, subscription payloads, cookies, or authorization headers.
+- Plugin-required sources are counted but never executed.
+- The Subscriptions panel now includes a title input and `批量检测` action with localized Chinese, English, and Japanese status labels.
+- Real current-runtime scan for `哪吒`: 35 HTTP-compatible sources checked, 7 completed search/detail/playback reachability, 1 searched but needed playback repair, and the remaining sources were separated into no-result, expired-line, and network-failure buckets.
+- A repeated visible scan produced the same 7 playable sources while the failure sub-buckets drifted slightly, confirming that third-party line health is time-sensitive.
+- Current runtime also contained 132 plugin-required sources; none were executed.
+- Visible screenshot: `D:\CodexWorks\tmp\donggua-source-availability-scan.png`.
+- Homepage aggregation now retries once after an initial browser-side request failure before falling back to TMDb.
+- Service Worker cache and required page version are aligned at `v32`.
+- Passed checks:
+  - `npm run test:localization-ui`
+  - `npm run test:homepage-ranking-ui`
+  - `npm run test:tvbox-parser`
+  - `npm run test:player-stack`
+  - `npm run build`

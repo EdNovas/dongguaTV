@@ -34,12 +34,12 @@
 
 ## Acceptance Criteria
 
-- [ ] At least 2 representative subscriptions are imported and classified with evidence.
-- [ ] At least 1 HTTP-ready source completes search -> detail -> playback line -> proxy -> mpv validation.
-- [ ] Live/plugin-required/unsupported/network-failed outcomes are distinguished clearly.
-- [ ] Relevant verification passes with real exit status.
-- [ ] Evidence and residual gaps are recorded.
-- [ ] Rollback is available or explicitly not required.
+- [x] At least 2 representative subscriptions are imported and classified with evidence.
+- [x] At least 1 HTTP-ready source completes search -> detail -> playback line -> proxy -> mpv validation.
+- [x] Live/plugin-required/unsupported/network-failed outcomes are distinguished clearly.
+- [x] Relevant verification passes with real exit status.
+- [x] Evidence and residual gaps are recorded.
+- [x] Rollback is available or explicitly not required.
 
 ## Source Files
 

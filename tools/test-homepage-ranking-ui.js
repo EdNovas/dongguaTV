@@ -36,6 +36,17 @@ async function waitFor(win, expression, timeoutMs = 30000) {
     throw new Error(`Timed out waiting for ${expression}`);
 }
 
+async function waitForStableNavigation(win, getLastNavigationAt, timeoutMs = 30000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        if (!win.webContents.isLoading() && Date.now() - getLastNavigationAt() >= 3000) {
+            return;
+        }
+        await delay(200);
+    }
+    throw new Error('Timed out waiting for homepage navigation to settle');
+}
+
 app.whenReady().then(async () => {
     const win = new BrowserWindow({
         show: false,
@@ -54,6 +65,10 @@ app.whenReady().then(async () => {
             line,
             sourceId: String(sourceId).slice(0, 160)
         });
+    });
+    let lastNavigationAt = Date.now();
+    win.webContents.on('did-start-navigation', () => {
+        lastNavigationAt = Date.now();
     });
 
     try {
@@ -152,6 +167,19 @@ app.whenReady().then(async () => {
         );
 
         win.show();
+        await waitForStableNavigation(win, () => lastNavigationAt, 30000);
+        await waitFor(win, 'window.vueApp');
+        await win.webContents.executeJavaScript(`(() => {
+            const vm = window.vueApp;
+            vm.isAuthenticated = true;
+            vm.dismissFirstRunGuide && vm.dismissFirstRunGuide();
+            return true;
+        })()`);
+        await waitFor(
+            win,
+            'window.vueApp.recommendationDiagnostics && Array.isArray(window.vueApp.rowLists.randomRow)',
+            90000
+        );
         await waitFor(
             win,
             "document.querySelector('.appletv-shell') && getComputedStyle(document.querySelector('.appletv-shell')).display !== 'none'"
