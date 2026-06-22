@@ -46,3 +46,5 @@
 - Acceptance proof: two simulated category failures recover on retry; live endpoint returns no empty rows; homepage UI, localization UI, and playback UI pass sequentially.
 - Residual risk: repeated upstream failure can still return a partial uncached response when no previous complete response exists, but the next refresh retries instead of preserving the failure.
 - Reviewer action: refresh the visible preview and expand several rows to confirm the content selection is acceptable.
+- Packaging acceptance: `npm run dist` passed and produced the updated NSIS installer.
+- Visible acceptance: the in-app browser shows the Chinese Apple TV-style homepage with loaded hero and category navigation; screenshot saved at `D:\CodexWorks\tmp\donggua-final-visible-preview.png`.

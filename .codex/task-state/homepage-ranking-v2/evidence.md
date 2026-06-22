@@ -76,3 +76,7 @@
   - `npm run test:java-bridge-self-test-api`
   - `npm run bridge:catvod:check`
   - `npm run build`
+- Windows packaging passed with `npm run dist`.
+- Updated installer: `D:\CodexWorks\dongguaTV-enhanced-app\dist-desktop\DongguaTV Enhanced Setup 1.0.54.exe`, 84,990,094 bytes, SHA-256 `8074429FB9F6103690714FC25B2693C374638F511529A86BBF3EF65F44F601B1`.
+- Final visible in-app preview confirmed Chinese navigation, the hero area, category shortcuts, current posters, and zero visible loading labels.
+- Final visible screenshot: `D:\CodexWorks\tmp\donggua-final-visible-preview.png`.

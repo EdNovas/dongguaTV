@@ -47,3 +47,5 @@
 - Live homepage endpoint reports all 20 categories complete.
 - Homepage, localization, playback, TVBox parser, LocalProxy, and Java bridge checks pass.
 - Exact next action: build the updated Windows NSIS installer, then keep the preview running for user review.
+- Packaging completed successfully. The visible preview remains available at `http://127.0.0.1:31386/?finalQa=20260622`.
+- Latest installer: `D:\CodexWorks\dongguaTV-enhanced-app\dist-desktop\DongguaTV Enhanced Setup 1.0.54.exe`.
