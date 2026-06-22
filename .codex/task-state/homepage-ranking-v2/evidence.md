@@ -49,3 +49,30 @@
 - Each row retains up to 100 items for expanded pagination while collapsed rails render only the first 20 cards.
 - Regression checks passed: `test:douban-home-provider`, `test:tvbox-home-endpoint`, `test:homepage-ranking-ui`, `test:localization-ui`, and `npm run build`.
 - Screenshot: `D:\CodexWorks\tmp\donggua-home-ranking-preview.png`.
+
+## 2026-06-22 Incomplete Cache Recovery
+
+- Root cause reproduced: transient Douban category failures could produce empty rows, and the incomplete aggregate was cached for 1,800 seconds.
+- Fix: failed or empty category requests retry once after a short delay.
+- Fix: a Douban homepage is marked complete only when all 20 rows contain items.
+- Fix: incomplete aggregates are not cached; the server uses the last complete aggregate when one is available.
+- Cache namespace advanced from `v6` to `v7` so previously incomplete cached data is ignored.
+- Provider regression simulated first-attempt failures for `tv_domestic` and `actionRow`; both recovered and all 20 rows remained non-empty.
+- Live endpoint verification returned mode `douban`, `douban.complete=true`, 1,714 total items, and no empty rows. The second request was a valid cache hit.
+- UI verification passed with 800 rendered cards, 250 loaded posters, and 2-5 pages per category.
+- Playback UI verification passed through LocalProxy and launched `D:\DELL\mpvnet\mpvnet.exe`.
+- Screenshots:
+  - `D:\CodexWorks\tmp\donggua-home-ranking-preview.png`
+  - `D:\CodexWorks\tmp\playback-ui-qa.png`
+- Passed commands:
+  - `npm run test:douban-home-provider`
+  - `npm run test:homepage-ranking-ui`
+  - `npm run test:localization-ui`
+  - `npm run test:playback-ui`
+  - `npm run test:tvbox-parser`
+  - `npm run test:player-stack`
+  - `npm run test:plugin-bridge-search`
+  - `npm run test:java-bridge-reflect`
+  - `npm run test:java-bridge-self-test-api`
+  - `npm run bridge:catvod:check`
+  - `npm run build`

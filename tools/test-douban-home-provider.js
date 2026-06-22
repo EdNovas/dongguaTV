@@ -88,6 +88,7 @@ function makeItems(prefix, count, factory) {
     });
 
     assert.equal(result.ok, true);
+    assert.equal(result.complete, true);
     assert.equal(requests.length, 19);
     assert.deepEqual(Object.keys(result.rows), HOME_ROW_KEYS);
     assert.equal(HOME_ROW_KEYS.every(key => result.rows[key].length > 0), true);
@@ -108,10 +109,40 @@ function makeItems(prefix, count, factory) {
         '\u8c46\u74e3\u70ed\u95e8'
     );
 
+    const flakyAttempts = new Map();
+    const flakyClient = {
+        async get(url, options) {
+            const requestKey = url.includes('/j/search_subjects')
+                ? genreByValue.get(options.params.tag)
+                : options.params.type || 'movie';
+            const attempts = (flakyAttempts.get(requestKey) || 0) + 1;
+            flakyAttempts.set(requestKey, attempts);
+
+            if ((requestKey === 'tv_domestic' || requestKey === 'actionRow') && attempts === 1) {
+                throw new Error('simulated transient timeout');
+            }
+            return httpClient.get(url, options);
+        }
+    };
+    const recovered = await fetchDoubanHomeRows({
+        httpClient: flakyClient,
+        baseUrl: 'https://douban.example.test/api/v2',
+        movieSearchUrl: 'https://movie.example.test/j/search_subjects',
+        limit: 100,
+        normalizeTitle: value => String(value || '').replace(/\s+/g, '').toLowerCase()
+    });
+    assert.equal(recovered.ok, true);
+    assert.equal(recovered.complete, true);
+    assert.deepEqual(recovered.errors, []);
+    assert.equal(flakyAttempts.get('tv_domestic'), 2);
+    assert.equal(flakyAttempts.get('actionRow'), 2);
+    assert.equal(HOME_ROW_KEYS.every(key => recovered.rows[key].length > 0), true);
+
     console.log(JSON.stringify({
         ok: true,
         provider: result.provider,
         requestCount: requests.length,
+        recoveredTransientFailures: 2,
         rowCounts: result.counts.rows
     }, null, 2));
 })().catch(error => {

@@ -1784,7 +1784,7 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
             .update(compatibleSites.map(site => `${site.key}:${site.api}`).join('|'))
             .digest('hex')
             .slice(0, 12);
-        const aggregateCacheKey = `${sourceSignature}:p${pages}:l${limitPerRow}:d${DOUBAN_HOME_ENABLED ? 1 : 0}:v6`;
+        const aggregateCacheKey = `${sourceSignature}:p${pages}:l${limitPerRow}:d${DOUBAN_HOME_ENABLED ? 1 : 0}:v7`;
         const cachedAggregate = cacheManager.get('tvbox-home-aggregate', aggregateCacheKey);
         if (cachedAggregate && cachedAggregate.rows) {
             return res.json({
@@ -1899,9 +1899,11 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
             douban: {
                 enabled: DOUBAN_HOME_ENABLED,
                 available: hasDoubanRows,
+                complete: !!doubanResult.complete,
                 provider: doubanResult.provider,
                 counts: doubanResult.counts,
-                error: doubanResult.error || ''
+                error: doubanResult.error || '',
+                errors: Array.isArray(doubanResult.errors) ? doubanResult.errors.slice(0, 5) : []
             },
             compatibleSources: compatibleSites.length,
             sourcePriority: compatibleSites.map(site => ({
@@ -1943,7 +1945,8 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
             }
         };
 
-        if (hasRows) {
+        const canCacheAggregate = hasRows && (!DOUBAN_HOME_ENABLED || doubanResult.complete === true);
+        if (canCacheAggregate) {
             lastSuccessfulHomeRecommendation = {
                 signature: sourceSignature,
                 payload,
@@ -1961,11 +1964,21 @@ app.get('/api/recommendations/tvbox-home', async (req, res) => {
                     stale: true,
                     savedAt: lastSuccessfulHomeRecommendation.savedAt
                 },
-                fallbackReason: 'using-last-successful-source-home'
+                fallbackReason: hasRows
+                    ? 'using-last-complete-home-after-incomplete-refresh'
+                    : 'using-last-successful-source-home'
             });
         }
 
-        res.json(payload);
+        res.json({
+            ...payload,
+            cache: {
+                hit: false,
+                stale: false,
+                ttlSeconds: 0,
+                skipped: hasRows ? 'incomplete-douban-home' : 'no-home-rows'
+            }
+        });
     } catch (error) {
         res.status(400).json({ error: error.message || 'Failed to build TVBox homepage recommendations' });
     }

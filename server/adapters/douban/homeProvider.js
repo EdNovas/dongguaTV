@@ -156,20 +156,47 @@ async function fetchMovieGenre(httpClient, searchUrl, genre, limit) {
         : [];
 }
 
-async function settleRequests(requests) {
+function wait(milliseconds) {
+    return new Promise(resolve => setTimeout(resolve, milliseconds));
+}
+
+async function settleRequests(requests, options = {}) {
     const entries = Object.entries(requests);
+    const retryCount = Math.max(0, Math.min(2, Number(options.retryCount ?? 1)));
+    const retryDelayMs = Math.max(0, Number(options.retryDelayMs ?? 200));
     const settled = await Promise.allSettled(entries.map(([, request]) => request()));
     const values = {};
     const errors = [];
+    const retryEntries = [];
+
     settled.forEach((result, index) => {
         const key = entries[index][0];
-        if (result.status === 'fulfilled') {
+        if (result.status === 'fulfilled' && Array.isArray(result.value) && result.value.length > 0) {
             values[key] = result.value;
         } else {
             values[key] = [];
-            errors.push(`${key}: ${textOf(result.reason && result.reason.message || result.reason).slice(0, 120)}`);
+            retryEntries.push(entries[index]);
         }
     });
+
+    for (let attempt = 0; attempt < retryCount && retryEntries.length > 0; attempt += 1) {
+        if (retryDelayMs > 0) {
+            await wait(retryDelayMs * (attempt + 1));
+        }
+        const retrySettled = await Promise.allSettled(retryEntries.map(([, request]) => request()));
+        for (let index = retryEntries.length - 1; index >= 0; index -= 1) {
+            const [key] = retryEntries[index];
+            const result = retrySettled[index];
+            if (result.status === 'fulfilled' && Array.isArray(result.value) && result.value.length > 0) {
+                values[key] = result.value;
+                retryEntries.splice(index, 1);
+            }
+        }
+    }
+
+    for (const [key] of retryEntries) {
+        errors.push(`${key}: returned no items after retry`);
+    }
     return { values, errors };
 }
 
@@ -270,6 +297,7 @@ async function fetchDoubanHomeRows(options = {}) {
     );
     return {
         ok: Object.values(rowCounts).some(count => count > 0),
+        complete: errors.length === 0 && HOME_ROW_KEYS.every(key => rowCounts[key] > 0),
         provider: 'douban-home-categories',
         rows,
         counts: {

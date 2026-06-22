@@ -40,3 +40,10 @@
 - Preview service is running on `127.0.0.1:31386` with data under `D:\CodexWorks\tmp\donggua-preview-31386`.
 - Latest installer: `D:\CodexWorks\dongguaTV-enhanced-app\dist-desktop\DongguaTV Enhanced Setup 1.0.54.exe`.
 - Next action: collect user visual feedback on category selection and card ordering; no known empty/loading category remains.
+
+## 2026-06-22 Reliability Checkpoint
+
+- Transient empty-category caching is fixed and covered by a retry regression.
+- Live homepage endpoint reports all 20 categories complete.
+- Homepage, localization, playback, TVBox parser, LocalProxy, and Java bridge checks pass.
+- Exact next action: build the updated Windows NSIS installer, then keep the preview running for user review.

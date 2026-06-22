@@ -38,3 +38,11 @@
 - Verification: provider test, endpoint test, homepage UI test, localization UI test, build, and Windows NSIS packaging all passed.
 - Residual risk: public metadata endpoints may change or temporarily throttle; existing fallback behavior remains available.
 - Reviewer action: inspect the visible preview at `http://127.0.0.1:31386/`, especially US, KR/JP, anime, and one movie genre expanded view.
+
+## 2026-06-22 Reliability Review
+
+- Intended scope: prevent temporary metadata failures from leaving homepage categories empty for 30 minutes.
+- Actual code files: `server/adapters/douban/homeProvider.js`, `server.js`, and `tools/test-douban-home-provider.js`.
+- Acceptance proof: two simulated category failures recover on retry; live endpoint returns no empty rows; homepage UI, localization UI, and playback UI pass sequentially.
+- Residual risk: repeated upstream failure can still return a partial uncached response when no previous complete response exists, but the next refresh retries instead of preserving the failure.
+- Reviewer action: refresh the visible preview and expand several rows to confirm the content selection is acceptable.
