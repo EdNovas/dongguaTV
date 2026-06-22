@@ -149,6 +149,37 @@
           "backup": "backups/20260619T223314Z/tools/test-tvbox-parser.js"
         }
       ]
+    },
+    {
+      "id": "20260622T185438Z",
+      "created_at": "2026-06-22T18:54:38Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": ".codex/task-state/tvbox-real-subscription-e2e/task.md",
+          "existed": true,
+          "sha256": "2572097d0bacbdad705c6f330685cb032880e2a4374574be5b47c10e75f97643",
+          "backup": "backups/20260622T185438Z/.codex/task-state/tvbox-real-subscription-e2e/task.md"
+        },
+        {
+          "path": ".codex/task-state/tvbox-real-subscription-e2e/evidence.md",
+          "existed": true,
+          "sha256": "b80288913077650d533e382f9d237968ba2be93ec0b40bfb728e9cc72717b374",
+          "backup": "backups/20260622T185438Z/.codex/task-state/tvbox-real-subscription-e2e/evidence.md"
+        },
+        {
+          "path": ".codex/task-state/tvbox-real-subscription-e2e/handoff.md",
+          "existed": true,
+          "sha256": "8ba61e8b06d732203936828182fb3abc42325ab8e00677e28db62edff37c2eae",
+          "backup": "backups/20260622T185438Z/.codex/task-state/tvbox-real-subscription-e2e/handoff.md"
+        },
+        {
+          "path": ".codex/task-state/tvbox-real-subscription-e2e/review.md",
+          "existed": true,
+          "sha256": "b19c921d2f8905fb9f672cd957027903888136a0fea8cab47bf47dc4decb1cc1",
+          "backup": "backups/20260622T185438Z/.codex/task-state/tvbox-real-subscription-e2e/review.md"
+        }
+      ]
     }
   ],
   "restores": []

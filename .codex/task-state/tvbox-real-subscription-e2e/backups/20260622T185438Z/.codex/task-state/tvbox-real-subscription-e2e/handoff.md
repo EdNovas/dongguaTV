@@ -51,14 +51,6 @@
 - Exact next action: user review of the source scan presentation and wording at `http://127.0.0.1:31386/`.
 - Updated NSIS installer was generated successfully after the feature commit.
 
-## 2026-06-23 Reconciliation Checkpoint
-
-- The authoritative task status now matches the completed acceptance criteria
-  and this handoff.
-- Deterministic regression verification passed.
-- Merging to `main`, pushing the feature branch, and creating a release tag
-  are the exact next release decisions and have not been performed.
-
 ## Changed Files
 
 - `.codex/task-state/tvbox-real-subscription-e2e/task.md`

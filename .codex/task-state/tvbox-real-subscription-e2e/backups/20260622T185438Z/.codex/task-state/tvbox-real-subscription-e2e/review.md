@@ -75,13 +75,6 @@
 - Residual risk: a successful URL probe proves current reachability, not long-term stability or media correctness for every episode.
 - Packaging acceptance: the updated Windows NSIS installer was generated successfully.
 
-## 2026-06-23 Release Decision
-
-- Functional task acceptance is complete.
-- Fresh deterministic regression and build verification passed.
-- Final repository publication is still pending an explicit decision to merge,
-  push, and tag the verified feature branch.
-
 ## Desktop Localization Review
 
 - Visible review: Simplified Chinese is the default; Simplified Chinese, English, and Japanese switch immediately in Settings.

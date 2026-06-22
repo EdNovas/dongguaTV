@@ -1,7 +1,7 @@
 # Task: DongguaTV TVBox real subscription end-to-end validation
 
 - Task ID: `tvbox-real-subscription-e2e`
-- Status: completed
+- Status: active
 - Created: 2026-06-18T22:36:30Z
 
 ## Objective
