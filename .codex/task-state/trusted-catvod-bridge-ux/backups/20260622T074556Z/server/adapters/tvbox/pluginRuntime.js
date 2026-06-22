@@ -237,28 +237,14 @@ function getLocalJavaBridgeStatus(dataDir) {
     const port = Number(settings.localJavaBridgePort || DEFAULT_PLUGIN_RUNTIME_SETTINGS.localJavaBridgePort);
     const trustedSpiderJarPath = String(settings.trustedSpiderJarPath || '').trim();
     const trustedSpiderClassName = String(settings.trustedSpiderClassName || '').trim();
-    const mode = settings.localJavaBridgeMode || DEFAULT_PLUGIN_RUNTIME_SETTINGS.localJavaBridgeMode;
-    const running = isLocalJavaBridgeRunning();
-    const bridgeJarPath = settings.catvodBridgeJarPath || getLocalJavaBridgePaths(dataDir).jarPath;
-    const bridgeJarConfigured = !!(bridgeJarPath && fs.existsSync(bridgeJarPath));
-    const trustedSpiderJarConfigured = !!(trustedSpiderJarPath && fs.existsSync(trustedSpiderJarPath));
-    const reflectConfigured = mode === 'reflect' && trustedSpiderJarConfigured && !!trustedSpiderClassName;
-    const readiness = running
-        ? mode === 'reflect'
-            ? reflectConfigured ? 'reflect-ready' : 'reflect-incomplete'
-            : mode === 'stub' ? 'stub' : 'disabled'
-        : localJavaBridgeExit ? 'exited' : 'stopped';
     return {
-        running,
-        operational: running && reflectConfigured,
-        readiness,
-        pid: running ? localJavaBridgeProcess.pid : null,
+        running: isLocalJavaBridgeRunning(),
+        pid: isLocalJavaBridgeRunning() ? localJavaBridgeProcess.pid : null,
         exit: localJavaBridgeExit,
         baseUrl: `http://127.0.0.1:${port}`,
-        jarPath: bridgeJarPath,
-        bridgeJarConfigured,
-        mode,
-        trustedSpiderJarConfigured,
+        jarPath: settings.catvodBridgeJarPath || getLocalJavaBridgePaths(dataDir).jarPath,
+        mode: settings.localJavaBridgeMode || DEFAULT_PLUGIN_RUNTIME_SETTINGS.localJavaBridgeMode,
+        trustedSpiderJarConfigured: !!(trustedSpiderJarPath && fs.existsSync(trustedSpiderJarPath)),
         trustedSpiderClassName,
         trustedSpiderExtConfigured: !!String(settings.trustedSpiderExt || '').trim()
     };
@@ -629,30 +615,19 @@ function createDefaultPluginRuntimeRegistry(dataDir, httpClient) {
     function buildRuntimeDescriptors() {
         const settings = readPluginRuntimeSettings(dataDir);
         const javaCheck = settings.enableJavaCatvod ? checkJavaRuntime(settings.javaPath) : { available: false };
+        const bridgeJarExists = !!(settings.catvodBridgeJarPath && fs.existsSync(settings.catvodBridgeJarPath));
+        const trustedSpiderJarPath = String(settings.trustedSpiderJarPath || '').trim();
         const trustedSpiderClassName = String(settings.trustedSpiderClassName || '').trim();
-        const localStatus = getLocalJavaBridgeStatus(dataDir);
-        const bridgeJarExists = localStatus.bridgeJarConfigured;
-        const reflectConfigured = localStatus.mode === 'reflect'
-            && localStatus.trustedSpiderJarConfigured
-            && !!trustedSpiderClassName;
-        const javaStatus = !settings.enableJavaCatvod || !javaCheck.available || !bridgeJarExists
-            ? 'not-installed'
-            : localStatus.mode === 'reflect' && !reflectConfigured
-                ? 'error'
-                : 'available';
         return [
             {
                 id: 'java-catvod',
                 type: 'java-catvod',
-                status: javaStatus,
+                status: settings.enableJavaCatvod && javaCheck.available && bridgeJarExists ? 'available' : 'not-installed',
                 enabled: !!settings.enableJavaCatvod,
                 javaAvailable: !!javaCheck.available,
                 bridgeJarConfigured: bridgeJarExists,
-                localJavaBridgeMode: localStatus.mode,
-                localJavaBridgeRunning: localStatus.running,
-                readiness: localStatus.readiness,
-                operational: localStatus.operational,
-                trustedSpiderJarConfigured: localStatus.trustedSpiderJarConfigured,
+                localJavaBridgeMode: settings.localJavaBridgeMode || DEFAULT_PLUGIN_RUNTIME_SETTINGS.localJavaBridgeMode,
+                trustedSpiderJarConfigured: !!(trustedSpiderJarPath && fs.existsSync(trustedSpiderJarPath)),
                 trustedSpiderClassName,
                 trustedSpiderExtConfigured: !!String(settings.trustedSpiderExt || '').trim(),
                 safeMode: true

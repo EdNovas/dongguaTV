@@ -13,78 +13,6 @@ function sanitizeSubscription(subscription) {
     };
 }
 
-function buildPluginSourceDiagnostics(source, runtimeState = {}) {
-    const localBridge = runtimeState.localJavaBridge || {};
-    const settings = runtimeState.settings || {};
-    const bridgeRunning = !!localBridge.running;
-    const bridgeMode = localBridge.mode || 'stub';
-    const externalBridgeConfigured = !!String(settings.externalHttpBaseUrl || '').trim();
-    const reflectReady = bridgeRunning
-        && bridgeMode === 'reflect'
-        && !!localBridge.trustedSpiderJarConfigured
-        && !!localBridge.trustedSpiderClassName;
-
-    let playable = false;
-    let reason = 'plugin-runtime-required';
-    let message = 'This TVBox source requires a trusted CatVod/Spider runtime. It is recognized, but plugin code is not executed directly by DongguaTV.';
-    let actions = [
-        settings.catvodBridgeJarPath ? 'Start Local Bridge in Settings.' : 'Build Java Bridge in Settings.',
-        'Do not use subscription-provided spider.jar as a trusted runtime jar.'
-    ];
-
-    if (reflectReady) {
-        playable = true;
-        reason = 'trusted-reflect-runtime-running';
-        message = 'A trusted local Reflect bridge is running. Use Safe Search to verify this source before opening details or playback.';
-        actions = [
-            'Run Safe Search with a known title.',
-            'Compatibility still depends on the trusted Spider runtime implementation.'
-        ];
-    } else if (bridgeRunning && bridgeMode === 'stub') {
-        reason = 'bridge-stub-mode';
-        message = 'The local Java Bridge is running in Stub mode. Stub mode verifies the bridge process but does not execute CatVod search, detail, or playback.';
-        actions = [
-            'Select Reflect mode and configure a trusted local Spider jar and class.',
-            'Keep subscription-provided plugin code untrusted.'
-        ];
-    } else if (bridgeRunning && bridgeMode === 'reflect') {
-        reason = 'reflect-runtime-incomplete';
-        message = 'Reflect mode is running, but its trusted Spider jar or class configuration is incomplete.';
-        actions = [
-            'Configure a trusted local Spider jar and class in Settings.',
-            'Restart the Local Java Bridge after saving settings.'
-        ];
-    } else if (bridgeRunning && bridgeMode === 'disabled') {
-        reason = 'bridge-disabled-mode';
-        message = 'The local Java Bridge is running with plugin execution disabled.';
-        actions = ['Choose Reflect mode only after configuring a trusted local Spider runtime.'];
-    } else if (externalBridgeConfigured) {
-        playable = true;
-        reason = 'trusted-external-bridge-configured';
-        message = 'A user-configured external trusted bridge route is available. Use Safe Search to verify that this source is compatible.';
-        actions = [
-            'Run Safe Search with a known title.',
-            'Keep the external bridge bound to a trusted local or controlled endpoint.'
-        ];
-    }
-
-    return {
-        sourceId: source.id,
-        sourceName: source.name,
-        status: 'plugin-required',
-        playable,
-        reason,
-        message,
-        actions,
-        runtime: {
-            localJavaBridgeRunning: bridgeRunning,
-            localJavaBridgeMode: bridgeMode,
-            localJavaBridgeReadiness: localBridge.readiness || (reflectReady ? 'reflect-ready' : bridgeRunning ? bridgeMode : 'stopped'),
-            externalHttpConfigured: externalBridgeConfigured
-        }
-    };
-}
-
 class TvboxService {
     constructor({ dataDir, httpClient }) {
         this.store = new SubscriptionStore(dataDir);
@@ -372,7 +300,29 @@ class TvboxService {
         }
 
         if (source.status === 'plugin-required' || source.sourceType === 'plugin-required') {
-            return buildPluginSourceDiagnostics(source, runtimeState);
+            const bridgeRunning = !!(runtimeState.localJavaBridge && runtimeState.localJavaBridge.running);
+            const bridgeConfigured = !!(runtimeState.settings && runtimeState.settings.catvodBridgeJarPath);
+            return {
+                sourceId,
+                sourceName: source.name,
+                status: 'plugin-required',
+                playable: bridgeRunning,
+                reason: bridgeRunning ? 'local-java-bridge-running' : 'plugin-runtime-required',
+                message: bridgeRunning
+                    ? 'This TVBox plugin source can be sent to the local Java Bridge. Current bridge stub mode may still return empty results until a real CatVod runtime is implemented.'
+                    : 'This TVBox source requires a CatVod/Spider plugin runtime. It is recognized, but plugin code is not executed directly by DongguaTV.',
+                actions: bridgeRunning
+                    ? ['Use the bridge operation endpoints for controlled testing.', 'Keep using only trusted local runtime jars.']
+                    : [
+                        bridgeConfigured ? 'Start Local Bridge in Settings.' : 'Build Java Bridge in Settings.',
+                        'Do not use subscription-provided spider.jar as a trusted runtime jar.'
+                    ],
+                runtime: {
+                    localJavaBridgeRunning: bridgeRunning,
+                    localJavaBridgeBaseUrl: runtimeState.localJavaBridge && runtimeState.localJavaBridge.baseUrl,
+                    localJavaBridgeMode: runtimeState.localJavaBridge && runtimeState.localJavaBridge.mode
+                }
+            };
         }
 
         if (source.status === 'unsupported' || source.supportLevel === 'unsupported') {
@@ -416,6 +366,5 @@ function createTvboxService(options) {
 }
 
 module.exports = {
-    createTvboxService,
-    buildPluginSourceDiagnostics
+    createTvboxService
 };

@@ -77,41 +77,6 @@ function getJson(url) {
     });
 }
 
-function postJson(url, payload) {
-    return new Promise((resolve, reject) => {
-        const target = new URL(url);
-        const body = JSON.stringify(payload || {});
-        const req = http.request({
-            hostname: target.hostname,
-            port: target.port,
-            path: target.pathname + target.search,
-            method: 'POST',
-            headers: {
-                'content-type': 'application/json; charset=utf-8',
-                'content-length': Buffer.byteLength(body)
-            }
-        }, res => {
-            let responseBody = '';
-            res.setEncoding('utf8');
-            res.on('data', chunk => { responseBody += chunk; });
-            res.on('end', () => {
-                try {
-                    const parsed = JSON.parse(responseBody);
-                    if (res.statusCode && res.statusCode >= 400) {
-                        reject(new Error(parsed.error || `HTTP ${res.statusCode}`));
-                    } else {
-                        resolve(parsed);
-                    }
-                } catch (error) {
-                    reject(new Error(`Invalid JSON from ${url}: ${responseBody.slice(0, 200)}`));
-                }
-            });
-        });
-        req.on('error', reject);
-        req.end(body);
-    });
-}
-
 (async () => {
     const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'donggua-plugin-bridge-'));
     const bridgeRequests = [];
@@ -230,21 +195,6 @@ function postJson(url, payload) {
         assert.equal(detail.list[0].vod_name, 'Bridge Detail');
         assert.match(detail.list[0].vod_play_url, /bridge\.m3u8/);
 
-        const probe = await postJson(
-            `http://127.0.0.1:${appPort}/api/plugin-sources/plugin-source-1/probe-search`,
-            { keyword: 'Bridge' }
-        );
-        assert.equal(probe.ok, true);
-        assert.equal(probe.count, 1);
-        assert.equal(probe.titles[0].title, 'Bridge Result Bridge');
-        assert.equal(probe.runtime.externalHttpConfigured, true);
-        assert.equal(Object.prototype.hasOwnProperty.call(probe, 'source'), false);
-        assert.equal(Object.prototype.hasOwnProperty.call(probe, 'bridge'), false);
-        assert.equal(Object.prototype.hasOwnProperty.call(probe.titles[0], 'vod_id'), false);
-        assert.equal(Object.prototype.hasOwnProperty.call(probe.titles[0], 'url'), false);
-        assert.equal(JSON.stringify(probe).includes('csp_Test'), false);
-        assert.equal(JSON.stringify(probe).includes('bridge-vod-1'), false);
-
         assert.equal(bridgeRequests.some(item => item.operation === 'search'), true);
         assert.equal(bridgeRequests.some(item => item.operation === 'detail'), true);
         const searchPayload = bridgeRequests.find(item => item.operation === 'search').payload;
@@ -256,7 +206,6 @@ function postJson(url, payload) {
             pluginBridgeSearchSources: diagnostics.counts.pluginBridgeSearchSources,
             searchTitle: search.list[0].vod_name,
             detailTitle: detail.list[0].vod_name,
-            safeProbeTitle: probe.titles[0].title,
             bridgeOperations: bridgeRequests.map(item => item.operation)
         }, null, 2));
     } finally {

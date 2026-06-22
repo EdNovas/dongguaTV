@@ -1697,11 +1697,8 @@ app.get('/api/search/diagnostics', (req, res) => {
         if (pluginRequired.length > 0 && !localJavaBridge.running) {
             actions.push(`Start Local Java Bridge in Settings for ${pluginRequired.length} plugin-required source(s).`);
         }
-        if (pluginRequired.length > 0 && localJavaBridge.running && localJavaBridge.mode === 'stub') {
-            actions.push('Local Java Bridge is running in Stub mode. Switch to Reflect mode with a trusted local Spider runtime before testing plugin sources.');
-        }
-        if (pluginRequired.length > 0 && localJavaBridge.readiness === 'reflect-ready') {
-            actions.push('Trusted local Reflect mode is ready. Use per-source Safe Search before opening details or playback.');
+        if (pluginRequired.length > 0 && localJavaBridge.running) {
+            actions.push('Local Java Bridge is running, but current Java bridge stub mode does not execute real CatVod plugins yet.');
         }
         if (pluginBridgeSearchSites.length > 0) {
             actions.push(`${pluginBridgeSearchSites.length} plugin-required source(s) are routed through the configured Bridge for controlled search.`);
@@ -1733,9 +1730,7 @@ app.get('/api/search/diagnostics', (req, res) => {
                 running: !!localJavaBridge.running,
                 baseUrl: localJavaBridge.baseUrl,
                 mode: localJavaBridge.mode,
-                readiness: localJavaBridge.readiness,
-                operational: !!localJavaBridge.operational,
-                jarConfigured: !!localJavaBridge.bridgeJarConfigured
+                jarConfigured: !!localJavaBridge.jarPath
             },
             message: 'Search uses built-in HTTP sites, compatible user TVBox HTTP/MacCMS sources, and trusted configured Bridge routes for plugin-required sources. Subscription plugin code is not executed directly by DongguaTV.',
             actions
@@ -2213,7 +2208,7 @@ app.patch('/api/recommendations/manual-home', (req, res) => {
 app.get('/api/plugin-runtimes', (req, res) => {
     res.json({
         runtimes: pluginRuntimeRegistry.list(),
-        message: 'Plugin sources run only through a user-configured trusted bridge. Subscription-provided plugin code is never executed automatically.'
+        message: 'Plugin-required TVBox sources are identified but not executed in this version.'
     });
 });
 
@@ -2318,9 +2313,8 @@ app.get('/api/plugin-sources', (req, res) => {
             bridge: {
                 externalHttpConfigured: !!pluginRuntimeRegistry.getSettings().externalHttpBaseUrl,
                 localJavaBridgeRunning: !!localJavaBridge.running,
-                localJavaBridgeMode: localJavaBridge.mode,
-                localJavaBridgeReadiness: localJavaBridge.readiness,
-                localJavaBridgeOperational: !!localJavaBridge.operational
+                localJavaBridgeBaseUrl: localJavaBridge.baseUrl,
+                localJavaBridgeMode: localJavaBridge.mode
             },
             message: 'Plugin sources require a trusted local bridge. Subscription jar/py/js code is not executed directly.'
         });
@@ -2340,65 +2334,6 @@ app.post('/api/plugin-sources/:sourceId/search', async (req, res) => {
         res.json({ ok: true, source: sanitizePluginSourceForBridge(source), bridge: response, ...normalized });
     } catch (error) {
         res.status(error.statusCode || 400).json({ ok: false, error: error.message || 'Plugin source search failed' });
-    }
-});
-
-app.post('/api/plugin-sources/:sourceId/probe-search', async (req, res) => {
-    try {
-        const keyword = String(req.body && (req.body.keyword || req.body.wd || req.body.query) || '').trim();
-        if (!keyword) {
-            return res.status(400).json({ ok: false, error: 'Enter a test title first.' });
-        }
-        if (keyword.length > 120) {
-            return res.status(400).json({ ok: false, error: 'Test title is too long.' });
-        }
-
-        const { source, response } = await callPluginSourceBridge(req.params.sourceId, 'search', {
-            keyword,
-            wd: keyword,
-            page: 1
-        });
-        const normalized = normalizePluginSearchResult(response, source);
-        const localJavaBridge = pluginRuntimeRegistry.getLocalJavaBridgeStatus();
-        const runtimeSettings = pluginRuntimeRegistry.getSettings();
-        const titles = normalized.list.slice(0, 5).map(item => ({
-            title: String(item.vod_name || '').trim(),
-            remarks: String(item.vod_remarks || '').trim(),
-            year: String(item.vod_year || '').trim()
-        }));
-
-        res.json({
-            ok: true,
-            sourceName: source.name,
-            keyword,
-            status: normalized.status,
-            message: normalized.message,
-            count: normalized.list.length,
-            titles,
-            runtime: {
-                localRunning: !!localJavaBridge.running,
-                localMode: localJavaBridge.mode,
-                localReadiness: localJavaBridge.readiness,
-                externalHttpConfigured: !!String(runtimeSettings.externalHttpBaseUrl || '').trim()
-            }
-        });
-    } catch (error) {
-        const detail = String(error && error.message || '');
-        const errorCode = /not configured/i.test(detail)
-            ? 'bridge-not-configured'
-            : /not found/i.test(detail)
-                ? 'source-not-found'
-                : /ECONNREFUSED|timeout|timed out|unavailable/i.test(detail)
-                    ? 'bridge-unavailable'
-                    : 'probe-failed';
-        const safeMessage = errorCode === 'bridge-not-configured'
-            ? 'Trusted plugin bridge is not configured.'
-            : errorCode === 'source-not-found'
-                ? 'Plugin source was not found.'
-                : errorCode === 'bridge-unavailable'
-                    ? 'Trusted plugin bridge is unavailable.'
-                    : 'Plugin source safe search failed.';
-        res.status(error.statusCode || 400).json({ ok: false, errorCode, error: safeMessage });
     }
 });
 

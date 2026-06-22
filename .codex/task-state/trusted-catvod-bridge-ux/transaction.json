@@ -1,0 +1,64 @@
+{
+  "schema": "codex-task-transaction-v1",
+  "task": "trusted-catvod-bridge-ux",
+  "repo": "D:\\CodexWorks\\dongguaTV-enhanced-app",
+  "created_at": "2026-06-22T07:44:43Z",
+  "snapshots": [
+    {
+      "id": "20260622T074556Z",
+      "created_at": "2026-06-22T07:45:56Z",
+      "status": "captured",
+      "entries": [
+        {
+          "path": "server/adapters/tvbox/index.js",
+          "existed": true,
+          "sha256": "93b1bfe43528b0267dfa23c26300606d509c9f350da051569fb37493cc29f3ab",
+          "backup": "backups/20260622T074556Z/server/adapters/tvbox/index.js"
+        },
+        {
+          "path": "server/adapters/tvbox/pluginRuntime.js",
+          "existed": true,
+          "sha256": "a36533415348e1b369dd08d277792de428a3e126b39448f01a34252fca011f78",
+          "backup": "backups/20260622T074556Z/server/adapters/tvbox/pluginRuntime.js"
+        },
+        {
+          "path": "server.js",
+          "existed": true,
+          "sha256": "093277323c155a4fe474e0c6d8b4b995e492074f991f60eef5159abe9178693d",
+          "backup": "backups/20260622T074556Z/server.js"
+        },
+        {
+          "path": "public/index.html",
+          "existed": true,
+          "sha256": "c8591405fca1ce5d780980e48065155983a60a1c5b8cbda1e54d7658c54eb30b",
+          "backup": "backups/20260622T074556Z/public/index.html"
+        },
+        {
+          "path": "public/sw.js",
+          "existed": true,
+          "sha256": "11b2db841ebd187b3bbda37b04b256c8ed0178d143d73b023f2822f734afc7ae",
+          "backup": "backups/20260622T074556Z/public/sw.js"
+        },
+        {
+          "path": "tools/test-plugin-bridge-search.js",
+          "existed": true,
+          "sha256": "a47f5681b6ba1e9154881fe3ab4e956f1206e061fce95878429244000b30ca52",
+          "backup": "backups/20260622T074556Z/tools/test-plugin-bridge-search.js"
+        },
+        {
+          "path": "package.json",
+          "existed": true,
+          "sha256": "fd68a2230c534217678d7af8eb826f2828ff4518e36f2f75be9d86cb64a1cced",
+          "backup": "backups/20260622T074556Z/package.json"
+        },
+        {
+          "path": "docs/CATVOD_BRIDGE.md",
+          "existed": true,
+          "sha256": "b6ac44550196daeb815ffac5c2d93fcadd78a4d0853b3dc8fb6c2d19cbf11332",
+          "backup": "backups/20260622T074556Z/docs/CATVOD_BRIDGE.md"
+        }
+      ]
+    }
+  ],
+  "restores": []
+}

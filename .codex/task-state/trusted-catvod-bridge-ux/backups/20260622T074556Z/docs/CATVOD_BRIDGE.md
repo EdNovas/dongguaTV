@@ -114,18 +114,6 @@ Settings also shows local bridge status, including running state, PID, URL, mode
 
 The Subscriptions panel has a per-source `Diagnose` action. Plugin-required sources report whether the local Java Bridge is running and explain why DongguaTV does not directly execute subscription-provided plugin code.
 
-## Safe Source Probe
-
-The Subscriptions page provides `Safe Search` for plugin-required sources. It
-sends a keyword through the user-configured trusted bridge and returns only the
-source display name, result count, runtime mode, and up to five titles.
-
-The UI response intentionally excludes source API values, plugin payloads,
-media IDs, playback URLs, headers, cookies, and raw bridge responses. Stub mode
-only verifies that the Java bridge process can run, so it is not reported as a
-test-ready plugin path. Trusted local execution requires Reflect mode with an
-explicitly configured local Spider jar and class.
-
 ## Trusted Reflect Mode
 
 The first Java runtime bridge is implemented as a conservative reflection bridge. It probes common CatVod-style Spider methods:

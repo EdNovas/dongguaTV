@@ -68,7 +68,7 @@
     <!-- SW 闂傚倷鑳剁划顖炪€冮崨瀛樺亱濠电姴鍋婇懓鍧楁煛婢跺寒鍤︽繛鎴欏灩閻掑灚銇勯幒鍡椾壕闂傚洤顦甸幃妤呮晲鎼存繄鍑归柣搴亢鐏忔瑩鍩€椤掍緡鍟忛柛鐘崇墵楠炴牠顢曢敃鈧弰銉︿繆閵堝懏鍣归柛妤佸▕閹鈽夊▍铏灴閹繝鍩€椤掑嫭鈷戦柟绋挎捣閳藉鏌ｅΔ鈧Λ娑㈠箲閵忋倕鐒垫い鎺嗗亾妞ゎ亜鍟存俊鍫曞醇椤愩垺顔勬繝鐢靛Л閸嬫挻銇勮箛鎾跺閻庢艾顦甸弻宥堫檨闁告挻鐟╅、姘舵晲婢跺﹦鍔﹀銈嗗笂缁€浣烘閻愬搫绾ч柛顐ｇ箓閳锋梻绱掗埀?-->
     <script data-cfasync="false">
         (function () {
-            var REQUIRED_SW_VERSION = 'v33';
+            var REQUIRED_SW_VERSION = 'v32';
             var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
             var QA_MODE = /(?:^|[?&])(?:localizationQa|_playbackQa)=/i.test(window.location.search);
             if (QA_MODE) return;
@@ -4078,14 +4078,6 @@
                                     style="border:0; padding:6px 10px; margin-top:10px; margin-left:6px; font-size:11px;">
                                     <i :class="['fas', sourceHealthLoading[source.id] ? 'fa-spinner fa-spin' : 'fa-heartbeat']"></i> {{ t('common.healthCheck') }}
                                 </button>
-                                <button v-if="source.status === 'plugin-required'" class="btn-info"
-                                    data-testid="plugin-safe-search"
-                                    @click="probePluginSource(source)"
-                                    :disabled="!source.enabled || !sourceScanKeyword || pluginProbeLoading[source.id]"
-                                    style="border:0; padding:6px 10px; margin-top:10px; margin-left:6px; font-size:11px;">
-                                    <i :class="['fas', pluginProbeLoading[source.id] ? 'fa-spinner fa-spin' : 'fa-shield-alt']"></i>
-                                    {{ pluginProbeLoading[source.id] ? t('subscriptions.pluginProbeRunning') : t('subscriptions.pluginProbe') }}
-                                </button>
                                 <div v-if="sourceHealthResult(source)"
                                     style="margin-top:8px; padding:7px 9px; border-radius:10px; background:rgba(255,255,255,0.06); color:#cfd3dc; font-size:11px; line-height:1.5;">
                                     <strong :style="{ color: sourceHealthResult(source).status === 'available' ? '#22c55e' : sourceHealthResult(source).status === 'error' ? '#f87171' : '#fbbf24' }">
@@ -4101,47 +4093,18 @@
                                     style="margin-top:10px; padding:8px 10px; border-radius:10px; background:rgba(0,0,0,0.22); color:#cfd3dc; font-size:11px; line-height:1.55;">
                                     <div>
                                         <strong :style="{ color: sourceDiagnostics[source.id].playable ? '#22c55e' : '#fbbf24' }">
-                                            {{ sourceDiagnostics[source.id].playable ? t('subscriptions.diagnosticReady') : t('subscriptions.diagnosticNotReady') }}
+                                            {{ sourceDiagnostics[source.id].playable ? 'playable path' : 'not playable yet' }}
                                         </strong>
-                                        <span>{{ sourceDiagnosticReasonLabel(sourceDiagnostics[source.id].reason) }}</span>
+                        <span>{{ sourceDiagnostics[source.id].reason }}</span>
                                     </div>
-                                    <div>{{ sourceDiagnosticMessage(sourceDiagnostics[source.id]) }}</div>
-                                    <div v-if="sourceDiagnostics[source.id].runtime">
-                                        {{ t('subscriptions.bridgeMode') }}:
-                                        {{ sourceDiagnostics[source.id].runtime.localJavaBridgeMode || 'unknown' }}
-                                        / {{ sourceDiagnostics[source.id].runtime.localJavaBridgeReadiness || 'unknown' }}
+                                    <div>{{ sourceDiagnostics[source.id].message }}</div>
+                                    <div v-if="sourceDiagnostics[source.id].runtime && sourceDiagnostics[source.id].runtime.localJavaBridgeBaseUrl">
+                                        Bridge: {{ sourceDiagnostics[source.id].runtime.localJavaBridgeBaseUrl }} / {{ sourceDiagnostics[source.id].runtime.localJavaBridgeMode }}
                                     </div>
-                                    <ul v-if="sourceDiagnosticActions(sourceDiagnostics[source.id]).length"
+                                    <ul v-if="sourceDiagnostics[source.id].actions && sourceDiagnostics[source.id].actions.length"
                                         style="margin:6px 0 0 16px; padding:0;">
-                                        <li v-for="action in sourceDiagnosticActions(sourceDiagnostics[source.id])" :key="action">{{ action }}</li>
+                                        <li v-for="action in sourceDiagnostics[source.id].actions" :key="action">{{ action }}</li>
                                     </ul>
-                                </div>
-                                <div v-if="pluginProbeResults[source.id]"
-                                    style="margin-top:10px; padding:9px 10px; border-radius:10px; background:rgba(34,197,94,0.08); border:1px solid rgba(34,197,94,0.2); color:#cfd3dc; font-size:11px; line-height:1.55;">
-                                    <div style="display:flex; justify-content:space-between; gap:8px;">
-                                        <strong :style="{ color: pluginProbeResults[source.id].ok ? '#22c55e' : '#f87171' }">
-                                            {{ pluginProbeResults[source.id].ok ? t('subscriptions.pluginProbeSuccess') : t('subscriptions.pluginProbeFailed') }}
-                                        </strong>
-                                        <span v-if="pluginProbeResults[source.id].ok">
-                                            {{ pluginProbeResults[source.id].count || 0 }} {{ t('subscriptions.pluginProbeResults') }}
-                                        </span>
-                                    </div>
-                                    <div v-if="pluginProbeResults[source.id].error">{{ pluginProbeResults[source.id].error }}</div>
-                                    <div v-if="pluginProbeResults[source.id].runtime" style="color:#8f98aa;">
-                                        {{ t('subscriptions.bridgeMode') }}:
-                                        {{ pluginProbeResults[source.id].runtime.localMode || 'external' }}
-                                        / {{ pluginProbeResults[source.id].runtime.localReadiness || 'configured' }}
-                                    </div>
-                                    <ul v-if="pluginProbeResults[source.id].titles && pluginProbeResults[source.id].titles.length"
-                                        style="margin:6px 0 0 16px; padding:0;">
-                                        <li v-for="item in pluginProbeResults[source.id].titles" :key="item.title + item.year">
-                                            {{ item.title }}<span v-if="item.year"> ({{ item.year }})</span>
-                                            <span v-if="item.remarks" style="color:#8f98aa;"> · {{ item.remarks }}</span>
-                                        </li>
-                                    </ul>
-                                    <div v-else-if="pluginProbeResults[source.id].ok" style="color:#8f98aa;">
-                                        {{ t('subscriptions.pluginProbeNoResults') }}
-                                    </div>
                                 </div>
                                 <div v-if="source.status === 'plugin-required'" style="color:#aaa; font-size:11px; line-height:1.6; margin-top:8px;">
                                     {{ t('subscriptions.pluginRuntimeNotice') }}
@@ -5581,37 +5544,6 @@
                 'subscriptions.outcomeNetworkError': '网络失败',
                 'subscriptions.outcomeUnsupported': '不支持',
                 'subscriptions.pluginRuntimeNotice': '该源需要 CatVod/Spider 运行时。当前可以识别和管理，但不会自动执行未知插件代码。',
-                'subscriptions.pluginProbe': '安全试搜',
-                'subscriptions.pluginProbeRunning': '正在试搜…',
-                'subscriptions.pluginProbeSuccess': '试搜完成',
-                'subscriptions.pluginProbeFailed': '试搜失败',
-                'subscriptions.pluginProbeResults': '个结果',
-                'subscriptions.pluginProbeNoResults': '桥接已响应，但没有返回匹配片名。',
-                'subscriptions.pluginProbeError.bridge-not-configured': '尚未配置可信插件桥，请先到设置中构建并启动。',
-                'subscriptions.pluginProbeError.source-not-found': '没有找到这个插件源，请刷新订阅后重试。',
-                'subscriptions.pluginProbeError.bridge-unavailable': '可信插件桥当前无法连接，请检查运行状态。',
-                'subscriptions.pluginProbeError.probe-failed': '安全试搜失败，请先运行诊断。',
-                'subscriptions.diagnosticReady': '已有可信测试路径',
-                'subscriptions.diagnosticNotReady': '尚未具备测试条件',
-                'subscriptions.bridgeMode': '桥接模式',
-                'subscriptions.diagnosticReason.trusted-reflect-runtime-running': '可信 Reflect 已运行',
-                'subscriptions.diagnosticReason.trusted-external-bridge-configured': '已配置可信外部桥',
-                'subscriptions.diagnosticReason.bridge-stub-mode': '当前为 Stub 模式',
-                'subscriptions.diagnosticReason.reflect-runtime-incomplete': 'Reflect 配置不完整',
-                'subscriptions.diagnosticReason.bridge-disabled-mode': '桥接执行已禁用',
-                'subscriptions.diagnosticReason.plugin-runtime-required': '需要插件运行环境',
-                'subscriptions.diagnosticMessage.trusted-reflect-runtime-running': '可信本地 Reflect 桥已运行，请先用“安全试搜”确认该源兼容。',
-                'subscriptions.diagnosticMessage.trusted-external-bridge-configured': '已配置可信桥接路径，请先用“安全试搜”确认该源兼容。',
-                'subscriptions.diagnosticMessage.bridge-stub-mode': 'Stub 模式只验证桥接进程可以启动，不会执行搜索、详情或播放。',
-                'subscriptions.diagnosticMessage.reflect-runtime-incomplete': 'Reflect 模式缺少可信 Spider jar 或类名配置。',
-                'subscriptions.diagnosticMessage.bridge-disabled-mode': '本地 Java 桥已启动，但插件执行处于禁用状态。',
-                'subscriptions.diagnosticMessage.plugin-runtime-required': '该源需要可信 CatVod/Spider 运行环境，冬瓜TV不会直接执行订阅内的未知插件。',
-                'subscriptions.diagnosticAction.safeSearch': '使用一个已知片名执行安全试搜。',
-                'subscriptions.diagnosticAction.compatibility': '实际兼容性仍取决于用户信任的 Spider 运行环境。',
-                'subscriptions.diagnosticAction.keepTrusted': '只使用你明确确认可信的本地运行环境。',
-                'subscriptions.diagnosticAction.configureReflect': '在设置中选择 Reflect，并配置可信本地 Spider jar 与类名。',
-                'subscriptions.diagnosticAction.restartBridge': '保存设置后重新启动本地 Java 桥。',
-                'subscriptions.diagnosticAction.buildStartBridge': '先在设置中构建并启动本地 Java 桥。',
                 'subscriptions.onlyUserProvided': '这里只保存用户自己提供的订阅。',
                 'subscriptions.refreshed': '订阅数据已刷新',
                 'subscriptions.urlRequired': '请先填写 TVBox JSON 订阅地址',
@@ -5895,37 +5827,6 @@
                 'subscriptions.outcomeNetworkError': 'Network failed',
                 'subscriptions.outcomeUnsupported': 'Unsupported',
                 'subscriptions.pluginRuntimeNotice': 'This source requires a CatVod/Spider runtime. It can be identified and managed, but unknown plugin code is not executed automatically.',
-                'subscriptions.pluginProbe': 'Safe search',
-                'subscriptions.pluginProbeRunning': 'Testing...',
-                'subscriptions.pluginProbeSuccess': 'Search completed',
-                'subscriptions.pluginProbeFailed': 'Search failed',
-                'subscriptions.pluginProbeResults': 'results',
-                'subscriptions.pluginProbeNoResults': 'The bridge responded but returned no matching titles.',
-                'subscriptions.pluginProbeError.bridge-not-configured': 'No trusted plugin bridge is configured. Build and start it in Settings first.',
-                'subscriptions.pluginProbeError.source-not-found': 'This plugin source was not found. Refresh subscriptions and try again.',
-                'subscriptions.pluginProbeError.bridge-unavailable': 'The trusted plugin bridge is unavailable. Check its runtime status.',
-                'subscriptions.pluginProbeError.probe-failed': 'Safe search failed. Run source diagnostics first.',
-                'subscriptions.diagnosticReady': 'Trusted test path ready',
-                'subscriptions.diagnosticNotReady': 'Test path not ready',
-                'subscriptions.bridgeMode': 'Bridge mode',
-                'subscriptions.diagnosticReason.trusted-reflect-runtime-running': 'Trusted Reflect is running',
-                'subscriptions.diagnosticReason.trusted-external-bridge-configured': 'Trusted external bridge configured',
-                'subscriptions.diagnosticReason.bridge-stub-mode': 'Stub mode active',
-                'subscriptions.diagnosticReason.reflect-runtime-incomplete': 'Reflect setup incomplete',
-                'subscriptions.diagnosticReason.bridge-disabled-mode': 'Bridge execution disabled',
-                'subscriptions.diagnosticReason.plugin-runtime-required': 'Plugin runtime required',
-                'subscriptions.diagnosticMessage.trusted-reflect-runtime-running': 'The trusted local Reflect bridge is running. Use Safe Search to verify this source.',
-                'subscriptions.diagnosticMessage.trusted-external-bridge-configured': 'A trusted bridge route is configured. Use Safe Search to verify this source.',
-                'subscriptions.diagnosticMessage.bridge-stub-mode': 'Stub mode only verifies that the bridge process starts; it does not run search, detail, or playback.',
-                'subscriptions.diagnosticMessage.reflect-runtime-incomplete': 'Reflect mode is missing a trusted Spider jar or class name.',
-                'subscriptions.diagnosticMessage.bridge-disabled-mode': 'The local Java bridge is running with plugin execution disabled.',
-                'subscriptions.diagnosticMessage.plugin-runtime-required': 'This source needs a trusted CatVod/Spider runtime. DongguaTV does not execute unknown subscription plugins directly.',
-                'subscriptions.diagnosticAction.safeSearch': 'Run Safe Search with a known title.',
-                'subscriptions.diagnosticAction.compatibility': 'Compatibility still depends on the trusted Spider runtime.',
-                'subscriptions.diagnosticAction.keepTrusted': 'Use only a local runtime that you explicitly trust.',
-                'subscriptions.diagnosticAction.configureReflect': 'Select Reflect in Settings and configure a trusted local Spider jar and class.',
-                'subscriptions.diagnosticAction.restartBridge': 'Restart the local Java bridge after saving settings.',
-                'subscriptions.diagnosticAction.buildStartBridge': 'Build and start the local Java bridge in Settings.',
                 'subscriptions.onlyUserProvided': 'Only user-provided subscriptions are stored.',
                 'subscriptions.refreshed': 'Subscription data refreshed',
                 'subscriptions.urlRequired': 'Enter a TVBox JSON subscription URL first',
@@ -6209,37 +6110,6 @@
                 'subscriptions.outcomeNetworkError': '通信失敗',
                 'subscriptions.outcomeUnsupported': '未対応',
                 'subscriptions.pluginRuntimeNotice': 'この配信元にはCatVod/Spider実行環境が必要です。識別と管理はできますが、未知のプラグインコードは自動実行しません。',
-                'subscriptions.pluginProbe': '安全検索',
-                'subscriptions.pluginProbeRunning': '確認中…',
-                'subscriptions.pluginProbeSuccess': '検索完了',
-                'subscriptions.pluginProbeFailed': '検索失敗',
-                'subscriptions.pluginProbeResults': '件',
-                'subscriptions.pluginProbeNoResults': 'ブリッジは応答しましたが、一致する作品名はありません。',
-                'subscriptions.pluginProbeError.bridge-not-configured': '信頼済みプラグインブリッジが未設定です。設定で構築して起動してください。',
-                'subscriptions.pluginProbeError.source-not-found': 'このプラグイン配信元が見つかりません。購読を更新して再試行してください。',
-                'subscriptions.pluginProbeError.bridge-unavailable': '信頼済みプラグインブリッジに接続できません。実行状態を確認してください。',
-                'subscriptions.pluginProbeError.probe-failed': '安全検索に失敗しました。先に診断を実行してください。',
-                'subscriptions.diagnosticReady': '信頼済みテスト経路あり',
-                'subscriptions.diagnosticNotReady': 'テスト準備未完了',
-                'subscriptions.bridgeMode': 'ブリッジモード',
-                'subscriptions.diagnosticReason.trusted-reflect-runtime-running': '信頼済みReflectが実行中',
-                'subscriptions.diagnosticReason.trusted-external-bridge-configured': '信頼済み外部ブリッジ設定済み',
-                'subscriptions.diagnosticReason.bridge-stub-mode': 'Stubモード',
-                'subscriptions.diagnosticReason.reflect-runtime-incomplete': 'Reflect設定が未完了',
-                'subscriptions.diagnosticReason.bridge-disabled-mode': 'ブリッジ実行は無効',
-                'subscriptions.diagnosticReason.plugin-runtime-required': 'プラグイン実行環境が必要',
-                'subscriptions.diagnosticMessage.trusted-reflect-runtime-running': '信頼済みローカルReflectブリッジが実行中です。安全検索でこの配信元を確認してください。',
-                'subscriptions.diagnosticMessage.trusted-external-bridge-configured': '信頼済みブリッジ経路が設定済みです。安全検索でこの配信元を確認してください。',
-                'subscriptions.diagnosticMessage.bridge-stub-mode': 'Stubモードはプロセス起動のみ確認し、検索・詳細・再生は実行しません。',
-                'subscriptions.diagnosticMessage.reflect-runtime-incomplete': 'Reflectモードに信頼済みSpider jarまたはクラス名が不足しています。',
-                'subscriptions.diagnosticMessage.bridge-disabled-mode': 'ローカルJavaブリッジは起動していますが、プラグイン実行は無効です。',
-                'subscriptions.diagnosticMessage.plugin-runtime-required': 'この配信元には信頼済みCatVod/Spider環境が必要です。購読内の未知のプラグインは直接実行しません。',
-                'subscriptions.diagnosticAction.safeSearch': '既知の作品名で安全検索を実行します。',
-                'subscriptions.diagnosticAction.compatibility': '互換性は信頼済みSpider実行環境に依存します。',
-                'subscriptions.diagnosticAction.keepTrusted': '明示的に信頼したローカル実行環境のみ使用してください。',
-                'subscriptions.diagnosticAction.configureReflect': '設定でReflectを選び、信頼済みローカルSpider jarとクラス名を指定します。',
-                'subscriptions.diagnosticAction.restartBridge': '設定保存後にローカルJavaブリッジを再起動します。',
-                'subscriptions.diagnosticAction.buildStartBridge': '設定でローカルJavaブリッジを構築して起動します。',
                 'subscriptions.onlyUserProvided': 'ユーザーが追加した購読のみ保存します。',
                 'subscriptions.refreshed': '購読データを更新しました',
                 'subscriptions.urlRequired': 'TVBox JSON購読URLを入力してください',
@@ -6485,8 +6355,6 @@
                     sourceDiagnostics: {},
                     sourceHealthResults: {},
                     sourceHealthLoading: {},
-                    pluginProbeResults: {},
-                    pluginProbeLoading: {},
                     sourceScanKeyword: '哪吒',
                     sourceAvailabilityScan: null,
                     sourceAvailabilityLoading: false,
@@ -6563,8 +6431,6 @@
                         baseUrl: '',
                         jarPath: '',
                         mode: 'stub',
-                        readiness: 'stopped',
-                        operational: false,
                         trustedSpiderJarConfigured: false,
                         trustedSpiderClassName: '',
                         trustedSpiderExtConfigured: false
@@ -7311,10 +7177,8 @@
                         this.subscriptions = subData.subscriptions || [];
                         this.tvboxSources = sourceData.sources || [];
                         this.sourceDiagnostics = {};
-                        this.pluginProbeResults = {};
                         this.liveGroups = groupData.groups || [];
                         await this.loadLiveChannels();
-                        await this.refreshLocalJavaBridgeStatus();
                         if (typeof this.loadDesktopStatus === 'function') {
                             await this.loadDesktopStatus();
                         }
@@ -7512,7 +7376,7 @@
 
                 async diagnoseTvboxSource(source) {
                     if (!source || !source.id) return;
-                    this.subscriptionError = '';
+                    this.subscriptionError = 'Subscription operation failed';
                     try {
                         const response = await fetch(`/api/sources/${encodeURIComponent(source.id)}/diagnostics`);
                         const data = await response.json();
@@ -7534,91 +7398,9 @@
                     }
                 },
 
-                sourceDiagnosticReasonLabel(reason) {
-                    const key = `subscriptions.diagnosticReason.${reason || 'unknown'}`;
-                    const value = this.t(key);
-                    return value === key ? (reason || 'unknown') : value;
-                },
-
-                sourceDiagnosticMessage(diagnostics) {
-                    const reason = diagnostics && diagnostics.reason || 'unknown';
-                    const key = `subscriptions.diagnosticMessage.${reason}`;
-                    const value = this.t(key);
-                    return value === key ? (diagnostics && diagnostics.message || '') : value;
-                },
-
-                sourceDiagnosticActions(diagnostics) {
-                    const reason = diagnostics && diagnostics.reason || '';
-                    const actionKeys = {
-                        'trusted-reflect-runtime-running': ['subscriptions.diagnosticAction.safeSearch', 'subscriptions.diagnosticAction.compatibility'],
-                        'trusted-external-bridge-configured': ['subscriptions.diagnosticAction.safeSearch', 'subscriptions.diagnosticAction.keepTrusted'],
-                        'bridge-stub-mode': ['subscriptions.diagnosticAction.configureReflect', 'subscriptions.diagnosticAction.keepTrusted'],
-                        'reflect-runtime-incomplete': ['subscriptions.diagnosticAction.configureReflect', 'subscriptions.diagnosticAction.restartBridge'],
-                        'bridge-disabled-mode': ['subscriptions.diagnosticAction.configureReflect'],
-                        'plugin-runtime-required': ['subscriptions.diagnosticAction.buildStartBridge', 'subscriptions.diagnosticAction.keepTrusted']
-                    };
-                    const keys = actionKeys[reason] || [];
-                    if (keys.length) return keys.map(key => this.t(key));
-                    return diagnostics && Array.isArray(diagnostics.actions) ? diagnostics.actions : [];
-                },
-
-                async probePluginSource(source) {
-                    const keyword = String(this.sourceScanKeyword || '').trim();
-                    if (!source || !source.id || !keyword || this.pluginProbeLoading[source.id]) return;
-                    this.subscriptionError = '';
-                    this.pluginProbeLoading = {
-                        ...this.pluginProbeLoading,
-                        [source.id]: true
-                    };
-                    try {
-                        const response = await fetch(`/api/plugin-sources/${encodeURIComponent(source.id)}/probe-search`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ keyword })
-                        });
-                        const data = await response.json();
-                        if (!response.ok) {
-                            this.pluginProbeResults = {
-                                ...this.pluginProbeResults,
-                                [source.id]: {
-                                    ok: false,
-                                    errorCode: data.errorCode || 'probe-failed',
-                                    error: this.pluginProbeErrorMessage(data.errorCode)
-                                }
-                            };
-                            return;
-                        }
-                        this.pluginProbeResults = {
-                            ...this.pluginProbeResults,
-                            [source.id]: data
-                        };
-                    } catch (error) {
-                        this.pluginProbeResults = {
-                            ...this.pluginProbeResults,
-                            [source.id]: {
-                                ok: false,
-                                errorCode: 'bridge-unavailable',
-                                error: this.pluginProbeErrorMessage('bridge-unavailable')
-                            }
-                        };
-                    } finally {
-                        this.pluginProbeLoading = {
-                            ...this.pluginProbeLoading,
-                            [source.id]: false
-                        };
-                    }
-                },
-
-                pluginProbeErrorMessage(errorCode) {
-                    const code = errorCode || 'probe-failed';
-                    const key = `subscriptions.pluginProbeError.${code}`;
-                    const value = this.t(key);
-                    return value === key ? this.t('subscriptions.operationFailed') : value;
-                },
-
                 async healthCheckTvboxSource(source) {
                     if (!source || !source.id) return;
-                    this.subscriptionError = '';
+                    this.subscriptionError = 'Subscription operation failed';
                     this.sourceHealthLoading = {
                         ...this.sourceHealthLoading,
                         [source.id]: true

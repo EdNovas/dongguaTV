@@ -1,6 +1,6 @@
 {
   "name": "dongguatv-enhanced-desktop",
-  "version": "1.0.55",
+  "version": "1.0.54",
   "description": "Windows desktop Apple TV style DongguaTV client with TVBox subscription intake and mpv.net playback support.",
   "author": "DongguaTV Enhanced",
   "main": "main.js",
@@ -19,7 +19,6 @@
     "test:tvbox-home-endpoint": "node tools/test-tvbox-home-endpoint.js",
     "test:douban-home-provider": "node tools/test-douban-home-provider.js",
     "test:plugin-bridge-search": "node tools/test-plugin-bridge-search.js",
-    "test:plugin-source-diagnostics": "node tools/test-plugin-source-diagnostics.js",
     "test:java-bridge-reflect": "node tools/test-java-bridge-reflect.js",
     "test:java-bridge-self-test-api": "node tools/test-java-bridge-self-test-api.js",
     "test:tvbox-real-qa": "node tools/test-tvbox-real-qa.js",

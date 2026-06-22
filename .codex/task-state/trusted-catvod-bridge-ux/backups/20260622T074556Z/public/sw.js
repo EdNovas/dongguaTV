@@ -1,6 +1,6 @@
 // Service Worker with Image Caching for dongguaTV
-// v33: add trusted CatVod bridge diagnostics and safe per-source search
-const CACHE_VERSION = 'v33';
+// v32: add the user-visible source availability scan and refresh cached HTML
+const CACHE_VERSION = 'v32';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 
