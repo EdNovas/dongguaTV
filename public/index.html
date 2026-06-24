@@ -6315,10 +6315,19 @@
                             // 这样播放器能恢复到正确位置（服务器优先模式：直接覆盖本地进度）
                             this.watchHistory.forEach(item => {
                                 if (item.progressTime && item.progressTime > 60) {
-                                    // 生成进度存储 key
+                                    // 生成进度存储 key —— 集名归一化必须与播放器 getProgressKey 完全一致
+                                    // (第01集→第1集、01→1，无集名→正片)，否则同步过来的进度因 key 不符读不到、那一集会从头播。
                                     const name = item.groupData?.name || item.name;
-                                    const combined = (name + '_' + (item.episode || '')).replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
-                                    const key = 'donggua_progress_' + combined.substring(0, 80);
+                                    let key;
+                                    if (!item.episode) {
+                                        // 电影(单集)：只用电影名、无集名后缀；前缀计入 80 字截断(与 getProgressKey length===1 一致)。
+                                        key = ('donggua_progress_' + name).replace(/[^a-zA-Z0-9一-龥]/g, '_').substring(0, 80);
+                                    } else {
+                                        // 剧集：电影名 + 标准化集名(第01集→第1集、01→1)。
+                                        const epNorm = String(item.episode).replace(/第0*(\d+)集/g, '第$1集').replace(/^0+(\d)/, '$1') || '正片';
+                                        const combined = (name + '_' + epNorm).replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
+                                        key = 'donggua_progress_' + combined.substring(0, 80);
+                                    }
 
                                     // 服务器优先：直接用服务器数据覆盖本地进度
                                     localStorage.setItem(key, JSON.stringify({
