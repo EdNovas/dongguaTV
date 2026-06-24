@@ -1105,13 +1105,11 @@ app.post('/api/history/push', (req, res) => {
             if (!(tomb.get(d.id) >= at)) tomb.set(d.id, at);
         }
 
-        // 计算需要删除的 ID（服务器有但本地没推上来的，单设备删除路径）
-        const existingIds = cacheManager.db.prepare('SELECT item_id FROM user_history WHERE user_token = ?').all(token).map(row => row.item_id);
-        const pushingIds = new Set(history.map(item => item.id));
-        const idsToDelete = existingIds.filter(id => !pushingIds.has(id));
+        // 取每条现有的 updated_at，用于"更新者胜"——防陈旧设备用旧进度覆盖服务器上更新的进度
+        const existingUpd = new Map(cacheManager.db.prepare('SELECT item_id, updated_at FROM user_history WHERE user_token = ?').all(token).map(row => [row.item_id, row.updated_at]));
         const PRUNE_MS = 120 * 24 * 60 * 60 * 1000;  // 墓碑保留 120 天，过期剪枝避免无限增长
 
-        let saved = 0, deletedCount = 0;
+        let saved = 0;
         const transaction = cacheManager.db.transaction(() => {
             // 1. 插入历史，但被【更新的删除墓碑】压制的不入库(防复活)；若该条比墓碑更新=重新观看,清墓碑后入库
             for (const item of history) {
@@ -1120,11 +1118,21 @@ app.post('/api/history/push', (req, res) => {
                 const td = tomb.get(item.id);
                 if (td != null && td >= upd) { deleteHist.run(token, item.id); continue; }  // 删除比这次观看新 → 压制
                 if (td != null) tomb.delete(item.id);  // 这次观看更新 → 重新观看,墓碑作废
+                // ⏱️ 更新者胜(last-writer-wins)：服务器已有更新的版本(别的设备看到了更靠后的集/进度) → 不被旧推送覆盖。
+                //    根治"iPad 看到16集、手机却把进度压回14集"——陈旧设备的旧 updated_at 推送不再 INSERT OR REPLACE 掉新数据。
+                const cur = existingUpd.get(item.id);
+                if (cur != null && cur > upd) continue;
                 insertStmt.run(token, item.id, JSON.stringify(item.data), upd);
                 saved++;
             }
-            // 2. 单设备删除：服务器有、推送里没有的，删掉(沿用旧行为,不打墓碑以免误伤未同步设备)
-            for (const id of idsToDelete) { deleteHist.run(token, id); deletedCount++; }
+            // 2. 墓碑驱动删除（替代危险的"服务器有、推送里没有就删"隐式删除——那会在多设备/本地条数上限不一致
+            //    (本地50 vs 服务器50)/配额降级时，把别的设备刚加/刚续看的剧误删，是经典多端同步反模式）。
+            //    现在只删【显式打了墓碑】的项(removeFromHistory/clearWatchHistory 都打墓碑)：墓碑不早于服务器版本才删，
+            //    re-watch(td<upd, 步骤1已 tomb.delete)的不在此列、别的设备没墓碑的剧一律不动。
+            for (const [id, at] of tomb) {
+                const cur = existingUpd.get(id);
+                if (cur != null && cur <= at) deleteHist.run(token, id);
+            }
             // 3. 持久化墓碑(剪枝过期)
             cacheManager.db.prepare('DELETE FROM user_history_deleted WHERE user_token = ?').run(token);
             const cutoff = Date.now() - PRUNE_MS;
@@ -1132,7 +1140,7 @@ app.post('/api/history/push', (req, res) => {
         });
         transaction();
 
-        res.json({ sync_enabled: true, saved: saved, deleted: deletedCount });
+        res.json({ sync_enabled: true, saved: saved, deleted: 0 });
     } catch (e) {
         console.error('[History Push Error]', e.message);
         res.status(500).json({ error: 'Database error' });

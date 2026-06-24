@@ -6270,22 +6270,23 @@
                         for (const k of Object.keys(tomb)) { if (tomb[k] < cutoff) delete tomb[k]; }
                         this._saveTombstones(tomb);
 
-                        // 🔄 服务器优先策略：服务器数据覆盖本地；被墓碑压制的(已删且之后没再看)一律剔除
-                        const newHistory = serverHistory.map(serverItem => serverItem.data).filter(d => !this._isTombstoned(tomb, d));
-
-                        // 💡 本地独有的记录（服务器上没有的、且未被墓碑压制）保留——这是刚添加还没推送的；
-                        //    已删但本地还残留的会被 _isTombstoned 挡掉，不再被当作"本地独有"复活。
-                        const serverNames = new Set(serverHistory.map(item => item.data.name));
-                        const localOnlyItems = this.watchHistory.filter(item => !serverNames.has(item.name) && !this._isTombstoned(tomb, item));
-
-                        if (localOnlyItems.length > 0) {
-                            console.log('[同步] 保留本地独有记录:', localOnlyItems.length, '条');
-                            localOnlyItems.forEach(item => newHistory.push(item));
-                        }
+                        // 🔄 逐条"更新者胜"(last-writer-wins)：同一部剧服务器与本地各有一份时，取 watchedAt 较新的那份。
+                        //    ① 服务器更新(别的设备看到更靠后) → 采纳服务器，修"iPad看16集、手机却续播14集"；
+                        //    ② 本地更新(本机刚看、还没推上去) → 保留本地，不被旧的服务器副本覆盖。
+                        //    被墓碑压制的(已删且之后没再看)一律剔除。
+                        const byName = new Map();
+                        const consider = (d) => {
+                            if (!d || !d.name || this._isTombstoned(tomb, d)) return;
+                            const ex = byName.get(d.name);
+                            if (!ex || new Date(d.watchedAt || 0).getTime() > new Date(ex.watchedAt || 0).getTime()) byName.set(d.name, d);
+                        };
+                        serverHistory.forEach(s => consider(s.data));
+                        this.watchHistory.forEach(consider);  // 本地若比服务器新(刚看未推) → 胜出保留
+                        const newHistory = [...byName.values()];
 
                         // 按时间排序（最新的在前）
                         newHistory.sort((a, b) =>
-                            new Date(b.watchedAt).getTime() - new Date(a.watchedAt).getTime()
+                            new Date(b.watchedAt || 0).getTime() - new Date(a.watchedAt || 0).getTime()
                         );
 
                         // 限制最大条数
@@ -6516,9 +6517,9 @@
                     // 添加到最前面
                     this.watchHistory.unshift(historyItem);
 
-                    // 限制最多保存30条
-                    if (this.watchHistory.length > 30) {
-                        this.watchHistory = this.watchHistory.slice(0, 30);
+                    // 限制最多保存50条(与服务器/pull 上限一致，避免本地是服务器子集时引发误删/反复增删)
+                    if (this.watchHistory.length > 50) {
+                        this.watchHistory = this.watchHistory.slice(0, 50);
                     }
 
                     this.saveWatchHistoryToStorage();
@@ -10316,6 +10317,19 @@
                             // 使用 sendBeacon 确保页面关闭时也能同步
                             this.pushHistoryBeacon();
                         });
+
+                        // 📱 移动端可靠保存：beforeunload 在手机上(切到别的App/锁屏/切后台)常常不触发，导致"刚看到的集/进度"
+                        //    没推到服务器、别的设备同步不到。visibilitychange→hidden 在手机上可靠触发——隐藏时立即保存当前进度
+                        //    并 sendBeacon 推送(beacon 不受节流影响)。守卫只挂一次。
+                        if (!this._historyHiddenHooked) {
+                            this._historyHiddenHooked = true;
+                            document.addEventListener('visibilitychange', () => {
+                                if (document.visibilityState === 'hidden') {
+                                    try { if (dp && dp.video) saveProgress(dp.video.currentTime); } catch (e) { }
+                                    this.pushHistoryBeacon();
+                                }
+                            });
+                        }
 
                         // 播放结束时清除进度记录
                         dp.on('ended', () => {
