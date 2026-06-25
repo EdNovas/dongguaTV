@@ -2128,6 +2128,97 @@
             border-color: rgba(255, 255, 255, 0.35);
         }
 
+        /* 📺 直播频道卡片 */
+        .live-row { gap: 12px; }
+        .live-card {
+            min-width: 112px;
+            width: 112px;
+            cursor: pointer;
+            position: relative;
+            transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+            contain: layout style;
+        }
+        .live-card:hover { transform: scale(1.06) translateZ(0); z-index: 10; }
+        .live-logo {
+            position: relative;
+            width: 100%;
+            height: 70px;
+            border-radius: 10px;
+            background: linear-gradient(135deg, #1c1c22, #2a2a32);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+        .live-card:hover .live-logo {
+            border-color: rgba(229, 9, 20, 0.6);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--accent);
+        }
+        .live-card.active .live-logo {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent);
+        }
+        .live-logo img {
+            max-width: 84%;
+            max-height: 78%;
+            object-fit: contain;
+            position: relative;
+            z-index: 1;
+        }
+        .live-logo-fallback {
+            position: absolute;
+            color: #555;
+            font-size: 26px;
+            z-index: 0;
+        }
+        .live-name {
+            margin-top: 7px;
+            font-size: 12px;
+            color: #ddd;
+            text-align: center;
+            line-height: 1.3;
+            max-height: 2.6em;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        .live-filter-btn {
+            background: rgba(255, 255, 255, 0.06);
+            color: #aaa;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 14px;
+            padding: 3px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .live-filter-btn:hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+        .live-filter-btn.active {
+            background: linear-gradient(135deg, #e50914, #ff6a00);
+            color: #fff;
+            border-color: transparent;
+        }
+        .live-sub-label {
+            font-size: 12px;
+            color: #999;
+            margin: 10px 0 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .live-dot {
+            display: inline-block;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #46d369;
+            margin-right: 2px;
+            animation: livePulse 1.6s infinite;
+        }
+        @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
         /* 历史卡片 - 不随 hover 缩放，只有内容缩放 */
         .history-card {
             min-width: var(--card-w, 150px);
@@ -3950,6 +4041,54 @@
                 </div>
             </div>
 
+            <!-- 📺 直播频道：精选常用频道(主页一行)。关闭或无数据时整段隐藏 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="liveEnabled && liveChannels.length > 0"
+                style="margin-top: 48px; margin-bottom: 44px;">
+                <div class="section-header" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                    <div class="section-line" style="background: linear-gradient(135deg, #e50914, #ff6a00);"></div>
+                    <div class="section-title"><i class="fas fa-tower-broadcast"></i> 直播频道</div>
+                    <span style="color: #777; font-size: 12px;">央视 · 卫视 · 体育</span>
+                    <span class="live-filter-bar" style="margin-left: auto; display: flex; gap: 6px;">
+                        <button v-for="g in liveGroups" :key="'lf-' + g" class="live-filter-btn"
+                            :class="{ active: liveFilter === g }" @click="liveFilter = g">{{ g }}</button>
+                    </span>
+                </div>
+                <!-- 最近观看频道(有才显示) -->
+                <template v-if="liveRecentChannels.length">
+                    <div class="live-sub-label"><i class="fas fa-clock"></i> 最近观看</div>
+                    <div class="hot-row live-row" style="margin-bottom: 8px;">
+                        <div class="live-card" v-for="ch in liveRecentChannels" :key="'lr-' + ch.id"
+                            @click="openLiveChannel(ch)">
+                            <div class="live-logo">
+                                <i class="fas fa-tv live-logo-fallback"></i>
+                                <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
+                                    @error="$event.target.style.display = 'none'">
+                            </div>
+                            <div class="live-name">{{ ch.name }}</div>
+                        </div>
+                    </div>
+                    <div class="live-sub-label"><i class="fas fa-list"></i> 全部频道</div>
+                </template>
+                <!-- 频道列表(横向滚动) -->
+                <div class="scroll-container">
+                    <button class="scroll-btn left" v-show="liveCanScrollLeft" @click="scrollLiveRow(-1)"
+                        aria-label="向左滚动频道"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <div class="hot-row live-row" ref="liveRow" @scroll="onLiveScroll">
+                        <div class="live-card" v-for="ch in filteredLiveChannels" :key="'lc-' + ch.id"
+                            @click="openLiveChannel(ch)">
+                            <div class="live-logo">
+                                <i class="fas fa-tv live-logo-fallback"></i>
+                                <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
+                                    @error="$event.target.style.display = 'none'">
+                            </div>
+                            <div class="live-name">{{ ch.name }}</div>
+                        </div>
+                    </div>
+                    <button class="scroll-btn right" v-show="liveCanScrollRight" @click="scrollLiveRow(1)"
+                        aria-label="向右滚动频道"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                </div>
+            </div>
+
             <!-- 分类导航栏 -->
             <div class="category-nav-container animate__animated animate__fadeInUp" style="margin-bottom: 40px;">
                 <div class="category-item" v-for="item in categories" :key="item.name" @click="handleCatClick(item)">
@@ -4448,8 +4587,8 @@
                     </div>
                 </div>
 
-                <!-- 3. 底部：控制面板 -->
-                <div class="controls-area">
+                <!-- 3. 底部：控制面板(直播模式隐藏，改用下方直播面板) -->
+                <div class="controls-area" v-if="!(currentGroup && currentGroup._isLive)">
                     <!-- 剧集简介 -->
                     <div class="mb-4" v-if="currentSource">
                         <div class="panel-title">剧情简介</div>
@@ -4664,6 +4803,44 @@
                                 </div>
                             </div>
                         </template>
+                    </div>
+                </div>
+
+                <!-- 📺 直播控制面板：替代 VOD 的简介/线路/选集 -->
+                <div class="controls-area" v-if="currentGroup && currentGroup._isLive">
+                    <div class="mb-4">
+                        <div class="panel-title"><i class="fas fa-broadcast-tower"></i> 正在直播</div>
+                        <div style="color: #bbb; font-size: 13px;">
+                            {{ currentGroup.name }}
+                            <span v-if="liveTesting" style="color: #888; margin-left: 8px;"><i
+                                    class="fas fa-spinner fa-spin"></i> 正在挑选可用线路…</span>
+                            <span v-else style="color: #46d369; margin-left: 8px;"><span class="live-dot"></span> LIVE</span>
+                        </div>
+                    </div>
+                    <!-- 线路切换(多线路才显示) -->
+                    <div class="mb-4" v-if="currentGroup._liveLines && currentGroup._liveLines.length > 1">
+                        <div class="panel-title">切换线路</div>
+                        <div class="source-list">
+                            <div v-for="(ln, i) in currentGroup._liveLines" :key="'lvln-' + i" class="source-pill"
+                                :class="{ active: liveLineIdx === i }" @click="switchLiveLine(i)">
+                                <span>线路{{ i + 1 }}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 快速换台 -->
+                    <div>
+                        <div class="panel-title">快速换台</div>
+                        <div class="hot-row live-row">
+                            <div class="live-card" v-for="ch in liveChannels" :key="'lp-' + ch.id"
+                                :class="{ active: liveChannelId === ch.id }" @click="openLiveChannel(ch)">
+                                <div class="live-logo">
+                                    <i class="fas fa-tv live-logo-fallback"></i>
+                                    <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
+                                        @error="$event.target.style.display = 'none'">
+                                </div>
+                                <div class="live-name">{{ ch.name }}</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -5494,6 +5671,18 @@
                     recommendPage: 1,               // 为你推荐：展开网格当前页(分页)
                     recommendCanScrollLeft: false,  // 为你推荐：左箭头显隐
                     recommendCanScrollRight: true,  // 为你推荐：右箭头显隐
+                    // 📺 直播(IPTV)
+                    liveEnabled: false,             // 来自 /api/config(live_enabled)
+                    liveChannels: [],               // 精选直播频道(来自 /api/live/channels)
+                    liveRecentChannels: [],         // 最近观看频道(本地+跨设备同步)
+                    liveFilter: '全部',             // 分类筛选(全部/央视/卫视/体育)
+                    liveCanScrollLeft: false,
+                    liveCanScrollRight: true,
+                    liveTesting: false,             // 正在为频道挑选可用线路
+                    _liveActive: false,             // 播放器当前处于直播模式(守卫进度/下一集/弹幕/分享)
+                    _liveOpenSeq: 0,                // 直播打开单调令牌(防 ABA 并发；仅方法内用)
+                    liveLineIdx: 0,                // 当前直播线路下标
+                    liveChannelId: null,           // 当前直播频道 id(快速换台高亮)
                     // 📮 求片
                     showRequestModal: false,
                     reqForm: { name: '', aka: '', year: '', cast: '', note: '' },
@@ -5853,6 +6042,17 @@
                 };
             },
             computed: {
+                // 📺 直播分类(只列出实际存在的组)
+                liveGroups() {
+                    const order = ['央视', '卫视', '体育'];
+                    const present = new Set(this.liveChannels.map(c => c.group));
+                    return ['全部', ...order.filter(g => present.has(g))];
+                },
+                // 📺 按分类筛选后的直播频道
+                filteredLiveChannels() {
+                    if (this.liveFilter === '全部') return this.liveChannels;
+                    return this.liveChannels.filter(c => c.group === this.liveFilter);
+                },
                 // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
                 shareUrl() {
                     if (!this.currentGroup || !this.currentGroup.name) return location.origin + '/';
@@ -5936,6 +6136,144 @@
                 }
             },
             methods: {
+                // ========== 📺 直播(IPTV) ==========
+                // 拉取精选直播频道(本地缓存 2h 秒显，再后台刷新；失败沿用旧缓存)
+                async fetchLiveChannels() {
+                    if (!this.liveEnabled) return;
+                    const CACHE_KEY = 'donggua_live_cache';
+                    const TTL = 2 * 60 * 60 * 1000;
+                    try {
+                        const raw = localStorage.getItem(CACHE_KEY);
+                        if (raw) {
+                            const c = JSON.parse(raw);
+                            if (c && Array.isArray(c.channels) && (Date.now() - (c.at || 0)) < TTL) {
+                                this.liveChannels = c.channels;
+                                this.$nextTick(() => this.updateLiveScroll());
+                            }
+                        }
+                    } catch (e) { }
+                    try {
+                        const res = await fetch('/api/live/channels');
+                        const data = await res.json();
+                        if (data && data.enabled === false) { this.liveEnabled = false; this.liveChannels = []; return; }
+                        if (data && Array.isArray(data.channels) && data.channels.length) {
+                            this.liveChannels = data.channels;
+                            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), channels: data.channels })); } catch (e) { }
+                            this.$nextTick(() => this.updateLiveScroll());
+                        }
+                    } catch (e) {
+                        console.warn('[直播] 拉取频道失败，沿用本地缓存:', e.message);
+                    }
+                },
+                onLiveScroll() {
+                    if (this._liveScrollTicking) return;
+                    this._liveScrollTicking = true;
+                    requestAnimationFrame(() => { this.updateLiveScroll(); this._liveScrollTicking = false; });
+                },
+                updateLiveScroll() {
+                    let row = this.$refs.liveRow;
+                    if (Array.isArray(row)) row = row[0];
+                    if (!row) return;
+                    const maxScroll = row.scrollWidth - row.clientWidth;
+                    const sl = Math.round(row.scrollLeft);
+                    const l = sl > 10, r = maxScroll > 10 && sl < maxScroll - 10;
+                    if (this.liveCanScrollLeft !== l) this.liveCanScrollLeft = l;
+                    if (this.liveCanScrollRight !== r) this.liveCanScrollRight = r;
+                },
+                scrollLiveRow(dir) {
+                    let row = this.$refs.liveRow;
+                    if (Array.isArray(row)) row = row[0];
+                    if (!row) return;
+                    row.scrollBy({ left: dir * Math.round(row.clientWidth * 0.8), behavior: 'smooth' });
+                },
+                // 客户端测一条直播线路是否可播(走与真正播放一致的代理路径)
+                async _testLiveUrl(streamUrl) {
+                    const target = this.corsProxyUrl ? `${this.corsProxyUrl}/?url=${encodeURIComponent(streamUrl)}` : streamUrl;
+                    const ctrl = new AbortController();
+                    const timer = setTimeout(() => ctrl.abort(), 6000);
+                    try {
+                        const res = await fetch(target, { method: 'GET', cache: 'no-cache', signal: ctrl.signal });
+                        clearTimeout(timer);
+                        return (res.ok || res.type === 'opaque' || res.type === 'cors');
+                    } catch (e) { clearTimeout(timer); return false; }
+                },
+                // 打开/切换直播频道：建最小 group → 测线路 → 播放 → 记最近观看
+                async openLiveChannel(ch) {
+                    if (!ch || !ch.id) return;
+                    // 跨设备同步过来的"最近"只有 id(无 sources)，从已拉取的频道表补全
+                    const resolve = () => {
+                        if ((!ch.sources || !ch.sources.length) && Array.isArray(this.liveChannels)) {
+                            const full = this.liveChannels.find(c => c.id === ch.id);
+                            if (full) ch = { ...ch, sources: full.sources, logo: ch.logo || full.logo, group: ch.group || full.group };
+                        }
+                    };
+                    resolve();
+                    if (!ch.sources || !ch.sources.length) { await this.fetchLiveChannels(); resolve(); }  // 表还没就绪 → 现拉一次再补
+                    if (!ch.sources || !ch.sources.length) { if (this.showMiniToast) this.showMiniToast('频道源未就绪，请稍后重试'); return; }
+
+                    // 防 ABA 并发：单调令牌；每次打开/换台自增，跨 await 用它(配合 _liveActive)判定是否已被取代
+                    const seq = ++this._liveOpenSeq;
+                    this._liveActive = true;
+                    this.liveChannelId = ch.id;
+                    this.liveLineIdx = 0;
+                    this.currentGroup = { name: ch.name, pic: ch.logo || '', _isLive: true, _liveLines: ch.sources.slice(), sources: [] };
+                    this.currentSource = { site_key: 'live_' + ch.id, site_name: ch.name, _useProxy: !!this.corsProxyUrl, _proxyUrl: this.corsProxyUrl || null };
+                    this.episodeList = [{ name: ch.name, url: ch.sources[0].url }];
+                    this.currentUrl = '';
+                    this.showDetail = true;
+                    document.body.classList.add('detail-open');
+                    await this.$nextTick();  // 等 player-layout(#dplayer 容器)渲染出来，否则 play() 里 DPlayer 取不到容器报错
+                    if (seq !== this._liveOpenSeq || !this._liveActive) return;  // 已被新的打开/换台/关闭取代
+                    try { if (dp && dp.danmaku) dp.danmaku.clear(); } catch (e) { }  // 清残留 VOD 弹幕
+                    this.addLiveRecent(ch);
+                    // 依次测线路，挑第一条通的(都不通就用第一条，让播放器自行报错/代理回退)
+                    this.liveTesting = true;
+                    let chosen = ch.sources[0].url, chosenIdx = 0, anyOk = false;
+                    for (let i = 0; i < ch.sources.length; i++) {
+                        if (seq !== this._liveOpenSeq || !this._liveActive) return;  // 用户已换台/退出
+                        if (await this._testLiveUrl(ch.sources[i].url)) { chosen = ch.sources[i].url; chosenIdx = i; anyOk = true; break; }
+                    }
+                    if (seq !== this._liveOpenSeq || !this._liveActive) return;
+                    this.liveTesting = false;
+                    this.liveLineIdx = chosenIdx;
+                    this.episodeList = [{ name: ch.name, url: chosen }];
+                    if (!anyOk && !this.corsProxyUrl && this.showMiniToast) this.showMiniToast('直播多为运营商源，需配置 CORS 代理才能播放');
+                    this.play(chosen);
+                },
+                switchLiveLine(i) {
+                    const lines = this.currentGroup && this.currentGroup._liveLines;
+                    if (!lines || !lines[i]) return;
+                    this._liveOpenSeq++;       // 作废可能在飞的 openLiveChannel 测速循环
+                    this.liveTesting = false;
+                    this.liveLineIdx = i;
+                    this.episodeList = [{ name: this.currentGroup.name, url: lines[i].url }];
+                    this.play(lines[i].url);
+                },
+                _loadLiveRecentLocal() {
+                    try {
+                        const raw = localStorage.getItem('donggua_live_recent');
+                        if (raw) { const a = JSON.parse(raw); if (Array.isArray(a)) this.liveRecentChannels = a.slice(0, 12); }
+                    } catch (e) { }
+                },
+                addLiveRecent(ch) {
+                    if (!ch || !ch.id) return;
+                    const entry = { id: ch.id, name: ch.name, logo: ch.logo || '', group: ch.group || '', sources: (ch.sources || []).slice(0, 6), at: Date.now() };
+                    const list = this.liveRecentChannels.filter(c => c.id !== ch.id);
+                    list.unshift(entry);
+                    this.liveRecentChannels = list.slice(0, 12);
+                    try { localStorage.setItem('donggua_live_recent', JSON.stringify(this.liveRecentChannels)); } catch (e) { }
+                    this._pushLiveRecent();
+                },
+                _pushLiveRecent() {
+                    if (!this.syncEnabled || !this.syncToken) return;
+                    const slim = this.liveRecentChannels.map(c => ({ id: c.id, name: c.name, logo: c.logo, group: c.group, at: c.at }));
+                    try {
+                        fetch('/api/settings/push', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: this.syncToken, settings: { liveRecent: slim } })
+                        });
+                    } catch (e) { }
+                },
                 async initApp() {
                     // 防止重复初始化
                     if (this._appInitialized) return;
@@ -5965,6 +6303,8 @@
                         if (this.danmakuEnabled) console.log('[Config] 弹幕已开启');
                         // 📮 求片开关（服务端配置了 ADMIN_TOKEN 才开启；否则整个功能隐藏）
                         this.requestsEnabled = !!config.requests_enabled;
+                        // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
+                        this.liveEnabled = !!config.live_enabled;
                         // 🚫 封禁锁屏（站长在后台封了这个用户）
                         this.userBanned = !!config.banned;
 
@@ -6071,6 +6411,10 @@
 
                     // ✨ 为你推荐：延迟低优先级加载(等首页榜单先渲染)，无历史时方法内部直接跳过
                     setTimeout(() => this.fetchRecommendations(), 2500);
+
+                    // 📺 直播：先用本地缓存秒显，再延迟拉取最新频道列表
+                    this._loadLiveRecentLocal();
+                    setTimeout(() => this.fetchLiveChannels(), 1800);
 
                     // ⬇️ 离线缓存：启动时读一次元数据(入口角标显示数量；不加载分段数据)
                     this.refreshOfflineList();
@@ -6213,6 +6557,23 @@
                             try { localStorage.setItem('donggua_cover_scale', String(this.coverScale)); } catch (e) { }
                             this.applyCoverScale();
                             console.log('[同步] 已应用封面缩放偏好:', this.coverScale);
+                        }
+                        // 📺 最近观看频道(跨设备)。服务器版是精简版(无 sources)；与本地按 id 合并、取较新 at，
+                        //    并保留本地已有的 sources(本机看过的不丢源)，避免整表覆盖丢失本地源/本机新条目。
+                        if (Array.isArray(data.settings.liveRecent)) {
+                            const localById = new Map((this.liveRecentChannels || []).map(c => [c.id, c]));
+                            const merged = [];
+                            const seen = new Set();
+                            for (const s of data.settings.liveRecent) {
+                                if (!s || !s.id || seen.has(s.id)) continue;
+                                seen.add(s.id);
+                                const local = localById.get(s.id);
+                                merged.push({ ...s, sources: (local && local.sources) || s.sources || [], at: Math.max(s.at || 0, (local && local.at) || 0) });
+                            }
+                            for (const c of (this.liveRecentChannels || [])) if (c && c.id && !seen.has(c.id)) merged.push(c);  // 本机有、服务器还没有的保留
+                            merged.sort((a, b) => (b.at || 0) - (a.at || 0));
+                            this.liveRecentChannels = merged.slice(0, 12);
+                            try { localStorage.setItem('donggua_live_recent', JSON.stringify(this.liveRecentChannels)); } catch (e) { }
                         }
                     } catch (e) { console.error('[同步] 拉取用户设置失败:', e); }
                 },
@@ -6781,6 +7142,7 @@
                 // 从历史记录直接播放
                 async playFromHistory(item) {
                     if (!item || !item.name) return;
+                    this._liveActive = false;  // 📺 从历史进入 VOD：清掉直播模式守卫
                     console.log('[观看历史] 点击播放:', item.name, 'groupData:', !!item.groupData, 'episode:', item.episode);
 
                     // 🧭 进入新剧：自增导航令牌，作废上一部剧残留的异步刷新/测速/回退定时器
@@ -7317,6 +7679,7 @@
                 // 把当前剧/集写进地址栏（便于收藏/分享），用 replaceState 不污染历史
                 syncShareUrl() {
                     try {
+                        if (this.currentGroup && this.currentGroup._isLive) { try { history.replaceState(history.state, '', location.pathname); } catch (e) { } return; }  // 📺 直播不写 ?play= 深链(无法当 VOD 解析)
                         if (!this.currentGroup || !this.currentGroup.name) return;
                         let u = '/?play=' + encodeURIComponent(this.currentGroup.name);
                         const cur = (this.episodeList && this.episodeList.length > 1)
@@ -8155,6 +8518,7 @@
                     };
                 },
                 async openDetail(group) {
+                    this._liveActive = false;  // 📺 进入 VOD：确保清掉直播模式(否则进度保存会被直播守卫跳过)
                     // 🧭 进入新剧详情：自增导航令牌并记录，用于作废本次测速期间被切换走的残留回调
                     _navSeq++;
                     const _openSeq = _navSeq;
@@ -8495,6 +8859,10 @@
                 },
                 closeDetail() {
                     this.showDetail = false;
+                    this._liveActive = false;       // 📺 退出直播模式(否则下一部 VOD 会被当直播、丢进度)
+                    this._liveOpenSeq++;            // 作废在飞的直播测速循环
+                    this.liveChannelId = null;
+                    this.liveTesting = false;
                     this.showOfflinePanel = false;  // ⬇️ 收起离线面板(防止下次打开别的剧时面板状态串显)
                     this.previewLocked = false;  // 🔒 退出预览锁定态
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
@@ -8704,6 +9072,7 @@
 
                 // 🔄 强制刷新线路列表（重新测速）
                 async refreshSources() {
+                    if (this.currentGroup && this.currentGroup._isLive) return;  // 📺 直播不走 VOD 重搜(线路切换在直播面板)
                     if (!this.currentGroup || this.isTestingSources) return;
                     this.refreshingSources = true;
                     this.isTestingSources = true;
@@ -8899,6 +9268,7 @@
                 // 🗨️ 构建当前集的 DPlayer 弹幕配置：id="剧名|集名"(交给 /api/danmaku/v3/ 匹配第三方弹幕)。
                 //    未开启弹幕或无剧名时返回 null(DPlayer 不挂弹幕)。api 末尾的斜杠是 DPlayer 约定(它会拼 v3/?id=)。
                 _buildDanmakuOption() {
+                    if (this._liveActive) return null;  // 📺 直播无弹幕
                     if (!this.danmakuEnabled) return null;
                     if (!this.currentGroup || !this.currentGroup.name) return null;
                     const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
@@ -10258,6 +10628,7 @@
                         // - 允许进度倒退（用户可能重新开始看）
                         // - 距离结尾 < 2分钟 视为完播，清除进度
                         const saveProgress = (currentTime) => {
+                            if (this._liveActive) return;  // 📺 直播无进度：不写进度键、不进 VOD 历史(改记最近频道)
                             const duration = dp.video?.duration || 0;
 
                             // 获取电影信息用于观看历史
@@ -10342,6 +10713,7 @@
 
                         // 播放结束时清除进度记录
                         dp.on('ended', () => {
+                            if (this._liveActive) return;  // 📺 直播不会真正结束(断流误触发)：不清进度、不自动跳台
                             // 🛡️ 投屏(AirPlay/远程)接管 MSE 流时会发"伪 ended"(进度远没到结尾)，旧逻辑直接 playNextEpisode
                             //    → 连跳好几集(用户报 iOS 投屏从第6集跳到第10+集)。投屏期间一律不处理 ended、不自动跳集。
                             if (this._isCasting()) { console.log('[投屏] 投屏中忽略 ended，不自动跳集'); return; }
@@ -10822,6 +11194,22 @@
                 handlePlaybackError() {
                     // 🛡️ 投屏接管 MSE 时本地 <video> 会报 error，这不是线路问题；投屏期间不要自动切线路
                     if (this._isCasting()) { console.log('[投屏] 投屏中忽略播放错误，不自动切线路'); return; }
+                    // 📺 直播：VOD 的 availableSources 为空(sources:[])，不能走 VOD 换源/"所有线路均无法播放"误报。
+                    //    改为在频道自己的 _liveLines 间顺延；用尽则给直播专属提示。
+                    if (this._liveActive || (this.currentGroup && this.currentGroup._isLive)) {
+                        if (this.isAutoRetrying) return;
+                        const lines = (this.currentGroup && this.currentGroup._liveLines) || [];
+                        if (this.liveLineIdx < lines.length - 1) {
+                            this.isAutoRetrying = true;
+                            const next = this.liveLineIdx + 1;
+                            this.autoRetryMessage = `线路${this.liveLineIdx + 1} 无法播放，正在尝试 线路${next + 1}…`;
+                            setTimeout(() => { this.isAutoRetrying = false; this.autoRetryMessage = ''; this.switchLiveLine(next); }, 1200);
+                        } else {
+                            this.autoRetryMessage = this.corsProxyUrl ? '该频道暂时无法播放，请换个频道或稍后再试' : '直播多为运营商源，需配置 CORS 代理才能播放';
+                            setTimeout(() => { this.autoRetryMessage = ''; }, 3000);
+                        }
+                        return;
+                    }
                     this.playbackErrorCount++;
 
                     // 避免重复触发

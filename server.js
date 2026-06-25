@@ -81,12 +81,19 @@ const REMOTE_DB_URL = process.env['REMOTE_DB_URL'] || '';
 // CORS 代理 URL（用于中转无法直接访问的资源站 API）
 const CORS_PROXY_URL = process.env['CORS_PROXY_URL'] || '';
 
+// 📺 直播(IPTV)：上游 M3U 源(vbskycn/iptv，每6h更新)。可用 LIVE_M3U_URL 覆盖主源、LIVE_M3U_FALLBACK 覆盖备源；
+//    设 LIVE_TV_DISABLED=1 整体关闭(前端隐藏直播区、后端 /api/live/channels 返回 enabled:false)。
+const LIVE_M3U_URL = process.env['LIVE_M3U_URL'] || 'https://live.zbds.top/tv/iptv4.m3u';
+const LIVE_M3U_FALLBACK = process.env['LIVE_M3U_FALLBACK'] || 'https://gh-proxy.com/raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u';
+const LIVE_TV_ENABLED = !process.env['LIVE_TV_DISABLED'];
+
 // 环境变量加载状态日志（用于 Vercel 调试）
 console.log(`[System] Environment: ${process.env.VERCEL ? 'Vercel Serverless' : 'Local/VPS'}`);
 console.log(`[System] TMDB_API_KEY: ${process.env.TMDB_API_KEY ? '✓ Configured' : '✗ Missing'}`);
 console.log(`[System] TMDB_PROXY_URL: ${process.env['TMDB_PROXY_URL'] || '(not set)'}`);
 console.log(`[System] CORS_PROXY_URL: ${CORS_PROXY_URL || '(not set)'}`);
 console.log(`[System] REMOTE_DB_URL: ${REMOTE_DB_URL ? '✓ Configured' : '(not set)'}`);
+console.log(`[System] 直播(IPTV): ${LIVE_TV_ENABLED ? '✓ 启用 (' + LIVE_M3U_URL + ')' : '✗ 已禁用 (LIVE_TV_DISABLED)'}`);
 
 
 
@@ -986,6 +993,144 @@ app.use(express.static('public', {
 
 const IS_VERCEL = !!process.env.VERCEL;
 
+// ========== 📺 直播(IPTV)频道：拉取上游 M3U → 解析 → 精选 → 缓存(6h) ==========
+// 服务器只负责"拉取+精选+缓存+定时更新"；真正的"测速/线路选择/可用性"放在客户端做——
+// 直播多为 http:// 运营商源(混合内容)，实际播放走 CF Worker 代理，客户端在自己网络上测才准。
+const LIVE_CACHE_TTL = 6 * 60 * 60 * 1000;
+let _liveCache = { at: 0, data: [], ok: false };
+let _liveInflight = null;
+
+// 精选频道(主页一行)：re 测试 (tvg-id + ' ' + 名称) 去空格横杠大写串；多条上游线路合并为 sources。
+// 顺序 = 展示顺序 = 匹配优先级：每个上游频道只归入【第一个】命中的项(见 curateLive)。
+// CCTV5+ 必须排在 CCTV5 之前——上游常把 CCTV5+ 误标 tvg-id=CCTV5，靠"首匹配优先"才能正确归类。
+const LIVE_CURATED = [
+    { id: 'cctv1', name: 'CCTV-1 综合', group: '央视', re: /CCTV1(?![0-9])/ },
+    { id: 'cctv2', name: 'CCTV-2 财经', group: '央视', re: /CCTV2(?![0-9])/ },
+    { id: 'cctv3', name: 'CCTV-3 综艺', group: '央视', re: /CCTV3(?![0-9])/ },
+    { id: 'cctv4', name: 'CCTV-4 中文国际', group: '央视', re: /CCTV4(?![0-9])/ },
+    { id: 'cctv5p', name: 'CCTV-5+ 体育赛事', group: '体育', re: /CCTV5[＋+]/ },
+    { id: 'cctv5', name: 'CCTV-5 体育', group: '体育', re: /CCTV5(?![0-9＋+])/ },
+    { id: 'cctv6', name: 'CCTV-6 电影', group: '央视', re: /CCTV6(?![0-9])/ },
+    { id: 'cctv7', name: 'CCTV-7 国防军事', group: '央视', re: /CCTV7(?![0-9])/ },
+    { id: 'cctv8', name: 'CCTV-8 电视剧', group: '央视', re: /CCTV8(?![0-9])/ },
+    { id: 'cctv9', name: 'CCTV-9 纪录', group: '央视', re: /CCTV9(?![0-9])/ },
+    { id: 'cctv10', name: 'CCTV-10 科教', group: '央视', re: /CCTV10(?![0-9])/ },
+    { id: 'cctv11', name: 'CCTV-11 戏曲', group: '央视', re: /CCTV11(?![0-9])/ },
+    { id: 'cctv12', name: 'CCTV-12 社会与法', group: '央视', re: /CCTV12(?![0-9])/ },
+    { id: 'cctv13', name: 'CCTV-13 新闻', group: '央视', re: /CCTV13(?![0-9])/ },
+    { id: 'cctv14', name: 'CCTV-14 少儿', group: '央视', re: /CCTV14(?![0-9])/ },
+    { id: 'cctv15', name: 'CCTV-15 音乐', group: '央视', re: /CCTV15(?![0-9])/ },
+    { id: 'cctv17', name: 'CCTV-17 农业农村', group: '央视', re: /CCTV17(?![0-9])/ },
+    { id: 'hunan', name: '湖南卫视', group: '卫视', re: /湖南卫视/ },
+    { id: 'zhejiang', name: '浙江卫视', group: '卫视', re: /浙江卫视/ },
+    { id: 'dongfang', name: '东方卫视', group: '卫视', re: /东方卫视/ },
+    { id: 'jiangsu', name: '江苏卫视', group: '卫视', re: /江苏卫视/ },
+    { id: 'beijing', name: '北京卫视', group: '卫视', re: /北京卫视/ },
+    { id: 'guangdong', name: '广东卫视', group: '卫视', re: /广东卫视/ },
+    { id: 'shenzhen', name: '深圳卫视', group: '卫视', re: /深圳卫视/ },
+    { id: 'shandong', name: '山东卫视', group: '卫视', re: /山东卫视/ },
+    { id: 'anhui', name: '安徽卫视', group: '卫视', re: /安徽卫视/ },
+    { id: 'dongnan', name: '东南卫视', group: '卫视', re: /东南卫视/ },
+    { id: 'gdsports', name: '广东体育', group: '体育', re: /广东体育/ },
+    { id: 'wuxing', name: '五星体育', group: '体育', re: /五星体育/ }
+];
+
+function parseM3U(text) {
+    const out = [];
+    const lines = String(text).split(/\r?\n/);
+    let cur = null;
+    for (const raw of lines) {
+        const line = raw.trim();
+        if (!line) continue;
+        if (line.startsWith('#EXTINF')) {
+            const name = line.includes(',') ? line.slice(line.lastIndexOf(',') + 1).trim() : '';
+            const logo = (line.match(/tvg-logo="([^"]*)"/i) || [])[1] || '';
+            const group = (line.match(/group-title="([^"]*)"/i) || [])[1] || '';
+            const tvgId = (line.match(/tvg-id="([^"]*)"/i) || [])[1] || '';
+            cur = { name, logo, group, tvgId };
+        } else if (line[0] !== '#') {
+            if (cur) { cur.url = line; out.push(cur); cur = null; }
+        }
+    }
+    return out;
+}
+
+function curateLive(channels) {
+    // 每个上游频道只归入【第一个】匹配的精选项(LIVE_CURATED 顺序即优先级：CCTV5+ 在 CCTV5 之前)。
+    // 这样更具体的项先吃掉，避免"串台"——比如上游把 CCTV5+ 误标 tvg-id=CCTV5 时，靠拼接串里的空格
+    // 会绕过 CCTV5 的负向预查导致 CCTV5+ 同时进 CCTV5；逐频道首匹配 + 去掉空格可彻底根治。
+    const buckets = new Map(LIVE_CURATED.map(e => [e.id, { entry: e, seen: new Set(), sources: [], logo: '' }]));
+    for (const c of channels) {
+        const u = (c.url || '').trim();
+        if (!/^https?:\/\//i.test(u)) continue;   // 浏览器只能播 http(s) m3u8，丢弃 rtp/udp/rtmp
+        const T = ((c.tvgId || '') + ' ' + (c.name || '')).toUpperCase().replace(/[\s-]/g, '');
+        const entry = LIVE_CURATED.find(e => e.re.test(T));
+        if (!entry) continue;
+        const b = buckets.get(entry.id);
+        if (b.seen.has(u) || b.sources.length >= 6) continue;   // 单频道最多 6 条线路，控制下发体积
+        b.seen.add(u);
+        // 台标只收 https(避免混合内容被拦 + 挡住恶意上游注入的 data:/外站追踪像素)；其余字段都是文本插值(转义)
+        if (!b.logo && c.logo && /^https:\/\//i.test(c.logo)) b.logo = c.logo;
+        b.sources.push({ url: u });
+    }
+    const result = [];
+    for (const entry of LIVE_CURATED) {
+        const b = buckets.get(entry.id);
+        if (b.sources.length) result.push({ id: entry.id, name: entry.name, group: entry.group, logo: b.logo, sources: b.sources });
+    }
+    return result;
+}
+
+async function fetchLiveUpstream() {
+    const tryUrls = [LIVE_M3U_URL, LIVE_M3U_FALLBACK].filter(Boolean);
+    let text = '';
+    for (const u of tryUrls) {
+        try {
+            const r = await axios.get(u, { timeout: 12000, responseType: 'text', headers: { 'User-Agent': 'Mozilla/5.0' } });
+            if (r.data && String(r.data).includes('#EXTINF')) { text = String(r.data); break; }
+        } catch (e) { /* 试下一个源 */ }
+    }
+    if (!text) throw new Error('upstream M3U fetch failed');
+    const parsed = parseM3U(text);
+    const curated = curateLive(parsed);
+    console.log(`[直播] 上游拉取成功：解析 ${parsed.length} 个频道 → 精选 ${curated.length} 个`);
+    return curated;
+}
+
+// 取直播频道(带 6h 缓存 + 并发合并 + 旧缓存兜底)
+async function getLiveChannels(force = false) {
+    if (!force && _liveCache.ok && (Date.now() - _liveCache.at) < LIVE_CACHE_TTL) return _liveCache.data;
+    if (_liveInflight) return _liveInflight;
+    _liveInflight = (async () => {
+        try {
+            const data = await fetchLiveUpstream();
+            _liveCache = { at: Date.now(), data, ok: true };
+            return data;
+        } catch (e) {
+            console.error('[直播] 刷新失败:', e.message);
+            if (_liveCache.ok) return _liveCache.data;   // 拉取失败时沿用旧缓存
+            _liveCache = { at: Date.now(), data: [], ok: false };
+            return [];
+        } finally { _liveInflight = null; }
+    })();
+    return _liveInflight;
+}
+
+// 📺 直播频道列表(精选 + 6h 缓存)。前端再本地缓存。
+app.get('/api/live/channels', async (req, res) => {
+    if (!LIVE_TV_ENABLED) return res.json({ enabled: false, channels: [] });
+    try {
+        const channels = await getLiveChannels(false);
+        res.set('Cache-Control', 'public, max-age=1800');   // 客户端/CDN 缓存 30 分钟
+        res.json({ enabled: true, updatedAt: _liveCache.at, count: channels.length, channels });
+    } catch (e) {
+        res.json({ enabled: true, channels: [], error: 'fetch_failed' });
+    }
+});
+
+// 启动后预热缓存(非阻塞)，让首位用户也能秒开直播区
+if (LIVE_TV_ENABLED && !IS_VERCEL) { getLiveChannels(false).catch(() => {}); }
+
 app.get('/api/config', (req, res) => {
     // 检查请求中的 token 是否支持同步
     const userToken = req.query.token || '';
@@ -1006,6 +1151,8 @@ app.get('/api/config', (req, res) => {
         danmaku_enabled: !!process.env.DANMU_API_URL,
         // 📮 求片：必须配置 ADMIN_TOKEN(站长才能履行)才开启;否则前端整个隐藏入口、后端拒收
         requests_enabled: !!process.env.ADMIN_TOKEN,
+        // 📺 直播(IPTV)：默认开启，设 LIVE_TV_DISABLED=1 关闭 → 前端隐藏直播区
+        live_enabled: LIVE_TV_ENABLED,
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });
