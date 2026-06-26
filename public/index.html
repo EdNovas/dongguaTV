@@ -2177,6 +2177,40 @@
         /* 实测放不了的频道置灰(仍可点，可能换线路/换网络能播) */
         .live-card.live-dead { opacity: 0.38; filter: grayscale(0.6); }
         .live-card.live-dead:hover { opacity: 0.7; }
+        /* 最近观看：删除单个(×，常显以适配触屏)+ 清空 */
+        .live-recent-del {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            z-index: 3;
+            width: 20px;
+            height: 20px;
+            padding: 0;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.78);
+            border: 1px solid rgba(255, 255, 255, 0.28);
+            color: #fff;
+            font-size: 10px;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.6;
+            transition: opacity 0.15s, background 0.15s;
+        }
+        .live-card:hover .live-recent-del { opacity: 1; }
+        .live-recent-del:hover { background: var(--accent); border-color: var(--accent); }
+        .live-recent-clear {
+            margin-left: 8px;
+            color: #888;
+            font-size: 11px;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 1px 9px;
+        }
+        .live-recent-clear:hover { color: #fff; border-color: var(--accent); }
         .live-logo img {
             max-width: 84%;
             max-height: 78%;
@@ -4069,10 +4103,14 @@
                 </div>
                 <!-- 最近观看频道(有才显示) -->
                 <template v-if="liveRecentChannels.length">
-                    <div class="live-sub-label"><i class="fas fa-clock"></i> 最近观看</div>
+                    <div class="live-sub-label"><i class="fas fa-clock"></i> 最近观看
+                        <span class="live-recent-clear" @click="clearLiveRecent">清空</span>
+                    </div>
                     <div class="hot-row live-row" style="margin-bottom: 8px;">
                         <div class="live-card" v-for="ch in liveRecentChannels" :key="'lr-' + ch.id"
                             @click="openLiveChannel(ch)">
+                            <button class="live-recent-del" @click.stop="removeLiveRecent(ch.id)"
+                                aria-label="删除最近观看" title="删除"><i class="fas fa-times"></i></button>
                             <div class="live-logo">
                                 <i class="fas fa-tv live-logo-fallback"></i>
                                 <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
@@ -6304,6 +6342,19 @@
                     const list = this.liveRecentChannels.filter(c => c.id !== ch.id);
                     list.unshift(entry);
                     this.liveRecentChannels = list.slice(0, 12);
+                    this._saveLiveRecent();
+                },
+                // 删除单个最近观看频道
+                removeLiveRecent(id) {
+                    this.liveRecentChannels = this.liveRecentChannels.filter(c => c.id !== id);
+                    this._saveLiveRecent();
+                },
+                // 清空最近观看
+                clearLiveRecent() {
+                    this.liveRecentChannels = [];
+                    this._saveLiveRecent();
+                },
+                _saveLiveRecent() {
                     try { localStorage.setItem('donggua_live_recent', JSON.stringify(this.liveRecentChannels)); } catch (e) { }
                     this._pushLiveRecent();
                 },
