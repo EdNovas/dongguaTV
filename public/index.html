@@ -6225,10 +6225,12 @@
                     const ctrl = new AbortController();
                     const timer = setTimeout(() => ctrl.abort(), 6000);
                     try {
-                        // 直连 https 用 no-cors 只探可达性(原生 HLS 播放本就免 CORS)；走代理则 worker 已带 CORS、可读状态
+                        // 直连 https 用 no-cors 只探可达性(原生 HLS 播放本就免 CORS)；走代理则 worker 已带 CORS、可读真实状态
                         const res = await fetch(target, { method: 'GET', cache: 'no-cache', mode: direct ? 'no-cors' : 'cors', signal: ctrl.signal });
                         clearTimeout(timer);
-                        return (res.ok || res.type === 'opaque' || res.type === 'cors');
+                        // opaque=直连 https 可达(no-cors 读不到状态，交给播放器)；cors/basic 必须 res.ok——否则 worker 返回的
+                        // 403(运营商源被封)会因 type==='cors' 被误判为"能播"，把死源排到 catvod 前面。
+                        return res.ok || res.type === 'opaque';
                     } catch (e) { clearTimeout(timer); return false; }
                 },
                 // 打开/切换直播频道：建最小 group → 测线路 → 播放 → 记最近观看
