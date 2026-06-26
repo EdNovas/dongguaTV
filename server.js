@@ -85,6 +85,8 @@ const CORS_PROXY_URL = process.env['CORS_PROXY_URL'] || '';
 //    设 LIVE_TV_DISABLED=1 整体关闭(前端隐藏直播区、后端 /api/live/channels 返回 enabled:false)。
 const LIVE_M3U_URL = process.env['LIVE_M3U_URL'] || 'https://live.zbds.top/tv/iptv4.m3u';
 const LIVE_M3U_FALLBACK = process.env['LIVE_M3U_FALLBACK'] || 'https://gh-proxy.com/raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u';
+// 第二上游(iptv-org cn)：补 CDN 域名源——vbskycn 的 CCTV 多是运营商 IP(封 Cloudflare 放不了)，iptv-org 有 cctvplus 等 CDN 源。
+const LIVE_M3U_IPTVORG = process.env['LIVE_M3U_IPTVORG'] || 'https://iptv-org.github.io/iptv/countries/cn.m3u';
 const LIVE_TV_ENABLED = !process.env['LIVE_TV_DISABLED'];
 
 // 环境变量加载状态日志（用于 Vercel 调试）
@@ -1000,40 +1002,58 @@ const LIVE_CACHE_TTL = 6 * 60 * 60 * 1000;
 let _liveCache = { at: 0, data: [], ok: false };
 let _liveInflight = null;
 
-// 精选频道(主页一行)：re 测试 (tvg-id + ' ' + 名称) 去空格横杠大写串；多条上游线路合并为 sources。
-// 顺序 = 展示顺序 = 匹配优先级：每个上游频道只归入【第一个】命中的项(见 curateLive)。
-// CCTV5+ 必须排在 CCTV5 之前——上游常把 CCTV5+ 误标 tvg-id=CCTV5，靠"首匹配优先"才能正确归类。
-const LIVE_CURATED = [
-    { id: 'cctv1', name: 'CCTV-1 综合', group: '央视', re: /CCTV1(?![0-9])/ },
-    { id: 'cctv2', name: 'CCTV-2 财经', group: '央视', re: /CCTV2(?![0-9])/ },
-    { id: 'cctv3', name: 'CCTV-3 综艺', group: '央视', re: /CCTV3(?![0-9])/ },
-    { id: 'cctv4', name: 'CCTV-4 中文国际', group: '央视', re: /CCTV4(?![0-9])/ },
-    { id: 'cctv5p', name: 'CCTV-5+ 体育赛事', group: '体育', re: /CCTV5[＋+]/ },
-    { id: 'cctv5', name: 'CCTV-5 体育', group: '体育', re: /CCTV5(?![0-9＋+])/ },
-    { id: 'cctv6', name: 'CCTV-6 电影', group: '央视', re: /CCTV6(?![0-9])/ },
-    { id: 'cctv7', name: 'CCTV-7 国防军事', group: '央视', re: /CCTV7(?![0-9])/ },
-    { id: 'cctv8', name: 'CCTV-8 电视剧', group: '央视', re: /CCTV8(?![0-9])/ },
-    { id: 'cctv9', name: 'CCTV-9 纪录', group: '央视', re: /CCTV9(?![0-9])/ },
-    { id: 'cctv10', name: 'CCTV-10 科教', group: '央视', re: /CCTV10(?![0-9])/ },
-    { id: 'cctv11', name: 'CCTV-11 戏曲', group: '央视', re: /CCTV11(?![0-9])/ },
-    { id: 'cctv12', name: 'CCTV-12 社会与法', group: '央视', re: /CCTV12(?![0-9])/ },
-    { id: 'cctv13', name: 'CCTV-13 新闻', group: '央视', re: /CCTV13(?![0-9])/ },
-    { id: 'cctv14', name: 'CCTV-14 少儿', group: '央视', re: /CCTV14(?![0-9])/ },
-    { id: 'cctv15', name: 'CCTV-15 音乐', group: '央视', re: /CCTV15(?![0-9])/ },
-    { id: 'cctv17', name: 'CCTV-17 农业农村', group: '央视', re: /CCTV17(?![0-9])/ },
-    { id: 'hunan', name: '湖南卫视', group: '卫视', re: /湖南卫视/ },
-    { id: 'zhejiang', name: '浙江卫视', group: '卫视', re: /浙江卫视/ },
-    { id: 'dongfang', name: '东方卫视', group: '卫视', re: /东方卫视/ },
-    { id: 'jiangsu', name: '江苏卫视', group: '卫视', re: /江苏卫视/ },
-    { id: 'beijing', name: '北京卫视', group: '卫视', re: /北京卫视/ },
-    { id: 'guangdong', name: '广东卫视', group: '卫视', re: /广东卫视/ },
-    { id: 'shenzhen', name: '深圳卫视', group: '卫视', re: /深圳卫视/ },
-    { id: 'shandong', name: '山东卫视', group: '卫视', re: /山东卫视/ },
-    { id: 'anhui', name: '安徽卫视', group: '卫视', re: /安徽卫视/ },
-    { id: 'dongnan', name: '东南卫视', group: '卫视', re: /东南卫视/ },
-    { id: 'gdsports', name: '广东体育', group: '体育', re: /广东体育/ },
-    { id: 'wuxing', name: '五星体育', group: '体育', re: /五星体育/ }
-];
+// 分类映射 + 展示顺序。用户选"全列出不验证"：上游全部频道按分类下发，主页行显示前几类，
+// 播放页"快速换台"出 grid + 分类筛选。客户端测线路挑能播的(运营商 IP 源封 CF，放不了)。
+const LIVE_GROUP_MAP = {
+    '央视频道': '央视', '卫视频道': '卫视', '体育频道': '体育', '电影频道': '影视',
+    '纪录频道': '纪实', '儿童频道': '少儿', '音乐频道': '音乐', '春晚频道': '专题',
+    '地方频道': '地方', '直播中国': '地方', '数字频道': '数字', '解说频道': '体育'
+};
+const LIVE_GROUP_ORDER = ['央视', '卫视', '体育', '影视', '新闻', '纪实', '少儿', '音乐', '专题', '数字', '地方', '其他'];
+// 主页一行显示的分类(其余靠播放页 grid + 分类浏览)
+const LIVE_HOME_GROUPS = new Set(['央视', '卫视', '体育']);
+
+// 名称归一(合并/去重 key)：去掉清晰度/HD/台/频道等噪声、空格横杠，大写
+function liveNormName(name) {
+    return String(name || '')
+        .replace(/\((?:\d{3,4}[pi]|[^)]*?)\)/gi, '')   // (1080p)/(720p)/(...)
+        .replace(/\[[^\]]*\]/g, '')                     // [Not 24/7]
+        .replace(/(高清|超清|蓝光|频道|台|HD|FHD|UHD|4K|8K|IPV6|IPV4)/gi, '')
+        .replace(/[\s\-_·｜|]/g, '')
+        .toUpperCase();
+}
+// 展示名清理(去清晰度/方括号噪声，保留中文台名)
+function liveCleanName(name) {
+    return String(name || '').replace(/\s*\((?:\d{3,4}[pi])\)\s*/gi, ' ').replace(/\s*\[[^\]]*\]\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function liveHostIsIP(u) { try { return /^\d{1,3}(\.\d{1,3}){3}$/.test(new URL(u).hostname); } catch (e) { return true; } }
+// 线路可达性打分(越小越靠前)。关键：CF Worker 的 fetch() 只允许标准端口(80/443/8080…)，
+// 运营商源多在 :9901/:82 等非标端口 → worker 取不到(403)；裸 IP 也常被封。域名+标准端口才能过。
+const LIVE_STD_PORTS = new Set([80, 443, 8080, 8443, 2052, 2053, 2082, 2083, 2086, 2087, 2095, 2096, 8880]);
+function liveSrcRank(u) {
+    try {
+        const url = new URL(u);
+        const ip = /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname);
+        const port = url.port ? parseInt(url.port, 10) : (url.protocol === 'https:' ? 443 : 80);
+        const stdPort = LIVE_STD_PORTS.has(port);
+        // 仅"域名 + 标准端口"才是 worker 真正能取到的(rank 0/1)；裸 IP 或非标端口 worker 多半 403(rank 10+)
+        if (!ip && stdPort) return url.protocol === 'https:' ? 0 : 1;
+        return 10 + (ip ? 2 : 0) + (stdPort ? 0 : 4) + (url.protocol === 'https:' ? 0 : 1);
+    } catch (e) { return 99; }
+}
+// 分类判定：先看名字(跨两个上游更稳)，再回退 group-title 映射
+function liveCategoryOf(name, groupTitle) {
+    const n = String(name || '');
+    if (/CCTV|央视|CGTN/i.test(n)) return /(5\s*[＋+]|体育|赛事|高尔夫|网球|台球|风云足球|斯诺克)/.test(n) ? '体育' : '央视';
+    if (/卫视/.test(n)) return '卫视';
+    if (/(体育|赛事|足球|篮球|网球|高尔夫|台球|斯诺克|搏击|NBA|ESPN)/i.test(n)) return '体育';
+    if (/(电影|影院|剧场|影视|院线)/.test(n)) return '影视';
+    if (/(少儿|动画|卡通|动漫|儿童|宝贝|金鹰卡通|嘉佳)/.test(n)) return '少儿';
+    if (/(纪录|纪实|探索|科教|地理|discovery)/i.test(n)) return '纪实';
+    if (/(新闻|资讯|凤凰)/.test(n)) return '新闻';
+    if (/(音乐|MTV|演唱)/i.test(n)) return '音乐';
+    return LIVE_GROUP_MAP[groupTitle] || '其他';
+}
 
 function parseM3U(text) {
     const out = [];
@@ -1055,46 +1075,68 @@ function parseM3U(text) {
     return out;
 }
 
-function curateLive(channels) {
-    // 每个上游频道只归入【第一个】匹配的精选项(LIVE_CURATED 顺序即优先级：CCTV5+ 在 CCTV5 之前)。
-    // 这样更具体的项先吃掉，避免"串台"——比如上游把 CCTV5+ 误标 tvg-id=CCTV5 时，靠拼接串里的空格
-    // 会绕过 CCTV5 的负向预查导致 CCTV5+ 同时进 CCTV5；逐频道首匹配 + 去掉空格可彻底根治。
-    const buckets = new Map(LIVE_CURATED.map(e => [e.id, { entry: e, seen: new Set(), sources: [], logo: '' }]));
-    for (const c of channels) {
-        const u = (c.url || '').trim();
-        if (!/^https?:\/\//i.test(u)) continue;   // 浏览器只能播 http(s) m3u8，丢弃 rtp/udp/rtmp
-        const T = ((c.tvgId || '') + ' ' + (c.name || '')).toUpperCase().replace(/[\s-]/g, '');
-        const entry = LIVE_CURATED.find(e => e.re.test(T));
-        if (!entry) continue;
-        const b = buckets.get(entry.id);
-        if (b.seen.has(u) || b.sources.length >= 6) continue;   // 单频道最多 6 条线路，控制下发体积
-        b.seen.add(u);
-        // 台标只收 https(避免混合内容被拦 + 挡住恶意上游注入的 data:/外站追踪像素)；其余字段都是文本插值(转义)
-        if (!b.logo && c.logo && /^https:\/\//i.test(c.logo)) b.logo = c.logo;
-        b.sources.push({ url: u });
+// 合并多路上游 → 按归一名去重 → 分类 → 线路域名优先排序。返回 { channels, groups }。
+function buildLiveChannels(lists) {
+    const map = new Map();   // 归一名 → bucket
+    for (const list of lists) {
+        for (const c of (list || [])) {
+            const u = (c.url || '').trim();
+            if (!/^https?:\/\//i.test(u)) continue;   // 浏览器只能播 http(s) m3u8
+            const key = liveNormName(c.name);
+            if (!key) continue;
+            if (/支持作者|更新时间|请刷新|公众号|演示频道|测试频道|^熊猫直播$/.test(c.name)) continue;   // 过滤上游推广/占位条目
+            let b = map.get(key);
+            if (!b) {
+                b = { name: liveCleanName(c.name) || c.name, group: liveCategoryOf(c.name, c.group), logo: '', seen: new Set(), sources: [] };
+                map.set(key, b);
+            } else {
+                const cn = liveCleanName(c.name);
+                if (cn && cn.length < b.name.length) b.name = cn;   // 取更短更干净的展示名
+            }
+            // 台标只收 https(挡混合内容 + 恶意上游 data:/追踪像素)
+            if (!b.logo && c.logo && /^https:\/\//i.test(c.logo)) b.logo = c.logo;
+            if (!b.seen.has(u) && b.sources.length < 12) {
+                b.seen.add(u);
+                b.sources.push({ url: u, rank: liveSrcRank(u) });
+            }
+        }
     }
-    const result = [];
-    for (const entry of LIVE_CURATED) {
-        const b = buckets.get(entry.id);
-        if (b.sources.length) result.push({ id: entry.id, name: entry.name, group: entry.group, logo: b.logo, sources: b.sources });
+    const channels = [];
+    for (const [key, b] of map) {
+        // 线路排序：可达性打分(域名+标准端口 worker 才取得到；运营商非标端口/裸 IP 排最后)
+        b.sources.sort((a, z) => a.rank - z.rank);
+        channels.push({
+            id: 'lv_' + key.replace(/[^a-zA-Z0-9一-龥]/g, '').slice(0, 32),
+            name: b.name, group: b.group, logo: b.logo,
+            rank: b.sources.length ? b.sources[0].rank : 99,   // 最优线路可达性(前端把可能能播的排前面)
+            sources: b.sources.slice(0, 8).map(s => ({ url: s.url }))
+        });
     }
-    return result;
+    const gi = (g) => { const i = LIVE_GROUP_ORDER.indexOf(g); return i < 0 ? 999 : i; };
+    channels.sort((a, z) => gi(a.group) - gi(z.group) || a.name.localeCompare(z.name, 'zh'));
+    const groups = LIVE_GROUP_ORDER.filter(g => channels.some(c => c.group === g));
+    return { channels, groups };
 }
 
 async function fetchLiveUpstream() {
-    const tryUrls = [LIVE_M3U_URL, LIVE_M3U_FALLBACK].filter(Boolean);
-    let text = '';
-    for (const u of tryUrls) {
-        try {
-            const r = await axios.get(u, { timeout: 12000, responseType: 'text', headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (r.data && String(r.data).includes('#EXTINF')) { text = String(r.data); break; }
-        } catch (e) { /* 试下一个源 */ }
-    }
-    if (!text) throw new Error('upstream M3U fetch failed');
-    const parsed = parseM3U(text);
-    const curated = curateLive(parsed);
-    console.log(`[直播] 上游拉取成功：解析 ${parsed.length} 个频道 → 精选 ${curated.length} 个`);
-    return curated;
+    const get = async (urls) => {
+        for (const u of urls) {
+            try {
+                const r = await axios.get(u, { timeout: 12000, responseType: 'text', headers: { 'User-Agent': 'Mozilla/5.0' } });
+                if (r.data && String(r.data).includes('#EXTINF')) return String(r.data);
+            } catch (e) { /* 试下一个 */ }
+        }
+        return '';
+    };
+    const [vbText, orgText] = await Promise.all([
+        get([LIVE_M3U_URL, LIVE_M3U_FALLBACK].filter(Boolean)),
+        get([LIVE_M3U_IPTVORG].filter(Boolean))
+    ]);
+    if (!vbText && !orgText) throw new Error('upstream M3U fetch failed');
+    const vbList = parseM3U(vbText), orgList = parseM3U(orgText);
+    const built = buildLiveChannels([vbList, orgList]);
+    console.log(`[直播] 上游拉取：vbskycn ${vbList.length} + iptv-org ${orgList.length} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类`);
+    return built;
 }
 
 // 取直播频道(带 6h 缓存 + 并发合并 + 旧缓存兜底)
@@ -1109,8 +1151,8 @@ async function getLiveChannels(force = false) {
         } catch (e) {
             console.error('[直播] 刷新失败:', e.message);
             if (_liveCache.ok) return _liveCache.data;   // 拉取失败时沿用旧缓存
-            _liveCache = { at: Date.now(), data: [], ok: false };
-            return [];
+            _liveCache = { at: Date.now(), data: { channels: [], groups: [] }, ok: false };
+            return _liveCache.data;
         } finally { _liveInflight = null; }
     })();
     return _liveInflight;
@@ -1118,13 +1160,13 @@ async function getLiveChannels(force = false) {
 
 // 📺 直播频道列表(精选 + 6h 缓存)。前端再本地缓存。
 app.get('/api/live/channels', async (req, res) => {
-    if (!LIVE_TV_ENABLED) return res.json({ enabled: false, channels: [] });
+    if (!LIVE_TV_ENABLED) return res.json({ enabled: false, channels: [], groups: [] });
     try {
-        const channels = await getLiveChannels(false);
+        const data = await getLiveChannels(false);
         res.set('Cache-Control', 'public, max-age=1800');   // 客户端/CDN 缓存 30 分钟
-        res.json({ enabled: true, updatedAt: _liveCache.at, count: channels.length, channels });
+        res.json({ enabled: true, updatedAt: _liveCache.at, count: data.channels.length, channels: data.channels, groups: data.groups });
     } catch (e) {
-        res.json({ enabled: true, channels: [], error: 'fetch_failed' });
+        res.json({ enabled: true, channels: [], groups: [], error: 'fetch_failed' });
     }
 });
 

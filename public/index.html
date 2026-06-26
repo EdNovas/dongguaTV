@@ -2130,6 +2130,21 @@
 
         /* 📺 直播频道卡片 */
         .live-row { gap: 12px; }
+        /* 播放页"快速换台"网格：响应式列宽 + content-visibility 砍掉视口外卡片的绘制开销 */
+        .live-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+            gap: 12px;
+            max-height: 60vh;
+            overflow-y: auto;
+            padding: 2px;
+        }
+        .live-grid .live-card {
+            width: auto;
+            min-width: 0;
+            content-visibility: auto;
+            contain-intrinsic-size: 120px;
+        }
         .live-card {
             min-width: 112px;
             width: 112px;
@@ -4041,17 +4056,12 @@
                 </div>
             </div>
 
-            <!-- 📺 直播频道：精选常用频道(主页一行)。关闭或无数据时整段隐藏 -->
+            <!-- 📺 直播频道：主页一行(干净，无副标题/筛选；分类+全部频道在播放页 grid)。关闭/无数据时隐藏 -->
             <div class="section-container animate__animated animate__fadeInUp" v-if="liveEnabled && liveChannels.length > 0"
                 style="margin-top: 48px; margin-bottom: 44px;">
-                <div class="section-header" style="display: flex; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #e50914, #ff6a00);"></div>
                     <div class="section-title"><i class="fas fa-tower-broadcast"></i> 直播频道</div>
-                    <span style="color: #777; font-size: 12px;">央视 · 卫视 · 体育</span>
-                    <span class="live-filter-bar" style="margin-left: auto; display: flex; gap: 6px;">
-                        <button v-for="g in liveGroups" :key="'lf-' + g" class="live-filter-btn"
-                            :class="{ active: liveFilter === g }" @click="liveFilter = g">{{ g }}</button>
-                    </span>
                 </div>
                 <!-- 最近观看频道(有才显示) -->
                 <template v-if="liveRecentChannels.length">
@@ -4067,14 +4077,14 @@
                             <div class="live-name">{{ ch.name }}</div>
                         </div>
                     </div>
-                    <div class="live-sub-label"><i class="fas fa-list"></i> 全部频道</div>
+                    <div class="live-sub-label"><i class="fas fa-list"></i> 常用频道</div>
                 </template>
-                <!-- 频道列表(横向滚动) -->
+                <!-- 频道行(横向滚动；按可达性排序，点开后在播放页看全部+分类) -->
                 <div class="scroll-container">
                     <button class="scroll-btn left" v-show="liveCanScrollLeft" @click="scrollLiveRow(-1)"
                         aria-label="向左滚动频道"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                     <div class="hot-row live-row" ref="liveRow" @scroll="onLiveScroll">
-                        <div class="live-card" v-for="ch in filteredLiveChannels" :key="'lc-' + ch.id"
+                        <div class="live-card" v-for="ch in liveHomeChannels" :key="'lc-' + ch.id"
                             @click="openLiveChannel(ch)">
                             <div class="live-logo">
                                 <i class="fas fa-tv live-logo-fallback"></i>
@@ -4827,11 +4837,18 @@
                             </div>
                         </div>
                     </div>
-                    <!-- 快速换台 -->
+                    <!-- 快速换台：分类 tab + grid(全部频道在这里浏览) -->
                     <div>
-                        <div class="panel-title">快速换台</div>
-                        <div class="hot-row live-row">
-                            <div class="live-card" v-for="ch in liveChannels" :key="'lp-' + ch.id"
+                        <div class="panel-title" style="display: flex; align-items: center; gap: 8px;">
+                            快速换台
+                            <span style="color: #777; font-size: 12px; font-weight: normal;">共 {{ liveChannels.length }} 个频道</span>
+                        </div>
+                        <div class="live-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px;">
+                            <button v-for="g in liveGroups" :key="'pf-' + g" class="live-filter-btn"
+                                :class="{ active: liveFilter === g }" @click="liveFilter = g">{{ g }}</button>
+                        </div>
+                        <div class="live-grid">
+                            <div class="live-card" v-for="ch in filteredLiveChannels" :key="'lp-' + ch.id"
                                 :class="{ active: liveChannelId === ch.id }" @click="openLiveChannel(ch)">
                                 <div class="live-logo">
                                     <i class="fas fa-tv live-logo-fallback"></i>
@@ -5673,9 +5690,10 @@
                     recommendCanScrollRight: true,  // 为你推荐：右箭头显隐
                     // 📺 直播(IPTV)
                     liveEnabled: false,             // 来自 /api/config(live_enabled)
-                    liveChannels: [],               // 精选直播频道(来自 /api/live/channels)
+                    liveChannels: [],               // 全部直播频道(来自 /api/live/channels)
+                    liveGroupList: [],              // 分类顺序(来自服务器)
                     liveRecentChannels: [],         // 最近观看频道(本地+跨设备同步)
-                    liveFilter: '全部',             // 分类筛选(全部/央视/卫视/体育)
+                    liveFilter: '全部',             // 播放页 grid 分类筛选
                     liveCanScrollLeft: false,
                     liveCanScrollRight: true,
                     liveTesting: false,             // 正在为频道挑选可用线路
@@ -6042,16 +6060,20 @@
                 };
             },
             computed: {
-                // 📺 直播分类(只列出实际存在的组)
+                // 📺 直播分类 tab(全部 + 服务器给的分类顺序)
                 liveGroups() {
-                    const order = ['央视', '卫视', '体育'];
-                    const present = new Set(this.liveChannels.map(c => c.group));
-                    return ['全部', ...order.filter(g => present.has(g))];
+                    return ['全部', ...(this.liveGroupList || [])];
                 },
-                // 📺 按分类筛选后的直播频道
+                // 📺 播放页 grid：按分类筛选(裁到 300 防一次渲染太多卡顿)
                 filteredLiveChannels() {
-                    if (this.liveFilter === '全部') return this.liveChannels;
-                    return this.liveChannels.filter(c => c.group === this.liveFilter);
+                    const list = this.liveFilter === '全部'
+                        ? this.liveChannels
+                        : this.liveChannels.filter(c => c.group === this.liveFilter);
+                    return list.slice(0, 300);
+                },
+                // 📺 主页一行：按可达性(rank)排序，能播的排前面，裁到 120
+                liveHomeChannels() {
+                    return [...this.liveChannels].sort((a, b) => (a.rank == null ? 9 : a.rank) - (b.rank == null ? 9 : b.rank)).slice(0, 120);
                 },
                 // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
                 shareUrl() {
@@ -6148,6 +6170,7 @@
                             const c = JSON.parse(raw);
                             if (c && Array.isArray(c.channels) && (Date.now() - (c.at || 0)) < TTL) {
                                 this.liveChannels = c.channels;
+                                if (Array.isArray(c.groups)) this.liveGroupList = c.groups;
                                 this.$nextTick(() => this.updateLiveScroll());
                             }
                         }
@@ -6158,7 +6181,8 @@
                         if (data && data.enabled === false) { this.liveEnabled = false; this.liveChannels = []; return; }
                         if (data && Array.isArray(data.channels) && data.channels.length) {
                             this.liveChannels = data.channels;
-                            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), channels: data.channels })); } catch (e) { }
+                            this.liveGroupList = Array.isArray(data.groups) ? data.groups : [];
+                            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), channels: data.channels, groups: this.liveGroupList })); } catch (e) { }
                             this.$nextTick(() => this.updateLiveScroll());
                         }
                     } catch (e) {
@@ -6215,6 +6239,7 @@
                     const seq = ++this._liveOpenSeq;
                     this._liveActive = true;
                     this.liveChannelId = ch.id;
+                    if (ch.group && (this.liveGroupList || []).includes(ch.group)) this.liveFilter = ch.group;  // grid 落到本频道分类(有界)
                     this.liveLineIdx = 0;
                     this.currentGroup = { name: ch.name, pic: ch.logo || '', _isLive: true, _liveLines: ch.sources.slice(), sources: [] };
                     this.currentSource = { site_key: 'live_' + ch.id, site_name: ch.name, _useProxy: !!this.corsProxyUrl, _proxyUrl: this.corsProxyUrl || null };
@@ -8208,8 +8233,8 @@
                     let row = this.$refs[refName];
                     if (Array.isArray(row)) row = row[0];
                     if (row) {
-                        const scrollAmount = row.clientWidth * 0.6;
-                        row.scrollLeft += direction * scrollAmount;
+                        const scrollAmount = row.clientWidth * 0.8;
+                        row.scrollBy({ left: direction * scrollAmount, behavior: 'smooth' });   // 平滑滚动(合成线程，比 scrollLeft+= 直跳更顺)
                         if (direction > 0) this.fetchRow(refName, true);
                     }
                 },
@@ -8217,7 +8242,7 @@
                 // ✨ 为你推荐：专用横向滚动(不触发 fetchRow，推荐是定长列表)
                 scrollRecommendRow(direction) {
                     const row = this.$refs.recommendRow;
-                    if (row) row.scrollLeft += direction * row.clientWidth * 0.6;
+                    if (row) row.scrollBy({ left: direction * row.clientWidth * 0.8, behavior: 'smooth' });
                 },
                 onRecommendScroll() {
                     const row = this.$refs.recommendRow;
