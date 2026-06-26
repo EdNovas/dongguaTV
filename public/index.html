@@ -2133,7 +2133,7 @@
         /* 播放页"快速换台"网格：响应式列宽 + content-visibility 砍掉视口外卡片的绘制开销 */
         .live-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(calc(108px * var(--ui-scale, 1)), 1fr));
             gap: 12px;
             max-height: 60vh;
             overflow-y: auto;
@@ -2143,11 +2143,12 @@
             width: auto;
             min-width: 0;
             content-visibility: auto;
-            contain-intrinsic-size: 120px;
+            contain-intrinsic-size: calc(130px * var(--ui-scale, 1));
         }
+        /* 频道卡跟随设置里的"封面/文字大小"(--ui-scale)缩放 */
         .live-card {
-            min-width: 112px;
-            width: 112px;
+            min-width: calc(118px * var(--ui-scale, 1));
+            width: calc(118px * var(--ui-scale, 1));
             cursor: pointer;
             position: relative;
             transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
@@ -2157,7 +2158,7 @@
         .live-logo {
             position: relative;
             width: 100%;
-            height: 70px;
+            height: calc(74px * var(--ui-scale, 1));
             border-radius: 10px;
             background: linear-gradient(135deg, #1c1c22, #2a2a32);
             border: 1px solid rgba(255, 255, 255, 0.08);
@@ -2221,12 +2222,12 @@
         .live-logo-fallback {
             position: absolute;
             color: #555;
-            font-size: 26px;
+            font-size: calc(28px * var(--ui-scale, 1));
             z-index: 0;
         }
         .live-name {
             margin-top: 7px;
-            font-size: 12px;
+            font-size: calc(13px * var(--ui-scale, 1));
             color: #ddd;
             text-align: center;
             line-height: 1.3;
