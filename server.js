@@ -1116,7 +1116,8 @@ function buildLiveChannels(lists) {
         // 线路排序：可达性打分(域名+标准端口 worker 才取得到；运营商非标端口/裸 IP 排最后)
         b.sources.sort((a, z) => a.rank - z.rank);
         channels.push({
-            id: 'lv_' + key.replace(/[^a-zA-Z0-9一-龥]/g, '').slice(0, 32),
+            // 保留 '+' —— 否则 "CCTV+1"(归一名 CCTV+1)和 "CCTV1" 去掉加号都成 lv_CCTV1、id 撞车 → 多个频道同时高亮
+            id: 'lv_' + key.replace(/[^a-zA-Z0-9一-龥+]/g, '').slice(0, 40),
             name: b.name, group: b.group, logo: b.logo,
             rank: b.sources.length ? b.sources[0].rank : 99,   // 最优线路可达性(前端把可能能播的排前面)
             sources: b.sources.slice(0, 8).map(s => ({ url: s.url }))

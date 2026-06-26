@@ -6084,6 +6084,7 @@
                 // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
                 shareUrl() {
                     if (!this.currentGroup || !this.currentGroup.name) return location.origin + '/';
+                    if (this.currentGroup._isLive) return location.origin + '/?live=' + encodeURIComponent(this.currentGroup.name);  // 📺 直播分享链
                     let u = location.origin + '/?play=' + encodeURIComponent(this.currentGroup.name);
                     const cur = (this.episodeList && this.episodeList.length > 1)
                         ? this.episodeList.find(e => e.url === this.currentUrl) : null;
@@ -7721,7 +7722,7 @@
                 // 把当前剧/集写进地址栏（便于收藏/分享），用 replaceState 不污染历史
                 syncShareUrl() {
                     try {
-                        if (this.currentGroup && this.currentGroup._isLive) { try { history.replaceState(history.state, '', location.pathname); } catch (e) { } return; }  // 📺 直播不写 ?play= 深链(无法当 VOD 解析)
+                        if (this.currentGroup && this.currentGroup._isLive) { try { history.replaceState(history.state, '', '/?live=' + encodeURIComponent(this.currentGroup.name)); } catch (e) { } return; }  // 📺 直播写 ?live=频道名 深链(可分享)
                         if (!this.currentGroup || !this.currentGroup.name) return;
                         let u = '/?play=' + encodeURIComponent(this.currentGroup.name);
                         const cur = (this.episodeList && this.episodeList.length > 1)
@@ -7740,10 +7741,24 @@
                         setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 1800);
                     } catch (e) { }
                 },
+                // 📺 解析 ?live=频道名 深链：等频道表就绪后按名匹配打开直播
+                async _resolveLiveDeepLink(want) {
+                    try {
+                        if (!this.liveEnabled) return;
+                        if (!this.liveChannels.length) await this.fetchLiveChannels();
+                        const norm = s => String(s || '').replace(/[\s\-_]/g, '').toUpperCase().replace('＋', '+');
+                        const w = norm(want);
+                        const ch = this.liveChannels.find(c => norm(c.name) === w || c.id === want || c.id === 'lv_' + want.replace(/[^a-zA-Z0-9一-龥+]/g, ''));
+                        if (ch) this.openLiveChannel(ch);
+                        else if (this.showMiniToast) this.showMiniToast('未找到直播频道：' + want);
+                    } catch (e) { }
+                },
                 // 🔗 解析 ?play= 深链：自动搜索并在结果就绪后打开对应剧
                 handleDeepLink() {
                     try {
                         const p = new URLSearchParams(location.search);
+                        const liveName = p.get('live');
+                        if (liveName) { this._resolveLiveDeepLink(decodeURIComponent(liveName)); return; }  // 📺 ?live=频道名
                         const playName = p.get('play');
                         if (!playName) return;
                         this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, done: false };
