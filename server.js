@@ -87,10 +87,8 @@ const LIVE_M3U_URL = process.env['LIVE_M3U_URL'] || 'https://live.zbds.top/tv/ip
 const LIVE_M3U_FALLBACK = process.env['LIVE_M3U_FALLBACK'] || 'https://gh-proxy.com/raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u';
 // 第二上游(iptv-org cn)：补 CDN 域名源——vbskycn 的 CCTV 多是运营商 IP(封 Cloudflare 放不了)，iptv-org 有 cctvplus 等 CDN 源。
 const LIVE_M3U_IPTVORG = process.env['LIVE_M3U_IPTVORG'] || 'https://iptv-org.github.io/iptv/countries/cn.m3u';
-// 第三上游(Guovin)：只取其中 iptv.catvod.com 的源——这是 https+CORS 代理，覆盖 CCTV-1~17 全套(含 CCTV5/5+ 体育)
-// 和主要卫视，海外【直连】能播(catvod 封 Cloudflare，但智能路由让 https 直连绕过 worker)。这是 CCTV5/5+ 唯一可达来源。
-const LIVE_M3U_GUOVIN = process.env['LIVE_M3U_GUOVIN'] || 'https://raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u';
-const LIVE_M3U_GUOVIN_FALLBACK = process.env['LIVE_M3U_GUOVIN_FALLBACK'] || 'https://gh-proxy.com/raw.githubusercontent.com/Guovin/iptv-api/gd/output/result.m3u';
+// 自定义上游(可选)：用户有付费 IPTV 的 m3u 可设 LIVE_M3U_EXTRA(逗号分隔多个)，并入合并 → 能播什么由它决定。
+const LIVE_M3U_EXTRA = (process.env['LIVE_M3U_EXTRA'] || '').split(',').map(s => s.trim()).filter(Boolean);
 const LIVE_TV_ENABLED = !process.env['LIVE_TV_DISABLED'];
 // 后台验证：每次刷新后通过 worker(http源)/直连(https源)实测每个频道首条线路能否播，标 ok 并把能播的排前。
 // 不删频道(全列出),只标记+排序。设 LIVE_NO_VALIDATE=1 关闭(纯全列出、不打 worker)。
@@ -1136,8 +1134,13 @@ async function probeLiveSource(url) {
     const target = https ? url : (CORS_PROXY_URL ? `${CORS_PROXY_URL}/?url=${encodeURIComponent(url)}` : null);
     if (!target) return false;   // http 源无 worker 没法验证(也没法播)
     try {
-        const r = await axios.get(target, { timeout: 8000, maxContentLength: 6000, responseType: 'text', validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-3000' } });
-        return (r.status === 200 || r.status === 206) && String(r.data).includes('#EXTM3U');
+        const r = await axios.get(target, { timeout: 8000, maxContentLength: 8000, responseType: 'text', validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-5000' } });
+        if (!(r.status === 200 || r.status === 206)) return false;
+        const body = String(r.data || '');
+        if (!body.includes('#EXTM3U')) return false;
+        // 待机/占位/死台不算"能播"(如 catvod 的 backup.m3u8、无信号轮播)——它们返回 200+m3u8 但放不出实际频道
+        if (/backup\.m3u8|backup_\d|无\s*信\s*号|no[\s_-]?signal|maintain|stand.?by|占位|轮播图/i.test(body)) return false;
+        return true;
     } catch (e) { return false; }
 }
 
@@ -1158,19 +1161,6 @@ async function validateLiveChannels(channels) {
     return channels;
 }
 
-// 直接生成 catvod 源(https+CORS、直连可播)给"必有"频道——保证 CCTV5+、各 CCTV、主要卫视/体育
-// 一定带上 catvod 线路(Guovin 列表未必全收，如缺 CCTV5+)。catvod 按 id 取流，中文名/加号都用 encodeURIComponent。
-const LIVE_CATVOD_GEN = [
-    'CCTV1', 'CCTV2', 'CCTV3', 'CCTV4', 'CCTV5', 'CCTV5+', 'CCTV6', 'CCTV7', 'CCTV8', 'CCTV9',
-    'CCTV10', 'CCTV11', 'CCTV12', 'CCTV13', 'CCTV14', 'CCTV15', 'CCTV16', 'CCTV17', 'CGTN',
-    '湖南卫视', '浙江卫视', '东方卫视', '江苏卫视', '北京卫视', '广东卫视', '深圳卫视', '山东卫视', '安徽卫视',
-    '东南卫视', '湖北卫视', '黑龙江卫视', '广西卫视', '贵州卫视', '天津卫视', '重庆卫视', '辽宁卫视', '四川卫视',
-    '河南卫视', '河北卫视', '广东体育', '五星体育', '北京体育'
-];
-function catvodGenList() {
-    return LIVE_CATVOD_GEN.map(id => ({ name: id, url: 'https://iptv.catvod.com/live.php?id=' + encodeURIComponent(id), logo: '', group: '', tvgId: '' }));
-}
-
 async function fetchLiveUpstream() {
     const get = async (urls) => {
         for (const u of urls) {
@@ -1181,18 +1171,16 @@ async function fetchLiveUpstream() {
         }
         return '';
     };
-    const [vbText, orgText, guovinText] = await Promise.all([
+    const [vbText, orgText, ...extraTexts] = await Promise.all([
         get([LIVE_M3U_URL, LIVE_M3U_FALLBACK].filter(Boolean)),
         get([LIVE_M3U_IPTVORG].filter(Boolean)),
-        get([LIVE_M3U_GUOVIN, LIVE_M3U_GUOVIN_FALLBACK].filter(Boolean))
+        ...LIVE_M3U_EXTRA.map(u => get([u]))
     ]);
-    if (!vbText && !orgText && !guovinText) throw new Error('upstream M3U fetch failed');
+    if (!vbText && !orgText && !extraTexts.some(Boolean)) throw new Error('upstream M3U fetch failed');
     const vbList = parseM3U(vbText), orgList = parseM3U(orgText);
-    // Guovin 只取 catvod 源(https+CORS、CCTV/卫视全套、直连可播)，丢掉其余运营商 IP 噪声
-    const guovinList = parseM3U(guovinText).filter(c => /iptv\.catvod\.com/i.test(c.url || ''));
-    const catvodGen = catvodGenList();   // 生成的必有频道 catvod 源(保证 CCTV5+ 等)
-    const built = buildLiveChannels([catvodGen, guovinList, vbList, orgList]);   // catvod 放最前 → 同名频道 catvod https 源优先
-    console.log(`[直播] 上游拉取：vbskycn ${vbList.length} + iptv-org ${orgList.length} + catvod(gen ${catvodGen.length}/list ${guovinList.length}) → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类`);
+    const extraLists = extraTexts.map(t => parseM3U(t));   // 用户自定义付费源(LIVE_M3U_EXTRA)优先
+    const built = buildLiveChannels([...extraLists, vbList, orgList]);
+    console.log(`[直播] 上游拉取：vbskycn ${vbList.length} + iptv-org ${orgList.length}${LIVE_M3U_EXTRA.length ? ' + extra ' + extraLists.reduce((s, l) => s + l.length, 0) : ''} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类`);
     // 后台验证(不阻塞返回)：完成后原地标 ok + 重排，并刷新缓存时间戳让客户端 SWR 取到新版
     if (LIVE_VALIDATE && CORS_PROXY_URL) {
         validateLiveChannels(built.channels).then(() => {
