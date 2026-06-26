@@ -1014,9 +1014,35 @@ const LIVE_GROUP_MAP = {
     '纪录频道': '纪实', '儿童频道': '少儿', '音乐频道': '音乐', '春晚频道': '专题',
     '地方频道': '地方', '直播中国': '地方', '数字频道': '数字', '解说频道': '体育'
 };
-const LIVE_GROUP_ORDER = ['央视', '卫视', '体育', '影视', '新闻', '纪实', '少儿', '音乐', '专题', '数字', '地方', '其他'];
+const LIVE_GROUP_ORDER = ['央视', '卫视', '体育', '影视', '电影', '电视剧', '综艺', '新闻', '纪实', '少儿', '音乐', '文化', '教育', '科教', '财经', '生活', '宗教', '购物', '专题', '数字', '地方', '成人', '其他'];
 // 主页一行显示的分类(其余靠播放页 grid + 分类浏览)
 const LIVE_HOME_GROUPS = new Set(['央视', '卫视', '体育']);
+
+// 🌍 国际频道：iptv-org 按语言的播放列表(每种封顶，控制总量/内存)。lang 从播放列表来，genre 从 group-title。
+const LIVE_LANGS = [
+    { code: 'eng', name: 'English', cap: 150 }, { code: 'spa', name: 'Español', cap: 150 },
+    { code: 'fra', name: 'Français', cap: 150 }, { code: 'deu', name: 'Deutsch', cap: 120 },
+    { code: 'rus', name: 'Русский', cap: 120 }, { code: 'ara', name: 'العربية', cap: 120 },
+    { code: 'por', name: 'Português', cap: 120 }, { code: 'ita', name: 'Italiano', cap: 100 },
+    { code: 'jpn', name: '日本語', cap: 80 }, { code: 'kor', name: '한국어', cap: 80 },
+    { code: 'hin', name: 'हिन्दी', cap: 80 }, { code: 'vie', name: 'Tiếng Việt', cap: 80 }
+];
+const LIVE_LANG_URL = (code) => `https://iptv-org.github.io/iptv/languages/${code}.m3u`;
+// 🔞 成人直播源(可选)：由站长用 LIVE_M3U_ADULT(逗号分隔)注入；归入"成人"分类，受前端 NSFW 过滤开关控制显隐。
+const LIVE_M3U_ADULT = (process.env['LIVE_M3U_ADULT'] || '').split(',').map(s => s.trim()).filter(Boolean);
+
+// iptv-org group-title(英文 genre) → 中文分类
+const LIVE_INTL_GENRE = {
+    general: '综艺', news: '新闻', movies: '电影', movie: '电影', series: '电视剧', drama: '电视剧',
+    music: '音乐', entertainment: '综艺', sports: '体育', sport: '体育', kids: '少儿', animation: '少儿',
+    documentary: '纪实', culture: '文化', education: '教育', science: '科教', business: '财经',
+    religious: '宗教', shop: '购物', lifestyle: '生活', cooking: '生活', travel: '生活', comedy: '综艺',
+    classic: '电影', family: '综艺', outdoor: '生活', auto: '生活', relax: '生活', weather: '其他', legislative: '新闻'
+};
+function liveIntlGenre(groupTitle) {
+    const g = String(groupTitle || '').toLowerCase().split(';')[0].trim();
+    return LIVE_INTL_GENRE[g] || '其他';
+}
 
 // 名称归一(合并/去重 key)：去掉清晰度/HD/台/频道等噪声、空格横杠，大写
 function liveNormName(name) {
@@ -1085,7 +1111,8 @@ function parseM3U(text) {
     return out;
 }
 
-// 合并多路上游 → 按归一名去重 → 分类 → 线路域名优先排序。返回 { channels, groups }。
+// 合并多路上游 → 按归一名去重 → 分类(语言+种类) → 线路域名优先排序。返回 { channels, groups, langs }。
+// 每条上游频道可带 lang(语言显示名)/intl(国际,用 group-title 映射种类)/adult(成人) 标记。
 function buildLiveChannels(lists) {
     const map = new Map();   // 归一名 → bucket
     for (const list of lists) {
@@ -1097,7 +1124,9 @@ function buildLiveChannels(lists) {
             if (/支持作者|更新时间|请刷新|公众号|演示频道|测试频道|^熊猫直播$/.test(c.name)) continue;   // 过滤上游推广/占位条目
             let b = map.get(key);
             if (!b) {
-                b = { name: liveCleanName(c.name) || c.name, group: liveCategoryOf(c.name, c.group), logo: '', seen: new Set(), sources: [] };
+                const adult = !!c.adult;
+                const group = adult ? '成人' : (c.intl ? liveIntlGenre(c.group) : liveCategoryOf(c.name, c.group));
+                b = { name: liveCleanName(c.name) || c.name, group, lang: c.lang || '中文', adult, logo: '', seen: new Set(), sources: [] };
                 map.set(key, b);
             } else {
                 const cn = liveCleanName(c.name);
@@ -1118,15 +1147,18 @@ function buildLiveChannels(lists) {
         channels.push({
             // 保留 '+' —— 否则 "CCTV+1"(归一名 CCTV+1)和 "CCTV1" 去掉加号都成 lv_CCTV1、id 撞车 → 多个频道同时高亮
             id: 'lv_' + key.replace(/[^a-zA-Z0-9一-龥+]/g, '').slice(0, 40),
-            name: b.name, group: b.group, logo: b.logo,
+            name: b.name, group: b.group, lang: b.lang, adult: b.adult, logo: b.logo,
             rank: b.sources.length ? b.sources[0].rank : 99,   // 最优线路可达性(前端把可能能播的排前面)
             sources: b.sources.slice(0, 8).map(s => ({ url: s.url }))
         });
     }
+    const langOrder = ['中文', ...LIVE_LANGS.map(l => l.name)];
+    const li = (l) => { const i = langOrder.indexOf(l); return i < 0 ? 999 : i; };
     const gi = (g) => { const i = LIVE_GROUP_ORDER.indexOf(g); return i < 0 ? 999 : i; };
-    channels.sort((a, z) => gi(a.group) - gi(z.group) || a.name.localeCompare(z.name, 'zh'));
+    channels.sort((a, z) => li(a.lang) - li(z.lang) || gi(a.group) - gi(z.group) || a.name.localeCompare(z.name, 'zh'));
     const groups = LIVE_GROUP_ORDER.filter(g => channels.some(c => c.group === g));
-    return { channels, groups };
+    const langs = langOrder.filter(l => channels.some(c => c.lang === l));
+    return { channels, groups, langs };
 }
 
 // 实测一条线路能否播：http 走 worker(=客户端播放路径)、https 直连(≈客户端直连)。拿到 #EXTM3U 即活。
@@ -1148,7 +1180,7 @@ async function probeLiveSource(url) {
 // 后台验证：标 ch.ok(首条线路能否播)，能播的在组内排前。不删频道。原地 mutate channels。
 async function validateLiveChannels(channels) {
     let i = 0;
-    const CONC = 24;
+    const CONC = 32;
     await Promise.all(Array.from({ length: CONC }, async () => {
         while (i < channels.length) {
             const ch = channels[i++];
@@ -1157,8 +1189,11 @@ async function validateLiveChannels(channels) {
             ch.ok = ok;
         }
     }));
+    const langOrder = ['中文', ...LIVE_LANGS.map(l => l.name)];
+    const li = (l) => { const x = langOrder.indexOf(l); return x < 0 ? 999 : x; };
     const gi = (g) => { const x = LIVE_GROUP_ORDER.indexOf(g); return x < 0 ? 999 : x; };
-    channels.sort((a, z) => gi(a.group) - gi(z.group) || ((z.ok ? 1 : 0) - (a.ok ? 1 : 0)) || (a.rank - z.rank) || a.name.localeCompare(z.name, 'zh'));
+    // 语言 → 分类 → 能播优先 → rank → 名称
+    channels.sort((a, z) => li(a.lang) - li(z.lang) || gi(a.group) - gi(z.group) || ((z.ok ? 1 : 0) - (a.ok ? 1 : 0)) || (a.rank - z.rank) || a.name.localeCompare(z.name, 'zh'));
     return channels;
 }
 
@@ -1178,10 +1213,19 @@ async function fetchLiveUpstream() {
         ...LIVE_M3U_EXTRA.map(u => get([u]))
     ]);
     if (!vbText && !orgText && !extraTexts.some(Boolean)) throw new Error('upstream M3U fetch failed');
-    const vbList = parseM3U(vbText), orgList = parseM3U(orgText);
-    const extraLists = extraTexts.map(t => parseM3U(t));   // 用户自定义付费源(LIVE_M3U_EXTRA)优先
-    const built = buildLiveChannels([...extraLists, vbList, orgList]);
-    console.log(`[直播] 上游拉取：vbskycn ${vbList.length} + iptv-org ${orgList.length}${LIVE_M3U_EXTRA.length ? ' + extra ' + extraLists.reduce((s, l) => s + l.length, 0) : ''} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类`);
+    const vbList = parseM3U(vbText), orgList = parseM3U(orgText);   // 中文(lang 默认中文)
+    const extraLists = extraTexts.map(t => parseM3U(t));           // 用户自定义付费源(LIVE_M3U_EXTRA)优先
+    // 🌍 国际：按语言拉 iptv-org，每种封顶；intl 标记 → 用 group-title 映射种类
+    const langLists = await Promise.all(LIVE_LANGS.map(async lg => {
+        const t = await get([LIVE_LANG_URL(lg.code)]);
+        return parseM3U(t).slice(0, lg.cap).map(c => ({ ...c, lang: lg.name, intl: true }));
+    }));
+    // 🔞 成人(站长用 LIVE_M3U_ADULT 注入)：归入"成人"分类，受前端 NSFW 过滤控制
+    const adultTexts = await Promise.all(LIVE_M3U_ADULT.map(u => get([u])));
+    const adultList = adultTexts.flatMap(t => parseM3U(t).map(c => ({ ...c, adult: true })));
+    const built = buildLiveChannels([...extraLists, vbList, orgList, ...langLists, adultList]);
+    const intlN = langLists.reduce((s, l) => s + l.length, 0);
+    console.log(`[直播] 上游拉取：中文 ${vbList.length + orgList.length}${LIVE_M3U_EXTRA.length ? '+extra' + extraLists.reduce((s, l) => s + l.length, 0) : ''} + 国际 ${intlN}(${LIVE_LANGS.length}语) + 成人 ${adultList.length} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类 / ${built.langs.length} 语`);
     // 后台验证(不阻塞返回)：完成后原地标 ok + 重排，并刷新缓存时间戳让客户端 SWR 取到新版
     if (LIVE_VALIDATE && CORS_PROXY_URL) {
         validateLiveChannels(built.channels).then(() => {
@@ -1204,7 +1248,7 @@ async function getLiveChannels(force = false) {
         } catch (e) {
             console.error('[直播] 刷新失败:', e.message);
             if (_liveCache.ok) return _liveCache.data;   // 拉取失败时沿用旧缓存
-            _liveCache = { at: Date.now(), data: { channels: [], groups: [] }, ok: false };
+            _liveCache = { at: Date.now(), data: { channels: [], groups: [], langs: [] }, ok: false };
             return _liveCache.data;
         } finally { _liveInflight = null; }
     })();
@@ -1213,13 +1257,13 @@ async function getLiveChannels(force = false) {
 
 // 📺 直播频道列表(精选 + 6h 缓存)。前端再本地缓存。
 app.get('/api/live/channels', async (req, res) => {
-    if (!LIVE_TV_ENABLED) return res.json({ enabled: false, channels: [], groups: [] });
+    if (!LIVE_TV_ENABLED) return res.json({ enabled: false, channels: [], groups: [], langs: [] });
     try {
         const data = await getLiveChannels(false);
         res.set('Cache-Control', 'public, max-age=1800');   // 客户端/CDN 缓存 30 分钟
-        res.json({ enabled: true, updatedAt: _liveCache.at, count: data.channels.length, channels: data.channels, groups: data.groups });
+        res.json({ enabled: true, updatedAt: _liveCache.at, count: data.channels.length, channels: data.channels, groups: data.groups, langs: data.langs });
     } catch (e) {
-        res.json({ enabled: true, channels: [], groups: [], error: 'fetch_failed' });
+        res.json({ enabled: true, channels: [], groups: [], langs: [], error: 'fetch_failed' });
     }
 });
 

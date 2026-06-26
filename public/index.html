@@ -2253,6 +2253,29 @@
             color: #fff;
             border-color: transparent;
         }
+        .live-filter-label { color: #888; font-size: 12px; margin-right: 2px; flex: 0 0 auto; }
+        .live-cctv-hint {
+            margin: 8px 0 4px;
+            padding: 8px 12px;
+            font-size: 12px;
+            line-height: 1.6;
+            color: #c9a96a;
+            background: rgba(229, 170, 60, 0.08);
+            border: 1px solid rgba(229, 170, 60, 0.22);
+            border-radius: 8px;
+        }
+        .live-cctv-hint b { color: #e6c074; font-weight: 600; }
+        .live-loadmore {
+            background: rgba(255, 255, 255, 0.06);
+            color: #ccc;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            border-radius: 20px;
+            padding: 7px 22px;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .live-loadmore:hover { color: #fff; border-color: var(--accent); }
         .live-sub-label {
             font-size: 12px;
             color: #999;
@@ -4101,6 +4124,10 @@
                     <div class="section-line" style="background: linear-gradient(135deg, #e50914, #ff6a00);"></div>
                     <div class="section-title"><i class="fas fa-tower-broadcast"></i> 直播频道</div>
                 </div>
+                <div class="live-cctv-hint">
+                    <i class="fas fa-circle-info"></i>
+                    海外网络下 <b>CCTV-1/2/3/5/5+/6/7/8</b> 等台无法播放，是 <b>地区与版权限制</b>(运营商组播源仅限国内特定运营商宽带 IP，连国内代理也未必能通)，非本站问题。<b>CGTN、CCTV-4/9/13/15/16、各卫视、国际频道</b>可正常观看(灰色=实测放不了)。
+                </div>
                 <!-- 最近观看频道(有才显示) -->
                 <template v-if="liveRecentChannels.length">
                     <div class="live-sub-label"><i class="fas fa-clock"></i> 最近观看
@@ -4879,18 +4906,26 @@
                             </div>
                         </div>
                     </div>
-                    <!-- 快速换台：分类 tab + grid(全部频道在这里浏览) -->
+                    <!-- 快速换台：语言 + 分类 双重筛选 + grid(懒加载，全部频道在这里浏览) -->
                     <div>
                         <div class="panel-title" style="display: flex; align-items: center; gap: 8px;">
                             快速换台
-                            <span style="color: #777; font-size: 12px; font-weight: normal;">共 {{ liveChannels.length }} 个频道</span>
+                            <span style="color: #777; font-size: 12px; font-weight: normal;">{{ filteredLiveChannels.length }} / 共 {{ liveChannels.length }} 频道</span>
                         </div>
-                        <div class="live-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 12px;">
+                        <!-- 语言筛选 -->
+                        <div class="live-filter-bar" v-if="liveLangs.length > 2" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; align-items: center;">
+                            <span class="live-filter-label">语言</span>
+                            <button v-for="lg in liveLangs" :key="'plf-' + lg" class="live-filter-btn"
+                                :class="{ active: liveLangFilter === lg }" @click="setLiveFilter('lang', lg)">{{ lg }}</button>
+                        </div>
+                        <!-- 分类筛选 -->
+                        <div class="live-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; align-items: center;">
+                            <span class="live-filter-label">分类</span>
                             <button v-for="g in liveGroups" :key="'pf-' + g" class="live-filter-btn"
-                                :class="{ active: liveFilter === g }" @click="liveFilter = g">{{ g }}</button>
+                                :class="{ active: liveFilter === g }" @click="setLiveFilter('cat', g)">{{ g }}</button>
                         </div>
                         <div class="live-grid">
-                            <div class="live-card" v-for="ch in filteredLiveChannels" :key="'lp-' + ch.id"
+                            <div class="live-card" v-for="ch in pagedLiveChannels" :key="'lp-' + ch.id"
                                 :class="{ active: liveChannelId === ch.id, 'live-dead': ch.ok === false }" @click="openLiveChannel(ch)">
                                 <div class="live-logo">
                                     <i class="fas fa-tv live-logo-fallback"></i>
@@ -4899,6 +4934,9 @@
                                 </div>
                                 <div class="live-name">{{ ch.name }}</div>
                             </div>
+                        </div>
+                        <div v-if="filteredLiveChannels.length > livePageSize" style="text-align: center; margin-top: 14px;">
+                            <button class="live-loadmore" @click="livePageSize += 120">加载更多 ({{ livePageSize }} / {{ filteredLiveChannels.length }})</button>
                         </div>
                     </div>
                 </div>
@@ -5734,8 +5772,11 @@
                     liveEnabled: false,             // 来自 /api/config(live_enabled)
                     liveChannels: [],               // 全部直播频道(来自 /api/live/channels)
                     liveGroupList: [],              // 分类顺序(来自服务器)
+                    liveLangList: [],               // 语言顺序(来自服务器)
                     liveRecentChannels: [],         // 最近观看频道(本地+跨设备同步)
                     liveFilter: '全部',             // 播放页 grid 分类筛选
+                    liveLangFilter: '全部',         // 播放页 grid 语言筛选
+                    livePageSize: 80,               // grid 懒加载：当前渲染数(分批加载，控内存/卡顿)
                     liveCanScrollLeft: false,
                     liveCanScrollRight: true,
                     liveTesting: false,             // 正在为频道挑选可用线路
@@ -6102,20 +6143,35 @@
                 };
             },
             computed: {
-                // 📺 直播分类 tab(全部 + 服务器给的分类顺序)
+                // 📺 直播分类 tab(全部 + 服务器给的、当前语言下实际存在的分类)
                 liveGroups() {
-                    return ['全部', ...(this.liveGroupList || [])];
-                },
-                // 📺 播放页 grid：按分类筛选(裁到 300 防一次渲染太多卡顿)
-                filteredLiveChannels() {
-                    const list = this.liveFilter === '全部'
+                    const inLang = this.liveLangFilter === '全部'
                         ? this.liveChannels
-                        : this.liveChannels.filter(c => c.group === this.liveFilter);
-                    return list.slice(0, 300);
+                        : this.liveChannels.filter(c => c.lang === this.liveLangFilter);
+                    const present = new Set(inLang.filter(c => !(c.adult && this.filterNsfw)).map(c => c.group));
+                    return ['全部', ...(this.liveGroupList || []).filter(g => present.has(g))];
                 },
-                // 📺 主页一行：实测能播的(ok)排最前，其次可达性 rank，裁到 120
+                // 📺 语言 tab(全部 + 服务器给的语言顺序)
+                liveLangs() {
+                    return ['全部', ...(this.liveLangList || [])];
+                },
+                // 📺 播放页 grid：语言 + 分类 双重筛选 + 成人门控(NSFW 开则隐藏)。不裁，交给 pagedLiveChannels 懒加载。
+                filteredLiveChannels() {
+                    return this.liveChannels.filter(c =>
+                        (this.liveLangFilter === '全部' || c.lang === this.liveLangFilter) &&
+                        (this.liveFilter === '全部' || c.group === this.liveFilter) &&
+                        !(c.adult && this.filterNsfw)
+                    );
+                },
+                // 📺 grid 实际渲染：懒加载只渲染前 livePageSize 个(控 DOM/内存，避免上千卡顿)
+                pagedLiveChannels() {
+                    return this.filteredLiveChannels.slice(0, this.livePageSize);
+                },
+                // 📺 主页一行：实测能播的(ok)排最前，其次可达性 rank；隐藏成人，裁到 120
                 liveHomeChannels() {
-                    return [...this.liveChannels]
+                    return this.liveChannels
+                        .filter(c => !(c.adult && this.filterNsfw))
+                        .slice()
                         .sort((a, b) => ((b.ok === true ? 1 : 0) - (a.ok === true ? 1 : 0)) || ((a.rank == null ? 9 : a.rank) - (b.rank == null ? 9 : b.rank)))
                         .slice(0, 120);
                 },
@@ -6216,6 +6272,7 @@
                             if (c && Array.isArray(c.channels) && (Date.now() - (c.at || 0)) < TTL) {
                                 this.liveChannels = c.channels;
                                 if (Array.isArray(c.groups)) this.liveGroupList = c.groups;
+                                if (Array.isArray(c.langs)) this.liveLangList = c.langs;
                                 this.$nextTick(() => this.updateLiveScroll());
                             }
                         }
@@ -6227,12 +6284,19 @@
                         if (data && Array.isArray(data.channels) && data.channels.length) {
                             this.liveChannels = data.channels;
                             this.liveGroupList = Array.isArray(data.groups) ? data.groups : [];
-                            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), channels: data.channels, groups: this.liveGroupList })); } catch (e) { }
+                            this.liveLangList = Array.isArray(data.langs) ? data.langs : [];
+                            try { localStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), channels: data.channels, groups: this.liveGroupList, langs: this.liveLangList })); } catch (e) { }
                             this.$nextTick(() => this.updateLiveScroll());
                         }
                     } catch (e) {
                         console.warn('[直播] 拉取频道失败，沿用本地缓存:', e.message);
                     }
+                },
+                // 切换 grid 语言/分类筛选 + 重置懒加载页大小
+                setLiveFilter(kind, val) {
+                    if (kind === 'lang') { this.liveLangFilter = val; if (!this.liveGroups.includes(this.liveFilter)) this.liveFilter = '全部'; }
+                    else this.liveFilter = val;
+                    this.livePageSize = 80;
                 },
                 onLiveScroll() {
                     if (this._liveScrollTicking) return;
@@ -6290,7 +6354,10 @@
                     const seq = ++this._liveOpenSeq;
                     this._liveActive = true;
                     this.liveChannelId = ch.id;
-                    if (ch.group && (this.liveGroupList || []).includes(ch.group)) this.liveFilter = ch.group;  // grid 落到本频道分类(有界)
+                    // grid 落到本频道的语言+分类(有界)
+                    if (ch.lang && (this.liveLangList || []).includes(ch.lang)) this.liveLangFilter = ch.lang;
+                    if (ch.group && (this.liveGroupList || []).includes(ch.group)) this.liveFilter = ch.group;
+                    this.livePageSize = 80;
                     this.liveLineIdx = 0;
                     this.currentGroup = { name: ch.name, pic: ch.logo || '', _isLive: true, _liveLines: ch.sources.slice(), sources: [] };
                     this.currentSource = { site_key: 'live_' + ch.id, site_name: ch.name, _useProxy: !!this.corsProxyUrl, _proxyUrl: this.corsProxyUrl || null };
