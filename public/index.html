@@ -2174,6 +2174,9 @@
             border-color: var(--accent);
             box-shadow: 0 0 0 2px var(--accent);
         }
+        /* 实测放不了的频道置灰(仍可点，可能换线路/换网络能播) */
+        .live-card.live-dead { opacity: 0.38; filter: grayscale(0.6); }
+        .live-card.live-dead:hover { opacity: 0.7; }
         .live-logo img {
             max-width: 84%;
             max-height: 78%;
@@ -2201,11 +2204,12 @@
         }
         .live-filter-btn {
             background: rgba(255, 255, 255, 0.06);
-            color: #aaa;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 14px;
-            padding: 3px 12px;
-            font-size: 12px;
+            color: #ccc;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 20px;
+            padding: 8px 20px;
+            font-size: 15px;
+            line-height: 1.2;
             cursor: pointer;
             transition: all 0.2s;
         }
@@ -4085,7 +4089,7 @@
                         aria-label="向左滚动频道"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                     <div class="hot-row live-row" ref="liveRow" @scroll="onLiveScroll">
                         <div class="live-card" v-for="ch in liveHomeChannels" :key="'lc-' + ch.id"
-                            @click="openLiveChannel(ch)">
+                            :class="{ 'live-dead': ch.ok === false }" @click="openLiveChannel(ch)">
                             <div class="live-logo">
                                 <i class="fas fa-tv live-logo-fallback"></i>
                                 <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
@@ -4849,7 +4853,7 @@
                         </div>
                         <div class="live-grid">
                             <div class="live-card" v-for="ch in filteredLiveChannels" :key="'lp-' + ch.id"
-                                :class="{ active: liveChannelId === ch.id }" @click="openLiveChannel(ch)">
+                                :class="{ active: liveChannelId === ch.id, 'live-dead': ch.ok === false }" @click="openLiveChannel(ch)">
                                 <div class="live-logo">
                                     <i class="fas fa-tv live-logo-fallback"></i>
                                     <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
@@ -6071,9 +6075,11 @@
                         : this.liveChannels.filter(c => c.group === this.liveFilter);
                     return list.slice(0, 300);
                 },
-                // 📺 主页一行：按可达性(rank)排序，能播的排前面，裁到 120
+                // 📺 主页一行：实测能播的(ok)排最前，其次可达性 rank，裁到 120
                 liveHomeChannels() {
-                    return [...this.liveChannels].sort((a, b) => (a.rank == null ? 9 : a.rank) - (b.rank == null ? 9 : b.rank)).slice(0, 120);
+                    return [...this.liveChannels]
+                        .sort((a, b) => ((b.ok === true ? 1 : 0) - (a.ok === true ? 1 : 0)) || ((a.rank == null ? 9 : a.rank) - (b.rank == null ? 9 : b.rank)))
+                        .slice(0, 120);
                 },
                 // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
                 shareUrl() {

@@ -88,6 +88,9 @@ const LIVE_M3U_FALLBACK = process.env['LIVE_M3U_FALLBACK'] || 'https://gh-proxy.
 // 第二上游(iptv-org cn)：补 CDN 域名源——vbskycn 的 CCTV 多是运营商 IP(封 Cloudflare 放不了)，iptv-org 有 cctvplus 等 CDN 源。
 const LIVE_M3U_IPTVORG = process.env['LIVE_M3U_IPTVORG'] || 'https://iptv-org.github.io/iptv/countries/cn.m3u';
 const LIVE_TV_ENABLED = !process.env['LIVE_TV_DISABLED'];
+// 后台验证：每次刷新后通过 worker(http源)/直连(https源)实测每个频道首条线路能否播，标 ok 并把能播的排前。
+// 不删频道(全列出),只标记+排序。设 LIVE_NO_VALIDATE=1 关闭(纯全列出、不打 worker)。
+const LIVE_VALIDATE = !process.env['LIVE_NO_VALIDATE'];
 
 // 环境变量加载状态日志（用于 Vercel 调试）
 console.log(`[System] Environment: ${process.env.VERCEL ? 'Vercel Serverless' : 'Local/VPS'}`);
@@ -1123,6 +1126,34 @@ function buildLiveChannels(lists) {
     return { channels, groups };
 }
 
+// 实测一条线路能否播：http 走 worker(=客户端播放路径)、https 直连(≈客户端直连)。拿到 #EXTM3U 即活。
+async function probeLiveSource(url) {
+    const https = /^https:\/\//i.test(url);
+    const target = https ? url : (CORS_PROXY_URL ? `${CORS_PROXY_URL}/?url=${encodeURIComponent(url)}` : null);
+    if (!target) return false;   // http 源无 worker 没法验证(也没法播)
+    try {
+        const r = await axios.get(target, { timeout: 8000, maxContentLength: 6000, responseType: 'text', validateStatus: () => true, headers: { 'User-Agent': 'Mozilla/5.0', 'Range': 'bytes=0-3000' } });
+        return (r.status === 200 || r.status === 206) && String(r.data).includes('#EXTM3U');
+    } catch (e) { return false; }
+}
+
+// 后台验证：标 ch.ok(首条线路能否播)，能播的在组内排前。不删频道。原地 mutate channels。
+async function validateLiveChannels(channels) {
+    let i = 0;
+    const CONC = 24;
+    await Promise.all(Array.from({ length: CONC }, async () => {
+        while (i < channels.length) {
+            const ch = channels[i++];
+            let ok = false;
+            for (const s of (ch.sources || []).slice(0, 2)) { if (await probeLiveSource(s.url)) { ok = true; break; } }
+            ch.ok = ok;
+        }
+    }));
+    const gi = (g) => { const x = LIVE_GROUP_ORDER.indexOf(g); return x < 0 ? 999 : x; };
+    channels.sort((a, z) => gi(a.group) - gi(z.group) || ((z.ok ? 1 : 0) - (a.ok ? 1 : 0)) || (a.rank - z.rank) || a.name.localeCompare(z.name, 'zh'));
+    return channels;
+}
+
 async function fetchLiveUpstream() {
     const get = async (urls) => {
         for (const u of urls) {
@@ -1141,6 +1172,13 @@ async function fetchLiveUpstream() {
     const vbList = parseM3U(vbText), orgList = parseM3U(orgText);
     const built = buildLiveChannels([vbList, orgList]);
     console.log(`[直播] 上游拉取：vbskycn ${vbList.length} + iptv-org ${orgList.length} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类`);
+    // 后台验证(不阻塞返回)：完成后原地标 ok + 重排，并刷新缓存时间戳让客户端 SWR 取到新版
+    if (LIVE_VALIDATE && CORS_PROXY_URL) {
+        validateLiveChannels(built.channels).then(() => {
+            _liveCache.at = Date.now();
+            console.log(`[直播] 验证完成：${built.channels.filter(c => c.ok).length}/${built.channels.length} 可播`);
+        }).catch(e => console.error('[直播] 验证失败:', e.message));
+    }
     return built;
 }
 
