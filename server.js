@@ -1034,11 +1034,16 @@ function liveSrcRank(u) {
     try {
         const url = new URL(u);
         const ip = /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname);
-        const port = url.port ? parseInt(url.port, 10) : (url.protocol === 'https:' ? 443 : 80);
+        const https = url.protocol === 'https:';
+        const port = url.port ? parseInt(url.port, 10) : (https ? 443 : 80);
         const stdPort = LIVE_STD_PORTS.has(port);
-        // 仅"域名 + 标准端口"才是 worker 真正能取到的(rank 0/1)；裸 IP 或非标端口 worker 多半 403(rank 10+)
-        if (!ip && stdPort) return url.protocol === 'https:' ? 0 : 1;
-        return 10 + (ip ? 2 : 0) + (stdPort ? 0 : 4) + (url.protocol === 'https:' ? 0 : 1);
+        // 智能路由后的可达性：
+        //   ① 域名 https → rank 0：客户端【直连】(原生 HLS 免 CORS；hls.js 若带 CORS)，不经 worker，端口/CF 限制都绕开。
+        //   ② 域名 http + 标准端口 → rank 1：http 在 https 页是混合内容，必须经 worker 升 https；worker 又只接标准端口。
+        //   ③ 裸 IP / 非标端口 http → rank 10+：worker 取不到 + 直连又是混合内容 → 基本放不了。
+        if (!ip && https) return 0;
+        if (!ip && stdPort) return 1;
+        return 10 + (ip ? 2 : 0) + (stdPort ? 0 : 4) + (https ? 0 : 1);
     } catch (e) { return 99; }
 }
 // 分类判定：先看名字(跨两个上游更稳)，再回退 group-title 映射
