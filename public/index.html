@@ -2131,12 +2131,32 @@
         /* 📺 直播频道卡片 */
         .live-row { gap: 12px; }
         /* 播放页"快速换台"网格：响应式列宽 + content-visibility 砍掉视口外卡片的绘制开销 */
+        /* 分页网格 + 左右翻页箭头：箭头固定高度并 sticky，跟随滚动常驻视口(网格很高时不会跑到几千 px 外) */
+        .live-grid-wrap { display: flex; align-items: flex-start; gap: 8px; }
+        .live-grid-wrap .live-grid { flex: 1; min-width: 0; }
+        .live-page-btn {
+            flex: 0 0 42px;
+            position: sticky;
+            top: 88px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            color: #ccc;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.18s;
+        }
+        .live-page-btn:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .live-page-btn:disabled { opacity: 0.28; cursor: default; }
+        .live-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; font-size: 13px; }
         .live-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(calc(108px * var(--ui-scale, 1)), 1fr));
-            gap: 12px;
-            max-height: 60vh;
-            overflow-y: auto;
+            grid-template-columns: repeat(auto-fill, minmax(calc(130px * var(--ui-scale, 1)), 1fr));
+            gap: 14px;
             padding: 2px;
         }
         .live-grid .live-card {
@@ -2266,17 +2286,6 @@
             border-radius: 8px;
         }
         .live-cctv-hint b { color: #e6c074; font-weight: 600; }
-        .live-loadmore {
-            background: rgba(255, 255, 255, 0.06);
-            color: #ccc;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 20px;
-            padding: 7px 22px;
-            font-size: 13px;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .live-loadmore:hover { color: #fff; border-color: var(--accent); }
         .live-sub-label {
             font-size: 12px;
             color: #999;
@@ -4907,37 +4916,45 @@
                             </div>
                         </div>
                     </div>
-                    <!-- 快速换台：语言 + 分类 双重筛选 + grid(懒加载，全部频道在这里浏览) -->
+                    <!-- 语言 + 分类 双重筛选 + 分页网格(左右翻页) -->
                     <div>
-                        <div class="panel-title" style="display: flex; align-items: center; gap: 8px;">
-                            快速换台
-                            <span style="color: #777; font-size: 12px; font-weight: normal;">{{ filteredLiveChannels.length }} / 共 {{ liveChannels.length }} 频道</span>
-                        </div>
                         <!-- 语言筛选 -->
-                        <div class="live-filter-bar" v-if="liveLangs.length > 2" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 6px; align-items: center;">
+                        <div class="live-filter-bar" v-if="liveLangs.length > 2" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 6px; align-items: center;">
                             <span class="live-filter-label">语言</span>
                             <button v-for="lg in liveLangs" :key="'plf-' + lg" class="live-filter-btn"
                                 :class="{ active: liveLangFilter === lg }" @click="setLiveFilter('lang', lg)">{{ lg }}</button>
                         </div>
                         <!-- 分类筛选 -->
-                        <div class="live-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 12px; align-items: center;">
+                        <div class="live-filter-bar" style="display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; align-items: center;">
                             <span class="live-filter-label">分类</span>
                             <button v-for="g in liveGroups" :key="'pf-' + g" class="live-filter-btn"
                                 :class="{ active: liveFilter === g }" @click="setLiveFilter('cat', g)">{{ g }}</button>
                         </div>
-                        <div class="live-grid">
-                            <div class="live-card" v-for="ch in pagedLiveChannels" :key="'lp-' + ch.id"
-                                :class="{ active: liveChannelId === ch.id, 'live-dead': ch.ok === false }" @click="openLiveChannel(ch)">
-                                <div class="live-logo">
-                                    <i class="fas fa-tv live-logo-fallback"></i>
-                                    <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
-                                        @error="$event.target.style.display = 'none'">
+                        <!-- 分页网格 + 左右翻页箭头 -->
+                        <div class="live-grid-wrap">
+                            <button class="live-page-btn" v-if="liveTotalPages > 1" :disabled="livePage <= 1"
+                                @click="livePage > 1 && livePage--" aria-label="上一页"><i class="fas fa-chevron-left"></i></button>
+                            <div class="live-grid">
+                                <div class="live-card" v-for="ch in pagedLiveChannels" :key="'lp-' + ch.id"
+                                    :class="{ active: liveChannelId === ch.id, 'live-dead': ch.ok === false }" @click="openLiveChannel(ch)">
+                                    <div class="live-logo">
+                                        <i class="fas fa-tv live-logo-fallback"></i>
+                                        <img v-if="ch.logo" :src="ch.logo" loading="lazy" decoding="async"
+                                            @error="$event.target.style.display = 'none'">
+                                    </div>
+                                    <div class="live-name">{{ ch.name }}</div>
                                 </div>
-                                <div class="live-name">{{ ch.name }}</div>
                             </div>
+                            <button class="live-page-btn" v-if="liveTotalPages > 1" :disabled="livePage >= liveTotalPages"
+                                @click="livePage < liveTotalPages && livePage++" aria-label="下一页"><i class="fas fa-chevron-right"></i></button>
                         </div>
-                        <div v-if="filteredLiveChannels.length > livePageSize" style="text-align: center; margin-top: 14px;">
-                            <button class="live-loadmore" @click="livePageSize += 120">加载更多 ({{ livePageSize }} / {{ filteredLiveChannels.length }})</button>
+                        <div class="live-pager">
+                            <span style="color:#777;">{{ filteredLiveChannels.length }} / 共 {{ liveChannels.length }} 频道</span>
+                            <template v-if="liveTotalPages > 1">
+                                <button class="rec-pager-btn" :disabled="livePage <= 1" @click="livePage > 1 && livePage--"><i class="fas fa-chevron-left"></i></button>
+                                <span class="rec-pager-info">{{ livePage }} / {{ liveTotalPages }}</span>
+                                <button class="rec-pager-btn" :disabled="livePage >= liveTotalPages" @click="livePage < liveTotalPages && livePage++"><i class="fas fa-chevron-right"></i></button>
+                            </template>
                         </div>
                     </div>
                 </div>
@@ -5777,7 +5794,8 @@
                     liveRecentChannels: [],         // 最近观看频道(本地+跨设备同步)
                     liveFilter: '全部',             // 播放页 grid 分类筛选
                     liveLangFilter: '全部',         // 播放页 grid 语言筛选
-                    livePageSize: 80,               // grid 懒加载：当前渲染数(分批加载，控内存/卡顿)
+                    livePage: 1,                    // grid 分页(左右翻页)当前页
+                    livePerPage: 48,                // grid 每页频道数(只渲染一页，控内存/卡顿)
                     liveCanScrollLeft: false,
                     liveCanScrollRight: true,
                     liveTesting: false,             // 正在为频道挑选可用线路
@@ -6164,9 +6182,15 @@
                         !(c.adult && this.filterNsfw)
                     );
                 },
-                // 📺 grid 实际渲染：懒加载只渲染前 livePageSize 个(控 DOM/内存，避免上千卡顿)
+                // 📺 grid 总页数(每页 livePerPage)
+                liveTotalPages() {
+                    return Math.max(1, Math.ceil(this.filteredLiveChannels.length / this.livePerPage));
+                },
+                // 📺 grid 实际渲染：只渲染当前页(控 DOM/内存，避免上千卡顿)。页码越界则取末页。
                 pagedLiveChannels() {
-                    return this.filteredLiveChannels.slice(0, this.livePageSize);
+                    const page = Math.min(this.livePage, this.liveTotalPages);
+                    const start = (page - 1) * this.livePerPage;
+                    return this.filteredLiveChannels.slice(start, start + this.livePerPage);
                 },
                 // 📺 主页一行：实测能播的(ok)排最前，其次可达性 rank；隐藏成人，裁到 120
                 liveHomeChannels() {
@@ -6293,11 +6317,11 @@
                         console.warn('[直播] 拉取频道失败，沿用本地缓存:', e.message);
                     }
                 },
-                // 切换 grid 语言/分类筛选 + 重置懒加载页大小
+                // 切换 grid 语言/分类筛选 + 回到第 1 页
                 setLiveFilter(kind, val) {
                     if (kind === 'lang') { this.liveLangFilter = val; if (!this.liveGroups.includes(this.liveFilter)) this.liveFilter = '全部'; }
                     else this.liveFilter = val;
-                    this.livePageSize = 80;
+                    this.livePage = 1;
                 },
                 onLiveScroll() {
                     if (this._liveScrollTicking) return;
@@ -6355,10 +6379,7 @@
                     const seq = ++this._liveOpenSeq;
                     this._liveActive = true;
                     this.liveChannelId = ch.id;
-                    // grid 落到本频道的语言+分类(有界)
-                    if (ch.lang && (this.liveLangList || []).includes(ch.lang)) this.liveLangFilter = ch.lang;
-                    if (ch.group && (this.liveGroupList || []).includes(ch.group)) this.liveFilter = ch.group;
-                    this.livePageSize = 80;
+                    // 注意：不再自动改 grid 的语言/分类筛选——否则在 grid 里点频道会把筛选弹回该频道的语言(总跳回中文)，用户没法浏览别的语言
                     this.liveLineIdx = 0;
                     this.currentGroup = { name: ch.name, pic: ch.logo || '', _isLive: true, _liveLines: ch.sources.slice(), sources: [] };
                     this.currentSource = { site_key: 'live_' + ch.id, site_name: ch.name, _useProxy: !!this.corsProxyUrl, _proxyUrl: this.corsProxyUrl || null };
