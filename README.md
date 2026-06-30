@@ -260,7 +260,9 @@ node server.js
 | `LIVE_M3U_URL` | ❌ | `live.zbds.top/tv/iptv4.m3u` | 直播主源 M3U（vbskycn）。详见[直播电视](#-直播电视-iptv) |
 | `LIVE_M3U_FALLBACK` | ❌ | gh-proxy 镜像 | 主源拉取失败时的备源 |
 | `LIVE_M3U_IPTVORG` | ❌ | iptv-org `countries/cn.m3u` | 中文频道补充源 |
-| `LIVE_M3U_EXTRA` | ❌ | — | 自定义上游 M3U（逗号分隔多个），用于注入**付费 IPTV 的 m3u**——海外稳定播 CCTV5/5+ 的唯一可靠路 |
+| `LIVE_M3U_EXTRA` | ❌ | — | 自定义上游 M3U（逗号分隔多个），用于注入**付费 IPTV 的 m3u**——海外稳定播更多被封频道的可靠路 |
+| `LIVE_KAFEI_BASE` | ❌ | `https://live.666666.zip` | CCTV5/5+ 免费可达源（kafeizhibo→咪咕）的 redirector 域名，海外 https+CORS 直连可播 |
+| `LIVE_KAFEI_DISABLED` | ❌ | — | 设为 `1` 关闭内置的免费 CCTV5/5+ 源（该源失效时用） |
 | `LIVE_M3U_ADULT` | ❌ | — | 成人直播源（逗号分隔），归"成人"分类，受前端 NSFW 过滤开关控制显隐；仓库**不内置任何地址** |
 | `LIVE_TV_DISABLED` | ❌ | — | 设为 `1` 整体关闭直播（前端隐藏直播区、`/api/live/channels` 返回 `enabled:false`） |
 | `LIVE_NO_VALIDATE` | ❌ | — | 设为 `1` 跳过服务端逐源测速验证（默认开启，用于标注频道能播/置灰） |
@@ -505,7 +507,9 @@ ACCESS_PASSWORD=admin_password,user1_pass,user2_pass
 
 - 直播多为 **http 运营商源**，浏览器混合内容 + 跨域限制 → **必须配置 `CORS_PROXY_URL`（Cloudflare Worker）** 才能播。**智能路由**：https 源由浏览器直连（可走用户自己的国内代理）、http 源经 Worker 升级 https。
 - 服务器侧对每个频道首源做**可达性测速**（能识别 backup/待机占位/无信号），标注「能播 / 不能播」，能播的排前、不能播的**置灰**——只如实标注，**不会让被封的源诈活**。测速本身也依赖 `CORS_PROXY_URL`（**未配代理则不测速、不置灰**）；可用 `LIVE_NO_VALIDATE=1` 跳过验证。
-- **CCTV 等央视频道海外通常放不了**：它们多为运营商内网 IP（地域 + 版权封锁），CF 边缘从境外发起的回源会被运营商拒（**与用户自己的 IP 无关**）。CGTN、CCTV-4/9/13、各卫视、国际频道一般可看。**想稳定看 CCTV5/5+ 的唯一可靠路 = 用 `LIVE_M3U_EXTRA` 注入付费 IPTV 的 https m3u**（智能路由直连、可走国内代理）。
+- **多数 CCTV 央视频道海外放不了**：它们多为运营商内网 IP（地域 + 版权封锁），CF 边缘从境外发起的回源会被运营商拒（**与用户自己的 IP 无关**）。CGTN、CCTV-4/9/13、各卫视、国际频道一般可看。
+- **CCTV5 / CCTV5+（体育）已内置免费可达源**：来自 kafeizhibo（`live.666666.zip`）→ 咪咕(migu) 的 https + `Access-Control-Allow-Origin:*` redirector，海外**直连即可播**（实测为真实时分段、非待机占位）。它在合并时被置于上游同名频道之前，故 CCTV5/5+ 默认走该可达源、运营商死源退为兜底。如该源失效可设 `LIVE_KAFEI_DISABLED=1` 关闭、或用 `LIVE_KAFEI_BASE` 换 redirector。
+- **想看更多被封频道**：用 `LIVE_M3U_EXTRA` 注入付费 IPTV 的 https m3u（智能路由直连、可走国内代理）。
 
 ### 成人频道（可选，默认隐藏）
 

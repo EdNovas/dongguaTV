@@ -89,6 +89,16 @@ const LIVE_M3U_FALLBACK = process.env['LIVE_M3U_FALLBACK'] || 'https://gh-proxy.
 const LIVE_M3U_IPTVORG = process.env['LIVE_M3U_IPTVORG'] || 'https://iptv-org.github.io/iptv/countries/cn.m3u';
 // 自定义上游(可选)：用户有付费 IPTV 的 m3u 可设 LIVE_M3U_EXTRA(逗号分隔多个)，并入合并 → 能播什么由它决定。
 const LIVE_M3U_EXTRA = (process.env['LIVE_M3U_EXTRA'] || '').split(',').map(s => s.trim()).filter(Boolean);
+// 🏀 免费 CCTV5 / CCTV5+：kafeizhibo 的 redirector(live.666666.zip)→ 咪咕(migu)源。https + ACAO:*，海外【直连】可播
+//    (实测返回真 TS 分段、media-seq 实时递增，非 catvod 那种 backup 待机台)。仅这两个体育频道稳定可用——其余 /cctv/N 皆 404。
+//    放在合并最前 → 与上游同名 CCTV5/CCTV5+ 归并时其 https 线路(rank0)排第一被优先播，运营商死源退为兜底。
+//    改 base 用 LIVE_KAFEI_BASE；设 LIVE_KAFEI_DISABLED=1 关闭(若源失效)。
+const LIVE_KAFEI_BASE = (process.env['LIVE_KAFEI_BASE'] || 'https://live.666666.zip').replace(/\/+$/, '');
+const LIVE_KAFEI_ENABLED = !process.env['LIVE_KAFEI_DISABLED'];
+const LIVE_KAFEI_GEN = LIVE_KAFEI_ENABLED ? [
+    { name: 'CCTV5', group: '体育', url: `${LIVE_KAFEI_BASE}/cctv/5.m3u8` },
+    { name: 'CCTV5+', group: '体育', url: `${LIVE_KAFEI_BASE}/cctv/5p.m3u8` },
+] : [];
 const LIVE_TV_ENABLED = !process.env['LIVE_TV_DISABLED'];
 // 后台验证：每次刷新后通过 worker(http源)/直连(https源)实测每个频道首条线路能否播，标 ok 并把能播的排前。
 // 不删频道(全列出),只标记+排序。设 LIVE_NO_VALIDATE=1 关闭(纯全列出、不打 worker)。
@@ -1223,9 +1233,10 @@ async function fetchLiveUpstream() {
     // 🔞 成人(站长用 LIVE_M3U_ADULT 注入)：归入"成人"分类，受前端 NSFW 过滤控制
     const adultTexts = await Promise.all(LIVE_M3U_ADULT.map(u => get([u])));
     const adultList = adultTexts.flatMap(t => parseM3U(t).map(c => ({ ...c, adult: true })));
-    const built = buildLiveChannels([...extraLists, vbList, orgList, ...langLists, adultList]);
+    // 免费 CCTV5/5+(kafeizhibo→咪咕)放在最前：与上游同名归并时其 https 线路被优先播
+    const built = buildLiveChannels([LIVE_KAFEI_GEN, ...extraLists, vbList, orgList, ...langLists, adultList]);
     const intlN = langLists.reduce((s, l) => s + l.length, 0);
-    console.log(`[直播] 上游拉取：中文 ${vbList.length + orgList.length}${LIVE_M3U_EXTRA.length ? '+extra' + extraLists.reduce((s, l) => s + l.length, 0) : ''} + 国际 ${intlN}(${LIVE_LANGS.length}语) + 成人 ${adultList.length} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类 / ${built.langs.length} 语`);
+    console.log(`[直播] 上游拉取：中文 ${vbList.length + orgList.length}${LIVE_KAFEI_GEN.length ? '+kafei' + LIVE_KAFEI_GEN.length : ''}${LIVE_M3U_EXTRA.length ? '+extra' + extraLists.reduce((s, l) => s + l.length, 0) : ''} + 国际 ${intlN}(${LIVE_LANGS.length}语) + 成人 ${adultList.length} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类 / ${built.langs.length} 语`);
     // 后台验证(不阻塞返回)：完成后原地标 ok + 重排，并刷新缓存时间戳让客户端 SWR 取到新版
     if (LIVE_VALIDATE && CORS_PROXY_URL) {
         validateLiveChannels(built.channels).then(() => {
