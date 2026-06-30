@@ -260,6 +260,7 @@ node server.js
 | `LIVE_M3U_URL` | ❌ | `live.zbds.top/tv/iptv4.m3u` | 直播主源 M3U（vbskycn）。详见[直播电视](#-直播电视-iptv) |
 | `LIVE_M3U_FALLBACK` | ❌ | gh-proxy 镜像 | 主源拉取失败时的备源 |
 | `LIVE_M3U_IPTVORG` | ❌ | iptv-org `countries/cn.m3u` | 中文频道补充源 |
+| `LIVE_M3U_ZHO` | ❌ | iptv-org `languages/zho.m3u` | 华语频道补充源——收录大量**海外 CDN** 华语源（CGTN 全家、CCTV-4 America/Europe、NTD 等），海外可达性远好于 `cn.m3u` |
 | `LIVE_M3U_EXTRA` | ❌ | — | 自定义上游 M3U（逗号分隔多个），用于注入**付费 IPTV 的 m3u**——海外稳定播更多被封频道的可靠路 |
 | `LIVE_M3U_DISABLE` | ❌ | — | 设为 `1` 关闭所有内置直播源，仅保留 `LIVE_M3U_EXTRA` 自定义源 |
 | `LIVE_M3U_ADULT` | ❌ | — | 成人直播源（逗号分隔），归"成人"分类，受前端 NSFW 过滤开关控制显隐；仓库**不内置任何地址** |

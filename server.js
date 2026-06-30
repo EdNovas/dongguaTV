@@ -87,6 +87,9 @@ const LIVE_M3U_URL = process.env['LIVE_M3U_URL'] || 'https://live.zbds.top/tv/ip
 const LIVE_M3U_FALLBACK = process.env['LIVE_M3U_FALLBACK'] || 'https://gh-proxy.com/raw.githubusercontent.com/vbskycn/iptv/refs/heads/master/tv/iptv4.m3u';
 // 第二上游(iptv-org cn)：补 CDN 域名源——vbskycn 的 CCTV 多是运营商 IP(封 Cloudflare 放不了)，iptv-org 有 cctvplus 等 CDN 源。
 const LIVE_M3U_IPTVORG = process.env['LIVE_M3U_IPTVORG'] || 'https://iptv-org.github.io/iptv/countries/cn.m3u';
+// 第三上游(iptv-org 中文语言表)：countries/cn 多是运营商 IP；languages/zho 反而收录大量【海外 CDN】华语源——
+// CCTV-1~17 完整 + CGTN 全家(News/Doc/西/阿/俄/法,多带 ACAO:*) + CCTV-4 America/Europe/Asia + 卫视。实测海外可播的关键补充。
+const LIVE_M3U_ZHO = process.env['LIVE_M3U_ZHO'] || 'https://iptv-org.github.io/iptv/languages/zho.m3u';
 // 自定义上游(可选)：用户有付费 IPTV 的 m3u 可设 LIVE_M3U_EXTRA(逗号分隔多个)，并入合并 → 能播什么由它决定。
 const LIVE_M3U_EXTRA = (process.env['LIVE_M3U_EXTRA'] || '').split(',').map(s => s.trim()).filter(Boolean);
 // 🏀 免费 CCTV5 / CCTV5+：第三方 redirector → 咪咕(migu)源。https + ACAO:*，海外【直连】可播
@@ -1217,13 +1220,14 @@ async function fetchLiveUpstream() {
         return '';
     };
     // LIVE_M3U_DISABLE=1 时只拉 LIVE_M3U_EXTRA，关掉所有内置上游(vbskycn/iptv-org/国际/内置CCTV5源)
-    const [vbText, orgText, ...extraTexts] = await Promise.all([
+    const [vbText, orgText, zhoText, ...extraTexts] = await Promise.all([
         LIVE_BUILTIN ? get([LIVE_M3U_URL, LIVE_M3U_FALLBACK].filter(Boolean)) : Promise.resolve(''),
         LIVE_BUILTIN ? get([LIVE_M3U_IPTVORG].filter(Boolean)) : Promise.resolve(''),
+        LIVE_BUILTIN ? get([LIVE_M3U_ZHO].filter(Boolean)) : Promise.resolve(''),
         ...LIVE_M3U_EXTRA.map(u => get([u]))
     ]);
-    if (!vbText && !orgText && !extraTexts.some(Boolean) && LIVE_BUILTIN) throw new Error('upstream M3U fetch failed');
-    const vbList = parseM3U(vbText), orgList = parseM3U(orgText);   // 中文(lang 默认中文)
+    if (!vbText && !orgText && !zhoText && !extraTexts.some(Boolean) && LIVE_BUILTIN) throw new Error('upstream M3U fetch failed');
+    const vbList = parseM3U(vbText), orgList = parseM3U(orgText), zhoList = parseM3U(zhoText);   // 中文(lang 默认中文)；zho 含海外 CDN 华语源
     const extraLists = extraTexts.map(t => parseM3U(t));           // 用户自定义付费源(LIVE_M3U_EXTRA)优先
     // 🌍 国际：按语言拉 iptv-org，每种封顶；intl 标记 → 用 group-title 映射种类
     const langLists = LIVE_BUILTIN ? await Promise.all(LIVE_LANGS.map(async lg => {
@@ -1235,9 +1239,9 @@ async function fetchLiveUpstream() {
     const adultList = adultTexts.flatMap(t => parseM3U(t).map(c => ({ ...c, adult: true })));
     // 内置免费 CCTV5/5+ 放在最前：与上游同名归并时其 https 线路被优先播(LIVE_M3U_DISABLE 时一并关掉)
     const kafeiList = LIVE_BUILTIN ? LIVE_KAFEI_GEN : [];
-    const built = buildLiveChannels([kafeiList, ...extraLists, vbList, orgList, ...langLists, adultList]);
+    const built = buildLiveChannels([kafeiList, ...extraLists, vbList, orgList, zhoList, ...langLists, adultList]);
     const intlN = langLists.reduce((s, l) => s + l.length, 0);
-    console.log(`[直播] 上游拉取：中文 ${vbList.length + orgList.length}${kafeiList.length ? '+kafei' + kafeiList.length : ''}${LIVE_M3U_EXTRA.length ? '+extra' + extraLists.reduce((s, l) => s + l.length, 0) : ''} + 国际 ${intlN}(${LIVE_LANGS.length}语) + 成人 ${adultList.length} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类 / ${built.langs.length} 语`);
+    console.log(`[直播] 上游拉取：中文 ${vbList.length + orgList.length}${zhoList.length ? '+zho' + zhoList.length : ''}${kafeiList.length ? '+kafei' + kafeiList.length : ''}${LIVE_M3U_EXTRA.length ? '+extra' + extraLists.reduce((s, l) => s + l.length, 0) : ''} + 国际 ${intlN}(${LIVE_LANGS.length}语) + 成人 ${adultList.length} → 合并 ${built.channels.length} 频道 / ${built.groups.length} 类 / ${built.langs.length} 语`);
     // 后台验证(不阻塞返回)：完成后原地标 ok + 重排，并刷新缓存时间戳让客户端 SWR 取到新版
     if (LIVE_VALIDATE && CORS_PROXY_URL) {
         validateLiveChannels(built.channels).then(() => {
