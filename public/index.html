@@ -2225,11 +2225,12 @@
         .live-recent-clear {
             margin-left: 8px;
             color: #888;
-            font-size: 11px;
+            font-size: calc(12.5px * var(--ui-scale, 1));
             cursor: pointer;
             border: 1px solid rgba(255, 255, 255, 0.15);
             border-radius: 10px;
-            padding: 1px 9px;
+            padding: 3px 10px;
+            line-height: 1.2;
         }
         .live-recent-clear:hover { color: #fff; border-color: var(--accent); }
         .live-logo img {
@@ -2287,12 +2288,16 @@
         }
         .live-cctv-hint b { color: #e6c074; font-weight: 600; }
         .live-sub-label {
-            font-size: 12px;
+            font-size: calc(14px * var(--ui-scale, 1));
             color: #999;
             margin: 10px 0 8px;
             display: flex;
             align-items: center;
             gap: 6px;
+            /* 抬到下方卡片行之上：.hot-row 用 margin-top:-24px 上移会盖住本行(尤其"清空"按钮下半)，
+               不抬层就只有按钮顶部一两 px 能点。position+z-index 让整行(含清空)在卡片行上面可点。 */
+            position: relative;
+            z-index: 1;
         }
         .live-dot {
             display: inline-block;
