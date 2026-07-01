@@ -6018,6 +6018,22 @@
 
                 // 📺 TV 遥控器键盘控制 - 使用 window 级别捕获
                 const self = this;
+                // ⌨️ 桌面(非 TV)播放页：空格 播放/暂停。DPlayer 自带 hotkey 要先点播放器拿到 dp.focus，
+                //    Mac/触控板上常没触发 → 空格只滚动页面暂停不了。用【捕获阶段 + stopImmediatePropagation】
+                //    抢在 DPlayer 之前处理:既保证一定生效,又避免与其 hotkey 叠加导致双触发相互抵消。输入框(弹幕/搜索)内不拦。
+                document.addEventListener('keydown', function (e) {
+                    if (!self.showDetail || self.isTVMode) return;
+                    if (e.key !== ' ' && e.code !== 'Space' && e.keyCode !== 32) return;
+                    const ae = document.activeElement;
+                    const tag = ae && ae.tagName ? ae.tagName.toLowerCase() : '';
+                    const ce = ae && ae.getAttribute ? ae.getAttribute('contenteditable') : null;
+                    if (tag === 'input' || tag === 'textarea' || ce === '' || ce === 'true') return;  // 正在输入(弹幕/搜索)不拦截
+                    if (!dp || !dp.video) return;
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    dp.toggle();
+                    try { dp.notice(dp.video.paused ? '⏸ 已暂停' : '▶ 播放中'); } catch (_) { }
+                }, true);
                 window.addEventListener('keydown', function (e) {
                     // TV 模式全局返回键处理
                     if (self.isTVMode && (e.key === 'Escape' || e.key === 'Backspace')) {
