@@ -9512,7 +9512,12 @@
                     const epName = ((cur && cur.name) || '').trim();
                     const m = epName.match(/第\s*0*(\d+)\s*[集话話期]/) || epName.match(/\bep\.?\s*0*(\d+)/i) || epName.match(/^0*(\d+)$/);
                     const num = m ? parseInt(m[1], 10) : null;
-                    return this.currentGroup.name + '|' + (num != null && !isNaN(num) ? num : epName);
+                    // 综艺同一期拆 上/中/下/纯享 等"部分"：键只含期号会塌缩(切"第1期上"→"第1期下"不重拉弹幕)。
+                    // 后缀只取【紧贴 期/集号 token】的部分词(与服务器 danmakuMarkers 同思路)——自由文本副标题("幕后黑手"/"兵临城下")不算,避免误触重拉。
+                    let suf = '';
+                    const tk = epName.match(/第?\s*\d+\s*[集话話期]/);
+                    if (tk) { const sm = epName.slice(tk.index + tk[0].length).match(/^\s*(上|中|下|先导|纯享|加更|特辑|彩蛋|花絮|预告|直拍|发布会|见面会|专场|访谈|饭局)/); if (sm) suf = sm[1]; }
+                    return this.currentGroup.name + '|' + (num != null && !isNaN(num) ? num + suf : epName);
                 },
                 // 🗄️ 资源站健康度本地缓存(跨剧集, 3天)：site_key → {latency,testType,useProxy,proxyUrl,ts}。
                 //    本地连不通的资源站基本不会再通，缓存上次测速结果 → 刷新页面/?play= 深链/换剧都直接套用、跳过重测；
