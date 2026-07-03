@@ -99,12 +99,15 @@ const LIVE_KAFEI_GEN = [
     { name: 'CCTV5', group: '体育', url: 'https://live.666666.zip/cctv/5.m3u8' },
     { name: 'CCTV5+', group: '体育', url: 'https://live.666666.zip/cctv/5p.m3u8' },
 ];
-const LIVE_TV_ENABLED = !process.env['LIVE_TV_DISABLED'];
+// 布尔型环境变量：0/false/no/off/空 都算"未开启"——JS 里 "0"/"false" 是 truthy，
+// 用户把 LIVE_TV_DISABLED=0 当"不禁用"填时曾把整个直播关掉(线上事故:首页直播频道消失)。
+const envFlag = (name) => { const v = String(process.env[name] ?? '').trim().toLowerCase(); return v !== '' && v !== '0' && v !== 'false' && v !== 'no' && v !== 'off'; };
+const LIVE_TV_ENABLED = !envFlag('LIVE_TV_DISABLED');
 // LIVE_M3U_DISABLE=1：关掉所有内置上游(vbskycn/iptv-org/国际/内置CCTV5源)，只用 LIVE_M3U_EXTRA 自定义源。
-const LIVE_BUILTIN = !process.env['LIVE_M3U_DISABLE'];
+const LIVE_BUILTIN = !envFlag('LIVE_M3U_DISABLE');
 // 后台验证：每次刷新后通过 worker(http源)/直连(https源)实测每个频道首条线路能否播，标 ok 并把能播的排前。
 // 不删频道(全列出),只标记+排序。设 LIVE_NO_VALIDATE=1 关闭(纯全列出、不打 worker)。
-const LIVE_VALIDATE = !process.env['LIVE_NO_VALIDATE'];
+const LIVE_VALIDATE = !envFlag('LIVE_NO_VALIDATE');
 
 // 环境变量加载状态日志（用于 Vercel 调试）
 console.log(`[System] Environment: ${process.env.VERCEL ? 'Vercel Serverless' : 'Local/VPS'}`);
