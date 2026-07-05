@@ -9627,7 +9627,12 @@
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
                         const mk = this._introMarks.marks[ep];
                         if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1 };
-                        // 指纹引擎(仅多集内容跑,单集无从跨集学习)：无标记(要学习/检测)或低票(要验证)才跑;有高票标记就省 CPU
+                        // 🎬 冷启动:本集无共享标记 → 后台抓 m3u8 离线学习(不用看片头,秒出)。每 剧|线路 只试一次。
+                        if (!mk && multiEp && window.afpOffline && this._introOfflineKey !== marksKey) {
+                            this._introOfflineKey = marksKey;
+                            window.afpOffline.learnOrDetect({ vue: this, title, site, ep, curUrl: this.currentUrl, epList: this.episodeList });
+                        }
+                        // 指纹引擎(边看边学,零流量兜底 + 后续集实时检测)：无标记或低票才跑;有高票标记就省 CPU
                         if (window.afpEngine) {
                             if (multiEp && (!mk || (mk.v || 1) < 3)) window.afpEngine.start({ title, site, ep });
                             else window.afpEngine.stop();
@@ -10480,6 +10485,170 @@
                                         const del = [];
                                         for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && (k.indexOf('donggua_afp|') === 0 || k.indexOf('donggua_afpop|') === 0)) del.push(k); }
                                         del.forEach(k => localStorage.removeItem(k));
+                                    }
+                                };
+
+                                // ========== 🎬 离线 m3u8 片头分析(不用看片头,直接抓分片解码) ==========
+                                // 抓这集+邻集的 m3u8(自动选最低码率省流量)→ 取前几分钟分片 → (AES-128 解密)→ 拆 TS 取 AAC
+                                //   → decodeAudioData 解码 → FFT 算 16 频带指纹 → 复用 afpEngine._learn 互相关找片头 → 直接出标记。
+                                //   全站首次学习(无共享标记)时用它秒出结果、且 iOS 也能用;失败自动回退"边看边学"。
+                                if (!window.afpOffline) window.afpOffline = {
+                                    FS: 2048, _ac: null, _busy: false,
+                                    E() { return window.afpEngine; },
+                                    _fft(re, im) {
+                                        const n = re.length;
+                                        for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr; const ti = im[i]; im[i] = im[j]; im[j] = ti; } }
+                                        for (let len = 2; len <= n; len <<= 1) {
+                                            const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+                                            for (let s = 0; s < n; s += len) { let cr = 1, ci = 0; for (let k = 0; k < len >> 1; k++) { const a = s + k, b = s + k + (len >> 1); const vr = re[b] * cr - im[b] * ci, vi = re[b] * ci + im[b] * cr; re[b] = re[a] - vr; im[b] = im[a] - vi; re[a] += vr; im[a] += vi; const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr; } }
+                                        }
+                                    },
+                                    // 单声道 PCM → 指纹(补齐到 afpEngine 的 N=WIN*HZ 长度,后段留零→_learn 里判无效跳过)
+                                    _fpFromPCM(ch, sr) {
+                                        const E = this.E(), HZ = E.HZ, BD = E.BANDS, N = E.WIN * E.HZ, FS = this.FS;
+                                        const re = new Float64Array(FS), im = new Float64Array(FS);
+                                        const binHz = sr / FS, lo = Math.max(1, Math.round(65 / binHz)), hi = Math.min(FS / 2 - 1, Math.round(Math.min(12000, sr / 2) / binHz));
+                                        const edge = []; for (let b = 0; b <= BD; b++) edge.push(Math.round(lo * Math.pow(hi / lo, b / BD)));
+                                        const step = sr / HZ, fp = new Float32Array(N * BD);
+                                        const frames = Math.min(N, Math.floor((ch.length - FS) / step));
+                                        for (let f = 0; f < frames; f++) {
+                                            const s0 = Math.floor(f * step);
+                                            for (let i = 0; i < FS; i++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (FS - 1)); re[i] = ch[s0 + i] * w; im[i] = 0; }
+                                            this._fft(re, im);
+                                            for (let b = 0; b < BD; b++) { let s = 0, c = 0; for (let k = edge[b]; k < edge[b + 1]; k++) { s += Math.hypot(re[k], im[k]); c++; } fp[f * BD + b] = c ? (s / c) * 50 : 0; }
+                                        }
+                                        return fp;
+                                    },
+                                    // TS → 干净 ADTS AAC(PAT→PMT→音频PID→PES去头→按 ADTS 同步字重扫)
+                                    _tsToAdts(u8) {
+                                        let pmtPid = -1, audioPid = -1, audioType = '';
+                                        const chunks = [], N = u8.length;
+                                        for (let i = 0; i + 188 <= N;) {
+                                            if (u8[i] !== 0x47) { let j = i + 1; while (j + 188 <= N && u8[j] !== 0x47) j++; i = j; continue; }
+                                            const b1 = u8[i + 1], pid = ((b1 & 0x1f) << 8) | u8[i + 2], payloadStart = (b1 & 0x40) !== 0, adaptation = (u8[i + 3] & 0x30) >> 4;
+                                            let off = i + 4;
+                                            if (adaptation === 0 || adaptation === 2) { i += 188; continue; }
+                                            if (adaptation === 3) off += 1 + u8[i + 4];
+                                            const pEnd = i + 188;
+                                            if (off >= pEnd) { i += 188; continue; }
+                                            if (pid === 0) { let p = off + (payloadStart ? 1 + u8[off] : 0); const base = p + 8; if (base + 3 < pEnd) pmtPid = ((u8[base + 2] & 0x1f) << 8) | u8[base + 3]; }
+                                            else if (pid === pmtPid && audioPid < 0) {
+                                                let p = off + (payloadStart ? 1 + u8[off] : 0);
+                                                const secLen = ((u8[p + 1] & 0x0f) << 8) | u8[p + 2], progInfoLen = ((u8[p + 10] & 0x0f) << 8) | u8[p + 11];
+                                                let es = p + 12 + progInfoLen; const secEnd = Math.min(pEnd, p + 3 + secLen - 4);
+                                                while (es + 5 <= secEnd) { const st = u8[es], ePid = ((u8[es + 1] & 0x1f) << 8) | u8[es + 2], infoLen = ((u8[es + 3] & 0x0f) << 8) | u8[es + 4]; if (st === 0x0f || st === 0x11) { audioPid = ePid; audioType = 'aac'; break; } else if ((st === 0x03 || st === 0x04) && audioPid < 0) { audioPid = ePid; audioType = 'mp3'; } es += 5 + infoLen; }
+                                            } else if (pid === audioPid) {
+                                                let s = off;
+                                                if (payloadStart && pEnd - off > 9 && u8[off] === 0 && u8[off + 1] === 0 && u8[off + 2] === 1) s = off + 9 + u8[off + 8];
+                                                if (s < pEnd) chunks.push(u8.subarray(s, pEnd));
+                                            }
+                                            i += 188;
+                                        }
+                                        if (audioType !== 'aac') return { type: audioType, data: null };
+                                        let total = 0; for (const c of chunks) total += c.length;
+                                        const es = new Uint8Array(total); let o = 0; for (const c of chunks) { es.set(c, o); o += c.length; }
+                                        const out = []; let p = 0;
+                                        while (p + 7 <= es.length) {
+                                            if (es[p] === 0xff && (es[p + 1] & 0xf6) === 0xf0) {
+                                                const len = ((es[p + 3] & 0x03) << 11) | (es[p + 4] << 3) | (es[p + 5] >> 5);
+                                                if (len >= 7 && p + len <= es.length && (p + len + 2 > es.length || (es[p + len] === 0xff && (es[p + len + 1] & 0xf6) === 0xf0))) { out.push(es.subarray(p, p + len)); p += len; continue; }
+                                            }
+                                            p++;
+                                        }
+                                        let ol = 0; for (const f of out) ol += f.length; const adts = new Uint8Array(ol); o = 0; for (const f of out) { adts.set(f, o); o += f.length; }
+                                        return { type: 'aac', data: adts };
+                                    },
+                                    async _fetchText(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP' + r.status); const t = await r.text(); if (!/#EXTM3U/.test(t)) throw new Error('非m3u8'); return t; },
+                                    // master → 最低码率 media 清单;返回 { origBase(未代理), text }
+                                    async _resolveMedia(origUrl, route) {
+                                        let origBase = origUrl, text = await this._fetchText(route(origBase));
+                                        for (let d = 0; d < 4; d++) {
+                                            if (!/#EXT-X-STREAM-INF/i.test(text)) break;
+                                            const vs = [], re = /#EXT-X-STREAM-INF:([^\n]*)\r?\n\s*([^\n#][^\r\n]*)/gi; let m;
+                                            while ((m = re.exec(text))) { const bw = (m[1].match(/BANDWIDTH=(\d+)/) || [])[1]; vs.push({ bw: bw ? +bw : 1e12, uri: m[2].trim() }); }
+                                            if (!vs.length) break;
+                                            vs.sort((a, b) => a.bw - b.bw);
+                                            origBase = new URL(vs[0].uri, origBase).href; text = await this._fetchText(route(origBase));
+                                        }
+                                        return { origBase, text };
+                                    },
+                                    _segList(text, base, maxSec) {
+                                        const lines = text.split('\n'); const out = []; let dur = 0, acc = 0, key = null;
+                                        for (const raw of lines) {
+                                            const ln = raw.trim();
+                                            if (ln.indexOf('#EXT-X-KEY') === 0) { const method = (ln.match(/METHOD=([^,]+)/) || [])[1]; if (method === 'NONE' || !method) key = null; else if (/AES-128/i.test(ln)) { const uri = (ln.match(/URI="([^"]+)"/) || [])[1]; const iv = (ln.match(/IV=0x([0-9A-Fa-f]+)/) || [])[1]; key = { uri: uri ? (function () { try { return new URL(uri, base).href; } catch (e) { return null; } })() : null, iv: iv || null }; } else key = 'unsupported'; }
+                                            else if (ln.indexOf('#EXTINF') === 0) dur = parseFloat(ln.slice(8)) || 0;
+                                            else if (ln && ln[0] !== '#') { try { out.push({ url: new URL(ln, base).href, dur, key, seq: out.length }); } catch (e) { } acc += dur; if (acc >= maxSec) break; }
+                                        }
+                                        return out;
+                                    },
+                                    _hexToBytes(h) { const a = new Uint8Array(h.length / 2); for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; },
+                                    async _decrypt(buf, key, route, cache) {
+                                        if (!key.uri) throw new Error('无密钥URI'); if (!crypto.subtle) throw new Error('无SubtleCrypto');
+                                        let raw = cache[key.uri]; if (!raw) { raw = await (await fetch(route(key.uri), { cache: 'no-store' })).arrayBuffer(); cache[key.uri] = raw; }
+                                        let iv; if (key.iv) iv = this._hexToBytes(key.iv.padStart(32, '0')); else { iv = new Uint8Array(16); const dv = new DataView(iv.buffer); dv.setUint32(12, key.seq >>> 0); }
+                                        const ck = await crypto.subtle.importKey('raw', raw, 'AES-CBC', false, ['decrypt']);
+                                        return await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, ck, buf);
+                                    },
+                                    // 抓一集前 maxSec 秒 → 指纹(失败抛错,上层回退)
+                                    async _analyze(origUrl, route, maxSec) {
+                                        const { origBase, text } = await this._resolveMedia(origUrl, route);
+                                        const segs = this._segList(text, origBase, maxSec);
+                                        if (!segs.length) throw new Error('无分段');
+                                        if (segs.some(s => s.key === 'unsupported')) throw new Error('不支持的加密(非AES-128)');
+                                        const cache = {}, parts = []; let bytes = 0;
+                                        for (const s of segs) {
+                                            let buf = await (await fetch(route(s.url), { cache: 'no-store' })).arrayBuffer();
+                                            if (s.key) buf = await this._decrypt(buf, s.key, route, cache);
+                                            parts.push(new Uint8Array(buf)); bytes += buf.byteLength;
+                                        }
+                                        let tot = 0; for (const p of parts) tot += p.length; const ts = new Uint8Array(tot); let o = 0; for (const p of parts) { ts.set(p, o); o += p.length; }
+                                        const { type, data } = this._tsToAdts(ts);
+                                        if (type !== 'aac' || !data || data.length < 1000) throw new Error('取不到AAC(可能fMP4/MP3源)');
+                                        const ac = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
+                                        const audio = await ac.decodeAudioData(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+                                        console.log('[AFP离线] 分析完成:', (bytes / 1048576).toFixed(1) + 'MB →', audio.duration.toFixed(0) + 's音频');
+                                        return this._fpFromPCM(audio.getChannelData(0), audio.sampleRate);
+                                    },
+                                    _epNumOf(name, idx) { const m = String(name || '').match(/第\s*0*(\d+)\s*[集话話期]/) || String(name || '').match(/\bep\.?\s*0*(\d+)/i) || String(name || '').match(/^0*(\d+)$/); return m ? parseInt(m[1], 10) : idx + 1; },
+                                    _pickSibling(epList, curUrl) {
+                                        const idx = (epList || []).findIndex(e => e.url === curUrl);
+                                        for (const j of [idx + 1, idx - 1, idx + 2, idx - 2]) if (j >= 0 && j < epList.length && epList[j].url !== curUrl) return { ep: this._epNumOf(epList[j].name, j), url: epList[j].url };
+                                        return null;
+                                    },
+                                    _detectStart(fp, opFp) {
+                                        const E = this.E(), BD = E.BANDS, HZ = E.HZ, L = Math.min(opFp.len, 30), N = E.WIN * E.HZ;
+                                        let best = -1, bestI = 0;
+                                        for (let i = 0; i + L <= N; i++) { let s = 0; for (let k = 0; k < L; k++) s += E._cos(fp, (i + k) * BD, opFp.data, k * BD); s /= L; if (s > best) { best = s; bestI = i; } }
+                                        return best >= 0.88 ? bestI / HZ : null;
+                                    },
+                                    _apply(o, os, oe) {
+                                        os = Math.round(os * 10) / 10; oe = Math.round(oe * 10) / 10;
+                                        if (oe - os < 10) return;
+                                        try { if (o.vue._introEpNum() === o.ep && !o.vue._introCur) { o.vue._introCur = { os, oe, ed: 0, src: 'afp', v: 0 }; } } catch (e) { }
+                                        o.vue._introUpload(o.title, o.site, o.ep, os, oe, 'auto');
+                                    },
+                                    // 主入口:抓 当前集+邻集 分片解码 → 互相关找片头 → 上报两集标记 + 本集立即出按钮。
+                                    //   只解决冷启动(全站首个观众、无共享标记时秒出结果);其余集交给"边看边学"(零流量)与共享标记。
+                                    //   与 afpEngine(播放采集)完全独立(指纹尺度不同不混用),纯粹多贡献一批共享标记。失败静默回退。
+                                    async learnOrDetect(o) {
+                                        if (this._busy) return; this._busy = true;
+                                        try {
+                                            const E = this.E(); if (!E) return;
+                                            const route = (u) => { try { return o.vue._routeMediaUrl(u, true); } catch (e) { return u; } };
+                                            const sib = this._pickSibling(o.epList, o.curUrl);
+                                            if (!sib) return;
+                                            console.log('[AFP离线] 冷启动学习: 抓 本集 + 第' + sib.ep + '集 最低码率前几分钟分片解码…');
+                                            const fpA = await this._analyze(o.curUrl, route, 240);
+                                            const fpB = await this._analyze(sib.url, route, 240);
+                                            const r = E._learn(fpA, fpB);
+                                            if (!r) { console.log('[AFP离线] 两集未找到公共片头(可能无固定片头曲/两集片头都没在前几分钟)'); return; }
+                                            const os1 = r.aStart / E.HZ, os2 = r.bStart / E.HZ, sec = r.len / E.HZ;
+                                            this._apply(o, os1, os1 + sec);
+                                            o.vue._introUpload(o.title, o.site, sib.ep, os2, os2 + sec, 'auto');
+                                            console.log('[AFP离线] ✅ 学习成功: 片头 ' + sec.toFixed(0) + 's @本集 ' + os1.toFixed(0) + 's / 第' + sib.ep + '集 ' + os2.toFixed(0) + 's');
+                                        } catch (e) { console.warn('[AFP离线] 失败,回退边看边学:', e && e.message); }
+                                        finally { this._busy = false; }
                                     }
                                 };
 
