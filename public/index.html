@@ -10192,7 +10192,7 @@
                                     },
                                     check(time) {
                                         // ── 第一优先：按集智能标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳 ──
-                                        //   两个独立可跳区间:开头贴片(bs~be,盗版源注入的广告/许可卡→「跳过开头」) 与 片头曲(os~oe→「跳过片头」),各自只跳一次
+                                        //   两个独立可跳区间:开头贴片(bs~be,网络视听许可证/平台方片头贴片→「跳过开头」) 与 片头曲(os~oe→「跳过片头」),各自只跳一次
                                         const v = this.vue, cur = v && v._introCur;
                                         // switchVideo 换集瞬间会发一次 currentTime=0 的 timeupdate、此时 duration=NaN；此刻绝不自动跳(否则新集从 oe 起播)
                                         const dur = dp.video && dp.video.duration;
@@ -10709,7 +10709,7 @@
                                         if (!regs.length) return null;
                                         regs.sort((x, y) => y.len - x.len);
                                         const bestR = regs[0];
-                                        // 顺带找"开头贴片"区间:两集都在前 60s 内、<45s、且整段在主区间之前不重叠(盗版源每集头部注入的同一段广告/许可卡)
+                                        // 顺带找"开头贴片"区间:两集都在前 60s 内、<45s、且整段在主区间之前不重叠(每集头部同一段网络视听许可证/平台方片头贴片)
                                         for (const g of regs.slice(1)) {
                                             if (g.aStart < 600 && g.bStart < 600 && g.len < 450 && g.aStart + g.len <= bestR.aStart && g.bStart + g.len <= bestR.bStart) { bestR.bump = g; break; }
                                         }
@@ -10873,7 +10873,7 @@
                                                 }
                                                 if (hit) {
                                                     const os = hit.at / this.EHZ;
-                                                    // 顺带定位开头贴片(只在前 150s 里找,盗版源都贴在头部)
+                                                    // 顺带定位开头贴片(只在前 150s 里找,片头贴片都在头部)
                                                     let bump = null;
                                                     if (saved.benv && saved.benv.length) {
                                                         const bh = this._xcorrDetect(saved.benv, sess.env, Math.min(sess.n, 150 * this.EHZ));
@@ -10898,7 +10898,7 @@
                                                 r = await this._xcorrLearn(sA.env, sA.n, sB.env, sB.n);
                                                 const isLast = si === this.STAGES.length - 1 || (!mA && !mB);
                                                 if (r) {
-                                                    // 🚨 疑似片源头部赞助贴片(网络视听logo/广告卡):两集都贴在最开头且不长——盗版源每集头部注入同一段
+                                                    // 🚨 疑似片源头部贴片(网络视听许可证/平台方logo):两集都贴在最开头且不长——每集头部同一段
                                                     //   音频,会被当成"公共片头"提前收工,真片头曲(可能在几分钟后)根本没进窗口。用户实测踩坑(40795广告卡)。
                                                     //   不急着收,扩窗看有没有更长的真片头;全扫完确实只有它,才按片头使用(有的剧片头确实又短又靠前)。
                                                     const sus = r.aStart / this.EHZ < 60 && r.bStart / this.EHZ < 60 && r.len / this.EHZ < 45;
@@ -10916,7 +10916,7 @@
                                             if (fine) { os1 = fine.osA; oe1 = fine.oeA; os2 = fine.osB; oe2 = fine.oeB; headEnv = fine.headEnv; headSec = fine.headSec; }
                                             else { os1 = r.aStart / this.EHZ; oe1 = os1 + r.len / this.EHZ; os2 = r.bStart / this.EHZ; oe2 = os2 + r.len / this.EHZ; headEnv = sA.env.slice(r.aStart, r.aStart + r.len); headSec = r.len / this.EHZ; }
                                             const dur = Math.min(oe1 - os1, oe2 - os2);   // 后续集定位的跳过时长取两集较小者(保守不过跳)
-                                            // 开头贴片区间(盗版源注入的广告/许可卡,片头曲之外的第二个可跳区间)——一起上报共享
+                                            // 开头贴片区间(网络视听许可证/平台方片头贴片,片头曲之外的第二个可跳区间)——一起上报共享
                                             const bp = r.bump || null;
                                             const bumpA = bp ? { bs: Math.round(bp.aStart / this.EHZ * 10) / 10, be: Math.round((bp.aStart + bp.len) / this.EHZ * 10) / 10 } : null;
                                             const bumpB = bp ? { bs: Math.round(bp.bStart / this.EHZ * 10) / 10, be: Math.round((bp.bStart + bp.len) / this.EHZ * 10) / 10 } : null;

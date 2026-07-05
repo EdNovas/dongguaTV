@@ -1541,7 +1541,7 @@ app.post('/api/settings/push', (req, res) => {
 // 存储走 cacheManager KV(category='intro')——json/sqlite/memory 全兼容,不像历史同步只限 sqlite。
 // 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>": {os,oe,ed,v,src,at,bs,be,bv} } 整剧一条。
 // 必须按【集】存:每集冷开场长度不同,片头起点不同;不能按剧存一个时间。
-// bs/be = 可选"开头贴片"区间(盗版源每集头部注入的广告/许可卡,与片头曲是两个独立可跳区间),bv = 其票数。
+// bs/be = 可选"开头贴片"区间(网络视听许可证/平台方片头贴片,与片头曲是两个独立可跳区间),bv = 其票数。
 const INTRO_TTL = 365 * 24 * 3600;   // 秒。每次写入续期
 function introNormTitle(s) {
     // 与前端 _introTitleKey 保持一致：去括号内容/空格/标点,小写。改这里必须同步改前端。
@@ -1578,7 +1578,7 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         if (!title || !site || !Number.isInteger(ep) || ep < 0 || ep > 99999999) return res.status(400).json({ error: 'bad params' });
         if (!isFinite(os) || !isFinite(oe) || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 150) return res.status(400).json({ error: 'bad range' });
         if (ed != null && (!isFinite(ed) || ed <= oe || ed > 6 * 3600)) ed = null;
-        // 可选"开头贴片"区间(盗版源头部注入的广告/许可卡):必须贴近片头部(起点≤120s)、3~90s、且在片头曲之前;非法就静默丢弃不拒整单
+        // 可选"开头贴片"区间(网络视听许可证/平台方片头贴片):必须贴近片头部(起点≤120s)、3~90s、且在片头曲之前;非法就静默丢弃不拒整单
         let bs = b.b_start == null ? null : Math.round(Number(b.b_start) * 10) / 10;
         let be = b.b_end == null ? null : Math.round(Number(b.b_end) * 10) / 10;
         if (bs == null || be == null || !isFinite(bs) || !isFinite(be) || bs < 0 || bs > 120 || be <= bs || (be - bs) < 3 || (be - bs) > 90 || be > os + 5) { bs = null; be = null; }
