@@ -9627,13 +9627,11 @@
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
                         const mk = this._introMarks.marks[ep];
                         if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1 };
-                        // 🎬 冷启动:本集无共享标记 → 后台抓 m3u8 离线学习(不用看片头,秒出)。
-                        //   成功/确认无片头 → 本剧本线路不再试;失败(代理400/换源打断等) → 释放守卫,下集或换源后重试。
-                        if (!mk && multiEp && window.afpOffline && this._introOfflineKey !== marksKey) {
-                            this._introOfflineKey = marksKey;
-                            window.afpOffline.learnOrDetect({ vue: this, title, site, ep, curUrl: this.currentUrl, epList: this.episodeList })
-                                .then(ok => { if (!ok && this._introOfflineKey === marksKey) this._introOfflineKey = null; })
-                                .catch(() => { if (this._introOfflineKey === marksKey) this._introOfflineKey = null; });
+                        // 🎬 本集无共享标记 → 后台离线分析(不用看片头):没学过→两集包络学习;学过→只定位本集。
+                        //   全部守卫(每剧学一次/每集定位一次/失败限2次/流量上限)内聚在模块里,这里只管调——
+                        //   ⚠️别在这儿加守卫变量:上一版 Vue 侧 _introOfflineKey 被多个异步回调竞态复位,导致换集就重学、流量爆炸。
+                        if (!mk && multiEp && window.afpOffline) {
+                            window.afpOffline.learnOrDetect({ vue: this, title, site, ep, epList: this.episodeList }).catch(() => { });
                         }
                         // 指纹引擎(边看边学,零流量兜底 + 后续集实时检测)：无标记或低票才跑;有高票标记就省 CPU
                         if (window.afpEngine) {
@@ -10484,47 +10482,27 @@
                                             if (ops.length > 40) ops.slice(0, ops.length - 40).forEach(k => localStorage.removeItem(k));   // op 键此前只增不减 → 也封顶
                                         } catch (e) { }
                                     },
-                                    _gcAll() {   // 配额兜底:清光指纹缓存(损失只是重新学习)
+                                    _gcAll() {   // 配额兜底:清光指纹/包络缓存(损失只是重新学习)
                                         const del = [];
-                                        for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && (k.indexOf('donggua_afp|') === 0 || k.indexOf('donggua_afpop|') === 0)) del.push(k); }
+                                        for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && (k.indexOf('donggua_afp|') === 0 || k.indexOf('donggua_afpop|') === 0 || k.indexOf('donggua_afpenv|') === 0)) del.push(k); }
                                         del.forEach(k => localStorage.removeItem(k));
                                     }
                                 };
 
                                 // ========== 🎬 离线 m3u8 片头分析(不用看片头,直接抓分片解码) ==========
-                                // 抓这集+邻集的 m3u8(自动选最低码率省流量)→ 取前几分钟分片 → (AES-128 解密)→ 拆 TS 取 AAC
-                                //   → decodeAudioData 解码 → FFT 算 16 频带指纹 → 复用 afpEngine._learn 互相关找片头 → 直接出标记。
-                                //   全站首次学习(无共享标记)时用它秒出结果、且 iOS 也能用;失败自动回退"边看边学"。
+                                // 抓两集 m3u8 → 逐段解码 → 10Hz 响度包络(RMS,PCM 即弃,常驻内存仅几十 KB) → 两集包络互相关找相同音频段=片头。
+                                //   真实数据(破事精英S2 红牛源)验证:同片头包络 Pearson≈0.89 且边界陡峭(2s 细窗可收到±1s);
+                                //   无关内容 30s 粗窗最高也会冒 0.71 假峰,但经 extent(连续5s窗≥0.5达15s+)+整段验证(≥0.6) 双过滤后全灭(倒序负样本 null)。
+                                //   ⚠️ 频谱指纹方案已被同一批真实数据证伪(46ms窗对亚秒错位极敏感→漏真;16维dB向量假相似→造假),勿走回头路。
+                                //   窗口 240s→480s→600s 渐进(长冷开场的剧片头可能在6~8分钟,破事精英S2第1集在6分45秒!)。
+                                //   学出后本地存片头包络:后续集只抓本集做"定位",标记上传共享→后来人零成本;iOS 可用;失败静默回退"边看边学"。
                                 if (!window.afpOffline) window.afpOffline = {
-                                    FS: 2048, _ac: null, _busy: false,
-                                    E() { return window.afpEngine; },
-                                    _fft(re, im) {
-                                        const n = re.length;
-                                        for (let i = 1, j = 0; i < n; i++) { let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr; const ti = im[i]; im[i] = im[j]; im[j] = ti; } }
-                                        for (let len = 2; len <= n; len <<= 1) {
-                                            const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
-                                            for (let s = 0; s < n; s += len) { let cr = 1, ci = 0; for (let k = 0; k < len >> 1; k++) { const a = s + k, b = s + k + (len >> 1); const vr = re[b] * cr - im[b] * ci, vi = re[b] * ci + im[b] * cr; re[b] = re[a] - vr; im[b] = im[a] - vi; re[a] += vr; im[a] += vi; const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr; } }
-                                        }
-                                    },
-                                    // 单声道 PCM → 指纹(补齐到 afpEngine 的 N=WIN*HZ 长度,后段留零→_learn 里判无效跳过)
-                                    _fpFromPCM(ch, sr) {
-                                        const E = this.E(), HZ = E.HZ, BD = E.BANDS, N = E.WIN * E.HZ, FS = this.FS;
-                                        const re = new Float64Array(FS), im = new Float64Array(FS);
-                                        const binHz = sr / FS, lo = Math.max(1, Math.round(65 / binHz)), hi = Math.min(FS / 2 - 1, Math.round(Math.min(12000, sr / 2) / binHz));
-                                        const edge = []; for (let b = 0; b <= BD; b++) edge.push(Math.round(lo * Math.pow(hi / lo, b / BD)));
-                                        const step = sr / HZ, fp = new Float32Array(N * BD);
-                                        const frames = Math.min(N, Math.floor((ch.length - FS) / step));
-                                        for (let f = 0; f < frames; f++) {
-                                            const s0 = Math.floor(f * step);
-                                            for (let i = 0; i < FS; i++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (FS - 1)); re[i] = ch[s0 + i] * w; im[i] = 0; }
-                                            this._fft(re, im);
-                                            for (let b = 0; b < BD; b++) { let s = 0, c = 0; for (let k = edge[b]; k < edge[b + 1]; k++) { s += Math.hypot(re[k], im[k]); c++; } fp[f * BD + b] = c ? (s / c) * 50 : 0; }
-                                        }
-                                        return fp;
-                                    },
+                                    _ac: null, _busy: false, _st: {}, _epDone: {}, _mb: 0,
+                                    EHZ: 10,                      // 包络采样率 10Hz(100ms)
+                                    STAGES: [240, 480, 600],      // 渐进分析窗口(秒)
                                     // TS → 干净 ADTS AAC(PAT→PMT→音频PID→PES去头→按 ADTS 同步字重扫)
                                     _tsToAdts(u8) {
-                                        let pmtPid = -1, audioPid = -1, audioType = '';
+                                        let pmtPid = -1, audioPid = -1, videoPid = -1, audioType = '', firstPts = -1, firstVPts = -1;
                                         const chunks = [], N = u8.length;
                                         for (let i = 0; i + 188 <= N;) {
                                             if (u8[i] !== 0x47) { let j = i + 1; while (j + 188 <= N && u8[j] !== 0x47) j++; i = j; continue; }
@@ -10539,15 +10517,22 @@
                                                 let p = off + (payloadStart ? 1 + u8[off] : 0);
                                                 const secLen = ((u8[p + 1] & 0x0f) << 8) | u8[p + 2], progInfoLen = ((u8[p + 10] & 0x0f) << 8) | u8[p + 11];
                                                 let es = p + 12 + progInfoLen; const secEnd = Math.min(pEnd, p + 3 + secLen - 4);
-                                                while (es + 5 <= secEnd) { const st = u8[es], ePid = ((u8[es + 1] & 0x1f) << 8) | u8[es + 2], infoLen = ((u8[es + 3] & 0x0f) << 8) | u8[es + 4]; if (st === 0x0f || st === 0x11) { audioPid = ePid; audioType = 'aac'; break; } else if ((st === 0x03 || st === 0x04) && audioPid < 0) { audioPid = ePid; audioType = 'mp3'; } es += 5 + infoLen; }
+                                                while (es + 5 <= secEnd) { const st = u8[es], ePid = ((u8[es + 1] & 0x1f) << 8) | u8[es + 2], infoLen = ((u8[es + 3] & 0x0f) << 8) | u8[es + 4]; if (st === 0x0f || st === 0x11) { audioPid = ePid; audioType = 'aac'; } else if ((st === 0x03 || st === 0x04) && audioPid < 0) { audioPid = ePid; audioType = 'mp3'; } else if ((st === 0x1b || st === 0x24 || st === 0x02 || st === 0x01 || st === 0x10) && videoPid < 0) videoPid = ePid; if (audioType === 'aac' && videoPid >= 0) break; es += 5 + infoLen; }
                                             } else if (pid === audioPid) {
                                                 let s = off;
-                                                if (payloadStart && pEnd - off > 9 && u8[off] === 0 && u8[off + 1] === 0 && u8[off + 2] === 1) s = off + 9 + u8[off + 8];
+                                                if (payloadStart && pEnd - off > 9 && u8[off] === 0 && u8[off + 1] === 0 && u8[off + 2] === 1) {
+                                                    // 顺手取首个音频 PES 的 PTS(90kHz)
+                                                    if (firstPts < 0 && (u8[off + 7] & 0x80)) { const p = off + 9; firstPts = ((u8[p] >> 1) & 7) * 1073741824 + (((u8[p + 1] << 7) | (u8[p + 2] >> 1)) & 0x7fff) * 32768 + (((u8[p + 3] << 7) | (u8[p + 4] >> 1)) & 0x7fff); }
+                                                    s = off + 9 + u8[off + 8];
+                                                }
                                                 if (s < pEnd) chunks.push(u8.subarray(s, pEnd));
+                                            } else if (pid === videoPid && firstVPts < 0 && payloadStart && pEnd - off > 13 && u8[off] === 0 && u8[off + 1] === 0 && u8[off + 2] === 1 && (u8[off + 7] & 0x80)) {
+                                                // 首个视频 PES 的 PTS——播放器时间轴锚定在视频轨(实测某源音频流比视频晚起4s,音频PTS增量会误判)
+                                                const p = off + 9; firstVPts = ((u8[p] >> 1) & 7) * 1073741824 + (((u8[p + 1] << 7) | (u8[p + 2] >> 1)) & 0x7fff) * 32768 + (((u8[p + 3] << 7) | (u8[p + 4] >> 1)) & 0x7fff);
                                             }
                                             i += 188;
                                         }
-                                        if (audioType !== 'aac') return { type: audioType, data: null };
+                                        if (audioType !== 'aac') return { type: audioType, data: null, pts: firstPts, vpts: firstVPts };
                                         let total = 0; for (const c of chunks) total += c.length;
                                         const es = new Uint8Array(total); let o = 0; for (const c of chunks) { es.set(c, o); o += c.length; }
                                         const out = []; let p = 0;
@@ -10559,7 +10544,7 @@
                                             p++;
                                         }
                                         let ol = 0; for (const f of out) ol += f.length; const adts = new Uint8Array(ol); o = 0; for (const f of out) { adts.set(f, o); o += f.length; }
-                                        return { type: 'aac', data: adts };
+                                        return { type: 'aac', data: adts, pts: firstPts, vpts: firstVPts };
                                     },
                                     // 智能取源:直连/worker代理 双策略——模仿播放的实际加载方式(hls.js 能直连的源直连也通;
                                     //   worker 对个别源 400/被源站拒 Referer 时换直连,反之亦然)。成功策略粘住,减少重复失败。
@@ -10592,13 +10577,21 @@
                                         }
                                         return { origBase, text };
                                     },
-                                    _segList(text, base, maxSec) {
+                                    // 取 [fromSec, toSec) 区间内的分段(按 EXTINF 累计时间);seq 用真实媒体序列号(AES 无显式 IV 时按 seq 构造,分阶段抓取不能从0重数)
+                                    _segList(text, base, fromSec, toSec) {
                                         const lines = text.split('\n'); const out = []; let dur = 0, acc = 0, key = null;
+                                        let seq = (function () { const m = text.match(/#EXT-X-MEDIA-SEQUENCE:\s*(\d+)/); return m ? +m[1] : 0; })();
                                         for (const raw of lines) {
                                             const ln = raw.trim();
                                             if (ln.indexOf('#EXT-X-KEY') === 0) { const method = (ln.match(/METHOD=([^,]+)/) || [])[1]; if (method === 'NONE' || !method) key = null; else if (/AES-128/i.test(ln)) { const uri = (ln.match(/URI="([^"]+)"/) || [])[1]; const iv = (ln.match(/IV=0x([0-9A-Fa-f]+)/) || [])[1]; key = { uri: uri ? (function () { try { return new URL(uri, base).href; } catch (e) { return null; } })() : null, iv: iv || null }; } else key = 'unsupported'; }
                                             else if (ln.indexOf('#EXTINF') === 0) dur = parseFloat(ln.slice(8)) || 0;
-                                            else if (ln && ln[0] !== '#') { try { out.push({ url: new URL(ln, base).href, dur, key, seq: out.length }); } catch (e) { } acc += dur; if (acc >= maxSec) break; }
+                                            else if (ln && ln[0] !== '#') {
+                                                const st0 = acc; acc += dur;
+                                                // key 逐段克隆并带上本段真实序列号(修旧版 _decrypt 读 key.seq 恒 undefined 的 bug)
+                                                if (st0 >= fromSec - 0.01 && st0 < toSec) { try { out.push({ url: new URL(ln, base).href, st: st0, key: key === 'unsupported' ? 'unsupported' : (key ? { uri: key.uri, iv: key.iv, seq } : null) }); } catch (e) { } }
+                                                seq++;
+                                                if (st0 >= toSec) break;
+                                            }
                                         }
                                         return out;
                                     },
@@ -10610,25 +10603,193 @@
                                         const ck = await crypto.subtle.importKey('raw', raw, 'AES-CBC', false, ['decrypt']);
                                         return await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, ck, buf);
                                     },
-                                    // 抓一集前 maxSec 秒 → 指纹(失败抛错,上层回退)
-                                    async _analyze(origUrl, F, maxSec) {
-                                        const { origBase, text } = await this._resolveMedia(origUrl, F);
-                                        const segs = this._segList(text, origBase, maxSec);
-                                        if (!segs.length) throw new Error('无分段');
+                                    // —— 包络会话:一集一个,跨阶段累积 [0..600s) 的 10Hz RMS 包络;chunks 留每段 RMS 供局部重锚(免二次流量) ——
+                                    _mkSess(url) { return { url, base: null, text: null, env: new Float32Array(this.STAGES[this.STAGES.length - 1] * this.EHZ), n: 0, filled: 0, keyCache: {}, chunks: [] }; },
+                                    // 把 sess 的包络补抓到 cap 秒:逐段 fetch→(解密)→拆TS→decodeAudioData→RMS,PCM 用完即弃。
+                                    //   包络下标按分段的 EXTINF 起始时间锚定(防逐段解码 priming 漂移累积,时间轴与播放器一致)。返回是否还有分段可抓。
+                                    async _fetchEnvTo(sess, F, cap) {
+                                        if (!sess.text) { const r = await this._resolveMedia(sess.url, F); sess.base = r.origBase; sess.text = r.text; }
+                                        if (cap <= sess.filled) return true;
+                                        const segs = this._segList(sess.text, sess.base, sess.filled, cap);
+                                        sess.filled = cap;
+                                        if (!segs.length) return false;
                                         if (segs.some(s => s.key === 'unsupported')) throw new Error('不支持的加密(非AES-128)');
-                                        const cache = {}, parts = []; let bytes = 0;
-                                        for (const s of segs) {
-                                            let buf = await (await F(s.url)).arrayBuffer();
-                                            if (s.key) buf = await this._decrypt(buf, s.key, F, cache);
-                                            parts.push(new Uint8Array(buf)); bytes += buf.byteLength;
-                                        }
-                                        let tot = 0; for (const p of parts) tot += p.length; const ts = new Uint8Array(tot); let o = 0; for (const p of parts) { ts.set(p, o); o += p.length; }
-                                        const { type, data } = this._tsToAdts(ts);
-                                        if (type !== 'aac' || !data || data.length < 1000) throw new Error('取不到AAC(可能fMP4/MP3源)');
                                         const ac = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
-                                        const audio = await ac.decodeAudioData(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
-                                        console.log('[AFP离线] 分析完成:', (bytes / 1048576).toFixed(1) + 'MB →', audio.duration.toFixed(0) + 's音频');
-                                        return this._fpFromPCM(audio.getChannelData(0), audio.sampleRate);
+                                        for (const s of segs) {
+                                            const buf0 = await (await F(s.url)).arrayBuffer(); this._mb += buf0.byteLength / 1048576;
+                                            const buf = s.key ? await this._decrypt(buf0, s.key, F, sess.keyCache) : buf0;
+                                            const { type, data, pts, vpts } = this._tsToAdts(new Uint8Array(buf));
+                                            if (type !== 'aac' || !data || data.length < 800) throw new Error('取不到AAC(可能fMP4/MP3源)');
+                                            let audio;
+                                            try { audio = await ac.decodeAudioData(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)); } catch (e) { continue; }   // 个别坏分段跳过(包络留零,互相关自动无视)
+                                            // 时间轴 = EXTINF 绝对锚定 + 视频PTS增量纠偏(实测调查结论,三层择优,勿改回任何单一方案):
+                                            //   ① 播放器 VOD 时间轴 = EXTINF 累计(hls.js frag.start 同款)且锚在**视频轨**——音频绝对 PTS 不可用(实测某源音频流比视频晚起4s:seg0 声称5s实际音频0.95s);
+                                            //   ② EXTINF 又会撒谎(声称10.0s实际10.4s),所以逐段用相邻**视频 PTS 差值**替代 EXTINF 差值(差值不受起始偏移影响);取不到视频PTS再用音频PTS差值;
+                                            //   ③ 差值异常(倒退/断层,如回绕、DISCONTINUITY)时退回 EXTINF 差值。
+                                            let t0;
+                                            if (sess.tl == null) { t0 = sess.tl = s.st; }
+                                            else {
+                                                const dExt = s.st - sess.prevSt;
+                                                const dVid = (vpts >= 0 && sess.prevVPts >= 0) ? (vpts - sess.prevVPts) / 90000 : null;
+                                                const dAud = (pts >= 0 && sess.prevPts >= 0) ? (pts - sess.prevPts) / 90000 : null;
+                                                const sane = d => d != null && d > 0 && d < 60 && Math.abs(d - dExt) < 10;
+                                                sess.tl += sane(dVid) ? dVid : (sane(dAud) ? dAud : dExt);
+                                                t0 = sess.tl;
+                                            }
+                                            sess.prevSt = s.st; sess.prevPts = pts >= 0 ? pts : -1; sess.prevVPts = vpts >= 0 ? vpts : -1;
+                                            const ch = audio.getChannelData(0), hop = Math.round(audio.sampleRate / this.EHZ);
+                                            const nf = Math.floor(ch.length / hop), rms = new Float32Array(nf);
+                                            for (let k = 0; k < nf; k++) { let sum = 0; const o = k * hop; for (let j = 0; j < hop; j++) { const x = ch[o + j]; sum += x * x; } rms[k] = Math.sqrt(sum / hop); }
+                                            sess.chunks.push({ st: s.st, rms });   // 留每段 RMS(EXTINF 局部锚定用,总共才几十 KB)
+                                            let idx = Math.round(t0 * this.EHZ), last = 0;
+                                            for (let k = 0; k < nf && idx < sess.env.length; k++, idx++) { if (idx < 0) continue; last = sess.env[idx] = rms[k]; }
+                                            if (idx >= 0 && idx < sess.env.length && !sess.env[idx]) sess.env[idx] = last;   // 补一帧边界零(floor 丢帧必现,零帧会打断相关链把区段截短)
+                                            if (idx > sess.n) sess.n = idx;
+                                        }
+                                        return true;
+                                    },
+                                    // 去均值 Pearson(响度包络的形状相关,音量/码率无关)
+                                    _p(a, ao, b, bo, w) { let ma = 0, mb = 0; for (let i = 0; i < w; i++) { ma += a[ao + i]; mb += b[bo + i]; } ma /= w; mb /= w; let d = 0, na = 0, nb = 0; for (let i = 0; i < w; i++) { const x = a[ao + i] - ma, y = b[bo + i] - mb; d += x * y; na += x * x; nb += y * y; } return (na > 1e-9 && nb > 1e-9) ? d / Math.sqrt(na * nb) : 0; },
+                                    // —— 学习:全 lag 粗扫(30s窗找最亮对齐) → 候选逐个 5s 窗量程 + 2s 窗精修首尾 + 整段复核 ——
+                                    //   双过滤(连续5s窗≥0.5达15s+ 且 整段≥0.6)已在真实数据上验证:同片头 conf≈0.89,倒序负样本全灭。
+                                    async _xcorrLearn(eA, nA, eB, nB) {
+                                        const CW = 300, CHOP = 20, EW = 50, EHOP = 10, MINL = 150, MAXL = 1500;
+                                        if (nA < CW + 60 || nB < CW + 60) return null;
+                                        const lagP = []; let cnt = 0;
+                                        for (let lag = -(nB - CW); lag <= nA - CW; lag += 2) {
+                                            const i0 = Math.max(0, lag), i1 = Math.min(nA, nB + lag);
+                                            if (i1 - i0 >= CW) {
+                                                let best = -1;
+                                                for (let s = i0; s + CW <= i1; s += CHOP) { const p = this._p(eA, s, eB, s - lag, CW); if (p > best) best = p; }
+                                                lagP.push({ lag, p: best });
+                                            }
+                                            if ((++cnt & 511) === 0) await new Promise(r => { const c = new MessageChannel(); c.port1.onmessage = r; c.port2.postMessage(0); });   // 分片让路不卡 UI(MessageChannel 不受后台标签 setTimeout 1s 节流)
+                                        }
+                                        lagP.sort((x, y) => y.p - x.p);
+                                        const cands = [];
+                                        for (const c of lagP) { if (c.p < 0.55) break; if (cands.every(x => Math.abs(x.lag - c.lag) > 50)) cands.push(c); if (cands.length >= 8) break; }
+                                        let bestR = null;
+                                        for (const c of cands) {
+                                            let rl = c.lag, rp = -1;   // lag 微调 ±0.3s
+                                            for (let d = -3; d <= 3; d++) {
+                                                const lag = c.lag + d, i0 = Math.max(0, lag), i1 = Math.min(nA, nB + lag);
+                                                if (i1 - i0 < CW) continue;
+                                                let bp = -1;
+                                                for (let s = i0; s + CW <= i1; s += CHOP) { const p = this._p(eA, s, eB, s - lag, CW); if (p > bp) bp = p; }
+                                                if (bp > rp) { rp = bp; rl = lag; }
+                                            }
+                                            const i0 = Math.max(0, rl), i1 = Math.min(nA, nB + rl);
+                                            let st = -1, en = -1, cs = -1;   // 沿对齐扫 5s 窗,取最长连续 ≥0.5 区段
+                                            for (let s = i0; s + EW <= i1; s += EHOP) {
+                                                const p = this._p(eA, s, eB, s - rl, EW);
+                                                if (p >= 0.5) { if (cs < 0) cs = s; if (s + EW - cs > en - st) { st = cs; en = s + EW; } }
+                                                else cs = -1;
+                                            }
+                                            if (st < 0) continue;
+                                            let len = en - st; if (len < MINL) continue; if (len > MAXL) { len = MAXL; en = st + len; }
+                                            if (this._p(eA, st, eB, st - rl, len) < 0.6) continue;
+                                            let st2 = st, en2 = en;   // 2s 窗精修首尾(±1s,防 5s 窗溢出边界导致"跳过头"多跳几秒)
+                                            for (let s = Math.max(i0, st - 30); s <= st + 30 && s + 20 <= i1; s += 2) { if (this._p(eA, s, eB, s - rl, 20) >= 0.5) { st2 = s; break; } }
+                                            for (let s = Math.min(en, i1 - 20); s >= en - 60; s -= 2) { if (this._p(eA, s, eB, s - rl, 20) >= 0.5) { en2 = s + 20; break; } }
+                                            if (en2 - st2 < MINL) continue;
+                                            const conf = this._p(eA, st2, eB, st2 - rl, en2 - st2);
+                                            if (conf < 0.6) continue;
+                                            if (!bestR || (en2 - st2) > bestR.len) bestR = { aStart: st2, bStart: st2 - rl, len: en2 - st2, conf };
+                                        }
+                                        return bestR;
+                                    },
+                                    // —— 定位:已知片头包络在整集包络里滑动找(0.1s 步进,整段 Pearson≥0.6 才认) ——
+                                    _xcorrDetect(intro, env, n) {
+                                        const L = intro.length; if (n < L + 10) return null;
+                                        let best = -1, bi = -1;
+                                        for (let s = 0; s + L <= n; s++) { const p = this._p(intro, 0, env, s, L); if (p > best) { best = p; bi = s; } }
+                                        return best >= 0.6 ? { at: bi, conf: best } : null;
+                                    },
+                                    // —— 局部重锚:用缓存的每段 RMS 按 EXTINF **局部**锚定重建 [from,to) 包络(零累计误差,免二次流量)。
+                                    //   累计时间轴在脏流(中途音频空洞/PTS异常)上会整体漂移,坐标必须以局部重建为准——实测调查结论,勿省这步。
+                                    _localEnv(sess, from, to) {
+                                        const env = new Float32Array(Math.ceil((to - from) * this.EHZ) + 20);
+                                        for (const c of sess.chunks) {
+                                            if (c.st + c.rms.length / this.EHZ < from || c.st > to) continue;
+                                            let idx = Math.round((c.st - from) * this.EHZ), last = 0;
+                                            for (let k = 0; k < c.rms.length && idx < env.length; k++, idx++) { if (idx < 0) continue; last = env[idx] = c.rms[k]; }
+                                            if (idx >= 0 && idx < env.length && !env[idx]) env[idx] = last;
+                                        }
+                                        return env;
+                                    },
+                                    // 给定 lag 沿对齐扫 2s 窗,返回最长连续 ≥0.5 区段(局部坐标,帧)
+                                    _run2s(eA, eB, rl, i0, i1) {
+                                        let st = -1, en = -1, cs = -1;
+                                        for (let s = Math.max(i0, rl < 0 ? 0 : rl); s + 20 <= i1; s += 2) {
+                                            if (s - rl < 0 || s - rl + 20 > eB.length) continue;
+                                            const p = this._p(eA, s, eB, s - rl, 20);
+                                            if (p >= 0.5) { if (cs < 0) cs = s; if (s + 20 - cs > en - st) { st = cs; en = s + 20; } } else cs = -1;
+                                        }
+                                        return st >= 0 ? { st, en } : null;
+                                    },
+                                    // 粗对齐(累计轴)后的精修:局部重建两侧包络 → 小范围重找 lag → 2s 窗定头部区段 →
+                                    //   跨"音频空洞"续接(空洞后 lag 会移 ±12s,重找一段续上,oe 按各自集的坐标各算各的)。
+                                    _refineRegion(sessA, sessB, aStartSec, bStartSec, lenSec) {
+                                        const EHZ = this.EHZ;
+                                        const baseA = Math.max(0, aStartSec - 45), baseB = Math.max(0, bStartSec - 45);
+                                        const eA = this._localEnv(sessA, baseA, aStartSec + lenSec + 150);
+                                        const eB = this._localEnv(sessB, baseB, bStartSec + lenSec + 150);
+                                        const rl0 = Math.round(((aStartSec - baseA) - (bStartSec - baseB)) * EHZ);
+                                        // 小范围(±8s)重找最优 lag(30s 窗,若窗不够用 15s)
+                                        const W = Math.min(300, Math.max(150, Math.floor(Math.min(eA.length, eB.length) / 2)));
+                                        let rl = rl0, rp = -1;
+                                        for (let d = -80; d <= 80; d += 2) {
+                                            const lag = rl0 + d, i0 = Math.max(0, lag), i1 = Math.min(eA.length, eB.length + lag);
+                                            if (i1 - i0 < W) continue;
+                                            let bp = -1;
+                                            for (let s = i0; s + W <= i1; s += 10) { const p = this._p(eA, s, eB, s - lag, W); if (p > bp) bp = p; }
+                                            if (bp > rp) { rp = bp; rl = lag; }
+                                        }
+                                        const head = this._run2s(eA, eB, rl, 0, eA.length);
+                                        if (!head || head.en - head.st < 100) return null;   // 头部区段至少 10s,否则退回粗结果
+                                        if (this._p(eA, head.st, eB, head.st - rl, head.en - head.st) < 0.6) return null;
+                                        // 循环续接:断点后 ≤12s 内、lag 移 ±15s 里找 ≥8s 的后续区段(脏流空洞可能不止一个),每跳独立过 0.6 复核防伪链
+                                        let curEnA = head.en, curLag = rl, hops = 0;
+                                        while (hops < 4) {
+                                            let cont = null, bestLen = 0;
+                                            for (let d = -150; d <= 150; d += 2) {
+                                                const lag2 = curLag + d;
+                                                const r2 = this._run2s(eA, eB, lag2, curEnA - 10, Math.min(eA.length, curEnA + 700));
+                                                if (r2 && r2.st <= curEnA + 120 && r2.st >= curEnA - 20 && r2.en - r2.st >= 80 && r2.en - r2.st > bestLen) {
+                                                    if (this._p(eA, r2.st, eB, r2.st - lag2, r2.en - r2.st) >= 0.6) { cont = { r: r2, lag: lag2 }; bestLen = r2.en - r2.st; }
+                                                }
+                                            }
+                                            if (!cont) break;
+                                            curEnA = cont.r.en; curLag = cont.lag; hops++;
+                                        }
+                                        return {
+                                            osA: baseA + head.st / EHZ, oeA: baseA + curEnA / EHZ,
+                                            osB: baseB + (head.st - rl) / EHZ, oeB: baseB + (curEnA - curLag) / EHZ,
+                                            headEnv: eA.slice(head.st, head.en), headSec: (head.en - head.st) / EHZ,
+                                            conf: rp, bridged: hops > 0
+                                        };
+                                    },
+                                    // —— 片头包络持久化(量化到 Uint8,Pearson 尺度无关;~1KB/剧) ——
+                                    _envKey(o) { return 'donggua_afpenv|' + o.title + '|' + o.site; },
+                                    _envSave(o, intro, sec, maxStart, dur) {
+                                        try {
+                                            let mx = 0; for (let i = 0; i < intro.length; i++) if (intro[i] > mx) mx = intro[i];
+                                            const u8 = new Uint8Array(intro.length);
+                                            for (let i = 0; i < intro.length; i++) u8[i] = Math.min(255, Math.round(intro[i] / (mx || 1) * 255));
+                                            let s = ''; for (let i = 0; i < u8.length; i += 4096) s += String.fromCharCode.apply(null, u8.subarray(i, i + 4096));
+                                            localStorage.setItem(this._envKey(o), JSON.stringify({ v: 1, sec, maxStart, dur, d: btoa(s) }));
+                                            const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('donggua_afpenv|') === 0) ks.push(k); }
+                                            if (ks.length > 30) ks.slice(0, ks.length - 30).forEach(k => localStorage.removeItem(k));
+                                        } catch (e) { }
+                                    },
+                                    _envLoad(o) {
+                                        try {
+                                            const s = localStorage.getItem(this._envKey(o)); if (!s) return null;
+                                            const j = JSON.parse(s); if (j.v !== 1) return null;
+                                            const bin = atob(j.d), f = new Float32Array(bin.length);
+                                            for (let i = 0; i < bin.length; i++) f[i] = bin.charCodeAt(i);
+                                            return { env: f, sec: j.sec, maxStart: j.maxStart || 0, dur: j.dur || j.sec };
+                                        } catch (e) { return null; }
                                     },
                                     _epNumOf(name, idx) { const m = String(name || '').match(/第\s*0*(\d+)\s*[集话話期]/) || String(name || '').match(/\bep\.?\s*0*(\d+)/i) || String(name || '').match(/^0*(\d+)$/); return m ? parseInt(m[1], 10) : idx + 1; },
                                     _pickSibling(epList, curUrl) {
@@ -10636,43 +10797,87 @@
                                         for (const j of [idx + 1, idx - 1, idx + 2, idx - 2]) if (j >= 0 && j < epList.length && epList[j].url !== curUrl) return { ep: this._epNumOf(epList[j].name, j), url: epList[j].url };
                                         return null;
                                     },
-                                    _detectStart(fp, opFp) {
-                                        const E = this.E(), BD = E.BANDS, HZ = E.HZ, L = Math.min(opFp.len, 30), N = E.WIN * E.HZ;
-                                        let best = -1, bestI = 0;
-                                        for (let i = 0; i + L <= N; i++) { let s = 0; for (let k = 0; k < L; k++) s += E._cos(fp, (i + k) * BD, opFp.data, k * BD); s /= L; if (s > best) { best = s; bestI = i; } }
-                                        return best >= 0.88 ? bestI / HZ : null;
-                                    },
-                                    _apply(o, os, oe) {
+                                    // 让一集的标记生效:①更新本地共享标记缓存(否则 15min 内导航到该集读的是旧缓存→无按钮,这正是"下一集不出按钮"的根因)
+                                    //   ②当前集即时点亮 _introCur ③上报服务器。当前集给 src:'afp'(本机实测本集,允许本会话自动跳),其余集缓存记 v:1/src:'auto'(需佐证才自动跳,只先出按钮)——与 afpEngine 边看边学同一套安全模型。
+                                    _apply(o, ep, os, oe, isCur) {
                                         os = Math.round(os * 10) / 10; oe = Math.round(oe * 10) / 10;
                                         if (oe - os < 10) return;
-                                        try { if (o.vue._introEpNum() === o.ep && !o.vue._introCur) { o.vue._introCur = { os, oe, ed: 0, src: 'afp', v: 0 }; } } catch (e) { }
-                                        o.vue._introUpload(o.title, o.site, o.ep, os, oe, 'auto');
+                                        const V = o.vue;
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = { os, oe, v: 1, src: 'auto' }; } catch (e) { }
+                                        try { if (V._introEpNum() === ep && !V._introCur) V._introCur = { os, oe, ed: 0, src: isCur ? 'afp' : 'auto', v: isCur ? 0 : 1 }; } catch (e) { }
+                                        V._introUpload(o.title, o.site, ep, os, oe, 'auto');
                                     },
-                                    // 主入口:抓 当前集+邻集 分片解码 → 互相关找片头 → 上报两集标记 + 本集立即出按钮。
-                                    //   只解决冷启动(全站首个观众、无共享标记时秒出结果);其余集交给"边看边学"(零流量)与共享标记。
-                                    //   与 afpEngine(播放采集)完全独立(指纹尺度不同不混用),纯粹多贡献一批共享标记。失败静默回退。
+                                    // 主入口(canplay 无共享标记时调,自带全部守卫,调用方无需管状态):
+                                    //   没学过 → 抓 本集+邻集 包络互相关学出片头 → 两集标记+本集立即出按钮+存片头包络(学习模式);
+                                    //   学过   → 只抓本集,滑动定位已知片头 → 本集标记并上传共享,后来人零成本(定位模式)。
+                                    //   守卫:同剧同线路学习只跑一次(学出/确认无片头都算终态);每集定位每会话只试一次;
+                                    //        失败(网络/源)最多自动重试2次;省流量档/2G 不跑;会话流量上限 600MB。
                                     async learnOrDetect(o) {
-                                        if (this._busy) return false; this._busy = true;
+                                        const K = o.title + '|' + o.site, epK = K + '|' + o.ep;
+                                        const st = this._st[K] || (this._st[K] = { phase: 'idle', tries: 0, intro: null });
+                                        if (this._busy || this._epDone[epK] || st.phase === 'pending' || st.phase === 'nointro') return;
+                                        if (st.phase === 'idle' && st.tries >= 2) return;
+                                        try { const c = navigator.connection; if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || ''))) return; } catch (e) { }
+                                        if (this._mb > 600) return;
+                                        this._busy = true; const back = st.phase; st.phase = 'pending';
+                                        let done = false;
                                         try {
-                                            const E = this.E(); if (!E) return false;
-                                            // 等换源/测速尘埃落定再开工(深链/failover 期间源还在切,当场抓必然抓错源)
-                                            await new Promise(r => setTimeout(r, 4000));
-                                            if (o.vue.currentUrl !== o.curUrl || (o.vue.currentSource && o.vue.currentSource.site_key) !== o.site) return false;   // 已换集/换源,放弃本次(guard 由上层重置)
-                                            const F = this._mkFetch(o.vue);
-                                            const sib = this._pickSibling(o.epList, o.curUrl);
-                                            if (!sib) return false;
-                                            console.log('[AFP离线] 冷启动学习: 抓 本集 + 第' + sib.ep + '集 最低码率前几分钟分片解码…');
-                                            const fpA = await this._analyze(o.curUrl, F, 240);
-                                            const fpB = await this._analyze(sib.url, F, 240);
-                                            const r = E._learn(fpA, fpB);
-                                            if (!r) { console.log('[AFP离线] 两集未找到公共片头(可能无固定片头曲/两集片头都没在前几分钟)'); return true; }   // 分析成功但无片头,不再重试
-                                            const os1 = r.aStart / E.HZ, os2 = r.bStart / E.HZ, sec = r.len / E.HZ;
-                                            this._apply(o, os1, os1 + sec);
-                                            o.vue._introUpload(o.title, o.site, sib.ep, os2, os2 + sec, 'auto');
-                                            console.log('[AFP离线] ✅ 学习成功: 片头 ' + sec.toFixed(0) + 's @本集 ' + os1.toFixed(0) + 's / 第' + sib.ep + '集 ' + os2.toFixed(0) + 's');
-                                            return true;
-                                        } catch (e) { console.warn('[AFP离线] 失败(下集换源后会再试),本次回退边看边学:', e && e.message); return false; }
-                                        finally { this._busy = false; }
+                                            await new Promise(r => setTimeout(r, 4000));   // 等换源/测速/深链尘埃落定(期间源还在切,当场抓必抓错)
+                                            if (o.vue._liveActive || !o.vue.currentSource || o.vue.currentSource.site_key !== o.site || o.vue._introEpNum() !== o.ep) return;
+                                            const F = this._mkFetch(o.vue), curUrl = o.vue.currentUrl;
+                                            const saved = st.intro || (st.intro = this._envLoad(o));
+                                            if (saved) {
+                                                // —— 定位模式 ——
+                                                this._epDone[epK] = 1; done = true; st.phase = 'learned';
+                                                const sess = this._mkSess(curUrl); let hit = null;
+                                                for (const cap of this.STAGES) {
+                                                    const more = await this._fetchEnvTo(sess, F, cap);
+                                                    hit = this._xcorrDetect(saved.env, sess.env, sess.n);
+                                                    if (hit || !more) break;
+                                                }
+                                                if (hit) {
+                                                    const os = hit.at / this.EHZ;
+                                                    this._apply(o, o.ep, os, os + (saved.dur || saved.sec), true);
+                                                    try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已定位本集片头', 2000); } catch (e) { }
+                                                    console.log('[AFP离线] 定位: 第' + o.ep + '集片头 @' + os.toFixed(1) + 's (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
+                                                } else console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's 未找到已知片头(可能本集无片头/被剪)');
+                                                return;
+                                            }
+                                            // —— 学习模式 ——
+                                            st.tries++;
+                                            const sib = this._pickSibling(o.epList, curUrl);
+                                            if (!sib) return;
+                                            console.log('[AFP离线] 冷启动学习: 抓 本集+第' + sib.ep + '集 音频响度包络(先前4分钟,学不出自动扩到10分钟)…');
+                                            const sA = this._mkSess(curUrl), sB = this._mkSess(sib.url);
+                                            let r = null;
+                                            for (const cap of this.STAGES) {
+                                                const mA = await this._fetchEnvTo(sA, F, cap), mB = await this._fetchEnvTo(sB, F, cap);
+                                                r = await this._xcorrLearn(sA.env, sA.n, sB.env, sB.n);
+                                                if (r) break;
+                                                if (!mA && !mB) break;
+                                                if (cap !== this.STAGES[this.STAGES.length - 1]) console.log('[AFP离线] 前' + cap + 's 未见公共片头,扩窗继续…');
+                                            }
+                                            if (!r) { st.phase = 'nointro'; done = true; console.log('[AFP离线] 两集前10分钟无公共片头(可能真没有固定片头曲),本剧本线路不再自动分析'); return; }
+                                            // 精修:局部重锚(坐标以此为准,累计轴在脏流上会漂)+跨音频空洞续接;精修不出(极端情况)退回粗结果
+                                            const fine = this._refineRegion(sA, sB, r.aStart / this.EHZ, r.bStart / this.EHZ, r.len / this.EHZ);
+                                            let os1, oe1, os2, oe2, headEnv, headSec;
+                                            if (fine) { os1 = fine.osA; oe1 = fine.oeA; os2 = fine.osB; oe2 = fine.oeB; headEnv = fine.headEnv; headSec = fine.headSec; }
+                                            else { os1 = r.aStart / this.EHZ; oe1 = os1 + r.len / this.EHZ; os2 = r.bStart / this.EHZ; oe2 = os2 + r.len / this.EHZ; headEnv = sA.env.slice(r.aStart, r.aStart + r.len); headSec = r.len / this.EHZ; }
+                                            const dur = Math.min(oe1 - os1, oe2 - os2);   // 后续集定位的跳过时长取两集较小者(保守不过跳)
+                                            this._apply(o, o.ep, os1, oe1, true);         // 本集:即时点亮 + 共享缓存 + 上报
+                                            this._apply(o, sib.ep, os2, oe2, false);      // 邻集:共享缓存 + 上报(修"下一集不出按钮")
+                                            this._envSave(o, headEnv, headSec, Math.max(os1, os2), dur);
+                                            st.intro = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2) };
+                                            st.phase = 'learned'; done = true;
+                                            this._epDone[epK] = 1; this._epDone[K + '|' + sib.ep] = 1;
+                                            try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已智能识别片头', 2500); } catch (e) { }
+                                            console.log('[AFP离线] ✅ 学习成功: 片头 ' + dur.toFixed(0) + 's @本集 ' + os1.toFixed(1) + '→' + oe1.toFixed(1) + 's / 第' + sib.ep + '集 ' + os2.toFixed(1) + '→' + oe2.toFixed(1) + 's (' + (fine ? '已局部精修' + (fine.bridged ? '+跨空洞续接' : '') : '粗对齐') + ',会话流量 ' + this._mb.toFixed(0) + 'MB;后续集将自动定位)');
+                                        } catch (e) {
+                                            console.warn('[AFP离线] 失败(最多再自动试' + Math.max(0, 2 - st.tries) + '次),本次回退边看边学:', e && e.message);
+                                        } finally {
+                                            if (!done && st.phase === 'pending') st.phase = back === 'learned' ? 'learned' : 'idle';
+                                            this._busy = false;
+                                        }
                                     }
                                 };
 
