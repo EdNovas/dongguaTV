@@ -9600,7 +9600,10 @@
                 // 每集开播时调用(skipManager.load 触发,canplay 后)：拉共享标记 + 定位本集标记 + 启动指纹引擎
                 async _introOnEpisode() {
                     try {
-                        if (this._liveActive || !this.currentGroup || (this.episodeList || []).length < 2) { this._introCur = null; this.introBtn.show = false; this._introRenderBtn(); return; }
+                        // 只在直播(无固定片头)排除;点播全类型通吃——剧集/动漫/综艺/电影都跑。综艺没固定片头曲的自然学不出(返回空,安全),
+                        // 有固定开场的(不少综艺有)照样能用;不按"类型"关。单集(电影)不做本地跨集学习,但仍消费全站共享标记。
+                        if (this._liveActive || !this.currentGroup) { this._introCur = null; this.introBtn.show = false; this._introRenderBtn(); return; }
+                        const multiEp = (this.episodeList || []).length >= 2;   // 跨集自学需 ≥2 集;单集只消费共享标记
                         const title = this._introTitleKey();
                         const site = (this.currentSource && this.currentSource.site_key) || '';
                         const ep = this._introEpNum();
@@ -9624,9 +9627,9 @@
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
                         const mk = this._introMarks.marks[ep];
                         if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1 };
-                        // 指纹引擎：无标记(要学习/检测)或低票(要验证)才跑;有高票标记就省 CPU
+                        // 指纹引擎(仅多集内容跑,单集无从跨集学习)：无标记(要学习/检测)或低票(要验证)才跑;有高票标记就省 CPU
                         if (window.afpEngine) {
-                            if (!mk || (mk.v || 1) < 3) window.afpEngine.start({ title, site, ep });
+                            if (multiEp && (!mk || (mk.v || 1) < 3)) window.afpEngine.start({ title, site, ep });
                             else window.afpEngine.stop();
                         }
                     } catch (e) { console.warn('[跳过片头] 初始化失败:', e); }
