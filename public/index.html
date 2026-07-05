@@ -9627,10 +9627,13 @@
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
                         const mk = this._introMarks.marks[ep];
                         if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1 };
-                        // 🎬 冷启动:本集无共享标记 → 后台抓 m3u8 离线学习(不用看片头,秒出)。每 剧|线路 只试一次。
+                        // 🎬 冷启动:本集无共享标记 → 后台抓 m3u8 离线学习(不用看片头,秒出)。
+                        //   成功/确认无片头 → 本剧本线路不再试;失败(代理400/换源打断等) → 释放守卫,下集或换源后重试。
                         if (!mk && multiEp && window.afpOffline && this._introOfflineKey !== marksKey) {
                             this._introOfflineKey = marksKey;
-                            window.afpOffline.learnOrDetect({ vue: this, title, site, ep, curUrl: this.currentUrl, epList: this.episodeList });
+                            window.afpOffline.learnOrDetect({ vue: this, title, site, ep, curUrl: this.currentUrl, epList: this.episodeList })
+                                .then(ok => { if (!ok && this._introOfflineKey === marksKey) this._introOfflineKey = null; })
+                                .catch(() => { if (this._introOfflineKey === marksKey) this._introOfflineKey = null; });
                         }
                         // 指纹引擎(边看边学,零流量兜底 + 后续集实时检测)：无标记或低票才跑;有高票标记就省 CPU
                         if (window.afpEngine) {
@@ -10558,17 +10561,34 @@
                                         let ol = 0; for (const f of out) ol += f.length; const adts = new Uint8Array(ol); o = 0; for (const f of out) { adts.set(f, o); o += f.length; }
                                         return { type: 'aac', data: adts };
                                     },
-                                    async _fetchText(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error('HTTP' + r.status); const t = await r.text(); if (!/#EXTM3U/.test(t)) throw new Error('非m3u8'); return t; },
+                                    // 智能取源:直连/worker代理 双策略——模仿播放的实际加载方式(hls.js 能直连的源直连也通;
+                                    //   worker 对个别源 400/被源站拒 Referer 时换直连,反之亦然)。成功策略粘住,减少重复失败。
+                                    _mkFetch(vue) {
+                                        const direct = u => fetch(u, { cache: 'no-store' });
+                                        const prox = u => { const p = (vue.currentSource && vue.currentSource._proxyUrl) || vue.corsProxyUrl; if (!p) return Promise.reject(new Error('无代理')); return fetch(p + '/?url=' + encodeURIComponent(u), { cache: 'no-store' }); };
+                                        const proxyFirst = !!(vue.currentSource && vue.currentSource._useProxy);
+                                        let sticky = null;
+                                        return async (u) => {
+                                            const tries = sticky ? [sticky.a, sticky.b] : (proxyFirst ? [prox, direct] : [direct, prox]);
+                                            let lastErr;
+                                            for (const f of tries) {
+                                                try { const r = await f(u); if (r.ok) { if (!sticky) sticky = { a: f, b: (f === direct ? prox : direct) }; return r; } lastErr = new Error('HTTP' + r.status); }
+                                                catch (e) { lastErr = e; }
+                                            }
+                                            throw lastErr || new Error('fetch失败');
+                                        };
+                                    },
+                                    async _fetchText(u, F) { const r = await F(u); const t = await r.text(); if (!/#EXTM3U/.test(t)) throw new Error('非m3u8内容'); return t; },
                                     // master → 最低码率 media 清单;返回 { origBase(未代理), text }
-                                    async _resolveMedia(origUrl, route) {
-                                        let origBase = origUrl, text = await this._fetchText(route(origBase));
+                                    async _resolveMedia(origUrl, F) {
+                                        let origBase = origUrl, text = await this._fetchText(origBase, F);
                                         for (let d = 0; d < 4; d++) {
                                             if (!/#EXT-X-STREAM-INF/i.test(text)) break;
                                             const vs = [], re = /#EXT-X-STREAM-INF:([^\n]*)\r?\n\s*([^\n#][^\r\n]*)/gi; let m;
                                             while ((m = re.exec(text))) { const bw = (m[1].match(/BANDWIDTH=(\d+)/) || [])[1]; vs.push({ bw: bw ? +bw : 1e12, uri: m[2].trim() }); }
                                             if (!vs.length) break;
                                             vs.sort((a, b) => a.bw - b.bw);
-                                            origBase = new URL(vs[0].uri, origBase).href; text = await this._fetchText(route(origBase));
+                                            origBase = new URL(vs[0].uri, origBase).href; text = await this._fetchText(origBase, F);
                                         }
                                         return { origBase, text };
                                     },
@@ -10583,23 +10603,23 @@
                                         return out;
                                     },
                                     _hexToBytes(h) { const a = new Uint8Array(h.length / 2); for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; },
-                                    async _decrypt(buf, key, route, cache) {
+                                    async _decrypt(buf, key, F, cache) {
                                         if (!key.uri) throw new Error('无密钥URI'); if (!crypto.subtle) throw new Error('无SubtleCrypto');
-                                        let raw = cache[key.uri]; if (!raw) { raw = await (await fetch(route(key.uri), { cache: 'no-store' })).arrayBuffer(); cache[key.uri] = raw; }
+                                        let raw = cache[key.uri]; if (!raw) { raw = await (await F(key.uri)).arrayBuffer(); cache[key.uri] = raw; }
                                         let iv; if (key.iv) iv = this._hexToBytes(key.iv.padStart(32, '0')); else { iv = new Uint8Array(16); const dv = new DataView(iv.buffer); dv.setUint32(12, key.seq >>> 0); }
                                         const ck = await crypto.subtle.importKey('raw', raw, 'AES-CBC', false, ['decrypt']);
                                         return await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, ck, buf);
                                     },
                                     // 抓一集前 maxSec 秒 → 指纹(失败抛错,上层回退)
-                                    async _analyze(origUrl, route, maxSec) {
-                                        const { origBase, text } = await this._resolveMedia(origUrl, route);
+                                    async _analyze(origUrl, F, maxSec) {
+                                        const { origBase, text } = await this._resolveMedia(origUrl, F);
                                         const segs = this._segList(text, origBase, maxSec);
                                         if (!segs.length) throw new Error('无分段');
                                         if (segs.some(s => s.key === 'unsupported')) throw new Error('不支持的加密(非AES-128)');
                                         const cache = {}, parts = []; let bytes = 0;
                                         for (const s of segs) {
-                                            let buf = await (await fetch(route(s.url), { cache: 'no-store' })).arrayBuffer();
-                                            if (s.key) buf = await this._decrypt(buf, s.key, route, cache);
+                                            let buf = await (await F(s.url)).arrayBuffer();
+                                            if (s.key) buf = await this._decrypt(buf, s.key, F, cache);
                                             parts.push(new Uint8Array(buf)); bytes += buf.byteLength;
                                         }
                                         let tot = 0; for (const p of parts) tot += p.length; const ts = new Uint8Array(tot); let o = 0; for (const p of parts) { ts.set(p, o); o += p.length; }
@@ -10632,22 +10652,26 @@
                                     //   只解决冷启动(全站首个观众、无共享标记时秒出结果);其余集交给"边看边学"(零流量)与共享标记。
                                     //   与 afpEngine(播放采集)完全独立(指纹尺度不同不混用),纯粹多贡献一批共享标记。失败静默回退。
                                     async learnOrDetect(o) {
-                                        if (this._busy) return; this._busy = true;
+                                        if (this._busy) return false; this._busy = true;
                                         try {
-                                            const E = this.E(); if (!E) return;
-                                            const route = (u) => { try { return o.vue._routeMediaUrl(u, true); } catch (e) { return u; } };
+                                            const E = this.E(); if (!E) return false;
+                                            // 等换源/测速尘埃落定再开工(深链/failover 期间源还在切,当场抓必然抓错源)
+                                            await new Promise(r => setTimeout(r, 4000));
+                                            if (o.vue.currentUrl !== o.curUrl || (o.vue.currentSource && o.vue.currentSource.site_key) !== o.site) return false;   // 已换集/换源,放弃本次(guard 由上层重置)
+                                            const F = this._mkFetch(o.vue);
                                             const sib = this._pickSibling(o.epList, o.curUrl);
-                                            if (!sib) return;
+                                            if (!sib) return false;
                                             console.log('[AFP离线] 冷启动学习: 抓 本集 + 第' + sib.ep + '集 最低码率前几分钟分片解码…');
-                                            const fpA = await this._analyze(o.curUrl, route, 240);
-                                            const fpB = await this._analyze(sib.url, route, 240);
+                                            const fpA = await this._analyze(o.curUrl, F, 240);
+                                            const fpB = await this._analyze(sib.url, F, 240);
                                             const r = E._learn(fpA, fpB);
-                                            if (!r) { console.log('[AFP离线] 两集未找到公共片头(可能无固定片头曲/两集片头都没在前几分钟)'); return; }
+                                            if (!r) { console.log('[AFP离线] 两集未找到公共片头(可能无固定片头曲/两集片头都没在前几分钟)'); return true; }   // 分析成功但无片头,不再重试
                                             const os1 = r.aStart / E.HZ, os2 = r.bStart / E.HZ, sec = r.len / E.HZ;
                                             this._apply(o, os1, os1 + sec);
                                             o.vue._introUpload(o.title, o.site, sib.ep, os2, os2 + sec, 'auto');
                                             console.log('[AFP离线] ✅ 学习成功: 片头 ' + sec.toFixed(0) + 's @本集 ' + os1.toFixed(0) + 's / 第' + sib.ep + '集 ' + os2.toFixed(0) + 's');
-                                        } catch (e) { console.warn('[AFP离线] 失败,回退边看边学:', e && e.message); }
+                                            return true;
+                                        } catch (e) { console.warn('[AFP离线] 失败(下集换源后会再试),本次回退边看边学:', e && e.message); return false; }
                                         finally { this._busy = false; }
                                     }
                                 };
