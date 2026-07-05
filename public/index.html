@@ -9615,6 +9615,7 @@
                         this._introSkipped = false;
                         this._bumpSkipped = false;
                         this._outroSkipped = false;
+                        this._introChkLogged = false;   // 让 check() 对新集重新打印一次"可跳区间 vs 起播位置"诊断
                         this.introBtn.show = false; this._introRenderBtn();
                         // 共享标记(每 剧|线路 拉一次,15min 内存缓存)
                         const marksKey = title + '|' + site;
@@ -9623,7 +9624,7 @@
                             try {
                                 const r = await fetch('/api/intro/marks?title=' + encodeURIComponent(this.currentGroup.name) + '&site=' + encodeURIComponent(site));
                                 const j = await r.json(); marks = (j && j.marks) || {};
-                            } catch (e) { }
+                            } catch (e) { console.warn('[跳过片头] 共享标记拉取失败(网络/服务器不可达),本集暂无按钮数据:', e && e.message); }
                             this._introMarks = { key: marksKey, at: Date.now(), marks };
                         }
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
@@ -9632,12 +9633,19 @@
                         // 🎬 本集无共享标记 → 后台离线分析(不用看片头):没学过→两集包络学习;学过→只定位本集。
                         //   全部守卫(每剧学一次/每集定位一次/失败限2次/流量上限)内聚在模块里,这里只管调——
                         //   ⚠️别在这儿加守卫变量:上一版 Vue 侧 _introOfflineKey 被多个异步回调竞态复位,导致换集就重学、流量爆炸。
-                        if (multiEp && window.afpOffline && (!mk || !mk.ed || !(mk.oe > mk.os))) {
+                        const willOffline = multiEp && !!window.afpOffline && (!mk || !mk.ed || !(mk.oe > mk.os));
+                        const willEngine = !!window.afpEngine && multiEp && (!mk || (mk.v || 1) < 3);
+                        // 📋 每集一行判定摘要:按钮数据从哪来/还差什么,一眼定位"为什么没按钮"
+                        try {
+                            const seg = mk ? [(mk.be > mk.bs ? '贴片' + mk.bs + '→' + mk.be + 's(' + (mk.bv || 0) + '票)' : ''), (mk.oe > mk.os ? '片头' + mk.os + '→' + mk.oe + 's(' + (mk.v || 0) + '票)' : ''), (mk.ed > 0 ? '片尾@' + mk.ed + 's(' + (mk.ev || 0) + '票)' : '')].filter(Boolean).join(' ') : '';
+                            console.log('[跳过片头] 第' + ep + '集判定: 共享标记=' + (seg || '无') + ' | 离线分析' + (willOffline ? '→启动(缺' + [!(mk && mk.oe > mk.os) ? '片头' : '', !(mk && mk.ed > 0) ? '片尾' : ''].filter(Boolean).join('+') + ')' : '→不需要') + ' | 边看边学' + (willEngine ? '→启动' : '→停') + ' | 按钮开关=' + (this.introSkipShow ? '开' : '关') + ' 自动跳=' + (this.introSkipAuto ? '开' : '关'));
+                        } catch (e) { }
+                        if (willOffline) {
                             window.afpOffline.learnOrDetect({ vue: this, title, site, ep, epList: this.episodeList }).catch(() => { });
                         }
                         // 指纹引擎(边看边学,零流量兜底 + 后续集实时检测)：无标记或低票才跑;有高票标记就省 CPU
                         if (window.afpEngine) {
-                            if (multiEp && (!mk || (mk.v || 1) < 3)) window.afpEngine.start({ title, site, ep });
+                            if (willEngine) window.afpEngine.start({ title, site, ep });
                             else window.afpEngine.stop();
                         }
                     } catch (e) { console.warn('[跳过片头] 初始化失败:', e); }
