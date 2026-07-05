@@ -10073,6 +10073,7 @@
                                         // ⏭️ 按集智能标记(服务器共享+指纹学习)初始化——canplay 每集/每次换源都会走到这里
                                         try { this.vue._introOnEpisode(); } catch (e) { }
                                     },
+                                    LEAD: 6,   // 按钮提前亮出的秒数:短片头/贴片(有的才十几秒)的按钮不再一闪而过;提前期点击=把提前的几秒一起跳过(用户主动,可接受)
                                     check(time) {
                                         // 按集智能标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳
                                         //   三个独立可跳区间:开头贴片(bs~be→「跳过开头」)、片头曲(os~oe→「跳过片头」)、片尾(ed→切下一集),各自只触发一次
@@ -10081,13 +10082,28 @@
                                         const dur = dp.video && dp.video.duration;
                                         const safe = time > 1 && isFinite(dur) && dur > 0 && !dp.video.seeking;
                                         if (cur && safe) {
+                                            // 📋 每集一次:可跳区间 vs 起播位置(续看从中段起播时,窗口已过不弹按钮——这里一眼看出"为什么没按钮")
+                                            if (!v._introChkLogged) {
+                                                v._introChkLogged = true;
+                                                try {
+                                                    const segs = [];
+                                                    if (cur.be > cur.bs) segs.push('贴片' + cur.bs + '→' + cur.be + 's' + (time >= cur.be - 1 ? '(已过,不弹)' : ''));
+                                                    if (cur.oe > cur.os) segs.push('片头' + cur.os + '→' + cur.oe + 's' + (time >= cur.oe - 1 ? '(已过,不弹)' : ''));
+                                                    if (cur.ed > 0) segs.push('片尾@' + cur.ed + 's');
+                                                    console.log('[跳过片头] 本集可跳区间: ' + (segs.join(' ') || '(空)') + ' | 起播位置 ' + time.toFixed(1) + 's');
+                                                } catch (e) { }
+                                            }
+                                            // 判定含提前量(reg.in=真正进入区间):按钮提前 LEAD 秒亮出;自动跳严格等区间起点(提前跳会切掉区间前的正片)
+                                            const L = this.LEAD;
                                             let reg = null;
-                                            if (cur.be > cur.bs && time >= cur.bs && time < cur.be - 1 && !v._bumpSkipped) reg = { to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头' };
-                                            else if (cur.oe > cur.os && time >= cur.os && time < cur.oe - 1 && !v._introSkipped) reg = { to: cur.oe, label: '跳过片头', flag: '_introSkipped', kind: 'op', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头' };
-                                            else if (cur.ed > 0 && time >= cur.ed && time < dur - 2 && !v._outroSkipped) reg = { to: 0, label: '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: cur.edSrc === 'afp' || (cur.ev || 0) >= 2, notice: '已自动跳过片尾' };
+                                            if (cur.be > cur.bs && time >= cur.bs - L && time < cur.be - 1 && !v._bumpSkipped) reg = { to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头', in: time >= cur.bs };
+                                            else if (cur.oe > cur.os && time >= cur.os - L && time < cur.oe - 1 && !v._introSkipped) reg = { to: cur.oe, label: '跳过片头', flag: '_introSkipped', kind: 'op', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头', in: time >= cur.os };
+                                            else if (cur.ed > 0 && time >= cur.ed - L && time < dur - 2 && !v._outroSkipped) reg = { to: 0, label: '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: cur.edSrc === 'afp' || (cur.ev || 0) >= 2, notice: '已自动跳过片尾', in: time >= cur.ed };
                                             if (reg) {
                                                 // 自动跳过只信【被佐证的】标记(票数≥2 或本会话实测检出),防单条误学/被刷的坏标记直接跳走正片
                                                 if (v.introSkipAuto && reg.ok) {
+                                                    // 提前期不亮按钮也不跳(马上就会自动接管,亮一下反而闪烁);到点自动跳
+                                                    if (!reg.in) { if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); } return; }
                                                     v[reg.flag] = true; if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); }
                                                     if (reg.kind === 'outro') { dp.notice(reg.notice); if (dp.events) dp.events.trigger('ended'); }
                                                     else { dp.seek(reg.to); dp.notice(reg.notice); }
