@@ -2649,6 +2649,33 @@
             color: #9a9a9a;
         }
 
+        /* ⏭️ 跳过片头/片尾 悬浮按钮(奈飞式,控制栏上方右侧) */
+        .intro-skip-btn {
+            position: absolute;
+            right: 18px;
+            bottom: 66px;
+            z-index: 30;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            background: rgba(20, 20, 20, 0.82);
+            border: 1px solid rgba(255, 255, 255, 0.55);
+            border-radius: 4px;
+            color: #fff;
+            font-size: calc(14px * var(--ui-scale, 1));
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            backdrop-filter: blur(2px);
+            transition: background 0.15s, transform 0.1s;
+            animation: introBtnIn 0.25s ease-out;
+        }
+        .intro-skip-btn:hover { background: #fff; color: #000; }
+        .intro-skip-btn:active { transform: scale(0.97); }
+        @keyframes introBtnIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+        @media (max-width: 690px) { .intro-skip-btn { bottom: 56px; right: 10px; padding: 8px 14px; } }
+
         .player-loading-dots i {
             font-style: normal;
             opacity: 0.2;
@@ -4446,6 +4473,30 @@
                         </label>
                     </div>
 
+                    <!-- ⏭️ 跳过片头 -->
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div>
+                            <div style="color: #fff; font-size: 15px; font-weight: 500;">跳过片头按钮</div>
+                            <div style="color: #888; font-size: 12px; margin-top: 4px;">播到片头时弹出「跳过片头」按钮（本地自动学习 + 全站共享标记）</div>
+                        </div>
+                        <label class="settings-switch">
+                            <input type="checkbox" v-model="introSkipShow" @change="saveSettings('introSkipShow')">
+                            <span class="settings-slider"></span>
+                        </label>
+                    </div>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div>
+                            <div style="color: #fff; font-size: 15px; font-weight: 500;">自动跳过片头</div>
+                            <div style="color: #888; font-size: 12px; margin-top: 4px;">不弹按钮，识别到片头直接跳过</div>
+                        </div>
+                        <label class="settings-switch">
+                            <input type="checkbox" v-model="introSkipAuto" @change="saveSettings('introSkipAuto')">
+                            <span class="settings-slider"></span>
+                        </label>
+                    </div>
+
                     <!-- 📐 封面/文字大小（等比缩放，几档，跨设备保存）-->
                     <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div style="color: #fff; font-size: 15px; font-weight: 500;">封面 / 文字大小</div>
@@ -4652,6 +4703,7 @@
                 <div class="player-box" style="position: relative;"
                     :style="previewLocked && currentGroup && currentGroup.pic ? { backgroundImage: 'url(' + currentGroup.pic + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
+                    <!-- ⏭️ 跳过片头按钮由 JS 注入进 #dplayer 容器内(而非此处兄弟节点)——否则全屏时(#dplayer 独占 top layer)按钮不可见 -->
                     <!-- ⏳ 深链/测速加载态：视频起播前在播放器区域显示加载指示，避免黑屏空等 -->
                     <div v-if="!previewLocked && !currentUrl && !autoRetryMessage && (deepLinkLoading || isTestingSources || loadingDetail)"
                         class="player-loading-overlay">
@@ -5834,6 +5886,10 @@
                     showSettingsModal: false,  // 设置弹窗显示状态
                     hideRandomRow: (function () { try { return localStorage.getItem('donggua_hide_random') === 'true'; } catch (e) { return false; } })(),  // 隐藏随机盲盒
                     filterNsfw: (function () { try { return localStorage.getItem('donggua_filter_nsfw') !== 'false'; } catch (e) { return true; } })(),  // 过滤 NSFW 内容（默认开启）
+                    // ⏭️ 跳过片头：按钮显示开关(默认开) / 自动跳过(默认关,开了不弹按钮直接跳)
+                    introSkipShow: (function () { try { return localStorage.getItem('donggua_intro_show') !== 'false'; } catch (e) { return true; } })(),
+                    introSkipAuto: (function () { try { return localStorage.getItem('donggua_intro_auto') === 'true'; } catch (e) { return false; } })(),
+                    introBtn: { show: false, label: '跳过片头', to: 0, kind: 'op' },   // 悬浮按钮状态(由 skipManager.check 驱动)
                     coverScale: (function () { try { return parseFloat(localStorage.getItem('donggua_cover_scale')) || 1; } catch (e) { return 1; } })(),  // 📐 封面+文字等比缩放(几档,跨设备)
                     coverScaleLevels: [{ v: 0.9, label: '小' }, { v: 1.0, label: '标准' }, { v: 1.15, label: '大' }, { v: 1.35, label: '特大' }],
 
@@ -7274,6 +7330,11 @@
                                 this.rowLists.randomRow = null;
                                 this.fetchRandomMixed();
                             }
+                        } else if (key === 'introSkipShow') {
+                            localStorage.setItem('donggua_intro_show', this.introSkipShow ? 'true' : 'false');
+                            if (!this.introSkipShow) this.introBtn.show = false, this._introRenderBtn();
+                        } else if (key === 'introSkipAuto') {
+                            localStorage.setItem('donggua_intro_auto', this.introSkipAuto ? 'true' : 'false');
                         } else if (key === 'coverScale') {
                             localStorage.setItem('donggua_cover_scale', String(this.coverScale));
                             // 跨设备：推到服务器(并入 user_settings)，与弹幕样式同机制
@@ -9086,6 +9147,9 @@
                     this.deepLinkLoading = false;  // ⏳ 退出深链加载态
                     this._deepLinkTargetEp = '';  // 清除未消费的深链目标集数，避免串到下一部剧
                     this._lastDanmakuKey = null;  // 🗨️ 复位弹幕标识，下次打开别的剧时重新加载弹幕
+                    // ⏭️ 跳过片头：停指纹引擎(存下已录指纹)、清本集标记与按钮
+                    try { if (window.afpEngine) window.afpEngine.stop(); } catch (e) { }
+                    this._introCur = null; this._introEpKey = null; this.introBtn.show = false; try { this._introRenderBtn(); } catch(e){}
                     this._clearDeepLinkTimers();
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
@@ -9519,6 +9583,104 @@
                     if (tk) { const sm = epName.slice(tk.index + tk[0].length).match(/^\s*(上|中|下|先导|纯享|加更|特辑|彩蛋|花絮|预告|直拍|发布会|见面会|专场|访谈|饭局)/); if (sm) suf = sm[1]; }
                     return this.currentGroup.name + '|' + (num != null && !isNaN(num) ? num + suf : epName);
                 },
+                // ========== ⏭️ 跳过片头：按集标记(服务器共享) + 音频指纹自动学习 ==========
+                // 归一剧名(与服务器 introNormTitle 完全一致,改一处必须同步另一处)
+                _introTitleKey() {
+                    const s = (this.currentGroup && this.currentGroup.name) || '';
+                    return String(s).replace(/[(（【\[][^)）】\]]*[)）】\]]/g, '').replace(/[\s·:：\-—_~～!！?？"'「」『』]/g, '').toLowerCase().slice(0, 60);
+                },
+                // 当前集号：解析集名数字,解析不出用列表序号+1(同一线路内稳定)
+                _introEpNum() {
+                    const idx = (this.episodeList || []).findIndex(e => e.url === this.currentUrl);
+                    const name = (idx >= 0 && this.episodeList[idx].name || '').trim();
+                    const m = name.match(/第\s*0*(\d+)\s*[集话話期]/) || name.match(/\bep\.?\s*0*(\d+)/i) || name.match(/^0*(\d+)$/);
+                    if (m) return parseInt(m[1], 10);
+                    return idx >= 0 ? idx + 1 : null;
+                },
+                // 每集开播时调用(skipManager.load 触发,canplay 后)：拉共享标记 + 定位本集标记 + 启动指纹引擎
+                async _introOnEpisode() {
+                    try {
+                        if (this._liveActive || !this.currentGroup || (this.episodeList || []).length < 2) { this._introCur = null; this.introBtn.show = false; this._introRenderBtn(); return; }
+                        const title = this._introTitleKey();
+                        const site = (this.currentSource && this.currentSource.site_key) || '';
+                        const ep = this._introEpNum();
+                        if (!title || !site || ep == null) { this._introCur = null; return; }
+                        const epKey = title + '|' + site + '|' + ep;
+                        if (this._introEpKey === epKey && this._introCur !== undefined) return;   // 同集(seek 引发的重复 canplay)不重来
+                        this._introEpKey = epKey;
+                        this._introCur = null;
+                        this._introSkipped = false;
+                        this.introBtn.show = false; this._introRenderBtn();
+                        // 共享标记(每 剧|线路 拉一次,15min 内存缓存)
+                        const marksKey = title + '|' + site;
+                        if (!this._introMarks || this._introMarks.key !== marksKey || Date.now() - this._introMarks.at > 15 * 60 * 1000) {
+                            let marks = {};
+                            try {
+                                const r = await fetch('/api/intro/marks?title=' + encodeURIComponent(this.currentGroup.name) + '&site=' + encodeURIComponent(site));
+                                const j = await r.json(); marks = (j && j.marks) || {};
+                            } catch (e) { }
+                            this._introMarks = { key: marksKey, at: Date.now(), marks };
+                        }
+                        if (this._introEpKey !== epKey) return;   // await 期间换集了
+                        const mk = this._introMarks.marks[ep];
+                        if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1 };
+                        // 指纹引擎：无标记(要学习/检测)或低票(要验证)才跑;有高票标记就省 CPU
+                        if (window.afpEngine) {
+                            if (!mk || (mk.v || 1) < 3) window.afpEngine.start({ title, site, ep });
+                            else window.afpEngine.stop();
+                        }
+                    } catch (e) { console.warn('[跳过片头] 初始化失败:', e); }
+                },
+                // 指纹引擎回调：实时检测到片头(本集无标记时)
+                _afpDetected(os, oe) {
+                    if (!this._introCur) { this._introCur = { os, oe, ed: 0, src: 'afp', v: 0 }; }
+                },
+                // 指纹引擎回调：两集比对学习出标记(含当前集) → 生效 + 上报
+                _afpLearned(list, info) {
+                    const curEp = this._introEpNum();
+                    for (const m of (list || [])) {
+                        if (m.ep === curEp && !this._introCur) this._introCur = { os: m.os, oe: m.oe, ed: 0, src: 'afp', v: 0 };
+                        this._introUpload(info.title, info.site, m.ep, m.os, m.oe, 'auto');
+                        if (this._introMarks && this._introMarks.key === info.title + '|' + info.site) this._introMarks.marks[m.ep] = { os: m.os, oe: m.oe, v: 1, src: 'auto' };
+                    }
+                },
+                // 上报标记(自动学习/手动标记共用)。token 与历史同步同一套
+                _introUpload(titleKeyOrName, site, ep, os, oe, src) {
+                    try {
+                        const token = localStorage.getItem('emax_auth_hash') || '';
+                        fetch('/api/intro/mark', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token, title: (this.currentGroup && this.currentGroup.name) || titleKeyOrName, site, ep, op_start: os, op_end: oe, src: src || 'auto' })
+                        }).catch(() => { });
+                    } catch (e) { }
+                },
+                // 点击「跳过片头」按钮
+                introSkipNow() {
+                    try {
+                        if (!this.introBtn.show) return;
+                        const to = this.introBtn.to;
+                        this.introBtn.show = false; this._introRenderBtn();
+                        this._introSkipped = true;
+                        if (typeof dp !== 'undefined' && dp && isFinite(to)) { dp.seek(to); dp.notice('已跳过片头'); }
+                    } catch (e) { }
+                },
+                // 把跳过按钮以 DOM 形式注入/更新在 #dplayer 容器内(全屏可见)。由 introBtn.show 驱动。
+                _introRenderBtn() {
+                    try {
+                        const c = document.getElementById('dplayer');
+                        if (!c) return;
+                        let el = c.querySelector('.intro-skip-btn');
+                        if (this.introBtn.show && !this.previewLocked) {
+                            if (!el) {
+                                el = document.createElement('div');
+                                el.className = 'intro-skip-btn';
+                                el.addEventListener('click', (e) => { e.stopPropagation(); this.introSkipNow(); });
+                                c.appendChild(el);
+                            }
+                            el.innerHTML = '<i class="fas fa-forward"></i> ' + (this.introBtn.label || '跳过片头');
+                        } else if (el) { el.remove(); }
+                    } catch (e) { }
+                },
                 // 🗄️ 资源站健康度本地缓存(跨剧集, 3天)：site_key → {latency,testType,useProxy,proxyUrl,ts}。
                 //    本地连不通的资源站基本不会再通，缓存上次测速结果 → 刷新页面/?play= 深链/换剧都直接套用、跳过重测；
                 //    本地不通的站(latency 高)自然沉底/视为不可用，省去重复测速。手动"刷新线路"会强制重测并刷新本缓存。
@@ -9904,6 +10066,8 @@
                                         this.hasSkippedIntro = false;
                                         this.hasSkippedOutro = false;
                                         this.updateUI();
+                                        // ⏭️ 按集智能标记(服务器共享+指纹学习)初始化——canplay 每集/每次换源都会走到这里
+                                        try { this.vue._introOnEpisode(); } catch (e) { }
                                     },
                                     save() {
                                         localStorage.setItem(this.getKey(), JSON.stringify(this.config));
@@ -9926,6 +10090,15 @@
                                         this.config.enabled = true;
                                         this.save();
                                         dp.notice(`已设置片头截止点: ${this.formatTime(this.config.intro)}`);
+                                        // ⏭️ 同时作为本集 manual 标记上报共享(片头=[0,截止点];人工纠正可覆盖低票自动值)
+                                        try {
+                                            const v = this.vue, site = v.currentSource && v.currentSource.site_key, ep = v._introEpNum();
+                                            if (site && ep != null && time >= 10) {
+                                                v._introCur = { os: 0, oe: time, ed: (v._introCur && v._introCur.ed) || 0, src: 'manual', v: 1 };
+                                                v._introSkipped = true;   // 刚手动设完不立刻弹按钮/自动跳
+                                                v._introUpload(v._introTitleKey(), site, ep, 0, time, 'manual');
+                                            }
+                                        } catch (e) { }
                                     },
                                     setOutro() {
                                         if (!dp.video) return;
@@ -10006,8 +10179,30 @@
                                         group.querySelector('.dplayer-setting-del-config').addEventListener('click', () => this.clear());
                                     },
                                     check(time) {
+                                        // ── 第一优先：按集智能片头标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳 ──
+                                        const v = this.vue, cur = v && v._introCur;
+                                        // switchVideo 换集瞬间会发一次 currentTime=0 的 timeupdate、此时 duration=NaN；此刻绝不自动跳(否则新集从 oe 起播)
+                                        const dur = dp.video && dp.video.duration;
+                                        const safe = time > 1 && isFinite(dur) && dur > 0 && !dp.video.seeking;
+                                        if (cur && cur.oe > cur.os && safe) {
+                                            const inOp = time >= cur.os && time < cur.oe - 1;
+                                            if (inOp && !v._introSkipped) {
+                                                // 自动跳过只信【被佐证的】标记(v≥2 或本会话实测检出),防单条误学/被刷的坏标记直接跳走正片
+                                                if (v.introSkipAuto && (cur.src === 'afp' || (cur.v || 0) >= 2)) {
+                                                    v._introSkipped = true; if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); }
+                                                    dp.seek(cur.oe); dp.notice('已自动跳过片头');
+                                                    return;
+                                                }
+                                                if (v.introSkipShow && !v.introBtn.show) { v.introBtn.label = '跳过片头'; v.introBtn.to = cur.oe; v.introBtn.show = true; v._introRenderBtn(); }
+                                            } else if (v.introBtn.show && !inOp) {
+                                                v.introBtn.show = false; v._introRenderBtn();   // 出了片头区间(拖过/看完) → 收起
+                                            }
+                                        } else if (v && v.introBtn.show) {
+                                            v.introBtn.show = false; v._introRenderBtn();   // 标记被清/不安全 → 收起
+                                        }
+                                        // ── 第二优先：旧版按剧手动配置(齿轮菜单"跳过片头片尾")。有按集片头标记时片头让位避免双跳 ──
                                         if (!this.config.enabled) return;
-                                        if (this.config.intro > 0 && time < this.config.intro && !this.hasSkippedIntro) {
+                                        if (!(cur && cur.oe > cur.os) && this.config.intro > 0 && time < this.config.intro && !this.hasSkippedIntro) {
                                             dp.seek(this.config.intro);
                                             dp.notice('已跳过片头');
                                             this.hasSkippedIntro = true;
@@ -10017,6 +10212,249 @@
                                             this.hasSkippedOutro = true;
                                             if (dp.events) dp.events.trigger('ended');
                                         }
+                                    }
+                                };
+
+                                // ========== 🎵 音频指纹引擎(跳过片头自动学习,奈飞式) ==========
+                                // 原理:片头曲每集音频几乎相同 → 对正在播放的音频做轻量频谱指纹(每0.5s一个16维向量,WebAudio Analyser,
+                                //   零额外带宽);看过两集后滑动互相关找 ≥15s 公共段=片头(两集冷开场长短不同也能对上,互相关本来就搜偏移);
+                                //   后续集实时滚动匹配 → 检测到片头即弹按钮;学到/检测到的 [start,end] 上报服务器共享给全站。
+                                // 门控:只在 hls.js(MSE) 路径开启——iOS 原生 HLS 下 MediaElementSource 取不到采样甚至弄哑声音,
+                                //   iOS 用户消费服务器共享标记即可。任何失败都静默禁用,绝不影响播放。
+                                // 单例:引擎(及其 AudioContext)只建一次,跨 dp 重建复用——否则 playFromHistory 跨剧 dp.destroy 后
+                                //   每次重进这里都 new 一个 AudioContext 孤儿泄漏(旧版 Chrome/Safari 有并发上限,几次后功能整会话死)。
+                                if (!window.afpEngine) window.afpEngine = {
+                                    vue: this,
+                                    WIN: 600, HZ: 2, BANDS: 16, SIM: 0.90, MINRUN: 40,   // 记录前10min;每秒2向量;16频带;相似阈值(0.90挡复用BGM/包络误配);最短公共段40向量=20s(挡20s BGM)
+                                    ctx: null, an: null, data: null, bandIdx: null,
+                                    cur: null, rec: null, recCnt: 0, timer: 0, capable: null, zeroRun: 0,
+                                    roll: [], opFp: null, detected: false, learnTried: false,
+                                    attach() {
+                                        try {
+                                            if (this.capable === false) return false;
+                                            if (typeof dp === 'undefined' || !dp || !dp.video) return false;
+                                            if (!(dp.plugins && dp.plugins.hls)) return false;   // 非 MSE(iOS原生HLS)不开启
+                                            const v = dp.video;
+                                            if (!this.ctx) {
+                                                const AC = window.AudioContext || window.webkitAudioContext;
+                                                if (!AC) { this.capable = false; return false; }
+                                                this.ctx = new AC();
+                                                this.an = this.ctx.createAnalyser();
+                                                this.an.fftSize = 2048; this.an.smoothingTimeConstant = 0.4;
+                                                this.data = new Uint8Array(this.an.frequencyBinCount);
+                                                const lo = 3, hi = Math.min(560, this.an.frequencyBinCount - 1);   // ~65Hz-12kHz 对数分带
+                                                this.bandIdx = [];
+                                                for (let b = 0; b <= this.BANDS; b++) this.bandIdx.push(Math.round(lo * Math.pow(hi / lo, b / this.BANDS)));
+                                            }
+                                            // 每个 video 元素终生只能 createMediaElementSource 一次 → 挂到元素上复用;必须接回 destination 否则静音
+                                            if (!v._afpSrc) { v._afpSrc = this.ctx.createMediaElementSource(v); v._afpSrc.connect(this.ctx.destination); }
+                                            try { v._afpSrc.disconnect(this.an); } catch (e) { }
+                                            v._afpSrc.connect(this.an);
+                                            if (this.ctx.state === 'suspended') this.ctx.resume().catch(() => { });
+                                            return true;
+                                        } catch (e) { console.warn('[AFP] 挂载失败,禁用指纹(不影响播放):', e); this.capable = false; return false; }
+                                    },
+                                    start(info) {
+                                        const key = info.title + '|' + info.site + '|' + info.ep;
+                                        if (this.cur && this.cur.key === key && this.timer) return;   // 同集续跑(seek 引发的重复 canplay)
+                                        this.stop();
+                                        // 换了 video 元素(新集/新源) → 重置会话级禁用:上一源静音/无采样不该永久毒死本会话(真不支持的浏览器 attach 会再次判 false)
+                                        if (typeof dp !== 'undefined' && dp && dp.video && dp.video !== this._lastVid) { this._lastVid = dp.video; this.capable = null; }
+                                        if (!this.attach()) return;
+                                        this.cur = Object.assign({ key }, info);
+                                        this.rec = new Float32Array(this.WIN * this.HZ * this.BANDS);
+                                        this.recCnt = 0; this.roll = []; this.detected = false; this.learnTried = false; this.zeroRun = 0; this.firstT = null;
+                                        this.opFp = this._loadOp(this.cur);
+                                        this.timer = setInterval(() => { try { this._tick(); } catch (e) { } }, 500);
+                                    },
+                                    stop() {
+                                        if (this.timer) { clearInterval(this.timer); this.timer = 0; }
+                                        if (this.cur && this.recCnt >= 120) { try { this._saveRec(); } catch (e) { } }
+                                        this.cur = null; this.rec = null; this.roll = [];
+                                    },
+                                    _tick() {
+                                        if (typeof dp === 'undefined' || !dp || !dp.video || !this.cur) return;
+                                        const v = dp.video;
+                                        if (v.paused || v.seeking) return;
+                                        if (v.playbackRate !== 1) return;   // 倍速下频谱变形+时间轴错位 → 指纹不可用,本 tick 跳过(不污染 rec/不误配)
+                                        if (this.ctx && this.ctx.state === 'suspended') { this.ctx.resume().catch(() => { }); return; }
+                                        const t = v.currentTime;
+                                        if (!isFinite(t) || t < 0) return;
+                                        if (this.firstT == null) this.firstT = t;   // 记录首个采样时间点:续看从中段起播的残缺指纹不落盘(否则污染学习)
+                                        if (t >= this.WIN) { this._maybeLearn(); if (this.timer) { clearInterval(this.timer); this.timer = 0; if (this.recCnt >= 120) this._saveRec(); } return; }
+                                        this.an.getByteFrequencyData(this.data);
+                                        const vec = new Float32Array(this.BANDS);
+                                        let energy = 0;
+                                        for (let b = 0; b < this.BANDS; b++) {
+                                            let s = 0, c = 0;
+                                            for (let i = this.bandIdx[b]; i < this.bandIdx[b + 1]; i++) { s += this.data[i]; c++; }
+                                            const m = c ? s / c : 0; vec[b] = m; energy += m;
+                                        }
+                                        if (energy < 8) {   // 静音段/静音播放/拿不到采样
+                                            if (!v.muted && v.volume > 0) { if (++this.zeroRun > 40) { console.warn('[AFP] 20s 无音频采样,禁用'); this.capable = false; this.stop(); } }
+                                            return;
+                                        }
+                                        this.zeroRun = 0;
+                                        const idx = Math.floor(t * this.HZ);
+                                        this.rec.set(vec, idx * this.BANDS); this.recCnt++;
+                                        this.roll.push({ idx, vec });
+                                        if (this.roll.length > 30) this.roll.shift();
+                                        if (this.opFp && !this.detected && !this.vue._introCur) this._match();
+                                        if (!this.learnTried && this.recCnt === 360) this._maybeLearn();   // 看到3分钟先试学一次
+                                    },
+                                    // 相似度=去均值相关(Pearson):频带能量全为正且被响度主导,原始余弦对任意内容都≈0.95(假相似);
+                                    // 去均值后只比"频谱形状",无关内容≈0、同内容≈1(合成测试抓出的关键修正)
+                                    _cos(a, ao, b, bo) {
+                                        let ma = 0, mb = 0;
+                                        for (let i = 0; i < this.BANDS; i++) { ma += a[ao + i]; mb += b[bo + i]; }
+                                        ma /= this.BANDS; mb /= this.BANDS;
+                                        let d = 0, na = 0, nb = 0;
+                                        for (let i = 0; i < this.BANDS; i++) { const x = a[ao + i] - ma, y = b[bo + i] - mb; d += x * y; na += x * x; nb += y * y; }
+                                        return (na > 1e-6 && nb > 1e-6) ? d / Math.sqrt(na * nb) : 0;
+                                    },
+                                    // 实时匹配:最近16向量(8s,须连续)滑给片头指纹前20s找对齐 → 反推片头起点
+                                    _match() {
+                                        if (this.roll.length < 16) return;
+                                        const w = this.roll.slice(-16);
+                                        for (let i = 1; i < 16; i++) if (w[i].idx - w[i - 1].idx > 2) return;
+                                        const fp = this.opFp.data;
+                                        let best = -1, bestK = 0;
+                                        for (let k = 0; k + 16 <= Math.min(this.opFp.len, 40); k++) {
+                                            let s = 0;
+                                            for (let i = 0; i < 16; i++) s += this._cos(w[i].vec, 0, fp, (k + i) * this.BANDS);
+                                            s /= 16;
+                                            if (s > best) { best = s; bestK = k; }
+                                        }
+                                        if (best >= 0.93) {   // 实时检测阈值(比学习更严,单点匹配无长度佐证,防正片偶然相似段误检)
+                                            const os = Math.max(0, Math.round((w[0].idx - bestK) / this.HZ * 10) / 10);
+                                            const oe = Math.round((os + this.opFp.sec) * 10) / 10;
+                                            this.detected = true;
+                                            this.vue._afpDetected(os, oe);
+                                            this.vue._introUpload(this.cur.title, this.cur.site, this.cur.ep, os, oe, 'auto');
+                                        }
+                                    },
+                                    // 两集互相关学习:找最长公共段(≥15s,允许2向量断档) → 片头
+                                    _maybeLearn() {
+                                        if (this.learnTried || !this.cur || this.opFp) { this.learnTried = true; return; }
+                                        this.learnTried = true;
+                                        if (this.firstT == null || this.firstT > 20 || this.recCnt < 120) return;   // 本集非从头录/采样太少 → 不作为学习依据(续看/倍速)
+                                        const sib = this._listRecs(this.cur).filter(k => k.ep !== this.cur.ep);
+                                        if (!sib.length) return;
+                                        const other = this._loadRec(sib[sib.length - 1]);
+                                        if (!other) return;
+                                        const t0 = Date.now();
+                                        const r = this._learn(this.rec, other.data);
+                                        console.log('[AFP] 互相关比对耗时', Date.now() - t0, 'ms →', r ? '命中' : '未找到公共段');
+                                        if (!r) return;
+                                        const os1 = r.aStart / this.HZ, os2 = r.bStart / this.HZ, sec = r.len / this.HZ;
+                                        const fp = this.rec.slice(r.aStart * this.BANDS, (r.aStart + r.len) * this.BANDS);
+                                        this.opFp = { data: fp, len: r.len, sec };
+                                        this._saveOp(this.cur, fp, r.len, sec);
+                                        this.vue._afpLearned([
+                                            { ep: this.cur.ep, os: Math.round(os1 * 10) / 10, oe: Math.round((os1 + sec) * 10) / 10 },
+                                            { ep: other.ep, os: Math.round(os2 * 10) / 10, oe: Math.round((os2 + sec) * 10) / 10 }
+                                        ], this.cur);
+                                        console.log(`[AFP] 学习成功: 片头 ${sec.toFixed(0)}s @ 本集 ${os1.toFixed(0)}s / 第${other.ep}集 ${os2.toFixed(0)}s`);
+                                    },
+                                    _learn(A, B) {
+                                        const N = this.WIN * this.HZ, BD = this.BANDS;
+                                        // 预处理:每向量 去均值+归一(Pearson) → 内积即相关;近乎无方差(缺失/静音/平坦)标记为无效
+                                        const prep = (arr) => {
+                                            const c = new Float32Array(N * BD), ok = new Uint8Array(N);
+                                            for (let i = 0; i < N; i++) {
+                                                const o = i * BD; let m = 0;
+                                                for (let b = 0; b < BD; b++) m += arr[o + b];
+                                                m /= BD;
+                                                let s = 0;
+                                                for (let b = 0; b < BD; b++) { const x = arr[o + b] - m; c[o + b] = x; s += x * x; }
+                                                if (s > 1e-4) { const inv = 1 / Math.sqrt(s); for (let b = 0; b < BD; b++) c[o + b] *= inv; ok[i] = 1; }
+                                            }
+                                            return { c, ok };
+                                        };
+                                        const pa = prep(A), pb = prep(B);
+                                        let best = null;
+                                        const flush = (runStart, run, miss, off) => {
+                                            const eff = run - miss;
+                                            if (runStart >= 0 && eff >= this.MINRUN && (!best || eff > best.len)) best = { aStart: runStart, bStart: runStart - off, len: eff };
+                                        };
+                                        for (let off = -(N - 60); off <= N - 60; off++) {
+                                            let run = 0, runStart = -1, miss = 0;
+                                            const i0 = Math.max(0, off), i1 = Math.min(N, N + off);
+                                            for (let i = i0; i < i1; i++) {
+                                                const j = i - off;
+                                                let sim = 0;
+                                                if (pa.ok[i] && pb.ok[j]) {
+                                                    let d = 0; const ai = i * BD, bj = j * BD;
+                                                    for (let b = 0; b < BD; b++) d += pa.c[ai + b] * pb.c[bj + b];
+                                                    sim = d;
+                                                }
+                                                if (sim >= this.SIM) { if (runStart < 0) { runStart = i; run = 0; miss = 0; } run++; miss = 0; }
+                                                else if (runStart >= 0 && miss < 4) { miss++; run++; }   // 容忍≤2s连续不相似(片头开场/过渡静音、短口白),miss 计入长度惩罚
+                                                else { flush(runStart, run, miss, off); run = 0; runStart = -1; miss = 0; }
+                                            }
+                                            flush(runStart, run, miss, off);
+                                        }
+                                        if (!best) return null;
+                                        const sec = best.len / this.HZ;
+                                        if (sec < 15 || sec > 240) return null;                                    // 片头 15s~4min
+                                        if (best.aStart / this.HZ > 420 || best.bStart / this.HZ > 420) return null; // 片头应在前7分钟内
+                                        return best;
+                                    },
+                                    // —— 本地持久化(localStorage,自动 GC;配额爆了清光自愈) ——
+                                    _recKey(c) { return 'donggua_afp|' + c.title + '|' + c.site + '|' + c.ep; },
+                                    _opKey(c) { return 'donggua_afpop|' + c.title + '|' + c.site; },
+                                    _b64(u8) { let s = ''; for (let i = 0; i < u8.length; i += 4096) s += String.fromCharCode.apply(null, u8.subarray(i, i + 4096)); return btoa(s); },
+                                    _unb64(s) { const bin = atob(s); const f = new Float32Array(bin.length); for (let i = 0; i < bin.length; i++) f[i] = bin.charCodeAt(i); return f; },
+                                    _saveRec() {
+                                        // 只落盘"从头录起"的指纹:续看从中段起播的残缺 rec(前段全零)会污染后续互相关学习
+                                        if (this.firstT == null || this.firstT > 20 || this.recCnt < 120) return;
+                                        try {
+                                            const u8 = new Uint8Array(this.rec.length);
+                                            for (let i = 0; i < u8.length; i++) u8[i] = Math.min(255, Math.round(this.rec[i]));
+                                            localStorage.setItem(this._recKey(this.cur), this._b64(u8));
+                                            this._gc();
+                                        } catch (e) { try { this._gcAll(); } catch (e2) { } }
+                                    },
+                                    _loadRec(k) { try { const s = localStorage.getItem(k.key); return s ? { ep: k.ep, data: this._unb64(s) } : null; } catch (e) { return null; } },
+                                    _listRecs(c) {
+                                        const pre = 'donggua_afp|' + c.title + '|' + c.site + '|', out = [];
+                                        for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf(pre) === 0) { const ep = parseInt(k.slice(pre.length), 10); if (!isNaN(ep)) out.push({ key: k, ep }); } }
+                                        out.sort((a, z) => a.ep - z.ep);
+                                        return out;
+                                    },
+                                    _saveOp(c, fp, len, sec) {
+                                        try {
+                                            const u8 = new Uint8Array(fp.length);
+                                            for (let i = 0; i < u8.length; i++) u8[i] = Math.min(255, Math.round(fp[i]));
+                                            localStorage.setItem(this._opKey(c), JSON.stringify({ sec, len, d: this._b64(u8) }));
+                                        } catch (e) { }
+                                    },
+                                    _loadOp(c) {
+                                        try {
+                                            const s = localStorage.getItem(this._opKey(c)); if (!s) return null;
+                                            const o = JSON.parse(s);
+                                            return { data: this._unb64(o.d), len: o.len, sec: o.sec };
+                                        } catch (e) { return null; }
+                                    },
+                                    _gc() {
+                                        try {
+                                            const mine = this._listRecs(this.cur);
+                                            while (mine.length > 3) localStorage.removeItem(mine.shift().key);
+                                            const all = [], ops = [];
+                                            for (let i = 0; i < localStorage.length; i++) {
+                                                const k = localStorage.key(i);
+                                                if (!k) continue;
+                                                if (k.indexOf('donggua_afpop|') === 0) ops.push(k);       // 学成的片头指纹键(前缀更长,先判)
+                                                else if (k.indexOf('donggua_afp|') === 0) all.push(k);    // 每集原始录制指纹
+                                            }
+                                            if (all.length > 12) all.slice(0, all.length - 12).forEach(k => localStorage.removeItem(k));
+                                            if (ops.length > 40) ops.slice(0, ops.length - 40).forEach(k => localStorage.removeItem(k));   // op 键此前只增不减 → 也封顶
+                                        } catch (e) { }
+                                    },
+                                    _gcAll() {   // 配额兜底:清光指纹缓存(损失只是重新学习)
+                                        const del = [];
+                                        for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && (k.indexOf('donggua_afp|') === 0 || k.indexOf('donggua_afpop|') === 0)) del.push(k); }
+                                        del.forEach(k => localStorage.removeItem(k));
                                     }
                                 };
 

@@ -6,6 +6,7 @@ search_cache.json
 detail_cache.json
 cache_search.json
 cache_detail.json
+cache_intro.json
 cache.db
 cache.db-wal
 cache.db-shm

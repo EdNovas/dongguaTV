@@ -526,6 +526,7 @@ async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
 const CACHE_TYPE = process.env.CACHE_TYPE || 'json'; // json, sqlite, memory, none
 const SEARCH_CACHE_JSON = path.join(__dirname, 'cache_search.json');
 const DETAIL_CACHE_JSON = path.join(__dirname, 'cache_detail.json');
+const INTRO_CACHE_JSON = path.join(__dirname, 'cache_intro.json');
 const CACHE_DB_FILE = path.join(__dirname, 'cache.db');
 
 console.log(`[System] Cache Type: ${CACHE_TYPE}`);
@@ -548,6 +549,7 @@ class CacheManager {
         this.type = type;
         this.searchCache = {};
         this.detailCache = {};
+        this.introCache = {};   // ⏭️ 片头标记(json/memory 模式):独立命名空间,不与 VOD 详情缓存串味/共用淘汰
         this.db = null;
         this.init();
     }
@@ -559,6 +561,9 @@ class CacheManager {
             }
             if (fs.existsSync(DETAIL_CACHE_JSON)) {
                 try { this.detailCache = JSON.parse(fs.readFileSync(DETAIL_CACHE_JSON)); } catch (e) { }
+            }
+            if (fs.existsSync(INTRO_CACHE_JSON)) {
+                try { this.introCache = JSON.parse(fs.readFileSync(INTRO_CACHE_JSON)); } catch (e) { }
             }
         } else if (this.type === 'sqlite') {
             try {
@@ -671,13 +676,10 @@ class CacheManager {
         }
     }
 
+    _bucket(category) { return category === 'search' ? this.searchCache : category === 'intro' ? this.introCache : this.detailCache; }
     get(category, key) {
-        if (this.type === 'memory') {
-            const data = category === 'search' ? this.searchCache[key] : this.detailCache[key];
-            if (data && data.expire > Date.now()) return data.value;
-            return null;
-        } else if (this.type === 'json') {
-            const data = category === 'search' ? this.searchCache[key] : this.detailCache[key];
+        if (this.type === 'memory' || this.type === 'json') {
+            const data = this._bucket(category)[key];
             if (data && data.expire > Date.now()) return data.value;
             return null;
         } else if (this.type === 'sqlite' && this.db) {
@@ -698,14 +700,10 @@ class CacheManager {
         const expire = Date.now() + ttlSeconds * 1000;
 
         if (this.type === 'memory') {
-            const item = { value, expire };
-            if (category === 'search') this.searchCache[key] = item;
-            else this.detailCache[key] = item;
+            this._bucket(category)[key] = { value, expire };
         } else if (this.type === 'json') {
-            const item = { value, expire };
-            if (category === 'search') this.searchCache[key] = item;
-            else this.detailCache[key] = item;
-            this.saveDisk();
+            this._bucket(category)[key] = { value, expire };
+            this.saveDisk(category);
         } else if (this.type === 'sqlite' && this.db) {
             try {
                 this.db.prepare(`
@@ -718,11 +716,12 @@ class CacheManager {
         }
     }
 
-    saveDisk() {
-        if (this.type === 'json') {
-            fs.writeFileSync(SEARCH_CACHE_JSON, JSON.stringify(this.searchCache));
-            fs.writeFileSync(DETAIL_CACHE_JSON, JSON.stringify(this.detailCache));
-        }
+    saveDisk(only) {
+        if (this.type !== 'json') return;
+        // 只写被改动的桶(片头提交别每次重写整个详情缓存文件)
+        if (!only || only === 'search') fs.writeFileSync(SEARCH_CACHE_JSON, JSON.stringify(this.searchCache));
+        if (!only || only === 'intro') fs.writeFileSync(INTRO_CACHE_JSON, JSON.stringify(this.introCache));
+        if (!only || (only !== 'search' && only !== 'intro')) fs.writeFileSync(DETAIL_CACHE_JSON, JSON.stringify(this.detailCache));
     }
 
     // 定期清理过期缓存 (SQLite)
@@ -1535,6 +1534,74 @@ app.post('/api/settings/push', (req, res) => {
     } catch (e) {
         console.error('[Settings Push Error]', e.message);
         res.status(500).json({ error: 'Database error' });
+    }
+});
+
+// ========== ⏭️ 跳过片头 API：共享的片头/片尾时间标记(众包 + 客户端音频指纹自动学习上报) ==========
+// 存储走 cacheManager KV(category='intro')——json/sqlite/memory 全兼容,不像历史同步只限 sqlite。
+// 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>": {os,oe,ed,v,src,at} } 整剧一条。
+// 必须按【集】存:每集冷开场长度不同,片头起点不同;不能按剧存一个时间。
+const INTRO_TTL = 365 * 24 * 3600;   // 秒。每次写入续期
+function introNormTitle(s) {
+    // 与前端 _introTitleKey 保持一致：去括号内容/空格/标点,小写。改这里必须同步改前端。
+    return String(s || '').replace(/[(（【\[][^)）】\]]*[)）】\]]/g, '').replace(/[\s·:：\-—_~～!！?？"'「」『』]/g, '').toLowerCase().slice(0, 60);
+}
+function introKey(title, site) { return introNormTitle(title) + '|' + String(site || '').slice(0, 40); }
+const introLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: ipKey, message: { error: '请求过于频繁' } });
+
+// 拉取某剧某线路的全部片头标记
+app.get('/api/intro/marks', introLimiter, (req, res) => {
+    const title = String(req.query.title || '').trim();
+    if (!title) return res.json({ marks: {} });
+    const map = cacheManager.get('intro', introKey(title, req.query.site)) || {};
+    res.json({ marks: map });
+});
+
+// 提交一集的片头标记(手动标记或客户端音频指纹自动学习)。登录站点即可提交(限流防刷)。
+app.post('/api/intro/mark', introLimiter, (req, res) => {
+    try {
+        const b = req.body || {};
+        // 站点配置了密码时要求有效 token(与历史同步同一套);未配密码的开放站不强求
+        if (Object.keys(PASSWORD_HASH_MAP).length) {
+            const u = PASSWORD_HASH_MAP[b.token];
+            if (!u) return res.status(401).json({ error: 'Invalid token' });
+            if (isBanned(b.token)) return res.status(403).json({ error: 'banned' });
+        }
+        const title = String(b.title || '').trim();
+        const site = String(b.site || '').trim();
+        const ep = parseInt(b.ep, 10);
+        let os = Math.round(Number(b.op_start) * 10) / 10, oe = Math.round(Number(b.op_end) * 10) / 10;
+        let ed = b.ed_start == null ? null : Math.round(Number(b.ed_start) * 10) / 10;
+        const src = b.src === 'manual' ? 'manual' : 'auto';
+        // 校验：ep 放宽到 8 位(综艺用日期做集号,如 20240105);片头起点前 25 分钟内、时长 10~150s(挡"整段5分钟片头"的滥用载荷)
+        if (!title || !site || !Number.isInteger(ep) || ep < 0 || ep > 99999999) return res.status(400).json({ error: 'bad params' });
+        if (!isFinite(os) || !isFinite(oe) || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 150) return res.status(400).json({ error: 'bad range' });
+        if (ed != null && (!isFinite(ed) || ed <= oe || ed > 6 * 3600)) ed = null;
+        const key = introKey(title, site);
+        const map = cacheManager.get('intro', key) || {};
+        const old = map[ep];
+        if (old && Math.abs(old.os - os) <= 5 && Math.abs(old.oe - oe) <= 5) {
+            // 与现值一致(±5s)：加权平均收敛 + 计票(封顶防溢出)
+            const w = Math.min(old.v || 1, 9);
+            map[ep] = { os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, ed: ed != null ? ed : old.ed, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() };
+        } else if (!old || (old.v || 1) <= 1 || (src === 'manual' && old.src !== 'manual' && (old.v || 1) <= 2)) {
+            // 无旧值 / 旧值只有 1 票 / 人工标记纠正低票自动值 → 覆盖
+            map[ep] = { os, oe, ed, v: 1, src, at: Date.now() };
+        } else {
+            // 与多票旧值冲突：削旧值一票(不直接推翻共识,但也不让先到的错值/被刷值永久钉死——
+            // 诚实多数持续提交正确值会把错值削到 1 票后取而代之,eventual 纠偏)
+            const nv = (old.v || 1) - 1;
+            if (nv <= 1) map[ep] = { os, oe, ed, v: 1, src, at: Date.now() };
+            else { old.v = nv; old.at = Date.now(); map[ep] = old; }
+        }
+        // 单剧集数上限(防灌爆一条 KV)
+        const keys = Object.keys(map);
+        if (keys.length > 500) { keys.sort((a, z) => (map[a].at || 0) - (map[z].at || 0)); for (const k of keys.slice(0, keys.length - 500)) delete map[k]; }
+        cacheManager.set('intro', key, map, INTRO_TTL);
+        res.json({ ok: true, mark: map[ep] || null });
+    } catch (e) {
+        console.error('[Intro Mark Error]', e.message);
+        res.status(500).json({ error: 'server error' });
     }
 });
 
