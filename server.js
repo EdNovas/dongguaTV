@@ -1539,8 +1539,9 @@ app.post('/api/settings/push', (req, res) => {
 
 // ========== ⏭️ 跳过片头 API：共享的片头/片尾时间标记(众包 + 客户端音频指纹自动学习上报) ==========
 // 存储走 cacheManager KV(category='intro')——json/sqlite/memory 全兼容,不像历史同步只限 sqlite。
-// 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>": {os,oe,ed,v,src,at} } 整剧一条。
+// 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>": {os,oe,ed,v,src,at,bs,be,bv} } 整剧一条。
 // 必须按【集】存:每集冷开场长度不同,片头起点不同;不能按剧存一个时间。
+// bs/be = 可选"开头贴片"区间(盗版源每集头部注入的广告/许可卡,与片头曲是两个独立可跳区间),bv = 其票数。
 const INTRO_TTL = 365 * 24 * 3600;   // 秒。每次写入续期
 function introNormTitle(s) {
     // 与前端 _introTitleKey 保持一致：去括号内容/空格/标点,小写。改这里必须同步改前端。
@@ -1577,21 +1578,36 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         if (!title || !site || !Number.isInteger(ep) || ep < 0 || ep > 99999999) return res.status(400).json({ error: 'bad params' });
         if (!isFinite(os) || !isFinite(oe) || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 150) return res.status(400).json({ error: 'bad range' });
         if (ed != null && (!isFinite(ed) || ed <= oe || ed > 6 * 3600)) ed = null;
+        // 可选"开头贴片"区间(盗版源头部注入的广告/许可卡):必须贴近片头部(起点≤120s)、3~90s、且在片头曲之前;非法就静默丢弃不拒整单
+        let bs = b.b_start == null ? null : Math.round(Number(b.b_start) * 10) / 10;
+        let be = b.b_end == null ? null : Math.round(Number(b.b_end) * 10) / 10;
+        if (bs == null || be == null || !isFinite(bs) || !isFinite(be) || bs < 0 || bs > 120 || be <= bs || (be - bs) < 3 || (be - bs) > 90 || be > os + 5) { bs = null; be = null; }
         const key = introKey(title, site);
         const map = cacheManager.get('intro', key) || {};
         const old = map[ep];
+        // 贴片区间独立计票收敛(和 os/oe 同一套 ±5s 加权/削票模型)
+        const mergeBump = (rec, oldRec) => {
+            const obs = oldRec && oldRec.be > oldRec.bs ? oldRec : null;
+            if (bs == null) { if (obs) { rec.bs = obs.bs; rec.be = obs.be; rec.bv = obs.bv || 1; } return rec; }
+            if (obs && Math.abs(obs.bs - bs) <= 5 && Math.abs(obs.be - be) <= 5) {
+                const w = Math.min(obs.bv || 1, 9);
+                rec.bs = Math.round((obs.bs * w + bs) / (w + 1) * 10) / 10; rec.be = Math.round((obs.be * w + be) / (w + 1) * 10) / 10; rec.bv = Math.min((obs.bv || 1) + 1, 99);
+            } else if (!obs || (obs.bv || 1) <= 1) { rec.bs = bs; rec.be = be; rec.bv = 1; }
+            else { rec.bs = obs.bs; rec.be = obs.be; rec.bv = (obs.bv || 1) - 1; }
+            return rec;
+        };
         if (old && Math.abs(old.os - os) <= 5 && Math.abs(old.oe - oe) <= 5) {
             // 与现值一致(±5s)：加权平均收敛 + 计票(封顶防溢出)
             const w = Math.min(old.v || 1, 9);
-            map[ep] = { os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, ed: ed != null ? ed : old.ed, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() };
+            map[ep] = mergeBump({ os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, ed: ed != null ? ed : old.ed, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() }, old);
         } else if (!old || (old.v || 1) <= 1 || (src === 'manual' && old.src !== 'manual' && (old.v || 1) <= 2)) {
             // 无旧值 / 旧值只有 1 票 / 人工标记纠正低票自动值 → 覆盖
-            map[ep] = { os, oe, ed, v: 1, src, at: Date.now() };
+            map[ep] = mergeBump({ os, oe, ed, v: 1, src, at: Date.now() }, null);
         } else {
             // 与多票旧值冲突：削旧值一票(不直接推翻共识,但也不让先到的错值/被刷值永久钉死——
             // 诚实多数持续提交正确值会把错值削到 1 票后取而代之,eventual 纠偏)
             const nv = (old.v || 1) - 1;
-            if (nv <= 1) map[ep] = { os, oe, ed, v: 1, src, at: Date.now() };
+            if (nv <= 1) map[ep] = mergeBump({ os, oe, ed, v: 1, src, at: Date.now() }, null);
             else { old.v = nv; old.at = Date.now(); map[ep] = old; }
         }
         // 单剧集数上限(防灌爆一条 KV)

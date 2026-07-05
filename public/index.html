@@ -9613,6 +9613,7 @@
                         this._introEpKey = epKey;
                         this._introCur = null;
                         this._introSkipped = false;
+                        this._bumpSkipped = false;
                         this.introBtn.show = false; this._introRenderBtn();
                         // 共享标记(每 剧|线路 拉一次,15min 内存缓存)
                         const marksKey = title + '|' + site;
@@ -9626,7 +9627,7 @@
                         }
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
                         const mk = this._introMarks.marks[ep];
-                        if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1 };
+                        if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1, bs: mk.bs || 0, be: mk.be || 0, bv: mk.bv || 0 };
                         // 🎬 本集无共享标记 → 后台离线分析(不用看片头):没学过→两集包络学习;学过→只定位本集。
                         //   全部守卫(每剧学一次/每集定位一次/失败限2次/流量上限)内聚在模块里,这里只管调——
                         //   ⚠️别在这儿加守卫变量:上一版 Vue 侧 _introOfflineKey 被多个异步回调竞态复位,导致换集就重学、流量爆炸。
@@ -9650,16 +9651,18 @@
                     for (const m of (list || [])) {
                         if (m.ep === curEp && !this._introCur) this._introCur = { os: m.os, oe: m.oe, ed: 0, src: 'afp', v: 0 };
                         this._introUpload(info.title, info.site, m.ep, m.os, m.oe, 'auto');
-                        if (this._introMarks && this._introMarks.key === info.title + '|' + info.site) this._introMarks.marks[m.ep] = { os: m.os, oe: m.oe, v: 1, src: 'auto' };
+                        if (this._introMarks && this._introMarks.key === info.title + '|' + info.site) { const om = this._introMarks.marks[m.ep] || {}; this._introMarks.marks[m.ep] = { os: m.os, oe: m.oe, v: 1, src: 'auto', bs: om.bs || 0, be: om.be || 0, bv: om.bv || 0 }; }
                     }
                 },
-                // 上报标记(自动学习/手动标记共用)。token 与历史同步同一套
-                _introUpload(titleKeyOrName, site, ep, os, oe, src) {
+                // 上报标记(自动学习/手动标记共用)。token 与历史同步同一套。bump = 可选开头贴片区间 {bs,be}
+                _introUpload(titleKeyOrName, site, ep, os, oe, src, bump) {
                     try {
                         const token = localStorage.getItem('emax_auth_hash') || '';
+                        const body = { token, title: (this.currentGroup && this.currentGroup.name) || titleKeyOrName, site, ep, op_start: os, op_end: oe, src: src || 'auto' };
+                        if (bump && bump.be > bump.bs) { body.b_start = bump.bs; body.b_end = bump.be; }
                         fetch('/api/intro/mark', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ token, title: (this.currentGroup && this.currentGroup.name) || titleKeyOrName, site, ep, op_start: os, op_end: oe, src: src || 'auto' })
+                            body: JSON.stringify(body)
                         }).catch(() => { });
                     } catch (e) { }
                 },
@@ -9667,10 +9670,10 @@
                 introSkipNow() {
                     try {
                         if (!this.introBtn.show) return;
-                        const to = this.introBtn.to;
+                        const to = this.introBtn.to, isBump = this.introBtn.flag === '_bumpSkipped';
                         this.introBtn.show = false; this._introRenderBtn();
-                        this._introSkipped = true;
-                        if (typeof dp !== 'undefined' && dp && isFinite(to)) { dp.seek(to); dp.notice('已跳过片头'); }
+                        this[isBump ? '_bumpSkipped' : '_introSkipped'] = true;   // 开头贴片/片头曲 两个区间各自只跳一次
+                        if (typeof dp !== 'undefined' && dp && isFinite(to)) { dp.seek(to); dp.notice(isBump ? '已跳过开头' : '已跳过片头'); }
                     } catch (e) { }
                 },
                 // 把跳过按钮以 DOM 形式注入/更新在 #dplayer 容器内(全屏可见)。由 introBtn.show 驱动。
@@ -10188,23 +10191,26 @@
                                         group.querySelector('.dplayer-setting-del-config').addEventListener('click', () => this.clear());
                                     },
                                     check(time) {
-                                        // ── 第一优先：按集智能片头标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳 ──
+                                        // ── 第一优先：按集智能标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳 ──
+                                        //   两个独立可跳区间:开头贴片(bs~be,盗版源注入的广告/许可卡→「跳过开头」) 与 片头曲(os~oe→「跳过片头」),各自只跳一次
                                         const v = this.vue, cur = v && v._introCur;
                                         // switchVideo 换集瞬间会发一次 currentTime=0 的 timeupdate、此时 duration=NaN；此刻绝不自动跳(否则新集从 oe 起播)
                                         const dur = dp.video && dp.video.duration;
                                         const safe = time > 1 && isFinite(dur) && dur > 0 && !dp.video.seeking;
-                                        if (cur && cur.oe > cur.os && safe) {
-                                            const inOp = time >= cur.os && time < cur.oe - 1;
-                                            if (inOp && !v._introSkipped) {
-                                                // 自动跳过只信【被佐证的】标记(v≥2 或本会话实测检出),防单条误学/被刷的坏标记直接跳走正片
-                                                if (v.introSkipAuto && (cur.src === 'afp' || (cur.v || 0) >= 2)) {
-                                                    v._introSkipped = true; if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); }
-                                                    dp.seek(cur.oe); dp.notice('已自动跳过片头');
+                                        if (cur && safe) {
+                                            let reg = null;
+                                            if (cur.be > cur.bs && time >= cur.bs && time < cur.be - 1 && !v._bumpSkipped) reg = { to: cur.be, label: '跳过开头', flag: '_bumpSkipped', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头' };
+                                            else if (cur.oe > cur.os && time >= cur.os && time < cur.oe - 1 && !v._introSkipped) reg = { to: cur.oe, label: '跳过片头', flag: '_introSkipped', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头' };
+                                            if (reg) {
+                                                // 自动跳过只信【被佐证的】标记(票数≥2 或本会话实测检出),防单条误学/被刷的坏标记直接跳走正片
+                                                if (v.introSkipAuto && reg.ok) {
+                                                    v[reg.flag] = true; if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); }
+                                                    dp.seek(reg.to); dp.notice(reg.notice);
                                                     return;
                                                 }
-                                                if (v.introSkipShow && !v.introBtn.show) { v.introBtn.label = '跳过片头'; v.introBtn.to = cur.oe; v.introBtn.show = true; v._introRenderBtn(); }
-                                            } else if (v.introBtn.show && !inOp) {
-                                                v.introBtn.show = false; v._introRenderBtn();   // 出了片头区间(拖过/看完) → 收起
+                                                if (v.introSkipShow && (!v.introBtn.show || v.introBtn.to !== reg.to)) { v.introBtn.label = reg.label; v.introBtn.to = reg.to; v.introBtn.flag = reg.flag; v.introBtn.show = true; v._introRenderBtn(); }
+                                            } else if (v.introBtn.show) {
+                                                v.introBtn.show = false; v._introRenderBtn();   // 出了可跳区间(拖过/看完) → 收起
                                             }
                                         } else if (v && v.introBtn.show) {
                                             v.introBtn.show = false; v._introRenderBtn();   // 标记被清/不安全 → 收起
@@ -10273,7 +10279,7 @@
                                         this.cur = Object.assign({ key }, info);
                                         this.rec = new Float32Array(this.WIN * this.HZ * this.BANDS);
                                         this.recCnt = 0; this.roll = []; this.detected = false; this.zeroRun = 0; this.firstT = null;
-                                        this.maxEnergy = 0; this._noSibLogged = false; this._missLogged = false; this.blindReason = '';
+                                        this.maxEnergy = 0; this._noSibLogged = false; this._missLogged = false; this.blindReason = ''; this._susLearn = false;
                                         this.opFp = this._loadOp(this.cur);
                                         console.log('[AFP] 开始采集 第' + info.ep + '集' + (this.opFp ? '(已有片头指纹,实时匹配)' : '(学习中)'));
                                         this.timer = setInterval(() => { try { this._tick(); } catch (e) { } }, 500);
@@ -10367,7 +10373,7 @@
                                     },
                                     // 两集互相关学习:找最长公共段(≥15s,允许2向量断档) → 片头
                                     _maybeLearn() {
-                                        if (!this.cur || this.opFp) return;   // 已学出/无上下文 → 不重复;可被重试调用
+                                        if (!this.cur || this.opFp || this._susLearn) return;   // 已学出/无上下文/本集已判疑似贴片 → 不重复;可被重试调用
                                         if (this.firstT == null || this.firstT > 20 || this.recCnt < 120) return;   // 本集非从头录/采样太少 → 不作为学习依据(续看/倍速)
                                         const sib = this._listRecs(this.cur).filter(k => k.ep !== this.cur.ep);
                                         if (!sib.length) { if (!this._noSibLogged) { console.log('[AFP] 本剧本线路还没有其它集的录制,先攒(至少看两集各≥1分钟才能学出片头)'); this._noSibLogged = true; } return; }
@@ -10378,6 +10384,8 @@
                                         if (!r) { if (!this._missLogged) { console.log('[AFP] 与第' + sib[sib.length - 1].ep + '集互相关暂未找到公共段(继续录/重试;两集片头须都录到)'); this._missLogged = true; } return; }
                                         console.log('[AFP] 互相关命中,耗时', Date.now() - t0, 'ms');
                                         const os1 = r.aStart / this.HZ, os2 = r.bStart / this.HZ, sec = r.len / this.HZ;
+                                        // 🚨 疑似片源头部赞助贴片(两集都在最开头且不长):不当片头、不上报,交给离线分析扩窗找真片头(它能看到全片前10分钟,这里只能看到播过的)
+                                        if (os1 < 60 && os2 < 60 && sec < 45) { this._susLearn = true; console.log('[AFP] 学到的公共段疑似片源头部贴片(两集都在开头,' + sec.toFixed(0) + 's),忽略,交给离线分析'); return; }
                                         const fp = this.rec.slice(r.aStart * this.BANDS, (r.aStart + r.len) * this.BANDS);
                                         this.opFp = { data: fp, len: r.len, sec };
                                         this._saveOp(this.cur, fp, r.len, sec);
@@ -10668,7 +10676,7 @@
                                         lagP.sort((x, y) => y.p - x.p);
                                         const cands = [];
                                         for (const c of lagP) { if (c.p < 0.55) break; if (cands.every(x => Math.abs(x.lag - c.lag) > 50)) cands.push(c); if (cands.length >= 8) break; }
-                                        let bestR = null;
+                                        const regs = [];
                                         for (const c of cands) {
                                             let rl = c.lag, rp = -1;   // lag 微调 ±0.3s
                                             for (let d = -3; d <= 3; d++) {
@@ -10686,15 +10694,43 @@
                                                 else cs = -1;
                                             }
                                             if (st < 0) continue;
-                                            let len = en - st; if (len < MINL) continue; if (len > MAXL) { len = MAXL; en = st + len; }
+                                            // 开头位置(两集都在前60s)的区段放宽到 ≥5s——贴片广告常短于片头的 15s 门槛;其余仍须 ≥15s 防噪声
+                                            const headish = st < 600 && st - rl < 600, minl = headish ? 50 : MINL;
+                                            let len = en - st; if (len < minl) continue; if (len > MAXL) { len = MAXL; en = st + len; }
                                             if (this._p(eA, st, eB, st - rl, len) < 0.6) continue;
                                             let st2 = st, en2 = en;   // 2s 窗精修首尾(±1s,防 5s 窗溢出边界导致"跳过头"多跳几秒)
                                             for (let s = Math.max(i0, st - 30); s <= st + 30 && s + 20 <= i1; s += 2) { if (this._p(eA, s, eB, s - rl, 20) >= 0.5) { st2 = s; break; } }
                                             for (let s = Math.min(en, i1 - 20); s >= en - 60; s -= 2) { if (this._p(eA, s, eB, s - rl, 20) >= 0.5) { en2 = s + 20; break; } }
-                                            if (en2 - st2 < MINL) continue;
+                                            if (en2 - st2 < minl) continue;
                                             const conf = this._p(eA, st2, eB, st2 - rl, en2 - st2);
                                             if (conf < 0.6) continue;
-                                            if (!bestR || (en2 - st2) > bestR.len) bestR = { aStart: st2, bStart: st2 - rl, len: en2 - st2, conf };
+                                            regs.push({ aStart: st2, bStart: st2 - rl, len: en2 - st2, conf });
+                                        }
+                                        if (!regs.length) return null;
+                                        regs.sort((x, y) => y.len - x.len);
+                                        const bestR = regs[0];
+                                        // 顺带找"开头贴片"区间:两集都在前 60s 内、<45s、且整段在主区间之前不重叠(盗版源每集头部注入的同一段广告/许可卡)
+                                        for (const g of regs.slice(1)) {
+                                            if (g.aStart < 600 && g.bStart < 600 && g.len < 450 && g.aStart + g.len <= bestR.aStart && g.bStart + g.len <= bestR.bStart) { bestR.bump = g; break; }
+                                        }
+                                        // 头部专项扫描:30s 粗窗会把 <15s 的短贴片稀释掉(12s相同+18s无关≈0.4),两集前60s 用 8s 短窗单独扫
+                                        if (!bestR.bump) {
+                                            const HN = Math.min(600, nA, nB);
+                                            if (HN >= 150) {
+                                                let bl = 0, bp2 = -1;
+                                                for (let lag = -(HN - 60); lag <= HN - 60; lag++) {
+                                                    const i0 = Math.max(0, lag), i1 = Math.min(HN, HN + lag);
+                                                    for (let s = i0; s + 80 <= i1; s += 5) { const p = this._p(eA, s, eB, s - lag, 80); if (p > bp2) { bp2 = p; bl = lag; } }
+                                                }
+                                                if (bp2 >= 0.6) {
+                                                    const r2 = this._run2s(eA, eB, bl, 0, HN);
+                                                    if (r2 && r2.en - r2.st >= 50 && r2.en - r2.st < 450) {
+                                                        const conf2 = this._p(eA, r2.st, eB, r2.st - bl, r2.en - r2.st);
+                                                        // 必须整段在主区间之前(片头曲本身在开头时,这里会撞上主区间而被排除,不会重复上报)
+                                                        if (conf2 >= 0.65 && r2.en <= bestR.aStart + 20 && (r2.en - bl) <= bestR.bStart + 20) bestR.bump = { aStart: r2.st, bStart: r2.st - bl, len: r2.en - r2.st, conf: conf2 };
+                                                    }
+                                                }
+                                            }
                                         }
                                         return bestR;
                                     },
@@ -10771,13 +10807,13 @@
                                     },
                                     // —— 片头包络持久化(量化到 Uint8,Pearson 尺度无关;~1KB/剧) ——
                                     _envKey(o) { return 'donggua_afpenv|' + o.title + '|' + o.site; },
-                                    _envSave(o, intro, sec, maxStart, dur) {
+                                    _q(f) { let mx = 0; for (let i = 0; i < f.length; i++) if (f[i] > mx) mx = f[i]; const u8 = new Uint8Array(f.length); for (let i = 0; i < f.length; i++) u8[i] = Math.min(255, Math.round(f[i] / (mx || 1) * 255)); let s = ''; for (let i = 0; i < u8.length; i += 4096) s += String.fromCharCode.apply(null, u8.subarray(i, i + 4096)); return btoa(s); },
+                                    _dq(s) { const bin = atob(s), f = new Float32Array(bin.length); for (let i = 0; i < bin.length; i++) f[i] = bin.charCodeAt(i); return f; },
+                                    _envSave(o, intro, sec, maxStart, dur, benv, bdur) {
                                         try {
-                                            let mx = 0; for (let i = 0; i < intro.length; i++) if (intro[i] > mx) mx = intro[i];
-                                            const u8 = new Uint8Array(intro.length);
-                                            for (let i = 0; i < intro.length; i++) u8[i] = Math.min(255, Math.round(intro[i] / (mx || 1) * 255));
-                                            let s = ''; for (let i = 0; i < u8.length; i += 4096) s += String.fromCharCode.apply(null, u8.subarray(i, i + 4096));
-                                            localStorage.setItem(this._envKey(o), JSON.stringify({ v: 1, sec, maxStart, dur, d: btoa(s) }));
+                                            const rec = { v: 2, sec, maxStart, dur, d: this._q(intro) };   // v2:v1 可能学到片源头部贴片,作废重学
+                                            if (benv && benv.length) { rec.bd = this._q(benv); rec.bdur = bdur; }
+                                            localStorage.setItem(this._envKey(o), JSON.stringify(rec));
                                             const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('donggua_afpenv|') === 0) ks.push(k); }
                                             if (ks.length > 30) ks.slice(0, ks.length - 30).forEach(k => localStorage.removeItem(k));
                                         } catch (e) { }
@@ -10785,10 +10821,8 @@
                                     _envLoad(o) {
                                         try {
                                             const s = localStorage.getItem(this._envKey(o)); if (!s) return null;
-                                            const j = JSON.parse(s); if (j.v !== 1) return null;
-                                            const bin = atob(j.d), f = new Float32Array(bin.length);
-                                            for (let i = 0; i < bin.length; i++) f[i] = bin.charCodeAt(i);
-                                            return { env: f, sec: j.sec, maxStart: j.maxStart || 0, dur: j.dur || j.sec };
+                                            const j = JSON.parse(s); if (j.v !== 2) return null;
+                                            return { env: this._dq(j.d), sec: j.sec, maxStart: j.maxStart || 0, dur: j.dur || j.sec, benv: j.bd ? this._dq(j.bd) : null, bdur: j.bdur || 0 };
                                         } catch (e) { return null; }
                                     },
                                     _epNumOf(name, idx) { const m = String(name || '').match(/第\s*0*(\d+)\s*[集话話期]/) || String(name || '').match(/\bep\.?\s*0*(\d+)/i) || String(name || '').match(/^0*(\d+)$/); return m ? parseInt(m[1], 10) : idx + 1; },
@@ -10799,13 +10833,15 @@
                                     },
                                     // 让一集的标记生效:①更新本地共享标记缓存(否则 15min 内导航到该集读的是旧缓存→无按钮,这正是"下一集不出按钮"的根因)
                                     //   ②当前集即时点亮 _introCur ③上报服务器。当前集给 src:'afp'(本机实测本集,允许本会话自动跳),其余集缓存记 v:1/src:'auto'(需佐证才自动跳,只先出按钮)——与 afpEngine 边看边学同一套安全模型。
-                                    _apply(o, ep, os, oe, isCur) {
+                                    _apply(o, ep, os, oe, isCur, bump) {
                                         os = Math.round(os * 10) / 10; oe = Math.round(oe * 10) / 10;
                                         if (oe - os < 10) return;
                                         const V = o.vue;
-                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = { os, oe, v: 1, src: 'auto' }; } catch (e) { }
-                                        try { if (V._introEpNum() === ep && !V._introCur) V._introCur = { os, oe, ed: 0, src: isCur ? 'afp' : 'auto', v: isCur ? 0 : 1 }; } catch (e) { }
-                                        V._introUpload(o.title, o.site, ep, os, oe, 'auto');
+                                        const bs = bump && bump.be > bump.bs ? Math.max(0, Math.round(bump.bs * 10) / 10) : 0;
+                                        const be = bump && bump.be > bump.bs ? Math.round(bump.be * 10) / 10 : 0;
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = { os, oe, v: 1, src: 'auto', bs, be, bv: be > bs ? 1 : 0 }; } catch (e) { }
+                                        try { if (V._introEpNum() === ep && !V._introCur) V._introCur = { os, oe, ed: 0, src: isCur ? 'afp' : 'auto', v: isCur ? 0 : 1, bs, be, bv: be > bs ? 1 : 0 }; } catch (e) { }
+                                        V._introUpload(o.title, o.site, ep, os, oe, 'auto', be > bs ? { bs, be } : null);
                                     },
                                     // 主入口(canplay 无共享标记时调,自带全部守卫,调用方无需管状态):
                                     //   没学过 → 抓 本集+邻集 包络互相关学出片头 → 两集标记+本集立即出按钮+存片头包络(学习模式);
@@ -10837,9 +10873,15 @@
                                                 }
                                                 if (hit) {
                                                     const os = hit.at / this.EHZ;
-                                                    this._apply(o, o.ep, os, os + (saved.dur || saved.sec), true);
+                                                    // 顺带定位开头贴片(只在前 150s 里找,盗版源都贴在头部)
+                                                    let bump = null;
+                                                    if (saved.benv && saved.benv.length) {
+                                                        const bh = this._xcorrDetect(saved.benv, sess.env, Math.min(sess.n, 150 * this.EHZ));
+                                                        if (bh) bump = { bs: Math.round(bh.at / this.EHZ * 10) / 10, be: Math.round((bh.at / this.EHZ + saved.bdur) * 10) / 10 };
+                                                    }
+                                                    this._apply(o, o.ep, os, os + (saved.dur || saved.sec), true, bump);
                                                     try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已定位本集片头', 2000); } catch (e) { }
-                                                    console.log('[AFP离线] 定位: 第' + o.ep + '集片头 @' + os.toFixed(1) + 's (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
+                                                    console.log('[AFP离线] 定位: 第' + o.ep + '集片头 @' + os.toFixed(1) + 's' + (bump ? ' + 开头贴片 @' + bump.bs + '→' + bump.be + 's' : '') + ' (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
                                                 } else console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's 未找到已知片头(可能本集无片头/被剪)');
                                                 return;
                                             }
@@ -10849,14 +10891,24 @@
                                             if (!sib) return;
                                             console.log('[AFP离线] 冷启动学习: 抓 本集+第' + sib.ep + '集 音频响度包络(先前4分钟,学不出自动扩到10分钟)…');
                                             const sA = this._mkSess(curUrl), sB = this._mkSess(sib.url);
-                                            let r = null;
-                                            for (const cap of this.STAGES) {
+                                            let r = null, rBak = null;
+                                            for (let si = 0; si < this.STAGES.length; si++) {
+                                                const cap = this.STAGES[si];
                                                 const mA = await this._fetchEnvTo(sA, F, cap), mB = await this._fetchEnvTo(sB, F, cap);
                                                 r = await this._xcorrLearn(sA.env, sA.n, sB.env, sB.n);
-                                                if (r) break;
-                                                if (!mA && !mB) break;
-                                                if (cap !== this.STAGES[this.STAGES.length - 1]) console.log('[AFP离线] 前' + cap + 's 未见公共片头,扩窗继续…');
+                                                const isLast = si === this.STAGES.length - 1 || (!mA && !mB);
+                                                if (r) {
+                                                    // 🚨 疑似片源头部赞助贴片(网络视听logo/广告卡):两集都贴在最开头且不长——盗版源每集头部注入同一段
+                                                    //   音频,会被当成"公共片头"提前收工,真片头曲(可能在几分钟后)根本没进窗口。用户实测踩坑(40795广告卡)。
+                                                    //   不急着收,扩窗看有没有更长的真片头;全扫完确实只有它,才按片头使用(有的剧片头确实又短又靠前)。
+                                                    const sus = r.aStart / this.EHZ < 60 && r.bStart / this.EHZ < 60 && r.len / this.EHZ < 45;
+                                                    if (!sus || isLast) break;
+                                                    rBak = r; r = null;
+                                                    console.log('[AFP离线] 前' + cap + 's 只匹到开头 ' + (rBak.len / this.EHZ).toFixed(0) + 's 公共段(疑似片源赞助贴片),扩窗找真片头…');
+                                                } else if (!isLast) console.log('[AFP离线] 前' + cap + 's 未见公共片头,扩窗继续…');
+                                                if (isLast) break;
                                             }
+                                            if (!r && rBak) { r = rBak; console.log('[AFP离线] 全片前10分钟只有开头公共段,按片头使用'); }
                                             if (!r) { st.phase = 'nointro'; done = true; console.log('[AFP离线] 两集前10分钟无公共片头(可能真没有固定片头曲),本剧本线路不再自动分析'); return; }
                                             // 精修:局部重锚(坐标以此为准,累计轴在脏流上会漂)+跨音频空洞续接;精修不出(极端情况)退回粗结果
                                             const fine = this._refineRegion(sA, sB, r.aStart / this.EHZ, r.bStart / this.EHZ, r.len / this.EHZ);
@@ -10864,14 +10916,19 @@
                                             if (fine) { os1 = fine.osA; oe1 = fine.oeA; os2 = fine.osB; oe2 = fine.oeB; headEnv = fine.headEnv; headSec = fine.headSec; }
                                             else { os1 = r.aStart / this.EHZ; oe1 = os1 + r.len / this.EHZ; os2 = r.bStart / this.EHZ; oe2 = os2 + r.len / this.EHZ; headEnv = sA.env.slice(r.aStart, r.aStart + r.len); headSec = r.len / this.EHZ; }
                                             const dur = Math.min(oe1 - os1, oe2 - os2);   // 后续集定位的跳过时长取两集较小者(保守不过跳)
-                                            this._apply(o, o.ep, os1, oe1, true);         // 本集:即时点亮 + 共享缓存 + 上报
-                                            this._apply(o, sib.ep, os2, oe2, false);      // 邻集:共享缓存 + 上报(修"下一集不出按钮")
-                                            this._envSave(o, headEnv, headSec, Math.max(os1, os2), dur);
-                                            st.intro = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2) };
+                                            // 开头贴片区间(盗版源注入的广告/许可卡,片头曲之外的第二个可跳区间)——一起上报共享
+                                            const bp = r.bump || null;
+                                            const bumpA = bp ? { bs: Math.round(bp.aStart / this.EHZ * 10) / 10, be: Math.round((bp.aStart + bp.len) / this.EHZ * 10) / 10 } : null;
+                                            const bumpB = bp ? { bs: Math.round(bp.bStart / this.EHZ * 10) / 10, be: Math.round((bp.bStart + bp.len) / this.EHZ * 10) / 10 } : null;
+                                            this._apply(o, o.ep, os1, oe1, true, bumpA);         // 本集:即时点亮 + 共享缓存 + 上报
+                                            this._apply(o, sib.ep, os2, oe2, false, bumpB);      // 邻集:共享缓存 + 上报(修"下一集不出按钮")
+                                            const benv = bp ? sA.env.slice(bp.aStart, bp.aStart + bp.len) : null;
+                                            this._envSave(o, headEnv, headSec, Math.max(os1, os2), dur, benv, bp ? bp.len / this.EHZ : 0);
+                                            st.intro = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2), benv, bdur: bp ? bp.len / this.EHZ : 0 };
                                             st.phase = 'learned'; done = true;
                                             this._epDone[epK] = 1; this._epDone[K + '|' + sib.ep] = 1;
                                             try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已智能识别片头', 2500); } catch (e) { }
-                                            console.log('[AFP离线] ✅ 学习成功: 片头 ' + dur.toFixed(0) + 's @本集 ' + os1.toFixed(1) + '→' + oe1.toFixed(1) + 's / 第' + sib.ep + '集 ' + os2.toFixed(1) + '→' + oe2.toFixed(1) + 's (' + (fine ? '已局部精修' + (fine.bridged ? '+跨空洞续接' : '') : '粗对齐') + ',会话流量 ' + this._mb.toFixed(0) + 'MB;后续集将自动定位)');
+                                            console.log('[AFP离线] ✅ 学习成功: 片头 ' + dur.toFixed(0) + 's @本集 ' + os1.toFixed(1) + '→' + oe1.toFixed(1) + 's / 第' + sib.ep + '集 ' + os2.toFixed(1) + '→' + oe2.toFixed(1) + 's' + (bumpA ? ' + 开头贴片 ' + bumpA.bs + '→' + bumpA.be + 's' : '') + ' (' + (fine ? '已局部精修' + (fine.bridged ? '+跨空洞续接' : '') : '粗对齐') + ',会话流量 ' + this._mb.toFixed(0) + 'MB;后续集将自动定位)');
                                         } catch (e) {
                                             console.warn('[AFP离线] 失败(最多再自动试' + Math.max(0, 2 - st.tries) + '次),本次回退边看边学:', e && e.message);
                                         } finally {
