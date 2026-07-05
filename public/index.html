@@ -10054,10 +10054,6 @@
                                                 }
                                             } catch (e) { console.warn('Highlight update failed:', e); }
 
-                                            // 初始化/显示跳过片头片尾 UI
-                                            if (isOpen && window.skipManager) {
-                                                window.skipManager.initUI();
-                                            }
                                             // 初始化广告过滤 UI
                                             if (isOpen && window.AdFilter && window.AdFilter.initUI) {
                                                 window.AdFilter.initUI();
@@ -10069,152 +10065,16 @@
                                 observer.observe(settingBox, { attributes: true });
 
                                 // ========== ✨ 跳过片头片尾管理器 ==========
+                                // 全自动:标记来自服务器共享/离线包络分析/边看边学,不再有手动"设置片头/设置片尾"入口——
+                                //   人工纠错交给共享标记随更多用户提交自然收敛(±5s/±8s 加权计票 + 削票纠偏)。
                                 window.skipManager = {
                                     vue: this,
-                                    config: { intro: 0, outro: 0, enabled: false },
-                                    hasSkippedIntro: false,
-                                    hasSkippedOutro: false,
-
-                                    getKey() {
-                                        const vodName = this.vue.currentGroup?.name || 'default';
-                                        const safeName = vodName.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
-                                        return `skip_config_${safeName}`;
-                                    },
                                     load() {
-                                        try {
-                                            const saved = localStorage.getItem(this.getKey());
-                                            if (saved) this.config = JSON.parse(saved);
-                                            else this.config = { intro: 0, outro: 0, enabled: false };
-                                        } catch (e) { }
-                                        this.hasSkippedIntro = false;
-                                        this.hasSkippedOutro = false;
-                                        this.updateUI();
                                         // ⏭️ 按集智能标记(服务器共享+指纹学习)初始化——canplay 每集/每次换源都会走到这里
                                         try { this.vue._introOnEpisode(); } catch (e) { }
                                     },
-                                    save() {
-                                        localStorage.setItem(this.getKey(), JSON.stringify(this.config));
-                                        this.updateUI();
-                                    },
-                                    formatTime(seconds) {
-                                        if (!seconds) return '点击设定';
-                                        const m = Math.floor(seconds / 60);
-                                        const s = Math.floor(seconds % 60);
-                                        return `${m}:${s.toString().padStart(2, '0')}`;
-                                    },
-                                    setIntro() {
-                                        if (!dp.video) return;
-                                        const time = Math.floor(dp.video.currentTime);
-                                        if (dp.video.duration && time > dp.video.duration * 0.5) {
-                                            dp.notice('片头时间不能超过视频时长的一半', 2000);
-                                            return;
-                                        }
-                                        this.config.intro = time;
-                                        this.config.enabled = true;
-                                        this.save();
-                                        dp.notice(`已设置片头截止点: ${this.formatTime(this.config.intro)}`);
-                                        // ⏭️ 同时作为本集 manual 标记上报共享(片头=[0,截止点];人工纠正可覆盖低票自动值)
-                                        try {
-                                            const v = this.vue, site = v.currentSource && v.currentSource.site_key, ep = v._introEpNum();
-                                            if (site && ep != null && time >= 10) {
-                                                const cur = v._introCur || {};
-                                                v._introCur = { ...cur, os: 0, oe: time, ed: cur.ed || 0, ev: cur.ev || 0, edSrc: cur.edSrc || null, src: 'manual', v: 1 };
-                                                v._introSkipped = true;   // 刚手动设完不立刻弹按钮/自动跳
-                                                v._introUpload(v._introTitleKey(), site, ep, 0, time, 'manual');
-                                            }
-                                        } catch (e) { }
-                                    },
-                                    setOutro() {
-                                        if (!dp.video) return;
-                                        const time = Math.floor(dp.video.currentTime);
-                                        if (dp.video.duration && time < dp.video.duration * 0.5) {
-                                            dp.notice('片尾起点通常在视频后半部分，请拖动进度条后再设置', 3000);
-                                            return;
-                                        }
-                                        if (this.config.intro > 0 && time <= this.config.intro) {
-                                            dp.notice('片尾时间必须晚于片头', 2000);
-                                            return;
-                                        }
-                                        this.config.outro = time;
-                                        this.config.enabled = true;
-                                        this.save();
-                                        dp.notice(`已设置片尾起点: ${this.formatTime(this.config.outro)}`);
-                                        // 手动片尾点也作为按集共享标记上报；没有片头标记时允许片尾单独投票。
-                                        try {
-                                            const v = this.vue, site = v.currentSource && v.currentSource.site_key, ep = v._introEpNum();
-                                            if (site && ep != null) {
-                                                const cur = v._introCur || {};
-                                                const os = cur.oe > cur.os ? cur.os : null, oe = cur.oe > cur.os ? cur.oe : null;
-                                                v._introCur = { os: cur.os || 0, oe: cur.oe || 0, ed: time, ev: Math.max(cur.ev || 0, 1), edSrc: 'manual', src: cur.src || 'manual', v: cur.v || 1, bs: cur.bs || 0, be: cur.be || 0, bv: cur.bv || 0 };
-                                                v._outroSkipped = true;   // 刚手动设完不立刻切下一集
-                                                v._introUpload(v._introTitleKey(), site, ep, os, oe, 'manual', null, time);
-                                            }
-                                        } catch (e) { }
-                                    },
-                                    clear() {
-                                        this.config = { intro: 0, outro: 0, enabled: false };
-                                        this.save();
-                                        dp.notice('已清除跳过配置');
-                                    },
-                                    updateUI() {
-                                        const group = document.querySelector('.dplayer-setting-skip-group');
-                                        if (!group) return;
-                                        const toggleBg = group.querySelector('.dplayer-toggle-icon');
-                                        const toggleKnob = group.querySelector('.toggle-knob');
-                                        if (toggleBg && toggleKnob) {
-                                            if (this.config.enabled) {
-                                                toggleBg.style.background = '#e50914';
-                                                toggleKnob.style.transform = 'translateX(18px)';
-                                            } else {
-                                                toggleBg.style.background = 'rgba(255,255,255,0.2)';
-                                                toggleKnob.style.transform = 'translateX(0)';
-                                            }
-                                        }
-                                        const introVal = group.querySelector('.intro-val');
-                                        if (introVal) introVal.textContent = this.formatTime(this.config.intro);
-                                        const outroVal = group.querySelector('.outro-val');
-                                        if (outroVal) outroVal.textContent = this.formatTime(this.config.outro);
-                                    },
-                                    initUI() {
-                                        const panel = document.querySelector('.dplayer-setting-origin-panel');
-                                        if (!panel || panel.querySelector('.dplayer-setting-skip-group')) {
-                                            if (panel) this.updateUI();
-                                            return;
-                                        }
-                                        const html = `
-                                            <div class="dplayer-setting-skip-group" style="border-top: 1px solid rgba(255,255,255,0.1); margin-top: 5px; padding-top: 5px;">
-                                                <div class="dplayer-setting-item dplayer-setting-skip-toggle" style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                                                    <span class="dplayer-label" style="white-space: nowrap;">跳过片头片尾</span>
-                                                    <div class="dplayer-toggle-icon" style="position: relative; width: 40px; height: 22px; background: ${this.config.enabled ? '#e50914' : 'rgba(255,255,255,0.2)'}; border-radius: 20px; transition: background 0.3s; flex-shrink: 0;">
-                                                        <div class="toggle-knob" style="position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform 0.3s; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transform: translateX(${this.config.enabled ? '18px' : '0'});"></div>
-                                                    </div>
-                                                </div>
-                                                <div class="dplayer-setting-item dplayer-setting-set-intro" style="cursor: pointer; justify-content: space-between;">
-                                                    <span class="dplayer-label">设置片头</span>
-                                                    <span class="dplayer-value intro-val" style="opacity: 0.8;">${this.formatTime(this.config.intro)}</span>
-                                                </div>
-                                                <div class="dplayer-setting-item dplayer-setting-set-outro" style="cursor: pointer; justify-content: space-between;">
-                                                    <span class="dplayer-label">设置片尾</span>
-                                                    <span class="dplayer-value outro-val" style="opacity: 0.8;">${this.formatTime(this.config.outro)}</span>
-                                                </div>
-                                                 <div class="dplayer-setting-item dplayer-setting-del-config" style="cursor: pointer; color: #888; font-size: 12px; height: 32px; display: flex; align-items: center; padding: 0 10px; margin-top: 0;">
-                                                    <i class="fas fa-trash-alt" style="margin-right:8px;"></i> 清除跳过配置
-                                                </div>
-                                            </div>
-                                        `;
-                                        panel.insertAdjacentHTML('beforeend', html);
-                                        const group = panel.querySelector('.dplayer-setting-skip-group');
-                                        group.querySelector('.dplayer-setting-skip-toggle').addEventListener('click', () => {
-                                            this.config.enabled = !this.config.enabled;
-                                            this.save();
-                                            dp.notice(this.config.enabled ? '已开启跳过功能' : '已关闭跳过功能');
-                                        });
-                                        group.querySelector('.dplayer-setting-set-intro').addEventListener('click', () => this.setIntro());
-                                        group.querySelector('.dplayer-setting-set-outro').addEventListener('click', () => this.setOutro());
-                                        group.querySelector('.dplayer-setting-del-config').addEventListener('click', () => this.clear());
-                                    },
                                     check(time) {
-                                        // ── 第一优先：按集智能标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳 ──
+                                        // 按集智能标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳
                                         //   三个独立可跳区间:开头贴片(bs~be→「跳过开头」)、片头曲(os~oe→「跳过片头」)、片尾(ed→切下一集),各自只触发一次
                                         const v = this.vue, cur = v && v._introCur;
                                         // switchVideo 换集瞬间会发一次 currentTime=0 的 timeupdate、此时 duration=NaN；此刻绝不自动跳(否则新集从 oe 起播)
@@ -10239,18 +10099,6 @@
                                             }
                                         } else if (v && v.introBtn.show) {
                                             v.introBtn.show = false; v._introRenderBtn();   // 标记被清/不安全 → 收起
-                                        }
-                                        // ── 第二优先：旧版按剧手动配置(齿轮菜单"跳过片头片尾")。有按集片头标记时片头让位避免双跳 ──
-                                        if (!this.config.enabled) return;
-                                        if (!(cur && cur.oe > cur.os) && this.config.intro > 0 && time < this.config.intro && !this.hasSkippedIntro) {
-                                            dp.seek(this.config.intro);
-                                            dp.notice('已跳过片头');
-                                            this.hasSkippedIntro = true;
-                                        }
-                                        if (this.config.outro > 0 && time > this.config.outro && !this.hasSkippedOutro) {
-                                            dp.notice('已跳过片尾');
-                                            this.hasSkippedOutro = true;
-                                            if (dp.events) dp.events.trigger('ended');
                                         }
                                     }
                                 };
@@ -10912,7 +10760,9 @@
                                         const V = o.vue;
                                         let old = null;
                                         try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) old = V._introMarks.marks[ep] || null; } catch (e) { }
-                                        const next = { ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || 'auto', ed, ev: 1, edSrc: 'afp' };
+                                        // edSrc:'afp' 只应活在本会话的即时 _introCur(下方,按 isCur 门控)——绝不能写进持久化共享缓存 marks[ep]:
+                                        // 否则从未被本机实测验证过的邻集(仅供后台学习抓取,isCur=false)会被标成"已验证",绕开 ev≥2 才自动跳的安全闸。
+                                        const next = { ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || 'auto', ed, ev: 1, edSrc: old?.edSrc || null };
                                         try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = next; } catch (e) { }
                                         try {
                                             if (V._introEpNum() === ep) {
@@ -11008,8 +10858,10 @@
                                                     } else console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's 未找到已知片头(可能本集无片头/被剪)');
                                                 } else if (saved.env) { done = true; st.phase = 'learned'; }
                                                 if (needOutro) {
-                                                    if (saved.oenv) await this._detectOutro(o, F, saved);
-                                                    else if (sib) { await this._learnOutro(o, F, curUrl, sib, st, saved); saved = st.intro || saved; }
+                                                    // 处理完(不管命中与否)就清 needOutro——否则 saved.env 缺失时会 fallthrough 到下面"学习模式"再触发一次 _learnOutro,
+                                                    // 对刚用 _detectOutro 复用过的已知 oenv 做重复抓取+烧 outroTries+对同一集重复上报
+                                                    if (saved.oenv) { await this._detectOutro(o, F, saved); needOutro = false; }
+                                                    else if (sib) { const ok = await this._learnOutro(o, F, curUrl, sib, st, saved); saved = st.intro || saved; if (ok) needOutro = false; }
                                                 }
                                                 if (saved.env || !needIntro) return;
                                             }
