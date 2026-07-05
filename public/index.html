@@ -4473,12 +4473,12 @@
                         </label>
                     </div>
 
-                    <!-- ⏭️ 跳过片头 -->
+                    <!-- ⏭️ 跳过片头/片尾 -->
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">跳过片头按钮</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">播到片头时弹出「跳过片头」按钮（本地自动学习 + 全站共享标记）</div>
+                            <div style="color: #fff; font-size: 15px; font-weight: 500;">跳过按钮</div>
+                            <div style="color: #888; font-size: 12px; margin-top: 4px;">播到片头/片尾时弹出跳过按钮（本地自动学习 + 全站共享标记）</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="introSkipShow" @change="saveSettings('introSkipShow')">
@@ -4488,8 +4488,8 @@
                     <div
                         style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">自动跳过片头</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">不弹按钮，识别到片头直接跳过</div>
+                            <div style="color: #fff; font-size: 15px; font-weight: 500;">自动跳过片头/片尾</div>
+                            <div style="color: #888; font-size: 12px; margin-top: 4px;">不弹按钮，识别到片头直接跳过；识别到片尾直接切下一集</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="introSkipAuto" @change="saveSettings('introSkipAuto')">
@@ -4703,7 +4703,7 @@
                 <div class="player-box" style="position: relative;"
                     :style="previewLocked && currentGroup && currentGroup.pic ? { backgroundImage: 'url(' + currentGroup.pic + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
-                    <!-- ⏭️ 跳过片头按钮由 JS 注入进 #dplayer 容器内(而非此处兄弟节点)——否则全屏时(#dplayer 独占 top layer)按钮不可见 -->
+                    <!-- ⏭️ 跳过按钮由 JS 注入进 #dplayer 容器内(而非此处兄弟节点)——否则全屏时(#dplayer 独占 top layer)按钮不可见 -->
                     <!-- ⏳ 深链/测速加载态：视频起播前在播放器区域显示加载指示，避免黑屏空等 -->
                     <div v-if="!previewLocked && !currentUrl && !autoRetryMessage && (deepLinkLoading || isTestingSources || loadingDetail)"
                         class="player-loading-overlay">
@@ -5886,10 +5886,10 @@
                     showSettingsModal: false,  // 设置弹窗显示状态
                     hideRandomRow: (function () { try { return localStorage.getItem('donggua_hide_random') === 'true'; } catch (e) { return false; } })(),  // 隐藏随机盲盒
                     filterNsfw: (function () { try { return localStorage.getItem('donggua_filter_nsfw') !== 'false'; } catch (e) { return true; } })(),  // 过滤 NSFW 内容（默认开启）
-                    // ⏭️ 跳过片头：按钮显示开关(默认开) / 自动跳过(默认关,开了不弹按钮直接跳)
+                    // ⏭️ 跳过片头/片尾：按钮显示开关(默认开) / 自动跳过(默认关,开了不弹按钮直接跳/切下一集)
                     introSkipShow: (function () { try { return localStorage.getItem('donggua_intro_show') !== 'false'; } catch (e) { return true; } })(),
                     introSkipAuto: (function () { try { return localStorage.getItem('donggua_intro_auto') === 'true'; } catch (e) { return false; } })(),
-                    introBtn: { show: false, label: '跳过片头', to: 0, kind: 'op' },   // 悬浮按钮状态(由 skipManager.check 驱动)
+                    introBtn: { show: false, label: '跳过片头', to: 0, kind: 'op', flag: '_introSkipped' },   // 悬浮按钮状态(由 skipManager.check 驱动)
                     coverScale: (function () { try { return parseFloat(localStorage.getItem('donggua_cover_scale')) || 1; } catch (e) { return 1; } })(),  // 📐 封面+文字等比缩放(几档,跨设备)
                     coverScaleLevels: [{ v: 0.9, label: '小' }, { v: 1.0, label: '标准' }, { v: 1.15, label: '大' }, { v: 1.35, label: '特大' }],
 
@@ -9614,6 +9614,7 @@
                         this._introCur = null;
                         this._introSkipped = false;
                         this._bumpSkipped = false;
+                        this._outroSkipped = false;
                         this.introBtn.show = false; this._introRenderBtn();
                         // 共享标记(每 剧|线路 拉一次,15min 内存缓存)
                         const marksKey = title + '|' + site;
@@ -9627,11 +9628,11 @@
                         }
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
                         const mk = this._introMarks.marks[ep];
-                        if (mk && mk.oe > mk.os) this._introCur = { os: mk.os, oe: mk.oe, ed: mk.ed || 0, src: mk.src, v: mk.v || 1, bs: mk.bs || 0, be: mk.be || 0, bv: mk.bv || 0 };
+                        if (mk && (mk.oe > mk.os || mk.ed > 0)) this._introCur = { os: mk.os || 0, oe: mk.oe || 0, ed: mk.ed || 0, ev: mk.ev || (mk.ed > 0 ? 1 : 0), edSrc: mk.edSrc || null, src: mk.src, v: mk.v || 1, bs: mk.bs || 0, be: mk.be || 0, bv: mk.bv || 0 };
                         // 🎬 本集无共享标记 → 后台离线分析(不用看片头):没学过→两集包络学习;学过→只定位本集。
                         //   全部守卫(每剧学一次/每集定位一次/失败限2次/流量上限)内聚在模块里,这里只管调——
                         //   ⚠️别在这儿加守卫变量:上一版 Vue 侧 _introOfflineKey 被多个异步回调竞态复位,导致换集就重学、流量爆炸。
-                        if (!mk && multiEp && window.afpOffline) {
+                        if (multiEp && window.afpOffline && (!mk || !mk.ed || !(mk.oe > mk.os))) {
                             window.afpOffline.learnOrDetect({ vue: this, title, site, ep, epList: this.episodeList }).catch(() => { });
                         }
                         // 指纹引擎(边看边学,零流量兜底 + 后续集实时检测)：无标记或低票才跑;有高票标记就省 CPU
@@ -9649,31 +9650,41 @@
                 _afpLearned(list, info) {
                     const curEp = this._introEpNum();
                     for (const m of (list || [])) {
-                        if (m.ep === curEp && !this._introCur) this._introCur = { os: m.os, oe: m.oe, ed: 0, src: 'afp', v: 0 };
+                        if (m.ep === curEp && !this._introCur) this._introCur = { os: m.os, oe: m.oe, ed: 0, ev: 0, src: 'afp', v: 0 };
                         this._introUpload(info.title, info.site, m.ep, m.os, m.oe, 'auto');
-                        if (this._introMarks && this._introMarks.key === info.title + '|' + info.site) { const om = this._introMarks.marks[m.ep] || {}; this._introMarks.marks[m.ep] = { os: m.os, oe: m.oe, v: 1, src: 'auto', bs: om.bs || 0, be: om.be || 0, bv: om.bv || 0 }; }
+                        if (this._introMarks && this._introMarks.key === info.title + '|' + info.site) { const om = this._introMarks.marks[m.ep] || {}; this._introMarks.marks[m.ep] = { ...om, os: m.os, oe: m.oe, v: 1, src: 'auto', bs: om.bs || 0, be: om.be || 0, bv: om.bv || 0, ed: om.ed || 0, ev: om.ev || 0 }; }
                     }
                 },
-                // 上报标记(自动学习/手动标记共用)。token 与历史同步同一套。bump = 可选开头贴片区间 {bs,be}
-                _introUpload(titleKeyOrName, site, ep, os, oe, src, bump) {
+                // 上报标记(自动学习/手动标记共用)。token 与历史同步同一套。bump = 可选开头贴片区间 {bs,be}; outro = 可选片尾起点
+                _introUpload(titleKeyOrName, site, ep, os, oe, src, bump, outro, outroDuration) {
                     try {
                         const token = localStorage.getItem('emax_auth_hash') || '';
-                        const body = { token, title: (this.currentGroup && this.currentGroup.name) || titleKeyOrName, site, ep, op_start: os, op_end: oe, src: src || 'auto' };
+                        const body = { token, title: (this.currentGroup && this.currentGroup.name) || titleKeyOrName, site, ep, src: src || 'auto' };
+                        if (isFinite(os) && isFinite(oe) && oe > os) { body.op_start = os; body.op_end = oe; }
                         if (bump && bump.be > bump.bs) { body.b_start = bump.bs; body.b_end = bump.be; }
+                        if (outro != null && isFinite(outro)) {
+                            body.ed_start = Math.round(Number(outro) * 10) / 10;
+                            if (isFinite(outroDuration) && outroDuration > 0) body.duration = Math.round(Number(outroDuration) * 10) / 10;
+                            else try { if (typeof dp !== 'undefined' && dp && dp.video && isFinite(dp.video.duration)) body.duration = Math.round(dp.video.duration * 10) / 10; } catch (e) { }
+                        }
                         fetch('/api/intro/mark', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify(body)
                         }).catch(() => { });
                     } catch (e) { }
                 },
-                // 点击「跳过片头」按钮
+                // 点击「跳过」按钮
                 introSkipNow() {
                     try {
                         if (!this.introBtn.show) return;
-                        const to = this.introBtn.to, isBump = this.introBtn.flag === '_bumpSkipped';
+                        const to = this.introBtn.to, flag = this.introBtn.flag || '_introSkipped';
                         this.introBtn.show = false; this._introRenderBtn();
-                        this[isBump ? '_bumpSkipped' : '_introSkipped'] = true;   // 开头贴片/片头曲 两个区间各自只跳一次
-                        if (typeof dp !== 'undefined' && dp && isFinite(to)) { dp.seek(to); dp.notice(isBump ? '已跳过开头' : '已跳过片头'); }
+                        this[flag] = true;   // 开头贴片/片头曲/片尾各自只触发一次
+                        if (this.introBtn.kind === 'outro') {
+                            if (typeof dp !== 'undefined' && dp) { dp.notice('已跳过片尾'); if (dp.events) dp.events.trigger('ended'); }
+                        } else if (typeof dp !== 'undefined' && dp && isFinite(to)) {
+                            dp.seek(to); dp.notice(flag === '_bumpSkipped' ? '已跳过开头' : '已跳过片头');
+                        }
                     } catch (e) { }
                 },
                 // 把跳过按钮以 DOM 形式注入/更新在 #dplayer 容器内(全屏可见)。由 introBtn.show 驱动。
@@ -10106,7 +10117,8 @@
                                         try {
                                             const v = this.vue, site = v.currentSource && v.currentSource.site_key, ep = v._introEpNum();
                                             if (site && ep != null && time >= 10) {
-                                                v._introCur = { os: 0, oe: time, ed: (v._introCur && v._introCur.ed) || 0, src: 'manual', v: 1 };
+                                                const cur = v._introCur || {};
+                                                v._introCur = { ...cur, os: 0, oe: time, ed: cur.ed || 0, ev: cur.ev || 0, edSrc: cur.edSrc || null, src: 'manual', v: 1 };
                                                 v._introSkipped = true;   // 刚手动设完不立刻弹按钮/自动跳
                                                 v._introUpload(v._introTitleKey(), site, ep, 0, time, 'manual');
                                             }
@@ -10127,6 +10139,17 @@
                                         this.config.enabled = true;
                                         this.save();
                                         dp.notice(`已设置片尾起点: ${this.formatTime(this.config.outro)}`);
+                                        // 手动片尾点也作为按集共享标记上报；没有片头标记时允许片尾单独投票。
+                                        try {
+                                            const v = this.vue, site = v.currentSource && v.currentSource.site_key, ep = v._introEpNum();
+                                            if (site && ep != null) {
+                                                const cur = v._introCur || {};
+                                                const os = cur.oe > cur.os ? cur.os : null, oe = cur.oe > cur.os ? cur.oe : null;
+                                                v._introCur = { os: cur.os || 0, oe: cur.oe || 0, ed: time, ev: Math.max(cur.ev || 0, 1), edSrc: 'manual', src: cur.src || 'manual', v: cur.v || 1, bs: cur.bs || 0, be: cur.be || 0, bv: cur.bv || 0 };
+                                                v._outroSkipped = true;   // 刚手动设完不立刻切下一集
+                                                v._introUpload(v._introTitleKey(), site, ep, os, oe, 'manual', null, time);
+                                            }
+                                        } catch (e) { }
                                     },
                                     clear() {
                                         this.config = { intro: 0, outro: 0, enabled: false };
@@ -10192,23 +10215,25 @@
                                     },
                                     check(time) {
                                         // ── 第一优先：按集智能标记(服务器共享/指纹学习/实时检测) → 奈飞式按钮 or 自动跳 ──
-                                        //   两个独立可跳区间:开头贴片(bs~be,网络视听许可证/平台方片头贴片→「跳过开头」) 与 片头曲(os~oe→「跳过片头」),各自只跳一次
+                                        //   三个独立可跳区间:开头贴片(bs~be→「跳过开头」)、片头曲(os~oe→「跳过片头」)、片尾(ed→切下一集),各自只触发一次
                                         const v = this.vue, cur = v && v._introCur;
                                         // switchVideo 换集瞬间会发一次 currentTime=0 的 timeupdate、此时 duration=NaN；此刻绝不自动跳(否则新集从 oe 起播)
                                         const dur = dp.video && dp.video.duration;
                                         const safe = time > 1 && isFinite(dur) && dur > 0 && !dp.video.seeking;
                                         if (cur && safe) {
                                             let reg = null;
-                                            if (cur.be > cur.bs && time >= cur.bs && time < cur.be - 1 && !v._bumpSkipped) reg = { to: cur.be, label: '跳过开头', flag: '_bumpSkipped', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头' };
-                                            else if (cur.oe > cur.os && time >= cur.os && time < cur.oe - 1 && !v._introSkipped) reg = { to: cur.oe, label: '跳过片头', flag: '_introSkipped', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头' };
+                                            if (cur.be > cur.bs && time >= cur.bs && time < cur.be - 1 && !v._bumpSkipped) reg = { to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头' };
+                                            else if (cur.oe > cur.os && time >= cur.os && time < cur.oe - 1 && !v._introSkipped) reg = { to: cur.oe, label: '跳过片头', flag: '_introSkipped', kind: 'op', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头' };
+                                            else if (cur.ed > 0 && time >= cur.ed && time < dur - 2 && !v._outroSkipped) reg = { to: 0, label: '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: cur.edSrc === 'afp' || (cur.ev || 0) >= 2, notice: '已自动跳过片尾' };
                                             if (reg) {
                                                 // 自动跳过只信【被佐证的】标记(票数≥2 或本会话实测检出),防单条误学/被刷的坏标记直接跳走正片
                                                 if (v.introSkipAuto && reg.ok) {
                                                     v[reg.flag] = true; if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); }
-                                                    dp.seek(reg.to); dp.notice(reg.notice);
+                                                    if (reg.kind === 'outro') { dp.notice(reg.notice); if (dp.events) dp.events.trigger('ended'); }
+                                                    else { dp.seek(reg.to); dp.notice(reg.notice); }
                                                     return;
                                                 }
-                                                if (v.introSkipShow && (!v.introBtn.show || v.introBtn.to !== reg.to)) { v.introBtn.label = reg.label; v.introBtn.to = reg.to; v.introBtn.flag = reg.flag; v.introBtn.show = true; v._introRenderBtn(); }
+                                                if (v.introSkipShow && (!v.introBtn.show || v.introBtn.to !== reg.to || v.introBtn.kind !== reg.kind)) { v.introBtn.label = reg.label; v.introBtn.to = reg.to; v.introBtn.flag = reg.flag; v.introBtn.kind = reg.kind; v.introBtn.show = true; v._introRenderBtn(); }
                                             } else if (v.introBtn.show) {
                                                 v.introBtn.show = false; v._introRenderBtn();   // 出了可跳区间(拖过/看完) → 收起
                                             }
@@ -10497,17 +10522,18 @@
                                     }
                                 };
 
-                                // ========== 🎬 离线 m3u8 片头分析(不用看片头,直接抓分片解码) ==========
-                                // 抓两集 m3u8 → 逐段解码 → 10Hz 响度包络(RMS,PCM 即弃,常驻内存仅几十 KB) → 两集包络互相关找相同音频段=片头。
+                                // ========== 🎬 离线 m3u8 片头/片尾分析(不用看片头片尾,直接抓分片解码) ==========
+                                // 抓两集 m3u8 → 逐段解码 → 10Hz 响度包络(RMS,PCM 即弃,常驻内存仅几十 KB) → 两集包络互相关找相同音频段=片头/片尾。
                                 //   真实数据(破事精英S2 红牛源)验证:同片头包络 Pearson≈0.89 且边界陡峭(2s 细窗可收到±1s);
                                 //   无关内容 30s 粗窗最高也会冒 0.71 假峰,但经 extent(连续5s窗≥0.5达15s+)+整段验证(≥0.6) 双过滤后全灭(倒序负样本 null)。
                                 //   ⚠️ 频谱指纹方案已被同一批真实数据证伪(46ms窗对亚秒错位极敏感→漏真;16维dB向量假相似→造假),勿走回头路。
                                 //   窗口 240s→480s→600s 渐进(长冷开场的剧片头可能在6~8分钟,破事精英S2第1集在6分45秒!)。
-                                //   学出后本地存片头包络:后续集只抓本集做"定位",标记上传共享→后来人零成本;iOS 可用;失败静默回退"边看边学"。
+                                //   学出后本地存片头/片尾包络:后续集只抓本集做"定位",标记上传共享→后来人零成本;iOS 可用;失败静默回退"边看边学"。
                                 if (!window.afpOffline) window.afpOffline = {
-                                    _ac: null, _busy: false, _st: {}, _epDone: {}, _mb: 0,
+                                    _ac: null, _busy: false, _st: {}, _epDone: {}, _outroDone: {}, _mb: 0,
                                     EHZ: 10,                      // 包络采样率 10Hz(100ms)
                                     STAGES: [240, 480, 600],      // 渐进分析窗口(秒)
+                                    TAIL_WIN: 240,                // 片尾只抓尾部4分钟,避免全片下载
                                     // TS → 干净 ADTS AAC(PAT→PMT→音频PID→PES去头→按 ADTS 同步字重扫)
                                     _tsToAdts(u8) {
                                         let pmtPid = -1, audioPid = -1, videoPid = -1, audioType = '', firstPts = -1, firstVPts = -1;
@@ -10603,6 +10629,15 @@
                                         }
                                         return out;
                                     },
+                                    _playlistDuration(text) {
+                                        let dur = 0, acc = 0;
+                                        for (const raw of text.split('\n')) {
+                                            const ln = raw.trim();
+                                            if (ln.indexOf('#EXTINF') === 0) dur = parseFloat(ln.slice(8)) || 0;
+                                            else if (ln && ln[0] !== '#') { acc += dur; dur = 0; }
+                                        }
+                                        return acc;
+                                    },
                                     _hexToBytes(h) { const a = new Uint8Array(h.length / 2); for (let i = 0; i < a.length; i++) a[i] = parseInt(h.substr(i * 2, 2), 16); return a; },
                                     async _decrypt(buf, key, F, cache) {
                                         if (!key.uri) throw new Error('无密钥URI'); if (!crypto.subtle) throw new Error('无SubtleCrypto');
@@ -10612,14 +10647,31 @@
                                         return await crypto.subtle.decrypt({ name: 'AES-CBC', iv }, ck, buf);
                                     },
                                     // —— 包络会话:一集一个,跨阶段累积 [0..600s) 的 10Hz RMS 包络;chunks 留每段 RMS 供局部重锚(免二次流量) ——
-                                    _mkSess(url) { return { url, base: null, text: null, env: new Float32Array(this.STAGES[this.STAGES.length - 1] * this.EHZ), n: 0, filled: 0, keyCache: {}, chunks: [] }; },
+                                    _mkSess(url) { return { url, base: null, text: null, env: new Float32Array(this.STAGES[this.STAGES.length - 1] * this.EHZ), n: 0, filled: 0, keyCache: {}, chunks: [], baseStart: 0 }; },
+                                    _mkTailSess(url) { return { url, base: null, text: null, env: null, n: 0, filled: 0, keyCache: {}, chunks: [], baseStart: 0, duration: 0 }; },
                                     // 把 sess 的包络补抓到 cap 秒:逐段 fetch→(解密)→拆TS→decodeAudioData→RMS,PCM 用完即弃。
                                     //   包络下标按分段的 EXTINF 起始时间锚定(防逐段解码 priming 漂移累积,时间轴与播放器一致)。返回是否还有分段可抓。
                                     async _fetchEnvTo(sess, F, cap) {
                                         if (!sess.text) { const r = await this._resolveMedia(sess.url, F); sess.base = r.origBase; sess.text = r.text; }
                                         if (cap <= sess.filled) return true;
-                                        const segs = this._segList(sess.text, sess.base, sess.filled, cap);
+                                        const from = sess.filled;
                                         sess.filled = cap;
+                                        return await this._fetchEnvRange(sess, F, from, cap);
+                                    },
+                                    async _fetchTailEnv(sess, F) {
+                                        if (!sess.text) { const r = await this._resolveMedia(sess.url, F); sess.base = r.origBase; sess.text = r.text; }
+                                        if (sess.filled) return true;
+                                        const total = this._playlistDuration(sess.text);
+                                        if (!total || total < 300) return false;
+                                        const win = Math.min(this.TAIL_WIN, total);
+                                        sess.duration = total;
+                                        sess.baseStart = Math.max(0, total - win);
+                                        sess.env = new Float32Array(Math.ceil(win * this.EHZ) + 80);
+                                        sess.filled = win;
+                                        return await this._fetchEnvRange(sess, F, sess.baseStart, total);
+                                    },
+                                    async _fetchEnvRange(sess, F, from, to) {
+                                        const segs = this._segList(sess.text, sess.base, from, to);
                                         if (!segs.length) return false;
                                         if (segs.some(s => s.key === 'unsupported')) throw new Error('不支持的加密(非AES-128)');
                                         const ac = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
@@ -10649,7 +10701,7 @@
                                             const nf = Math.floor(ch.length / hop), rms = new Float32Array(nf);
                                             for (let k = 0; k < nf; k++) { let sum = 0; const o = k * hop; for (let j = 0; j < hop; j++) { const x = ch[o + j]; sum += x * x; } rms[k] = Math.sqrt(sum / hop); }
                                             sess.chunks.push({ st: s.st, rms });   // 留每段 RMS(EXTINF 局部锚定用,总共才几十 KB)
-                                            let idx = Math.round(t0 * this.EHZ), last = 0;
+                                            let idx = Math.round((t0 - (sess.baseStart || 0)) * this.EHZ), last = 0;
                                             for (let k = 0; k < nf && idx < sess.env.length; k++, idx++) { if (idx < 0) continue; last = sess.env[idx] = rms[k]; }
                                             if (idx >= 0 && idx < sess.env.length && !sess.env[idx]) sess.env[idx] = last;   // 补一帧边界零(floor 丢帧必现,零帧会打断相关链把区段截短)
                                             if (idx > sess.n) sess.n = idx;
@@ -10809,10 +10861,13 @@
                                     _envKey(o) { return 'donggua_afpenv|' + o.title + '|' + o.site; },
                                     _q(f) { let mx = 0; for (let i = 0; i < f.length; i++) if (f[i] > mx) mx = f[i]; const u8 = new Uint8Array(f.length); for (let i = 0; i < f.length; i++) u8[i] = Math.min(255, Math.round(f[i] / (mx || 1) * 255)); let s = ''; for (let i = 0; i < u8.length; i += 4096) s += String.fromCharCode.apply(null, u8.subarray(i, i + 4096)); return btoa(s); },
                                     _dq(s) { const bin = atob(s), f = new Float32Array(bin.length); for (let i = 0; i < bin.length; i++) f[i] = bin.charCodeAt(i); return f; },
-                                    _envSave(o, intro, sec, maxStart, dur, benv, bdur) {
+                                    _envSave(o, intro, sec, maxStart, dur, benv, bdur, outroEnv, outroDur) {
                                         try {
-                                            const rec = { v: 2, sec, maxStart, dur, d: this._q(intro) };   // v2:v1 可能学到片源头部贴片,作废重学
+                                            const rec = { v: 2 };   // v2:v1 可能学到片源头部贴片,作废重学
+                                            if (intro && intro.length) { rec.sec = sec; rec.maxStart = maxStart; rec.dur = dur; rec.d = this._q(intro); }
                                             if (benv && benv.length) { rec.bd = this._q(benv); rec.bdur = bdur; }
+                                            if (outroEnv && outroEnv.length) { rec.od = this._q(outroEnv); rec.odur = outroDur; }
+                                            if (!rec.d && !rec.od) return;
                                             localStorage.setItem(this._envKey(o), JSON.stringify(rec));
                                             const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('donggua_afpenv|') === 0) ks.push(k); }
                                             if (ks.length > 30) ks.slice(0, ks.length - 30).forEach(k => localStorage.removeItem(k));
@@ -10822,7 +10877,7 @@
                                         try {
                                             const s = localStorage.getItem(this._envKey(o)); if (!s) return null;
                                             const j = JSON.parse(s); if (j.v !== 2) return null;
-                                            return { env: this._dq(j.d), sec: j.sec, maxStart: j.maxStart || 0, dur: j.dur || j.sec, benv: j.bd ? this._dq(j.bd) : null, bdur: j.bdur || 0 };
+                                            return { env: j.d ? this._dq(j.d) : null, sec: j.sec || 0, maxStart: j.maxStart || 0, dur: j.dur || j.sec || 0, benv: j.bd ? this._dq(j.bd) : null, bdur: j.bdur || 0, oenv: j.od ? this._dq(j.od) : null, odur: j.odur || 0 };
                                         } catch (e) { return null; }
                                     },
                                     _epNumOf(name, idx) { const m = String(name || '').match(/第\s*0*(\d+)\s*[集话話期]/) || String(name || '').match(/\bep\.?\s*0*(\d+)/i) || String(name || '').match(/^0*(\d+)$/); return m ? parseInt(m[1], 10) : idx + 1; },
@@ -10839,20 +10894,86 @@
                                         const V = o.vue;
                                         const bs = bump && bump.be > bump.bs ? Math.max(0, Math.round(bump.bs * 10) / 10) : 0;
                                         const be = bump && bump.be > bump.bs ? Math.round(bump.be * 10) / 10 : 0;
-                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = { os, oe, v: 1, src: 'auto', bs, be, bv: be > bs ? 1 : 0 }; } catch (e) { }
-                                        try { if (V._introEpNum() === ep && !V._introCur) V._introCur = { os, oe, ed: 0, src: isCur ? 'afp' : 'auto', v: isCur ? 0 : 1, bs, be, bv: be > bs ? 1 : 0 }; } catch (e) { }
+                                        let old = null;
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) old = V._introMarks.marks[ep] || null; } catch (e) { }
+                                        const ed = old && old.ed > 0 ? old.ed : 0, ev = old && old.ev > 0 ? old.ev : 0;
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = { ...(old || {}), os, oe, v: 1, src: 'auto', bs, be, bv: be > bs ? 1 : 0, ed, ev }; } catch (e) { }
+                                        try {
+                                            if (V._introEpNum() === ep) {
+                                                const cur = V._introCur || {};
+                                                V._introCur = { ...cur, os, oe, src: isCur ? 'afp' : (cur.src || 'auto'), v: isCur ? 0 : (cur.v || 1), bs, be, bv: be > bs ? 1 : 0, ed: cur.ed || ed || 0, ev: cur.ev || ev || 0, edSrc: cur.edSrc || null };
+                                            }
+                                        } catch (e) { }
                                         V._introUpload(o.title, o.site, ep, os, oe, 'auto', be > bs ? { bs, be } : null);
                                     },
-                                    // 主入口(canplay 无共享标记时调,自带全部守卫,调用方无需管状态):
-                                    //   没学过 → 抓 本集+邻集 包络互相关学出片头 → 两集标记+本集立即出按钮+存片头包络(学习模式);
-                                    //   学过   → 只抓本集,滑动定位已知片头 → 本集标记并上传共享,后来人零成本(定位模式)。
+                                    _applyOutro(o, ep, ed, isCur, duration) {
+                                        ed = Math.round(ed * 10) / 10;
+                                        if (!isFinite(ed) || ed <= 0 || (duration && (ed < duration * 0.45 || ed > duration - 2))) return;
+                                        const V = o.vue;
+                                        let old = null;
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) old = V._introMarks.marks[ep] || null; } catch (e) { }
+                                        const next = { ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || 'auto', ed, ev: 1, edSrc: 'afp' };
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = next; } catch (e) { }
+                                        try {
+                                            if (V._introEpNum() === ep) {
+                                                const cur = V._introCur || {};
+                                                V._introCur = { ...cur, os: cur.os || next.os || 0, oe: cur.oe || next.oe || 0, v: cur.v || next.v || 0, src: cur.src || next.src || 'auto', bs: cur.bs || next.bs || 0, be: cur.be || next.be || 0, bv: cur.bv || next.bv || 0, ed, ev: isCur ? 0 : 1, edSrc: isCur ? 'afp' : 'auto' };
+                                            }
+                                        } catch (e) { }
+                                        V._introUpload(o.title, o.site, ep, null, null, 'auto', null, ed, duration);
+                                    },
+                                    async _detectOutro(o, F, saved) {
+                                        if (!saved || !saved.oenv || !saved.oenv.length) return false;
+                                        const sess = this._mkTailSess(o.vue.currentUrl);
+                                        const ok = await this._fetchTailEnv(sess, F);
+                                        if (!ok) return false;
+                                        const hit = this._xcorrDetect(saved.oenv, sess.env, sess.n);
+                                        if (!hit) { console.log('[AFP离线] 定位: 第' + o.ep + '集尾部未找到已知片尾'); return false; }
+                                        const ed = sess.baseStart + hit.at / this.EHZ;
+                                        this._applyOutro(o, o.ep, ed, true, sess.duration);
+                                        this._outroDone[o.title + '|' + o.site + '|' + o.ep] = 1;
+                                        try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已定位本集片尾', 2000); } catch (e) { }
+                                        console.log('[AFP离线] 定位: 第' + o.ep + '集片尾 @' + ed.toFixed(1) + 's (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
+                                        return true;
+                                    },
+                                    async _learnOutro(o, F, curUrl, sib, st, saved) {
+                                        if (!sib || st.outroTries >= 2) return false;
+                                        st.outroTries++;
+                                        const sA = this._mkTailSess(curUrl), sB = this._mkTailSess(sib.url);
+                                        const okA = await this._fetchTailEnv(sA, F), okB = await this._fetchTailEnv(sB, F);
+                                        if (!okA || !okB) return false;
+                                        const r = await this._xcorrLearn(sA.env, sA.n, sB.env, sB.n);
+                                        if (!r || r.len < 150) { console.log('[AFP离线] 两集尾部未见稳定公共片尾'); return false; }
+                                        const edA = sA.baseStart + r.aStart / this.EHZ, edB = sB.baseStart + r.bStart / this.EHZ;
+                                        if (edA < sA.duration * 0.45 || edB < sB.duration * 0.45 || edA > sA.duration - 2 || edB > sB.duration - 2) return false;
+                                        const odur = r.len / this.EHZ;
+                                        const oenv = sA.env.slice(r.aStart, r.aStart + r.len);
+                                        this._applyOutro(o, o.ep, edA, true, sA.duration);
+                                        this._applyOutro(o, sib.ep, edB, false, sB.duration);
+                                        const next = Object.assign({}, saved || {}, { oenv, odur });
+                                        this._envSave(o, next.env, next.sec, next.maxStart, next.dur, next.benv, next.bdur, oenv, odur);
+                                        st.intro = next;
+                                        this._outroDone[o.title + '|' + o.site + '|' + o.ep] = 1; this._outroDone[o.title + '|' + o.site + '|' + sib.ep] = 1;
+                                        try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已智能识别片尾', 2500); } catch (e) { }
+                                        console.log('[AFP离线] ✅ 学习成功: 片尾 ' + odur.toFixed(0) + 's @本集 ' + edA.toFixed(1) + 's / 第' + sib.ep + '集 ' + edB.toFixed(1) + 's (conf ' + r.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB;后续集将自动定位)');
+                                        return true;
+                                    },
+                                    // 主入口(canplay 缺共享标记时调,自带全部守卫,调用方无需管状态):
+                                    //   没学过 → 抓 本集+邻集 包络互相关学出片头/片尾 → 两集标记+本集立即出按钮+存包络(学习模式);
+                                    //   学过   → 只抓本集头部/尾部,滑动定位已知片头/片尾 → 本集标记并上传共享,后来人零成本(定位模式)。
                                     //   守卫:同剧同线路学习只跑一次(学出/确认无片头都算终态);每集定位每会话只试一次;
                                     //        失败(网络/源)最多自动重试2次;省流量档/2G 不跑;会话流量上限 600MB。
                                     async learnOrDetect(o) {
                                         const K = o.title + '|' + o.site, epK = K + '|' + o.ep;
-                                        const st = this._st[K] || (this._st[K] = { phase: 'idle', tries: 0, intro: null });
-                                        if (this._busy || this._epDone[epK] || st.phase === 'pending' || st.phase === 'nointro') return;
-                                        if (st.phase === 'idle' && st.tries >= 2) return;
+                                        const st = this._st[K] || (this._st[K] = { phase: 'idle', tries: 0, intro: null, outroTries: 0 });
+                                        if (st.outroTries == null) st.outroTries = 0;
+                                        const mark = o.vue._introMarks && o.vue._introMarks.key === K ? (o.vue._introMarks.marks[o.ep] || null) : null;
+                                        let needIntro = !(mark && mark.oe > mark.os) && !this._epDone[epK] && st.phase !== 'nointro';
+                                        let needOutro = !(mark && mark.ed > 0) && !this._outroDone[epK];
+                                        if (this._busy || st.phase === 'pending') return;
+                                        if (needIntro && st.phase === 'idle' && st.tries >= 2) needIntro = false;
+                                        if (needOutro && st.outroTries >= 2) needOutro = false;
+                                        if (!needIntro && !needOutro) return;
                                         try { const c = navigator.connection; if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || ''))) return; } catch (e) { }
                                         if (this._mb > 600) return;
                                         this._busy = true; const back = st.phase; st.phase = 'pending';
@@ -10861,33 +10982,43 @@
                                             await new Promise(r => setTimeout(r, 4000));   // 等换源/测速/深链尘埃落定(期间源还在切,当场抓必抓错)
                                             if (o.vue._liveActive || !o.vue.currentSource || o.vue.currentSource.site_key !== o.site || o.vue._introEpNum() !== o.ep) return;
                                             const F = this._mkFetch(o.vue), curUrl = o.vue.currentUrl;
-                                            const saved = st.intro || (st.intro = this._envLoad(o));
+                                            let saved = st.intro || (st.intro = this._envLoad(o));
+                                            const sib = this._pickSibling(o.epList, curUrl);
                                             if (saved) {
                                                 // —— 定位模式 ——
-                                                this._epDone[epK] = 1; done = true; st.phase = 'learned';
-                                                const sess = this._mkSess(curUrl); let hit = null;
-                                                for (const cap of this.STAGES) {
-                                                    const more = await this._fetchEnvTo(sess, F, cap);
-                                                    hit = this._xcorrDetect(saved.env, sess.env, sess.n);
-                                                    if (hit || !more) break;
-                                                }
-                                                if (hit) {
-                                                    const os = hit.at / this.EHZ;
-                                                    // 顺带定位开头贴片(只在前 150s 里找,片头贴片都在头部)
-                                                    let bump = null;
-                                                    if (saved.benv && saved.benv.length) {
-                                                        const bh = this._xcorrDetect(saved.benv, sess.env, Math.min(sess.n, 150 * this.EHZ));
-                                                        if (bh) bump = { bs: Math.round(bh.at / this.EHZ * 10) / 10, be: Math.round((bh.at / this.EHZ + saved.bdur) * 10) / 10 };
+                                                if (saved.env && needIntro) {
+                                                    this._epDone[epK] = 1; done = true; st.phase = 'learned';
+                                                    const sess = this._mkSess(curUrl); let hit = null;
+                                                    for (const cap of this.STAGES) {
+                                                        const more = await this._fetchEnvTo(sess, F, cap);
+                                                        hit = this._xcorrDetect(saved.env, sess.env, sess.n);
+                                                        if (hit || !more) break;
                                                     }
-                                                    this._apply(o, o.ep, os, os + (saved.dur || saved.sec), true, bump);
-                                                    try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已定位本集片头', 2000); } catch (e) { }
-                                                    console.log('[AFP离线] 定位: 第' + o.ep + '集片头 @' + os.toFixed(1) + 's' + (bump ? ' + 开头贴片 @' + bump.bs + '→' + bump.be + 's' : '') + ' (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
-                                                } else console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's 未找到已知片头(可能本集无片头/被剪)');
-                                                return;
+                                                    if (hit) {
+                                                        const os = hit.at / this.EHZ;
+                                                        // 顺带定位开头贴片(只在前 150s 里找,片头贴片都在头部)
+                                                        let bump = null;
+                                                        if (saved.benv && saved.benv.length) {
+                                                            const bh = this._xcorrDetect(saved.benv, sess.env, Math.min(sess.n, 150 * this.EHZ));
+                                                            if (bh) bump = { bs: Math.round(bh.at / this.EHZ * 10) / 10, be: Math.round((bh.at / this.EHZ + saved.bdur) * 10) / 10 };
+                                                        }
+                                                        this._apply(o, o.ep, os, os + (saved.dur || saved.sec), true, bump);
+                                                        try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已定位本集片头', 2000); } catch (e) { }
+                                                        console.log('[AFP离线] 定位: 第' + o.ep + '集片头 @' + os.toFixed(1) + 's' + (bump ? ' + 开头贴片 @' + bump.bs + '→' + bump.be + 's' : '') + ' (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
+                                                    } else console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's 未找到已知片头(可能本集无片头/被剪)');
+                                                } else if (saved.env) { done = true; st.phase = 'learned'; }
+                                                if (needOutro) {
+                                                    if (saved.oenv) await this._detectOutro(o, F, saved);
+                                                    else if (sib) { await this._learnOutro(o, F, curUrl, sib, st, saved); saved = st.intro || saved; }
+                                                }
+                                                if (saved.env || !needIntro) return;
                                             }
                                             // —— 学习模式 ——
+                                            if (!needIntro) {
+                                                if (needOutro && sib) await this._learnOutro(o, F, curUrl, sib, st, saved);
+                                                return;
+                                            }
                                             st.tries++;
-                                            const sib = this._pickSibling(o.epList, curUrl);
                                             if (!sib) return;
                                             console.log('[AFP离线] 冷启动学习: 抓 本集+第' + sib.ep + '集 音频响度包络(先前4分钟,学不出自动扩到10分钟)…');
                                             const sA = this._mkSess(curUrl), sB = this._mkSess(sib.url);
@@ -10909,7 +11040,11 @@
                                                 if (isLast) break;
                                             }
                                             if (!r && rBak) { r = rBak; console.log('[AFP离线] 全片前10分钟只有开头公共段,按片头使用'); }
-                                            if (!r) { st.phase = 'nointro'; done = true; console.log('[AFP离线] 两集前10分钟无公共片头(可能真没有固定片头曲),本剧本线路不再自动分析'); return; }
+                                            if (!r) {
+                                                st.phase = 'nointro'; done = true; console.log('[AFP离线] 两集前10分钟无公共片头(可能真没有固定片头曲),本剧本线路不再自动分析');
+                                                if (needOutro && sib) await this._learnOutro(o, F, curUrl, sib, st, saved);
+                                                return;
+                                            }
                                             // 精修:局部重锚(坐标以此为准,累计轴在脏流上会漂)+跨音频空洞续接;精修不出(极端情况)退回粗结果
                                             const fine = this._refineRegion(sA, sB, r.aStart / this.EHZ, r.bStart / this.EHZ, r.len / this.EHZ);
                                             let os1, oe1, os2, oe2, headEnv, headSec;
@@ -10923,10 +11058,11 @@
                                             this._apply(o, o.ep, os1, oe1, true, bumpA);         // 本集:即时点亮 + 共享缓存 + 上报
                                             this._apply(o, sib.ep, os2, oe2, false, bumpB);      // 邻集:共享缓存 + 上报(修"下一集不出按钮")
                                             const benv = bp ? sA.env.slice(bp.aStart, bp.aStart + bp.len) : null;
-                                            this._envSave(o, headEnv, headSec, Math.max(os1, os2), dur, benv, bp ? bp.len / this.EHZ : 0);
-                                            st.intro = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2), benv, bdur: bp ? bp.len / this.EHZ : 0 };
+                                            const learned = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2), benv, bdur: bp ? bp.len / this.EHZ : 0 };
                                             st.phase = 'learned'; done = true;
                                             this._epDone[epK] = 1; this._epDone[K + '|' + sib.ep] = 1;
+                                            const outroLearned = needOutro ? await this._learnOutro(o, F, curUrl, sib, st, learned) : false;
+                                            if (!outroLearned) { this._envSave(o, headEnv, headSec, Math.max(os1, os2), dur, benv, bp ? bp.len / this.EHZ : 0); st.intro = learned; }
                                             try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已智能识别片头', 2500); } catch (e) { }
                                             console.log('[AFP离线] ✅ 学习成功: 片头 ' + dur.toFixed(0) + 's @本集 ' + os1.toFixed(1) + '→' + oe1.toFixed(1) + 's / 第' + sib.ep + '集 ' + os2.toFixed(1) + '→' + oe2.toFixed(1) + 's' + (bumpA ? ' + 开头贴片 ' + bumpA.bs + '→' + bumpA.be + 's' : '') + ' (' + (fine ? '已局部精修' + (fine.bridged ? '+跨空洞续接' : '') : '粗对齐') + ',会话流量 ' + this._mb.toFixed(0) + 'MB;后续集将自动定位)');
                                         } catch (e) {

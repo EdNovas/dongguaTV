@@ -549,7 +549,7 @@ class CacheManager {
         this.type = type;
         this.searchCache = {};
         this.detailCache = {};
-        this.introCache = {};   // ⏭️ 片头标记(json/memory 模式):独立命名空间,不与 VOD 详情缓存串味/共用淘汰
+        this.introCache = {};   // ⏭️ 片头/片尾标记(json/memory 模式):独立命名空间,不与 VOD 详情缓存串味/共用淘汰
         this.db = null;
         this.init();
     }
@@ -718,7 +718,7 @@ class CacheManager {
 
     saveDisk(only) {
         if (this.type !== 'json') return;
-        // 只写被改动的桶(片头提交别每次重写整个详情缓存文件)
+        // 只写被改动的桶(片头/片尾提交别每次重写整个详情缓存文件)
         if (!only || only === 'search') fs.writeFileSync(SEARCH_CACHE_JSON, JSON.stringify(this.searchCache));
         if (!only || only === 'intro') fs.writeFileSync(INTRO_CACHE_JSON, JSON.stringify(this.introCache));
         if (!only || (only !== 'search' && only !== 'intro')) fs.writeFileSync(DETAIL_CACHE_JSON, JSON.stringify(this.detailCache));
@@ -1539,7 +1539,7 @@ app.post('/api/settings/push', (req, res) => {
 
 // ========== ⏭️ 跳过片头 API：共享的片头/片尾时间标记(众包 + 客户端音频指纹自动学习上报) ==========
 // 存储走 cacheManager KV(category='intro')——json/sqlite/memory 全兼容,不像历史同步只限 sqlite。
-// 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>": {os,oe,ed,v,src,at,bs,be,bv} } 整剧一条。
+// 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>": {os,oe,ed,v,ev,src,at,bs,be,bv} } 整剧一条。
 // 必须按【集】存:每集冷开场长度不同,片头起点不同;不能按剧存一个时间。
 // bs/be = 可选"开头贴片"区间(网络视听许可证/平台方片头贴片,与片头曲是两个独立可跳区间),bv = 其票数。
 const INTRO_TTL = 365 * 24 * 3600;   // 秒。每次写入续期
@@ -1550,7 +1550,7 @@ function introNormTitle(s) {
 function introKey(title, site) { return introNormTitle(title) + '|' + String(site || '').slice(0, 40); }
 const introLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: ipKey, message: { error: '请求过于频繁' } });
 
-// 拉取某剧某线路的全部片头标记
+// 拉取某剧某线路的全部片头/片尾标记
 app.get('/api/intro/marks', introLimiter, (req, res) => {
     const title = String(req.query.title || '').trim();
     if (!title) return res.json({ marks: {} });
@@ -1558,7 +1558,7 @@ app.get('/api/intro/marks', introLimiter, (req, res) => {
     res.json({ marks: map });
 });
 
-// 提交一集的片头标记(手动标记或客户端音频指纹自动学习)。登录站点即可提交(限流防刷)。
+// 提交一集的片头/片尾标记(手动标记或客户端音频指纹/包络自动学习)。登录站点即可提交(限流防刷)。
 app.post('/api/intro/mark', introLimiter, (req, res) => {
     try {
         const b = req.body || {};
@@ -1571,20 +1571,26 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         const title = String(b.title || '').trim();
         const site = String(b.site || '').trim();
         const ep = parseInt(b.ep, 10);
+        const opProvided = b.op_start != null || b.op_end != null;
         let os = Math.round(Number(b.op_start) * 10) / 10, oe = Math.round(Number(b.op_end) * 10) / 10;
+        const hasOp = opProvided && isFinite(os) && isFinite(oe);
         let ed = b.ed_start == null ? null : Math.round(Number(b.ed_start) * 10) / 10;
+        const dur = b.duration == null ? null : Math.round(Number(b.duration) * 10) / 10;
         const src = b.src === 'manual' ? 'manual' : 'auto';
         // 校验：ep 放宽到 8 位(综艺用日期做集号,如 20240105);片头起点前 25 分钟内、时长 10~150s(挡"整段5分钟片头"的滥用载荷)
         if (!title || !site || !Number.isInteger(ep) || ep < 0 || ep > 99999999) return res.status(400).json({ error: 'bad params' });
-        if (!isFinite(os) || !isFinite(oe) || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 150) return res.status(400).json({ error: 'bad range' });
-        if (ed != null && (!isFinite(ed) || ed <= oe || ed > 6 * 3600)) ed = null;
+        if (opProvided && (!hasOp || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 150)) return res.status(400).json({ error: 'bad range' });
+        const validDur = isFinite(dur) && dur > 0 && dur <= 6 * 3600 ? dur : null;
+        if (ed != null && (!isFinite(ed) || ed <= 0 || ed > 6 * 3600 || (hasOp && ed <= oe) || (validDur && (ed < validDur * 0.45 || ed > validDur - 2)))) ed = null;
         // 可选"开头贴片"区间(网络视听许可证/平台方片头贴片):必须贴近片头部(起点≤120s)、3~90s、且在片头曲之前;非法就静默丢弃不拒整单
         let bs = b.b_start == null ? null : Math.round(Number(b.b_start) * 10) / 10;
         let be = b.b_end == null ? null : Math.round(Number(b.b_end) * 10) / 10;
-        if (bs == null || be == null || !isFinite(bs) || !isFinite(be) || bs < 0 || bs > 120 || be <= bs || (be - bs) < 3 || (be - bs) > 90 || be > os + 5) { bs = null; be = null; }
+        if (!hasOp || bs == null || be == null || !isFinite(bs) || !isFinite(be) || bs < 0 || bs > 120 || be <= bs || (be - bs) < 3 || (be - bs) > 90 || be > os + 5) { bs = null; be = null; }
         const key = introKey(title, site);
         const map = cacheManager.get('intro', key) || {};
         const old = map[ep];
+        if (ed != null && !hasOp && old && old.oe > old.os && ed <= old.oe) ed = null;
+        if (!hasOp && ed == null) return res.status(400).json({ error: 'bad range' });
         // 贴片区间独立计票收敛(和 os/oe 同一套 ±5s 加权/削票模型)
         const mergeBump = (rec, oldRec) => {
             const obs = oldRec && oldRec.be > oldRec.bs ? oldRec : null;
@@ -1596,19 +1602,32 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
             else { rec.bs = obs.bs; rec.be = obs.be; rec.bv = (obs.bv || 1) - 1; }
             return rec;
         };
-        if (old && Math.abs(old.os - os) <= 5 && Math.abs(old.oe - oe) <= 5) {
+        const mergeOutro = (rec, oldRec) => {
+            const obs = oldRec && oldRec.ed > 0 ? oldRec : null;
+            if (ed == null) { if (obs) { rec.ed = obs.ed; rec.ev = obs.ev || 1; } return rec; }
+            if (obs && Math.abs(obs.ed - ed) <= 8) {
+                const w = Math.min(obs.ev || 1, 9);
+                rec.ed = Math.round((obs.ed * w + ed) / (w + 1) * 10) / 10;
+                rec.ev = Math.min((obs.ev || 1) + 1, 99);
+            } else if (!obs || (obs.ev || 1) <= 1) { rec.ed = ed; rec.ev = 1; }
+            else { rec.ed = obs.ed; rec.ev = (obs.ev || 1) - 1; }
+            return rec;
+        };
+        if (!hasOp) {
+            map[ep] = mergeOutro(mergeBump({ ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || src, at: Date.now() }, old), old);
+        } else if (old && Math.abs(old.os - os) <= 5 && Math.abs(old.oe - oe) <= 5) {
             // 与现值一致(±5s)：加权平均收敛 + 计票(封顶防溢出)
             const w = Math.min(old.v || 1, 9);
-            map[ep] = mergeBump({ os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, ed: ed != null ? ed : old.ed, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() }, old);
+            map[ep] = mergeOutro(mergeBump({ os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() }, old), old);
         } else if (!old || (old.v || 1) <= 1 || (src === 'manual' && old.src !== 'manual' && (old.v || 1) <= 2)) {
             // 无旧值 / 旧值只有 1 票 / 人工标记纠正低票自动值 → 覆盖
-            map[ep] = mergeBump({ os, oe, ed, v: 1, src, at: Date.now() }, null);
+            map[ep] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
         } else {
             // 与多票旧值冲突：削旧值一票(不直接推翻共识,但也不让先到的错值/被刷值永久钉死——
             // 诚实多数持续提交正确值会把错值削到 1 票后取而代之,eventual 纠偏)
             const nv = (old.v || 1) - 1;
-            if (nv <= 1) map[ep] = mergeBump({ os, oe, ed, v: 1, src, at: Date.now() }, null);
-            else { old.v = nv; old.at = Date.now(); map[ep] = old; }
+            if (nv <= 1) map[ep] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
+            else { old.v = nv; old.at = Date.now(); map[ep] = mergeOutro(mergeBump(old, old), old); }
         }
         // 单剧集数上限(防灌爆一条 KV)
         const keys = Object.keys(map);
