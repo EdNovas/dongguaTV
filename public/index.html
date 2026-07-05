@@ -10812,11 +10812,15 @@
                                     //   没学过 → 抓 本集+邻集 包络互相关学出片头/片尾 → 两集标记+本集立即出按钮+存包络(学习模式);
                                     //   学过   → 只抓本集头部/尾部,滑动定位已知片头/片尾 → 本集标记并上传共享,后来人零成本(定位模式)。
                                     //   守卫:同剧同线路学习只跑一次(学出/确认无片头都算终态);每集定位每会话只试一次;
-                                    //        失败(网络/源)最多自动重试2次;省流量档/2G 不跑;会话流量上限 600MB。
+                                    //        失败(网络/源)最多自动重试2次;省流量档/2G 不跑;单剧流量上限 700MB(护别的剧不被一部问题剧拖累)+
+                                    //        会话总量上限 2000MB(全场兜底)——两档命中都在控制台打日志,不再是"悄悄啥都不干"(实测踩坑:
+                                    //        没有低码率变体的源单集分片就 50~80MB,一部剧的学习+片尾学习轻松单剧过 600MB,旧的单一全局
+                                    //        上限一撞就静默熄火,后面开的每一部新剧都跟着遭殃,且控制台没有任何提示,像"坏了"一样查不出原因)。
                                     async learnOrDetect(o) {
                                         const K = o.title + '|' + o.site, epK = K + '|' + o.ep;
-                                        const st = this._st[K] || (this._st[K] = { phase: 'idle', tries: 0, intro: null, outroTries: 0 });
+                                        const st = this._st[K] || (this._st[K] = { phase: 'idle', tries: 0, intro: null, outroTries: 0, mb: 0 });
                                         if (st.outroTries == null) st.outroTries = 0;
+                                        if (st.mb == null) st.mb = 0;
                                         const mark = o.vue._introMarks && o.vue._introMarks.key === K ? (o.vue._introMarks.marks[o.ep] || null) : null;
                                         let needIntro = !(mark && mark.oe > mark.os) && !this._epDone[epK] && st.phase !== 'nointro';
                                         let needOutro = !(mark && mark.ed > 0) && !this._outroDone[epK];
@@ -10825,8 +10829,10 @@
                                         if (needOutro && st.outroTries >= 2) needOutro = false;
                                         if (!needIntro && !needOutro) return;
                                         try { const c = navigator.connection; if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || ''))) return; } catch (e) { }
-                                        if (this._mb > 600) return;
+                                        if (st.mb > 700) { console.log('[AFP离线] 《' + o.title + '》本线路分析已用 ' + st.mb.toFixed(0) + 'MB,超过单剧上限,不再自动分析(已学到的标记仍正常使用;换线路/等下次访问会重试)'); return; }
+                                        if (this._mb > 2000) { console.log('[AFP离线] 本次会话分析总流量已达 ' + this._mb.toFixed(0) + 'MB 上限,本次不再自动分析(刷新页面重置)'); return; }
                                         this._busy = true; const back = st.phase; st.phase = 'pending';
+                                        const mbBefore = this._mb;
                                         let done = false;
                                         try {
                                             await new Promise(r => setTimeout(r, 4000));   // 等换源/测速/深链尘埃落定(期间源还在切,当场抓必抓错)
@@ -10921,6 +10927,7 @@
                                             console.warn('[AFP离线] 失败(最多再自动试' + Math.max(0, 2 - st.tries) + '次),本次回退边看边学:', e && e.message);
                                         } finally {
                                             if (!done && st.phase === 'pending') st.phase = back === 'learned' ? 'learned' : 'idle';
+                                            st.mb += this._mb - mbBefore;   // 本次调用消耗的流量记进本剧账,供上面单剧上限用
                                             this._busy = false;
                                         }
                                     }
