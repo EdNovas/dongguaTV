@@ -527,6 +527,7 @@ const CACHE_TYPE = process.env.CACHE_TYPE || 'json'; // json, sqlite, memory, no
 const SEARCH_CACHE_JSON = path.join(__dirname, 'cache_search.json');
 const DETAIL_CACHE_JSON = path.join(__dirname, 'cache_detail.json');
 const INTRO_CACHE_JSON = path.join(__dirname, 'cache_intro.json');
+const INTRO_ENV_CACHE_JSON = path.join(__dirname, 'cache_intro_env.json');
 const CACHE_DB_FILE = path.join(__dirname, 'cache.db');
 
 console.log(`[System] Cache Type: ${CACHE_TYPE}`);
@@ -550,6 +551,7 @@ class CacheManager {
         this.searchCache = {};
         this.detailCache = {};
         this.introCache = {};   // ⏭️ 片头/片尾标记(json/memory 模式):独立命名空间,不与 VOD 详情缓存串味/共用淘汰
+        this.introEnvCache = {}; // 🎵 片头/片尾音频响度包络(客户端学习成果的云备份,跨设备/跨线路复用)
         this.db = null;
         this.init();
     }
@@ -564,6 +566,9 @@ class CacheManager {
             }
             if (fs.existsSync(INTRO_CACHE_JSON)) {
                 try { this.introCache = JSON.parse(fs.readFileSync(INTRO_CACHE_JSON)); } catch (e) { }
+            }
+            if (fs.existsSync(INTRO_ENV_CACHE_JSON)) {
+                try { this.introEnvCache = JSON.parse(fs.readFileSync(INTRO_ENV_CACHE_JSON)); } catch (e) { }
             }
         } else if (this.type === 'sqlite') {
             try {
@@ -676,7 +681,7 @@ class CacheManager {
         }
     }
 
-    _bucket(category) { return category === 'search' ? this.searchCache : category === 'intro' ? this.introCache : this.detailCache; }
+    _bucket(category) { return category === 'search' ? this.searchCache : category === 'intro' ? this.introCache : category === 'introenv' ? this.introEnvCache : this.detailCache; }
     get(category, key) {
         if (this.type === 'memory' || this.type === 'json') {
             const data = this._bucket(category)[key];
@@ -721,7 +726,33 @@ class CacheManager {
         // 只写被改动的桶(片头/片尾提交别每次重写整个详情缓存文件)
         if (!only || only === 'search') fs.writeFileSync(SEARCH_CACHE_JSON, JSON.stringify(this.searchCache));
         if (!only || only === 'intro') fs.writeFileSync(INTRO_CACHE_JSON, JSON.stringify(this.introCache));
-        if (!only || (only !== 'search' && only !== 'intro')) fs.writeFileSync(DETAIL_CACHE_JSON, JSON.stringify(this.detailCache));
+        if (!only || only === 'introenv') fs.writeFileSync(INTRO_ENV_CACHE_JSON, JSON.stringify(this.introEnvCache));
+        if (!only || (only !== 'search' && only !== 'intro' && only !== 'introenv')) fs.writeFileSync(DETAIL_CACHE_JSON, JSON.stringify(this.detailCache));
+    }
+
+    // 按 key 前缀列出某类别下的未过期条目(音频包络"跨线路借用"查同剧其它线路用)。上限截断防大扫描。
+    list(category, prefix, limit = 20) {
+        const out = [];
+        if (this.type === 'memory' || this.type === 'json') {
+            const bucket = this._bucket(category), now = Date.now();
+            for (const k of Object.keys(bucket)) {
+                if (k.indexOf(prefix) !== 0) continue;
+                const data = bucket[k];
+                if (data && data.expire > now) { out.push({ key: k, value: data.value }); if (out.length >= limit) break; }
+            }
+        } else if (this.type === 'sqlite' && this.db) {
+            try {
+                // LIKE 通配符注入防护:剧名归一化不会剥掉 % ,必须转义(否则含 % 的标题会匹配到别的剧)
+                const esc = prefix.replace(/[\\%_]/g, ch => '\\' + ch);
+                const rows = this.db.prepare(
+                    "SELECT key, value FROM cache WHERE category = ? AND key LIKE ? ESCAPE '\\' AND expire > ? LIMIT ?"
+                ).all(category, esc + '%', Date.now(), limit);
+                for (const r of rows) { try { out.push({ key: r.key, value: JSON.parse(r.value) }); } catch (e) { } }
+            } catch (e) {
+                console.error('[SQLite Cache] List error:', e.message);
+            }
+        }
+        return out;
     }
 
     // 定期清理过期缓存 (SQLite)
@@ -1636,6 +1667,75 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         res.json({ ok: true, mark: map[ep] || null });
     } catch (e) {
         console.error('[Intro Mark Error]', e.message);
+        res.status(500).json({ error: 'server error' });
+    }
+});
+
+// ========== 🎵 片头/片尾音频包络云备份：客户端学习成果(10Hz响度包络,量化Uint8→base64,约1~2KB/段)存服务器 ==========
+// 为什么值得存:marks 是"时间坐标",绑死线路时间轴,不能跨线路;包络是"剧集内容音频的形状",与时间轴无关——
+//   A线路学出的片头曲包络,在B线路上滑动互相关(Pearson≥0.6 实测校验)就能"定位"出 B 自己的时间点。
+//   于是①新设备/清了 localStorage 免两集冷启动(只抓本集定位,流量约减半);②资源站再多,一部剧全站只需学一次。
+// 键 = 归一剧名|线路(每线路一条自洽记录:开头贴片是线路特有的,跟着记录走);GET 本线路没有→借同剧其它线路(borrowed),
+//   借用的包络客户端必须实测定位命中才会转正回传登记到本线路,失配自动回退冷启动学习——坏/不匹配数据自灭,不会长期占坑。
+const INTRO_ENV_TTL = 365 * 24 * 3600;   // 秒。每次写入/被采用回传都会续期
+const INTRO_ENV_B64 = /^[A-Za-z0-9+/]+={0,2}$/;
+
+// 拉取某剧某线路的包络;本线路没有时借同剧其它线路最新一条(borrowed=true)
+app.get('/api/intro/env', introLimiter, (req, res) => {
+    const title = String(req.query.title || '').trim();
+    if (!title) return res.json({ env: null });
+    const norm = introNormTitle(title);
+    if (!norm) return res.json({ env: null });
+    const site = String(req.query.site || '').slice(0, 40);
+    const exact = cacheManager.get('introenv', norm + '|' + site);
+    if (exact) return res.json({ env: exact, from: site, borrowed: false });
+    let best = null, bestKey = '';
+    for (const { key, value } of cacheManager.list('introenv', norm + '|')) {
+        if (value && value.v === 2 && (value.at || 0) > (best ? best.at || 0 : -1)) { best = value; bestKey = key; }
+    }
+    if (!best) return res.json({ env: null });
+    res.json({ env: best, from: bestKey.slice(norm.length + 1), borrowed: true });
+});
+
+// 上传学习成果包络。env 字段与客户端本地记录同构:{v:2, d,sec,dur,maxStart, bd,bdur, od,odur}
+//   d=片头曲包络 bd=开头贴片包络 od=片尾包络(都是 base64(Uint8) 10Hz 采样;量化不损 Pearson——尺度无关)。
+// 组件级合并:来的组件覆盖,没带的组件保留旧值(先学出片头、后学出片尾的两次上传互不 clobber)。
+app.post('/api/intro/env', introLimiter, (req, res) => {
+    try {
+        const b = req.body || {};
+        if (Object.keys(PASSWORD_HASH_MAP).length) {
+            const u = PASSWORD_HASH_MAP[b.token];
+            if (!u) return res.status(401).json({ error: 'Invalid token' });
+            if (isBanned(b.token)) return res.status(403).json({ error: 'banned' });
+        }
+        const title = String(b.title || '').trim();
+        const site = String(b.site || '').trim().slice(0, 40);
+        const e = b.env || {};
+        if (!title || !introNormTitle(title) || !site || e.v !== 2) return res.status(400).json({ error: 'bad params' });
+        // 逐组件校验:base64 字符集 + 长度上限(10Hz 包络≈10B/s;片头包络经跨空洞续接可到几百秒,给到 400s)
+        //   + 秒数与包络字节数一致性(声称 150s 却只有 10s 数据的畸形载荷直接拒)
+        const num = (x, lo, hi) => { const n = Math.round(Number(x) * 10) / 10; return isFinite(n) && n >= lo && n <= hi ? n : null; };
+        const bytesOf = s => Math.floor(s.length * 3 / 4) - (s.endsWith('==') ? 2 : s.endsWith('=') ? 1 : 0);
+        const b64 = (s, max, sec) => (typeof s === 'string' && s.length >= 40 && s.length <= max && INTRO_ENV_B64.test(s) && sec != null && Math.abs(bytesOf(s) / 10 - sec) <= 3) ? s : null;
+        const rec = { v: 2, at: Date.now() };
+        const sec = num(e.sec, 10, 400), dur = num(e.dur, 10, 160), d = b64(e.d, 5600, sec);
+        if (d && dur) { rec.d = d; rec.sec = sec; rec.dur = dur; rec.maxStart = num(e.maxStart, 0, 1500) || 0; }
+        const bdur = num(e.bdur, 3, 90), bd = b64(e.bd, 1200, bdur);
+        if (bd) { rec.bd = bd; rec.bdur = bdur; }
+        const odur = num(e.odur, 10, 160), od = b64(e.od, 2400, odur);
+        if (od) { rec.od = od; rec.odur = odur; }
+        if (!rec.d && !rec.od) return res.status(400).json({ error: 'no payload' });
+        const key = introNormTitle(title) + '|' + site;
+        const old = cacheManager.get('introenv', key);
+        if (old && old.v === 2) {
+            if (!rec.d && old.d) { rec.d = old.d; rec.sec = old.sec; rec.dur = old.dur; rec.maxStart = old.maxStart || 0; }
+            if (!rec.bd && old.bd) { rec.bd = old.bd; rec.bdur = old.bdur; }
+            if (!rec.od && old.od) { rec.od = old.od; rec.odur = old.odur; }
+        }
+        cacheManager.set('introenv', key, rec, INTRO_ENV_TTL);
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[Intro Env Error]', e.message);
         res.status(500).json({ error: 'server error' });
     }
 });

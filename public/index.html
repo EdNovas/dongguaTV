@@ -10377,6 +10377,9 @@
                                 //   ⚠️ 频谱指纹方案已被同一批真实数据证伪(46ms窗对亚秒错位极敏感→漏真;16维dB向量假相似→造假),勿走回头路。
                                 //   窗口 240s→480s→600s 渐进(长冷开场的剧片头可能在6~8分钟,破事精英S2第1集在6分45秒!)。
                                 //   学出后本地存片头/片尾包络:后续集只抓本集做"定位",标记上传共享→后来人零成本;iOS 可用;失败静默回退"边看边学"。
+                                //   ☁️ 包络云备份(/api/intro/env):学习成果(几 KB)上传服务器,跨设备/跨用户/跨线路复用——包络是"内容音频的形状",
+                                //   与线路时间轴无关,A 线路学的片头曲在 B 线路滑动定位照样命中(marks 是时间坐标,绑死线路,借不了;包络能借)。
+                                //   借用语义:非本线路的包络必须实测定位命中才转正登记到本线路;失配自动丢弃回退冷启动——坏数据自灭不占坑。
                                 if (!window.afpOffline) window.afpOffline = {
                                     _ac: null, _busy: false, _st: {}, _epDone: {}, _outroDone: {}, _mb: 0,
                                     EHZ: 10,                      // 包络采样率 10Hz(100ms)
@@ -10705,10 +10708,17 @@
                                             conf: rp, bridged: hops > 0
                                         };
                                     },
-                                    // —— 片头包络持久化(量化到 Uint8,Pearson 尺度无关;~1KB/剧) ——
+                                    // —— 片头包络持久化(量化到 Uint8,Pearson 尺度无关;~1KB/剧) + ☁️ 云备份同步 ——
+                                    //   包络是"内容音频的形状",与线路时间轴无关:A 线路学出的片头曲包络在 B 线路上滑动定位照样命中。
+                                    //   借用(borrowed)语义:其它线路/云端的包络必须本线路实测定位命中才"转正"(存本地+回传登记),失配就丢弃回退冷启动——
+                                    //   坏数据/版本不符自灭,不会永久占坑。iB/oB/bB = 片头/片尾/贴片组件"借用未验证"标记。
                                     _envKey(o) { return 'donggua_afpenv|' + o.title + '|' + o.site; },
                                     _q(f) { let mx = 0; for (let i = 0; i < f.length; i++) if (f[i] > mx) mx = f[i]; const u8 = new Uint8Array(f.length); for (let i = 0; i < f.length; i++) u8[i] = Math.min(255, Math.round(f[i] / (mx || 1) * 255)); let s = ''; for (let i = 0; i < u8.length; i += 4096) s += String.fromCharCode.apply(null, u8.subarray(i, i + 4096)); return btoa(s); },
                                     _dq(s) { const bin = atob(s), f = new Float32Array(bin.length); for (let i = 0; i < bin.length; i++) f[i] = bin.charCodeAt(i); return f; },
+                                    _envParse(j) {
+                                        if (!j || j.v !== 2) return null;
+                                        return { env: j.d ? this._dq(j.d) : null, sec: j.sec || 0, maxStart: j.maxStart || 0, dur: j.dur || j.sec || 0, benv: j.bd ? this._dq(j.bd) : null, bdur: j.bdur || 0, oenv: j.od ? this._dq(j.od) : null, odur: j.odur || 0 };
+                                    },
                                     _envSave(o, intro, sec, maxStart, dur, benv, bdur, outroEnv, outroDur) {
                                         try {
                                             const rec = { v: 2 };   // v2:v1 可能学到片源头部贴片,作废重学
@@ -10716,6 +10726,7 @@
                                             if (benv && benv.length) { rec.bd = this._q(benv); rec.bdur = bdur; }
                                             if (outroEnv && outroEnv.length) { rec.od = this._q(outroEnv); rec.odur = outroDur; }
                                             if (!rec.d && !rec.od) return;
+                                            this._envUpload(o, rec);   // ☁️ 学习成果顺手备份云端(先传后存:隐私模式 setItem 会抛,别把云备份陪葬)
                                             localStorage.setItem(this._envKey(o), JSON.stringify(rec));
                                             const ks = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf('donggua_afpenv|') === 0) ks.push(k); }
                                             if (ks.length > 30) ks.slice(0, ks.length - 30).forEach(k => localStorage.removeItem(k));
@@ -10723,10 +10734,77 @@
                                     },
                                     _envLoad(o) {
                                         try {
-                                            const s = localStorage.getItem(this._envKey(o)); if (!s) return null;
-                                            const j = JSON.parse(s); if (j.v !== 2) return null;
-                                            return { env: j.d ? this._dq(j.d) : null, sec: j.sec || 0, maxStart: j.maxStart || 0, dur: j.dur || j.sec || 0, benv: j.bd ? this._dq(j.bd) : null, bdur: j.bdur || 0, oenv: j.od ? this._dq(j.od) : null, odur: j.odur || 0 };
+                                            const s = localStorage.getItem(this._envKey(o));
+                                            return s ? this._envParse(JSON.parse(s)) : null;
                                         } catch (e) { return null; }
+                                    },
+                                    // 本地找包络:本线路精确命中 → 直接用;没有 → 借同剧其它线路的(标 borrowed,须实测验证)
+                                    _envLoadAny(o) {
+                                        const exact = this._envLoad(o);
+                                        if (exact) return exact;
+                                        try {
+                                            const pre = 'donggua_afpenv|' + o.title + '|';
+                                            for (let i = 0; i < localStorage.length; i++) {
+                                                const k = localStorage.key(i);
+                                                if (k && k.indexOf(pre) === 0) {
+                                                    const s = this._envParse(JSON.parse(localStorage.getItem(k) || 'null'));
+                                                    if (s) { s.borrowed = true; s.from = k.slice(pre.length); return s; }
+                                                }
+                                            }
+                                        } catch (e) { }
+                                        return null;
+                                    },
+                                    // 借用记录打组件级"未验证"标(iB=片头 bB=贴片 oB=片尾);本线路记录不打标=可信
+                                    _envTag(s) {
+                                        if (!s) return null;
+                                        if (s.borrowed) { if (s.env) s.iB = 1; if (s.benv) s.bB = 1; if (s.oenv) s.oB = 1; }
+                                        delete s.borrowed;
+                                        return s;
+                                    },
+                                    // 组件级合并:base(可信本地)缺的组件用 extra(云端/借用)补上,连同其未验证标一起带入
+                                    _envFill(base, extra) {
+                                        if (!extra) return base;
+                                        if (!base) return extra;
+                                        if (!base.env && extra.env) { base.env = extra.env; base.sec = extra.sec; base.dur = extra.dur; base.maxStart = extra.maxStart; base.iB = extra.iB; base.from = extra.from; }
+                                        if (!base.benv && extra.benv) { base.benv = extra.benv; base.bdur = extra.bdur; base.bB = extra.bB; }
+                                        if (!base.oenv && extra.oenv) { base.oenv = extra.oenv; base.odur = extra.odur; base.oB = extra.oB; }
+                                        return base;
+                                    },
+                                    // 内容归一 JSON(上传去重比对用;server 的 at 等额外字段不参与)
+                                    _envJson(r) { return JSON.stringify({ d: r.d || '', sec: r.sec || 0, dur: r.dur || 0, ms: r.maxStart || 0, bd: r.bd || '', bdur: r.bdur || 0, od: r.od || '', odur: r.odur || 0 }); },
+                                    // ☁️ 拉云端包络(服务器端:本线路精确 → borrowed=false;借同剧其它线路 → borrowed=true)
+                                    async _envFetchRemote(o) {
+                                        try {
+                                            const title = (o.vue && o.vue.currentGroup && o.vue.currentGroup.name) || o.title;
+                                            const r = await fetch('/api/intro/env?title=' + encodeURIComponent(title) + '&site=' + encodeURIComponent(o.site));
+                                            const j = await r.json();
+                                            const s = this._envParse(j && j.env);
+                                            if (s) {
+                                                s.borrowed = !!j.borrowed; s.from = j.borrowed ? (j.from || '其它线路') : '';
+                                                // 本线路云端原样记录:记住内容,免得 promote 时又原封不动回传一份
+                                                const st = this._st[o.title + '|' + o.site];
+                                                if (st && !j.borrowed) st.envSrv = this._envJson(j.env);
+                                            }
+                                            return s;
+                                        } catch (e) { return null; }
+                                    },
+                                    // ☁️ 上传包络(fire-and-forget;同内容每会话每剧只发一次,云端已有的原样内容不回传)
+                                    _envUpload(o, rec) {
+                                        try {
+                                            const st = this._st[o.title + '|' + o.site], json = this._envJson(rec);
+                                            if (st) { if (st.envSent === json || st.envSrv === json) return; st.envSent = json; }
+                                            const token = localStorage.getItem('emax_auth_hash') || '';
+                                            const title = (o.vue && o.vue.currentGroup && o.vue.currentGroup.name) || o.title;
+                                            fetch('/api/intro/env', {
+                                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ token, title, site: o.site, env: rec })
+                                            }).catch(() => { });
+                                        } catch (e) { }
+                                    },
+                                    // 实测命中后落库转正:只收可信/已验证组件(别把别线路特有的贴片、未验证的片尾登记到本线路);
+                                    //   同时兼作老用户既有本地成果的云端补传(_envSave 内部带上传,内容级去重不重发)
+                                    _envPromote(o, s) {
+                                        this._envSave(o, s.iB ? null : s.env, s.sec, s.maxStart, s.dur, s.bB ? null : s.benv, s.bdur, s.oB ? null : s.oenv, s.odur);
                                     },
                                     _epNumOf(name, idx) { const m = String(name || '').match(/第\s*0*(\d+)\s*[集话話期]/) || String(name || '').match(/\bep\.?\s*0*(\d+)/i) || String(name || '').match(/^0*(\d+)$/); return m ? parseInt(m[1], 10) : idx + 1; },
                                     _pickSibling(epList, curUrl) {
@@ -10778,16 +10856,21 @@
                                         const ok = await this._fetchTailEnv(sess, F);
                                         if (!ok) return false;
                                         const hit = this._xcorrDetect(saved.oenv, sess.env, sess.n);
-                                        if (!hit) { console.log('[AFP离线] 定位: 第' + o.ep + '集尾部未找到已知片尾'); return false; }
+                                        // 抓取成功后不管中没中都记"本集本会话已试过"(网络失败不记,允许重试)——中了自然有 ed 标记短路,
+                                        // 没中就别在同一会话反复回到这集时一遍遍重抓 4 分钟尾部白烧流量
+                                        this._outroDone[o.title + '|' + o.site + '|' + o.ep] = 1;
+                                        if (!hit) { console.log('[AFP离线] 定位: 第' + o.ep + '集尾部未找到已知片尾' + (saved.oB ? '(包络借自' + (saved.from || '其它线路') + ',可能版本不符)' : '')); return false; }
                                         const ed = sess.baseStart + hit.at / this.EHZ;
                                         this._applyOutro(o, o.ep, ed, true, sess.duration);
-                                        this._outroDone[o.title + '|' + o.site + '|' + o.ep] = 1;
+                                        if (saved.oB) { saved.oB = 0; this._envPromote(o, saved); }   // 借用片尾实测命中:转正登记到本线路
                                         try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已定位本集片尾', 2000); } catch (e) { }
                                         console.log('[AFP离线] 定位: 第' + o.ep + '集片尾 @' + ed.toFixed(1) + 's (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
                                         return true;
                                     },
                                     async _learnOutro(o, F, curUrl, sib, st, saved) {
-                                        if (!sib || st.outroTries >= 2) return false;
+                                        // 片尾学习只给 1 次机会(不像片头 2 次):失败大概率是"这剧结尾本来就没有跨集重复的固定音频"
+                                        // (花絮/彩蛋/下集预告每集都不同),换一对集重试大概率还是学不出,为小概率省流量而不值得。
+                                        if (!sib || st.outroTries >= 1) return false;
                                         st.outroTries++;
                                         const sA = this._mkTailSess(curUrl), sB = this._mkTailSess(sib.url);
                                         const okA = await this._fetchTailEnv(sA, F), okB = await this._fetchTailEnv(sB, F);
@@ -10800,8 +10883,10 @@
                                         const oenv = sA.env.slice(r.aStart, r.aStart + r.len);
                                         this._applyOutro(o, o.ep, edA, true, sA.duration);
                                         this._applyOutro(o, sib.ep, edB, false, sB.duration);
-                                        const next = Object.assign({}, saved || {}, { oenv, odur });
-                                        this._envSave(o, next.env, next.sec, next.maxStart, next.dur, next.benv, next.bdur, oenv, odur);
+                                        const next = Object.assign({}, saved || {}, { oenv, odur, oB: 0 });
+                                        // 落库过滤未验证的借用组件(iB/bB):借来还没实测命中的片头/贴片包络绝不能持久化成"本线路可信"——
+                                        // 一旦落库,标记丢失,失配时就再也不会回退冷启动学习,这剧本线路的片头就永久卡死了
+                                        this._envSave(o, next.iB ? null : next.env, next.sec, next.maxStart, next.dur, next.bB ? null : next.benv, next.bdur, oenv, odur);
                                         st.intro = next;
                                         this._outroDone[o.title + '|' + o.site + '|' + o.ep] = 1; this._outroDone[o.title + '|' + o.site + '|' + sib.ep] = 1;
                                         try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已智能识别片尾', 2500); } catch (e) { }
@@ -10809,13 +10894,15 @@
                                         return true;
                                     },
                                     // 主入口(canplay 缺共享标记时调,自带全部守卫,调用方无需管状态):
-                                    //   没学过 → 抓 本集+邻集 包络互相关学出片头/片尾 → 两集标记+本集立即出按钮+存包络(学习模式);
+                                    //   没学过 → 先查本地任意线路/云端有没有现成包络(☁️ 有就省掉冷启动,只抓本集定位;借用的须实测命中才转正)
+                                    //          → 都没有才抓 本集+邻集 包络互相关学出片头/片尾 → 两集标记+本集立即出按钮+存包络+云备份(学习模式);
                                     //   学过   → 只抓本集头部/尾部,滑动定位已知片头/片尾 → 本集标记并上传共享,后来人零成本(定位模式)。
                                     //   守卫:同剧同线路学习只跑一次(学出/确认无片头都算终态);每集定位每会话只试一次;
-                                    //        失败(网络/源)最多自动重试2次;省流量档/2G 不跑;单剧流量上限 700MB(护别的剧不被一部问题剧拖累)+
-                                    //        会话总量上限 2000MB(全场兜底)——两档命中都在控制台打日志,不再是"悄悄啥都不干"(实测踩坑:
-                                    //        没有低码率变体的源单集分片就 50~80MB,一部剧的学习+片尾学习轻松单剧过 600MB,旧的单一全局
-                                    //        上限一撞就静默熄火,后面开的每一部新剧都跟着遭殃,且控制台没有任何提示,像"坏了"一样查不出原因)。
+                                    //        失败(网络/源)最多自动重试2次;省流量档/2G/蜂窝网络不跑(打一次日志,不静默);
+                                    //        单剧流量上限 700MB(护别的剧不被一部问题剧拖累)+会话总量上限 2000MB(全场兜底)——
+                                    //        两档命中都在控制台打日志,不再是"悄悄啥都不干"(实测踩坑:没有低码率变体的源单集分片就 50~80MB,
+                                    //        一部剧的学习+片尾学习轻松单剧过 600MB,旧的单一全局上限一撞就静默熄火,后面开的每一部新剧
+                                    //        都跟着遭殃,且控制台没有任何提示,像"坏了"一样查不出原因)。
                                     async learnOrDetect(o) {
                                         const K = o.title + '|' + o.site, epK = K + '|' + o.ep;
                                         const st = this._st[K] || (this._st[K] = { phase: 'idle', tries: 0, intro: null, outroTries: 0, mb: 0 });
@@ -10826,9 +10913,10 @@
                                         let needOutro = !(mark && mark.ed > 0) && !this._outroDone[epK];
                                         if (this._busy || st.phase === 'pending') return;
                                         if (needIntro && st.phase === 'idle' && st.tries >= 2) needIntro = false;
-                                        if (needOutro && st.outroTries >= 2) needOutro = false;
+                                        if (needOutro && st.outroTries >= 1) needOutro = false;
                                         if (!needIntro && !needOutro) return;
-                                        try { const c = navigator.connection; if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || ''))) return; } catch (e) { }
+                                        // 省流量模式/2G/蜂窝流量不自动分析(蜂窝判断只有 Chrome/Android 给 type,尽力而为;WiFi/桌面不受影响)
+                                        try { const c = navigator.connection; if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || '') || c.type === 'cellular')) { if (!this._netLogged) { this._netLogged = true; console.log('[AFP离线] 省流量模式/蜂窝网络,不自动离线分析(已有共享标记仍正常使用)'); } return; } } catch (e) { }
                                         if (st.mb > 700) { console.log('[AFP离线] 《' + o.title + '》本线路分析已用 ' + st.mb.toFixed(0) + 'MB,超过单剧上限,不再自动分析(已学到的标记仍正常使用;换线路/等下次访问会重试)'); return; }
                                         if (this._mb > 2000) { console.log('[AFP离线] 本次会话分析总流量已达 ' + this._mb.toFixed(0) + 'MB 上限,本次不再自动分析(刷新页面重置)'); return; }
                                         this._busy = true; const back = st.phase; st.phase = 'pending';
@@ -10838,12 +10926,22 @@
                                             await new Promise(r => setTimeout(r, 4000));   // 等换源/测速/深链尘埃落定(期间源还在切,当场抓必抓错)
                                             if (o.vue._liveActive || !o.vue.currentSource || o.vue.currentSource.site_key !== o.site || o.vue._introEpNum() !== o.ep) return;
                                             const F = this._mkFetch(o.vue), curUrl = o.vue.currentUrl;
-                                            let saved = st.intro || (st.intro = this._envLoad(o));
+                                            let saved = st.intro || (st.intro = this._envTag(this._envLoadAny(o)));
+                                            // ☁️ 本地(含借其它线路)凑不齐需要的组件 → 查一次云端(每剧每会话一次):有人在任何设备/线路学过就免冷启动
+                                            if ((!saved || (needIntro && !saved.env) || (needOutro && !saved.oenv)) && !st.envFetched) {
+                                                st.envFetched = 1;
+                                                const remote = this._envTag(await this._envFetchRemote(o));
+                                                if (remote) {
+                                                    saved = st.intro = this._envFill(saved, remote);
+                                                    const parts = [saved.env ? '片头' : '', saved.benv ? '贴片' : '', saved.oenv ? '片尾' : ''].filter(Boolean).join('+');
+                                                    console.log('[AFP离线] ☁️ 云端有本剧包络(' + parts + (remote.from ? ',借自线路 ' + remote.from + ',将实测验证' : ',本线路共享') + '),免冷启动直接定位');
+                                                }
+                                            }
                                             const sib = this._pickSibling(o.epList, curUrl);
+                                            let preSessA = null;   // 借用包络失配回退学习时,复用定位已抓的本集包络(不花二遍流量)
                                             if (saved) {
                                                 // —— 定位模式 ——
                                                 if (saved.env && needIntro) {
-                                                    this._epDone[epK] = 1; done = true; st.phase = 'learned';
                                                     const sess = this._mkSess(curUrl); let hit = null;
                                                     for (const cap of this.STAGES) {
                                                         const more = await this._fetchEnvTo(sess, F, cap);
@@ -10851,22 +10949,41 @@
                                                         if (hit || !more) break;
                                                     }
                                                     if (hit) {
+                                                        this._epDone[epK] = 1; done = true; st.phase = 'learned';
                                                         const os = hit.at / this.EHZ;
                                                         // 顺带定位开头贴片(只在前 150s 里找,片头贴片都在头部)
                                                         let bump = null;
                                                         if (saved.benv && saved.benv.length) {
                                                             const bh = this._xcorrDetect(saved.benv, sess.env, Math.min(sess.n, 150 * this.EHZ));
-                                                            if (bh) bump = { bs: Math.round(bh.at / this.EHZ * 10) / 10, be: Math.round((bh.at / this.EHZ + saved.bdur) * 10) / 10 };
+                                                            if (bh) { bump = { bs: Math.round(bh.at / this.EHZ * 10) / 10, be: Math.round((bh.at / this.EHZ + saved.bdur) * 10) / 10 }; saved.bB = 0; }
+                                                            else if (saved.bB) { saved.benv = null; saved.bdur = 0; saved.bB = 0; }   // 贴片是线路特有的,借来的没中就丢,别反复找
                                                         }
+                                                        if (saved.iB) { saved.iB = 0; this._envPromote(o, saved); console.log('[AFP离线] ☁️ 借用包络实测命中,已登记到本线路(后来人直接用)'); }
+                                                        else this._envPromote(o, saved);   // 本线路可信包络:兼作老本地成果的云端补传(内容级去重,不会重复发)
                                                         this._apply(o, o.ep, os, os + (saved.dur || saved.sec), true, bump);
                                                         try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已定位本集片头', 2000); } catch (e) { }
                                                         console.log('[AFP离线] 定位: 第' + o.ep + '集片头 @' + os.toFixed(1) + 's' + (bump ? ' + 开头贴片 @' + bump.bs + '→' + bump.be + 's' : '') + ' (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
-                                                    } else console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's 未找到已知片头(可能本集无片头/被剪)');
+                                                    } else if (saved.iB) {
+                                                        // 借用的片头包络在本线路失配(版本/剪辑不同):丢弃,顺流而下回退冷启动学习(本集包络已抓好,复用)
+                                                        console.log('[AFP离线] ☁️ 借用的片头包络本线路未命中(版本可能不同),回退冷启动学习');
+                                                        saved.env = null; saved.iB = 0; preSessA = sess;
+                                                    } else {
+                                                        this._epDone[epK] = 1; done = true; st.phase = 'learned';
+                                                        console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's 未找到已知片头(可能本集无片头/被剪)');
+                                                    }
                                                 } else if (saved.env) { done = true; st.phase = 'learned'; }
                                                 if (needOutro) {
                                                     // 处理完(不管命中与否)就清 needOutro——否则 saved.env 缺失时会 fallthrough 到下面"学习模式"再触发一次 _learnOutro,
                                                     // 对刚用 _detectOutro 复用过的已知 oenv 做重复抓取+烧 outroTries+对同一集重复上报
-                                                    if (saved.oenv) { await this._detectOutro(o, F, saved); needOutro = false; }
+                                                    if (saved.oenv) {
+                                                        const ok = await this._detectOutro(o, F, saved);
+                                                        if (!ok && saved.oB) {
+                                                            // 借用的片尾包络失配:丢弃,就地按本线路重学一次(有自己的 outroTries 预算)
+                                                            saved.oenv = null; saved.odur = 0; saved.oB = 0;
+                                                            if (sib) { const l = await this._learnOutro(o, F, curUrl, sib, st, saved); if (l) saved = st.intro || saved; }
+                                                        }
+                                                        needOutro = false;
+                                                    }
                                                     else if (sib) { const ok = await this._learnOutro(o, F, curUrl, sib, st, saved); saved = st.intro || saved; if (ok) needOutro = false; }
                                                 }
                                                 if (saved.env || !needIntro) return;
@@ -10879,7 +10996,7 @@
                                             st.tries++;
                                             if (!sib) return;
                                             console.log('[AFP离线] 冷启动学习: 抓 本集+第' + sib.ep + '集 音频响度包络(先前4分钟,学不出自动扩到10分钟)…');
-                                            const sA = this._mkSess(curUrl), sB = this._mkSess(sib.url);
+                                            const sA = preSessA || this._mkSess(curUrl), sB = this._mkSess(sib.url);
                                             let r = null, rBak = null;
                                             for (let si = 0; si < this.STAGES.length; si++) {
                                                 const cap = this.STAGES[si];
@@ -10916,11 +11033,13 @@
                                             this._apply(o, o.ep, os1, oe1, true, bumpA);         // 本集:即时点亮 + 共享缓存 + 上报
                                             this._apply(o, sib.ep, os2, oe2, false, bumpB);      // 邻集:共享缓存 + 上报(修"下一集不出按钮")
                                             const benv = bp ? sA.env.slice(bp.aStart, bp.aStart + bp.len) : null;
-                                            const learned = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2), benv, bdur: bp ? bp.len / this.EHZ : 0 };
+                                            // 云端来的已验证片尾包络别丢:借用片头失配回退学习的场景里,片尾可能已实测命中转正,新记录要带着它
+                                            const keepO = saved && saved.oenv && !saved.oB ? { oenv: saved.oenv, odur: saved.odur } : { oenv: null, odur: 0 };
+                                            const learned = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2), benv, bdur: bp ? bp.len / this.EHZ : 0, oenv: keepO.oenv, odur: keepO.odur };
                                             st.phase = 'learned'; done = true;
                                             this._epDone[epK] = 1; this._epDone[K + '|' + sib.ep] = 1;
                                             const outroLearned = needOutro ? await this._learnOutro(o, F, curUrl, sib, st, learned) : false;
-                                            if (!outroLearned) { this._envSave(o, headEnv, headSec, Math.max(os1, os2), dur, benv, bp ? bp.len / this.EHZ : 0); st.intro = learned; }
+                                            if (!outroLearned) { this._envSave(o, headEnv, headSec, Math.max(os1, os2), dur, benv, bp ? bp.len / this.EHZ : 0, keepO.oenv, keepO.odur); st.intro = learned; }
                                             try { if (typeof dp !== 'undefined' && dp && o.vue._introEpNum() === o.ep) dp.notice('✓ 已智能识别片头', 2500); } catch (e) { }
                                             console.log('[AFP离线] ✅ 学习成功: 片头 ' + dur.toFixed(0) + 's @本集 ' + os1.toFixed(1) + '→' + oe1.toFixed(1) + 's / 第' + sib.ep + '集 ' + os2.toFixed(1) + '→' + oe2.toFixed(1) + 's' + (bumpA ? ' + 开头贴片 ' + bumpA.bs + '→' + bumpA.be + 's' : '') + ' (' + (fine ? '已局部精修' + (fine.bridged ? '+跨空洞续接' : '') : '粗对齐') + ',会话流量 ' + this._mb.toFixed(0) + 'MB;后续集将自动定位)');
                                         } catch (e) {
