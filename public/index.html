@@ -10231,7 +10231,7 @@
                                     WIN: 600, HZ: 2, BANDS: 16, SIM: 0.90, MINRUN: 40,   // 记录前10min;每秒2向量;16频带;相似阈值(0.90挡复用BGM/包络误配);最短公共段40向量=20s(挡20s BGM)
                                     ctx: null, an: null, data: null, bandIdx: null,
                                     cur: null, rec: null, recCnt: 0, timer: 0, capable: null, zeroRun: 0,
-                                    roll: [], opFp: null, detected: false, learnTried: false,
+                                    roll: [], opFp: null, detected: false, maxEnergy: 0, blindReason: '',
                                     attach() {
                                         try {
                                             if (this.capable === false) return false;
@@ -10266,14 +10266,36 @@
                                         if (!this.attach()) return;
                                         this.cur = Object.assign({ key }, info);
                                         this.rec = new Float32Array(this.WIN * this.HZ * this.BANDS);
-                                        this.recCnt = 0; this.roll = []; this.detected = false; this.learnTried = false; this.zeroRun = 0; this.firstT = null;
+                                        this.recCnt = 0; this.roll = []; this.detected = false; this.zeroRun = 0; this.firstT = null;
+                                        this.maxEnergy = 0; this._noSibLogged = false; this._missLogged = false; this.blindReason = '';
                                         this.opFp = this._loadOp(this.cur);
+                                        console.log('[AFP] 开始采集 第' + info.ep + '集' + (this.opFp ? '(已有片头指纹,实时匹配)' : '(学习中)'));
                                         this.timer = setInterval(() => { try { this._tick(); } catch (e) { } }, 500);
                                     },
                                     stop() {
                                         if (this.timer) { clearInterval(this.timer); this.timer = 0; }
                                         if (this.cur && this.recCnt >= 120) { try { this._saveRec(); } catch (e) { } }
                                         this.cur = null; this.rec = null; this.roll = [];
+                                    },
+                                    // 🔎 诊断:控制台调 window.afpEngine.status() 看引擎状态(排查"没弹按钮")
+                                    status() {
+                                        let recKeys = 0, opKeys = 0;
+                                        try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (!k) continue; if (k.indexOf('donggua_afpop|') === 0) opKeys++; else if (k.indexOf('donggua_afp|') === 0) recKeys++; } } catch (e) { }
+                                        let liveEnergy = null;
+                                        try { if (this.an && this.data) { this.an.getByteFrequencyData(this.data); let s = 0; for (let i = 3; i < 560; i++) s += this.data[i]; liveEnergy = s; } } catch (e) { }
+                                        const s = {
+                                            capable: this.capable, ctxState: this.ctx && this.ctx.state, attached: !!(this.ctx && this.an),
+                                            hasHlsPlugin: !!(typeof dp !== 'undefined' && dp && dp.plugins && dp.plugins.hls),
+                                            timerRunning: !!this.timer, recCnt: this.recCnt, firstT: this.firstT, zeroRun: this.zeroRun,
+                                            liveAudioEnergy现采一帧: liveEnergy, maxEnergy曾采到: this.maxEnergy, blindReason: this.blindReason || '(无)',
+                                            已学出片头指纹: !!this.opFp, 本地录制数: recKeys, 已学剧数: opKeys,
+                                            当前集标记: this.vue && this.vue._introCur, 按钮显示开关: this.vue && this.vue.introSkipShow, 自动跳开关: this.vue && this.vue.introSkipAuto
+                                        };
+                                        console.log('⏭️ 跳过片头引擎状态:', s);
+                                        console.log(liveEnergy != null && liveEnergy < 30 && !dp.video.paused
+                                            ? '⚠️ 现采能量≈0 而视频在放 → analyser 拿不到音频(多半跨域音频无CORS,MSE/hls.js 路径本应正常;检查是否走了原生HLS或直连MP4)'
+                                            : '✓ 采样正常;若没按钮多半是【全站还没学出/共享标记为空】——同一部剧看满两集(各≥2分钟、含片头)后,第三集起会出现');
+                                        return s;
                                     },
                                     _tick() {
                                         if (typeof dp === 'undefined' || !dp || !dp.video || !this.cur) return;
@@ -10294,16 +10316,17 @@
                                             const m = c ? s / c : 0; vec[b] = m; energy += m;
                                         }
                                         if (energy < 8) {   // 静音段/静音播放/拿不到采样
-                                            if (!v.muted && v.volume > 0) { if (++this.zeroRun > 40) { console.warn('[AFP] 20s 无音频采样,禁用'); this.capable = false; this.stop(); } }
+                                            if (!v.muted && v.volume > 0) { if (++this.zeroRun > 40) { this.blindReason = '连续20s无音频采样(跨域音频无CORS→analyser被静音? / AudioContext被浏览器策略挂起?)'; console.warn('[AFP] ' + this.blindReason + ' → 本源禁用指纹'); this.capable = false; this.stop(); } }
                                             return;
                                         }
-                                        this.zeroRun = 0;
+                                        this.zeroRun = 0; this.maxEnergy = Math.max(this.maxEnergy || 0, energy);
                                         const idx = Math.floor(t * this.HZ);
                                         this.rec.set(vec, idx * this.BANDS); this.recCnt++;
                                         this.roll.push({ idx, vec });
                                         if (this.roll.length > 30) this.roll.shift();
                                         if (this.opFp && !this.detected && !this.vue._introCur) this._match();
-                                        if (!this.learnTried && this.recCnt === 360) this._maybeLearn();   // 看到3分钟先试学一次
+                                        // 学习:攒够 ~80s 采样且未学出就试,之后每 ~20s 重试(比"看满3分钟才试一次"稳很多)
+                                        if (!this.opFp && this.recCnt >= 160 && this.recCnt % 40 === 0) this._maybeLearn();
                                     },
                                     // 相似度=去均值相关(Pearson):频带能量全为正且被响度主导,原始余弦对任意内容都≈0.95(假相似);
                                     // 去均值后只比"频谱形状",无关内容≈0、同内容≈1(合成测试抓出的关键修正)
@@ -10328,7 +10351,7 @@
                                             s /= 16;
                                             if (s > best) { best = s; bestK = k; }
                                         }
-                                        if (best >= 0.93) {   // 实时检测阈值(比学习更严,单点匹配无长度佐证,防正片偶然相似段误检)
+                                        if (best >= 0.90) {   // 实时检测阈值(同一片头音频跨集相似度很高;误检有 v≥2 门控+可忽略按钮兜底)
                                             const os = Math.max(0, Math.round((w[0].idx - bestK) / this.HZ * 10) / 10);
                                             const oe = Math.round((os + this.opFp.sec) * 10) / 10;
                                             this.detected = true;
@@ -10338,17 +10361,16 @@
                                     },
                                     // 两集互相关学习:找最长公共段(≥15s,允许2向量断档) → 片头
                                     _maybeLearn() {
-                                        if (this.learnTried || !this.cur || this.opFp) { this.learnTried = true; return; }
-                                        this.learnTried = true;
+                                        if (!this.cur || this.opFp) return;   // 已学出/无上下文 → 不重复;可被重试调用
                                         if (this.firstT == null || this.firstT > 20 || this.recCnt < 120) return;   // 本集非从头录/采样太少 → 不作为学习依据(续看/倍速)
                                         const sib = this._listRecs(this.cur).filter(k => k.ep !== this.cur.ep);
-                                        if (!sib.length) return;
+                                        if (!sib.length) { if (!this._noSibLogged) { console.log('[AFP] 本剧本线路还没有其它集的录制,先攒(至少看两集各≥1分钟才能学出片头)'); this._noSibLogged = true; } return; }
                                         const other = this._loadRec(sib[sib.length - 1]);
                                         if (!other) return;
                                         const t0 = Date.now();
                                         const r = this._learn(this.rec, other.data);
-                                        console.log('[AFP] 互相关比对耗时', Date.now() - t0, 'ms →', r ? '命中' : '未找到公共段');
-                                        if (!r) return;
+                                        if (!r) { if (!this._missLogged) { console.log('[AFP] 与第' + sib[sib.length - 1].ep + '集互相关暂未找到公共段(继续录/重试;两集片头须都录到)'); this._missLogged = true; } return; }
+                                        console.log('[AFP] 互相关命中,耗时', Date.now() - t0, 'ms');
                                         const os1 = r.aStart / this.HZ, os2 = r.bStart / this.HZ, sec = r.len / this.HZ;
                                         const fp = this.rec.slice(r.aStart * this.BANDS, (r.aStart + r.len) * this.BANDS);
                                         this.opFp = { data: fp, len: r.len, sec };
