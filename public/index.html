@@ -9780,9 +9780,15 @@
                     // 📺 直播不套去广告(直播 m3u8 是滑窗，时长启发式会毁流；https 直连源也不该再被 worker 包一层)
                     const isDirectM3U8 = url && url.includes('.m3u8') && !(this.currentSource && this.currentSource._useProxy) && !this._liveActive;
                     if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && this.corsProxyUrl) {
-                        finalUrl = this.corsProxyUrl + '/?url=' + encodeURIComponent(finalUrl);
-                        adFilterProxyUsed = true;
-                        console.log('[播放器] 🛡️ 广告过滤: M3U8 路由到 CF Worker 代理');
+                        // 本会话已确认"过滤代理过不了"的线路(源站封代理IP/URL签名绑IP)不再反复试代理:
+                        // 直连能看但没有过滤——想要无广告请换线路(错误分诊时已自动换过)
+                        if (this._adProxyBadSites && this.currentSource && this._adProxyBadSites[this.currentSource.site_key]) {
+                            console.log('[播放器] 🛡️ 本线路(' + this.currentSource.site_key + ')此前过滤代理失败(源站封代理)，本集直连播放——广告过滤对该线路不可用，换其它线路可恢复过滤');
+                        } else {
+                            finalUrl = this.corsProxyUrl + '/?url=' + encodeURIComponent(finalUrl);
+                            adFilterProxyUsed = true;
+                            console.log('[播放器] 🛡️ 广告过滤: M3U8 路由到 CF Worker 代理');
+                        }
                     } else if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && !this.corsProxyUrl) {
                         console.warn('[播放器] ⚠️ 广告过滤已启用但未配置 CORS_PROXY_URL，无法过滤');
                     }
@@ -9810,32 +9816,59 @@
                                 console.log('[播放器] ⏳ 代理回退中，忽略错误 (' + source + ')');
                                 return;
                             }
-                            // 如果使用了广告过滤代理，先回退到直连重试
+                            // 如果使用了广告过滤代理，先分诊再决定回退方式——
+                            //   旧行为"一失败就回退直连"会静默放弃过滤,用户看到满屏广告还以为过滤坏了。
+                            //   分诊:worker 有任何 HTTP 响应(哪怕4xx/5xx)=代理活着 → 是【本线路】过不了(源站封代理IP/URL签名绑IP),
+                            //        换下一条线路继续保广告过滤;worker 不通/超时 或 已有≥2条线路代理失败(疑似代理全局故障/配额耗尽)
+                            //        或没有下一条线路 → 回退直连兜底(能看优先,明确提示可能含广告)。
                             if (this._activeAdFilterProxyUsed && !this._proxyRetried) {
                                 this._proxyRetried = true;
                                 this._proxyRetrying = true;
                                 const fb = this._activeOriginalUrl;
-                                console.log('[播放器] 🛡️ 代理播放失败，回退直连:', (fb || '').substring(0, 60));
-                                dp.switchVideo({ url: fb, type: 'hls' });
-                                // 回退后等就绪再播放（switchVideo 不会自动播放）
-                                const onMeta = () => {
-                                    dp.video.removeEventListener('loadedmetadata', onMeta);
-                                    const p = dp.play();
-                                    if (p && typeof p.catch === 'function') p.catch(() => { });
-                                    if (typeof window._syncPlayOverlays === 'function') window._syncPlayOverlays();
-                                };
-                                if (dp.video && dp.video.readyState >= 1) onMeta();
-                                else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
-                                // 3秒后解除锁定（足够 switchVideo 完成加载）；若回退直连后仍未起播
-                                //（代理 403 + 直连 CORS/拒连都失败，此时不会再触发 error 事件 → 原先会永久卡黑屏）→ 自动切下一个源
-                                setTimeout(() => {
-                                    this._proxyRetrying = false;
-                                    if (this._activePlaySeq === _navSeq && dp && dp.video &&
-                                        dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
-                                        console.log('[播放器] 代理+直连均失败，自动切换下一个源');
+                                const failSite = this.currentSource && this.currentSource.site_key;
+                                const srcs = this.availableSources || [];
+                                const idx = srcs.findIndex(s => s.site_key === failSite);
+                                const canHop = idx >= 0 && idx < srcs.length - 1 && Object.keys(this._adProxyBadSites || {}).length < 2;
+                                const probe = !canHop ? Promise.resolve(false) : (async () => {
+                                    try {
+                                        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
+                                        await fetch(this.corsProxyUrl, { mode: 'no-cors', cache: 'no-store', signal: ctl.signal });   // no-cors:只探"通不通",不要求 CORS 头
+                                        clearTimeout(t); return true;
+                                    } catch (e) { return false; }
+                                })();
+                                probe.then(workerAlive => {
+                                    if (this._activePlaySeq !== _navSeq) { this._proxyRetrying = false; return; }
+                                    if (workerAlive) {
+                                        (this._adProxyBadSites = this._adProxyBadSites || {})[failSite] = 1;   // 本会话该线路不再走代理(play() 里会改直连)
+                                        console.log('[播放器] 🛡️ 过滤代理正常、但 ' + failSite + ' 线路过不了代理(源站可能封代理IP)，为保住广告过滤自动换线路');
+                                        try { dp.notice('该线路无法过滤广告，自动换线路…', 2500); } catch (e) { }
+                                        this._proxyRetrying = false;
                                         this.handlePlaybackError();
+                                        return;
                                     }
-                                }, 3000);
+                                    console.log('[播放器] 🛡️ 代理播放失败(代理不可用/无备选线路)，回退直连:', (fb || '').substring(0, 60));
+                                    try { dp.notice('广告过滤代理暂不可用，本集直连播放（可能含广告）', 3000); } catch (e) { }
+                                    dp.switchVideo({ url: fb, type: 'hls' });
+                                    // 回退后等就绪再播放（switchVideo 不会自动播放）
+                                    const onMeta = () => {
+                                        dp.video.removeEventListener('loadedmetadata', onMeta);
+                                        const p = dp.play();
+                                        if (p && typeof p.catch === 'function') p.catch(() => { });
+                                        if (typeof window._syncPlayOverlays === 'function') window._syncPlayOverlays();
+                                    };
+                                    if (dp.video && dp.video.readyState >= 1) onMeta();
+                                    else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
+                                    // 3秒后解除锁定（足够 switchVideo 完成加载）；若回退直连后仍未起播
+                                    //（代理 403 + 直连 CORS/拒连都失败，此时不会再触发 error 事件 → 原先会永久卡黑屏）→ 自动切下一个源
+                                    setTimeout(() => {
+                                        this._proxyRetrying = false;
+                                        if (this._activePlaySeq === _navSeq && dp && dp.video &&
+                                            dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
+                                            console.log('[播放器] 代理+直连均失败，自动切换下一个源');
+                                            this.handlePlaybackError();
+                                        }
+                                    }, 3000);
+                                });
                                 return;
                             }
                             this.handlePlaybackError();
