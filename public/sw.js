@@ -1,6 +1,10 @@
 // Service Worker with Image Caching for dongguaTV
 // v25: 直播台标(跨域图片)Cache-First 缓存 + /api/live/channels SWR(秒开)
-const CACHE_VERSION = 'v25';
+// v26: 离线/弱网加固——①静态资源(libs)策略修复:原 './' 前缀匹配绝对 URL 永不命中(死代码),libs 全落
+//      Network-First,弱网可能白屏;改按 pathname 匹配,真正 SWR。②导航兜底:带 ?play= 等查询参数的深链
+//      cache.match 精确匹配不命中预缓存 './',断网只回纯文本 'Offline';改为回退 index.html 外壳。
+//      ③同源 /api GET:有缓存时网络 4s 未响应先用缓存兜底(弱网不再陪网络挂到死;网络结果仍写回缓存)。
+const CACHE_VERSION = 'v26';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -97,39 +101,58 @@ self.addEventListener('fetch', event => {
 
     // 策略2：HTML 页面 - Stale-While-Revalidate（秒开 + 后台更新）
     // 立即返回缓存(若有)，同时后台拉取最新版写回缓存；新版本由 index.html 的版本检测脚本 + SW 版本号兜底。
-    // 相比原 Network-First：老用户不再每次重下 ~80-150KB(gzip) HTML，回访明显更快。
+    // ⚠️ SPA 外壳兜底【仅限根路径导航】(/?play= 深链等)：精确缓存 miss 时,网络失败或弱网 5s 未响应才回
+    //    './' 外壳(它每次访问首页都被 SWR 刷新,不陈旧)。/admin、/clear-cache.html 等独立页面绝不回外壳——
+    //    否则在线首次访问就会被劫持成首页。
     if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
-        event.respondWith(
-            caches.open(STATIC_CACHE).then(cache =>
-                cache.match(event.request).then(cached => {
-                    const network = fetch(event.request)
-                        .then(response => {
-                            if (response && response.status === 200) {
-                                cache.put(event.request, response.clone());
-                            }
-                            return response;
-                        })
-                        .catch(() => cached || new Response('Offline', { status: 503, statusText: 'Service Unavailable' }));
-                    // 有缓存先秒开，后台 network 静默更新；无缓存则等网络
-                    return cached || network;
-                })
-            )
-        );
+        event.respondWith((async () => {
+            const cache = await caches.open(STATIC_CACHE);
+            const cached = await cache.match(event.request);
+            const network = fetch(event.request).then(response => {
+                if (response && response.status === 200) {
+                    cache.put(event.request, response.clone());
+                }
+                return response;
+            });
+            if (cached) {
+                event.waitUntil(network.catch(() => { }));  // 后台静默更新
+                return cached;
+            }
+            const isSpaRoot = event.request.mode === 'navigate' && url.pathname === '/';
+            const shell = isSpaRoot ? (await cache.match('./')) || (await cache.match('./index.html')) : null;
+            if (shell) {
+                const winner = await Promise.race([
+                    network.catch(() => null),
+                    new Promise(resolve => setTimeout(() => resolve(null), 5000))
+                ]);
+                if (!winner) event.waitUntil(network.catch(() => { }));  // 竞速输了的网络结果仍写回缓存
+                return winner || shell;
+            }
+            try {
+                return await network;
+            } catch (e) {
+                return new Response('Offline', { status: 503, statusText: 'Service Unavailable' });
+            }
+        })());
         return;
     }
 
-    // 策略3：静态资源 (CSS/JS) - Stale-While-Revalidate
-    // 先返回缓存，同时后台更新
-    if (STATIC_URLS.some(staticUrl => event.request.url.includes(staticUrl))) {
+    // 策略3：静态资源 (CSS/JS/图标) - Stale-While-Revalidate
+    // ⚠️ 必须按 pathname 匹配：旧写法 event.request.url.includes('./libs/...') 里绝对 URL 不含 './'，
+    //    永不命中(死代码)，libs 全部落到 Network-First，弱网时核心脚本挂起=白屏。
+    // ⚠️ cache.match 必须 ignoreSearch：页面以 'ad-filter.js?v=4.0' 带版本参数引用,预缓存键无查询串,
+    //    精确匹配永 miss——该脚本是 defer,弱网挂起会阻塞 DOMContentLoaded 把整站卡在 loader。
+    if (url.origin === self.location.origin &&
+        STATIC_URLS.some(staticUrl => staticUrl !== './' && url.pathname === staticUrl.replace(/^\./, ''))) {
         event.respondWith(
             caches.open(STATIC_CACHE).then(cache => {
-                return cache.match(event.request).then(cached => {
+                return cache.match(event.request, { ignoreSearch: true }).then(cached => {
                     const fetchPromise = fetch(event.request).then(response => {
                         if (response && response.status === 200) {
                             cache.put(event.request, response.clone());
                         }
                         return response;
-                    }).catch(() => cached); // 网络失败时返回缓存
+                    }).catch(() => cached || new Response('', { status: 503 })); // 必须返回 Response(undefined 会让请求直接报错)
                     // 返回缓存（如果有），同时后台更新
                     return cached || fetchPromise;
                 });
@@ -138,7 +161,7 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // 策略4：只处理同源请求 - Network First
+    // 策略4：只处理同源请求 - Network First(+弱网缓存竞速)
     // 跳过跨域请求（如 m3u8 视频流），避免 CORS 错误
     if (url.origin !== self.location.origin) {
         return; // 让浏览器直接处理跨域请求
@@ -149,25 +172,38 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    event.respondWith(
-        fetch(event.request)
-            .then(response => {
-                // 只缓存成功的同源 GET 请求
-                if (response && response.status === 200) {
-                    const responseToCache = response.clone();
-                    caches.open(STATIC_CACHE).then(cache => {
-                        cache.put(event.request, responseToCache);
-                    });
-                }
-                return response;
-            })
-            .catch(() => {
-                return caches.match(event.request).then(cached => {
-                    // 确保返回有效的 Response
-                    return cached || new Response('Network Error', { status: 503 });
-                });
-            })
-    );
+    // ⚠️ SSE 流(/api/search?stream=true)与显式刷新(nocache=1)不缓存不竞速：
+    //    缓存整条 SSE 会在弱网被整段回放旧结果;nocache 的语义就是"要最新",被 4s 竞速回旧副本会
+    //    让"刷新集数/刷新线路"静默返回昨天的数据冒充刷新成功。这两类交给浏览器直连。
+    if (url.searchParams.get('stream') === 'true' || url.searchParams.has('nocache')) {
+        return;
+    }
+
+    // Network-First；已有缓存副本时网络最多等 4s——弱网挂起(不 reject)原来会连缓存兜底都拿不到，
+    // 现在 4s 未响应先回缓存(旧数据可用性 > 无限转圈)，网络结果照常写回缓存供下次。
+    event.respondWith((async () => {
+        const cache = await caches.open(STATIC_CACHE);
+        const cached = await cache.match(event.request);
+        const network = fetch(event.request).then(response => {
+            if (response && response.status === 200) {
+                cache.put(event.request, response.clone());
+            }
+            return response;
+        });
+        if (cached) {
+            const winner = await Promise.race([
+                network.catch(() => null),
+                new Promise(resolve => setTimeout(() => resolve(null), 4000))
+            ]);
+            if (!winner) event.waitUntil(network.catch(() => { }));  // 竞速输了的网络结果仍写回缓存
+            return winner || cached;
+        }
+        try {
+            return await network;
+        } catch (e) {
+            return new Response('Network Error', { status: 503 });
+        }
+    })());
 });
 
 // 图片请求处理 - Cache First 策略

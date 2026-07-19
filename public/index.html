@@ -5288,11 +5288,12 @@
             }
 
             try {
-                const res = await fetch('/api/auth/v2board/check', {
+                // ⏱️ 8s 超时:弱网挂起时走 catch 的 fail-open(返回 true 不阻断使用),与断网行为一致
+                const res = await fetchT('/api/auth/v2board/check', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ v2boardToken: v2bToken, email })
-                });
+                }, 8000);
 
                 const data = await res.json();
 
@@ -5381,8 +5382,12 @@
         // ========== 页面加载认证检查 ==========
         async function checkAuthStatus() {
             try {
-                const res = await fetch('/api/auth/check');
+                // ⏱️ 8s 超时:这是 DOMContentLoaded 后第一道门,弱网挂起=整站卡在不透明 loader 后。
+                //    超时抛错→外层 catch fail-open 放行(与完全断网的快速失败同一条路)。
+                const res = await fetchT('/api/auth/check', null, 8000);
                 const data = await res.json();
+                // 记住"本站需要登录"——弱网超时 fail-open 时,无凭据的访客不该被放进来(见下方 catch)
+                try { localStorage.setItem('donggua_auth_required', data.requirePassword ? '1' : '0'); } catch (e) { }
 
                 if (!data.requirePassword) {
                     window.startApp && window.startApp();
@@ -5448,12 +5453,12 @@
 
                     // 独立密码模式
                     if (!isExpired) {
-                        // 验证 hash 是否仍然有效
-                        const verifyRes = await fetch('/api/auth/verify', {
+                        // 验证 hash 是否仍然有效(⏱️ 8s 超时→外层 catch fail-open,弱网不锁死)
+                        const verifyRes = await fetchT('/api/auth/verify', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ passwordHash: storedHash })
-                        });
+                        }, 8000);
                         const verifyData = await verifyRes.json();
 
                         if (verifyData.success) {
@@ -5471,11 +5476,13 @@
 
             } catch (e) {
                 console.error('Auth check error:', e);
-                // 容错：保持原有 fail-open(后端异常时放行)，但深链 + 无缓存登录态这一特定情形除外——
-                // 否则会被 fail-open 触发资源站搜索并绕过登录墙(违背"未登录不加载资源站")。该情形改为渲染锁定预览。
+                // 容错：保持原有 fail-open(后端异常/弱网超时时放行有凭据的用户——他们要能离线看缓存)。
+                // 但【无任何本地凭据】的访客在"已知本站需要登录"(上次成功检查缓存过)或深链场景下不放行——
+                // 否则弱网 8s 超时就成了登录墙的绕过通道。
                 let hasPlay = false;
                 try { hasPlay = !!new URLSearchParams(location.search).get('play'); } catch (_) { }
-                if (hasPlay && !localStorage.getItem(AUTH_STORAGE_KEY)) {
+                const knownRequired = localStorage.getItem('donggua_auth_required') === '1';
+                if ((hasPlay || knownRequired) && !localStorage.getItem(AUTH_STORAGE_KEY)) {
                     showLoginScreen();
                 } else {
                     window.startApp && window.startApp();
@@ -5635,6 +5642,14 @@
             return fetch(url, { ...options, headers });
         }
 
+        // ⏱️ 带超时的 fetch：弱网(断断续续)时裸 fetch 可挂起数十秒~数分钟,把启动/鉴权/测速链整个卡死。
+        //    关键链路统一用它兜底——超时抛 AbortError,走各自既有的 catch 兜底分支(fail-open/缓存/跳过)。
+        function fetchT(url, options, timeoutMs) {
+            const ctl = new AbortController();
+            const t = setTimeout(() => ctl.abort(), timeoutMs || 8000);
+            return fetch(url, { ...(options || {}), signal: ctl.signal }).finally(() => clearTimeout(t));
+        }
+
         // 页面加载时获取公网 IP（后台执行，不阻塞）
         fetchClientPublicIP();
 
@@ -5718,6 +5733,11 @@
                 if (m && /^https?%3A/i.test(m[1])) return decodeURIComponent(m[1]);
             } catch (e) { }
             return String(u);
+        }
+        // 集名归一化(与进度记忆同规则):跨线路 第01集↔第1集/前导零差异不该让离线缓存 miss
+        function offlineNormEp(name) {
+            if (!name) return '';
+            return String(name).replace(/第0*(\d+)集/g, '第$1集').replace(/^0+(\d)/, '$1').trim();
         }
         // hls.js(v1.x) 自定义 loader：清单/分段先查本地缓存，未命中走原生网络加载。已缓存的剧集=离线/秒开。
         // ⚠️ 结构要点：onSuccess/super.load 不能落在任何 .catch 链里——onSuccess 内部抛错若兜底到再次 super.load，
@@ -6548,8 +6568,20 @@
                     // 1. 获取后端配置
                     updateStatus('正在连接服务器...');
                     try {
-                        const res = await fetch('/api/config');
-                        const config = await res.json();
+                        // ⏱️ 8s 超时 + 本地缓存兜底:弱网挂起/断网时用上次成功的配置(corsProxyUrl 等)照常进应用,
+                        //    不再卡死在"正在连接服务器"。SW 对 /api/config 也有缓存,这里是客户端最后一道兜底。
+                        let config;
+                        try {
+                            const res = await fetchT('/api/config', null, 8000);
+                            config = await res.json();
+                            try { localStorage.setItem('donggua_config_cache', JSON.stringify({ ts: Date.now(), config })); } catch (e) { }
+                        } catch (e) {
+                            // 兜底配置带 7 天 TTL:太陈旧的 cors_proxy_url/开关不如没有(代理早换了会钉死整个会话)
+                            const cached = JSON.parse(localStorage.getItem('donggua_config_cache') || 'null');
+                            if (!cached || !cached.config || (Date.now() - (cached.ts || 0)) > 7 * 24 * 3600 * 1000) throw e;
+                            config = cached.config;
+                            console.warn('[Config] 服务器不可达,使用本地缓存配置(离线/弱网模式)');
+                        }
                         TMDB_API_KEY = config.tmdb_api_key;
 
                         // 保存 CORS 代理 URL（用于资源站 API 中转）
@@ -6590,7 +6622,9 @@
                     if (TMDB_API_KEY) {
                         updateStatus('正在加载首页内容...');
                         try {
-                            await this.fetchHero();
+                            // ⏱️ 最多等 6s:弱网时 Hero 慢到/拉不回来就先放行进应用(它完成后仍会自行填充),
+                            //    loader 不再被首页轮播图挂死
+                            await Promise.race([this.fetchHero(), new Promise(r => setTimeout(r, 6000))]);
                         } catch (e) {
                             console.error('[InitApp] Hero 加载失败:', e);
                         }
@@ -6611,9 +6645,13 @@
                         if (loader) loader.classList.add('hidden');
                     }, 300);
 
-                    // 4. 加载站点信息（用于客户端测速）
+                    // 4. 加载观看历史(先于 /api/sites——历史/离线列表纯本地,不能被网络请求挂起拖住:
+                    //    弱网时"继续观看"行与 offlineList 必须先就位,它们是断网/弱网播缓存的入口)
+                    this.loadWatchHistory();
+
+                    // 5. 加载站点信息（用于客户端测速;⏱️ 8s 超时防弱网挂起阻断后续深链处理）
                     try {
-                        const sitesRes = await fetch('/api/sites');
+                        const sitesRes = await fetchT('/api/sites', null, 8000);
                         const sitesData = await sitesRes.json();
                         if (sitesData.sites) {
                             sitesData.sites.forEach(site => {
@@ -6623,9 +6661,6 @@
                     } catch (e) {
                         console.error('Sites Load Error:', e);
                     }
-
-                    // 5. 加载观看历史
-                    this.loadWatchHistory();
 
                     // 6. 🔗 处理分享深链 ?play=（自动搜索并打开对应剧）
                     this.handleDeepLink();
@@ -7093,6 +7128,20 @@
                     // 🔧 修复"历史记录资源列表不齐全"：currentGroup 是详情页打开瞬间的快照，
                     //    流式搜索后续到达的线路不会并入这个被引用的对象。这里用最新的完整
                     //    groupedList（反映当前完整 rawList）补齐缺失线路，已测速的线路保留其测速数据。
+                    // ⬇️ 离线上下文(合成的单条"离线缓存"线路)不覆盖已有的【真实线路快照/封面/集数】——
+                    //    否则断网看一次缓存,回网后"继续观看"就丢了全部真实线路、封面变灰、集数被清。
+                    //    无旧快照时才用合成快照(它也能回放)。
+                    if (groupData && groupData._offlineCtx) {
+                        const prev = existingIndex !== -1 ? this.watchHistory[existingIndex] : null;
+                        if (prev) {
+                            if (prev.groupData && Array.isArray(prev.groupData.sources) &&
+                                prev.groupData.sources.some(s => s && s.vod_id)) {
+                                groupData = prev.groupData;
+                            }
+                            if (!poster && prev.poster) poster = prev.poster;
+                            if (!episode && prev.episode) episode = prev.episode;
+                        }
+                    }
                     if (groupData && Array.isArray(groupData.sources)) {
                         const fresh = this.groupedList.find(g => g.name === name);
                         if (fresh && fresh.sources.length > groupData.sources.length) {
@@ -8022,6 +8071,17 @@
                         || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
                     if (!group) {
                         if (!isFinal) return;  // 还没搜到该剧：继续等(防抖/兜底)，别误判失败
+                        // ⬇️ 搜索无果(典型=断网)但该剧有离线缓存 → 深链直接进离线上下文(?ep= 由 _deepLinkTargetEp 定位)
+                        const om = (this.offlineList || []).find(x => norm(x.name) === norm(dl.name)) ||
+                            (this.offlineList || []).find(x => norm(x.name).includes(norm(dl.name)));
+                        if (om) {
+                            console.log('[离线] 深链搜索无结果但《' + om.name + '》有离线缓存 → 进离线上下文');
+                            dl.done = true;
+                            this._clearDeepLinkTimers();
+                            this._deepLinkTargetEp = dl.ep || '';
+                            this._openOfflineContext(om);
+                            return;
+                        }
                         // 搜索结束仍无匹配：退出加载/锁定态，落到已加载的首页/搜索结果，而不是卡在黑屏框架
                         dl.done = true;
                         this._clearDeepLinkTimers();
@@ -8794,9 +8854,31 @@
                         }
                         // 🔗 深链：搜索连接中断也用已到的源尝试打开，避免一直卡在加载帧
                         if (this._deepLink && !this._deepLink.done) this.$nextTick(() => this.tryOpenDeepLink(true));
+                        // ⬇️ 设备离线且搜索无果:搜的剧有离线缓存 → 直接进离线上下文(否则断网搜已下载的剧只会看到"无结果")
+                        if (navigator.onLine === false && !(this.rawList || []).length && (!this._deepLink || this._deepLink.done)) {
+                            const kw = (this.keyword || '').trim();
+                            const om = kw && ((this.offlineList || []).find(x => x.name === kw) ||
+                                (this.offlineList || []).find(x => x.name && x.name.includes(kw)));
+                            if (om) {
+                                console.log('[离线] 断网搜索《' + kw + '》命中离线缓存 → 进离线上下文');
+                                this._openOfflineContext(om);
+                            }
+                        }
                     };
                 },
                 async openDetail(group) {
+                    // ⬇️ 断网守卫:设备离线且该剧有离线缓存 → 跳过测速直接进离线上下文
+                    //    (否则全线路测成 9999,死在"所有采集站均不可用",缓存躺在 IDB 里够不着)
+                    if (navigator.onLine === false && group && group.name) {
+                        const _cached = (this.offlineList || []).filter(x => x.name === group.name && x.url);
+                        if (_cached.length) {
+                            console.log('[离线] 设备离线,《' + group.name + '》有缓存 → 直接进离线上下文');
+                            const _h = (this.watchHistory || []).find(x => x.name === group.name);
+                            const _start = (_h && _h.episode && _cached.find(x => offlineNormEp(x.ep) === offlineNormEp(_h.episode))) || _cached[0];
+                            this._openOfflineContext(_start);
+                            return;
+                        }
+                    }
                     this._liveActive = false;  // 📺 进入 VOD：确保清掉直播模式(否则进度保存会被直播守卫跳过)
                     // 🧭 进入新剧详情：自增导航令牌并记录，用于作废本次测速期间被切换走的残留回调
                     _navSeq++;
@@ -8898,8 +8980,8 @@
                         source.latency = '...';
                         source._useProxy = false;  // 默认不使用代理
                         try {
-                            // 1. 先获取该线路的视频详情
-                            const detailRes = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`);
+                            // 1. 先获取该线路的视频详情(⏱️ 8s 超时:弱网挂起时尽快判失败,别拖住整个测速池)
+                            const detailRes = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`, null, 8000);
                             const detailData = await detailRes.json();
 
                             if (!detailData.list || detailData.list.length === 0) {
@@ -8907,8 +8989,9 @@
                                 return source;
                             }
 
-                            // 2. 解析出第一个 m3u8 视频 URL
+                            // 2. 解析出第一个 m3u8 视频 URL(detail 立即缓存——后续任何测速分支超时都不该丢它)
                             const detail = detailData.list[0];
+                            source._cachedDetail = detail;
                             let playUrl = detail.vod_play_url || '';
 
                             // 处理多线路格式 (用 $$$ 分隔)
@@ -8934,7 +9017,7 @@
                             if (isPageHttps && isVideoHttp) {
                                 // 混合内容，无法直接测试，回退到服务器端延迟
                                 console.log(`[混合内容] ${source.site_name} 视频URL为HTTP，回退到服务器测速`);
-                                const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
                                 const checkData = await checkRes.json();
                                 source.latency = checkData.latency;
                                 source._testType = 'server';  // 服务器端测速
@@ -9020,7 +9103,7 @@
                             // 5. 如果仍然失败，回退到服务器端测速
                             if (!directSuccess) {
                                 try {
-                                    const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                    const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
                                     const checkData = await checkRes.json();
                                     source.latency = checkData.latency;
                                     source._testType = 'server';
@@ -9041,12 +9124,12 @@
                             // 获取详情失败的兜底处理
                             if (e.name !== 'AbortError') {
                                 try {
-                                    const detailRes = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`);
+                                    const detailRes = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`, null, 8000);
                                     const detailData = await detailRes.json();
                                     if (detailData.list && detailData.list.length > 0) {
                                         source._cachedDetail = detailData.list[0];
                                         // 无法直接测试，回退到服务器端延迟
-                                        const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                        const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
                                         const checkData = await checkRes.json();
                                         source.latency = checkData.latency;
                                         source._testType = 'server';  // 服务器端测速
@@ -9058,7 +9141,18 @@
                                     source.latency = 9999;
                                 }
                             } else {
-                                source.latency = 9999;  // 超时
+                                // ⏱️ fetchT 超时(弱网/服务器"直连8s→代理"兜底链最长~18s):不能直接判死——
+                                //    问一次服务器测速(它秒回)拿兜底延迟;仍失败才 9999,且 _timedOut 标记不写12h死亡缓存
+                                source._timedOut = true;
+                                try {
+                                    const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
+                                    const checkData = await checkRes.json();
+                                    source.latency = (typeof checkData.latency === 'number') ? checkData.latency : 9999;
+                                    source._testType = 'server';
+                                    checkEarlyReturn();
+                                } catch (e3) {
+                                    source.latency = 9999;
+                                }
                             }
                         }
                         return source;
@@ -9080,7 +9174,8 @@
                             return source;
                         }
                         await latencyWorker(source);
-                        this._siteHealthSet(source.site_key, source, true);
+                        // ⏱️ 超时(_timedOut)得出的不可用是瞬态信号,不写 12h 死亡缓存(否则弱网一次就封线路半天)
+                        this._siteHealthSet(source.site_key, source, !source._timedOut);
                         return source;
                     };
                     await runWithConcurrency(this.currentGroup.sources, 6, cachedWorker);
@@ -9135,6 +9230,15 @@
                         }
                     }
                     // 如果全部不可用，不自动选择，UI会显示提示
+                    // ⬇️ 但若该剧有离线缓存 → 落进离线上下文播缓存(典型场景:断网/全线路被墙)
+                    if (!this.currentSource && !this.currentUrl &&
+                        !this.currentGroup.sources.some(s => typeof s.latency === 'number' && s.latency < 9000)) {
+                        const _cached = (this.offlineList || []).filter(x => x.name === this.currentGroup.name && x.url);
+                        if (_cached.length) {
+                            console.log('[离线] 全线路不可用但有离线缓存 → 进离线上下文');
+                            this._openOfflineContext(this._pickOfflineStart(_cached));
+                        }
+                    }
                 },
                 closeDetail() {
                     this.showDetail = false;
@@ -9221,8 +9325,9 @@
                         let detail = source._cachedDetail;
 
                         if (!detail) {
-                            // 如果没有缓存，重新获取
-                            const res = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`);
+                            // 如果没有缓存，重新获取(⏱️ 20s 超时:要盖过服务器"直连8s→代理10s"兜底链;
+                            //    超时→catch 走 handlePlaybackError 推进下一源,弱网不卡死,期间有 loadingDetail 转圈)
+                            const res = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`, null, 20000);
                             const data = await res.json();
                             if (data.list && data.list.length > 0) {
                                 detail = data.list[0];
@@ -9270,7 +9375,7 @@
                         if (!vodId && this.currentGroup?.name) {
                             console.log('[刷新集数] vod_id 缺失，通过搜索获取...');
                             try {
-                                const searchRes = await fetch(`/api/search?wd=${encodeURIComponent(this.currentGroup.name)}&site_key=${encodeURIComponent(source.site_key)}`);
+                                const searchRes = await fetchT(`/api/search?wd=${encodeURIComponent(this.currentGroup.name)}&site_key=${encodeURIComponent(source.site_key)}`, null, 20000);
                                 const searchData = await searchRes.json();
                                 if (searchData.list && searchData.list.length > 0) {
                                     // 找到匹配当前 site_key 的结果
@@ -9293,8 +9398,8 @@
                             return;
                         }
 
-                        // 带 nocache 参数，通知服务器跳过缓存
-                        const res = await fetch(`/api/detail?site_key=${source.site_key}&id=${vodId}&nocache=1`);
+                        // 带 nocache 参数，通知服务器跳过缓存(⏱️ 20s 超时:弱网挂起时放弃本次后台刷新,保快照原样)
+                        const res = await fetchT(`/api/detail?site_key=${source.site_key}&id=${vodId}&nocache=1`, null, 20000);
                         const data = await res.json();
                         // 🧭 await 期间用户可能已切换剧集/资源站：丢弃过期结果，避免串剧与集数列表被旧剧覆盖
                         if (mySeq !== _navSeq || this.currentSource !== reqSource || this.currentGroup !== reqGroup) {
@@ -9327,10 +9432,19 @@
                             if (currentEpName && oldUrl) {
                                 const updatedEp = this.episodeList.find(ep => ep.name === currentEpName);
                                 if (updatedEp && updatedEp.url && updatedEp.url !== oldUrl) {
-                                    console.log('[刷新集数] 检测到 URL 更新，自动切换播放');
-                                    console.log('[刷新集数] 旧:', oldUrl.substring(0, 60));
-                                    console.log('[刷新集数] 新:', updatedEp.url.substring(0, 60));
-                                    this.play(updatedEp.url);
+                                    // ⬇️ 当前正在播这一集的【离线缓存】(oldUrl=下载时地址)→ 不切新地址不打断播放,
+                                    //    把选集条目钉回缓存 URL(否则 play() 重定向会触发一次无谓的重播)
+                                    const _mCached = this.currentGroup ? this._offlineCachedFor(this.currentGroup.name, currentEpName) : null;
+                                    const _cachedNow = !!(_mCached && _mCached.url === oldUrl);
+                                    if (_cachedNow) {
+                                        console.log('[刷新集数] 当前集正在播离线缓存,保持缓存地址不切换(新地址已更新到其余集)');
+                                        updatedEp.url = oldUrl;
+                                    } else {
+                                        console.log('[刷新集数] 检测到 URL 更新，自动切换播放');
+                                        console.log('[刷新集数] 旧:', oldUrl.substring(0, 60));
+                                        console.log('[刷新集数] 新:', updatedEp.url.substring(0, 60));
+                                        this.play(updatedEp.url);
+                                    }
                                 }
                             }
                             // 更新历史记录中的数据（防止下次从历史播放又用旧数据）
@@ -9374,8 +9488,8 @@
                         const currentSiteKey = this.currentSource?.site_key;
                         const currentEpName = this.currentEpisodeName || this.episodeList?.find(ep => ep.url === this.currentUrl)?.name;
 
-                        // 完整重新搜索
-                        const res = await fetch(`/api/search?wd=${encodeURIComponent(searchName)}&nocache=1`);
+                        // 完整重新搜索(⏱️ 20s 超时:弱网挂起会让 isTestingSources/refreshingSources 卡 true 数分钟)
+                        const res = await fetchT(`/api/search?wd=${encodeURIComponent(searchName)}&nocache=1`, null, 20000);
                         const data = await res.json();
 
                         // 🧭 await 期间用户可能已切换剧集：丢弃过期结果，避免覆盖新剧的线路列表（防串剧）
@@ -9415,7 +9529,7 @@
                         const sources = this.currentGroup.sources;
                         const latencyWorker = async (source) => {
                             try {
-                                const detailRes = await fetch(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}&nocache=1`);
+                                const detailRes = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}&nocache=1`, null, 20000);
                                 const detailData = await detailRes.json();
                                 if (!detailData.list || detailData.list.length === 0) {
                                     source.latency = 9999;
@@ -9440,7 +9554,7 @@
                                 }
 
                                 if (window.location.protocol === 'https:' && videoUrl.startsWith('http:')) {
-                                    const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                    const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
                                     const checkData = await checkRes.json();
                                     source.latency = checkData.latency;
                                     source._testType = 'server';
@@ -9457,7 +9571,7 @@
                                         source.latency = Date.now() - startTime;
                                         source._testType = 'direct';
                                     } else {
-                                        const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                        const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
                                         const checkData = await checkRes.json();
                                         source.latency = checkData.latency;
                                         source._testType = 'server';
@@ -9465,7 +9579,7 @@
                                 } catch (fetchErr) {
                                     clearTimeout(timeoutId);
                                     try {
-                                        const checkRes = await fetch(`/api/check?key=${source.site_key}`);
+                                        const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
                                         const checkData = await checkRes.json();
                                         source.latency = checkData.latency;
                                         source._testType = 'server';
@@ -9621,11 +9735,13 @@
                         const marksKey = title + '|' + site;
                         if (!this._introMarks || this._introMarks.key !== marksKey || Date.now() - this._introMarks.at > 15 * 60 * 1000) {
                             let marks = {};
+                            let marksFailed = false;
                             try {
-                                const r = await fetch('/api/intro/marks?title=' + encodeURIComponent(this.currentGroup.name) + '&site=' + encodeURIComponent(site));
+                                const r = await fetchT('/api/intro/marks?title=' + encodeURIComponent(this.currentGroup.name) + '&site=' + encodeURIComponent(site), null, 5000);
                                 const j = await r.json(); marks = (j && j.marks) || {};
-                            } catch (e) { console.warn('[跳过片头] 共享标记拉取失败(网络/服务器不可达),本集暂无按钮数据:', e && e.message); }
-                            this._introMarks = { key: marksKey, at: Date.now(), marks };
+                            } catch (e) { marksFailed = true; console.warn('[跳过片头] 共享标记拉取失败(网络/服务器不可达),本集暂无按钮数据:', e && e.message); }
+                            // 失败的空 marks 只负缓存 2 分钟(at 回拨),且带 failed 标记——别让一次弱网超时触发数十MB的离线分析
+                            this._introMarks = { key: marksKey, at: Date.now() - (marksFailed ? 13 * 60 * 1000 : 0), marks, failed: marksFailed };
                         }
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
                         const mk = this._introMarks.marks[ep];
@@ -9633,7 +9749,7 @@
                         // 🎬 本集无共享标记 → 后台离线分析(不用看片头):没学过→两集包络学习;学过→只定位本集。
                         //   全部守卫(每剧学一次/每集定位一次/失败限2次/流量上限)内聚在模块里,这里只管调——
                         //   ⚠️别在这儿加守卫变量:上一版 Vue 侧 _introOfflineKey 被多个异步回调竞态复位,导致换集就重学、流量爆炸。
-                        const willOffline = multiEp && !!window.afpOffline && (!mk || !mk.ed || !(mk.oe > mk.os));
+                        const willOffline = multiEp && !!window.afpOffline && !this._introMarks.failed && (!mk || !mk.ed || !(mk.oe > mk.os));
                         const willEngine = !!window.afpEngine && multiEp && (!mk || (mk.v || 1) < 3);
                         // 📋 每集一行判定摘要:按钮数据从哪来/还差什么,一眼定位"为什么没按钮"
                         try {
@@ -9749,6 +9865,24 @@
                     } catch (e) { }
                 },
                 play(url) {
+                    // ⬇️ 离线缓存重定向:本集(剧名|集名)已完整缓存、但请求的 URL ≠ 下载时的 URL(资源站轮换了地址/
+                    //    换过线路/refreshEpisodes 刷新过)→ 改播下载时的 URL,OfflineLoader 按它命中 IDB=离线可播/秒开。
+                    //    同时把选集条目"钉"回缓存 URL:高亮(currentUrl===ep.url)/下一集定位全部保持一致。
+                    //    offlineList 是启动时载入内存的 episodes 元数据(纯同步查找,不引入 async);进度记忆按剧名存,不受影响。
+                    try {
+                        if (!this._liveActive && this.currentGroup && this.currentGroup.name) {
+                            const _ep = (this.episodeList || []).find(e => e.url === url);
+                            if (_ep) {
+                                const _m = this._offlineCachedFor(this.currentGroup.name, _ep.name);
+                                // 缓存副本曾确认播不出(_offRedirectBad)→本会话不再钉回,保住换线路 failover 通道
+                                if (_m && _m.url !== url && !(this._offRedirectBad && this._offRedirectBad[_m.epKey])) {
+                                    console.log('[离线] 本集已有完整缓存(下载时线路),改播缓存地址以命中本地:', _m.url.substring(0, 60) + '...');
+                                    _ep.url = _m.url;
+                                    url = _m.url;
+                                }
+                            }
+                        }
+                    } catch (e) { }
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
@@ -10972,6 +11106,8 @@
                                         if (needIntro && st.phase === 'idle' && st.tries >= 2) needIntro = false;
                                         if (needOutro && st.outroTries >= 1) needOutro = false;
                                         if (!needIntro && !needOutro) return;
+                                        // 设备离线不自动分析(分析要从网络抓分段,断网时全是白费的挂起请求,还挤占离线播放)
+                                        if (navigator.onLine === false) { if (!this._offLogged) { this._offLogged = true; console.log('[AFP离线] 设备离线,跳过自动分析(已有标记仍正常使用)'); } return; }
                                         // 省流量模式/2G/蜂窝流量不自动分析(蜂窝判断只有 Chrome/Android 给 type,尽力而为;WiFi/桌面不受影响)
                                         try { const c = navigator.connection; if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || '') || c.type === 'cellular')) { if (!this._netLogged) { this._netLogged = true; console.log('[AFP离线] 省流量模式/蜂窝网络,不自动离线分析(已有共享标记仍正常使用)'); } return; } } catch (e) { }
                                         if (st.mb > 700) { console.log('[AFP离线] 《' + o.title + '》本线路分析已用 ' + st.mb.toFixed(0) + 'MB,超过单剧上限,不再自动分析(已学到的标记仍正常使用;换线路/等下次访问会重试)'); return; }
@@ -11881,7 +12017,8 @@
                             const vodName = this.currentGroup?.name || 'unknown';
 
                             // 如果只有1集（电影），不加集数后缀，这样 正片/HD/HD中字 都共享同一个进度
-                            if (this.episodeList && this.episodeList.length === 1) {
+                            // ⚠️ 离线上下文例外:只缓存了1集的剧(集名含数字)不能按电影归类,否则与在线的按集进度键错位
+                            if (this.episodeList && this.episodeList.length === 1 && !this._offlineEpisodic()) {
                                 const key = `donggua_progress_${vodName}`.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
                                 return key.substring(0, 80);
                             }
@@ -11949,7 +12086,7 @@
                             const poster = this.currentGroup?.pic || '';
                             // 使用 this.currentUrl 获取当前正在播放的集数（而不是闭包中固定的 url）
                             const currentEp = this.episodeList?.find(ep => ep.url === this.currentUrl);
-                            const episodeName = (this.episodeList?.length > 1 && currentEp) ? currentEp.name : null;
+                            const episodeName = (currentEp && (this.episodeList?.length > 1 || this._offlineEpisodic())) ? currentEp.name : null;
 
 
                             // 如果距离结尾 < 2分钟，视为完播，清除进度
@@ -12036,7 +12173,7 @@
                             const movieName = this.currentGroup?.name || '';
                             const poster = this.currentGroup?.pic || '';
                             const currentEp = this.episodeList?.find(ep => ep.url === this.currentUrl);
-                            const episodeName = (this.episodeList?.length > 1 && currentEp) ? currentEp.name : null;
+                            const episodeName = (currentEp && (this.episodeList?.length > 1 || this._offlineEpisodic())) ? currentEp.name : null;
                             const duration = dp.video?.duration || 0;
                             if (movieName) {
                                 this.addToWatchHistory(movieName, poster, episodeName, duration, duration, this.currentGroup);
@@ -12063,8 +12200,8 @@
                         const getProgressKey = () => {
                             const vodName = this.currentGroup?.name || 'unknown';
 
-                            // 电影（只有1集）：忽略集数名称
-                            if (this.episodeList && this.episodeList.length === 1) {
+                            // 电影（只有1集）：忽略集数名称(离线上下文单集剧例外,与初始化处同规则)
+                            if (this.episodeList && this.episodeList.length === 1 && !this._offlineEpisodic()) {
                                 const key = `donggua_progress_${vodName}`.replace(/[^a-zA-Z0-9\u4e00-\u9fa5]/g, '_');
                                 return key.substring(0, 80);
                             }
@@ -12565,6 +12702,7 @@
                             }
 
                             // 确认不可播 → 标记并切换到下一个线路
+                            this._offMarkBadCache();  // 当前播的若是离线缓存副本→本会话停用该集重定向(保住 failover)
                             this.autoRetryMessage = `${failingSource?.site_name} 播放失败，正在尝试 ${nextSource.site_name}`;
                             console.log(`[Auto-Failover] ${this.autoRetryMessage}`);
                             if (failingSource) failingSource.latency = 9998;  // 标记为用户端不可用
@@ -12573,11 +12711,37 @@
                         }, 1500);
                     } else {
                         // 没有更多可用线路
+                        this._offMarkBadCache();
+                        // ⬇️ 弱网/假在线(onLine=true 但外网断)兜底:线路全试尽,但本剧有【未被判坏的】离线缓存
+                        //    → 转入离线上下文播缓存。这是"网不好时播不了下载内容"最常见变体的最后防线。
+                        const _cands = (this.currentGroup && !this.currentGroup._offlineCtx) ?
+                            (this.offlineList || []).filter(x => x.name === this.currentGroup.name && x.url &&
+                                !(this._offRedirectBad && this._offRedirectBad[x.epKey])) : [];
+                        if (_cands.length) {
+                            console.log('[离线] 所有线路均无法播放,但本剧有离线缓存 → 转入离线上下文');
+                            this.autoRetryMessage = '线路不可用，已切换到离线缓存';
+                            setTimeout(() => { this.autoRetryMessage = ''; }, 3000);
+                            this._openOfflineContext(this._pickOfflineStart(_cands));
+                            return;
+                        }
                         this.autoRetryMessage = '所有线路均无法播放';
                         setTimeout(() => {
                             this.autoRetryMessage = '';
                         }, 3000);
                     }
+                },
+
+                // 当前正在播的 URL 若是某集的离线缓存副本且播放已确认失败:本会话不再把该集重定向回这份缓存,
+                // 否则换哪条线路都被 play() 钉回同一份坏缓存,failover 对该集彻底失效(唯一逃生口成了删缓存)。
+                _offMarkBadCache() {
+                    try {
+                        const bad = this.currentGroup && (this.offlineList || []).find(x =>
+                            x.name === this.currentGroup.name && x.url === this.currentUrl);
+                        if (bad) {
+                            (this._offRedirectBad = this._offRedirectBad || {})[bad.epKey] = 1;
+                            console.log('[离线] 缓存副本播放失败,本会话对该集停用缓存重定向:', bad.epKey);
+                        }
+                    } catch (e) { }
                 },
 
                 // 播放下一集
@@ -12605,6 +12769,34 @@
                         list.sort((a, b) => (b.date || 0) - (a.date || 0));
                         this.offlineList = list;
                     } catch (e) { this.offlineList = []; }
+                },
+
+                // 该剧某集(集名归一化匹配)的完整离线缓存元数据。play() 重定向/刷新守卫/离线面板共用这一个入口。
+                _offlineCachedFor(groupName, epName) {
+                    if (!groupName || !epName) return null;
+                    const ne = offlineNormEp(epName);
+                    return (this.offlineList || []).find(x => x.name === groupName && x.url && offlineNormEp(x.ep) === ne) || null;
+                },
+
+                // 离线上下文里"只缓存了1集的剧"不能按电影归类(集名含数字=剧集),进度键必须仍带集名——
+                // 否则在线存的 剧名_第5集 进度断网读不回、断网进度写进电影键回网也读不回。
+                _offlineEpisodic() {
+                    if (!this.currentGroup || !this.currentGroup._offlineCtx) return false;
+                    const ce = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    return !!(ce && /\d/.test(ce.name || ''));
+                },
+
+                // 自动进离线上下文时挑起播条目:当前集 → 历史记录里该剧的集 → 最新下载的一条
+                _pickOfflineStart(cands) {
+                    if (!cands || !cands.length) return null;
+                    const name = this.currentGroup && this.currentGroup.name;
+                    const curEp = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    let m = curEp ? cands.find(x => offlineNormEp(x.ep) === offlineNormEp(curEp.name)) : null;
+                    if (!m && name) {
+                        const h = (this.watchHistory || []).find(x => x.name === name);
+                        if (h && h.episode) m = cands.find(x => offlineNormEp(x.ep) === offlineNormEp(h.episode));
+                    }
+                    return m || cands[0];
                 },
 
                 formatBytes(b) {
@@ -12767,22 +12959,78 @@
                     } catch (e) { console.warn('[离线] 清空失败:', e); }
                 },
 
-                // 点已缓存条目：同一部剧优先按【下载时的 URL】匹配集(保证命中缓存)；只有集名同而 URL 不同=换过线路，
-                //    播放会走网络，要如实提示。不同剧给指引提示。
+                // 点已缓存条目：同一部剧优先按【下载时的 URL】匹配集(保证命中缓存)；集名同而 URL 不同=换过线路/地址轮换,
+                //    钉回缓存 URL 照样走本地(play() 里的离线重定向也会兜底)。不同剧/选集为空(断网)→ 直接凭 IDB 元数据
+                //    构建离线上下文播放——这是"断网也能看下载内容"的关键入口,绝不再弹断网下无法执行的指引。
                 offlinePlay(item) {
-                    if (this.currentGroup && this.currentGroup.name === item.name) {
-                        const byUrl = item.url && (this.episodeList || []).find(e => e.url === item.url);
+                    if (this.currentGroup && this.currentGroup.name === item.name && (this.episodeList || []).length) {
+                        const byUrl = item.url && this.episodeList.find(e => e.url === item.url);
                         if (byUrl) { this.play(byUrl.url); this.showOfflinePanel = false; return; }
-                        const byName = (this.episodeList || []).find(e => e.name === item.ep);
+                        const byName = this.episodeList.find(e => offlineNormEp(e.name) === offlineNormEp(item.ep));
                         if (byName) {
+                            if (item.url) byName.url = item.url;   // 钉回缓存 URL → play() 命中本地
                             this.play(byName.url);
                             this.showOfflinePanel = false;
-                            if (item.url && dp && dp.notice) dp.notice('⚠️ 该集缓存来自其他线路，当前线路播放将走网络');
+                            return;
+                        }
+                        // 同剧但当前线路选集里没有这集(线路集数差异):把缓存集插进选集表再播,
+                        // 保留完整线路/选集上下文(高亮/下一集/进度都一致),不整体降级成离线上下文
+                        if (item.url) {
+                            this.episodeList.push({ name: item.ep, url: item.url });
+                            this.episodeList.sort((a, b) => (parseInt(String(a.name).replace(/\D+/g, ''), 10) || 0) - (parseInt(String(b.name).replace(/\D+/g, ''), 10) || 0));
+                            if (dp && dp.notice) dp.notice('当前线路无此集，已直接播放缓存副本');
+                            this.play(item.url);
+                            this.showOfflinePanel = false;
                             return;
                         }
                     }
-                    if (dp && dp.notice) dp.notice('打开《' + item.name + '》并选择缓存时的线路即可使用缓存');
-                    else alert('打开《' + item.name + '》并选择缓存时的线路即可使用缓存');
+                    this._openOfflineContext(item);
+                },
+
+                // ⬇️ 离线上下文:断网/未打开该剧时,仅凭 IDB episodes 元数据重建"详情页+选集"(选集=该剧全部已缓存集),
+                //    合成一条"离线缓存"线路。不发任何网络请求;联网后 refreshEpisodes 可凭真实 siteKey 搜回完整选集。
+                _openOfflineContext(item) {
+                    _navSeq++;   // 🧭 作废旧剧残留异步任务(与 playFromHistory 一致,防串剧)
+                    this._liveActive = false;
+                    this.refreshingEpisodes = false;
+                    this.isTestingSources = false;
+                    this.previewLocked = false;    // 🔒 深链锁定态在此路径也要解除(否则选集/面板被锁定遮罩挡住)
+                    this.deepLinkLoading = false;
+                    if (this.currentGroup && this.currentGroup.name && this.currentGroup.name !== item.name && dp) {
+                        try { dp.destroy(); } catch (e) { }
+                        dp = null;
+                    }
+                    const eps = (this.offlineList || []).filter(x => x.name === item.name && x.url)
+                        .map(x => ({ name: x.ep, url: x.url }));
+                    if (!eps.length) { if (dp && dp.notice) dp.notice('缓存数据不完整,无法离线播放'); return; }
+                    eps.sort((a, b) => (parseInt(String(a.name).replace(/\D+/g, ''), 10) || 0) - (parseInt(String(b.name).replace(/\D+/g, ''), 10) || 0));
+                    const hist = (this.watchHistory || []).find(x => x.name === item.name);
+                    const src = {
+                        site_key: item.siteKey || 'offline',
+                        site_name: '离线缓存',
+                        vod_name: item.name,
+                        vod_pic: (hist && hist.poster) || '',
+                        latency: 1, _testType: 'direct', _useProxy: false, _proxyUrl: null,
+                        // 快照可回放:历史记录存的就是这条 vod_play_url,下次断网从"继续观看"进也能零网络重建
+                        vod_play_url: eps.map(e => e.name + '$' + e.url).join('#')
+                    };
+                    // ⚠️ 不动 rawList——它是搜索结果页的状态,覆盖成合成源会把结果页变成一张空名卡片
+                    this.currentGroup = { name: item.name, pic: (hist && hist.poster) || '', sources: [src], _offlineCtx: true };
+                    this.currentSource = src;
+                    this.episodeList = eps;
+                    this.loadingDetail = false;
+                    this.showDetail = true;
+                    document.body.classList.add('detail-open');
+                    this.showOfflinePanel = false;
+                    // 起播集:深链指定集(?ep=)优先,其次调用方传入的条目
+                    let startUrl = item.url;
+                    if (this._deepLinkTargetEp) {
+                        const t = eps.find(e => offlineNormEp(e.name) === offlineNormEp(this._deepLinkTargetEp));
+                        if (t) startUrl = t.url;
+                        this._deepLinkTargetEp = '';
+                    }
+                    console.log('[离线] 进入离线上下文:《' + item.name + '》已缓存 ' + eps.length + ' 集');
+                    this.$nextTick(() => this.play(startUrl));
                 },
 
                 // ✨ 为你推荐：内容过滤(类型+语言)。弃用 TMDB /recommendations(西方协同过滤、对国产剧无信号→全推美剧)。
