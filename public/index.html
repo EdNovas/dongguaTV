@@ -6668,6 +6668,12 @@
                     // 7. 🛡️ 站长后台：访问 网址#admin 显示后台(隐藏入口，与普通用户分离)
                     this._syncAdminHash();
                     window.addEventListener('hashchange', () => this._syncAdminHash());
+
+                    // 8. 🔌 浏览器断网事件:正在播的集有离线缓存且播的不是它 → 主动切缓存续播,
+                    //    不等 hls 重试超时(弱网断断续续时这是最快的切换信号;方法内部自带全部前置判断)
+                    window.addEventListener('offline', () => {
+                        try { this._offSwitchToCacheIfAvailable(); } catch (e) { }
+                    });
                 },
 
                 // ========== 📺 观看历史功能 ==========
@@ -9879,6 +9885,10 @@
                                     console.log('[离线] 本集已有完整缓存(下载时线路),改播缓存地址以命中本地:', _m.url.substring(0, 60) + '...');
                                     _ep.url = _m.url;
                                     url = _m.url;
+                                } else if (!_m && (this.offlineList || []).some(x => x.name === this.currentGroup.name)) {
+                                    // 诊断:本剧有缓存却没匹配到当前集(多为集名风格差异)——打出来便于排查"下了却没走本地"
+                                    console.log('[离线] 本剧有缓存但未匹配到当前集: 当前集名"' + _ep.name + '" vs 缓存集名 ' +
+                                        JSON.stringify((this.offlineList || []).filter(x => x.name === this.currentGroup.name).map(x => x.ep)));
                                 }
                             }
                         }
@@ -10013,6 +10023,9 @@
                         if (dp.video) {
                             dp.video.addEventListener('error', () => handleError('video'));
                         }
+                        // ⚠️ hls.js 的网络层错误(分段/清单拉不到)不会触发 <video>.error——不暴露出去的话,
+                        //    播放中断网只会无限转圈,分诊/换线路/离线兜底整条链都收不到信号。
+                        window._offHandlePlayError = handleError;
                     };
 
                     // 🗨️ 本集弹幕配置(弹幕开启且匹配到剧名时返回，否则 undefined)。
@@ -11998,6 +12011,7 @@
                         });
 
                         setupErrorHandling();
+                        this._attachHlsErrorHook();   // 🔌 hls 网络错误→缓存快速通道/错误处理链(首建实例)
 
                         // ========== 🕐 播放进度记忆功能 (外部实现) ==========
                         // 标准化集数名称，确保不同源使用相同的 Key
@@ -12229,6 +12243,7 @@
 
                         // 🗨️ 仅"换集"(danmakuReload)时重载弹幕；同集换源/代理回退不传第二参(DPlayer 保留当前弹幕，不闪烁/不重拉)
                         dp.switchVideo({ url: finalUrl, type: 'hls' }, danmakuReload ? danmakuOpt : undefined);
+                        this._attachHlsErrorHook();   // 🔌 switchVideo 会新建 hls 实例,错误钩子要重挂(实例级防重)
 
                         if (_oldHls) {
                             let _destroyed = false;  // 防止 'playing' 与 5s 兜底重复销毁
@@ -12774,8 +12789,78 @@
                 // 该剧某集(集名归一化匹配)的完整离线缓存元数据。play() 重定向/刷新守卫/离线面板共用这一个入口。
                 _offlineCachedFor(groupName, epName) {
                     if (!groupName || !epName) return null;
+                    const list = this.offlineList || [];
                     const ne = offlineNormEp(epName);
-                    return (this.offlineList || []).find(x => x.name === groupName && x.url && offlineNormEp(x.ep) === ne) || null;
+                    let hit = list.find(x => x.name === groupName && x.url && offlineNormEp(x.ep) === ne) || null;
+                    if (!hit) {
+                        // 跨线路集名风格不同("第1集" vs "01" vs "1"):双方都是纯集号形态时按数字匹配
+                        // (仅限 第N集/N/N话 这类,不碰 "1080P"/"HD" 等画质词,避免误配)
+                        const num = (s) => { const m = String(s || '').trim().match(/^第?0*(\d+)[集话]?$/); return m ? parseInt(m[1], 10) : null; };
+                        const n = num(epName);
+                        if (n != null) hit = list.find(x => x.name === groupName && x.url && num(x.ep) === n) || null;
+                    }
+                    return hit;
+                },
+
+                // 🔌 播放中断(hls 网络错误/浏览器 offline 事件)的缓存快速通道:
+                //    当前集有完整离线缓存、现在播的又不是它 → 立即切到缓存副本并续在当前进度,不用走换线路分诊。
+                //    返回 true=已切换(调用方不必再处理)。
+                _offSwitchToCacheIfAvailable() {
+                    try {
+                        if (this._liveActive || !this.currentGroup || !this.currentGroup.name) return false;
+                        const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                        if (!cur) return false;
+                        const m = this._offlineCachedFor(this.currentGroup.name, cur.name);
+                        if (!m || !m.url) return false;
+                        if (this._offRedirectBad && this._offRedirectBad[m.epKey]) return false;
+                        if (offlineKey(this.currentUrl) === offlineKey(m.url)) return false;   // 已经在播缓存副本
+                        const t = (dp && dp.video && Number.isFinite(dp.video.currentTime)) ? dp.video.currentTime : 0;
+                        console.log('[离线] 播放中断但本集有离线缓存 → 切缓存副本续播 @' + t.toFixed(0) + 's');
+                        try { if (dp && dp.notice) dp.notice('网络不稳定，已切换到离线缓存续播', 3000); } catch (e) { }
+                        cur.url = m.url;   // 钉回缓存 URL(高亮/下一集一致)
+                        this.play(m.url);
+                        // 切换后续在中断处(>5s 才值得续;晚于 canplay 的进度恢复执行,以这里为准)
+                        if (t > 5) {
+                            let n = 0;
+                            const tick = () => {
+                                n++;
+                                if (dp && dp.video && dp.video.readyState >= 1 && Number.isFinite(dp.video.duration)) { safeSeek(t); return; }
+                                if (n < 40) setTimeout(tick, 300);
+                            };
+                            setTimeout(tick, 500);
+                        }
+                        return true;
+                    } catch (e) { return false; }
+                },
+
+                // 🔌 给当前 hls 实例挂网络错误监听(幂等,实例级防重)。DPlayer 首建与 switchVideo 都会换实例,两处都要挂。
+                //    非致命网络错误:断网(onLine=false)攒 1 次、在线抖动攒 3 次(给 hls 自身重试留机会)→ 尝试切缓存;
+                //    致命错误:先尝试切缓存,无缓存可切才交给既有错误处理链(分诊→换线路→离线上下文兜底)。
+                _attachHlsErrorHook() {
+                    try {
+                        const h = dp && dp.plugins && dp.plugins.hls;
+                        if (!h || h._offErrHooked || !window.Hls || !Hls.Events) return;
+                        h._offErrHooked = true;
+                        let netErrCount = 0;
+                        h.on(Hls.Events.ERROR, (evt, data) => {
+                            try {
+                                if (this._activePlaySeq !== _navSeq) return;   // 🧭 旧剧残留实例的迟到错误
+                                if (!data) return;
+                                const isNet = data.type === 'networkError';
+                                if (!data.fatal) {
+                                    if (!isNet) return;
+                                    netErrCount++;
+                                    if (netErrCount < (navigator.onLine === false ? 1 : 3)) return;
+                                }
+                                netErrCount = 0;
+                                if (this._offSwitchToCacheIfAvailable()) return;
+                                if (!data.fatal) return;   // 非致命且无缓存可切:留给 hls 自己继续重试
+                                console.log('[播放器] hls 致命错误(' + data.type + '/' + data.details + '),交给错误处理链');
+                                if (typeof window._offHandlePlayError === 'function') window._offHandlePlayError('hls');
+                                else this.handlePlaybackError();
+                            } catch (e) { }
+                        });
+                    } catch (e) { }
                 },
 
                 // 离线上下文里"只缓存了1集的剧"不能按电影归类(集名含数字=剧集),进度键必须仍带集名——
