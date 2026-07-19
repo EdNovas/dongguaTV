@@ -5752,9 +5752,22 @@
                         destroy() { this._offDestroyed = true; super.destroy(); }
                         load(context, config, callbacks) {
                             const wantBuf = context.responseType === 'arraybuffer';
+                            // 清单(文本)请求按 URL 归一化键 miss 时,再按"当前播放集"的候选键兜底(play() 写入
+                            // window._offActiveEp):代理地址形态特殊时归一化剥不掉壳,单点查找会让"已缓存"的集
+                            // 整场静默走网络——这里闭掉。分段不需要兜底:它们的 URL 来自已供出的清单,键必一致。
+                            const tryKeys = (keys, idx) => {
+                                if (!keys || idx >= keys.length) return Promise.resolve(null);
+                                return offlineDB.get('files', keys[idx]).then(r => r, () => null)
+                                    .then(rec => (rec && typeof rec.data === 'string') ? rec : tryKeys(keys, idx + 1));
+                            };
                             offlineDB.get('files', offlineKey(context.url)).then(r => r, () => null).then(rec => {
-                                if (this._offDestroyed) return;
                                 if (rec && ((typeof rec.data === 'string') === wantBuf)) rec = null;  // 类型不符走网络
+                                if (rec || wantBuf) return rec;
+                                const hint = window._offActiveEp;
+                                if (!hint || hint.seq !== _navSeq) return null;   // 提示已过期(切过剧)不用
+                                return tryKeys(hint.keys, 0);
+                            }).then(rec => {
+                                if (this._offDestroyed) return;
                                 if (rec) {
                                     const now = performance.now();
                                     const stats = this.stats;
@@ -9871,26 +9884,47 @@
                     } catch (e) { }
                 },
                 play(url) {
-                    // ⬇️ 离线缓存重定向:本集(剧名|集名)已完整缓存、但请求的 URL ≠ 下载时的 URL(资源站轮换了地址/
-                    //    换过线路/refreshEpisodes 刷新过)→ 改播下载时的 URL,OfflineLoader 按它命中 IDB=离线可播/秒开。
-                    //    同时把选集条目"钉"回缓存 URL:高亮(currentUrl===ep.url)/下一集定位全部保持一致。
+                    // ⬇️ 离线缓存重定向:本集(剧名|集名)已完整缓存 → 本次播放【完全走本地】:
+                    //    ①URL 不同(资源站轮换/换过线路)→ 改播下载时的 URL 并钉回选集条目;
+                    //    ②跳过线路代理/广告过滤包装(内容出自 IDB,不需要 CORS/过滤;包装形态差异曾导致静默走网络);
+                    //    ③给 OfflineLoader 留"按集候选键"兜底提示(清单按 URL 键没命中也能按集找到)。
                     //    offlineList 是启动时载入内存的 episodes 元数据(纯同步查找,不引入 async);进度记忆按剧名存,不受影响。
+                    let _offCacheRec = null;   // 非空 = 本集已完整缓存,本次播放完全离线
                     try {
                         if (!this._liveActive && this.currentGroup && this.currentGroup.name) {
                             const _ep = (this.episodeList || []).find(e => e.url === url);
                             if (_ep) {
                                 const _m = this._offlineCachedFor(this.currentGroup.name, _ep.name);
-                                // 缓存副本曾确认播不出(_offRedirectBad)→本会话不再钉回,保住换线路 failover 通道
-                                if (_m && _m.url !== url && !(this._offRedirectBad && this._offRedirectBad[_m.epKey])) {
-                                    console.log('[离线] 本集已有完整缓存(下载时线路),改播缓存地址以命中本地:', _m.url.substring(0, 60) + '...');
-                                    _ep.url = _m.url;
-                                    url = _m.url;
+                                // 缓存副本曾确认播不出(_offRedirectBad)→本会话不再用,保住换线路 failover 通道
+                                if (_m && !(this._offRedirectBad && this._offRedirectBad[_m.epKey])) {
+                                    _offCacheRec = _m;
+                                    if (_m.url !== url) {
+                                        console.log('[离线] 本集已有完整缓存(下载时线路),改播缓存地址以命中本地:', _m.url.substring(0, 60) + '...');
+                                        _ep.url = _m.url;
+                                        url = _m.url;
+                                    }
                                 } else if (!_m && (this.offlineList || []).some(x => x.name === this.currentGroup.name)) {
                                     // 诊断:本剧有缓存却没匹配到当前集(多为集名风格差异)——打出来便于排查"下了却没走本地"
                                     console.log('[离线] 本剧有缓存但未匹配到当前集: 当前集名"' + _ep.name + '" vs 缓存集名 ' +
                                         JSON.stringify((this.offlineList || []).filter(x => x.name === this.currentGroup.name).map(x => x.ep)));
                                 }
                             }
+                        }
+                    } catch (e) { }
+                    // 🔑 OfflineLoader 按集兜底候选键:覆盖"归一化剥不掉代理壳"(CORS_PROXY_URL 带路径/多参数)时
+                    //    清单以包裹态入库的历史数据——按 URL 键 miss 后用这些键再找,杜绝"已缓存却整场静默走网络"。
+                    try {
+                        if (_offCacheRec) {
+                            const cand = [];
+                            const pushK = (u) => { if (u && cand.indexOf(u) < 0) cand.push(u); };
+                            pushK(offlineKey(_offCacheRec.url));
+                            pushK(_offCacheRec.url);
+                            const wrapped = this._routeMediaUrl(_offCacheRec.url, true);
+                            pushK(wrapped);
+                            pushK(offlineKey(wrapped));
+                            window._offActiveEp = { keys: cand, seq: _navSeq };
+                        } else {
+                            window._offActiveEp = null;
                         }
                     } catch (e) { }
                     this.currentUrl = url;
@@ -9910,8 +9944,16 @@
                     console.log('[播放器] dp已存在:', !!dp);
 
                     // 检查当前线路是否需要使用代理
+                    // 📦 已完整缓存的集不套任何包装:内容出自 IDB,不需要 CORS/去广告(下载时已是净化版);
+                    //    URL 保持与缓存键同形态,配合 loader 按集兜底=保证完全离线,断网也照播
                     let finalUrl = url;
-                    if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
+                    if (_offCacheRec) {
+                        console.log('[播放器] 📦 本集已完整缓存,跳过代理/过滤包装,完全离线播放');
+                        const _noticeSeq = _navSeq;
+                        setTimeout(() => {
+                            try { if (dp && dp.notice && _noticeSeq === _navSeq) dp.notice('📦 本集已缓存 · 离线播放', 2000); } catch (e) { }
+                        }, 1200);
+                    } else if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
                         finalUrl = `${this.currentSource._proxyUrl}/?url=${encodeURIComponent(url)}`;
                         console.log('[播放器] 🌐 使用代理播放:', finalUrl.substring(0, 80) + '...');
                     }
@@ -9922,7 +9964,8 @@
                     let adFilterProxyUsed = false;
                     const originalUrl = finalUrl;  // 保存原始 URL 供代理失败时回退
                     // 📺 直播不套去广告(直播 m3u8 是滑窗，时长启发式会毁流；https 直连源也不该再被 worker 包一层)
-                    const isDirectM3U8 = url && url.includes('.m3u8') && !(this.currentSource && this.currentSource._useProxy) && !this._liveActive;
+                    // 📦 已缓存的集也不套(_offCacheRec):缓存的就是净化版,包一层只会让缓存键错位
+                    const isDirectM3U8 = url && url.includes('.m3u8') && !(this.currentSource && this.currentSource._useProxy) && !this._liveActive && !_offCacheRec;
                     if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && this.corsProxyUrl) {
                         // 本会话已确认"过滤代理过不了"的线路(源站封代理IP/URL签名绑IP)不再反复试代理:
                         // 直连能看但没有过滤——想要无广告请换线路(错误分诊时已自动换过)
