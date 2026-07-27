@@ -579,6 +579,24 @@
             }
         }
 
+        /* 📱 窄屏(竖屏手机)：时间挪到进度条上方一行(YouTube 手机版式)。
+           左右两个按钮组是各自绝对定位的(左贴左/右贴右)，右组(下一集/弹幕设置/设置/画中画/网页全屏/全屏)
+           就有 ~276px，加上左侧时间文本在 ≤600px 宽的屏上根本挤不下 → 右组第一个按钮直接压在时间上。
+           把时间抬到进度条上方后，按钮行整行归图标，天然不重叠。 */
+        @media (max-width: 600px) {
+            #dplayer .dplayer-icons.dplayer-icons-left .dplayer-time {
+                position: absolute;
+                left: 0;        /* icons-left 自带 left:20px,这里 0 正好与进度条左缘(20px)对齐 */
+                bottom: 74px;   /* 进度条命中带(bottom:36px+高34px≈顶到70px)之上 */
+                font-size: 12px;
+                line-height: 1;
+                padding: 0;
+                white-space: nowrap;
+                text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+                pointer-events: none;
+            }
+        }
+
         /* 📱 音量/亮度滑动手势指示器 */
         #dplayer .gesture-indicator {
             position: absolute;
