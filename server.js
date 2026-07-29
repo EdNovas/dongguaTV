@@ -2338,6 +2338,15 @@ function pickDanmakuEpisode(episodes, epName, preferYear) {
     // ② 日期式期号(综艺)：同月日跨年 → 优先 preferYear、否则取最新一年；日期配不上【不终结】继续走 ③
     if (want.date) {
         let sd = parts.filter(x => danmakuDateEq(want.date, x.m.date));
+        // 🚨 我方带明确年份(6/8位,如"第20170624期")：只认同样带年份且【同年同月日】(yymmdd 后缀相等)的集。
+        //   纯月日式("0624期")一概不配——dateEq 的 endsWith 会让【任意年份】的同月日撞上;实测事故:
+        //   iqiyi 正主瞬时限流返回空 → 候选回退到杂牌同名条目 → 其"0701期"式集名撞月日 → 拿到完全无关
+        //   节目(转生史莱姆日记)的弹幕,再被 服务器+CDN+浏览器 三层缓存固化 7 天。宁可没有不错配。
+        //   (纯月日 want——源站本来就只写"0624期"——保持原宽松逻辑,preferYear/最新年消歧。)
+        if (sd.length && want.date.length >= 6) {
+            const w6 = want.date.slice(-6);
+            sd = sd.filter(x => x.m.date.length >= 6 && x.m.date.slice(-6) === w6);
+        }
         if (sd.length) {
             const py = String(preferYear || ''), yy = py.slice(2);
             const byYear = py ? sd.filter(x => (x.m.date.length >= 8 && x.m.date.startsWith(py)) || (x.m.date.length === 6 && yy && x.m.date.startsWith(yy))) : [];
