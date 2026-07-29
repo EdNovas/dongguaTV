@@ -9138,8 +9138,8 @@
                         // 末尾 |v3 是缓存版本：CF 曾把"暂时为空"的弹幕响应按 1 年浏览器TTL 缓存进了各用户浏览器(中毒)，
                         // 改 URL 即让旧的中毒缓存 miss、重新拉取。服务器只取 split('|') 的前两段(剧名|集名)，第三段被忽略、
                         // 不影响匹配与服务器缓存键。将来若再需强制刷新弹幕缓存，把版本号往上 bump 即可。
-                        // (v2→v3: 修"带年份期号撞任意年份同月日"串台后,冲掉已固化错弹幕的 CDN/浏览器缓存)
-                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v3'),
+                        // (v2→v3: 修"带年份期号撞任意年份同月日"串台;v3→v4: 综艺匹配16项对抗审查大修后再冲一次缓存)
+                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v4'),
                         api: '/api/danmaku/',
                         user: '观众',
                         // 弹幕显示区域由 CSS(.dplayer-danmaku height:33%)限制到顶部 1/3，
@@ -9154,14 +9154,29 @@
                     if (!this.currentGroup || !this.currentGroup.name) return '';
                     const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
                     const epName = ((cur && cur.name) || '').trim();
-                    const m = epName.match(/第\s*0*(\d+)\s*[集话話期]/) || epName.match(/\bep\.?\s*0*(\d+)/i) || epName.match(/^0*(\d+)$/);
-                    const num = m ? parseInt(m[1], 10) : null;
+                    const m = epName.match(/第\s*(\d+)\s*[集话話期]/) || epName.match(/\bep\.?\s*(\d+)/i) || epName.match(/^(\d+)$/);
+                    // 数字归一:一般剥前导零(第06集=第6集=06=6);但 ≥4位且0开头的是【日期式】(0624=6月24日),保留原样——
+                    // 否则'第0624期'(日期)与'第624期'(期号)塌缩同键,换源切到碰撞集时不重拉,旧期弹幕铺完全不同的一期(对抗审查实锤)。
+                    const num = m ? ((m[1].length >= 4 && m[1][0] === '0') ? m[1] : String(parseInt(m[1], 10))) : null;
                     // 综艺同一期拆 上/中/下/纯享 等"部分"：键只含期号会塌缩(切"第1期上"→"第1期下"不重拉弹幕)。
-                    // 后缀只取【紧贴 期/集号 token】的部分词(与服务器 danmakuMarkers 同思路)——自由文本副标题("幕后黑手"/"兵临城下")不算,避免误触重拉。
+                    // 对抗审查修的三处(都会导致半集互切/正片↔变体同键不重拉=旧弹幕铺错内容):
+                    //   ①token 也认 EP 形("EP5上"此前整段跳过后缀提取) ②后缀词允许被 括号/连字符/点号 隔开("第1期(上)"/"第1期-下")
+                    //   ③词表补齐服务器 DM_VARIANT/DM_EXTRA 有而这里缺的 plus/片花/reaction/repo,并连取多词("第5期下纯享"≠"第5期下")。
+                    // 自由文本副标题("幕后黑手"/"兵临城下")首词不在白名单即停,不误触重拉。
                     let suf = '';
-                    const tk = epName.match(/第?\s*\d+\s*[集话話期]/);
-                    if (tk) { const sm = epName.slice(tk.index + tk[0].length).match(/^\s*(上|中|下|先导|纯享|加更|特辑|彩蛋|花絮|预告|直拍|发布会|见面会|专场|访谈|饭局)/); if (sm) suf = sm[1]; }
-                    return this.currentGroup.name + '|' + (num != null && !isNaN(num) ? num + suf : epName);
+                    const tk = epName.match(/第?\s*\d+\s*[集话話期]/) || epName.match(/\bep\.?\s*\d+/i);
+                    if (tk) {
+                        let rest = epName.slice(tk.index + tk[0].length);
+                        const SUFW = /^(上|中|下|先导|纯享|加更|特辑|彩蛋|花絮|片花|预告|直拍|发布会|见面会|专场|访谈|饭局|plus|reaction|repo)/i;
+                        for (let g = 0; g < 4; g++) {
+                            rest = rest.replace(/^[\s()（）\[\]【】·:：\-—_~～、.。]+/, '');
+                            const sm = rest.match(SUFW);
+                            if (!sm) break;
+                            suf += sm[1].toLowerCase();
+                            rest = rest.slice(sm[0].length);
+                        }
+                    }
+                    return this.currentGroup.name + '|' + (num != null ? num + suf : epName);
                 },
                 // ========== ⏭️ 跳过片头：按集标记(服务器共享) + 音频指纹自动学习 ==========
                 // 归一剧名(与服务器 introNormTitle 完全一致,改一处必须同步另一处)
