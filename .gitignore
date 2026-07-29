@@ -38,3 +38,4 @@ android-tv/build_*.txt
 
 
 .agents/workflows/search-files.md
+.claude/

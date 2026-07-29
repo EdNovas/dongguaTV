@@ -454,6 +454,12 @@
             padding: 12px 14px;
             color: #fff;
             box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+            /* 📱 面板必须整体待在播放器里:手机竖屏内联播放器只有 ~190px 高,面板(231px)锚 bottom:56px 会把
+               最上面两行(显示弹幕/海量弹幕)顶出播放器外——被上层元素盖住点不到(实测用户手机上正是这两个开关失灵)。
+               限高 + 内部滚动,小屏上滚着用;全屏/横屏高度充裕时不受影响。border-box 让 max-height 含 padding。 */
+            box-sizing: border-box;
+            max-height: calc(100% - 70px);
+            overflow-y: auto;
         }
         #dplayer .dm-set-title {
             font-size: 13px;
@@ -9129,10 +9135,11 @@
                     const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
                     const epName = (cur && cur.name) || '';
                     return {
-                        // 末尾 |v2 是缓存版本：CF 曾把"暂时为空"的弹幕响应按 1 年浏览器TTL 缓存进了各用户浏览器(中毒)，
+                        // 末尾 |v3 是缓存版本：CF 曾把"暂时为空"的弹幕响应按 1 年浏览器TTL 缓存进了各用户浏览器(中毒)，
                         // 改 URL 即让旧的中毒缓存 miss、重新拉取。服务器只取 split('|') 的前两段(剧名|集名)，第三段被忽略、
-                        // 不影响匹配与服务器缓存键。将来若再需强制刷新弹幕缓存，把 v2 往上 bump 即可。
-                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v2'),
+                        // 不影响匹配与服务器缓存键。将来若再需强制刷新弹幕缓存，把版本号往上 bump 即可。
+                        // (v2→v3: 修"带年份期号撞任意年份同月日"串台后,冲掉已固化错弹幕的 CDN/浏览器缓存)
+                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v3'),
                         api: '/api/danmaku/',
                         user: '观众',
                         // 弹幕显示区域由 CSS(.dplayer-danmaku height:33%)限制到顶部 1/3，
