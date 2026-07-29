@@ -11356,7 +11356,7 @@
                             container.addEventListener('touchstart', (e) => {
                                 _gmode = null;
                                 if (e.touches.length !== 1) return;
-                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
+                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
                                 const rect = container.getBoundingClientRect();
                                 _gx = e.touches[0].clientX; _gy = e.touches[0].clientY;
                                 const rx = (_gx - rect.left) / rect.width;
@@ -11402,10 +11402,15 @@
                         container.addEventListener('touchend', (e) => {
                             // 🎚️ 刚完成音量/亮度滑动手势 → 这次抬手不算点击(防止误切控制栏/误判双击)
                             if (_swipeConsumed) { _swipeConsumed = false; return; }
-                            // 忽略控制栏区域和自定义按钮的点击
-                            // 忽略控制栏区域、自定义按钮以及 DPlayer 遮罩的点击
+                            // 忽略控制栏区域、自定义按钮以及 DPlayer 遮罩的点击。
+                            // ⚠️ 此名单必须包含所有【直挂 #dplayer 的可点自定义 UI】——这里 preventDefault 会吃掉浏览器
+                            //    合成的 click,名单外的自定义控件在手机上会"点了没任何反应"(实测事故:弹幕设置面板里
+                            //    显示弹幕/海量弹幕两个开关手机全屏点不动,就是漏了 .dm-settings-panel;跳过片头按钮同理)。
                             if (e.target.closest('.dplayer-controller') ||
                                 e.target.closest('.dplayer-setting-box') ||
+                                e.target.closest('.dm-settings-panel') ||
+                                e.target.closest('.intro-skip-btn') ||
+                                e.target.closest('.dplayer-comment-box') ||
                                 e.target.closest('.mobile-play-overlay') ||
                                 e.target.closest('.dplayer-mask')) {
                                 return;
