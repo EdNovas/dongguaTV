@@ -9380,25 +9380,27 @@
                         localStorage.setItem('donggua_site_health', JSON.stringify(m));
                     } catch (e) { }
                 },
-                // 🛡️ "该站封了广告过滤代理"记账(实测:部分源站 CDN 封 Cloudflare 机房出口 IP——直连好好的,
-                //    过 worker 必 403/超时)。内存 + localStorage 双层,记 3 天:封 IP 不会一夜解封,跨会话别反复踩坑。
+                // 🛡️ "该站的源站封了 Cloudflare 出口 IP"记账。只在【确诊源站封 CF】(worker 探测本集 m3u8 返回 403/404)
+                //    时才记 —— 绝不因 worker 自身 5xx/超时(临时故障)而记,否则 worker 一次抽风就把好站误关小黑屋、广告全回来。
+                //    TTL 只 12h(误记也能半天自愈;真封 CF 的站半天重探一次成本极低)。键名带 v2:老版本的错误记账一律作废。
+                //    ⚠️ v1(donggua_adproxy_bad)因分诊过激会误记好站,已弃用,不再读取。
                 _adProxyBad(siteKey) {
                     if (!siteKey) return false;
                     if (this._adProxyBadSites && this._adProxyBadSites[siteKey]) return true;
                     try {
-                        const m = JSON.parse(localStorage.getItem('donggua_adproxy_bad') || '{}');
-                        return !!(m[siteKey] && Date.now() - m[siteKey] < 3 * 24 * 3600 * 1000);
+                        const m = JSON.parse(localStorage.getItem('donggua_adproxy_bad2') || '{}');
+                        return !!(m[siteKey] && Date.now() - m[siteKey] < 12 * 3600 * 1000);
                     } catch (e) { return false; }
                 },
                 _adProxyBadMark(siteKey) {
                     if (!siteKey) return;
                     (this._adProxyBadSites = this._adProxyBadSites || {})[siteKey] = 1;
                     try {
-                        const m = JSON.parse(localStorage.getItem('donggua_adproxy_bad') || '{}');
+                        const m = JSON.parse(localStorage.getItem('donggua_adproxy_bad2') || '{}');
                         m[siteKey] = Date.now();
                         const ks = Object.keys(m);
                         if (ks.length > 60) ks.sort((a, b) => m[a] - m[b]).slice(0, ks.length - 60).forEach(k => delete m[k]);
-                        localStorage.setItem('donggua_adproxy_bad', JSON.stringify(m));
+                        localStorage.setItem('donggua_adproxy_bad2', JSON.stringify(m));
                     } catch (e) { }
                 },
                 play(url) {
@@ -9521,21 +9523,26 @@
                                 console.log('[播放器] ⏳ 代理回退中，忽略错误 (' + source + ')');
                                 return;
                             }
-                            // 如果使用了广告过滤代理，先分诊再决定回退方式(实测数据:worker 本体通常是好的,
-                            //   但约 1/3 的直连源站 CDN 封 Cloudflare 机房出口 IP——直连好好的,过 worker 必 403/超时):
-                            //   ① 本站测速实测【直连可达】→ 原站直接回退直连(不跳线路!跳下一条大概率同样封 CF,只会级联失败),
-                            //      并记 3 天"该站屏蔽过滤代理",跨会话不再踩坑;
-                            //   ② 本站非直连可达(proxy-only/server 测的) → 探测 worker:活着=只是这条线路过不了 → 换线路保过滤;
-                            //      worker 不通/超时 或 已有≥2站代理失败(疑似全局故障/配额耗尽) 或 无备选线路 → 回退直连兜底。
+                            // 广告过滤代理失败时:先【把本集 m3u8 通过 worker 再取一次、按返回状态精确分诊】,再决定回退方式。
+                            //   worker 会加 CORS 头 → 这次探测能读到真实 status/body,足以区分三种情况:
+                            //   ① worker 5xx/429/超时/网络失败 = 过滤代理【自身临时故障】(如 CF 503/配额波动) → 本集直连兜底,
+                            //      【绝不记账、不换线路】,下次播放自动重试过滤(修:旧版把 worker 一次 503 误判成"源站封CF"并记3天,
+                            //      导致常用站广告全回来——正是本次 bug);
+                            //   ② worker 返回 403/404/451 或 200 但非 m3u8 = 源站真封 CF 出口 → 记账(12h);直连可达就原站直连,
+                            //      否则(proxy-only)换线路保过滤;
+                            //   ③ worker 返回 200 且是 #EXTM3U = 过滤代理其实正常,原错误是偶发 → 重试走过滤代理(不记账不换线)。
                             if (this._activeAdFilterProxyUsed && !this._proxyRetried) {
                                 this._proxyRetried = true;
                                 this._proxyRetrying = true;
-                                const fb = this._activeOriginalUrl;
+                                const fb = this._activeOriginalUrl;                 // 未包装的原始 m3u8(直连回退用)
+                                const wrapped = this._activeFinalUrl;               // 过滤代理(worker)包装后的 m3u8
                                 const failSite = this.currentSource && this.currentSource.site_key;
-                                // 原站回退直连(共用):switchVideo → 等就绪播放 → 3s 看门狗(直连也起不来才切下一个源)
-                                const fallDirect = (reason) => {
-                                    console.log('[播放器] 🛡️ ' + reason + '，回退直连:', (fb || '').substring(0, 60));
-                                    dp.switchVideo({ url: fb, type: 'hls' });
+                                const health = this._siteHealthGet ? (this._siteHealthGet(failSite) || {}) : {};
+                                const directOK = (this.currentSource && this.currentSource._testType === 'direct') || health._testType === 'direct';
+                                // 切到指定 URL 播放 + 3s 看门狗(仍起不来才切下一个源)。reason 仅日志用。
+                                const switchTo = (url, reason) => {
+                                    console.log('[播放器] 🛡️ ' + reason + ':', (url || '').substring(0, 70));
+                                    dp.switchVideo({ url, type: 'hls' });
                                     const onMeta = () => {
                                         dp.video.removeEventListener('loadedmetadata', onMeta);
                                         const p = dp.play();
@@ -9544,51 +9551,52 @@
                                     };
                                     if (dp.video && dp.video.readyState >= 1) onMeta();
                                     else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
-                                    // 3秒后解除锁定（足够 switchVideo 完成加载）；若回退直连后仍未起播
-                                    //（代理失败 + 直连 CORS/拒连都失败，此时不会再触发 error 事件 → 原先会永久卡黑屏）→ 自动切下一个源
                                     setTimeout(() => {
                                         this._proxyRetrying = false;
                                         if (this._activePlaySeq === _navSeq && dp && dp.video &&
                                             dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
-                                            console.log('[播放器] 代理+直连均失败，自动切换下一个源');
+                                            console.log('[播放器] 回退后仍未起播，自动切换下一个源');
                                             this.handlePlaybackError();
                                         }
                                     }, 3000);
                                 };
-                                // ① 客户端实测直连可达的站:代理失败 ≈ 源站封 CF 出口 → 原站直连,记账,完事
-                                const health = this._siteHealthGet ? (this._siteHealthGet(failSite) || {}) : {};
-                                const directOK = (this.currentSource && this.currentSource._testType === 'direct') || health._testType === 'direct';
-                                if (failSite && directOK) {
-                                    this._adProxyBadMark(failSite);
-                                    console.log('[播放器] 🛡️ ' + failSite + ' 直连实测可达但过滤代理不通(源站封代理IP)，原站回退直连，3天内该站不再走代理');
-                                    try { dp.notice('该线路屏蔽了广告过滤，已直连播放（可能含广告）', 3000); } catch (e) { }
-                                    fallDirect('源站屏蔽过滤代理');
-                                    return;
-                                }
-                                // ② proxy-only 站:分诊 worker 本体
-                                const srcs = this.availableSources || [];
-                                const idx = srcs.findIndex(s => s.site_key === failSite);
-                                const canHop = idx >= 0 && idx < srcs.length - 1 && Object.keys(this._adProxyBadSites || {}).length < 2;
-                                const probe = !canHop ? Promise.resolve(false) : (async () => {
+                                // 通过 worker 重取本集 m3u8,分类 worker故障 / 源站封CF / 偶发
+                                (async () => {
+                                    let cls = 'workerdown';   // 默认按"临时故障"处理(最保守:不记账)
                                     try {
-                                        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
-                                        await fetch(this.corsProxyUrl, { mode: 'no-cors', cache: 'no-store', signal: ctl.signal });   // no-cors:只探"通不通",不要求 CORS 头
-                                        clearTimeout(t); return true;
-                                    } catch (e) { return false; }
-                                })();
-                                probe.then(workerAlive => {
+                                        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+                                        const pr = await fetch(wrapped, { cache: 'no-store', signal: ctl.signal });
+                                        clearTimeout(t);
+                                        if (pr.status >= 500 || pr.status === 429) cls = 'workerdown';
+                                        else if (pr.status === 403 || pr.status === 404 || pr.status === 451) cls = 'siteblock';
+                                        else if (pr.ok) { let txt = ''; try { txt = await pr.text(); } catch (e) { } cls = /#EXTM3U/.test(txt) ? 'ok' : 'siteblock'; }
+                                        else cls = 'siteblock';
+                                    } catch (e) { cls = 'workerdown'; }   // 超时/网络失败 = worker 侧不可达 → 临时故障
                                     if (this._activePlaySeq !== _navSeq) { this._proxyRetrying = false; return; }
-                                    if (workerAlive) {
-                                        this._adProxyBadMark(failSite);   // 该线路不再走代理(play() 里会改直连)
-                                        console.log('[播放器] 🛡️ 过滤代理正常、但 ' + failSite + ' 线路过不了代理(源站可能封代理IP)，为保住广告过滤自动换线路');
+                                    if (cls === 'ok') {
+                                        console.log('[播放器] 🛡️ 过滤代理探测正常(worker+源站均通)，原错误疑似偶发，重试过滤播放');
+                                        switchTo(wrapped, '重试广告过滤代理');
+                                        return;
+                                    }
+                                    if (cls === 'workerdown') {
+                                        console.log('[播放器] 🛡️ 过滤代理(worker)暂时不可用(5xx/超时)，本集直连播放，不记账，下次自动重试过滤');
+                                        try { dp.notice('广告过滤暂时波动，本集直连播放，稍后自动恢复', 3000); } catch (e) { }
+                                        switchTo(fb, '过滤代理临时故障→直连兜底');
+                                        return;
+                                    }
+                                    // siteblock:源站封 CF —— 记账
+                                    this._adProxyBadMark(failSite);
+                                    if (directOK) {
+                                        console.log('[播放器] 🛡️ ' + failSite + ' 源站屏蔽过滤代理(worker→403/404)，原站直连，12h 内不再走代理');
+                                        try { dp.notice('该线路屏蔽了广告过滤，已直连播放（可能含广告）', 3000); } catch (e) { }
+                                        switchTo(fb, '源站屏蔽过滤代理→直连');
+                                    } else {
+                                        console.log('[播放器] 🛡️ ' + failSite + ' 源站封过滤代理且非直连可达，换线路保过滤');
                                         try { dp.notice('该线路无法过滤广告，自动换线路…', 2500); } catch (e) { }
                                         this._proxyRetrying = false;
                                         this.handlePlaybackError();
-                                        return;
                                     }
-                                    try { dp.notice('广告过滤代理暂不可用，本集直连播放（可能含广告）', 3000); } catch (e) { }
-                                    fallDirect('代理不可用/无备选线路');
-                                });
+                                })();
                                 return;
                             }
                             this.handlePlaybackError();
