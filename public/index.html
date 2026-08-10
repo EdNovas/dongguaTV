@@ -8539,10 +8539,17 @@
 
                                 clearTimeout(timeoutId);
 
-                                if (testRes.ok || testRes.type === 'cors') {
-                                    directLatency = Date.now() - startTime;
-                                    source.latency = directLatency;
-                                    directSuccess = true;
+                                // ⚠️ 旧版把 testRes.type==='cors' 也算成功——但带 CORS 头的 403/404 错误页 type 同样是 'cors',
+                                //    .ok=false 却被判"可达",于是死站测出延迟显绿灯、点进去播不了(用户实测的核心症状之一)。
+                                //    改为只认真正 2xx(.ok);顺带轻量校验响应体确实是 m3u8(#EXTM3U),挡掉返回 200 却是 HTML/错误页的源。
+                                if (testRes.ok) {
+                                    let bodyOK = true;
+                                    try { const txt = await testRes.clone().text(); bodyOK = /#EXTM3U/.test(txt); } catch (e) { bodyOK = true; }
+                                    if (bodyOK) {
+                                        directLatency = Date.now() - startTime;
+                                        source.latency = directLatency;
+                                        directSuccess = true;
+                                    }
                                 }
                             } catch (directError) {
                                 // 直接访问失败，稍后尝试代理
@@ -8567,7 +8574,9 @@
 
                                     clearTimeout(proxyTimeoutId);
 
-                                    if (proxyTestRes.ok) {
+                                    let proxyBodyOK = proxyTestRes.ok;
+                                    if (proxyTestRes.ok) { try { const ptxt = await proxyTestRes.clone().text(); proxyBodyOK = /#EXTM3U/.test(ptxt); } catch (e) { proxyBodyOK = true; } }
+                                    if (proxyBodyOK) {
                                         const proxyLatency = Date.now() - proxyStartTime;
 
                                         // 如果直连失败，使用代理
