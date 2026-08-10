@@ -64,7 +64,12 @@ function userIdentity(token, label) {
 const REMOTE_DB_URL = process.env['REMOTE_DB_URL'] || '';
 
 // CORS 代理 URL（用于中转无法直接访问的资源站 API）
-const CORS_PROXY_URL = process.env['CORS_PROXY_URL'] || '';
+// 支持配多个(逗号/空格分隔)做冗余:CORS_PROXY_URL=https://cors.a.com,https://cors.b.com
+//   每个都归一化(trim + 去尾部斜杠,拼接时统一 `${u}/?url=`)。CORS_PROXY_URL 取第一个作主代理,
+//   所有历史单代理代码零改动照常用;完整列表经 /api/config 下发前端,前端在过滤代理故障时自动轮换到备用。
+const CORS_PROXY_URLS = (process.env['CORS_PROXY_URL'] || '')
+    .split(/[,\s]+/).map(s => s.trim().replace(/\/+$/, '')).filter(s => /^https?:\/\//i.test(s));
+const CORS_PROXY_URL = CORS_PROXY_URLS[0] || '';
 
 // 📺 直播(IPTV)：上游 M3U 源(vbskycn/iptv，每6h更新)。可用 LIVE_M3U_URL 覆盖主源、LIVE_M3U_FALLBACK 覆盖备源；
 //    设 LIVE_TV_DISABLED=1 整体关闭(前端隐藏直播区、后端 /api/live/channels 返回 enabled:false)。
@@ -98,7 +103,7 @@ const LIVE_VALIDATE = !envFlag('LIVE_NO_VALIDATE');
 console.log(`[System] Environment: ${process.env.VERCEL ? 'Vercel Serverless' : 'Local/VPS'}`);
 console.log(`[System] TMDB_API_KEY: ${process.env.TMDB_API_KEY ? '✓ Configured' : '✗ Missing'}`);
 console.log(`[System] TMDB_PROXY_URL: ${process.env['TMDB_PROXY_URL'] || '(not set)'}`);
-console.log(`[System] CORS_PROXY_URL: ${CORS_PROXY_URL || '(not set)'}`);
+console.log(`[System] CORS_PROXY_URL: ${CORS_PROXY_URL || '(not set)'}${CORS_PROXY_URLS.length > 1 ? ` (+${CORS_PROXY_URLS.length - 1} 备用: ${CORS_PROXY_URLS.slice(1).join(', ')})` : ''}`);
 console.log(`[System] REMOTE_DB_URL: ${REMOTE_DB_URL ? '✓ Configured' : '(not set)'}`);
 console.log(`[System] 直播(IPTV): ${LIVE_TV_ENABLED ? '✓ 启用 (' + LIVE_M3U_URL + ')' : '✗ 已禁用 (LIVE_TV_DISABLED)'}`);
 
@@ -1313,8 +1318,10 @@ app.get('/api/config', (req, res) => {
     res.json({
         tmdb_api_key: process.env.TMDB_API_KEY,
         tmdb_proxy_url: process.env['TMDB_PROXY_URL'],
-        // CORS 代理 URL（用于中转无法直接访问的资源站 API）
+        // CORS 代理 URL（用于中转无法直接访问的资源站 API）。cors_proxy_url=主代理(向后兼容);
+        // cors_proxy_urls=全部代理(前端故障时轮换到备用 worker)
         cors_proxy_url: CORS_PROXY_URL || null,
+        cors_proxy_urls: CORS_PROXY_URLS,
         // Vercel 环境下禁用本地图片缓存，防止写入报错
         enable_local_image_cache: !IS_VERCEL,
         // 多用户同步功能
