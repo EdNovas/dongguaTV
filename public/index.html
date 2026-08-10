@@ -2925,6 +2925,30 @@
             text-overflow: ellipsis;
         }
 
+        /* 集名文本:普通数字集名单行居中;长名(见 .ep-grid-long)最多折两行,超出才省略——
+           旧版在 flex 容器上挂 text-overflow:ellipsis 根本不生效(ellipsis 只作用于块容器的行内内容),
+           综艺"第20260703期上纯享版"这类长名直接被硬截断,啥也看不出 */
+        .ep-btn .ep-name {
+            white-space: normal;
+            word-break: break-all;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            overflow: hidden;
+            line-height: 1.4;
+        }
+
+        /* 集名普遍很长的剧(多为综艺):格子加宽,字号略缩,两行能装下 ~20 字 */
+        .ep-grid.ep-grid-long {
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        }
+
+        .ep-grid.ep-grid-long .ep-btn {
+            font-size: 13px;
+            padding: 8px 8px;
+        }
+
         .ep-btn:hover {
             background: #333;
             color: #fff;
@@ -4794,10 +4818,12 @@
                             <div v-if="loadingDetail" class="text-center py-5 text-muted"><i
                                     class="fas fa-spinner fa-spin"></i>
                                 加载中...</div>
-                            <div v-else class="ep-grid">
+                            <!-- 集名普遍很长(综艺"第20260703期上纯享版"这类)时给 ep-grid-long:加宽格子+允许折两行 -->
+                            <div v-else class="ep-grid"
+                                :class="{ 'ep-grid-long': episodeList.some(e => String(e.name || '').length > 7) }">
                                 <div v-for="ep in episodeList" class="ep-btn" :class="{ active: currentUrl === ep.url }"
-                                    @click="play(ep.url)">
-                                    {{ ep.name }}
+                                    :title="ep.name" @click="play(ep.url)">
+                                    <span class="ep-name">{{ ep.name }}</span>
                                 </div>
                             </div>
                         </template>
