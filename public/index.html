@@ -9949,6 +9949,27 @@
                         localStorage.setItem('donggua_site_health', JSON.stringify(m));
                     } catch (e) { }
                 },
+                // 🛡️ "该站封了广告过滤代理"记账(实测:部分源站 CDN 封 Cloudflare 机房出口 IP——直连好好的,
+                //    过 worker 必 403/超时)。内存 + localStorage 双层,记 3 天:封 IP 不会一夜解封,跨会话别反复踩坑。
+                _adProxyBad(siteKey) {
+                    if (!siteKey) return false;
+                    if (this._adProxyBadSites && this._adProxyBadSites[siteKey]) return true;
+                    try {
+                        const m = JSON.parse(localStorage.getItem('donggua_adproxy_bad') || '{}');
+                        return !!(m[siteKey] && Date.now() - m[siteKey] < 3 * 24 * 3600 * 1000);
+                    } catch (e) { return false; }
+                },
+                _adProxyBadMark(siteKey) {
+                    if (!siteKey) return;
+                    (this._adProxyBadSites = this._adProxyBadSites || {})[siteKey] = 1;
+                    try {
+                        const m = JSON.parse(localStorage.getItem('donggua_adproxy_bad') || '{}');
+                        m[siteKey] = Date.now();
+                        const ks = Object.keys(m);
+                        if (ks.length > 60) ks.sort((a, b) => m[a] - m[b]).slice(0, ks.length - 60).forEach(k => delete m[k]);
+                        localStorage.setItem('donggua_adproxy_bad', JSON.stringify(m));
+                    } catch (e) { }
+                },
                 play(url) {
                     // ⬇️ 离线缓存重定向:本集(剧名|集名)已完整缓存 → 本次播放【完全走本地】:
                     //    ①URL 不同(资源站轮换/换过线路)→ 改播下载时的 URL 并钉回选集条目;
@@ -10033,10 +10054,10 @@
                     // 📦 已缓存的集也不套(_offCacheRec):缓存的就是净化版,包一层只会让缓存键错位
                     const isDirectM3U8 = url && url.includes('.m3u8') && !(this.currentSource && this.currentSource._useProxy) && !this._liveActive && !_offCacheRec;
                     if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && this.corsProxyUrl) {
-                        // 本会话已确认"过滤代理过不了"的线路(源站封代理IP/URL签名绑IP)不再反复试代理:
-                        // 直连能看但没有过滤——想要无广告请换线路(错误分诊时已自动换过)
-                        if (this._adProxyBadSites && this.currentSource && this._adProxyBadSites[this.currentSource.site_key]) {
-                            console.log('[播放器] 🛡️ 本线路(' + this.currentSource.site_key + ')此前过滤代理失败(源站封代理)，本集直连播放——广告过滤对该线路不可用，换其它线路可恢复过滤');
+                        // 已确认"过滤代理过不了"的线路(源站封代理IP/URL签名绑IP,3天记账)不再反复试代理:
+                        // 直连能看但没有过滤——想要无广告请换线路
+                        if (this.currentSource && this._adProxyBad(this.currentSource.site_key)) {
+                            console.log('[播放器] 🛡️ 本线路(' + this.currentSource.site_key + ')的源站屏蔽过滤代理(3天内记账)，本集直连播放——广告过滤对该线路不可用，换其它线路可恢复过滤');
                         } else {
                             finalUrl = this.corsProxyUrl + '/?url=' + encodeURIComponent(finalUrl);
                             adFilterProxyUsed = true;
@@ -10069,16 +10090,51 @@
                                 console.log('[播放器] ⏳ 代理回退中，忽略错误 (' + source + ')');
                                 return;
                             }
-                            // 如果使用了广告过滤代理，先分诊再决定回退方式——
-                            //   旧行为"一失败就回退直连"会静默放弃过滤,用户看到满屏广告还以为过滤坏了。
-                            //   分诊:worker 有任何 HTTP 响应(哪怕4xx/5xx)=代理活着 → 是【本线路】过不了(源站封代理IP/URL签名绑IP),
-                            //        换下一条线路继续保广告过滤;worker 不通/超时 或 已有≥2条线路代理失败(疑似代理全局故障/配额耗尽)
-                            //        或没有下一条线路 → 回退直连兜底(能看优先,明确提示可能含广告)。
+                            // 如果使用了广告过滤代理，先分诊再决定回退方式(实测数据:worker 本体通常是好的,
+                            //   但约 1/3 的直连源站 CDN 封 Cloudflare 机房出口 IP——直连好好的,过 worker 必 403/超时):
+                            //   ① 本站测速实测【直连可达】→ 原站直接回退直连(不跳线路!跳下一条大概率同样封 CF,只会级联失败),
+                            //      并记 3 天"该站屏蔽过滤代理",跨会话不再踩坑;
+                            //   ② 本站非直连可达(proxy-only/server 测的) → 探测 worker:活着=只是这条线路过不了 → 换线路保过滤;
+                            //      worker 不通/超时 或 已有≥2站代理失败(疑似全局故障/配额耗尽) 或 无备选线路 → 回退直连兜底。
                             if (this._activeAdFilterProxyUsed && !this._proxyRetried) {
                                 this._proxyRetried = true;
                                 this._proxyRetrying = true;
                                 const fb = this._activeOriginalUrl;
                                 const failSite = this.currentSource && this.currentSource.site_key;
+                                // 原站回退直连(共用):switchVideo → 等就绪播放 → 3s 看门狗(直连也起不来才切下一个源)
+                                const fallDirect = (reason) => {
+                                    console.log('[播放器] 🛡️ ' + reason + '，回退直连:', (fb || '').substring(0, 60));
+                                    dp.switchVideo({ url: fb, type: 'hls' });
+                                    const onMeta = () => {
+                                        dp.video.removeEventListener('loadedmetadata', onMeta);
+                                        const p = dp.play();
+                                        if (p && typeof p.catch === 'function') p.catch(() => { });
+                                        if (typeof window._syncPlayOverlays === 'function') window._syncPlayOverlays();
+                                    };
+                                    if (dp.video && dp.video.readyState >= 1) onMeta();
+                                    else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
+                                    // 3秒后解除锁定（足够 switchVideo 完成加载）；若回退直连后仍未起播
+                                    //（代理失败 + 直连 CORS/拒连都失败，此时不会再触发 error 事件 → 原先会永久卡黑屏）→ 自动切下一个源
+                                    setTimeout(() => {
+                                        this._proxyRetrying = false;
+                                        if (this._activePlaySeq === _navSeq && dp && dp.video &&
+                                            dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
+                                            console.log('[播放器] 代理+直连均失败，自动切换下一个源');
+                                            this.handlePlaybackError();
+                                        }
+                                    }, 3000);
+                                };
+                                // ① 客户端实测直连可达的站:代理失败 ≈ 源站封 CF 出口 → 原站直连,记账,完事
+                                const health = this._siteHealthGet ? (this._siteHealthGet(failSite) || {}) : {};
+                                const directOK = (this.currentSource && this.currentSource._testType === 'direct') || health._testType === 'direct';
+                                if (failSite && directOK) {
+                                    this._adProxyBadMark(failSite);
+                                    console.log('[播放器] 🛡️ ' + failSite + ' 直连实测可达但过滤代理不通(源站封代理IP)，原站回退直连，3天内该站不再走代理');
+                                    try { dp.notice('该线路屏蔽了广告过滤，已直连播放（可能含广告）', 3000); } catch (e) { }
+                                    fallDirect('源站屏蔽过滤代理');
+                                    return;
+                                }
+                                // ② proxy-only 站:分诊 worker 本体
                                 const srcs = this.availableSources || [];
                                 const idx = srcs.findIndex(s => s.site_key === failSite);
                                 const canHop = idx >= 0 && idx < srcs.length - 1 && Object.keys(this._adProxyBadSites || {}).length < 2;
@@ -10092,35 +10148,15 @@
                                 probe.then(workerAlive => {
                                     if (this._activePlaySeq !== _navSeq) { this._proxyRetrying = false; return; }
                                     if (workerAlive) {
-                                        (this._adProxyBadSites = this._adProxyBadSites || {})[failSite] = 1;   // 本会话该线路不再走代理(play() 里会改直连)
+                                        this._adProxyBadMark(failSite);   // 该线路不再走代理(play() 里会改直连)
                                         console.log('[播放器] 🛡️ 过滤代理正常、但 ' + failSite + ' 线路过不了代理(源站可能封代理IP)，为保住广告过滤自动换线路');
                                         try { dp.notice('该线路无法过滤广告，自动换线路…', 2500); } catch (e) { }
                                         this._proxyRetrying = false;
                                         this.handlePlaybackError();
                                         return;
                                     }
-                                    console.log('[播放器] 🛡️ 代理播放失败(代理不可用/无备选线路)，回退直连:', (fb || '').substring(0, 60));
                                     try { dp.notice('广告过滤代理暂不可用，本集直连播放（可能含广告）', 3000); } catch (e) { }
-                                    dp.switchVideo({ url: fb, type: 'hls' });
-                                    // 回退后等就绪再播放（switchVideo 不会自动播放）
-                                    const onMeta = () => {
-                                        dp.video.removeEventListener('loadedmetadata', onMeta);
-                                        const p = dp.play();
-                                        if (p && typeof p.catch === 'function') p.catch(() => { });
-                                        if (typeof window._syncPlayOverlays === 'function') window._syncPlayOverlays();
-                                    };
-                                    if (dp.video && dp.video.readyState >= 1) onMeta();
-                                    else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
-                                    // 3秒后解除锁定（足够 switchVideo 完成加载）；若回退直连后仍未起播
-                                    //（代理 403 + 直连 CORS/拒连都失败，此时不会再触发 error 事件 → 原先会永久卡黑屏）→ 自动切下一个源
-                                    setTimeout(() => {
-                                        this._proxyRetrying = false;
-                                        if (this._activePlaySeq === _navSeq && dp && dp.video &&
-                                            dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
-                                            console.log('[播放器] 代理+直连均失败，自动切换下一个源');
-                                            this.handlePlaybackError();
-                                        }
-                                    }, 3000);
+                                    fallDirect('代理不可用/无备选线路');
                                 });
                                 return;
                             }
