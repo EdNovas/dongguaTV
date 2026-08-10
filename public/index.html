@@ -5914,7 +5914,8 @@
                     pastCompactThreshold: false,  // 滚动越过 400px(用于搜索框 compact)；仅阈值翻转时更新，避免每帧重渲染
                     hotList: [],
                     sitesMap: {},  // 缓存站点信息（用于客户端测速）
-                    corsProxyUrl: null,  // CORS 代理 URL（用于中转无法直接访问的资源站 API）
+                    corsProxyUrl: null,  // CORS 代理 URL（当前主代理；用于中转无法直接访问的资源站 API）
+                    corsProxyUrls: [],   // 全部 CORS 代理（多代理冗余；过滤代理故障时轮换到备用 worker）
                     danmakuEnabled: false,  // 🗨️ 弹幕开关（来自 /api/config，配置了 DANMU_API_URL 才为 true）
                     requestsEnabled: false, // 📮 求片开关（来自 /api/config：仅 VPS/server.js 配了 ADMIN_TOKEN 才为 true；Vercel 始终 false）
                     playbackErrorCount: 0,  // 播放失败计数
@@ -6647,10 +6648,16 @@
                         }
                         TMDB_API_KEY = config.tmdb_api_key;
 
-                        // 保存 CORS 代理 URL（用于资源站 API 中转）
-                        if (config.cors_proxy_url) {
-                            this.corsProxyUrl = config.cors_proxy_url;
-                            console.log('[Config] CORS 代理已配置:', config.cors_proxy_url);
+                        // 保存 CORS 代理 URL（用于资源站 API 中转）。支持多代理:cors_proxy_urls 数组做冗余,
+                        //   corsProxyUrl 取第一个作【当前主代理】(所有既有 `${corsProxyUrl}/?url=` 照常);
+                        //   过滤代理故障时 handleError 会把 corsProxyUrl 轮换到列表里健康的备用 worker。
+                        const _proxyList = (Array.isArray(config.cors_proxy_urls) && config.cors_proxy_urls.length)
+                            ? config.cors_proxy_urls.map(u => String(u || '').trim().replace(/\/+$/, '')).filter(u => /^https?:\/\//i.test(u))
+                            : (config.cors_proxy_url ? [String(config.cors_proxy_url).trim().replace(/\/+$/, '')] : []);
+                        this.corsProxyUrls = _proxyList;
+                        if (_proxyList.length) {
+                            this.corsProxyUrl = _proxyList[0];
+                            console.log('[Config] CORS 代理已配置:', _proxyList[0] + (_proxyList.length > 1 ? ' (+' + (_proxyList.length - 1) + ' 备用)' : ''));
                         }
 
                         // 🗨️ 弹幕开关（服务端配置了 DANMU_API_URL 才开启）
@@ -10157,7 +10164,28 @@
                                         return;
                                     }
                                     if (cls === 'workerdown') {
-                                        console.log('[播放器] 🛡️ 过滤代理(worker)暂时不可用(5xx/超时)，本集直连播放，不记账，下次自动重试过滤');
+                                        // 主过滤代理临时故障 → 先试配置的【备用 worker】(多代理冗余:CORS_PROXY_URL 逗号分隔多个),
+                                        //   备用能通就把本会话主代理轮换过去(后续集/直播都用它),都不通才直连兜底。
+                                        //   注:源站封 CF(siteblock)不会走到这里——那种换个 CF worker 也一样被封,只有 worker 自身故障才轮换有意义。
+                                        const others = (this.corsProxyUrls || []).filter(p => p && p !== this.corsProxyUrl);
+                                        let backup = null;
+                                        for (const p of others) {
+                                            try {
+                                                const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+                                                const pr = await fetch(p + '/?url=' + encodeURIComponent(fb), { cache: 'no-store', signal: ctl.signal });
+                                                clearTimeout(t);
+                                                if (pr.ok) { let tx = ''; try { tx = await pr.text(); } catch (e) { } if (/#EXTM3U/.test(tx)) { backup = p; break; } }
+                                            } catch (e) { }
+                                        }
+                                        if (this._activePlaySeq !== _navSeq) { this._proxyRetrying = false; return; }
+                                        if (backup) {
+                                            this.corsProxyUrl = backup;   // 本会话主代理轮换到健康备用
+                                            console.log('[播放器] 🛡️ 主过滤代理临时故障，已切换到备用过滤代理:', backup);
+                                            try { dp.notice('已切换到备用广告过滤线路', 2500); } catch (e) { }
+                                            switchTo(backup + '/?url=' + encodeURIComponent(fb), '切备用过滤代理');
+                                            return;
+                                        }
+                                        console.log('[播放器] 🛡️ 过滤代理(worker)暂时不可用(5xx/超时)' + (others.length ? '，备用代理也不通' : '') + '，本集直连播放，不记账，下次自动重试过滤');
                                         try { dp.notice('广告过滤暂时波动，本集直连播放，稍后自动恢复', 3000); } catch (e) { }
                                         switchTo(fb, '过滤代理临时故障→直连兜底');
                                         return;

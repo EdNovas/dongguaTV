@@ -250,7 +250,7 @@ node server.js
 | `ACCESS_PASSWORD` | ❌ | — | 访问密码；逗号分隔多个则开启多用户（首个为管理员，不同步） |
 | `TMDB_PROXY_URL` | ❌ | — | TMDB 反代地址（大陆用户） |
 | `SERVER_IN_CHINA` | ❌ | — | 设为 `true` 时所有 TMDB 请求强制走 `TMDB_PROXY_URL` |
-| `CORS_PROXY_URL` | ❌ | — | 资源站/m3u8 的 CORS 代理与边缘去广告地址 |
+| `CORS_PROXY_URL` | ❌ | — | 资源站/m3u8 的 CORS 代理与边缘去广告地址。**可逗号分隔配多个做冗余**（如 `https://cors.a.workers.dev,https://cors.b.workers.dev`）：第一个为主代理，主代理临时故障（5xx/超时）时前端自动切换到备用 worker 保住广告过滤 |
 | `REMOTE_DB_URL` | ❌ | — | 远程 `db.json` 地址（5 分钟缓存，失败回退本地） |
 | `SITES_JSON` | ❌ | — | 直接内嵌站点配置（JSON 或 Base64），主要用于 Vercel |
 | `DANMU_API_URL` | ❌ | — | 自建 `danmu_api` 地址；配置后开启弹幕。**支持逗号分隔多实例**（并行赛跑、抗限流）。详见[弹幕](#️-弹幕) |
