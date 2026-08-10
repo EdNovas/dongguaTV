@@ -2069,8 +2069,33 @@ app.get('/api/check', async (req, res) => {
         if (!site || !site.api) return res.json({ latency: 9999 });
         const start = Date.now();
         try {
-            await axios.get(`${site.api}?ac=list&pg=1`, { timeout: 3000 });
-            return res.json({ latency: Date.now() - start, _testType: 'server' });
+            // 旧版只要请求不抛错就报延迟 → 返回 200 的死站(域名停放页/Cloudflare 人机校验页/HTML 报错页)
+            // 也会显示绿灯延迟,用户点进去却播不了。这里改为:必须返回【有效 videolist JSON 且有片源】才算通,
+            // 否则一律 9999(不可用)。ac=videolist 才带 vod_play_url(ac=list 只有元数据),顺带能校验片源存在。
+            const r = await axios.get(`${site.api}?ac=videolist&pg=1`, {
+                timeout: 4000,
+                responseType: 'json',
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' },
+            });
+            const latency = Date.now() - start;
+            const data = r.data;
+            // axios 拿到 HTML/停放页/人机校验页时 data 是字符串(解析不成 JSON) → list 不是数组 → 判不可用。
+            const list = data && Array.isArray(data.list) ? data.list : null;
+            if (!list || !list.length) return res.json({ latency: 9999 });
+            // 从样本里找一个【直接 .m3u8】播放地址;有的正规站(如红牛)返回的是"/play/xxx"播放页,拿不到直接 m3u8。
+            let m3u8 = '';
+            for (const v of list) { const mm = String(v.vod_play_url || '').match(/https?:\/\/[^"'#$\s]+\.m3u8[^"'#$\s]*/i); if (mm) { m3u8 = mm[0]; break; } }
+            if (m3u8) {
+                // 能拿到直接 m3u8 就真拉一次验证是 #EXTM3U——挡掉"API活着但播放地址404/超时"的死站(bfzy/tyyszy 这类)
+                try {
+                    const pr = await axios.get(m3u8, { timeout: 4000, responseType: 'text', maxContentLength: 300000, headers: { 'User-Agent': 'Mozilla/5.0' } });
+                    if (typeof pr.data !== 'string' || !pr.data.includes('#EXTM3U')) return res.json({ latency: 9999 });
+                } catch (e) { return res.json({ latency: 9999 }); }
+            } else {
+                // 播放页型(无直接 m3u8):至少要有 http 播放地址,真实可播性交给客户端直连/代理测速把关
+                if (!list.some(v => /https?:\/\//.test(String(v.vod_play_url || '')))) return res.json({ latency: 9999 });
+            }
+            return res.json({ latency, _testType: 'server' });
         } catch (e) {
             return res.json({ latency: 9999 });
         }
@@ -3718,9 +3743,12 @@ ${urls.join('\n')}
 });
 
 // Helper: Get DB data (Local or Remote)
+// ⚠️ 必须剥 UTF-8 BOM:db.json 若由 PowerShell/记事本保存会带 BOM(EF BB BF),
+//    JSON.parse 直接吃带 BOM 的字符串会抛 "Unexpected token" → getDB 全线抛错被上层 catch 吞掉,
+//    表现为 /api/check 对所有源恒返回 9999(健康检查形同虚设)、POST 搜索拿不到源。剥掉即可。
 function getDB() {
     if (remoteDbCache) return remoteDbCache;
-    return JSON.parse(fs.readFileSync(DATA_FILE));
+    return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8').replace(/^\uFEFF/, ''));
 }
 
 // 本地/Docker 环境：启动服务器监听
