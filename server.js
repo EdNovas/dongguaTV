@@ -2095,33 +2095,27 @@ app.get('/api/check', async (req, res) => {
         if (!site || !site.api) return res.json({ latency: 9999 });
         const start = Date.now();
         try {
-            // 旧版只要请求不抛错就报延迟 → 返回 200 的死站(域名停放页/Cloudflare 人机校验页/HTML 报错页)
-            // 也会显示绿灯延迟,用户点进去却播不了。这里改为:必须返回【有效 videolist JSON 且有片源】才算通,
-            // 否则一律 9999(不可用)。ac=videolist 才带 vod_play_url(ac=list 只有元数据),顺带能校验片源存在。
-            const r = await axios.get(`${site.api}?ac=videolist&pg=1`, {
-                timeout: 4000,
-                responseType: 'json',
-                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' },
-            });
-            const latency = Date.now() - start;
-            const data = r.data;
-            // axios 拿到 HTML/停放页/人机校验页时 data 是字符串(解析不成 JSON) → list 不是数组 → 判不可用。
-            const list = data && Array.isArray(data.list) ? data.list : null;
-            if (!list || !list.length) return res.json({ latency: 9999 });
-            // 从样本里找一个【直接 .m3u8】播放地址;有的正规站(如红牛)返回的是"/play/xxx"播放页,拿不到直接 m3u8。
-            let m3u8 = '';
-            for (const v of list) { const mm = String(v.vod_play_url || '').match(/https?:\/\/[^"'#$\s]+\.m3u8[^"'#$\s]*/i); if (mm) { m3u8 = mm[0]; break; } }
-            if (m3u8) {
-                // 能拿到直接 m3u8 就真拉一次验证是 #EXTM3U——挡掉"API活着但播放地址404/超时"的死站(bfzy/tyyszy 这类)
-                try {
-                    const pr = await axios.get(m3u8, { timeout: 4000, responseType: 'text', maxContentLength: 300000, headers: { 'User-Agent': 'Mozilla/5.0' } });
-                    if (typeof pr.data !== 'string' || !pr.data.includes('#EXTM3U')) return res.json({ latency: 9999 });
-                } catch (e) { return res.json({ latency: 9999 }); }
-            } else {
-                // 播放页型(无直接 m3u8):至少要有 http 播放地址,真实可播性交给客户端直连/代理测速把关
-                if (!list.some(v => /https?:\/\//.test(String(v.vod_play_url || '')))) return res.json({ latency: 9999 });
+            // 必须返回【有效 videolist JSON 且有 http 播放地址】才算通——挡掉返回 200 的死站
+            // (域名停放页/Cloudflare 人机校验页/HTML 报错页,它们解析不出 JSON list → 9999)。
+            // ⚠️ 但【绝不在服务器上真拉 m3u8 验证】:VPS 是数据中心 IP,视频 CDN 普遍封机房出口(这正是要建
+            //    CORS worker 的原因)——曾加过"抽样 m3u8 拉一次验 #EXTM3U",结果生产上【所有站】全判 9999
+            //    (可用性检查形同虚设,前端超时死锁下全站不可播,事故)。且抽样的是榜单第一页随机片,住宅网络实测
+            //    健康站也常抽到 403/404 过期链接。真实可播性只能由【客户端】直连/代理测速把关,服务器只管
+            //    "API 活着且返回正经片库"这一层。
+            const UA_HDRS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' };
+            let list = null;
+            try {
+                const r = await axios.get(`${site.api}?ac=videolist&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS });
+                list = r.data && Array.isArray(r.data.list) ? r.data.list : null;
+            } catch (e) { }
+            if (!list || !list.length) {
+                // 部分 CMS 变体对 ac=videolist 返回空/不支持 → 退回 ac=detail 再试一次(资源站验活的既定铁律)
+                const r2 = await axios.get(`${site.api}?ac=detail&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS });
+                list = r2.data && Array.isArray(r2.data.list) ? r2.data.list : null;
             }
-            return res.json({ latency, _testType: 'server' });
+            if (!list || !list.length) return res.json({ latency: 9999 });
+            if (!list.some(v => /https?:\/\//.test(String(v.vod_play_url || '')))) return res.json({ latency: 9999 });
+            return res.json({ latency: Date.now() - start, _testType: 'server' });
         } catch (e) {
             return res.json({ latency: 9999 });
         }
