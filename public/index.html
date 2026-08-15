@@ -9011,10 +9011,13 @@
                     };
 
                     // 超时自动选择（优先用户端测速，其次服务器端）
+                    // ⚠️ 死锁教训(生产事故):此定时器在 3s 时若【一个源都还没测完】(大剧 40+ 线路、首批 worker 都是慢站/
+                    //    死站时很常见),旧版无条件 hasAutoSelected=true 再发现无源可选【静默返回】——标志被烧掉后,
+                    //    checkEarlyReturn 与"测速完成"路径全部跳过,30 个测出绿灯的线路永远没人选,整站表现为"全部播放不了"。
+                    //    修:只有【真选中了源】才置 hasAutoSelected;空手时保持 false,让后续完成的测速自然接管。
                     const earlyReturnTimer = setTimeout(() => {
                         if (_openSeq !== _navSeq) return;  // 🧭 已切换到别的剧，放弃超时自动选源
                         if (hasAutoSelected) return;
-                        hasAutoSelected = true;
 
                         // 优先选择用户端测速的结果
                         let directSources = this.currentGroup.sources.filter(s =>
@@ -9022,6 +9025,7 @@
                         );
 
                         if (directSources.length > 0) {
+                            hasAutoSelected = true;
                             directSources.sort((a, b) => a.latency - b.latency);
                             console.log(`[超时返回] 选择用户端测速最快的: ${directSources[0].site_name} (${directSources[0].latency}ms 🎬)`);
                             this.switchSource(directSources[0]);
@@ -9034,6 +9038,7 @@
                             s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
                         );
                         if (proxySources.length > 0) {
+                            hasAutoSelected = true;
                             proxySources.sort((a, b) => a.latency - b.latency);
                             console.log(`[超时返回] 选择代理可播最快的: ${proxySources[0].site_name} (${proxySources[0].latency}ms 🔁)`);
                             this.switchSource(proxySources[0]);
@@ -9046,10 +9051,12 @@
                         );
 
                         if (testedSources.length > 0) {
+                            hasAutoSelected = true;
                             testedSources.sort((a, b) => a.latency - b.latency);
                             console.log(`[超时返回] ${MAX_WAIT_TIME}ms后自动选择: ${testedSources[0].site_name} (${testedSources[0].latency}ms)`);
                             this.switchSource(testedSources[0]);
                         }
+                        // 一个都没测完 → 不烧标志,等 checkEarlyReturn/测速完成路径接管
                     }, MAX_WAIT_TIME);
 
                     const latencyWorker = async (source) => {
@@ -9285,7 +9292,8 @@
                     }
 
                     // 如果还没有选择任何源，选择最快的
-                    if (!hasAutoSelected) {
+                    // (兜底条件含 !this.currentSource:任何路径把 hasAutoSelected 烧掉却没真选到源,这里都要接住——防再现"测出绿灯没人选"死锁)
+                    if (!hasAutoSelected || !this.currentSource) {
                         // 优先选择用户端测速(direct)的结果
                         const directSources = this.currentGroup.sources.filter(s =>
                             s._testType === 'direct' && typeof s.latency === 'number' && s.latency < 9000
@@ -9932,10 +9940,12 @@
                 // 🗄️ 资源站健康度本地缓存(跨剧集, 3天)：site_key → {latency,testType,useProxy,proxyUrl,ts}。
                 //    本地连不通的资源站基本不会再通，缓存上次测速结果 → 刷新页面/?play= 深链/换剧都直接套用、跳过重测；
                 //    本地不通的站(latency 高)自然沉底/视为不可用，省去重复测速。手动"刷新线路"会强制重测并刷新本缓存。
+                //    键 v2:"/api/check 全站误判9999+选源死锁"事故期间用户缓存里灌满了 12h 死亡记录,换键整体作废。
                 _siteHealthGet(siteKey) {
                     if (!siteKey) return null;
+                    try { localStorage.removeItem('donggua_site_health'); } catch (e) { }
                     try {
-                        const m = JSON.parse(localStorage.getItem('donggua_site_health') || '{}') || {};
+                        const m = JSON.parse(localStorage.getItem('donggua_site_health2') || '{}') || {};
                         const r = m[siteKey];
                         if (r && typeof r.latency === 'number') {
                             // 不可用项(9999)缓存短(12h)便于恢复；测通的(direct/proxy)缓存 3 天免重测
@@ -9959,10 +9969,10 @@
                     if (!isGood && !(isDead && allowDead)) return;
                     try {
                         const MAXTTL = 3 * 24 * 3600 * 1000, now = Date.now();
-                        const m = JSON.parse(localStorage.getItem('donggua_site_health') || '{}') || {};
+                        const m = JSON.parse(localStorage.getItem('donggua_site_health2') || '{}') || {};
                         m[siteKey] = { latency: source.latency, testType: tt || null, useProxy: !!source._useProxy, proxyUrl: source._proxyUrl || null, ts: now };
                         for (const k of Object.keys(m)) { if (now - (m[k].ts || 0) > MAXTTL) delete m[k]; }  // 剪枝过期
-                        localStorage.setItem('donggua_site_health', JSON.stringify(m));
+                        localStorage.setItem('donggua_site_health2', JSON.stringify(m));
                     } catch (e) { }
                 },
                 // 🛡️ "该站的源站封了 Cloudflare 出口 IP"记账。只在【确诊源站封 CF】(worker 探测本集 m3u8 返回 403/404)
