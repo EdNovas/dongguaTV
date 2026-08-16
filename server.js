@@ -14,6 +14,30 @@ const stream = require('stream');
 const { promisify } = require('util');
 const pipeline = promisify(stream.pipeline);
 
+// ========== 🔌 出网连接池硬限制(全站可用性的保命阀) ==========
+// 事故(2026-08,v1.1.174):Node 默认 globalAgent.maxSockets = Infinity。前端每开一部剧就对 50+ 资源站
+//   并发测速/搜索,曾有一版 /api/check 还会逐站真拉 m3u8——出网连接无上限增长,超时/中止的 socket 未及时
+//   回收,累积撞穿容器 fd 上限(ulimit -n 通常 1024)后【所有新出网请求全部失败】:资源站、TMDB、弹幕、
+//   甚至连自家 Cloudflare Worker 都连不上,而缓存接口照常返回 → 表现为"搜索全 0 / 资源站全灭",极难自诊断。
+//   (泄漏源已删,但进程不重启则已泄漏的 fd 不释放——这正是"播放修好了搜索还坏"的原因。)
+// 修:全局 Agent 显式限流 + keepAlive 复用连接(同一资源站多次请求复用同一条 TCP,fd 占用降一个数量级),
+//   并设 socket 空闲超时,任何路径的泄漏都被 maxSockets 挡在天花板下,永远不会再撞穿 fd 上限。
+const http = require('http');
+const https = require('https');
+const AGENT_OPTS = { keepAlive: true, keepAliveMsecs: 15000, maxSockets: 96, maxFreeSockets: 32, timeout: 30000, scheduling: 'lifo' };
+http.globalAgent = new http.Agent(AGENT_OPTS);
+https.globalAgent = new https.Agent(AGENT_OPTS);
+axios.defaults.httpAgent = http.globalAgent;
+axios.defaults.httpsAgent = https.globalAgent;
+// 🩺 出网健康自检:fd 逼近上限时明确告警(而不是让全站静默变成"搜不到")
+setInterval(() => {
+    try {
+        const n = (https.globalAgent.sockets ? Object.values(https.globalAgent.sockets).reduce((a, b) => a + b.length, 0) : 0)
+            + (http.globalAgent.sockets ? Object.values(http.globalAgent.sockets).reduce((a, b) => a + b.length, 0) : 0);
+        if (n >= AGENT_OPTS.maxSockets * 0.9) console.warn(`[出网告警] 活跃 socket ${n}/${AGENT_OPTS.maxSockets} 接近上限——上游普遍变慢或出网受阻`);
+    } catch (e) { }
+}, 60000).unref();
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'db.json');
