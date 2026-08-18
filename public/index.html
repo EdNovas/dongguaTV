@@ -8558,7 +8558,7 @@
                                 //    改为只认真正 2xx(.ok);顺带轻量校验响应体确实是 m3u8(#EXTM3U),挡掉返回 200 却是 HTML/错误页的源。
                                 if (testRes.ok) {
                                     let bodyOK = true;
-                                    try { const txt = await testRes.clone().text(); bodyOK = /#EXTM3U/.test(txt); } catch (e) { bodyOK = true; }
+                                    try { const txt = await testRes.clone().text(); bodyOK = await this._m3u8HasFragments(txt, videoUrl); } catch (e) { bodyOK = true; }
                                     if (bodyOK) {
                                         directLatency = Date.now() - startTime;
                                         source.latency = directLatency;
@@ -8589,7 +8589,7 @@
                                     clearTimeout(proxyTimeoutId);
 
                                     let proxyBodyOK = proxyTestRes.ok;
-                                    if (proxyTestRes.ok) { try { const ptxt = await proxyTestRes.clone().text(); proxyBodyOK = /#EXTM3U/.test(ptxt); } catch (e) { proxyBodyOK = true; } }
+                                    if (proxyTestRes.ok) { try { const ptxt = await proxyTestRes.clone().text(); proxyBodyOK = await this._m3u8HasFragments(ptxt, proxyUrl); } catch (e) { proxyBodyOK = true; } }
                                     if (proxyBodyOK) {
                                         const proxyLatency = Date.now() - proxyStartTime;
 
@@ -9359,6 +9359,25 @@
                         } else if (el) { el.remove(); }
                     } catch (e) { }
                 },
+                // ✅ m3u8 是否【真的有可播分片】。只验 #EXTM3U 远远不够:master playlist 自身永远没有 EXTINF,
+                //    而"零分片的空清单"(#EXTM3U…#EXT-X-ENDLIST 中间无 EXTINF)语法完全合法却一秒都播不了——
+                //    实测有资源站正是这样,测速判"可用"、选中后播放器静默停在 00:00 且不报错(不报错=不会自动换源)。
+                //    规则:媒体清单直接看有无 EXTINF;master 清单跟进【第一条】子清单再看一次(只多一跳,代价可接受)。
+                async _m3u8HasFragments(text, baseUrl) {
+                    try {
+                        if (!/#EXTM3U/.test(text)) return false;
+                        if (/#EXTINF/.test(text)) return true;
+                        if (!/#EXT-X-STREAM-INF/i.test(text)) return false;   // 既非 master 又无分片 = 空清单
+                        const line = text.split(String.fromCharCode(10)).map(x => x.trim()).find(x => x && x[0] !== '#');
+                        if (!line) return false;
+                        const sub = new URL(line, baseUrl).href;
+                        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+                        const r = await fetch(sub, { cache: 'no-store', signal: ctl.signal });
+                        clearTimeout(t);
+                        if (!r.ok) return false;
+                        return /#EXTINF/.test(await r.text());
+                    } catch (e) { return true; }   // 网络/CORS 抖动不冤枉源站,交给播放侧的零分片闸兜底
+                },
                 // 🗄️ 资源站健康度本地缓存(跨剧集, 3天)：site_key → {latency,testType,useProxy,proxyUrl,ts}。
                 //    本地连不通的资源站基本不会再通，缓存上次测速结果 → 刷新页面/?play= 深链/换剧都直接套用、跳过重测；
                 //    本地不通的站(latency 高)自然沉底/视为不可用，省去重复测速。手动"刷新线路"会强制重测并刷新本缓存。
@@ -9472,6 +9491,26 @@
                     //    因此绝不能用它给"本次播放"的异步回调(看门狗/重试)做边界——那会让上一个源装的定时器对下一个源生效。
                     const playToken = (this._playToken = (this._playToken || 0) + 1);
                     try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }   // 🚦 换源/换集:先叫停上一轮后台分析,别让它继续抢新源的带宽
+                    // ⏱️ 起播看门狗(不依赖任何 hls 事件的最后一道闸)。
+                    //   实测有死源(空清单/极小清单)会让 hls.js 【完全静默】:不触发 LEVEL_LOADED、不触发 FRAG_LOADED、
+                    //   连 ERROR 都不报(量子/如意资源即如此) → 播放器永远停在 00:00、点播放毫无反应、console 一片干净,
+                    //   而所有"靠错误事件驱动"的自动换源链(handleError/Auto-Failover/代理回退)统统不会被唤醒,
+                    //   于是明明有可播线路(ffzy/魔都实测 959/1917 分片正常)也永远轮不到 —— 表现为"所有资源站都播不了"。
+                    //   这里用纯超时兜底:起播 14s 内没有任何实质进展(readyState<3 且 0 进度 且 无缓冲)就判该源不可播、自动换源。
+                    try { clearTimeout(this._startWatchdog); } catch (e) { }
+                    this._startWatchdog = setTimeout(() => {
+                        if (this._playToken !== playToken) return;   // 已换源/换集 → 本看门狗作废
+                        try {
+                            const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
+                            if (!v) return;
+                            const hasContent = v.readyState >= 3 || (v.currentTime || 0) > 0.1 || (v.buffered && v.buffered.length > 0);
+                            if (hasContent) return;
+                            console.warn('[播放器] ⏱️ 起播超时:14s 内无任何分片就绪(该线路可能返回空清单/静默挂起) → 自动换源');
+                            try { dp.notice('该线路无有效内容，正在换源', 2500); } catch (e) { }
+                            if (typeof window._offHandlePlayError === 'function') window._offHandlePlayError('startTimeout');
+                            else this.handlePlaybackError();
+                        } catch (e) { }
+                    }, 14000);
                     const isFreshPlayer = !dp;     // ▶ 是否新建播放器（决定如何触发首次播放）
                     this.syncShareUrl();           // 🔗 把当前剧/集写进地址栏（可收藏/分享/深链）
 
@@ -12570,6 +12609,24 @@
                         const h = dp && dp.plugins && dp.plugins.hls;
                         if (!h || h._offErrHooked || !window.Hls || !Hls.Events) return;
                         h._offErrHooked = true;
+                        // 🚨 零分片清单 = 死源(实测:某资源站返回 `#EXTM3U…#EXT-X-ENDLIST` 中间一个 EXTINF 都没有)。
+                        //    这种清单【语法完全合法】,hls.js 既不报错也没内容 → 播放器停在 00:00、点播放毫无反应、
+                        //    console 一片干净,且因为没有 error 事件,自动换源链根本不会触发 → 好线路被白白晾着,
+                        //    用户体验就是"所有资源站都播不了"(生产实测:量子资源空清单,而 ffzy/魔都各有 959/1917 分片可播)。
+                        //    这里补上唯一能识破它的闸:清单解析完直接看分片数,为 0 立刻按"该源不可播"处理。
+                        const onLevel = (evt, data) => {
+                            try {
+                                if (this._activePlaySeq !== _navSeq) return;
+                                const frags = data && data.details && data.details.fragments;
+                                if (frags && frags.length === 0) {
+                                    console.warn('[播放器] ⚠️ 该线路返回空播放列表(0 个分片),视为不可播 → 自动换源');
+                                    try { dp.notice('该线路无有效内容，正在换源', 2500); } catch (e) { }
+                                    if (typeof window._offHandlePlayError === 'function') window._offHandlePlayError('emptyPlaylist');
+                                    else this.handlePlaybackError();
+                                }
+                            } catch (e) { }
+                        };
+                        if (Hls.Events.LEVEL_LOADED) h.on(Hls.Events.LEVEL_LOADED, onLevel);
                         let netErrCount = 0;
                         h.on(Hls.Events.ERROR, (evt, data) => {
                             try {
