@@ -1,10 +1,17 @@
 // Service Worker with Image Caching for dongguaTV
 // v25: 直播台标(跨域图片)Cache-First 缓存 + /api/live/channels SWR(秒开)
+// v27: 🚨 全站"点播放没反应"事故修复——SW 误把【CORS 代理的视频请求】当 HTML 页面缓存。
+//      代理地址形如 https://cors.ednovas.video/?url=<真实m3u8>,其 pathname 恰好是 '/',而策略2
+//      (HTML SWR)的条件 `url.pathname === '/'` 没有同源检查、且排在"跨域跳过"之前 → 每个 m3u8/ts
+//      分片都走了缓存逻辑;分片是 206 Partial Content,Cache API 的 put() 遇 206 直接抛异常 → 响应失败,
+//      播放器拿不到任何分片,表现为"所有资源站都播不了、点播放无反应、console 无报错"(错误发生在 SW 内)。
+//      旧代码只跳过 'workers.dev' 域名,用【自定义域名】的代理(cors.ednovas.video)完全不在豁免内。
+//      修:fetch 入口先做三条硬豁免——媒体流(video/audio/Range)、任何带 ?url= 的代理请求、非同源非图片请求。
 // v26: 离线/弱网加固——①静态资源(libs)策略修复:原 './' 前缀匹配绝对 URL 永不命中(死代码),libs 全落
 //      Network-First,弱网可能白屏;改按 pathname 匹配,真正 SWR。②导航兜底:带 ?play= 等查询参数的深链
 //      cache.match 精确匹配不命中预缓存 './',断网只回纯文本 'Offline';改为回退 index.html 外壳。
 //      ③同源 /api GET:有缓存时网络 4s 未响应先用缓存兜底(弱网不再陪网络挂到死;网络结果仍写回缓存)。
-const CACHE_VERSION = 'v26';
+const CACHE_VERSION = 'v27';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -68,11 +75,17 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
     const url = new URL(event.request.url);
 
-    // 跳过 CORS 代理请求（workers.dev 域名）
-    // 这些请求需要直接发送，不能被 Service Worker 干扰
-    if (url.hostname.includes('workers.dev')) {
-        return; // 让浏览器直接处理
-    }
+    // 🚫 硬豁免(必须放在所有策略之前)：以下请求 SW 一律不碰，交给浏览器直连。
+    //    ① 媒体流：video/audio 目标或带 Range 头 —— 分片响应是 206，Cache API 的 put() 遇 206 会抛异常，
+    //       一旦被任何缓存策略接手，整条播放链就废掉(v27 事故根因)。
+    //    ② 任何 CORS/去广告代理请求：形如 `<代理域>/?url=<真实地址>`。旧版只按 'workers.dev' 域名豁免，
+    //       用户改用自定义域名(cors.ednovas.video)后完全失效，且其 pathname 恰是 '/' 会命中"HTML 页面"策略。
+    //       改为按 ?url= 参数特征识别，与域名无关。
+    //    ③ 跨域请求：除已在下方显式处理的图片(策略1/1b)外，一律不拦(m3u8/ts/第三方 API 都在此列)。
+    const _dest = event.request.destination;
+    if (_dest === 'video' || _dest === 'audio' || event.request.headers.has('range')) return;
+    if (url.searchParams.has('url')) return;
+    if (url.hostname.includes('workers.dev')) return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {
@@ -91,7 +104,7 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && url.pathname === '/api/live/channels') {
         event.respondWith(
             caches.open(STATIC_CACHE).then(cache => cache.match(event.request).then(cached => {
-                const net = fetch(event.request).then(r => { if (r && r.status === 200) cache.put(event.request, r.clone()); return r; }).catch(() => cached);
+                const net = fetch(event.request).then(r => { if (r && r.status === 200 && r.type !== 'opaque') { try { cache.put(event.request, r.clone()); } catch (e) { } } return r; }).catch(() => cached);
                 return cached || net;
             }))
         );
@@ -103,13 +116,14 @@ self.addEventListener('fetch', event => {
     // ⚠️ SPA 外壳兜底【仅限根路径导航】(/?play= 深链等)：精确缓存 miss 时,网络失败或弱网 5s 未响应才回
     //    './' 外壳(它每次访问首页都被 SWR 刷新,不陈旧)。/admin、/clear-cache.html 等独立页面绝不回外壳——
     //    否则在线首次访问就会被劫持成首页。
-    if (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
+    if (url.origin === self.location.origin && (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/')) {
         event.respondWith((async () => {
             const cache = await caches.open(STATIC_CACHE);
             const cached = await cache.match(event.request);
             const network = fetch(event.request).then(response => {
-                if (response && response.status === 200) {
-                    cache.put(event.request, response.clone());
+                // ⚠️ 只缓存完整的 200 响应:206(分片)会让 cache.put 抛异常、opaque 无法校验 —— 一律跳过
+                if (response && response.status === 200 && response.type !== 'opaque') {
+                    try { cache.put(event.request, response.clone()); } catch (e) { }
                 }
                 return response;
             });
@@ -147,8 +161,8 @@ self.addEventListener('fetch', event => {
             caches.open(STATIC_CACHE).then(cache => {
                 return cache.match(event.request, { ignoreSearch: true }).then(cached => {
                     const fetchPromise = fetch(event.request).then(response => {
-                        if (response && response.status === 200) {
-                            cache.put(event.request, response.clone());
+                        if (response && response.status === 200 && response.type !== 'opaque') {
+                            try { cache.put(event.request, response.clone()); } catch (e) { }   // put 抛异常绝不能炸掉响应本身
                         }
                         return response;
                     }).catch(() => cached || new Response('', { status: 503 })); // 必须返回 Response(undefined 会让请求直接报错)
@@ -184,8 +198,8 @@ self.addEventListener('fetch', event => {
         const cache = await caches.open(STATIC_CACHE);
         const cached = await cache.match(event.request);
         const network = fetch(event.request).then(response => {
-            if (response && response.status === 200) {
-                cache.put(event.request, response.clone());
+            if (response && response.status === 200 && response.type !== 'opaque') {
+                try { cache.put(event.request, response.clone()); } catch (e) { }   // put 抛异常绝不能炸掉响应本身
             }
             return response;
         });
@@ -221,7 +235,7 @@ async function handleImageRequest(request) {
         const response = await fetch(request);
         if (response && response.status === 200) {
             // 缓存图片
-            cache.put(request, response.clone());
+            try { cache.put(request, response.clone()); } catch (e) { }
             // 清理过多的缓存
             trimImageCache(cache);
             // console.log('[SW] Image cached:', request.url.substring(0, 60) + '...');
@@ -245,7 +259,7 @@ async function handleLiveImage(request) {
     try {
         const response = await fetch(request);
         if (response && (response.status === 200 || response.type === 'opaque')) {
-            cache.put(request, response.clone());
+            try { cache.put(request, response.clone()); } catch (e) { }
             trimCache(cache, MAX_LIVE_IMG);
         }
         return response;
