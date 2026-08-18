@@ -10049,6 +10049,7 @@
                     // 🎟️ 播放令牌:每次 play() 都递增(切源/换集/换剧都变)。playSeq 只在【换剧】时变,同一部剧内切源恒等,
                     //    因此绝不能用它给"本次播放"的异步回调(看门狗/重试)做边界——那会让上一个源装的定时器对下一个源生效。
                     const playToken = (this._playToken = (this._playToken || 0) + 1);
+                    try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }   // 🚦 换源/换集:先叫停上一轮后台分析,别让它继续抢新源的带宽
                     const isFreshPlayer = !dp;     // ▶ 是否新建播放器（决定如何触发首次播放）
                     this.syncShareUrl();           // 🔗 把当前剧/集写进地址栏（可收藏/分享/深链）
 
@@ -10111,6 +10112,8 @@
                     const setupErrorHandling = () => {
                         // 统一错误处理函数（dp.error 和 video.error 都会触发）
                         const handleError = (source) => {
+                            // 🚦 播放一出错就叫停后台离线分析——它正在下几十MB分片抢带宽,是这类"播不了"的常见推手
+                            try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }
                             // 🧭 用户已切换到别的剧（_navSeq 变化且 this._activePlaySeq 未被新 play() 刷新到）→ 忽略旧错误
                             if (this._activePlaySeq !== _navSeq) {
                                 console.log('[播放器] ⏭️ 忽略旧剧残留的错误事件 (' + source + ')');
@@ -10938,6 +10941,19 @@
                                         if (segs.some(s => s.key === 'unsupported')) throw new Error('不支持的加密(非AES-128)');
                                         const ac = this._ac || (this._ac = new (window.AudioContext || window.webkitAudioContext)());
                                         for (const s of segs) {
+                                            // 🚦 逐段让路:播放器一旦卡顿/换源就立刻停抓(分析永远让位于播放)。
+                                            //   缓冲低于 6s 视为"播放正在挨饿",此时再抢带宽必然把播放拖死。
+                                            if (this._abort) throw new Error('播放需要带宽,分析已让路');
+                                            try {
+                                                const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
+                                                if (v && !v.paused) {
+                                                    let ahead = 0;
+                                                    for (let bi = 0; bi < v.buffered.length; bi++) {
+                                                        if (v.currentTime >= v.buffered.start(bi) - 0.5 && v.currentTime <= v.buffered.end(bi) + 0.5) { ahead = v.buffered.end(bi) - v.currentTime; break; }
+                                                    }
+                                                    if (v.readyState < 3 || ahead < 6) throw new Error('播放缓冲不足,分析让路');
+                                                }
+                                            } catch (e) { if (/让路/.test(e.message)) throw e; }
                                             const buf0 = await (await F(s.url)).arrayBuffer(); this._mb += buf0.byteLength / 1048576;
                                             const buf = s.key ? await this._decrypt(buf0, s.key, F, sess.keyCache) : buf0;
                                             const { type, data, pts, vpts } = this._tsToAdts(new Uint8Array(buf));
@@ -11332,11 +11348,28 @@
                                         try { const c = navigator.connection; if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || '') || c.type === 'cellular')) { if (!this._netLogged) { this._netLogged = true; console.log('[AFP离线] 省流量模式/蜂窝网络,不自动离线分析(已有共享标记仍正常使用)'); } return; } } catch (e) { }
                                         if (st.mb > 700) { console.log('[AFP离线] 《' + o.title + '》本线路分析已用 ' + st.mb.toFixed(0) + 'MB,超过单剧上限,不再自动分析(已学到的标记仍正常使用;换线路/等下次访问会重试)'); return; }
                                         if (this._mb > 2000) { console.log('[AFP离线] 本次会话分析总流量已达 ' + this._mb.toFixed(0) + 'MB 上限,本次不再自动分析(刷新页面重置)'); return; }
+                                        // ⏳ 必须等播放【真正稳住】才开抓——分析要下几十~上百 MB 分片,和播放器抢的是同一份带宽。
+                                        //   生产事故(2026-08):海外用户拉国内 CDN 本就吃紧,起播瞬间分析就开抓(旧版只固定等 4s),
+                                        //   直接把播放器的分片请求挤死 → 报错 → 切源 → 新源 canplay 又启动一轮分析 → 恶性循环,
+                                        //   表现为"所有资源站都播不了"(日志实证:定位一集就吃掉 163MB,还要再抓两集尾部各 4 分钟)。
+                                        //   规则:视频必须处于 已播>10s 且 readyState≥3 且 未暂停 才认为稳;60s 等不到就本次放弃(播放优先)。
+                                        const myToken = o.vue._playToken;
+                                        let stable = false;
+                                        for (let i = 0; i < 60; i++) {
+                                            await new Promise(r => setTimeout(r, 1000));
+                                            if (o.vue._playToken !== myToken) return;   // 换集/换源/换剧 → 本次分析作废(别对新源乱抓)
+                                            try {
+                                                const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
+                                                if (v && !v.paused && v.readyState >= 3 && (v.currentTime || 0) > 10) { stable = true; break; }
+                                            } catch (e) { }
+                                        }
+                                        if (!stable) { if (!this._unstableLogged) { this._unstableLogged = true; console.log('[AFP离线] 播放未稳定(卡顿/暂停/已切源),本次不分析——优先保证播放'); } return; }
+                                        if (this._busy || st.phase === 'pending') return;   // 等待期间可能已有别的分析开跑
                                         this._busy = true; const back = st.phase; st.phase = 'pending';
+                                        this._abort = false; this._token = myToken;
                                         const mbBefore = this._mb;
                                         let done = false;
                                         try {
-                                            await new Promise(r => setTimeout(r, 4000));   // 等换源/测速/深链尘埃落定(期间源还在切,当场抓必抓错)
                                             if (o.vue._liveActive || !o.vue.currentSource || o.vue.currentSource.site_key !== o.site || o.vue._introEpNum() !== o.ep) return;
                                             const F = this._mkFetch(o.vue), curUrl = o.vue.currentUrl;
                                             let saved = st.intro || (st.intro = this._envTag(this._envLoadAny(o)));
