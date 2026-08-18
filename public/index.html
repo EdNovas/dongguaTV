@@ -7617,13 +7617,15 @@
                                 // 找到对应集数
                                 let targetEpisode = this.episodeList[0];
                                 if (item.episode) {
-                                    // 精确匹配集数名称
-                                    const found = this.episodeList.find(ep => ep.name === item.episode);
+                                    const wk = this._epMatchKey(item.episode), wc = wk.split('|')[0];
+                                    let found = this.episodeList.find(ep => ep.name === item.episode)
+                                        || this.episodeList.find(ep => this._epMatchKey(ep.name) === wk);
+                                    if (!found && wc) found = this.episodeList.find(ep => this._epMatchKey(ep.name).split('|')[0] === wc);
                                     if (found) {
                                         targetEpisode = found;
-                                        console.log('[观看历史] 找到匹配集数:', item.episode);
+                                        console.log('[观看历史] 找到匹配集数:', found.name);
                                     } else {
-                                        console.log('[观看历史] 未找到匹配集数:', item.episode, '使用第一集');
+                                        console.log('[观看历史] 该线路没有《' + item.episode + '》这一集，回退第一集');
                                     }
                                 }
 
@@ -9723,6 +9725,28 @@
                     }
                 },
 
+                // 🔑 集名归一化匹配键。各资源站对【同一集】的命名千差万别(实测同一期综艺:
+                //    "第20260809期加更"(ikun) / "20260809加更"(dyttzy) / "20260809下"(1080资源)),
+                //    旧逻辑只归一化"第N集"、其余要求【原名完全相等】→ 换源时几乎必然匹配失败 →
+                //    回退"使用第一集",而第一集往往是先导片/预告甚至空清单 → 表现为"换了源还是播不了"。
+                //    这里按 日期式期号 或 集号 提取主键,再附上"部分"后缀(上/下/加更/纯享…不能混为一集)。
+                _epMatchKey(name) {
+                    const s = String(name || '').trim();
+                    if (!s) return '';
+                    let core = null;
+                    const d = s.match(/(?:^|\D)((?:19|20)\d{2})[-./]?(\d{2})[-./]?(\d{2})(?=\D|$)/);
+                    if (d && +d[2] >= 1 && +d[2] <= 12 && +d[3] >= 1 && +d[3] <= 31) core = d[1] + d[2] + d[3];
+                    if (!core) {
+                        const n = s.match(/第\s*0*(\d+)\s*[集话話期]/) || s.match(/(?:^|[^a-z0-9])ep\.?\s*0*(\d+)/i) || s.match(/^0*(\d+)$/);
+                        if (n) core = 'N' + parseInt(n[1], 10);
+                    }
+                    if (!core) return 'T' + s.toLowerCase().replace(/\s+/g, '');   // 无结构集名 → 原名归一
+                    let suf = '';
+                    const rest = s.replace(/(?:19|20)?\d{2,8}/g, '');
+                    const re = /(上|中|下|加更|纯享|先导|特辑|彩蛋|花絮|预告|回顾|集结篇|plus)/g;
+                    let m2; while ((m2 = re.exec(rest))) suf += m2[1];
+                    return core + '|' + suf.toLowerCase();
+                },
                 // 解析剧集列表，尝试匹配指定集数
                 parseEpisodes(urlStr, targetEpName) {
                     let playSource = urlStr;
@@ -9739,16 +9763,18 @@
                         // 尝试找到与之前相同名称的集数
                         let targetEp = this.episodeList[0];
                         if (targetEpName) {
-                            // 标准化集数名称进行匹配
-                            const normalize = (name) => name?.replace(/第0*(\d+)集/g, '第$1集') || '';
-                            const normalizedTarget = normalize(targetEpName);
-
-                            const found = this.episodeList.find(ep => normalize(ep.name) === normalizedTarget);
+                            const wantKey = this._epMatchKey(targetEpName);
+                            const wantCore = wantKey.split('|')[0];
+                            // ①原名全等 ②归一化键全等(跨源写法差异) ③同期号/同日期但"部分"不同(退而求其次,总比第一集强)
+                            let found = this.episodeList.find(ep => ep.name === targetEpName)
+                                || this.episodeList.find(ep => this._epMatchKey(ep.name) === wantKey);
+                            let loose = false;
+                            if (!found && wantCore) { found = this.episodeList.find(ep => this._epMatchKey(ep.name).split('|')[0] === wantCore); loose = !!found; }
                             if (found) {
                                 targetEp = found;
-                                console.log('[切换资源] 找到匹配集数:', targetEp.name);
+                                console.log('[切换资源] 找到匹配集数:', targetEp.name + (loose ? '(同期近似匹配)' : ''));
                             } else {
-                                console.log('[切换资源] 未找到匹配集数:', targetEpName, '使用第一集');
+                                console.log('[切换资源] 该线路没有《' + targetEpName + '》这一集，回退第一集:', targetEp.name);
                             }
                         }
                         this.play(targetEp.url);
