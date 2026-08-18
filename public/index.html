@@ -9169,6 +9169,22 @@
                     let m2; while ((m2 = re.exec(rest))) suf += m2[1];
                     return core + '|' + suf.toLowerCase();
                 },
+                // ❓该线路【是否确实有这一集】。换源前先问清楚,而不是切过去再靠匹配碰运气——
+                //    切过去才发现没有就会回退播第一集(先导片/预告/甚至空清单),正是"换了源还是播不了"的根源。
+                //    数据来自测速阶段已缓存的 _cachedDetail.vod_play_url,不额外发任何请求。
+                //    返回 true=有 / false=确实没有 / null=该源详情还没缓存(未知,不作否定判断)。
+                _sourceHasEpisode(source, epName) {
+                    if (!epName) return true;
+                    const pu = (source && source._cachedDetail && source._cachedDetail.vod_play_url) || (source && source.vod_play_url) || '';
+                    if (!pu) return null;
+                    let seg = pu;
+                    if (pu.includes('$$$')) { const sets = pu.split('$$$'); seg = sets.find(x => x.toLowerCase().includes('m3u8')) || sets[0]; }
+                    const want = this._epMatchKey(epName), core = want.split('|')[0];
+                    const names = seg.split('#').map(e => e.split('$')[0]);
+                    if (names.some(n => this._epMatchKey(n) === want)) return true;
+                    if (core && names.some(n => this._epMatchKey(n).split('|')[0] === core)) return true;
+                    return false;
+                },
                 // 解析剧集列表，尝试匹配指定集数
                 parseEpisodes(urlStr, targetEpName) {
                     let playSource = urlStr;
@@ -12485,7 +12501,22 @@
                     // 如果还有下一个线路可用，给一段宽限期后再决定是否切换
                     if (currentIndex >= 0 && currentIndex < allSources.length - 1) {
                         this.isAutoRetrying = true;
-                        const nextSource = allSources[currentIndex + 1];
+                        // 🎯 优先切到【确实有当前这一集】的线路,而不是无脑取下一个:
+                        //    无脑顺延会切到没有这一集的源 → parseEpisodes 回退播第一集(先导片/预告/空清单)→ 又失败,
+                        //    一路把线路耗尽,而真正有这一集的好源(生产实测 ikun 有"第20260809期加更"且 1279 分片可播)
+                        //    永远轮不上 —— 这就是用户看到的"所有资源站都播不了"。
+                        //    _sourceHasEpisode 用测速时已缓存的剧集表判断,不发请求;返回 null(详情未缓存)按"可试"处理。
+                        const _curEpName = (this.episodeList || []).find(e => e.url === this.currentUrl)?.name;
+                        let nextSource = null;
+                        for (let i = currentIndex + 1; i < allSources.length; i++) {
+                            if (this._sourceHasEpisode(allSources[i], _curEpName) !== false) { nextSource = allSources[i]; break; }
+                        }
+                        if (!nextSource) {
+                            console.log('[Auto-Failover] 后续线路都没有《' + (_curEpName || '本集') + '》,按原顺序试下一个');
+                            nextSource = allSources[currentIndex + 1];
+                        } else if (nextSource !== allSources[currentIndex + 1]) {
+                            console.log('[Auto-Failover] 跳过不含本集的线路,直接切到有《' + _curEpName + '》的:', nextSource.site_name);
+                        }
                         this.autoRetryMessage = `正在检测 ${failingSource?.site_name} 线路...`;
                         console.log('[Auto-Failover] 收到错误事件，进入 1.5s 宽限期检测是否真的不可播');
 
