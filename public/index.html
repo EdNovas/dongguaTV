@@ -9468,6 +9468,9 @@
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
                     const playSeq = _navSeq;       // 🧭 记录本次播放的导航上下文（供错误回退判断串剧）
+                    // 🎟️ 播放令牌:每次 play() 都递增(切源/换集/换剧都变)。playSeq 只在【换剧】时变,同一部剧内切源恒等,
+                    //    因此绝不能用它给"本次播放"的异步回调(看门狗/重试)做边界——那会让上一个源装的定时器对下一个源生效。
+                    const playToken = (this._playToken = (this._playToken || 0) + 1);
                     const isFreshPlayer = !dp;     // ▶ 是否新建播放器（决定如何触发首次播放）
                     this.syncShareUrl();           // 🔗 把当前剧/集写进地址栏（可收藏/分享/深链）
 
@@ -9570,12 +9573,16 @@
                                     else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
                                     setTimeout(() => {
                                         this._proxyRetrying = false;
-                                        if (this._activePlaySeq === _navSeq && dp && dp.video &&
-                                            dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
+                                        // 🎟️ 必须用播放令牌判边界(不能用 playSeq/_navSeq——同一部剧内切源它们不变):
+                                        //    否则本源装的看门狗会在切源后对【新源】的 video 做判定,新源只要 8s 内没到
+                                        //    readyState 3 就被判死并再切一个 → 每个源给下一个源判死刑 = 级联切源风暴,
+                                        //    一圈下来"所有资源站都播不了"(生产实测:日志反复刷"回退后仍未起播"直到源用尽)。
+                                        if (this._playToken !== playToken) return;   // 已切源/换集 → 本看门狗作废
+                                        if (dp && dp.video && dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
                                             console.log('[播放器] 回退后仍未起播，自动切换下一个源');
                                             this.handlePlaybackError();
                                         }
-                                    }, 3000);
+                                    }, 8000);   // 3s→8s:海外用户拉国内 CDN,首个分片常要 4~6s,3s 必然误判"起不来"
                                 };
                                 // 通过 worker 重取本集 m3u8,分类 worker故障 / 源站封CF / 偶发
                                 (async () => {
@@ -9589,7 +9596,7 @@
                                         else if (pr.ok) { let txt = ''; try { txt = await pr.text(); } catch (e) { } cls = /#EXTM3U/.test(txt) ? 'ok' : 'siteblock'; }
                                         else cls = 'siteblock';
                                     } catch (e) { cls = 'workerdown'; }   // 超时/网络失败 = worker 侧不可达 → 临时故障
-                                    if (this._activePlaySeq !== _navSeq) { this._proxyRetrying = false; return; }
+                                    if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) { this._proxyRetrying = false; return; }
                                     if (cls === 'ok') {
                                         console.log('[播放器] 🛡️ 过滤代理探测正常(worker+源站均通)，原错误疑似偶发，重试过滤播放');
                                         switchTo(wrapped, '重试广告过滤代理');
@@ -9609,7 +9616,7 @@
                                                 if (pr.ok) { let tx = ''; try { tx = await pr.text(); } catch (e) { } if (/#EXTM3U/.test(tx)) { backup = p; break; } }
                                             } catch (e) { }
                                         }
-                                        if (this._activePlaySeq !== _navSeq) { this._proxyRetrying = false; return; }
+                                        if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) { this._proxyRetrying = false; return; }
                                         if (backup) {
                                             this.corsProxyUrl = backup;   // 本会话主代理轮换到健康备用
                                             console.log('[播放器] 🛡️ 主过滤代理临时故障，已切换到备用过滤代理:', backup);
