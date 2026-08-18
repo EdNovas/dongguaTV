@@ -5314,6 +5314,33 @@
         // ⚠️ 结构要点：onSuccess/super.load 不能落在任何 .catch 链里——onSuccess 内部抛错若兜底到再次 super.load，
         //    v1.1.5 的 XhrLoader 会抛 "Loader can only be used once" 且该分段永久挂起。catch 只兜 IDB 本身。
         //    另有 destroyed 守卫：IDB 异步返回时 hls 可能已 destroy 该 loader(快速切集)，迟到回调直接丢弃。
+        // 🎯 DPlayer customType.hls:接管"用什么通道播 m3u8"的决定权。
+        //   DPlayer 默认逻辑:只要 video.canPlayType('application/x-mpegURL') 非空就丢掉 hls.js、把 m3u8 直接塞给 <video> 走
+        //   【浏览器原生 HLS】。过去只有 Safari/iOS 会命中;但新版 Chrome(桌面+Android)已内置 HLS,canPlayType 返回 'maybe',
+        //   于是整站在 Chrome 上悄悄改走了原生通道——而我们的整条播放栈(离线缓存 loader、hls 错误钩子、空清单识别、
+        //   去广告 worker 链路、片头分析)全是围绕 hls.js 建的,原生通道下这些全部静默失效;更糟的是浏览器内置 HLS 对资源站
+        //   那种"贴片+正片拼接、分辨率/编码中途切换、DISCONTINUITY 满天飞"的流远不如 hls.js 皮实,遇到就直接 MediaError
+        //   停在 00:00,且没有任何 hls 事件可供换源链感知 → 用户看到的就是"所有资源站都播不了、点播放没反应、console 干净"。
+        //   这里:只要 MSE 可用且不是 Safari/iOS(那边 hls.js 反而不如原生,且原生才支持 AirPlay)就【强制 hls.js】;
+        //   其余情况保持 DPlayer 原行为(video.src 已由 DPlayer 设好,原生播放)。
+        window._dgPreferNativeHls = (() => {
+            try {
+                const ua = navigator.userAgent || '';
+                const isiOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+                const isSafari = /Safari/.test(ua) && !/Chrome|CriOS|Edg|EdgA|Android|Firefox|FxiOS|OPR|SamsungBrowser/i.test(ua);
+                return isiOS || isSafari;
+            } catch (e) { return false; }
+        })();
+        window._dgHlsCustomType = function (video, player) {
+            try {
+                if (window._dgPreferNativeHls || !window.Hls || !Hls.isSupported()) return;   // 原生通道(DPlayer 已设好 video.src)
+                const hls = new Hls((player.options && player.options.pluginOptions && player.options.pluginOptions.hls) || buildOfflineHlsConfig());
+                player.plugins.hls = hls;
+                hls.loadSource(video.src);
+                hls.attachMedia(video);
+                player.events.on('destroy', () => { try { hls.destroy(); } catch (e) { } if (player.plugins.hls === hls) delete player.plugins.hls; });
+            } catch (e) { console.warn('[播放器] hls.js 接管失败,回退浏览器原生 HLS:', e && e.message); }
+        };
         function buildOfflineHlsConfig() {
             try {
                 if (!window.Hls || !Hls.DefaultConfig || !Hls.DefaultConfig.loader) return {};
@@ -9553,7 +9580,7 @@
                         try {
                             const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
                             if (!v) return;
-                            const hasContent = v.readyState >= 3 || (v.currentTime || 0) > 0.1 || (v.buffered && v.buffered.length > 0);
+                            const hasContent = !v.error && (v.readyState >= 3 || (v.currentTime || 0) > 0.1 || (v.buffered && v.buffered.length > 0));   // 已进 error 态=死透,缓冲过也不算
                             if (hasContent) return;
                             console.warn('[播放器] ⏱️ 起播超时:14s 内无任何分片就绪(该线路可能返回空清单/静默挂起) → 自动换源');
                             try { dp.notice('该线路无有效内容，正在换源', 2500); } catch (e) { }
@@ -9623,6 +9650,27 @@
                     const setupErrorHandling = () => {
                         // 统一错误处理函数（dp.error 和 video.error 都会触发）
                         const handleError = (source) => {
+                            // 🎟️ 本处理器只在首次建播放器时绑定一次,闭包里 play() 局部的 playToken 永远冻结成"首个播放"的令牌
+                            //   (与上方 playSeq/originalUrl 冻结是同一个坑)。v1.1.175 在下面的分诊/看门狗里用它判
+                            //   `this._playToken !== playToken` → 从第二次 play() 起恒为 true → 分诊拿到探测结果后【静默返回】、
+                            //   8s 看门狗【静默作废】——于是出错后既不重试也不换源,只剩一行"代理回退中,忽略错误"。
+                            //   必须在每次错误到来时读【当前】令牌(用同名 const 遮蔽外层冻结值,下面所有引用自动生效)。
+                            const playToken = this._playToken;
+                            // 🩺 每次播放的首个错误打一行诊断(MediaError 码/信息、就绪态、播放通道是 hls.js 还是浏览器原生 HLS)——
+                            //   没有它,"播不了"永远只能靠猜。
+                            try {
+                                if (this._errDiagTok !== playToken) {
+                                    this._errDiagTok = playToken;
+                                    const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
+                                    const me = v && v.error;
+                                    console.warn('[播放器] 🩺 错误诊断(' + source + '): code=' + (me ? me.code : '-') + ' msg=' + (me && me.message ? me.message.slice(0, 120) : '-')
+                                        + ' | readyState=' + (v ? v.readyState : '-') + ' networkState=' + (v ? v.networkState : '-') + ' t=' + (v ? (v.currentTime || 0).toFixed(1) : '-')
+                                        + ' | 通道=' + ((dp && dp.plugins && dp.plugins.hls) ? 'hls.js' : ('原生HLS(dp.type=' + (dp && dp.type) + ')'))
+                                        + ' src=' + (v ? String(v.currentSrc || v.src || '').slice(0, 60) : '-')
+                                        + ' | MSE=' + !!(window.Hls && Hls.isSupported()) + ' nativeHls=' + JSON.stringify(v ? v.canPlayType('application/vnd.apple.mpegURL') : '')
+                                        + ' online=' + navigator.onLine);
+                                }
+                            } catch (e) { }
                             // 🚦 播放一出错就叫停后台离线分析——它正在下几十MB分片抢带宽,是这类"播不了"的常见推手
                             try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }
                             // 🧭 用户已切换到别的剧（_navSeq 变化且 this._activePlaySeq 未被新 play() 刷新到）→ 忽略旧错误
@@ -9660,7 +9708,7 @@
                                 // 切到指定 URL 播放 + 3s 看门狗(仍起不来才切下一个源)。reason 仅日志用。
                                 const switchTo = (url, reason) => {
                                     console.log('[播放器] 🛡️ ' + reason + ':', (url || '').substring(0, 70));
-                                    dp.switchVideo({ url, type: 'hls' });
+                                    this._dpSwitchHls(url);
                                     const onMeta = () => {
                                         dp.video.removeEventListener('loadedmetadata', onMeta);
                                         const p = dp.play();
@@ -9776,7 +9824,7 @@
                             volume: 0.8,             // 默认音量 80%
                             loop: false,             // 循环播放（可在设置中切换）
                             playbackSpeed: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3],  // 0.25间隔倍速选项
-                            video: { url: finalUrl, type: 'hls' },
+                            video: { url: finalUrl, type: 'hls', customType: { hls: window._dgHlsCustomType } },   // 🎯 MSE 可用即强制 hls.js(见 _dgHlsCustomType)
                             pluginOptions: { hls: buildOfflineHlsConfig() },  // ⬇️ 离线缓存优先的 hls loader(无缓存时行为与原生一致)
                             danmaku: danmakuOpt || undefined,  // 🗨️ 弹幕(借第三方聚合)；未开启则 undefined(DPlayer 不初始化弹幕)
                             contextmenu: [
@@ -12041,28 +12089,10 @@
                         //    安全时序——先捕获旧实例，switchVideo 创建新实例后，等"新流真正 playing"
                         //    再销毁旧的：此时 <video> 已挂上可用的新源，detach 旧实例不会触发"无源"报错，
                         //    从而既回收泄漏又不会误跳过线路（旧实现是在 switchVideo 前 destroy 才出的问题）。
-                        const _oldHls = (dp.plugins && dp.plugins.hls) || null;
-
                         // 🗨️ 仅"换集"(danmakuReload)时重载弹幕；同集换源/代理回退不传第二参(DPlayer 保留当前弹幕，不闪烁/不重拉)
-                        dp.switchVideo({ url: finalUrl, type: 'hls' }, danmakuReload ? danmakuOpt : undefined);
-                        this._attachHlsErrorHook();   // 🔌 switchVideo 会新建 hls 实例,错误钩子要重挂(实例级防重)
+                        // 🧹 旧 hls 实例在 switchVideo 后【立即】销毁(见 _dpSwitchHls)——绝不允许两个 hls 实例同时挂在一个 <video> 上
+                        this._dpSwitchHls(finalUrl, danmakuReload ? danmakuOpt : undefined);
                         console.log('[进度记忆-切换] switchVideo 已调用' + (finalUrl !== url ? ' (代理模式)' : ''));
-
-                        if (_oldHls) {
-                            let _destroyed = false;  // 防止 'playing' 与 5s 兜底重复销毁
-                            const destroyOldHls = () => {
-                                if (_destroyed) return;
-                                _destroyed = true;
-                                if (dp.video) dp.video.removeEventListener('playing', destroyOldHls);
-                                // 仅当它确实是被替换掉的旧实例时才销毁，避免误杀当前实例
-                                if (_oldHls !== (dp.plugins && dp.plugins.hls)) {
-                                    try { _oldHls.destroy(); } catch (e) { }
-                                }
-                            };
-                            if (dp.video) dp.video.addEventListener('playing', destroyOldHls);
-                            // 兜底：5秒后无论是否 playing 都回收（仍只在它非当前实例时）
-                            setTimeout(destroyOldHls, 5000);
-                        }
 
                         // ▶ 修复"切换资源/集数后不自动播放 + 中央大按钮图标反向"：
                         //   switchVideo 会复用同一个 <video> 元素但重置 src，HLS 尚未就绪时立刻 dp.play()
@@ -12677,6 +12707,23 @@
                 // 🔌 给当前 hls 实例挂网络错误监听(幂等,实例级防重)。DPlayer 首建与 switchVideo 都会换实例,两处都要挂。
                 //    非致命网络错误:断网(onLine=false)攒 1 次、在线抖动攒 3 次(给 hls 自身重试留机会)→ 尝试切缓存;
                 //    致命错误:先尝试切缓存,无缓存可切才交给既有错误处理链(分诊→换线路→离线上下文兜底)。
+                // 🔁 唯一的"切视频"入口:switchVideo → 重挂 hls 错误钩子 → 【立即】销毁被顶掉的旧 hls 实例。
+                //   为什么必须立即销毁而不是"等新流 playing/5s 兜底":旧实例的 MediaSource 在新实例 attach 的一瞬就被顶掉了,
+                //   但它的加载/追加流水线还活着,会继续拉分片往已关闭的 SourceBuffer 里塞 → bufferAppendError 每秒上千条、
+                //   条条"致命" → 全灌进错误处理链 → 把明明播得好好的新源判死再换源(实测 7s 内 3918 条+一次误换源)。
+                //   立即销毁安全吗:hls.js 1.1.5 detach 时只在 `media.src === 自己的 blob` 才 removeAttribute('src')+load(),
+                //   此刻 video.src 已是新实例的 blob → 跳过清理,不会触发"无源"错误(旧版"switchVideo 前 destroy 才误跳线路"
+                //   的坑正是因为那时 src 还是它自己的)。
+                _dpSwitchHls(url, danmakuOpt) {
+                    const oldHls = (typeof dp !== 'undefined' && dp && dp.plugins && dp.plugins.hls) || null;
+                    if (danmakuOpt) dp.switchVideo({ url, type: 'hls' }, danmakuOpt);
+                    else dp.switchVideo({ url, type: 'hls' });
+                    this._attachHlsErrorHook();   // 🔌 switchVideo 会新建 hls 实例,错误钩子要重挂(实例级防重)
+                    if (oldHls && oldHls !== (dp.plugins && dp.plugins.hls)) {
+                        try { oldHls.destroy(); } catch (e) { }
+                    }
+                },
+
                 _attachHlsErrorHook() {
                     try {
                         const h = dp && dp.plugins && dp.plugins.hls;
