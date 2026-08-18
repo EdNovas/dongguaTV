@@ -10106,6 +10106,14 @@
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
+                    // 🚨 必须一并重置 _proxyRetrying —— 它是【实例级"正在代理回退中,吞掉所有错误"】的闸门,
+                    //   旧代码只在 switchTo 的 8s 定时器/分诊分支里清,却【从不在 play() 时清】。于是:
+                    //   源A 报错 → 闸门开(8s) → auto-failover 每 1.5s 切一个源 → 这 8s 内【后续每个源的错误
+                    //   全被静默吞掉】(日志表现:每次 play() 后紧跟"⏳ 代理回退中,忽略错误",且全程无一条分诊输出)
+                    //   → 谁都没机会走分诊/换源/看门狗 → 播放器永久停在 00:00、点播放毫无反应、console 一片空白。
+                    //   每次 play() 都是全新一次播放,必须从零开始,不能继承上一个源的闸门状态。
+                    this._proxyRetrying = false;
+                    try { clearTimeout(this._proxyRetryGuard); } catch (e) { }
                     const playSeq = _navSeq;       // 🧭 记录本次播放的导航上下文（供错误回退判断串剧）
                     // 🎟️ 播放令牌:每次 play() 都递增(切源/换集/换剧都变)。playSeq 只在【换剧】时变,同一部剧内切源恒等,
                     //    因此绝不能用它给"本次播放"的异步回调(看门狗/重试)做边界——那会让上一个源装的定时器对下一个源生效。
@@ -10216,6 +10224,12 @@
                             if (this._activeAdFilterProxyUsed && !this._proxyRetried) {
                                 this._proxyRetried = true;
                                 this._proxyRetrying = true;
+                                // 🔐 死亡开关:分诊链路一旦有未预料的异常/提前返回,闸门就会永久锁死整场会话。
+                                //    无论如何 10s 后强制解闸,让后续错误能正常触发换源。
+                                try { clearTimeout(this._proxyRetryGuard); } catch (e) { }
+                                this._proxyRetryGuard = setTimeout(() => {
+                                    if (this._proxyRetrying) { console.warn('[播放器] ⏱️ 代理回退闸门超时未关闭,强制解除(防止吞掉后续所有错误)'); this._proxyRetrying = false; }
+                                }, 10000);
                                 const fb = this._activeOriginalUrl;                 // 未包装的原始 m3u8(直连回退用)
                                 const wrapped = this._activeFinalUrl;               // 过滤代理(worker)包装后的 m3u8
                                 const failSite = this.currentSource && this.currentSource.site_key;
@@ -10248,6 +10262,7 @@
                                 };
                                 // 通过 worker 重取本集 m3u8,分类 worker故障 / 源站封CF / 偶发
                                 (async () => {
+                                  try {
                                     let cls = 'workerdown';   // 默认按"临时故障"处理(最保守:不记账)
                                     try {
                                         const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
@@ -10303,6 +10318,7 @@
                                         this._proxyRetrying = false;
                                         this.handlePlaybackError();
                                     }
+                                  } catch (e) { this._proxyRetrying = false; console.warn('[播放器] 代理分诊异常,已解闸:', e && e.message); }
                                 })();
                                 return;
                             }
