@@ -603,6 +603,77 @@
             }
         }
 
+        /* 📱 手机端控制栏"大按钮"精简版(v1.1.184)。
+           问题:控制栏一行塞了 播放/音量/时间 + 下一集/发弹幕/弹幕设置/齿轮/画中画/网页全屏/全屏 共 10 个 46px 按钮
+           (≈500px),竖屏手机(360~430px)与窄视口下左右两组绝对定位的按钮组直接互相压叠(用户实测截图:暂停/设置/
+           音量/弹幕按钮全叠在一起)。做法(YouTube/B站手机版式):触屏或 ≤768px 只留 4 个大按钮——
+           【播放/暂停 · 下一集 · 设置 · 全屏】,其余(音量→用硬件键 · 发弹幕 · 弹幕样式 · 画中画 · 网页全屏)
+           全部收进"设置"齿轮菜单(见 JS 的 .dg-mob-row 注入)。不做两行:两行控制栏会吃掉竖屏 16:9 画面(~200px 高)
+           近一半,且进度条/手势区都要重排。桌面端(鼠标)完全不变。 */
+        #dplayer .dg-mob-row { display: none; }
+        @media (pointer: coarse), (max-width: 768px) {
+            #dplayer .dplayer-icons .dplayer-volume,
+            #dplayer .dplayer-icons .dplayer-comment,
+            #dplayer .dplayer-icons .dplayer-dmset-icon,
+            #dplayer .dplayer-icons .dplayer-pip-icon,
+            #dplayer .dplayer-controller .dplayer-icons .dplayer-full .dplayer-full-in-icon {
+                display: none !important;
+            }
+            /* 剩下 4 个按钮:更大的命中区 + 更大的图标 */
+            #dplayer .dplayer-icons .dplayer-icon {
+                width: 52px !important;
+                min-width: 52px !important;
+            }
+            #dplayer .dplayer-icons .dplayer-icon i {
+                font-size: 22px !important;
+            }
+            #dplayer .dplayer-icons.dplayer-icons-right .dplayer-icon {
+                margin: 0 4px !important;
+            }
+            /* 齿轮菜单:手机专属行显示;菜单高度不能超过播放器(竖屏 16:9 只有 ~200px 高,#dplayer overflow:hidden 会把
+               超出部分裁掉),用 JS 写入的 --dg-player-h 限高 + 内部滚动 */
+            #dplayer .dg-mob-row {
+                display: flex !important;
+                align-items: center;
+                justify-content: space-between;
+                cursor: pointer;
+            }
+            #dplayer .dplayer-setting-box {
+                max-height: calc(var(--dg-player-h, 400px) - 64px);
+                /* 下方全局规则 .dplayer-setting-box{overflow:hidden !important} 会盖掉普通声明,这里必须同为 !important */
+                overflow-y: auto !important;
+                overflow-x: hidden !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            #dplayer .dplayer-setting-box .dplayer-setting-item {
+                min-height: 36px;   /* 手指命中区 */
+            }
+            #dplayer .dg-mob-row .dg-mob-arrow {
+                opacity: .6;
+                font-size: 12px;
+            }
+            #dplayer .dg-mob-toggle {
+                position: relative;
+                width: 40px;
+                height: 22px;
+                border-radius: 20px;
+                background: rgba(255, 255, 255, .2);
+                transition: background .25s;
+                flex: none;
+            }
+            #dplayer .dg-mob-toggle.on { background: #e50914; }
+            #dplayer .dg-mob-toggle::after {
+                content: '';
+                position: absolute;
+                top: 2px; left: 2px;
+                width: 18px; height: 18px;
+                border-radius: 50%;
+                background: #fff;
+                transition: transform .25s;
+            }
+            #dplayer .dg-mob-toggle.on::after { transform: translateX(18px); }
+        }
+
         /* 📱 音量/亮度滑动手势指示器 */
         #dplayer .gesture-indicator {
             position: absolute;
@@ -10153,19 +10224,29 @@
                     //   于是明明有可播线路(ffzy/魔都实测 959/1917 分片正常)也永远轮不到 —— 表现为"所有资源站都播不了"。
                     //   这里用纯超时兜底:起播 14s 内没有任何实质进展(readyState<3 且 0 进度 且 无缓冲)就判该源不可播、自动换源。
                     try { clearTimeout(this._startWatchdog); } catch (e) { }
-                    this._startWatchdog = setTimeout(() => {
-                        if (this._playToken !== playToken) return;   // 已换源/换集 → 本看门狗作废
-                        try {
-                            const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
-                            if (!v) return;
-                            const hasContent = !v.error && (v.readyState >= 3 || (v.currentTime || 0) > 0.1 || (v.buffered && v.buffered.length > 0));   // 已进 error 态=死透,缓冲过也不算
-                            if (hasContent) return;
-                            console.warn('[播放器] ⏱️ 起播超时:14s 内无任何分片就绪(该线路可能返回空清单/静默挂起) → 自动换源');
-                            try { dp.notice('该线路无有效内容，正在换源', 2500); } catch (e) { }
-                            if (typeof window._offHandlePlayError === 'function') window._offHandlePlayError('startTimeout');
-                            else this.handlePlaybackError();
-                        } catch (e) { }
-                    }, 14000);
+                    // 🙈 后台/被遮挡标签页:Chrome 对"从未播过媒体的隐藏页面"会【推迟媒体加载】——MediaSource 的 sourceopen
+                    //    根本不触发,hls.js 拿到清单也不会请求任何分片、readyState 恒 0(生产实测:被别的窗口完全遮住的
+                    //    Chrome 窗口 visibilityState=hidden,连裸 MediaSource 都打不开)。这不是源坏了,看门狗此时判死刑
+                    //    会在用户切回来之前把好线路一个个换掉。隐藏期间只轮询等待,页面重新可见后再给完整的 14s。
+                    const armStartWatchdog = (ms) => {
+                        this._startWatchdog = setTimeout(() => {
+                            if (this._playToken !== playToken) return;   // 已换源/换集 → 本看门狗作废
+                            try {
+                                if (document.hidden) { armStartWatchdog(3000); this._startWdHidden = true; return; }
+                                if (this._startWdHidden) { this._startWdHidden = false; armStartWatchdog(14000); return; }   // 刚从后台回来:重新计满 14s
+                                const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
+                                if (!v) return;
+                                const hasContent = !v.error && (v.readyState >= 3 || (v.currentTime || 0) > 0.1 || (v.buffered && v.buffered.length > 0));   // 已进 error 态=死透,缓冲过也不算
+                                if (hasContent) return;
+                                console.warn('[播放器] ⏱️ 起播超时:14s 内无任何分片就绪(该线路可能返回空清单/静默挂起) → 自动换源');
+                                try { dp.notice('该线路无有效内容，正在换源', 2500); } catch (e) { }
+                                if (typeof window._offHandlePlayError === 'function') window._offHandlePlayError('startTimeout');
+                                else this.handlePlaybackError();
+                            } catch (e) { }
+                        }, ms);
+                    };
+                    this._startWdHidden = false;
+                    armStartWatchdog(14000);
                     const isFreshPlayer = !dp;     // ▶ 是否新建播放器（决定如何触发首次播放）
                     this.syncShareUrl();           // 🔗 把当前剧/集写进地址栏（可收藏/分享/深链）
 
@@ -10275,9 +10356,12 @@
                                 // 🔐 死亡开关:分诊链路一旦有未预料的异常/提前返回,闸门就会永久锁死整场会话。
                                 //    无论如何 10s 后强制解闸,让后续错误能正常触发换源。
                                 try { clearTimeout(this._proxyRetryGuard); } catch (e) { }
-                                this._proxyRetryGuard = setTimeout(() => {
+                                //    分诊最长 = 探测过滤代理(6s) + stripped 分支再探无过滤/直连(6s+6s) ≈ 18s,闸门必须罩住整段,否则中途解闸后
+                                //    14s 起播看门狗会绕过闸门把正在分诊的源提前判死;switchTo 时会再按看门狗时长续期。
+                                const armGuard = (ms) => { try { clearTimeout(this._proxyRetryGuard); } catch (e) { } this._proxyRetryGuard = setTimeout(() => {
                                     if (this._proxyRetrying) { console.warn('[播放器] ⏱️ 代理回退闸门超时未关闭,强制解除(防止吞掉后续所有错误)'); this._proxyRetrying = false; }
-                                }, 10000);
+                                }, ms); };
+                                armGuard(20000);
                                 const fb = this._activeOriginalUrl;                 // 未包装的原始 m3u8(直连回退用)
                                 const wrapped = this._activeFinalUrl;               // 过滤代理(worker)包装后的 m3u8
                                 const failSite = this.currentSource && this.currentSource.site_key;
@@ -10295,36 +10379,74 @@
                                     };
                                     if (dp.video && dp.video.readyState >= 1) onMeta();
                                     else if (dp.video) dp.video.addEventListener('loadedmetadata', onMeta);
-                                    setTimeout(() => {
-                                        this._proxyRetrying = false;
+                                    let wdWasHidden = false;
+                                    const armFallbackWd = (ms) => { armGuard(ms + 4000); setTimeout(() => {   // 闸门续期到看门狗之后,分诊全程都罩着
                                         // 🎟️ 必须用播放令牌判边界(不能用 playSeq/_navSeq——同一部剧内切源它们不变):
                                         //    否则本源装的看门狗会在切源后对【新源】的 video 做判定,新源只要 8s 内没到
                                         //    readyState 3 就被判死并再切一个 → 每个源给下一个源判死刑 = 级联切源风暴,
                                         //    一圈下来"所有资源站都播不了"(生产实测:日志反复刷"回退后仍未起播"直到源用尽)。
-                                        if (this._playToken !== playToken) return;   // 已切源/换集 → 本看门狗作废
+                                        if (this._playToken !== playToken) { this._proxyRetrying = false; return; }   // 已切源/换集 → 本看门狗作废
+                                        // 🙈 页面隐藏时 Chrome 推迟媒体加载(见起播看门狗注释),不判死,等可见后再给完整 8s
+                                        if (document.hidden) { wdWasHidden = true; armFallbackWd(3000); return; }
+                                        if (wdWasHidden) { wdWasHidden = false; armFallbackWd(8000); return; }   // 刚从后台回来:重新计满 8s
+                                        this._proxyRetrying = false;
                                         if (dp && dp.video && dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
                                             console.log('[播放器] 回退后仍未起播，自动切换下一个源');
                                             this.handlePlaybackError();
                                         }
-                                    }, 8000);   // 3s→8s:海外用户拉国内 CDN,首个分片常要 4~6s,3s 必然误判"起不来"
+                                    }, ms); };
+                                    armFallbackWd(8000);   // 3s→8s:海外用户拉国内 CDN,首个分片常要 4~6s,3s 必然误判"起不来"
                                 };
                                 // 通过 worker 重取本集 m3u8,分类 worker故障 / 源站封CF / 偶发
                                 (async () => {
                                   try {
                                     let cls = 'workerdown';   // 默认按"临时故障"处理(最保守:不记账)
+                                    // 拉一份清单并数分片:探测必须看到【子清单里的 EXTINF】才算"正常"——只看 master 的 #EXTM3U 会被
+                                    //   "去广告把整集清空"骗过(worker 返回语法合法但 0 分片的子清单,hls.js 静默,见 stripped 分支)。
+                                    //   整条链(master→子清单)共用一个 6s 预算;读 body 中途超时/失败一律往外抛(=worker 侧不可达→'workerdown'),
+                                    //   绝不能把"读了一半的空文本"当成功返回——那会被判成 siteblock 给好站记 12h 黑账。
+                                    const probeM3u8 = async (u, ctl, depth) => {
+                                        const own = !ctl; if (own) { ctl = new AbortController(); setTimeout(() => ctl.abort(), 6000); }
+                                        const pr = await fetch(u, { cache: 'no-store', signal: ctl.signal });
+                                        let txt = ''; if (pr.ok) txt = await pr.text();   // 失败/中止 → 抛给上层
+                                        if (pr.ok && /#EXT-X-STREAM-INF/.test(txt) && (depth || 0) < 2) {
+                                            const sub = txt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                                            if (sub) return probeM3u8(sub, ctl, (depth || 0) + 1);
+                                        }
+                                        return { status: pr.status, ok: pr.ok, txt };
+                                    };
                                     try {
-                                        const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
-                                        const pr = await fetch(wrapped, { cache: 'no-store', signal: ctl.signal });
-                                        clearTimeout(t);
+                                        const pr = await probeM3u8(wrapped);
                                         if (pr.status >= 500 || pr.status === 429) cls = 'workerdown';
                                         else if (pr.status === 403 || pr.status === 404 || pr.status === 451) cls = 'siteblock';
-                                        else if (pr.ok) { let txt = ''; try { txt = await pr.text(); } catch (e) { } cls = /#EXTM3U/.test(txt) ? 'ok' : 'siteblock'; }
+                                        else if (pr.ok) cls = !/#EXTM3U/.test(pr.txt) ? 'siteblock' : (/#EXTINF:/.test(pr.txt) ? 'ok' : 'stripped');
                                         else cls = 'siteblock';
                                     } catch (e) { cls = 'workerdown'; }   // 超时/网络失败 = worker 侧不可达 → 临时故障
                                     if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) { this._proxyRetrying = false; return; }
+                                    if (source === 'emptyPlaylist' && cls === 'ok') cls = 'stripped';   // hls 亲眼看到 0 分片,探测却"正常"=worker 边缘节点不一致,一样按清空处理
                                     if (cls === 'ok') {
                                         console.log('[播放器] 🛡️ 过滤代理探测正常(worker+源站均通)，原错误疑似偶发，重试过滤播放');
                                         switchTo(wrapped, '重试广告过滤代理');
+                                        return;
+                                    }
+                                    if (cls === 'stripped') {
+                                        // 🚨 去广告把整集清空(源站把整集按每 5 段一个 DISCONTINUITY 均匀切块,时长规则把所有组都当广告删了,
+                                        //   worker 返回 0 分片的"合法"清单 → hls.js 只报非致命 levelEmptyError 然后静默)。这不是源坏也不是
+                                        //   worker 挂,是过滤规则对这份清单不适用:走 worker 的【无过滤通道】(?nofilter=1,保 CORS/防盗链)——
+                                        //   老版 worker 不认该参数会原样返回空清单,那就再退直连;都不行才换线路。绝不记账(不是源站封 CF)。
+                                        const nofilterUrl = this.corsProxyUrl + '/?nofilter=1&url=' + encodeURIComponent(fb);
+                                        let nfOk = false, directHas = false;
+                                        try { const p2 = await probeM3u8(nofilterUrl); nfOk = !!(p2.ok && /#EXTINF:/.test(p2.txt)); } catch (e) { }
+                                        // 无过滤通道也是空(老 worker 不认参数 / 源站本身就是空清单):直连可达就直接探一眼原站,
+                                        //   原站有分片才值得切过去等 8s;原站也空=这源本来就死,立刻换线路(别再白等)
+                                        if (!nfOk && directOK) { try { const p3 = await probeM3u8(fb); directHas = !!(p3.ok && /#EXTINF:/.test(p3.txt)); } catch (e) { } }
+                                        if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) { this._proxyRetrying = false; return; }
+                                        console.warn('[播放器] 🛡️ 广告过滤把本集清单清空(源站均匀切块,过滤规则不适用) → ' + (nfOk ? '走无过滤代理通道' : (directHas ? '原站直连' : '原站也无分片,换线路')) + '(不记账)');
+                                        try { dp.notice('本集广告过滤不可用，已按原片播放', 3000); } catch (e) { }
+                                        if (nfOk) { switchTo(nofilterUrl, '过滤清空→无过滤代理'); return; }
+                                        if (directHas) { switchTo(fb, '过滤清空→直连'); return; }
+                                        this._proxyRetrying = false;
+                                        this.handlePlaybackError();
                                         return;
                                     }
                                     if (cls === 'workerdown') {
@@ -11868,6 +11990,93 @@
                                 // 挂载"弹幕设置"按钮+滑块面板(控件此时已就绪)
                                 if (window.danmakuStyle) window.danmakuStyle.mount();
 
+                                // 📱 手机端"大按钮"控制栏:被 CSS 收起的按钮(发弹幕/弹幕样式/画中画/网页全屏 + 弹幕开关)
+                                //    在齿轮菜单里以整行菜单项的形式提供(.dg-mob-row,桌面端 CSS 隐藏)。
+                                //    每行都是"代为点击原按钮/调原 API",不复制任何业务逻辑,原按钮的行为改了这里自动跟着变。
+                                {
+                                    const settingPanel = dplayerContainer.querySelector('.dplayer-setting-origin-panel');
+                                    const settingBox = dplayerContainer.querySelector('.dplayer-setting-box');
+                                    // 齿轮菜单限高用:把播放器实际高度写进 --dg-player-h(竖屏/横屏/全屏都会变,ResizeObserver 跟随)
+                                    try {
+                                        const ro = new ResizeObserver(entries => {
+                                            for (const en of entries) dplayerContainer.style.setProperty('--dg-player-h', Math.round(en.contentRect.height) + 'px');
+                                        });
+                                        ro.observe(dplayerContainer);
+                                    } catch (e) { }
+                                    if (settingPanel && !settingPanel.querySelector('.dg-mob-row')) {
+                                        const closeGear = () => {
+                                            try {
+                                                if (settingBox) settingBox.classList.remove('dplayer-setting-box-open');
+                                                const mask = dplayerContainer.querySelector('.dplayer-mask');
+                                                if (mask) mask.classList.remove('dplayer-mask-show');
+                                            } catch (e) { }
+                                        };
+                                        const row = (key, label, right) => `
+                                            <div class="dplayer-setting-item dg-mob-row" data-dg="${key}">
+                                                <span class="dplayer-label">${label}</span>
+                                                ${right}
+                                            </div>`;
+                                        const hasDm = !!(dp && dp.danmaku);
+                                        const pipBtn = dplayerContainer.querySelector('.dplayer-pip-icon');
+                                        const dmShowing = hasDm && dp.danmaku.showing !== false;
+                                        let html = '';
+                                        if (hasDm) {
+                                            html += row('dmshow', '弹幕', `<span class="dg-mob-toggle ${dmShowing ? 'on' : ''}"></span>`);
+                                            html += row('dmsend', '发送弹幕', '<span class="dg-mob-arrow">›</span>');
+                                            html += row('dmstyle', '弹幕样式', '<span class="dg-mob-arrow">›</span>');
+                                        }
+                                        if (pipBtn) html += row('pip', '画中画', '<span class="dg-mob-arrow">›</span>');
+                                        html += row('webfull', '网页全屏', '<span class="dg-mob-arrow dg-webfull-label">›</span>');
+                                        settingPanel.insertAdjacentHTML('beforeend', html);
+
+                                        const setDmKnob = (on) => { const k = settingPanel.querySelector('.dg-mob-row[data-dg="dmshow"] .dg-mob-toggle'); if (k) k.classList.toggle('on', !!on); };
+                                        const setWebFullLabel = () => {
+                                            const lbl = settingPanel.querySelector('.dg-mob-row[data-dg="webfull"] .dplayer-label');
+                                            const on = !!(dp && dp.fullScreen && dp.fullScreen.isFullScreen('web'));
+                                            if (lbl) lbl.textContent = on ? '退出网页全屏' : '网页全屏';
+                                        };
+                                        // 状态同步:弹幕开关可能在弹幕样式面板/DPlayer 原生入口被改;网页全屏可能被 ESC/原按钮退出
+                                        try { dp.on('danmaku_show', () => setDmKnob(true)); dp.on('danmaku_hide', () => setDmKnob(false)); } catch (e) { }
+                                        try { dp.on('webfullscreen', setWebFullLabel); dp.on('webfullscreen_cancel', setWebFullLabel); } catch (e) { }
+
+                                        settingPanel.querySelectorAll('.dg-mob-row').forEach(el => el.addEventListener('click', (e) => {
+                                            e.stopPropagation();   // 别让 #dplayer 上"点面板外关闭弹幕样式面板"的监听把刚打开的面板又关掉
+                                            const key = el.getAttribute('data-dg');
+                                            try {
+                                                if (key === 'dmshow') {
+                                                    if (!dp || !dp.danmaku) return;
+                                                    const on = dp.danmaku.showing === false;   // 当前隐藏 → 打开
+                                                    on ? dp.danmaku.show() : dp.danmaku.hide();
+                                                    setDmKnob(on);
+                                                    // 与弹幕样式面板里的"显示弹幕"开关保持一致
+                                                    const t = dplayerContainer.querySelector('.dm-settings-panel .dm-toggle[data-key="show"]');
+                                                    if (t) t.classList.toggle('dm-on', on);
+                                                    return;   // 开关行不关菜单
+                                                }
+                                                closeGear();
+                                                if (key === 'dmsend') {
+                                                    // 代为点击原生"发送弹幕"按钮(CSS 隐藏不影响 click()),弹出输入框。
+                                                    // 必须【同步】派发:DPlayer 在 click 里 focus() 输入框,iOS Safari 只在用户手势同步栈内才弹软键盘,
+                                                    // 用 setTimeout 延后就只见输入框不见键盘(还得再点一下)。
+                                                    const cbtn = dplayerContainer.querySelector('.dplayer-comment-icon');
+                                                    if (cbtn) cbtn.click();
+                                                } else if (key === 'dmstyle') {
+                                                    const panel = dplayerContainer.querySelector('.dm-settings-panel');
+                                                    if (panel) panel.style.display = 'block';
+                                                } else if (key === 'pip') {
+                                                    if (pipBtn) pipBtn.click();
+                                                } else if (key === 'webfull') {
+                                                    if (dp && dp.fullScreen) {
+                                                        if (dp.fullScreen.isFullScreen('web')) dp.fullScreen.cancel('web');
+                                                        else dp.fullScreen.request('web');
+                                                    }
+                                                    setTimeout(setWebFullLabel, 50);
+                                                }
+                                            } catch (err) { console.warn('[播放器] 手机设置项执行失败:', key, err && err.message); }
+                                        }));
+                                    }
+                                }
+
                                 // 再次点击设置按钮时关闭设置菜单
                                 const settingIcon = dplayerContainer.querySelector('.dplayer-setting-icon');
                                 if (settingIcon) {
@@ -13268,6 +13477,18 @@
                             try {
                                 if (this._activePlaySeq !== _navSeq) return;   // 🧭 旧剧残留实例的迟到错误
                                 if (!data) return;
+                                // 🚨 0 分片子清单:hls.js(1.1.x)遇到它【不发 LEVEL_LOADED】,只发一个非致命 levelEmptyError 然后
+                                //    永远静默(不重试、不请求分片、不触发 <video>.error)——上面 onLevel 的空清单闸压根等不到事件。
+                                //    生产实测根因:去广告 worker 把"每 5 段一个 DISCONTINUITY 均匀切块"的整集全当广告删光。
+                                //    这里立刻按空清单处理(分诊会识别为 stripped → 无过滤代理/直连),不用干等 14s 看门狗。
+                                if (data.details === 'levelEmptyError' || (Hls.ErrorDetails && data.details === Hls.ErrorDetails.LEVEL_EMPTY_ERROR)) {
+                                    if (h._offEmptyHandled) return; h._offEmptyHandled = true;
+                                    console.warn('[播放器] ⚠️ 该线路子清单 0 个分片(levelEmptyError:多为去广告把整集清空) → 立即分诊');
+                                    try { dp.notice('该线路清单为空，正在处理', 2000); } catch (e) { }
+                                    if (typeof window._offHandlePlayError === 'function') window._offHandlePlayError('emptyPlaylist');
+                                    else this.handlePlaybackError();
+                                    return;
+                                }
                                 const isNet = data.type === 'networkError';
                                 if (!data.fatal) {
                                     if (!isNet) return;

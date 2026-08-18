@@ -56,10 +56,13 @@ async function handleRequest(request) {
         });
     }
 
-    return handleProxyRequest(request, targetUrlParam, reqUrl.origin);
+    // nofilter=1:只做 CORS + URL 重写,不做去广告(前端在"过滤后清单为空/不可播"时的兜底通道;
+    //   子清单链接会继承该参数,整条播放链都不过滤)
+    const noFilter = reqUrl.searchParams.get('nofilter') === '1';
+    return handleProxyRequest(request, targetUrlParam, reqUrl.origin, noFilter);
 }
 
-async function handleProxyRequest(request, targetUrlParam, currentOrigin) {
+async function handleProxyRequest(request, targetUrlParam, currentOrigin, noFilter) {
     // 防止递归调用
     if (targetUrlParam.startsWith(currentOrigin)) {
         return errorResponse('Loop detected: self-fetch blocked', 400);
@@ -179,7 +182,11 @@ async function handleProxyRequest(request, targetUrlParam, currentOrigin) {
         if (isM3u8 && response.ok) {
             // 读取 m3u8 内容并重写 URL
             const m3u8Content = await response.text();
-            const rewrittenContent = rewriteM3u8(m3u8Content, targetURL, currentOrigin);
+            // nofilter 模式:代理前缀带上 nofilter=1,让子清单/分段链接也走无过滤通道
+            const proxyPrefix = noFilter ? currentOrigin + '/?nofilter=1&url=' : currentOrigin + '/?url=';
+            const rewrittenContent = noFilter
+                ? rewriteNoFilter(m3u8Content, targetURL, proxyPrefix)
+                : rewriteM3u8(m3u8Content, targetURL, currentOrigin);
 
             responseHeaders.set('Content-Type', 'application/vnd.apple.mpegurl');
             responseHeaders.delete('Content-Length'); // 长度已变化
@@ -216,6 +223,9 @@ async function handleProxyRequest(request, targetUrlParam, currentOrigin) {
  *   - 按 DISCONTINUITY 将分段分成多个"组"
  *   - 广告组特征：3-120秒 且 <15个分段 → 整组移除
  *   - 保留所有非广告组（可能有多个主内容组）
+ *   - 🛡️ 保险丝(v2.3)："广告"占比 >50% 或过滤后 0 个内容组 → 判定为"均匀切块"而非贴片，整份放行不过滤；
+ *     任何情况下都绝不输出 0 分片的清单（那会让 hls.js 静默死掉、前端无任何错误可感知）
+ *   - ?nofilter=1 → 完全跳过广告判定，只做 CORS/URL 重写（前端兜底通道）
  */
 function rewriteM3u8(content, baseUrl, proxyOrigin) {
     const baseOrigin = baseUrl.origin;
@@ -230,6 +240,12 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
     }
 
     // ===== 子播放列表：过滤广告 =====
+
+    // 📺 直播(滑动窗口,无 #EXT-X-ENDLIST):时长启发式对滑窗毫无意义(窗口边缘常有 DISCONTINUITY 切出的小组会被
+    //    当广告删掉),且过滤路径会硬加 ENDLIST 把直播变成 VOD(hls.js 不再刷新清单,几分钟后播完停住)。直播只改 URL。
+    if (!lines.some(l => l.trim() === '#EXT-X-ENDLIST')) {
+        return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
+    }
 
     // 第一步：提取全局头部标签（在第一个 #EXTINF 或 #EXT-X-DISCONTINUITY 之前的标签）
     const globalHeaders = [];
@@ -315,8 +331,10 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
     const keptGroups = [];
     let adsRemoved = 0;
     let adDuration = 0;
+    let totalDuration = 0;
 
     for (const g of groups) {
+        totalDuration += g.duration;
         // 广告特征：3-120秒 且 <15个分段
         const isAd = g.duration >= 3 && g.duration <= 120 && g.segCount < 15;
 
@@ -326,6 +344,20 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         } else {
             keptGroups.push(g);
         }
+    }
+
+    // 🚨 "均匀切块"不是广告 —— 事故根因(2026-08 生产实测):部分资源站(如 ryplay17 系)开始把整集按【每 5 个分段
+    //    一个 #EXT-X-DISCONTINUITY】打包(1724 分片/345 组,每组 ~20s,零广告),上面的时长规则会把【所有】组都判成
+    //    广告 → 输出一份只剩头部、一个 EXTINF 都没有的"合法"m3u8 → hls.js 只报一个非致命 levelEmptyError 然后
+    //    永远静默(readyState 0、无 fragment 请求、不触发 <video>.error) → 播放器停在 00:00、点播放没反应、
+    //    console 干净 → 前端分诊拿 master 探测又看到 #EXTM3U 判"代理正常"再重试 → 每个源白等 14s+8s 才换下一个,
+    //    用户体验就是"所有资源站都播不了"。真实 SSAI 广告只占整集很小一部分(实测 ffzy 4 组/74s、ikun 7 组/123s,
+    //    均 <2%);一旦"广告"占比过半、或过滤后一个内容组都不剩,说明这份清单根本不是"正片+贴片"结构,过滤规则不适用,
+    //    必须整份保留(宁可有广告也不能没画面)。
+    const adShare = totalDuration > 0 ? adDuration / totalDuration : 0;
+    if (adsRemoved > 0 && (keptGroups.length === 0 || adShare > 0.5)) {
+        console.log(`[AdFilter] SKIP: ${adsRemoved}/${groups.length} groups look like ads (${adDuration.toFixed(0)}s / ${totalDuration.toFixed(0)}s = ${(adShare * 100).toFixed(0)}%) → uniform chunking, not SSAI ads; passing playlist through unfiltered`);
+        return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
     }
 
     // 第三步 B：清理组内嵌入的单条广告/追踪分段
@@ -386,6 +418,13 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         const trimmed = line.trim();
         if (trimmed.startsWith('#EXT-X-TARGETDURATION')) {
             output.push(`#EXT-X-TARGETDURATION:${maxSegDur || 4}`);
+        } else if (trimmed.includes('URI="')) {
+            // 🔑 头部的 #EXT-X-KEY / #EXT-X-MAP(AES-128 源常把 KEY 放在第一个 EXTINF 之前):相对 URI 必须解析并走代理,
+            //    否则 hls.js 按响应 URL(worker 域)去拼 → 拉到 worker 的帮助页当密钥 → 解密失败(未过滤路径早就这么做,过滤路径漏了)
+            output.push(line.replace(/URI="([^"]+)"/g, (match, uri) => {
+                const absoluteUrl = resolveUrl(uri, baseOrigin, basePath);
+                return `URI="${proxyOrigin}/?url=${encodeURIComponent(absoluteUrl)}"`;
+            }));
         } else {
             output.push(line);
         }
@@ -418,8 +457,41 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
 
     output.push('#EXT-X-ENDLIST');
 
+    // 🔒 最后一道闸:无论上面怎么判,绝不返回一份 0 分片的清单(那等于给播放器一个"合法的空"——静默死亡)。
+    if (!output.some(l => l.trim().startsWith('#EXTINF:'))) {
+        console.log(`[AdFilter] SKIP: filtered result has 0 segments (${groups.length} groups) → passing playlist through unfiltered`);
+        return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
+    }
+
     console.log(`[AdFilter] Removed ${adsRemoved} ad groups (${adDuration.toFixed(1)}s), kept ${keptGroups.length} content groups (${groups.length} total)`);
 
+    return output.join('\n');
+}
+
+/**
+ * 无过滤模式（?nofilter=1）：不做任何广告判定，只做 URL 重写。
+ *   - 主清单:子清单 URL → 代理(保留 nofilter=1,整条链都不过滤)
+ *   - 子清单:分段 → 绝对 URL 直连 CDN;URI="…"(密钥/初始化段) → 代理
+ */
+function rewriteNoFilter(content, baseUrl, proxyPrefix) {
+    const baseOrigin = baseUrl.origin;
+    const basePath = baseUrl.pathname.substring(0, baseUrl.pathname.lastIndexOf('/') + 1);
+    const lines = content.split('\n');
+    const isMaster = lines.some(l => l.trim().startsWith('#EXT-X-STREAM-INF'));
+    const output = [];
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (trimmed === '' || trimmed.startsWith('#')) {
+            if (trimmed.includes('URI="')) {
+                output.push(lines[i].replace(/URI="([^"]+)"/g, (m, uri) => `URI="${proxyPrefix}${encodeURIComponent(resolveUrl(uri, baseOrigin, basePath))}"`));
+            } else {
+                output.push(lines[i]);
+            }
+        } else {
+            const absoluteUrl = resolveUrl(trimmed, baseOrigin, basePath);
+            output.push(isMaster ? proxyPrefix + encodeURIComponent(absoluteUrl) : absoluteUrl);
+        }
+    }
     return output.join('\n');
 }
 
@@ -431,7 +503,12 @@ function rewriteMasterPlaylist(lines, baseOrigin, basePath, proxyOrigin) {
     for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
         if (trimmed === '' || trimmed.startsWith('#')) {
-            output.push(lines[i]);
+            // #EXT-X-MEDIA / #EXT-X-SESSION-KEY 等带 URI="…" 的标签同样要走代理
+            if (trimmed.includes('URI="')) {
+                output.push(lines[i].replace(/URI="([^"]+)"/g, (match, uri) => `URI="${proxyOrigin}/?url=${encodeURIComponent(resolveUrl(uri, baseOrigin, basePath))}"`));
+            } else {
+                output.push(lines[i]);
+            }
         } else {
             // 子播放列表 URL → 代理重写
             const absoluteUrl = resolveUrl(trimmed, baseOrigin, basePath);
