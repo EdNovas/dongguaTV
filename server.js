@@ -1639,6 +1639,10 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         let ed = b.ed_start == null ? null : Math.round(Number(b.ed_start) * 10) / 10;
         const dur = b.duration == null ? null : Math.round(Number(b.duration) * 10) / 10;
         const src = b.src === 'manual' ? 'manual' : 'auto';
+        // 🧭 时间轴通道:'f'=经去广告代理(贴片/中插已剔除) / 'r'=原始(直连/nofilter)。同一集两条通道时间轴差=被删广告时长,
+        //    票池必须分开(键 ep|ch),否则两边互相削票/加权平均出一个谁都不对的值 → 用户看到"跳过片头多跳二十秒"。
+        //    老客户端不带 ch → 继续用裸 ep 键(老行为)。
+        const ch = b.ch === 'f' || b.ch === 'r' ? b.ch : null;
         // 校验：ep 放宽到 8 位(综艺用日期做集号,如 20240105);片头起点前 25 分钟内、时长 10~150s(挡"整段5分钟片头"的滥用载荷)
         if (!title || !site || !Number.isInteger(ep) || ep < 0 || ep > 99999999) return res.status(400).json({ error: 'bad params' });
         if (opProvided && (!hasOp || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 150)) return res.status(400).json({ error: 'bad range' });
@@ -1650,7 +1654,8 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         if (!hasOp || bs == null || be == null || !isFinite(bs) || !isFinite(be) || bs < 0 || bs > 120 || be <= bs || (be - bs) < 3 || (be - bs) > 90 || be > os + 5) { bs = null; be = null; }
         const key = introKey(title, site);
         const map = cacheManager.get('intro', key) || {};
-        const old = map[ep];
+        const epKey = ch ? (ep + '|' + ch) : String(ep);
+        const old = map[epKey];
         if (ed != null && !hasOp && old && old.oe > old.os && ed <= old.oe) ed = null;
         if (!hasOp && ed == null) return res.status(400).json({ error: 'bad range' });
         // 贴片区间独立计票收敛(和 os/oe 同一套 ±5s 加权/削票模型)
@@ -1676,26 +1681,27 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
             return rec;
         };
         if (!hasOp) {
-            map[ep] = mergeOutro(mergeBump({ ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || src, at: Date.now() }, old), old);
+            map[epKey] = mergeOutro(mergeBump({ ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || src, at: Date.now() }, old), old);
         } else if (old && Math.abs(old.os - os) <= 5 && Math.abs(old.oe - oe) <= 5) {
             // 与现值一致(±5s)：加权平均收敛 + 计票(封顶防溢出)
             const w = Math.min(old.v || 1, 9);
-            map[ep] = mergeOutro(mergeBump({ os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() }, old), old);
+            map[epKey] = mergeOutro(mergeBump({ os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() }, old), old);
         } else if (!old || (old.v || 1) <= 1 || (src === 'manual' && old.src !== 'manual' && (old.v || 1) <= 2)) {
             // 无旧值 / 旧值只有 1 票 / 人工标记纠正低票自动值 → 覆盖
-            map[ep] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
+            map[epKey] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
         } else {
             // 与多票旧值冲突：削旧值一票(不直接推翻共识,但也不让先到的错值/被刷值永久钉死——
             // 诚实多数持续提交正确值会把错值削到 1 票后取而代之,eventual 纠偏)
             const nv = (old.v || 1) - 1;
-            if (nv <= 1) map[ep] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
-            else { old.v = nv; old.at = Date.now(); map[ep] = mergeOutro(mergeBump(old, old), old); }
+            if (nv <= 1) map[epKey] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
+            else { old.v = nv; old.at = Date.now(); map[epKey] = mergeOutro(mergeBump(old, old), old); }
         }
+        if (ch && map[epKey]) map[epKey].ch = ch;
         // 单剧集数上限(防灌爆一条 KV)
         const keys = Object.keys(map);
         if (keys.length > 500) { keys.sort((a, z) => (map[a].at || 0) - (map[z].at || 0)); for (const k of keys.slice(0, keys.length - 500)) delete map[k]; }
         cacheManager.set('intro', key, map, INTRO_TTL);
-        res.json({ ok: true, mark: map[ep] || null });
+        res.json({ ok: true, mark: map[epKey] || null });
     } catch (e) {
         console.error('[Intro Mark Error]', e.message);
         res.status(500).json({ error: 'server error' });

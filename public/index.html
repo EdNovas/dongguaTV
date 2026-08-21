@@ -6071,7 +6071,7 @@
                     // ⏭️ 跳过片头/片尾：按钮显示开关(默认开) / 自动跳过(默认关,开了不弹按钮直接跳/切下一集)
                     introSkipShow: (function () { try { return localStorage.getItem('donggua_intro_show') !== 'false'; } catch (e) { return true; } })(),
                     introSkipAuto: (function () { try { return localStorage.getItem('donggua_intro_auto') === 'true'; } catch (e) { return false; } })(),
-                    introBtn: { show: false, label: '跳过片头', to: 0, kind: 'op', flag: '_introSkipped' },   // 悬浮按钮状态(由 skipManager.check 驱动)
+                    introBtn: { show: false, label: '跳过片头', to: 0, start: 0, kind: 'op', flag: '_introSkipped' },   // 悬浮按钮状态(由 skipManager.check 驱动)
                     coverScale: (function () { try { return parseFloat(localStorage.getItem('donggua_cover_scale')) || 1; } catch (e) { return 1; } })(),  // 📐 封面+文字等比缩放(几档,跨设备)
                     coverScaleLevels: [{ v: 0.9, label: '小' }, { v: 1.0, label: '标准' }, { v: 1.15, label: '大' }, { v: 1.35, label: '特大' }],
 
@@ -9971,13 +9971,15 @@
                         const site = (this.currentSource && this.currentSource.site_key) || '';
                         const ep = this._introEpNum();
                         if (!title || !site || ep == null) { this._introCur = null; return; }
-                        const epKey = title + '|' + site + '|' + ep;
-                        if (this._introEpKey === epKey && this._introCur !== undefined) return;   // 同集(seek 引发的重复 canplay)不重来
+                        // 🧭 键里带时间轴通道:同一集若中途从过滤代理退到直连/无过滤(switchTo),时间轴变了,canplay 再来时必须重取该通道的标记
+                        const epKey = title + '|' + site + '|' + ep + '|' + this._introChannel();
+                        if (this._introEpKey === epKey && this._introCur !== undefined) return;   // 同集同通道(seek 引发的重复 canplay)不重来
                         this._introEpKey = epKey;
                         this._introCur = null;
                         this._introSkipped = false;
                         this._bumpSkipped = false;
                         this._outroSkipped = false;
+                        this._introArm = null;   // 换集:作废提前期的"预约跳过"
                         this._introChkLogged = false;   // 让 check() 对新集重新打印一次"可跳区间 vs 起播位置"诊断
                         this.introBtn.show = false; this._introRenderBtn();
                         // 共享标记(每 剧|线路 拉一次,15min 内存缓存)
@@ -9993,7 +9995,9 @@
                             this._introMarks = { key: marksKey, at: Date.now() - (marksFailed ? 13 * 60 * 1000 : 0), marks, failed: marksFailed };
                         }
                         if (this._introEpKey !== epKey) return;   // await 期间换集了
-                        const mk = this._introMarks.marks[ep];
+                        // 🧭 按【时间轴通道】取标记:同一集在"去广告代理"(f)和"原始/直连"(r)两条通道上时间轴不同(差=被删广告时长),
+                        //    两个票池独立(服务器按 ep|ch 分开存);没有本通道的就退回老格式(无通道信息,沿用旧行为)
+                        const mk = this._introMarkGet(ep);
                         if (mk && (mk.oe > mk.os || mk.ed > 0)) this._introCur = { os: mk.os || 0, oe: mk.oe || 0, ed: mk.ed || 0, ev: mk.ev || (mk.ed > 0 ? 1 : 0), edSrc: mk.edSrc || null, src: mk.src, v: mk.v || 1, bs: mk.bs || 0, be: mk.be || 0, bv: mk.bv || 0 };
                         // 🎬 本集无共享标记 → 后台离线分析(不用看片头):没学过→两集包络学习;学过→只定位本集。
                         //   全部守卫(每剧学一次/每集定位一次/失败限2次/流量上限)内聚在模块里,这里只管调——
@@ -10025,14 +10029,33 @@
                     for (const m of (list || [])) {
                         if (m.ep === curEp && !this._introCur) this._introCur = { os: m.os, oe: m.oe, ed: 0, ev: 0, src: 'afp', v: 0 };
                         this._introUpload(info.title, info.site, m.ep, m.os, m.oe, 'auto');
-                        if (this._introMarks && this._introMarks.key === info.title + '|' + info.site) { const om = this._introMarks.marks[m.ep] || {}; this._introMarks.marks[m.ep] = { ...om, os: m.os, oe: m.oe, v: 1, src: 'auto', bs: om.bs || 0, be: om.be || 0, bv: om.bv || 0, ed: om.ed || 0, ev: om.ev || 0 }; }
+                        if (this._introMarks && this._introMarks.key === info.title + '|' + info.site) { const om = this._introMarkGet(m.ep) || {}; this._introMarkSet(m.ep, { ...om, os: m.os, oe: m.oe, v: 1, src: 'auto', bs: om.bs || 0, be: om.be || 0, bv: om.bv || 0, ed: om.ed || 0, ev: om.ev || 0 }); }
                     }
                 },
                 // 上报标记(自动学习/手动标记共用)。token 与历史同步同一套。bump = 可选开头贴片区间 {bs,be}; outro = 可选片尾起点
+                // 🧭 当前播放的时间轴通道:'f'=经去广告 worker(贴片/中插已被剔除) / 'r'=原始(直连或 nofilter 代理,广告都在)。
+                //    片头/片尾标记只在同通道内有效——通道不同=时间轴不同,混用就会多跳/少跳被删广告那么长。
+                // 共享标记本地缓存的读写入口(所有读写都走这里,键=集|通道;读时退回老格式裸集号键)
+                _introMarkKey(ep) { return ep + '|' + this._introChannel(); },
+                _introMarkGet(ep) {
+                    const m = this._introMarks && this._introMarks.marks; if (!m) return null;
+                    return m[this._introMarkKey(ep)] || m[ep] || null;
+                },
+                _introMarkSet(ep, rec) {
+                    const m = this._introMarks && this._introMarks.marks; if (!m) return;
+                    m[this._introMarkKey(ep)] = rec;
+                },
+                _introChannel() {
+                    try {
+                        if (this._activeOffCached) return this.corsProxyUrl ? 'f' : 'r';   // 离线包是经代理(去广告)下载的
+                        const u = String(this._activeFinalUrl || '');
+                        return (/[?&]url=/.test(u) && !/[?&]nofilter=1/.test(u)) ? 'f' : 'r';
+                    } catch (e) { return 'r'; }
+                },
                 _introUpload(titleKeyOrName, site, ep, os, oe, src, bump, outro, outroDuration) {
                     try {
                         const token = localStorage.getItem('emax_auth_hash') || '';
-                        const body = { token, title: (this.currentGroup && this.currentGroup.name) || titleKeyOrName, site, ep, src: src || 'auto' };
+                        const body = { token, title: (this.currentGroup && this.currentGroup.name) || titleKeyOrName, site, ep, src: src || 'auto', ch: this._introChannel() };
                         if (isFinite(os) && isFinite(oe) && oe > os) { body.op_start = os; body.op_end = oe; }
                         if (bump && bump.be > bump.bs) { body.b_start = bump.bs; body.b_end = bump.be; }
                         if (outro != null && isFinite(outro)) {
@@ -10052,6 +10075,15 @@
                         if (!this.introBtn.show) return;
                         const to = this.introBtn.to, flag = this.introBtn.flag || '_introSkipped';
                         this.introBtn.show = false; this._introRenderBtn();
+                        // ⏳ 按钮提前 LEAD 秒亮出;提前期点击以前是"立刻跳到区间终点"——把区间前那几秒正片也一起跳掉了(用户反馈"多跳了几秒")。
+                        //    现在提前期点击只"预约":到区间起点那一刻再跳(check() 里执行),一秒正片都不多切。
+                        const start = this.introBtn.start, now = (typeof dp !== 'undefined' && dp && dp.video) ? (dp.video.currentTime || 0) : 0;
+                        if (isFinite(start) && start > 0 && now < start - 0.3) {
+                            this._introArm = { start, to, flag, kind: this.introBtn.kind };
+                            try { dp.notice((flag === '_bumpSkipped' ? '开头' : flag === '_outroSkipped' ? '片尾' : '片头') + '开始时自动跳过'); } catch (e) { }
+                            return;
+                        }
+                        this._introArm = null;   // 立即跳过:清掉可能残留的预约,防二次 seek
                         this[flag] = true;   // 开头贴片/片头曲/片尾各自只触发一次
                         if (this.introBtn.kind === 'outro') {
                             if (typeof dp !== 'undefined' && dp) { dp.notice('已跳过片尾'); if (dp.events) dp.events.trigger('ended'); }
@@ -10305,6 +10337,7 @@
                     this._activeOriginalUrl = originalUrl;
                     this._activeAdFilterProxyUsed = adFilterProxyUsed;
                     this._activeFinalUrl = finalUrl;  // 📺 投屏(Chromecast)用：实际喂给播放器的 URL(去广告代理过、带 CORS，Chromecast 能拉)
+                    this._activeOffCached = !!_offCacheRec;   // 📦 本集来自离线缓存(下载时经代理去过广告 → 时间轴属"过滤"通道,见 _introChannel)
 
                     const setupErrorHandling = () => {
                         // 统一错误处理函数（dp.error 和 video.error 都会触发）
@@ -10370,6 +10403,7 @@
                                 // 切到指定 URL 播放 + 3s 看门狗(仍起不来才切下一个源)。reason 仅日志用。
                                 const switchTo = (url, reason) => {
                                     console.log('[播放器] 🛡️ ' + reason + ':', (url || '').substring(0, 70));
+                                    this._activeFinalUrl = url;   // 🧭 记录真实在播的 URL(通道可能已从过滤代理换成无过滤/直连):片头分析与投屏都要跟着它走
                                     this._dpSwitchHls(url);
                                     const onMeta = () => {
                                         dp.video.removeEventListener('loadedmetadata', onMeta);
@@ -10746,6 +10780,21 @@
                                         // switchVideo 换集瞬间会发一次 currentTime=0 的 timeupdate、此时 duration=NaN；此刻绝不自动跳(否则新集从 oe 起播)
                                         const dur = dp.video && dp.video.duration;
                                         const safe = time > 1 && isFinite(dur) && dur > 0 && !dp.video.seeking;
+                                        // ⏳ 提前期点过"跳过"→ 到区间起点再真正执行(见 introSkipNow)
+                                        const arm = v && v._introArm;
+                                        if (arm && safe) {
+                                            if ((arm.kind !== 'outro' && time >= arm.to) || time < arm.start - this.LEAD - 2) { v._introArm = null; }   // 用户拖过区间/拖回更早处 → 作废(片尾 to=0 不能用 to 判)
+                                            else if (time >= arm.start - 0.15) {
+                                                v._introArm = null; v[arm.flag] = true;
+                                                if (arm.kind === 'outro') { dp.notice('已跳过片尾'); if (dp.events) dp.events.trigger('ended'); }
+                                                else { dp.seek(arm.to); dp.notice(arm.flag === '_bumpSkipped' ? '已跳过开头' : '已跳过片头'); }
+                                                return;
+                                            } else {
+                                                // 预约生效中:按钮保持收起,别在提前期里又把同一个按钮弹回来
+                                                if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); }
+                                                return;
+                                            }
+                                        }
                                         if (cur && safe) {
                                             // 📋 每集一次:可跳区间 vs 起播位置(续看从中段起播时,窗口已过不弹按钮——这里一眼看出"为什么没按钮")
                                             if (!v._introChkLogged) {
@@ -10761,9 +10810,9 @@
                                             // 判定含提前量(reg.in=真正进入区间):按钮提前 LEAD 秒亮出;自动跳严格等区间起点(提前跳会切掉区间前的正片)
                                             const L = this.LEAD;
                                             let reg = null;
-                                            if (cur.be > cur.bs && time >= cur.bs - L && time < cur.be - 1 && !v._bumpSkipped) reg = { to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头', in: time >= cur.bs };
-                                            else if (cur.oe > cur.os && time >= cur.os - L && time < cur.oe - 1 && !v._introSkipped) reg = { to: cur.oe, label: '跳过片头', flag: '_introSkipped', kind: 'op', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头', in: time >= cur.os };
-                                            else if (cur.ed > 0 && time >= cur.ed - L && time < dur - 2 && !v._outroSkipped) reg = { to: 0, label: '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: cur.edSrc === 'afp' || (cur.ev || 0) >= 2, notice: '已自动跳过片尾', in: time >= cur.ed };
+                                            if (cur.be > cur.bs && time >= cur.bs - L && time < cur.be - 1 && !v._bumpSkipped) reg = { start: cur.bs, to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头', in: time >= cur.bs };
+                                            else if (cur.oe > cur.os && time >= cur.os - L && time < cur.oe - 1 && !v._introSkipped) reg = { start: cur.os, to: cur.oe, label: '跳过片头', flag: '_introSkipped', kind: 'op', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头', in: time >= cur.os };
+                                            else if (cur.ed > 0 && time >= cur.ed - L && time < dur - 2 && !v._outroSkipped) reg = { start: cur.ed, to: 0, label: '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: cur.edSrc === 'afp' || (cur.ev || 0) >= 2, notice: '已自动跳过片尾', in: time >= cur.ed };
                                             if (reg) {
                                                 // 自动跳过只信【被佐证的】标记(票数≥2 或本会话实测检出),防单条误学/被刷的坏标记直接跳走正片
                                                 if (v.introSkipAuto && reg.ok) {
@@ -10774,7 +10823,7 @@
                                                     else { dp.seek(reg.to); dp.notice(reg.notice); }
                                                     return;
                                                 }
-                                                if (v.introSkipShow && (!v.introBtn.show || v.introBtn.to !== reg.to || v.introBtn.kind !== reg.kind)) { v.introBtn.label = reg.label; v.introBtn.to = reg.to; v.introBtn.flag = reg.flag; v.introBtn.kind = reg.kind; v.introBtn.show = true; v._introRenderBtn(); }
+                                                if (v.introSkipShow && (!v.introBtn.show || v.introBtn.to !== reg.to || v.introBtn.kind !== reg.kind)) { v.introBtn.label = reg.label; v.introBtn.to = reg.to; v.introBtn.flag = reg.flag; v.introBtn.kind = reg.kind; v.introBtn.start = reg.start; v.introBtn.show = true; v._introRenderBtn(); }
                                             } else if (v.introBtn.show) {
                                                 v.introBtn.show = false; v._introRenderBtn();   // 出了可跳区间(拖过/看完) → 收起
                                             }
@@ -11117,9 +11166,11 @@
                                     _mkFetch(vue) {
                                         const direct = u => fetch(u, { cache: 'no-store' });
                                         const prox = u => { const p = (vue.currentSource && vue.currentSource._proxyUrl) || vue.corsProxyUrl; if (!p) return Promise.reject(new Error('无代理')); return fetch(p + '/?url=' + encodeURIComponent(u), { cache: 'no-store' }); };
+                                        const noFilterProx = u => { const p = (vue.currentSource && vue.currentSource._proxyUrl) || vue.corsProxyUrl; if (!p) return Promise.reject(new Error('无代理')); return fetch(p + '/?nofilter=1&url=' + encodeURIComponent(u), { cache: 'no-store' }); };
                                         const proxyFirst = !!(vue.currentSource && vue.currentSource._useProxy);
                                         let sticky = null;
-                                        return async (u) => {
+                                        // 分段(.ts):字节两边相同,直连/代理双策略粘住即可
+                                        const F = async (u) => {
                                             const tries = sticky ? [sticky.a, sticky.b] : (proxyFirst ? [prox, direct] : [direct, prox]);
                                             let lastErr;
                                             for (const f of tries) {
@@ -11128,8 +11179,23 @@
                                             }
                                             throw lastErr || new Error('fetch失败');
                                         };
+                                        // 🧭 【清单】必须与播放走同一通道——这是"跳过片头多跳几秒/二十秒"的根因:播放走去广告 worker(贴片/中插被删掉),
+                                        //    分析却直连抓原始清单(广告还在)→ 学到的 os/oe/ed 都是另一条时间轴(差=被删广告的时长)→ 按它跳就切掉正片;
+                                        //    反过来(播放直连、分析粘到代理)也一样。只有 m3u8 文本要严格同通道:
+                                        //    过滤通道只允许 worker(失败就放弃本次分析,宁可没按钮也不学错);原始通道用 直连 → nofilter 代理(内容与直连一致,只补 CORS)。
+                                        F.channel = (typeof vue._introChannel === 'function') ? vue._introChannel() : 'r';
+                                        F.playlist = async (u) => {
+                                            if (/[?&]url=/.test(u)) return direct(u);   // 已是代理地址(worker 改写过的子清单)原样取
+                                            const tries = F.channel === 'f' ? [prox] : [direct, noFilterProx];
+                                            let lastErr;
+                                            for (const f of tries) {
+                                                try { const r = await f(u); if (r.ok) return r; lastErr = new Error('HTTP' + r.status); } catch (e) { lastErr = e; }
+                                            }
+                                            throw lastErr || new Error('清单获取失败(通道=' + F.channel + ')');
+                                        };
+                                        return F;
                                     },
-                                    async _fetchText(u, F) { const r = await F(u); const t = await r.text(); if (!/#EXTM3U/.test(t)) throw new Error('非m3u8内容'); return t; },
+                                    async _fetchText(u, F) { const r = await ((F && F.playlist) || F)(u); const t = await r.text(); if (!/#EXTM3U/.test(t)) throw new Error('非m3u8内容'); return t; },
                                     // master → 最低码率 media 清单;返回 { origBase(未代理), text }
                                     async _resolveMedia(origUrl, F) {
                                         let origBase = origUrl, text = await this._fetchText(origBase, F);
@@ -11515,9 +11581,9 @@
                                         const bs = bump && bump.be > bump.bs ? Math.max(0, Math.round(bump.bs * 10) / 10) : 0;
                                         const be = bump && bump.be > bump.bs ? Math.round(bump.be * 10) / 10 : 0;
                                         let old = null;
-                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) old = V._introMarks.marks[ep] || null; } catch (e) { }
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) old = V._introMarkGet(ep); } catch (e) { }
                                         const ed = old && old.ed > 0 ? old.ed : 0, ev = old && old.ev > 0 ? old.ev : 0;
-                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = { ...(old || {}), os, oe, v: 1, src: 'auto', bs, be, bv: be > bs ? 1 : 0, ed, ev }; } catch (e) { }
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarkSet(ep, { ...(old || {}), os, oe, v: 1, src: 'auto', bs, be, bv: be > bs ? 1 : 0, ed, ev }); } catch (e) { }
                                         try {
                                             if (V._introEpNum() === ep) {
                                                 const cur = V._introCur || {};
@@ -11531,11 +11597,11 @@
                                         if (!isFinite(ed) || ed <= 0 || (duration && (ed < duration * 0.45 || ed > duration - 2))) return;
                                         const V = o.vue;
                                         let old = null;
-                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) old = V._introMarks.marks[ep] || null; } catch (e) { }
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) old = V._introMarkGet(ep); } catch (e) { }
                                         // edSrc:'afp' 只应活在本会话的即时 _introCur(下方,按 isCur 门控)——绝不能写进持久化共享缓存 marks[ep]:
                                         // 否则从未被本机实测验证过的邻集(仅供后台学习抓取,isCur=false)会被标成"已验证",绕开 ev≥2 才自动跳的安全闸。
                                         const next = { ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || 'auto', ed, ev: 1, edSrc: old?.edSrc || null };
-                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarks.marks[ep] = next; } catch (e) { }
+                                        try { if (V._introMarks && V._introMarks.key === o.title + '|' + o.site) V._introMarkSet(ep, next); } catch (e) { }
                                         try {
                                             if (V._introEpNum() === ep) {
                                                 const cur = V._introCur || {};
@@ -11602,7 +11668,7 @@
                                         const st = this._st[K] || (this._st[K] = { phase: 'idle', tries: 0, intro: null, outroTries: 0, mb: 0 });
                                         if (st.outroTries == null) st.outroTries = 0;
                                         if (st.mb == null) st.mb = 0;
-                                        const mark = o.vue._introMarks && o.vue._introMarks.key === K ? (o.vue._introMarks.marks[o.ep] || null) : null;
+                                        const mark = o.vue._introMarks && o.vue._introMarks.key === K ? o.vue._introMarkGet(o.ep) : null;
                                         let needIntro = !(mark && mark.oe > mark.os) && !this._epDone[epK] && st.phase !== 'nointro';
                                         let needOutro = !(mark && mark.ed > 0) && !this._outroDone[epK];
                                         if (this._busy || st.phase === 'pending') return;
