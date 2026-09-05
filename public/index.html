@@ -135,7 +135,7 @@
     <script data-cfasync="false" src="libs/js/vue.global.prod.min.js"></script>
 
     <!-- 非关键脚本 (延迟加载) -->
-    <script data-cfasync="false" src="libs/js/hls.min.js" defer></script>
+    <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
@@ -5873,6 +5873,20 @@
         //   停在 00:00,且没有任何 hls 事件可供换源链感知 → 用户看到的就是"所有资源站都播不了、点播放没反应、console 干净"。
         //   这里:只要 MSE 可用且不是 Safari/iOS(那边 hls.js 反而不如原生,且原生才支持 AirPlay)就【强制 hls.js】;
         //   其余情况保持 DPlayer 原行为(video.src 已由 DPlayer 设好,原生播放)。
+        // 🔊 音频"变低沉+失真"(2026-09 根因,实测 + 对抗核查在 Chromium 自带 ffmpeg.dll 上逐帧复现):
+        //   hls.js 1.1.5 的 getAudioConfig 在 Chrome/Edge 等非 Firefox/非 Android UA 上,把所有 AAC 的 track.codec 强写成 HE-AAC
+        //   (mp4a.40.5),ASC 写成 AOT5 且"SBR 扩展采样率=基础采样率"(2a120800)——这是 hls.js 多年的 Chrome 兼容 hack(上游 1.6 才删,PR #6627)。
+        //   真正的扳机在 DISCONTINUITY:片源每 20 片一个 DISCONTINUITY(或每 ~10-13 分钟一个广告拼接点),hls.js 的 mp4-remuxer 在非连续
+        //   分片处发现音频比视频晚 ≥1 帧就"注入静音帧"补洞(console 有 "[mp4-remuxer]: Injecting N audio frame" 警告),静音帧按
+        //   track.codec 选 → 选中 HE-AACv2 版(SCE+SBR/PS 载荷);Chromium 内置 FFmpeg 的 aacdec 收到它后把解码器锁进 sbr=1 状态,
+        //   而 ASC 里 ext==base 让它每帧合成 2048 采样却只输出前 1024 个 → 每帧内容被拉长一倍再截半:音高整体低一个八度+碎裂,
+        //   时长/同步完全不变,画面正常;seek 不会恢复,只有新建解码器(换源/刷新页面)才恢复。这是 FFmpeg 的长期行为,不是浏览器新 bug。
+        //   实测(本机 Chromium 148,captureStream 录音 vs ffmpeg 解码真值,逐秒频谱重心/基频比对):无 DISCONTINUITY 的集正常;有
+        //   DISCONTINUITY 的集频谱整体下移恰好 1 个八度(谱形相关 0.95-0.99);改成 AAC-LC 信令后跨多个 DISCONTINUITY 与真值一致。
+        //   修法在 libs/js/hls.min.js(文件顶部有 banner):getAudioConfig 只要清单没声明 HE-AAC、内容也不是隐式 HE(≤24kHz 且无 CODECS),
+        //   一律按 ADTS 实际类型走 AAC-LC 分支(ASC 1210 / mp4a.40.2,静音帧也随之变成 LC 版),与 hls.js ≥1.6 行为一致。
+        //   ⚠️ 升级/替换 hls.min.js 必须重新打补丁——`node scripts/check-hls-lc-patch.mjs` 会失败提醒。
+        //   3 月那次"修好"其实是 DPlayer 改走浏览器原生 HLS 绕开了 MSE,8 月强制回 hls.js 通道后自然回来。
         window._dgPreferNativeHls = (() => {
             try {
                 const ua = navigator.userAgent || '';
@@ -5932,7 +5946,10 @@
                     }
                     window._OfflineHlsLoader = OfflineLoader;
                 }
-                return { loader: window._OfflineHlsLoader };
+                // backBufferLength:90 —— 1.1.5 默认 Infinity 把已播部分永远留在 SourceBuffer,10 分钟上下就撞 Chrome 的 12MB 音频/
+                //   150MB 视频上限交给浏览器自己 GC;另据 hls.js #7367,Chrome/Edge 138+ 改了 QuotaExceededError 的类型,1.1.5 可能认不出来而当成
+                //   致命 bufferAppendError → 站内错误链误判换源(该点未在本机单独验证)。自己只留 90s 后向缓冲就基本走不到这条路(回拖 >90s 重拉分片即可)。
+                return { loader: window._OfflineHlsLoader, backBufferLength: 90 };
             } catch (e) { return {}; }
         }
         let _lastProgressSaveTime = 0;  // timeupdate 节流时间戳（每15秒保存一次）

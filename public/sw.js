@@ -11,7 +11,9 @@
 //      Network-First,弱网可能白屏;改按 pathname 匹配,真正 SWR。②导航兜底:带 ?play= 等查询参数的深链
 //      cache.match 精确匹配不命中预缓存 './',断网只回纯文本 'Offline';改为回退 index.html 外壳。
 //      ③同源 /api GET:有缓存时网络 4s 未响应先用缓存兜底(弱网不再陪网络挂到死;网络结果仍写回缓存)。
-const CACHE_VERSION = 'v27';
+// v28: hls.min.js 换成 AAC-LC 信令补丁版(修 Chromium 138+ 播十分钟后声音低一个八度),预缓存键带 ?v=1.1.5-lc1 与页面引用一致,
+//      旧版 SW 缓存(v27)里的老 hls.min.js 随 activate 清理;不带查询串的话 ignoreSearch 匹配会把老文件继续喂给页面。
+const CACHE_VERSION = 'v28';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -28,7 +30,7 @@ const STATIC_URLS = [
     './libs/css/fontawesome.min.css',
     './libs/js/vue.global.prod.min.js',
     './libs/js/bootstrap.bundle.min.js',
-    './libs/js/hls.min.js',
+    './libs/js/hls.min.js?v=1.1.5-lc1',
     './libs/js/ad-filter.js',
     './libs/js/DPlayer.min.js'
 ];
@@ -157,7 +159,7 @@ self.addEventListener('fetch', event => {
     // ⚠️ cache.match 必须 ignoreSearch：页面以 'ad-filter.js?v=4.0' 带版本参数引用,预缓存键无查询串,
     //    精确匹配永 miss——该脚本是 defer,弱网挂起会阻塞 DOMContentLoaded 把整站卡在 loader。
     if (url.origin === self.location.origin &&
-        STATIC_URLS.some(staticUrl => staticUrl !== './' && url.pathname === staticUrl.replace(/^\./, ''))) {
+        STATIC_URLS.some(staticUrl => staticUrl !== './' && url.pathname === staticUrl.replace(/^\./, '').split('?')[0])) {   // v28: 预缓存项可带 ?v= 版本串,比对 pathname 时剥掉
         event.respondWith(
             caches.open(STATIC_CACHE).then(cache => {
                 return cache.match(event.request, { ignoreSearch: true }).then(cached => {
