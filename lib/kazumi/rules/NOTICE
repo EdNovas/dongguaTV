@@ -1,0 +1,13 @@
+本目录的规则文件(7sefun.json、dm84.json)中的 Kazumi 规则字段
+(api/type/name/version/muliSources/useWebview/useNativePlayer/userAgent/adBlocker/
+baseURL/searchURL/searchList/searchName/searchResult/chapterRoads/chapterResult)
+取自开源项目 Kazumi 的内置规则 assets/plugins/7sefun.json 与 assets/plugins/DM84.json:
+
+  Kazumi — https://github.com/Predidit/Kazumi
+  Copyright (C) Predidit and contributors
+  Licensed under the GNU General Public License v3.0
+  https://www.gnu.org/licenses/gpl-3.0.html
+
+保留原字段是为了与 Kazumi 规则格式兼容(日后可直接导入更多 Kazumi 规则)。
+"dg" 扩展块(解析器/ID 提取/年份正则等)以及 lib/kazumi/ 下的规则引擎与解析器均为本项目自行实现,
+未复制 Kazumi 的源代码。再分发这两个规则文件时请遵守 GPL-3.0 的相应条款。

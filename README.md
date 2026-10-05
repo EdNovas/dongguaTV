@@ -55,6 +55,7 @@ https://ednovas-test.vercel.app （不包含任何数据）
 - **智能关键词匹配**：自动生成搜索变体（去除副标题、季数后缀等），同时搜索中英文名
 - **自动英中翻译**：检测英文搜索词时自动通过 TMDB 获取中文译名（如 "Stranger Things" → "怪奇物语"）
 - **自动分组与合并**：同一影片的不同线路自动聚合到一张卡片
+- **🎌 番剧规则源**：内置 2 个番剧站（规则取自开源项目 [Kazumi](https://github.com/Predidit/Kazumi) 的默认 XPath 规则，GPL-3.0，见 `lib/kazumi/rules/NOTICE`；规则引擎与地址解析为本项目自行实现），服务端抓取搜索/选集并解析真实播放地址，结果自动并入同一部剧的卡片；可用 `KAZUMI_DISABLE=1` 关闭
 - **多级缓存**：SQLite / JSON / 内存，热搜词秒级响应
 
 ### 📺 沉浸式播放体验
@@ -265,6 +266,8 @@ node server.js
 | `LIVE_M3U_EXTRA` | ❌ | — | 自定义上游 M3U（逗号分隔多个），用于注入**付费 IPTV 的 m3u**——海外稳定播更多被封频道的可靠路 |
 | `LIVE_M3U_DISABLE` | ❌ | — | 设为 `1` 关闭所有内置直播源，仅保留 `LIVE_M3U_EXTRA` 自定义源 |
 | `LIVE_M3U_ADULT` | ❌ | — | 成人直播源（逗号分隔），归"成人"分类，受前端 NSFW 过滤开关控制显隐；仓库**不内置任何地址** |
+| `KAZUMI_DISABLE` | ❌ | — | 设为 `1` 关闭内置番剧规则源（Kazumi 格式，服务端刮削+解析） |
+| `KAZUMI_SITES` | ❌ | 全部 | 只启用指定的番剧规则源（逗号分隔，填规则文件名如 `7sefun,dm84`） |
 | `LIVE_TV_DISABLED` | ❌ | — | 设为 `1` 整体关闭直播（前端隐藏直播区、`/api/live/channels` 返回 `enabled:false`） |
 | `LIVE_NO_VALIDATE` | ❌ | — | 设为 `1` 跳过服务端逐源测速验证（默认开启，用于标注频道能播/置灰） |
 

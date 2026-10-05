@@ -1,0 +1,61 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta charset="UTF-8">
+    <title>ArtPlayer+</title>
+
+    <link rel="stylesheet" href="../player/css/art.css">
+    <script src="../player/js/jquery.min.js"></script>
+    <script src="../player/js/hls.min.js"></script>
+    <script src="../player/js/artplayer.js"></script>
+    <script src="../player/js/art.min.js"></script>
+    <script src="../player/js/flv.min.js"></script>
+    <script src='../player/js/artplayer-danmuku.js'></script>    <style>
+        #loading-box .pic{width:320px;height:184px;z-index:3;background:url(https://img13.360buyimg.com/ddimg/jfs/t1/185080/17/2599/91779/6093991cEba246750/4634b6e0c56b6510.png) no-repeat;-webkit-transform:scale(.5);transform:scale(.5);-webkit-animation:iconAnimation .94s steps(1) infinite;animation:iconAnimation .94s steps(1) infinite;margin:-110px 0 0 -160px}        #loading-box .video-panel-blur-image{background: url(https://ydschool-online.nosdn.127.net/tiku/197df124b2c5eb070c47b10e1a61a145cbb39b3093b6c156026fa5d6bb9d6a43.jpg) #000000;display:block;width:110%;height:110%;position:absolute;left:-5%;top:-5%;background-size:cover;background-position:50%;-webkit-filter:blur(35px);-moz-filter:blur(35px);-ms-filter:blur(35px);filter:blur(0)}
+        #close{bottom:5%;left:2%;box-shadow:unset;background:unset;top:unset;color:#00a1d6;height:auto;border-radius:0;text-align:left;font-size:12px;width:110px;cursor:pointer;position:absolute;z-index:99999;display:inline-block;line-height:16px}
+        .ec-logo{right: 5%;top: 5%;}
+        :root{--main-color:#24a5ff;}
+    </style>
+</head>
+<body>
+<div class="artplayer-app"></div>
+<script>
+    var config = {
+        "api": '/index.php/danmu',
+        "url": "https://groupvideo.photo.qq.com/1071_0bc33madsaaaaaafwptwarus7wyehhnqaoka.f0.mp4?dis_k=8feae6299919cafbf8611edb711b7d90&dis_t=1791134916",
+        "id": "6380a8cbe34164ab6a82",
+        "next": "",
+        "jump":"",
+        "group": "游客",
+        'state':"0",
+        "logo": "https://www.7sefun.top/pc/img/logo.png",
+        "sendtime": "10",
+        "marquee":"",
+        "color":"#24a5ff",
+        "danmuon":"0",
+        "ads":{"pic":{"time":"5","img":"https:\/\/www.7sefun.top\/upload\/site\/20250813-1\/3f3ccabab45c2d5897257260e7910abd.jpeg","link":"https:\/\/www.7sefun.top\/artdetail-1.html"},"vod":{"time":"https:\/\/storage.googleapis.com\/img.cjgxs10.cc\/media\/common\/2021\/0912\/24e024bcd605ff820c556c714476e018.mp4","link":"#"},"pause":{"img":"https:\/\/www.7sefun.top\/upload\/site\/20250813-1\/3f3ccabab45c2d5897257260e7910abd.jpeg","link":"https:\/\/www.7sefun.top\/artdetail-1.html"}},
+        "pbgjz":"草,操,妈,逼,滚,网址,网站,关注,wx,微信,qq,QQ,百度,搜索,公众号,看片,习近平,法轮,迫害,翻墙",
+        "subtitle_url":"",
+        "api_id":"26976",
+        "api_uid":"0",
+        "api_url":"https://www.7sefun.top/",
+        "group_x":"NULL",
+        "api_vod_url":"https://www.lmm85.com/play/7817_1_1.html",
+        "user_danmuon":"0",
+        "trysee":"3",
+        "try_user":"NULL",
+        "waittime":"10",
+        "default":"1",
+    }
+    if (self.frameElement && self.frameElement.tagName == "IFRAME") {
+        let MacCmsBox = $('#blibliId', parent.document).data();
+        if(MacCmsBox.id.toString().length > 1){
+            config.id = MacCmsBox.id;
+        }
+        config.next = MacCmsBox.url;
+        config.group = MacCmsBox.user;
+    }
+</script>
+</body>
+</html>

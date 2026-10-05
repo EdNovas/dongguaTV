@@ -136,6 +136,7 @@
 
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
+    <script data-cfasync="false" src="libs/js/kz-titlematch.js?v=1" defer></script>   <!-- 🎌 Kazumi 源片名归一化/并组(服务端 lib/kazumi 共用同一文件) -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
@@ -5945,7 +5946,7 @@
                             latency: item.latency || 999
                         });
                     });
-                    return Object.values(groups).sort((a, b) => b.sources.length - a.sources.length);
+                    return this._kzSnapGroups(Object.values(groups)).sort((a, b) => b.sources.length - a.sources.length);
                 },
                 // 快速线路 (延迟 < 600ms)
                 fastSources() {
@@ -6775,7 +6776,8 @@
                                 vod_id: s.vod_id,  // 用于刷新集数
                                 vod_name: s.vod_name,
                                 vod_pic: s.vod_pic,
-                                vod_play_url: s.vod_play_url,
+                                // 🎌 Kazumi 源的搜索结果不带选集(vod_play_url 为空),选集只在测速/切源时拉的详情里
+                                vod_play_url: s.vod_play_url || (s._cachedDetail && s._cachedDetail.vod_play_url) || '',
                                 vod_content: s.vod_content || '',  // 剧情介绍
                                 site_name: s.site_name,
                                 site_key: s.site_key || (s.site_name + '_' + idx),  // 用于匹配高亮
@@ -7073,7 +7075,10 @@
 
                         if (bestSource && bestSource.vod_play_url) {
                             // 解析播放地址（只从这一个资源站取）
-                            const urls = bestSource.vod_play_url.split('#').filter(u => u && u.includes('$'));
+                            // 多线路($$$)先挑一条(与 parseEpisodes 同规则),否则各线路的集数会混成一张表
+                            let _pu = bestSource.vod_play_url;
+                            if (_pu.includes('$$$')) { const _sets = _pu.split('$$$'); _pu = _sets.find(x => x.toLowerCase().includes('m3u8')) || _sets[0]; }
+                            const urls = _pu.split('#').filter(u => u && u.includes('$'));
                             console.log('[观看历史] 解析到', urls.length, '个剧集');
 
                             if (urls.length > 0) {
@@ -7100,7 +7105,7 @@
 
                                 await this.$nextTick();
                                 if (targetEpisode && targetEpisode.url) {
-                                    this.play(targetEpisode.url, bestSource.site_name);
+                                    this.play(targetEpisode.url);
                                     // 后台自动刷新集数（不阻塞播放）
                                     this.refreshEpisodes();
                                     // 🔄 线路测速优先用本地缓存(历史已存每路 latency/_testType)。仅当"从未测速(缺失)"或"缓存超过 24h"
@@ -8517,8 +8522,10 @@
                         }
 
                         // 最后回退到服务器端测速(可能播不了，靠自动换源兜底)
+                        // 🎌 Kazumi 源不参与 3s 超时抢选:它的测速命中服务器缓存时几乎瞬回,会抢在仍在测的 maccms 直连/代理源前面被选中;
+                        //    这里空手就不烧标志,交给测速完成路径(那里 maccms 全不可用才轮到 kz)
                         const testedSources = this.currentGroup.sources.filter(s =>
-                            typeof s.latency === 'number' && s.latency < 9000
+                            typeof s.latency === 'number' && s.latency < 9000 && s._testType !== 'kz'
                         );
 
                         if (testedSources.length > 0) {
@@ -8558,6 +8565,13 @@
                             const firstEp = playUrl.split('#')[0];
                             const parts = firstEp.split('$');
                             const videoUrl = parts.length > 1 ? parts[1] : parts[0];
+
+                            // 🎌 Kazumi 规则源:集数地址是本站 /api/kz/ep/… 解析端点(相对路径),不能当 m3u8 测
+                            if (this._isKzUrl(videoUrl)) {
+                                await this._kzProbe(source, detail, videoUrl);
+                                checkEarlyReturn();
+                                return source;
+                            }
 
                             if (!videoUrl || !videoUrl.startsWith('http')) {
                                 source.latency = 9999;
@@ -8729,6 +8743,9 @@
                     // 🗄️ 缓存优先：命中(测通项3天/不可用项12h内)直接套用、跳过测速请求(detail 起播时由 switchSource 按需拉取)；
                     //    未命中才真测、测完写回缓存。allowDead=true：这是全量测速(含代理)，可缓存不可用态(9999)。
                     const cachedWorker = async (source) => {
+                        // 🎌 Kazumi 源不读写站点健康缓存:它的可用性是"这部剧这一集解析得出"(还要做年份校验),
+                        //    一部剧解析失败不能把整个站封 12h,一部剧可用也不代表别的剧可用。解析结果服务器有缓存,重测很便宜。
+                        if (this._isKzSource(source)) { await latencyWorker(source); return source; }
                         const c = this._siteHealthGet(source.site_key);
                         if (c) {
                             source.latency = c.latency; source._testType = c._testType;
@@ -8784,7 +8801,9 @@
                             } else {
                                 // 回退到服务器端测速最快的(可能播不了，靠自动换源兜底)
                                 const fastestAvailable = this.currentGroup.sources.find(s =>
-                                    typeof s.latency === 'number' && s.latency < 9000
+                                    typeof s.latency === 'number' && s.latency < 9000 && s._testType !== 'kz'
+                                ) || this.currentGroup.sources.find(s =>   // 🎌 maccms 全不可用 → Kazumi 源兜底(年份对不上的不自动选)
+                                    typeof s.latency === 'number' && s.latency < 9000 && !s._kzMismatch
                                 );
                                 if (fastestAvailable) {
                                     console.log(`[测速完成] 选择服务器测速最快的线路: ${fastestAvailable.site_name} (${fastestAvailable.latency}ms)`);
@@ -9066,7 +9085,8 @@
 
                         // 找到同名影片的搜索结果
                         const matched = data.list.filter(item =>
-                            item.vod_name === searchName || item.vod_name?.trim() === searchName?.trim()
+                            item.vod_name === searchName || item.vod_name?.trim() === searchName?.trim() ||
+                            (this._isKzSource(item) && this._kzSameTitle(item, searchName))   // 🎌 kz 源原名与组名不同(见 _kzSnapGroups)
                         );
                         const results = matched.length > 0 ? matched : data.list;
 
@@ -9076,6 +9096,7 @@
                             site_name: item.site_name,
                             vod_id: item.vod_id,
                             vod_name: item.vod_name,
+                            vod_year: item.vod_year,   // 🎌 Kazumi 源年份校验要用 maccms 源的年份
                             vod_play_url: item.vod_play_url || '',
                             latency: undefined,
                             _testType: undefined,
@@ -9108,6 +9129,8 @@
                                 const firstEp = playUrl.split('#')[0];
                                 const parts = firstEp.split('$');
                                 const videoUrl = parts.length > 1 ? parts[1] : parts[0];
+
+                                if (this._isKzUrl(videoUrl)) { await this._kzProbe(source, detail, videoUrl); return source; }   // 🎌 同 openDetail
 
                                 if (!videoUrl || !videoUrl.startsWith('http')) {
                                     source.latency = 9999;
@@ -9157,7 +9180,7 @@
                         // 🚦 限并发逐批测速（测全部源、最多 6 并发）
                         // 🗄️ "刷新线路"是手动重测(恢复通道)：强制真测(不读缓存)，测完写回缓存。
                         //    allowDead=false：此路径测速无代理分支(proxy-only 源会误判)，只许缓存 direct/proxy 成功态，不缓存不可用态。
-                        const cachedWorker = async (source) => { await latencyWorker(source); this._siteHealthSet(source.site_key, source, false); return source; };
+                        const cachedWorker = async (source) => { await latencyWorker(source); if (!this._isKzSource(source)) this._siteHealthSet(source.site_key, source, false); return source; };
                         await runWithConcurrency(sources, 6, cachedWorker);
 
                         // 🧭 测速期间用户可能已切换剧集：丢弃过期结果
@@ -9366,7 +9389,7 @@
                         // 🎬 本集无共享标记 → 后台离线分析(不用看片头):没学过→两集包络学习;学过→只定位本集。
                         //   全部守卫(每剧学一次/每集定位一次/失败限2次/流量上限)内聚在模块里,这里只管调——
                         //   ⚠️别在这儿加守卫变量:上一版 Vue 侧 _introOfflineKey 被多个异步回调竞态复位,导致换集就重学、流量爆炸。
-                        const willOffline = multiEp && !!window.afpOffline && !this._introMarks.failed && (!mk || !mk.ed || !(mk.oe > mk.os));
+                        const willOffline = multiEp && !!window.afpOffline && !this._introMarks.failed && (!mk || !mk.ed || !(mk.oe > mk.os)) && !this._isKzUrl(this.currentUrl);   // 🎌 kz 选集地址是解析端点,离线分析拉不了
                         const willEngine = !!window.afpEngine && multiEp && (!mk || (mk.v || 1) < 3);
                         // 📋 每集一行判定摘要:按钮数据从哪来/还差什么,一眼定位"为什么没按钮"
                         try {
@@ -9569,6 +9592,56 @@
                             window._offActiveEp = null;
                         }
                     } catch (e) { }
+                    // 🎌 Kazumi 规则源(七色番/动漫巴士):集数地址是 /api/kz/ep/… 解析端点——先问服务器这一集解析成什么
+                    //   (hls 清单 / mp4 直链)再起播。页面→解析器→真实地址这条链只能服务器走(动漫巴士的解析器只认它自己的
+                    //   Origin,浏览器发不出;七色番走站内 art.php),签名直链过期也由服务器重解析。
+                    //   解析失败(该集所有线路都解不出)= 这个源这一集不可播 → 直接走正常换源链。
+                    // 解析结果只经 _kzPending 交接(只认本集、只认合法形状)。⚠️ 不能用位置参数:历史回放一直以
+                    //   play(url, 线路名) 调用(第二参数原本被忽略),当成解析结果会把每次"继续观看"都播成 /undefined。
+                    let _kzRes = null;
+                    const _kp = this._kzPending; this._kzPending = null;
+                    if (_kp && _kp.url === url && _kp.res && typeof _kp.res.url === 'string' && (_kp.res.type === 'hls' || _kp.res.type === 'mp4')) _kzRes = _kp.res;
+                    const kzTok = (this._kzPlayTok = (this._kzPlayTok || 0) + 1);   // 任何一次 play() 都作废在飞的解析
+                    if (!_kzRes && !_offCacheRec && this._isKzUrl(url)) {
+                        const kzSeq = _navSeq;
+                        // 解析要 0.5~数十秒:先把上一个源的播放【作废】——令牌递增让它的起播看门狗/分诊/重试回调全部失效、
+                        //   停掉旧 hls 的加载、高亮切到新集。否则上一个源迟到的错误/看门狗会算到这个 kz 源头上。
+                        this._playToken = (this._playToken || 0) + 1;
+                        try { clearTimeout(this._startWatchdog); } catch (e) { }
+                        try { clearTimeout(this._proxyRetryGuard); } catch (e) { }
+                        this._proxyRetrying = false; this._proxyRetried = false;
+                        this._activeKz = null; this._activeAdFilterProxyUsed = false;
+                        this._activePlaySeq = _navSeq;
+                        this.currentUrl = url;
+                        try { if (dp) { dp.pause(); if (dp.plugins && dp.plugins.hls) dp.plugins.hls.stopLoad(); dp.notice('正在解析视频地址…', 3000); } } catch (e) { }
+                        // 45s > 服务器最坏解析耗时(多线路回退预算 25s + 在途请求),免得服务器刚解出来客户端已放弃
+                        fetchT(url, null, 45000)
+                            .then(r => r.json().catch(() => null).then(j => (r.ok && j && j.url) ? j : Promise.reject(new Error((j && j.error) || ('HTTP ' + r.status)))))
+                            .then(j => {
+                                if (this._kzPlayTok !== kzTok || kzSeq !== _navSeq) return;   // 解析期间已换集/换源/换剧
+                                console.log('[Kazumi] 解析成功:', j.type, (j.road != null ? '线路' + j.road : ''), String(j.url).slice(0, 60));
+                                this._kzPending = { url, res: j };
+                                this.play(url);
+                            })
+                            .catch(e => {
+                                if (this._kzPlayTok !== kzTok || kzSeq !== _navSeq) return;
+                                console.warn('[Kazumi] 本集解析失败(' + (this.currentSource && this.currentSource.site_name) + '):', e && e.message);
+                                this.playbackErrorCount = 0;
+                                this._proxyRetrying = false;
+                                try { if (dp) dp.notice('该线路本集解析失败，正在换源', 2500); } catch (e2) { }
+                                // force:播放器里还挂着上一个源/上一集的画面(暂停、可播),宽限期的"其实能播"检测会误判而取消换源
+                                this.handlePlaybackError({ force: true });
+                            });
+                        return;
+                    }
+                    this._activeKz = _kzRes ? Object.assign({ epUrl: url, tok: kzTok }, _kzRes) : null;
+                    // 🔇 MP4 直链(跨域、多数无 CORS)不能在"已接入 WebAudio"的 <video> 上播:片头指纹引擎对 hls 流调过
+                    //    createMediaElementSource 后,该元素的声音终生走 WebAudio 图,跨域无 CORS 的媒体进图会被浏览器静音
+                    //    → 画面正常但没声音。遇到这种元素就重建播放器换一个干净的 <video>(必须在 isFreshPlayer 计算之前)。
+                    if (this._activeKz && this._activeKz.type === 'mp4' && typeof dp !== 'undefined' && dp && dp.video && dp.video._afpSrc) {
+                        console.log('[Kazumi] MP4 直链:当前 <video> 已接入 WebAudio(片头指纹),重建播放器以免跨域静音');
+                        this._dpRebuildFresh();
+                    }
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
@@ -9627,6 +9700,10 @@
                         setTimeout(() => {
                             try { if (dp && dp.notice && _noticeSeq === _navSeq) dp.notice('📦 本集已缓存 · 离线播放', 2000); } catch (e) { }
                         }, 1200);
+                    } else if (this._activeKz) {
+                        // 🎌 本站同源端点:hls → 服务器取回并绝对化的清单(分片直连 CDN);mp4 → 302 到最新签名直链。不套 worker。
+                        finalUrl = new URL(this._activeKz.url, location.href).href;
+                        console.log('[播放器] 🎌 Kazumi 源(' + this._activeKz.type + '):', finalUrl.substring(0, 80));
                     } else if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
                         finalUrl = `${this.currentSource._proxyUrl}/?url=${encodeURIComponent(url)}`;
                         console.log('[播放器] 🌐 使用代理播放:', finalUrl.substring(0, 80) + '...');
@@ -9809,13 +9886,73 @@
                                 })();
                                 return;
                             }
+                            // 🎌 Kazumi MP4 直链带签名会过期(电信云约 3h、字节 CDN 约 1.2h、腾讯不定):播到一半出错多半是过期 →
+                            //    让服务器强制重解析一次、原位续播。起播阶段就出错 / 续播后 8s 内仍起不来 → 走正常换源。
+                            //    dp 'error' 与 video 'error' 会成对到达,重解析窗口内的重复错误一律吞掉,由 8s 复核兜底。
+                            const kz = this._activeKz;
+                            // hls:签名清单过期,或上游轮换(七色番 art.php 会在 m3u8 与 mp4 之间换,服务器此时对 m3u8 请求回 409)→
+                            //   每集最多强制重解析一次,按新结果(可能已变成 mp4)重放;仍不行才换源。_retried 随解析结果带进新一轮,防循环。
+                            if (kz && kz.type === 'hls' && !kz._retried) {
+                                kz._retried = 1;
+                                const tokAt = this._playToken, seqAt = _navSeq;
+                                console.warn('[Kazumi] hls 播放出错 → 强制重新解析一次');
+                                this._proxyRetrying = true;   // 重解析期间吞掉本源后续的成对错误
+                                fetchT(kz.epUrl + '?fresh=1', null, 45000)
+                                    .then(r => r.json().catch(() => null).then(j => (r.ok && j && j.url) ? j : Promise.reject(new Error('resolve failed'))))
+                                    .then(j => {
+                                        this._proxyRetrying = false;
+                                        if (this._playToken !== tokAt || seqAt !== _navSeq) return;
+                                        this._kzPending = { url: kz.epUrl, res: Object.assign({}, j, { _retried: 1 }) };
+                                        this.play(kz.epUrl);
+                                    })
+                                    .catch(() => {
+                                        this._proxyRetrying = false;
+                                        if (this._playToken !== tokAt || seqAt !== _navSeq) return;
+                                        this.handlePlaybackError({ force: true });
+                                    });
+                                return;
+                            }
+                            // mp4:直链签名会过期(电信云约 3h、字节 CDN 约 1.2h、腾讯不定)——播到一半出错多半是过期 → 服务器强制重解析、
+                            //   原位续播。限 60s 一次、每集至多 3 次(永久坏链不至于无限循环);起播阶段就出错 → 直接换源。
+                            //   dp 'error' 与 video 'error' 成对到达:重解析后 8s 内的重复错误吞掉,由 8.5s 复核兜底。
+                            if (kz && kz.type === 'mp4' && kz.refreshAt && Date.now() - kz.refreshAt < 8000) return;
+                            const kzN = kz ? (kz.refreshN || 0) : 0;
+                            if (kz && kz.type === 'mp4' && kzN < 3 && (!kz.refreshAt || Date.now() - kz.refreshAt > 60000) && dp && dp.video && (dp.video.currentTime || 0) > 5) {
+                                kz.refreshAt = Date.now(); kz.refreshN = kzN + 1;
+                                const resumeAt = dp.video.currentTime;
+                                console.warn('[Kazumi] MP4 播放中出错(多为直链签名过期) → 重新解析,从 ' + resumeAt.toFixed(0) + 's 续播');
+                                const fresh = new URL(kz.url, location.href);
+                                fresh.searchParams.set('fresh', '1'); fresh.searchParams.set('_', String(Date.now()));
+                                this._activeFinalUrl = fresh.href;
+                                this._dpSwitchHls(fresh.href, undefined, 'normal');
+                                const vAt = dp.video, tokAt = this._playToken;
+                                // 监听绑在这一个 <video> 上并随复核一起摘掉:续播失败时若残留,下一集一加载就会被拽到这里的时间点
+                                const onMeta = () => {
+                                    vAt.removeEventListener('loadedmetadata', onMeta);
+                                    if (this._playToken !== tokAt || this._activeKz !== kz || !dp || dp.video !== vAt) return;
+                                    try { dp.seek(resumeAt); } catch (e) { }
+                                    const p = dp.play(); if (p && typeof p.catch === 'function') p.catch(() => { });
+                                };
+                                vAt.addEventListener('loadedmetadata', onMeta);
+                                setTimeout(() => {
+                                    vAt.removeEventListener('loadedmetadata', onMeta);
+                                    if (this._playToken !== tokAt || this._activeKz !== kz) return;
+                                    const v = dp && dp.video;
+                                    if (v && (v.error || v.readyState < 2)) { console.warn('[Kazumi] 重解析后仍无法播放 → 换源'); this.handlePlaybackError({ force: true }); }
+                                }, 8500);
+                                return;
+                            }
                             this.handlePlaybackError();
                         };
 
-                        dp.on('error', () => handleError('dp'));
+                        // 🪦 只认【当前】播放器实例的错误:同一部剧内重建播放器(Kazumi MP4 换干净 <video>)时,被销毁的旧实例
+                        //    清空 src 会迟到地发一个 error —— 旧版把它当成新源的错误,刚起播的新线路被立刻换掉(实测)。
+                        //    跨剧重建靠 _navSeq 挡掉,同剧重建 _navSeq 不变,只能按实例甄别。
+                        const myDp = dp, myVideo = dp.video;
+                        dp.on('error', () => { if (dp !== myDp) return; handleError('dp'); });
 
-                        if (dp.video) {
-                            dp.video.addEventListener('error', () => handleError('video'));
+                        if (myVideo) {
+                            myVideo.addEventListener('error', () => { if (!dp || dp.video !== myVideo) return; handleError('video'); });
                         }
                         // ⚠️ hls.js 的网络层错误(分段/清单拉不到)不会触发 <video>.error——不暴露出去的话,
                         //    播放中断网只会无限转圈,分诊/换线路/离线兜底整条链都收不到信号。
@@ -9841,7 +9978,7 @@
                             volume: 0.8,             // 默认音量 80%
                             loop: false,             // 循环播放（可在设置中切换）
                             playbackSpeed: [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3],  // 0.25间隔倍速选项
-                            video: { url: finalUrl, type: 'hls', customType: { hls: window._dgHlsCustomType } },   // 🎯 MSE 可用即强制 hls.js(见 _dgHlsCustomType)
+                            video: { url: finalUrl, type: (this._activeKz && this._activeKz.type === 'mp4') ? 'normal' : 'hls', customType: { hls: window._dgHlsCustomType } },   // 🎯 MSE 可用即强制 hls.js(见 _dgHlsCustomType);🎌 Kazumi MP4 直链走原生 <video>
                             pluginOptions: { hls: buildOfflineHlsConfig() },  // ⬇️ 离线缓存优先的 hls loader(无缓存时行为与原生一致)
                             danmaku: danmakuOpt || undefined,  // 🗨️ 弹幕(借第三方聚合)；未开启则 undefined(DPlayer 不初始化弹幕)
                             contextmenu: [
@@ -11446,14 +11583,17 @@
                         dp.on('webfullscreen', enterFullscreenMode);
                         dp.on('webfullscreen_cancel', exitFullscreenMode);
 
-                        // 监听浏览器原生全屏 API（备用）
-                        document.addEventListener('fullscreenchange', () => {
-                            if (document.fullscreenElement) {
-                                enterFullscreenMode();
-                            } else {
-                                exitFullscreenMode();
-                            }
-                        });
+                        // 监听浏览器原生全屏 API（备用）——document 级监听只绑一次(重建播放器不再叠加;两个处理函数无状态、幂等)
+                        if (!this._fsChangeHooked) {
+                            this._fsChangeHooked = true;
+                            document.addEventListener('fullscreenchange', () => {
+                                if (document.fullscreenElement) {
+                                    enterFullscreenMode();
+                                } else {
+                                    exitFullscreenMode();
+                                }
+                            });
+                        }
 
                         // ========== 📱 手机端双击快进/快退功能 ==========
                         const container = document.getElementById('dplayer');
@@ -12017,14 +12157,16 @@
                             }
                         });
 
-                        // 页面关闭前保存
-                        window.addEventListener('beforeunload', () => {
-                            if (dp.video) {
-                                saveProgress(dp.video.currentTime);
-                            }
-                            // 使用 sendBeacon 确保页面关闭时也能同步
-                            this.pushHistoryBeacon();
-                        });
+                        // 页面关闭前保存——只绑一次(重建播放器会再走到这里),保存实现按最新一次建播放器时的闭包更新
+                        this._saveProgressOnUnload = () => { if (dp && dp.video) saveProgress(dp.video.currentTime); };
+                        if (!this._unloadHooked) {
+                            this._unloadHooked = true;
+                            window.addEventListener('beforeunload', () => {
+                                try { if (this._saveProgressOnUnload) this._saveProgressOnUnload(); } catch (e) { }
+                                // 使用 sendBeacon 确保页面关闭时也能同步
+                                this.pushHistoryBeacon();
+                            });
+                        }
 
                         // 📱 移动端可靠保存：beforeunload 在手机上(切到别的App/锁屏/切后台)常常不触发，导致"刚看到的集/进度"
                         //    没推到服务器、别的设备同步不到。visibilitychange→hidden 在手机上可靠触发——隐藏时立即保存当前进度
@@ -12108,7 +12250,7 @@
                         //    从而既回收泄漏又不会误跳过线路（旧实现是在 switchVideo 前 destroy 才出的问题）。
                         // 🗨️ 仅"换集"(danmakuReload)时重载弹幕；同集换源/代理回退不传第二参(DPlayer 保留当前弹幕，不闪烁/不重拉)
                         // 🧹 旧 hls 实例在 switchVideo 后【立即】销毁(见 _dpSwitchHls)——绝不允许两个 hls 实例同时挂在一个 <video> 上
-                        this._dpSwitchHls(finalUrl, danmakuReload ? danmakuOpt : undefined);
+                        this._dpSwitchHls(finalUrl, danmakuReload ? danmakuOpt : undefined, (this._activeKz && this._activeKz.type === 'mp4') ? 'normal' : 'hls');
                         console.log('[进度记忆-切换] switchVideo 已调用' + (finalUrl !== url ? ' (代理模式)' : ''));
 
                         // ▶ 修复"切换资源/集数后不自动播放 + 中央大按钮图标反向"：
@@ -12529,7 +12671,8 @@
                 },
 
                 // 处理播放错误，自动切换线路
-                handlePlaybackError() {
+                handlePlaybackError(opts) {
+                    const force = !!(opts && opts.force);   // 调用方已确认"本次没有新媒体可播"(如 Kazumi 解析失败),宽限期不再看旧 <video>
                     // 🛡️ 投屏接管 MSE 时本地 <video> 会报 error，这不是线路问题；投屏期间不要自动切线路
                     if (this._isCasting()) { console.log('[投屏] 投屏中忽略播放错误，不自动切线路'); return; }
                     // 📺 直播：VOD 的 availableSources 为空(sources:[])，不能走 VOD 换源/"所有线路均无法播放"误报。
@@ -12559,7 +12702,9 @@
                     // 获取当前线路索引（记住失败源，宽限期后用于判定是否真的要跳过）
                     const allSources = this.availableSources;
                     const failingSource = this.currentSource;
-                    const currentIndex = allSources.findIndex(s => s.site_key === failingSource?.site_key);
+                    // 先按对象找:同一张卡片里可能有同站两条(动漫巴士同名不同年的两部),按 site_key 会认错是哪一条在失败
+                    let currentIndex = allSources.indexOf(failingSource);
+                    if (currentIndex < 0) currentIndex = allSources.findIndex(s => s.site_key === failingSource?.site_key);
 
                     // 如果还有下一个线路可用，给一段宽限期后再决定是否切换
                     if (currentIndex >= 0 && currentIndex < allSources.length - 1) {
@@ -12572,6 +12717,7 @@
                         const _curEpName = (this.episodeList || []).find(e => e.url === this.currentUrl)?.name;
                         let nextSource = null;
                         for (let i = currentIndex + 1; i < allSources.length; i++) {
+                            if (allSources[i]._kzMismatch) continue;   // 🎌 年份对不上的 Kazumi 源(疑似同名另一部)不当自动换源目标
                             if (this._sourceHasEpisode(allSources[i], _curEpName) !== false) { nextSource = allSources[i]; break; }
                         }
                         if (!nextSource) {
@@ -12596,7 +12742,7 @@
                             if (!stillSameSource) { this.autoRetryMessage = ''; return; }
 
                             const v = dp && dp.video;
-                            const isPlayable = v && !v.error && (v.readyState >= 2 || (v.buffered && v.buffered.length > 0));
+                            const isPlayable = !force && v && !v.error && (v.readyState >= 2 || (v.buffered && v.buffered.length > 0));
                             if (isPlayable) {
                                 console.log('[Auto-Failover] 该源实际可播放（已就绪/有缓冲），取消跳过，保留当前线路');
                                 this.autoRetryMessage = '';
@@ -12731,10 +12877,113 @@
                 //   立即销毁安全吗:hls.js 1.1.5 detach 时只在 `media.src === 自己的 blob` 才 removeAttribute('src')+load(),
                 //   此刻 video.src 已是新实例的 blob → 跳过清理,不会触发"无源"错误(旧版"switchVideo 前 destroy 才误跳线路"
                 //   的坑正是因为那时 src 还是它自己的)。
-                _dpSwitchHls(url, danmakuOpt) {
+                // 🎌 Kazumi 规则源(HTML 刮削站)并组:它们的片名风格与 maccms 资源站不同("葬送的芙莉莲 第二季"、
+                //   "间谍过家家 Part 2"、"鬼灭之刃第二季(游郭篇)"、夹零宽字符…),按原名精确分组会冒出一堆只有 1 个线路的重复卡片。
+                //   只把【全由 kz 源组成】的组吸附进同一部剧的 maccms 组(规范化片名键 → 季/部/语言一致的有限模糊,规则见
+                //   libs/js/kz-titlematch.js),吸附后沿用 maccms 组的原名——历史/进度/离线/弹幕/片头标记都按组名存,
+                //   maccms 组自身的分组与显示名【一律不动】。没有 maccms 对应的 kz 组之间只按规范化键精确合并。
+                _kzSnapGroups(list) {
+                    const KT = window.KzTitle;
+                    if (!KT || !list.some(g => g.sources.some(x => this._isKzSource(x)))) return list;
+                    const cache = this._kzTitleCache || (this._kzTitleCache = new Map());   // 非响应式:每次 SSE 到包都会重算 computed
+                    const pt = (name, it) => {
+                        const ck = name + '\u0001' + ((it && it.vod_remarks) || '') + '\u0001' + ((it && it.type_name) || '');
+                        let v = cache.get(ck);
+                        if (!v) { v = KT.parseTitle(name, { remarks: it && it.vod_remarks, type: it && it.type_name }); if (cache.size > 3000) cache.clear(); cache.set(ck, v); }
+                        return v;
+                    };
+                    const kzOnly = g => g.sources.every(x => this._isKzSource(x));
+                    const hostByKey = new Map(), entries = [];
+                    list.forEach(g => {
+                        if (kzOnly(g)) return;
+                        const p = pt(g.name, g.sources[0]);
+                        const cur = hostByKey.get(p.key);
+                        if (!cur) { hostByKey.set(p.key, g); entries.push({ key: p.key, p }); }
+                        else if (g.sources.length > cur.sources.length) hostByKey.set(p.key, g);   // 同键多组(如"咒术回战第一季"与"咒术回战")吸附进线路多的那组
+                    });
+                    const kzByKey = new Map();
+                    const out = [];
+                    list.forEach(g => {
+                        if (!kzOnly(g)) { out.push(g); return; }
+                        const p = pt(g.name, g.sources[0]);
+                        const r = entries.length ? KT.snapToGroup(p, entries) : { how: 'new' };
+                        const host = r.how !== 'new' ? hostByKey.get(r.key) : null;
+                        if (host) { host.sources.push(...g.sources); return; }
+                        const twin = kzByKey.get(p.key);
+                        if (twin) { twin.sources.push(...g.sources); return; }
+                        kzByKey.set(p.key, g);
+                        out.push(g);
+                    });
+                    return out;
+                },
+                // 刷新线路/深链等"按剧名找同一部剧"的地方:kz 源原名与组名不同,按并组同一套规则判同
+                _kzSameTitle(item, groupName) {
+                    const KT = window.KzTitle;
+                    if (!KT || !item || !groupName) return false;
+                    try {
+                        const g = KT.parseTitle(groupName);
+                        // 只认精确键/篇名级匹配:只拿一个组名做模糊比对会把续作("超电磁炮S/T")也收进来
+                        return /^(exact|arc)/.test(KT.snapToGroup(KT.parseTitle(item.vod_name || '', { remarks: item.vod_remarks, type: item.type_name }), [{ key: g.key, p: g }]).how);
+                    } catch (e) { return false; }
+                },
+                // 同一部剧内重建播放器(Kazumi MP4 需要一个没接过 WebAudio 的干净 <video>):DPlayer.destroy() 只清 innerHTML,
+                //   #dplayer 容器上那批手势/点击/双击/MutationObserver 监听还在,重建时会再绑一份(双击快进变 20s、中央双击失效)。
+                //   换一个同属性的空容器把旧监听一并丢掉。#dplayer 在模板里是纯静态节点,Vue 不会再 patch 它。
+                _dpRebuildFresh() {
+                    try { dp.destroy(); } catch (e) { }
+                    dp = null;
+                    try {
+                        const old = document.getElementById('dplayer');
+                        if (old && old.parentNode) old.parentNode.replaceChild(old.cloneNode(false), old);
+                    } catch (e) { }
+                },
+                // 🎌 Kazumi 规则源识别:选集地址形如 /api/kz/ep/<站点>/<vid>-<sid>-<nid>(相对路径,多域名部署也不失效)
+                _isKzUrl(u) { return typeof u === 'string' && /(^|\/)api\/kz\/ep\//.test(u); },
+                _isKzSource(s) { return !!(s && (s._kz || /^kz_/.test(s.site_key || ''))); },
+                // 🎌 Kazumi 源测速:第 1 集交给服务器解析(只走 页面→解析器 拿地址,绝不拉媒体——守"服务器不验 m3u8"铁律),
+                //   耗时即延迟,顺带预热解析缓存。_testType='kz' 不进直连/代理两档,只在没有可用 maccms 源时才被自动选中。
+                //   年份校验:HTML 刮削站的搜索列表没有年份,同名不同年的条目(动漫巴士"间谍过家家 第二季"有 2022 与 2023 两部)
+                //   会被吸附进同一张卡片 → 详情年份与本卡 maccms 源多数年份差 >1 年即判"同名另一部",排到最后、不自动选。
+                async _kzProbe(source, detail, videoUrl) {
+                    source._testType = 'kz';
+                    source._kzMismatch = false;
+                    try {
+                        const yr = parseInt(detail && detail.vod_year, 10);
+                        const ys = ((this.currentGroup && this.currentGroup.sources) || []).filter(x => !this._isKzSource(x))
+                            .map(x => parseInt(x.vod_year || (x._cachedDetail && x._cachedDetail.vod_year), 10)).filter(y => y > 1900);
+                        if (yr > 1900 && ys.length) {
+                            const cnt = {}; ys.forEach(y => { cnt[y] = (cnt[y] || 0) + 1; });
+                            const major = +Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a])[0];
+                            // 差 1 年也要拦(动漫巴士"间谍过家家 第二季"有 2022 与 2023 两部);maccms 年份本身乱时(没有明显多数)不判
+                            const clear = ys.length === 1 || cnt[major] >= 2 || cnt[major] / ys.length >= 0.6;
+                            if (yr !== major && clear) {
+                                source._kzMismatch = true;
+                                console.log('[Kazumi] ' + source.site_name + '《' + (detail.vod_name || '') + '》年份 ' + yr + ' 与本剧 ' + major + ' 不符,疑似同名的另一部 → 排到最后、不自动选');
+                            }
+                        }
+                    } catch (e) { }
+                    const t0 = Date.now();
+                    try {
+                        const r = await fetchT(videoUrl, null, 20000);
+                        const j = r.ok ? await r.json() : null;
+                        // 解析结果命中服务器缓存时只要几 ms,不代表片源快:设 600ms 下限,免得排到 maccms 直连快线前面(它们才是首选)
+                        source.latency = (j && j.url) ? Math.max(600, Date.now() - t0) : 9999;
+                    } catch (e) { source.latency = 9999; }
+                    // 年份对不上:仍留在线路列表里(用户可手选,年份判断也可能错),但排在最后、不参与自动选/自动换源
+                    if (source._kzMismatch && source.latency < 9000) source.latency = 8999;
+                    return source;
+                },
+                _dpSwitchHls(url, danmakuOpt, type) {
+                    const t = type || 'hls';
                     const oldHls = (typeof dp !== 'undefined' && dp && dp.plugins && dp.plugins.hls) || null;
-                    if (danmakuOpt) dp.switchVideo({ url, type: 'hls' }, danmakuOpt);
-                    else dp.switchVideo({ url, type: 'hls' });
+                    if (danmakuOpt) dp.switchVideo({ url, type: t }, danmakuOpt);
+                    else dp.switchVideo({ url, type: t });
+                    if (t !== 'hls') {
+                        // 🎌 原生 <video> 通道(Kazumi MP4 直链):DPlayer 的 'normal' 不碰 hls,旧 hls 实例还挂着 → switchVideo 【之后】
+                        //    手动销毁并摘掉(此刻 video.src 已是新直链,hls.js detach 只在 src 仍是自己的 blob 时才清空,与 hls→hls 同理)
+                        if (oldHls) { try { oldHls.destroy(); } catch (e) { } if (dp.plugins && dp.plugins.hls === oldHls) delete dp.plugins.hls; }
+                        return;
+                    }
                     this._attachHlsErrorHook();   // 🔌 switchVideo 会新建 hls 实例,错误钩子要重挂(实例级防重)
                     if (oldHls && oldHls !== (dp.plugins && dp.plugins.hls)) {
                         try { oldHls.destroy(); } catch (e) { }

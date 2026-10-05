@@ -1,0 +1,39 @@
+{
+    "_credit": "rule fields from Predidit/Kazumi assets/plugins (GPL-3.0); evaluated by our own clean-room engine",
+    "api": "5",
+    "type": "anime",
+    "name": "DM84",
+    "version": "1.4",
+    "muliSources": true,
+    "useWebview": true,
+    "useNativePlayer": true,
+    "userAgent": "",
+    "adBlocker": true,
+    "baseURL": "https://dmbus.cc/",
+    "searchURL": "https://dmbus.cc/s----------.html?wd=@keyword",
+    "searchList": "//div/div[3]/ul/li",
+    "searchName": "//div/a[2]",
+    "searchResult": "//div/a[2]",
+    "chapterRoads": "//div/div[4]/div/ul",
+    "chapterResult": "//li/a",
+    "dg": {
+        "key": "kz_dm84",
+        "name": "动漫巴士",
+        "resolver": "hhjx",
+        "playPath": "/p/{vid}-{sid}-{nid}.html",
+        "detailPath": "/v/{vid}.html",
+        "vidFrom": "/v/(\\d+)\\.html",
+        "searchCover": "//div/a[1]",
+        "searchRemarks": "//div/span",
+        "roadNames": "//ul[@class='tab_control play_from']/li",
+        "detail": {
+            "name": "//h1[@class='v_title']/a",
+            "cover": "//div[@class='cover']/img/@src",
+            "content": "re:<p>剧情：([\\s\\S]*?)</p>",
+            "remarks": "//p[@class='v_desc']/span",
+            "year": "re:class=\"v_desc\"><span class=\"desc\">[^<]*</span><em class=\"hr\">\\|</em>(\\d{4})",
+            "movie": "re:<li class=\"current\"><a href=\"/list-4\\.html\"",
+            "movieType": "电影"
+        }
+    }
+}
