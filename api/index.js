@@ -13,6 +13,20 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
+// 🎌 Kazumi 规则源(七色番/动漫巴士):与 server.js 共用 lib/kazumi(同一份实现,勿在此另抄一份)。
+//    加载失败只禁用这批源;KAZUMI_DISABLE=1 整体关闭。Serverless 下模块内缓存按实例存活,冷启动会重抓(可接受)。
+let kazumi = null;
+try { kazumi = require('../lib/kazumi'); } catch (e) { console.warn('[Kazumi] 模块加载失败,规则源已禁用:', e.message); }
+const withKzSites = (sites) => {
+    if (!kazumi) return sites || [];
+    const base = sites || [];
+    let kz = [];
+    try { kz = kazumi.getSites(); } catch (e) { console.warn('[Kazumi] getSites 失败,本次只用 maccms 站:', e.message); }
+    const have = new Set(base.map(x => x.key));
+    return base.concat(kz.filter(x => !have.has(x.key)));
+};
+if (kazumi) { try { kazumi.registerRoutes(app); } catch (e) { console.warn('[Kazumi] 路由注册失败:', e.message); } }
+
 // ========== 环境变量 ==========
 const REMOTE_DB_URL = process.env['REMOTE_DB_URL'] || '';
 const TMDB_API_KEY = process.env.TMDB_API_KEY || ''; // Keep Required
@@ -192,8 +206,9 @@ app.get('/api/check', async (req, res) => {
                 }
             }
         }
-        const sites = (sitesData && sitesData.sites) || [];
+        const sites = withKzSites((sitesData && sitesData.sites) || []);
         const site = sites.find(s => s.key === key);
+        if (site && kazumi && kazumi.isKzSite(site)) return res.json(await kazumi.check(site.key));   // 🎌 只测首页可达,不拉媒体
         if (!site || !site.api) return res.json({ latency: 9999 });
         const start = Date.now();
         try {
@@ -896,6 +911,8 @@ app.get('/api/search', async (req, res) => {
     } catch (err) {
         console.error('[Search] Failed to load sites:', err.message);
     }
+    sites = withKzSites(sites);   // 🎌 内置规则站
+    const originalTitle = req.query.original || '';
 
     if (sites.length === 0) {
         // 即使没有站点也要返回 SSE 格式，否则 EventSource 会报错
@@ -916,6 +933,13 @@ app.get('/api/search', async (req, res) => {
 
         const allResults = [];
         const searchPromises = targetSites.map(async (site) => {
+            if (kazumi && kazumi.isKzSite(site)) {
+                try {
+                    const r = await kazumi.search(site.key, keyword, originalTitle);
+                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name }));
+                } catch (err) { console.error(`[Search JSON] ${site.name}:`, err.message); }
+                return;
+            }
             try {
                 const response = await axios.get(site.api, {
                     params: { ac: 'detail', wd: keyword },
@@ -928,6 +952,7 @@ app.get('/api/search', async (req, res) => {
                             vod_id: item.vod_id,
                             vod_name: item.vod_name,
                             vod_pic: item.vod_pic,
+                            vod_year: item.vod_year,
                             vod_play_url: item.vod_play_url,
                             site_key: site.key,
                             site_name: site.name
@@ -949,6 +974,14 @@ app.get('/api/search', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
 
     const searchPromises = sites.map(async (site) => {
+        if (kazumi && kazumi.isKzSite(site)) {   // 🎌 规则站:核心关键词 + 0 结果才回退一次(模块内实现)
+            try {
+                const r = await kazumi.search(site.key, keyword, originalTitle);
+                const list = ((r && r.list) || []).map(item => ({ ...item, site_key: site.key, site_name: site.name }));
+                if (list.length > 0) res.write(`data: ${JSON.stringify(list)}\n\n`);
+                return list;
+            } catch (err) { console.error(`[Search Error] ${site.name}:`, err.message); return []; }
+        }
         try {
             const response = await axios.get(site.api, {
                 params: { ac: 'detail', wd: keyword },
@@ -1014,9 +1047,17 @@ app.get('/api/detail', async (req, res) => {
         console.error('[Detail] Failed to load sites:', err.message);
     }
 
+    sites = withKzSites(sites);
     const site = sites.find(s => s.key === siteKey);
     if (!site) {
         return res.status(404).json({ error: 'Site not found' });
+    }
+    if (kazumi && kazumi.isKzSite(site)) {
+        try {
+            const r = await kazumi.detail(site.key, id, { fresh: req.query.nocache === '1' });
+            if (r && r.list && r.list.length) return res.json({ list: [r.list[0]] });
+            return res.status(404).json({ error: 'Not found', list: [] });
+        } catch (err) { console.error('[Detail Error]', err.message); return res.status(500).json({ error: 'Detail fetch failed', list: [] }); }
     }
 
     try {

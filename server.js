@@ -39,6 +39,21 @@ setInterval(() => {
 }, 60000).unref();
 
 const app = express();
+
+// 🎌 Kazumi 规则源(七色番/动漫巴士等 HTML 刮削站,规则格式效仿 Predidit/Kazumi):共享模块 lib/kazumi,
+//    server.js 与 Vercel api/index.js 共用同一份实现(不再重蹈弹幕匹配"两处手抄、改一处漏一处"的覆辙)。
+//    模块加载失败(如部署时缺 parse5 依赖)只禁用这批源,绝不拖垮主站;KAZUMI_DISABLE=1 可整体关闭。
+let kazumi = null;
+try { kazumi = require('./lib/kazumi'); } catch (e) { console.warn('[Kazumi] 模块加载失败,规则源已禁用:', e.message); }
+// 站点全集 = db.json/远程配置的 maccms 站 + 内置 Kazumi 规则站(db.json 里同 key 的条目优先,便于覆盖/停用)
+function allSites() {
+    const base = ((getDB() || {}).sites) || [];
+    if (!kazumi) return base;
+    let kz = [];
+    try { kz = kazumi.getSites(); } catch (e) { console.warn('[Kazumi] getSites 失败,本次只用 maccms 站:', e.message); }
+    const have = new Set(base.map(x => x.key));
+    return base.concat(kz.filter(x => !have.has(x.key)));
+}
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'db.json');
 const TEMPLATE_FILE = path.join(__dirname, 'db.template.json');
@@ -875,6 +890,8 @@ app.use(apiLimiter);
 
 // 对搜索 API 应用更严格的限流
 app.use('/api/search', searchLimiter);
+// 🎌 Kazumi 规则源的播放端点:/api/kz/ep(解析成 {type,url})、/api/kz/m3u8(同源清单)、/api/kz/mp4(302 签名直链)
+if (kazumi) { try { kazumi.registerRoutes(app); } catch (e) { console.warn('[Kazumi] 路由注册失败:', e.message); } }
 
 // 对分享预览 API 应用更严格的限流
 app.use('/api/preview', previewLimiter);
@@ -2100,9 +2117,10 @@ app.get('/api/sites', async (req, res) => {
 app.get('/api/check', async (req, res) => {
     const { key } = req.query;
     try {
-        const db = getDB();
-        const sites = (db && db.sites) || [];
+        const sites = allSites();
         const site = sites.find(s => s.key === key);
+        // 🎌 规则站没有 maccms API:只测站点首页可达(绝不拉媒体,同下方铁律)
+        if (site && kazumi && kazumi.isKzSite(site)) return res.json(await kazumi.check(site.key));
         if (!site || !site.api) return res.json({ latency: 9999 });
         const start = Date.now();
         try {
@@ -2642,7 +2660,7 @@ app.get('/api/search', async (req, res) => {
         return res.status(400).json({ error: 'Missing keyword' });
     }
 
-    const sites = getDB().sites;
+    const sites = allSites();
 
     if (!stream) {
         // 非流式模式：返回聚合的 JSON 结果（用于 refreshEpisodes 查找 vod_id）
@@ -2651,6 +2669,13 @@ app.get('/api/search', async (req, res) => {
 
         const allResults = [];
         const searchPromises = targetSites.map(async (site) => {
+            if (kazumi && kazumi.isKzSite(site)) {   // 🎌 规则站:模块自带关键词策略与缓存
+                try {
+                    const r = await kazumi.search(site.key, keyword, originalTitle);
+                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name }));
+                } catch (err) { console.error(`[Search JSON] ${site.name}:`, err.message); }
+                return;
+            }
             const cacheKey = `${site.key}_${keyword}`;
             const cached = cacheManager.get('search', cacheKey);
             if (cached && cached.list) {
@@ -2666,6 +2691,7 @@ app.get('/api/search', async (req, res) => {
                     vod_id: item.vod_id,
                     vod_name: item.vod_name,
                     vod_pic: item.vod_pic,
+                    vod_year: item.vod_year,   // 刷新线路后 Kazumi 源的年份校验要用
                     vod_play_url: item.vod_play_url,
                     site_key: site.key,
                     site_name: site.name
@@ -2717,6 +2743,21 @@ app.get('/api/search', async (req, res) => {
 
     // 并行搜索所有站点
     const searchPromises = sites.map(async (site) => {
+        // 🎌 规则站(HTML 刮削的小站):对空格敏感、七色番 wd 只取前 10 字,智能变体对它们全是无效请求还徒增被封风险
+        //    → 交给模块:一个"核心关键词",0 结果才回退一次;结果带 _gk 等归一化键供前端并组
+        if (kazumi && kazumi.isKzSite(site)) {
+            let list = [];
+            try { list = ((await kazumi.search(site.key, keyword, originalTitle)) || {}).list || []; }
+            catch (error) { console.error(`[SSE Search Error] ${site.name}:`, error.message); }
+            const items = list.map(item => ({ ...item, site_key: site.key, site_name: site.name })).filter(item => {
+                const globalKey = `${item.site_key}_${item.vod_id}`;
+                if (sentVodIds.has(globalKey)) return false;
+                sentVodIds.set(globalKey, true);
+                return true;
+            });
+            if (items.length > 0) res.write(`data: ${JSON.stringify(items)}\n\n`);
+            return items;
+        }
         // 对每个站点，尝试所有关键词变体
         const allResults = [];
 
@@ -2813,10 +2854,14 @@ app.get('/api/search', async (req, res) => {
 // 2b. 搜索 API - POST 版本 (用于单站点搜索)
 app.post('/api/search', async (req, res) => {
     const { keyword, siteKey } = req.body;
-    const sites = getDB().sites;
+    const sites = allSites();
     const site = sites.find(s => s.key === siteKey);
 
     if (!site) return res.status(404).json({ error: 'Site not found' });
+    if (kazumi && kazumi.isKzSite(site)) {
+        try { return res.json(await kazumi.search(site.key, keyword, '')); }
+        catch (error) { console.error(`[Search Error] ${site.name}:`, error.message); return res.status(500).json({ error: 'Search failed' }); }
+    }
 
     const cacheKey = `${siteKey}_${keyword}`;
     const cached = cacheManager.get('search', cacheKey);
@@ -2857,10 +2902,20 @@ app.get('/api/detail', async (req, res) => {
     const id = req.query.id;
     const siteKey = req.query.site_key;
     const nocache = req.query.nocache === '1';
-    const sites = getDB().sites;
+    const sites = allSites();
     const site = sites.find(s => s.key === siteKey);
 
     if (!site) return res.status(404).json({ error: 'Site not found' });
+    if (kazumi && kazumi.isKzSite(site)) {   // 🎌 规则站:模块抓详情页、拼 maccms 形状的 vod_play_url(选集=/api/kz/ep/…)
+        try {
+            const r = await kazumi.detail(site.key, id, { fresh: nocache });
+            if (r && r.list && r.list.length) return res.json({ list: [r.list[0]] });
+            return res.status(404).json({ error: 'Not found', list: [] });
+        } catch (error) {
+            console.error(`[Detail Error] ${site.name}:`, error.message);
+            return res.status(500).json({ error: 'Detail fetch failed', list: [] });
+        }
+    }
 
     const cacheKey = `${siteKey}_detail_${id}`;
     if (!nocache) {
@@ -2898,10 +2953,17 @@ app.get('/api/detail', async (req, res) => {
 // 3b. 详情 API (带缓存) - POST 版本
 app.post('/api/detail', async (req, res) => {
     const { id, siteKey } = req.body;
-    const sites = getDB().sites;
+    const sites = allSites();
     const site = sites.find(s => s.key === siteKey);
 
     if (!site) return res.status(404).json({ error: 'Site not found' });
+    if (kazumi && kazumi.isKzSite(site)) {
+        try {
+            const r = await kazumi.detail(site.key, id);
+            if (r && r.list && r.list.length) return res.json(r.list[0]);
+            return res.status(404).json({ error: 'Not found' });
+        } catch (error) { console.error(`[Detail Error] ${site.name}:`, error.message); return res.status(500).json({ error: 'Detail fetch failed' }); }
+    }
 
     const cacheKey = `${siteKey}_detail_${id}`;
     const cached = cacheManager.get('detail', cacheKey);

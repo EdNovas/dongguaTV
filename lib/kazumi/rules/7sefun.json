@@ -1,0 +1,43 @@
+{
+    "_credit": "rule fields from Predidit/Kazumi assets/plugins (GPL-3.0); evaluated by our own clean-room engine",
+    "api": "4",
+    "type": "anime",
+    "name": "7sefun",
+    "version": "1.3",
+    "muliSources": true,
+    "useWebview": true,
+    "useNativePlayer": true,
+    "userAgent": "",
+    "baseURL": "https://www.7sefun.top/",
+    "searchURL": "https://www.7sefun.top/vodsearch/-------------.html?wd=@keyword",
+    "searchList": "//div[2]/div[2]/div[2]/div[2]/div",
+    "searchName": "//div[2]/text()",
+    "searchResult": "//a",
+    "chapterRoads": "//div[2]/div[2]/div[2]/div/div[2]/div[1]//div",
+    "chapterResult": "//a",
+    "dg": {
+        "key": "kz_7sefun",
+        "name": "七色番",
+        "resolver": "maccms",
+        "maccms": {
+            "artphp": "/addons/dp/player/art.php",
+            "followRedirect": ["^https?://[^/]*jxdunrui\\.top/d/file/"]
+        },
+        "kwMax": 10,
+        "playPath": "/vodplay/{vid}-{sid}-{nid}.html",
+        "detailPath": "/voddetail/{vid}.html",
+        "vidFrom": "/voddetail/(\\d+)\\.html",
+        "searchCover": "//a/img",
+        "searchRemarks": "//div[1]",
+        "roadNames": "//span[@class='chat-stream-bfq']",
+        "detail": {
+            "name": "re:<div class=\"video-p-name\">([^<]*)",
+            "cover": "//img[@class='author-img']/@src",
+            "content": "re:<div class=\"video-p-subtitle[^\"]*\"[^>]*>[\\s\\S]*?<p>([\\s\\S]*?)</p>",
+            "remarks": "re:<div class=\"chat-header anim\">([^<]*)<span class=\"chat-stream-bfq\"",
+            "year": "re:类型：[^<]*?((?:19|20)\\d{2})年",
+            "movie": "re:is-active\"\\s+href=\"/vodtype/2\\.html\"",
+            "movieType": "电影"
+        }
+    }
+}
