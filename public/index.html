@@ -11551,6 +11551,9 @@
                         const exitFullscreenMode = async () => {
                             // 1. 移除全屏状态标记（恢复 safe-area padding）
                             document.body.classList.remove('dplayer-fullscreen-active');
+                            // 🔆 亮度手势只在全屏可用:退出全屏把亮度复位,免得非全屏下留着调暗的画面却无处可调
+                            window._videoBrightness = 1;
+                            try { if (dp && dp.video) dp.video.style.filter = ''; } catch (e) { }
 
                             // 2. 📱 调用 Android 原生退出全屏接口（恢复 padding + 解锁方向 + 显示状态栏）
                             if (window.AndroidFullscreen) {
@@ -11818,9 +11821,24 @@
                         // 左 1/3 上下滑=亮度(CSS filter,网页拿不到系统亮度)；右 1/3 上下滑=音量。
                         // 竖向滑动锁定后 preventDefault(passive:false)防页面滚动；横向滑动放弃(留给双击/原生)。
                         // _swipeConsumed 防止滑完抬手被下面的"双击/单击检测"误判成点击切控制栏。
+                        // 🔒 只在【全屏】时启用:非全屏时播放器只是页面里的一块,竖滑必须留给页面滚动——旧版不分状态一律截获,
+                        //    往下翻选集时手指落在播放器左右两侧就被吃掉、误调亮度/音量(iPhone/iPad 用户实测)。
+                        //    全屏判定只看【实时状态】:DPlayer 网页全屏(#dplayer 上的 dplayer-fulled)或浏览器全屏(fullscreenElement,
+                        //    含 iPad 的 webkit 前缀;安卓 App 里点全屏也是这条)。不看 body.dplayer-fullscreen-active——它靠事件维护,
+                        //    重建播放器/老 iPadOS 只发 webkitfullscreenchange 时会残留,残留就等于把误触 bug 带回来。
+                        //    iPhone 的"全屏"是系统原生播放器,网页收不到触摸,所以 iPhone 上这个手势实际只在网页全屏下可用。
+                        // 🔇 iOS/iPadOS 的 video.volume 只读(音量只能用实体键),网页改了也无效 → iOS 不提供音量手势,右侧竖滑直接放行。
                         let _swipeConsumed = false;
                         {
                             let _gx = 0, _gy = 0, _gmode = null, _gstart = 0;
+                            const _gIOS = (() => {
+                                try { const ua = navigator.userAgent || ''; return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); } catch (e) { return false; }
+                            })();
+                            const _gFull = () => {
+                                if (container.classList.contains('dplayer-fulled')) return true;
+                                const fe = document.fullscreenElement || document.webkitFullscreenElement;
+                                return !!(fe && (fe === container || fe.contains(container) || container.contains(fe)));
+                            };
                             const gInd = document.createElement('div');
                             gInd.className = 'gesture-indicator';
                             container.appendChild(gInd);
@@ -11830,12 +11848,13 @@
                             container.addEventListener('touchstart', (e) => {
                                 _gmode = null;
                                 if (e.touches.length !== 1) return;
+                                if (!_gFull()) return;   // 非全屏:不接管,让页面正常滚动
                                 if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
                                 const rect = container.getBoundingClientRect();
                                 _gx = e.touches[0].clientX; _gy = e.touches[0].clientY;
                                 const rx = (_gx - rect.left) / rect.width;
                                 if (rx <= 1 / 3) _gmode = 'bri?';
-                                else if (rx >= 2 / 3) _gmode = 'vol?';
+                                else if (rx >= 2 / 3 && !_gIOS) _gmode = 'vol?';
                             }, { passive: true });
                             container.addEventListener('touchmove', (e) => {
                                 if (!_gmode) return;
@@ -11869,13 +11888,30 @@
                                 else if (_gmode === 'bri') gHide();
                                 _gmode = null;
                             }, { passive: true });
+                            // 滑动被系统打断(iPad 边缘手势、下拉退出全屏、系统弹窗)只有 touchcancel、没有 touchend → 复位,
+                            //   否则 _swipeConsumed 残留会吞掉下一次真点击
+                            container.addEventListener('touchcancel', () => {
+                                if (_gmode === 'vol' || _gmode === 'bri') gHide();
+                                _gmode = null; _swipeConsumed = false;
+                            }, { passive: true });
                         }
 
                         // 双击检测
-                        // 双击检测
+                        // 👆 移动过的触摸(滚动页面/横扫)不是点击:手势只在全屏接管后,非全屏时在播放器上滑动翻页会落到这里,
+                        //    快速连滑两下会被当成"双击"→ 误快进/快退 10s 或暂停。按位移(>10px)甄别,移动过的抬手直接放行。
+                        let _tapX = 0, _tapY = 0, _tapMoved = false;
+                        container.addEventListener('touchstart', (e) => {
+                            _tapMoved = false;
+                            if (e.touches && e.touches[0]) { _tapX = e.touches[0].clientX; _tapY = e.touches[0].clientY; }
+                        }, { passive: true });
+                        container.addEventListener('touchmove', (e) => {
+                            if (_tapMoved || !e.touches || !e.touches[0]) return;
+                            if (Math.abs(e.touches[0].clientX - _tapX) > 10 || Math.abs(e.touches[0].clientY - _tapY) > 10) _tapMoved = true;
+                        }, { passive: true });
                         container.addEventListener('touchend', (e) => {
                             // 🎚️ 刚完成音量/亮度滑动手势 → 这次抬手不算点击(防止误切控制栏/误判双击)
                             if (_swipeConsumed) { _swipeConsumed = false; return; }
+                            if (_tapMoved) { _tapMoved = false; lastTap = 0; return; }   // 滑动/滚动后的抬手:不算点击,也不留给下一次凑双击
                             // 忽略控制栏区域、自定义按钮以及 DPlayer 遮罩的点击。
                             // ⚠️ 此名单必须包含所有【直挂 #dplayer 的可点自定义 UI】——这里 preventDefault 会吃掉浏览器
                             //    合成的 click,名单外的自定义控件在手机上会"点了没任何反应"(实测事故:弹幕设置面板里
