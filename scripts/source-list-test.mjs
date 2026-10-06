@@ -263,16 +263,17 @@ console.log('[6] sourceGroups 分组排序');
     ];
     const { vm } = mk({ sources });
     const g = vm.sourceGroups;
-    eq(g.map(x => x.tier).join(','), 'clean,unknown,ads,unreach', '组顺序:无广告 > … > 有水印 > 可能无法播放(空组不出现)');
+    eq(g.map(x => x.tier).join(','), 'clean,ads,unreach', '组顺序:无广告 > 有插播 > 有水印 > 可能无法播放(没有单独的"未评测"组;空组不出现)');
     eq(keys(g[0].items), 'nb_fast,kz_moonci,nb_slow,kz_mis', '无广告组(clean+插播已去除合并):快线在前 → 档位 → 分辨率;年份不符 kz 垫底');
-    eq(keys(g[1].items), 'hist', '历史快照里没在用户端测过的线路(_testType 空)→ 留在原档(未评测),不进"可能无法播放"');
-    eq(keys(g[2].items), 'ads_fast1080,ads_fast720,ads_slow1080', '组内:快线 → 分辨率高 → 延迟低');
-    eq(keys(g[3].items), 'unk', '用户端真测过、只有服务器能通(_srvOnly)→ 可能无法播放');
-    eq(g.map(x => x.offset).join(','), '0,4,5,8', 'offset 累加(tabindex 用)');
-    eq(keys(vm.availableSources), 'nb_fast,kz_moonci,nb_slow,kz_mis,hist,ads_fast1080,ads_fast720,ads_slow1080,unk', 'availableSources = 分组展开顺序(不可达的在最后 → 自动换源也最后试)');
+    eq(keys(g[1].items), 'ads_fast1080,ads_fast720,ads_slow1080', '组内:快线 → 分辨率高 → 延迟低');
+    eq(keys(g[2].items), 'hist,unk', '可能无法播放组 = 未评测(用户端测得通/没测过的在前)+ 用户端只有服务器能通的');
+    eq(g.map(x => x.offset).join(','), '0,4,7', 'offset 累加(tabindex 用)');
+    eq(keys(vm.availableSources), 'nb_fast,kz_moonci,nb_slow,kz_mis,ads_fast1080,ads_fast720,ads_slow1080,hist,unk', 'availableSources = 分组展开顺序(未评测与不可达的在最后 → 自动换源也最后试)');
+    ok(!vm.sourceGroups.some(x => x.tier === 'unknown'), '不再有单独的"未评测"分组');
+    eq(vm.srcTierLabel(S('u', 'direct', 300, null)), '未评测', '未评测线路的徽章文字照旧(在"可能无法播放"组里也能看出是未评测)');
     ok(!vm.availableSources.some(s => ['testing', 'dead', 'failed'].indexOf(s.site_key) >= 0), "'...'/9999/9998 不显示");
     eq(keys(vm.fastSources), 'nb_fast,ads_fast1080,ads_fast720,unk', 'fastSources = <600');
-    eq(keys(vm.slowSources), 'kz_moonci,nb_slow,kz_mis,hist,ads_slow1080', 'slowSources = >=600');
+    eq(keys(vm.slowSources), 'kz_moonci,nb_slow,kz_mis,ads_slow1080,hist', 'slowSources = >=600');
     eq(vm.fastSources.length + vm.slowSources.length, vm.availableSources.length, 'fast+slow = 全部');
     ok(vm.availableSources.every(s => sources.indexOf(s) >= 0), '元素是原线路对象本身(换源 indexOf / switchSource 依赖)');
     // 可能无法播放组内:档位优先(不看快慢);海外受限但本机直连测通的留在原分组
@@ -428,6 +429,8 @@ console.log('[9b] _siteHealthGet/_siteHealthSet');
     vm._siteHealthSet('dead', { latency: 9999 }, true, true);
     eq(vm._siteHealthGet('dead') && vm._siteHealthGet('dead').latency, 9999, '9999 全量测速确认 → 12h 死亡缓存');
     vm._siteHealthSet('mid', { latency: '...' }, true, true);
+    store.donggua_site_health2 = JSON.stringify(Object.assign(JSON.parse(store.donggua_site_health2 || '{}'), { oldsrv: { latency: 1321, testType: 'server', ts: now } }));
+    eq(vm._siteHealthGet('oldsrv') && vm._siteHealthGet('oldsrv')._srvOnly, true, '旧版本写的 server 缓存(没有 srvOnly 字段)回放时也算只有服务器能通 → 可能无法播放');
     eq(vm._siteHealthGet('mid'), null, "测速中('...')不存");
 }
 
