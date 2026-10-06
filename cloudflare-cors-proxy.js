@@ -223,8 +223,17 @@ async function handleProxyRequest(request, targetUrlParam, currentOrigin, noFilt
  *   - 按 DISCONTINUITY 将分段分成多个"组"
  *   - 广告组特征：3-120秒 且 <15个分段 → 整组移除
  *   - 保留所有非广告组（可能有多个主内容组）
- *   - 🛡️ 保险丝(v2.3)："广告"占比 >50% 或过滤后 0 个内容组 → 判定为"均匀切块"而非贴片，整份放行不过滤；
+ *   - 🛡️ 保险丝(v2.3→v2.4)："广告"占比 >20% 或过滤后 0 个内容组 → 判定为"切块打包"而非贴片，整份放行不过滤；
  *     任何情况下都绝不输出 0 分片的清单（那会让 hls.js 静默死掉、前端无任何错误可感知）
+ *   - v2.4 两类"打包"豁免(2026-10 用 80 份真实清单回归,见 scripts/worker-test.mjs):
+ *     ① 场景切块(qwe132456 系:分段全 2.000s、DISCONTINUITY 不规则 146-226 组):候选组的 EXTINF 全等于正片主导时长、
+ *        且与正片同 host+目录 → 是正片碎块不是广告(此前每集被删掉约一半)
+ *     ② 定长切块(ryplay/dytt/模都 系:每 N 片一个 DISCONTINUITY):整 N 片的组是包装;插播会把某个 N 片组"打断",
+ *        只把打断处多出来的组当广告(如尾部 12s 棋牌片尾、中插 17.6s 棋牌片),断开的两截正片保留;
+ *        另外"整组都在外来目录(少见目录、且不连成片)"的短组不论位置一律是插播(开头贴片/卡在整 N 边界上的也删)。
+ *        定长切块还要求整 N 组占片长 ≥70% —— 防"多条等长小广告背靠背"的 SSAI 广告位冒充切块
+ *   - 广告域名后缀(.vip/.top…)只对【不在清单主域名上】的分段生效(比的是注册域 adfg8.vip,不是 v5.adfg8.vip 这种子域)
+ *     —— 无尽(adfg8.vip)/稀饭(playxf.top)整片就在这类 CDN 上;且这类"组内单片删除"超过 20% 时一律不删(只删追踪像素)
  *   - ?nofilter=1 → 完全跳过广告判定，只做 CORS/URL 重写（前端兜底通道）
  */
 function rewriteM3u8(content, baseUrl, proxyOrigin) {
@@ -270,9 +279,9 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         bodyStartIdx = i + 1;
     }
 
-    // 第二步：按 DISCONTINUITY 分组
+    // 第二步：按 DISCONTINUITY 分组(每组额外记下各分段时长 durs 与"host+目录" locs,供下面的打包豁免判定)
     const groups = [];
-    let currentGroup = { segments: [], duration: 0, segCount: 0 };
+    let currentGroup = { segments: [], duration: 0, segCount: 0, durs: [], locs: [] };
 
     for (let i = bodyStartIdx; i < lines.length; i++) {
         const trimmed = lines[i].trim();
@@ -289,7 +298,7 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
             if (currentGroup.segCount > 0) {
                 groups.push(currentGroup);
             }
-            currentGroup = { segments: [], duration: 0, segCount: 0 };
+            currentGroup = { segments: [], duration: 0, segCount: 0, durs: [], locs: [] };
             continue;
         }
 
@@ -302,11 +311,16 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
             const dur = durMatch ? parseFloat(durMatch[1]) : 0;
             currentGroup.duration += dur;
             currentGroup.segCount++;
+            currentGroup.durs.push(dur);
             currentGroup.segments.push(lines[i]);
             // 下一行是 URL
             if (i + 1 < lines.length) {
                 i++;
                 currentGroup.segments.push(lines[i]);
+                const u = lines[i].trim();
+                currentGroup.locs.push(u && !u.startsWith('#') ? segLocation(resolveUrl(u, baseOrigin, basePath)) : null);
+            } else {
+                currentGroup.locs.push(null);
             }
             continue;
         }
@@ -328,15 +342,112 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
     }
 
     // 第三步：过滤广告组（基于 DISCONTINUITY 分组）
+    // 广告特征：3-120秒 且 <15个分段 —— 这是唯一的"判广告"规则(⚠ 别改成"只删异 host 组":国内站广告多是同 host
+    // 相对路径,那样会一个都删不掉,v1.1.74 踩过);下面的 A/B 只做"豁免"(把确定是正片包装的组排除在外),只会少删不会多删。
+    const looksLikeAd = g => g.duration >= 3 && g.duration <= 120 && g.segCount < 15;
+
+    // 正片画像:主 host+目录(按分段数)与主导分段时长(按累计时长,toFixed(3) 归并 2.000000/2.0 之类写法)
+    const locCount = {}, hostCount = {}, durTotal = {};
+    for (const g of groups) {
+        for (let k = 0; k < g.durs.length; k++) {
+            const loc = g.locs[k];
+            if (loc) {
+                locCount[loc.dir] = (locCount[loc.dir] || 0) + 1;
+                hostCount[loc.host] = (hostCount[loc.host] || 0) + 1;
+            }
+            const dk = g.durs[k].toFixed(3);
+            durTotal[dk] = (durTotal[dk] || 0) + g.durs[k];
+        }
+    }
+    const mainDir = topKey(locCount);
+    const mainHost = topKey(hostCount);
+    const domDur = parseFloat(topKey(durTotal) || '0');
+
+    // 豁免 B①「场景切块」(qwe132456.cc 系:最大/最新/OK/闪电/快车/牛牛/鸭鸭…):整集每片都是 2.000s,却按镜头切出
+    //    146-226 个不规则 DISCONTINUITY 组,3-28s 的组占片长 49-59% → 旧规则把将近一半正片当广告删掉(2837s→1437s),
+    //    恰好过半的那些集又被 50% 保险丝整份放行 —— 同一部剧有的集正常、有的集"跳着播"。真实插播的分段时长是另一个
+    //    编码器的节奏(5,5,5,2.567 / 3,3,5,3,3,0.64 / 4.87,3.33,5.6…)或在另一个 host/目录(…/adjump/…),
+    //    所以"每片都等于正片主导时长 且 与正片同 host+目录"的组一定是正片碎块。全集最后一组的最后一片允许更短
+    //    (编码余数,如 2,2,2,2,1.24 —— 片尾字幕)。反例 wsyzy:同目录但 2.1,2,2,1.967,1.933,1.767 的 12s 棋牌片照删。
+    const isScenePiece = (g, isLastGroup) => domDur > 0 && !!mainDir &&
+        g.durs.every((d, k) => Math.abs(d - domDur) < 0.002 ||
+            (isLastGroup && k === g.durs.length - 1 && d < domDur)) &&
+        g.locs.every(l => l && l.dir === mainDir);
+
+    // 豁免 B②「定长切块」(ryplay 系 v2.3 事故那种:每 N 片一个 DISCONTINUITY;如意/模都/dytt 都是):≥70% 的组恰好 N 片
+    //    (或 N 的整数倍)→ 这些组全是包装。插播会"打断"某个 N 片组:断点前后各剩一截(片数不是 N 的倍数),中间夹着广告组。
+    //    对每一段连续的"非整 N"组:若首尾两截片数相加凑成整 N(模都 黑袍:7|9|13、4|9|16 → 中间 9 片 17.6s 棋牌片)→
+    //    只删中间;否则首组是被打断的正片(或全集最后的余数组)、其后的才是插播(如意 每集尾:4,4,4,1 片尾字幕 | 4,5.48,2.68
+    //    720p 星云棋牌;dytt:4 | 3,2 中插)。单独一个非整 N 组(如 6 片)视为正片。开头的连续段不动(没有证据,宁可少删)。
+    const segHist = {};
+    for (const g of groups) segHist[g.segCount] = (segHist[g.segCount] || 0) + 1;
+    const chunkN = parseInt(topKey(segHist) || '0', 10);
+    const regular = g => chunkN > 0 && g.segCount % chunkN === 0;
+    // 整 N 组还必须扛起大部分片长(≥70%):只数组数的话,经典 SSAI 的"广告位 = 几条等长小广告背靠背"(如 5 个广告位 × 3 条 ×
+    //    3 片)组数一多就会冒充成"每 3 片切块",N 被定成广告片长 → 所有广告组都算包装、一个都不删。真切块(如意/dytt/模都/
+    //    v2.3 事故)整 N 组都占片长 90%+,广告位只占 ~5%。
+    let regDur = 0, allDur = 0;
+    for (const g of groups) { allDur += g.duration; if (regular(g)) regDur += g.duration; }
+    const chunkMode = groups.length >= 10 && chunkN >= 2 && segHist[chunkN] / groups.length >= 0.7 &&
+        allDur > 0 && regDur / allDur >= 0.7;
+    const chunkAd = new Array(groups.length).fill(false);
+    // 定长切块里的"外来短组":整组分段都在【少见目录】(不是主目录、该目录占片长 <10%、且没有连续两组都落在它里面)→ 插播,
+    //    不论它在开头(贴片)、卡在整 N 边界上、还是单独一个非整 N 组 —— 切块包装永远在正片目录里(模都 黑袍:广告在
+    //    bf.modujx15.com/…/CXADHDMP/,正片在 bf.modujx11.com)。上面那条"打断"启发式管不到这些位置。
+    //    "少见 + 不连片"是防按目录分桶的 CDN(/0000/ /0001/ …):正片桶要么占比大、要么连续好几组都在里面,不会被误删。
+    const dirDur = {}, dirRun = {};
+    const soleDir = g => {
+        const d0 = g.locs[0] && g.locs[0].dir;
+        return d0 && g.locs.every(l => l && l.dir === d0) ? d0 : '';
+    };
+    if (chunkMode && mainDir) {
+        for (let gi = 0; gi < groups.length; gi++) {
+            const g = groups[gi];
+            for (let k = 0; k < g.durs.length; k++) {
+                const l = g.locs[k];
+                if (l) dirDur[l.dir] = (dirDur[l.dir] || 0) + g.durs[k];
+            }
+            const d = soleDir(g);
+            if (d && gi > 0 && soleDir(groups[gi - 1]) === d) dirRun[d] = true;
+        }
+    }
+    const foreignGroup = g => {
+        if (!chunkMode || !mainDir) return false;
+        const d = soleDir(g);
+        return !!d && d !== mainDir && !dirRun[d] && (dirDur[d] || 0) < allDur * 0.1;
+    };
+    if (chunkMode) {
+        let i = 0;
+        while (i < groups.length) {
+            if (regular(groups[i])) { i++; continue; }
+            let j = i;
+            while (j + 1 < groups.length && !regular(groups[j + 1])) j++;
+            if (i > 0) {
+                let hi = j;
+                if (j - i >= 2 && (groups[i].segCount + groups[j].segCount) % chunkN === 0) hi = j - 1;
+                for (let k = i + 1; k <= hi; k++) chunkAd[k] = looksLikeAd(groups[k]);
+            }
+            i = j + 1;
+        }
+    }
+
     const keptGroups = [];
     let adsRemoved = 0;
     let adDuration = 0;
     let totalDuration = 0;
+    let exempted = 0;
 
-    for (const g of groups) {
+    for (let gi = 0; gi < groups.length; gi++) {
+        const g = groups[gi];
         totalDuration += g.duration;
-        // 广告特征：3-120秒 且 <15个分段
-        const isAd = g.duration >= 3 && g.duration <= 120 && g.segCount < 15;
+        let isAd;
+        if (chunkMode) {
+            isAd = chunkAd[gi] || (looksLikeAd(g) && foreignGroup(g));
+            if (!isAd && looksLikeAd(g)) exempted++;
+        } else {
+            isAd = looksLikeAd(g);
+            if (isAd && isScenePiece(g, gi === groups.length - 1)) { isAd = false; exempted++; }
+        }
 
         if (isAd) {
             adsRemoved++;
@@ -344,6 +455,9 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         } else {
             keptGroups.push(g);
         }
+    }
+    if (exempted > 0) {
+        console.log(`[AdFilter] ${chunkMode ? `chunk packaging (every ${chunkN} segs)` : `scene-cut packaging (${domDur}s segs)`}: ${exempted} short group(s) kept as content`);
     }
 
     // 🚨 "均匀切块"不是广告 —— 事故根因(2026-08 生产实测):部分资源站(如 ryplay17 系)开始把整集按【每 5 个分段
@@ -354,14 +468,28 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
     //    用户体验就是"所有资源站都播不了"。真实 SSAI 广告只占整集很小一部分(实测 ffzy 4 组/74s、ikun 7 组/123s,
     //    均 <2%);一旦"广告"占比过半、或过滤后一个内容组都不剩,说明这份清单根本不是"正片+贴片"结构,过滤规则不适用,
     //    必须整份保留(宁可有广告也不能没画面)。
+    //    v2.4:阈值 50% → 20%。2026-10 审计 80 份清单里真实插播最多 5%(其余 0.6-2.2%),而场景切块正好卡在 49-59%,
+    //    50% 这条线等于让一半剧集被砍半;20% 留了 4 倍余量,上面的豁免没认出来的新打包方式也会被这里兜住。
     const adShare = totalDuration > 0 ? adDuration / totalDuration : 0;
-    if (adsRemoved > 0 && (keptGroups.length === 0 || adShare > 0.5)) {
+    if (adsRemoved > 0 && (keptGroups.length === 0 || adShare > 0.2)) {
         console.log(`[AdFilter] SKIP: ${adsRemoved}/${groups.length} groups look like ads (${adDuration.toFixed(0)}s / ${totalDuration.toFixed(0)}s = ${(adShare * 100).toFixed(0)}%) → uniform chunking, not SSAI ads; passing playlist through unfiltered`);
         return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
     }
 
     // 第三步 B：清理组内嵌入的单条广告/追踪分段
     // 例如：尾部 0.01s 的 unibet666.vip 追踪像素，或中间插入的跨域广告 URL
+    // 判定见 inlineDropPlan(先对所有保留组统一算一遍,才能做"删太多就不删"的闸门)
+    const inlineSegs = [];
+    for (const g of keptGroups) {
+        for (let i = 0; i < g.segments.length; i++) {
+            const trimmed = g.segments[i].trim();
+            if (!trimmed.startsWith('#EXTINF:')) continue;
+            const durMatch = trimmed.match(/#EXTINF:([\d.]+)/);
+            inlineSegs.push({ dur: durMatch ? parseFloat(durMatch[1]) : 0, url: (i + 1 < g.segments.length) ? g.segments[i + 1].trim() : '' });
+        }
+    }
+    const inlineDrop = inlineDropPlan(inlineSegs, mainHost);
+    let inlineIdx = 0;
     for (const g of keptGroups) {
         const cleanedSegments = [];
         for (let i = 0; i < g.segments.length; i++) {
@@ -370,20 +498,11 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
 
             // 检查 EXTINF + 下一行 URL 的组合
             if (trimmed.startsWith('#EXTINF:')) {
-                const durMatch = trimmed.match(/#EXTINF:([\d.]+)/);
-                const dur = durMatch ? parseFloat(durMatch[1]) : 0;
-                const nextLine = (i + 1 < g.segments.length) ? g.segments[i + 1].trim() : '';
-
-                // 判断是否为嵌入式广告/追踪分段：
-                // 1) 极短时长 (< 0.5s) 且目标是完整 URL（非相对路径 .ts）
-                // 2) URL 指向已知广告/赌博/追踪域名
-                const isTracker = dur < 0.5 && /^https?:\/\//i.test(nextLine) && !/\.ts(\?|$)/i.test(nextLine);
-                const isAdDomain = /^https?:\/\//i.test(nextLine) && /\.(vip|bet|casino|click|top|xyz|buzz)\//i.test(nextLine);
-
-                if (isTracker || isAdDomain) {
+                const k = inlineIdx++;
+                if (inlineDrop[k]) {
                     // 跳过这个 EXTINF 和下一行的 URL
                     adsRemoved++;
-                    adDuration += dur;
+                    adDuration += inlineSegs[k].dur;
                     i++; // 跳过 URL 行
                     continue;
                 }
@@ -524,19 +643,32 @@ function rewriteMasterPlaylist(lines, baseOrigin, basePath, proxyOrigin) {
 function rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin) {
     const output = [];
     let skippedCount = 0;
+    // 清单主 host(按分段数):广告域名后缀规则只打"外来"分段,见 isOffHostAdDomain
+    const hostCount = {};
+    for (let i = 0; i + 1 < lines.length; i++) {
+        if (!lines[i].trim().startsWith('#EXTINF:')) continue;
+        const u = lines[i + 1].trim();
+        if (!u || u.startsWith('#')) continue;
+        const h = segLocation(resolveUrl(u, baseOrigin, basePath)).host;
+        hostCount[h] = (hostCount[h] || 0) + 1;
+    }
+    const mainHost = topKey(hostCount);
+    // 先统一算一遍要删哪些(带"删太多就不删"闸门,见 inlineDropPlan),再逐行输出
+    const inlineSegs = [];
+    for (let i = 0; i < lines.length; i++) {
+        const trimmed = lines[i].trim();
+        if (!trimmed.startsWith('#EXTINF:')) continue;
+        const durMatch = trimmed.match(/#EXTINF:([\d.]+)/);
+        inlineSegs.push({ dur: durMatch ? parseFloat(durMatch[1]) : 0, url: (i + 1 < lines.length) ? lines[i + 1].trim() : '' });
+    }
+    const inlineDrop = inlineDropPlan(inlineSegs, mainHost);
+    let inlineIdx = 0;
     for (let i = 0; i < lines.length; i++) {
         const trimmed = lines[i].trim();
 
         // 检查嵌入式广告/追踪分段
         if (trimmed.startsWith('#EXTINF:')) {
-            const durMatch = trimmed.match(/#EXTINF:([\d.]+)/);
-            const dur = durMatch ? parseFloat(durMatch[1]) : 0;
-            const nextLine = (i + 1 < lines.length) ? lines[i + 1].trim() : '';
-
-            const isTracker = dur < 0.5 && /^https?:\/\//i.test(nextLine) && !/\.ts(\?|$)/i.test(nextLine);
-            const isAdDomain = /^https?:\/\//i.test(nextLine) && /\.(vip|bet|casino|click|top|xyz|buzz)\//i.test(nextLine);
-
-            if (isTracker || isAdDomain) {
+            if (inlineDrop[inlineIdx++]) {
                 skippedCount++;
                 i++; // 跳过 URL 行
                 continue;
@@ -562,6 +694,73 @@ function rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin) {
         console.log(`[AdFilter] rewriteUrlsOnly: removed ${skippedCount} inline tracker(s)`);
     }
     return output.join('\n');
+}
+
+/**
+ * 分段位置:{ host(小写、去端口), dir: host+目录(到最后一个 / 为止) }。解析不了的返回空串。
+ */
+function segLocation(absUrl) {
+    const m = /^https?:\/\/([^\/?#]+)([^?#]*)/i.exec(absUrl || '');
+    if (!m) return { host: '', dir: '' };
+    const host = m[1].toLowerCase().replace(/:\d+$/, '');
+    const p = m[2] || '/';
+    return { host, dir: host + p.substring(0, p.lastIndexOf('/') + 1) };
+}
+
+/** 计数表里出现次数最多的键(并列取先出现的);空表返回 '' */
+function topKey(counts) {
+    let best = '', bestN = -1;
+    for (const k in counts) {
+        if (counts[k] > bestN) { best = k; bestN = counts[k]; }
+    }
+    return best;
+}
+
+/**
+ * 广告域名后缀(.vip/.bet/.casino/.click/.top/.xyz/.buzz)判定 —— 只对【不在清单主 host 上】的绝对 URL 分段生效。
+ * 🚨 v2.4 事故:旧规则见 .vip/ 就删,而无尽系(adfg8.vip,含无尽/无尽cc/樱花/lovedan wj 线)、wsyzy(wsyzyts.vip)、
+ *    稀饭/月之祠 HLS(dl.playxf.top)整集正片就放在这类 CDN 上 → 0 分片清单(靠前端 nofilter 兜底延迟救回);
+ *    樱花更惨:正片全删、只剩开头 6 秒外站成人贴片(ts1.yhzybf.com)→ 不是 0 片、兜底不触发,用户看完 6 秒广告就"播完了"。
+ *    插在正片里的赌博追踪片才是这条规则的目标,它们必然来自别的 host。
+ */
+function isOffHostAdDomain(url, mainHost) {
+    if (!/^https?:\/\//i.test(url)) return false;
+    const host = segLocation(url).host;
+    if (!host || host === mainHost) return false;
+    if (!/\.(vip|bet|casino|click|top|xyz|buzz)$/i.test(host)) return false;
+    // 比注册域而不是完整 host:adfg8.vip 每集轮换子域(樱花 e1 v5 / e2 v7 / e3 v4,无尽 v10),同一集的正片分散在
+    //    v5.adfg8.vip + v7.adfg8.vip 上时,按完整 host 比会把"非最多那个子域"的正片片段静默删掉(集里一段段跳着播,
+    //    又不是 0 片、前端兜底不触发)。这些广告后缀都是单级 TLD,取最后两段就是注册域。
+    return regDomain(host) !== regDomain(mainHost || '');
+}
+
+/** 注册域(粗略版:最后两段;IP 原样返回)—— 只给 isOffHostAdDomain 用,广告后缀都是单级 TLD,够用 */
+function regDomain(host) {
+    if (!host || /^[\d.]+$/.test(host) || host.indexOf(':') >= 0) return host || '';
+    const p = host.split('.');
+    return p.length <= 2 ? host : p.slice(-2).join('.');
+}
+
+/**
+ * 组内单片删除计划(过滤路径的第三步 B 与 rewriteUrlsOnly 共用)。segs:[{dur, url}] 按清单顺序;返回同长度的 bool 数组。
+ *   ① 追踪像素:<0.5s、绝对 URL、不是 .ts → 删
+ *   ② 外来广告域名分段(isOffHostAdDomain)→ 删;但这类删除若超过分段数或时长的 20%,说明"外来域名"其实是正片
+ *      (正片分散在两个注册域的 .vip/.top CDN 上等)→ 一个都不删,只删追踪像素。这些单片删除发生在 20% 保险丝之后、
+ *      也不会造成 0 片,别的闸门都兜不住 —— 用户只会看到一集"跳着播"。
+ */
+function inlineDropPlan(segs, mainHost) {
+    let total = 0, adN = 0, adDur = 0;
+    const kind = segs.map(s => {
+        total += s.dur;
+        if (s.dur < 0.5 && /^https?:\/\//i.test(s.url) && !/\.ts(\?|$)/i.test(s.url)) return 1;
+        if (isOffHostAdDomain(s.url, mainHost)) { adN++; adDur += s.dur; return 2; }
+        return 0;
+    });
+    const tooMany = adN > 0 && (adN > segs.length * 0.2 || (total > 0 && adDur > total * 0.2));
+    if (tooMany) {
+        console.log(`[AdFilter] inline ad-domain removals would drop ${adN}/${segs.length} segs (${adDur.toFixed(0)}s / ${total.toFixed(0)}s) → treated as content, kept`);
+    }
+    return kind.map(k => k === 1 || (k === 2 && !tooMany));
 }
 
 /**

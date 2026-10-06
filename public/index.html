@@ -3054,6 +3054,120 @@
             background: #ff453a;
         }
 
+        /* 🏷️ 线路广告分级(lib/site-profiles 审计数据,/api/sites 下发):无广告 > 无硬广 > 未评测 > 含广告。
+           旧的 直连/中转/服务 角标已撤(那是测速通道,对用户没意义;_testType 逻辑照旧保留给选源/健康缓存/分诊用)。
+           颜色走变量:全站目前只有深色主题,将来加浅色主题时只需在对应作用域重写这几个变量。 */
+        :root {
+            --src-clean: #34d399;
+            --src-clean-bg: rgba(16, 185, 129, 0.16);
+            --src-noburn: #2dd4bf;
+            --src-noburn-bg: rgba(20, 184, 166, 0.16);
+            --src-unknown: #a1a1aa;
+            --src-unknown-bg: rgba(113, 113, 122, 0.2);
+            --src-ads: #fbbf24;
+            --src-ads-bg: rgba(245, 158, 11, 0.16);
+            --src-chip-border: rgba(255, 255, 255, 0.22);
+            --src-chip-text: #c8c8c8;
+            --src-group-text: #8a8a8a;
+            --src-group-line: #333;
+        }
+
+        .src-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            line-height: 1.5;
+            font-weight: 600;
+            white-space: nowrap;
+            border: 1px solid transparent;
+        }
+
+        .src-tag.t-clean { color: var(--src-clean); background: var(--src-clean-bg); border-color: var(--src-clean-bg); }
+        .src-tag.t-noburn { color: var(--src-noburn); background: var(--src-noburn-bg); border-color: var(--src-noburn-bg); }
+        .src-tag.t-unknown { color: var(--src-unknown); background: var(--src-unknown-bg); border-color: var(--src-unknown-bg); }
+        .src-tag.t-ads { color: var(--src-ads); background: var(--src-ads-bg); border-color: var(--src-ads-bg); }
+
+        /* 分辨率 / 海外受限:描边小角标(信息性,不抢分级标签的颜色) */
+        .src-res,
+        .src-geo {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 4px;
+            border-radius: 3px;
+            font-size: 9px;
+            line-height: 1.6;
+            white-space: nowrap;
+            border: 1px solid var(--src-chip-border);
+            color: var(--src-chip-text);
+        }
+
+        .src-res.hd {
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.45);
+            font-weight: 600;
+        }
+
+        .src-geo {
+            color: var(--src-unknown);
+            border-style: dashed;
+        }
+
+        /* 选中态底色是品牌红:彩色标签在红底上看不清,统一改成白字半透明底 */
+        .source-pill.active .src-tag,
+        .source-pill.active .src-res,
+        .source-pill.active .src-geo {
+            color: #fff;
+            background: rgba(0, 0, 0, 0.22);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .source-pill.slow:not(.active) {
+            opacity: 0.7;
+        }
+
+        /* 手机宽度:名称+延迟+分辨率+分级+海外受限 一行放不下(实测 375px 下"海外受限"被截掉)→
+           角标在线路块内换行,线路块不超出列表宽度 */
+        .source-pill {
+            max-width: 100%;
+            flex-wrap: wrap;
+            row-gap: 4px;
+        }
+
+        @media (max-width: 600px) {
+            .source-pill {
+                gap: 6px;
+                padding: 8px 12px;
+            }
+        }
+
+        /* 分级分组标题:整行(在 flex-wrap 的 .source-list 里占满一行),取代旧的"较慢线路"分隔条 */
+        .src-group-head {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--src-group-text);
+        }
+
+        .src-group-head:not(:first-child) {
+            border-top: 1px solid var(--src-group-line);
+            padding-top: 10px;
+            margin-top: 2px;
+        }
+
+        .src-group-head .src-group-count {
+            margin-left: auto;
+            opacity: 0.8;
+        }
+
+        .video-meta .src-tag {
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
         /* 展开/收起按钮 */
         .expand-toggle {
             font-size: 12px;
@@ -4805,7 +4919,7 @@
                         <h1 class="video-title">{{ currentGroup.name }}</h1>
                         <div class="video-meta">
                             <template v-if="previewLocked"><i class="fas fa-lock" style="color:#e50914;"></i> 登录后即可观看</template>
-                            <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span></template>
+                            <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcProfile(currentSource).tier" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
                             <template v-else><i class="fas fa-spinner fa-spin"></i> 正在加载…</template>
                         </div>
                     </div>
@@ -4889,74 +5003,30 @@
                             <i class="fas fa-lock"></i> 登录后解锁全部播放线路
                         </div>
 
-                        <!-- 测速类型图例 -->
-                        <div v-if="!isTestingSources && (fastSources.length > 0 || slowSources.length > 0)"
-                            style="font-size: 11px; color: #666; margin-bottom: 10px; display: flex; gap: 15px; align-items: center;">
-                            <span style="display: flex; align-items: center; gap: 4px;">
-                                <span
-                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">直连</span>
-                                用户端直接访问
-                            </span>
-                            <span style="display: flex; align-items: center; gap: 4px;">
-                                <span
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">中转</span>
-                                通过代理访问
-                            </span>
-                            <span style="display: flex; align-items: center; gap: 4px;">
-                                <span
-                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">服务</span>
-                                服务器端测速
-                            </span>
-                        </div>
-
-                        <!-- 快速线路列表 (< 600ms) -->
+                        <!-- 🏷️ 线路按广告分级分组:无广告 > 无硬广 > 未评测 > 含广告(数据:lib/site-profiles,经 /api/sites 与搜索结果下发)。
+                             组内排序:快线(<600ms)在前 → 分辨率高在前 → 延迟低在前。
+                             显示顺序 = 自动换源顺序 = TV"切换线路"顺序(三者都读 availableSources,见 sourceGroups)。
+                             旧的 直连/中转/服务 角标与图例已撤:那是测速通道,用户看不懂也不关心;_testType 逻辑原样保留(选源/健康缓存/去广告分诊都靠它)。 -->
                         <div class="source-list" v-if="fastSources.length > 0 || slowSources.length > 0">
-                            <!-- 快速线路 -->
-                            <div v-for="(source, index) in fastSources" class="source-pill"
-                                :class="{ active: currentSource?.site_key === source.site_key }" :tabindex="10 + index"
-                                @click="switchSource(source)" @keydown.enter="switchSource(source)">
-                                <span>{{ source.site_name }}</span>
-                                <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
-                                <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
-                                <span v-if="source._testType === 'direct'"
-                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    直连
-                                </span>
-                                <span v-else-if="source._testType === 'proxy'"
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    中转
-                                </span>
-                                <span v-else
-                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    服务
-                                </span>
-                            </div>
-                            <!-- 慢速线路分隔符 -->
-                            <div v-if="slowSources.length > 0 && fastSources.length > 0"
-                                style="width: 100%; font-size: 11px; color: #666; padding: 8px 0; border-top: 1px solid #333; margin-top: 5px;">
-                                <i class="fas fa-hourglass-half"></i> 较慢线路 ({{ slowSources.length }})
-                            </div>
-                            <!-- 慢速线路 -->
-                            <div v-for="(source, index) in slowSources" class="source-pill"
-                                :class="{ active: currentSource?.site_key === source.site_key }" style="opacity: 0.7;"
-                                :tabindex="100 + index" @click="switchSource(source)"
-                                @keydown.enter="switchSource(source)">
-                                <span>{{ source.site_name }}</span>
-                                <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
-                                <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
-                                <span v-if="source._testType === 'direct'"
-                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    直连
-                                </span>
-                                <span v-else-if="source._testType === 'proxy'"
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    中转
-                                </span>
-                                <span v-else
-                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    服务
-                                </span>
-                            </div>
+                            <template v-for="g in sourceGroups" :key="'sg-' + g.tier">
+                                <div class="src-group-head" :title="g.desc">
+                                    <span class="src-tag" :class="'t-' + g.tier">{{ g.label }}</span>
+                                    <span>{{ g.desc }}</span>
+                                    <span class="src-group-count">{{ g.items.length }} 条</span>
+                                </div>
+                                <!-- tabindex 封顶 98:与 TV 全屏控制栏的 99~102/200+/300+ 不撞号;同号时按文档顺序,遥控器遍历顺序不变 -->
+                                <div v-for="(source, i) in g.items" class="source-pill"
+                                    :class="{ active: currentSource && currentSource.site_key === source.site_key, slow: source.latency >= 600 }"
+                                    :tabindex="Math.min(10 + g.offset + i, 98)" :title="srcTitle(source)"
+                                    @click="switchSource(source)" @keydown.enter="switchSource(source)">
+                                    <span>{{ source.site_name }}</span>
+                                    <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
+                                    <span style="font-size:10px; opacity:0.6;">{{ source.latency }}ms</span>
+                                    <span v-if="srcResLabel(source)" class="src-res" :class="{ hd: srcResRank(source) >= 2 }">{{ srcResLabel(source) }}</span>
+                                    <span class="src-tag" :class="'t-' + g.tier">{{ g.label }}</span>
+                                    <span v-if="srcProfile(source).geo" class="src-geo">海外受限</span>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- 全部不可用提示 -->
@@ -5960,6 +6030,25 @@
         //    防止旧剧的回调把内容灌进新剧的播放器（串剧）。
         let _navSeq = 0;
 
+        // 🏷️ 线路广告分级(顺序即自动选源偏好;数据见 lib/site-profiles/profiles.json,db.json 可用 profile/ad_tier 覆盖)
+        //   clean  无广告:无插播、画面无广告字幕(实看帧确认)
+        //   noburn 无硬广:画面干净,但清单里有插播片段——靠 CF Worker 去广告过滤掉(该站被记"源站封 CF"时会降为 unknown)
+        //   unknown 未评测:没测到(多为海外受限)或不在表里
+        //   ads    含广告:博彩/网址字幕烧在画面里,任何清单过滤都去不掉
+        const SRC_TIERS = [
+            { tier: 'clean', label: '无广告', desc: '无插播、画面无广告' },
+            { tier: 'noburn', label: '无硬广', desc: '画面干净，插播片段已自动过滤' },
+            { tier: 'unknown', label: '未评测', desc: '暂无评测数据' },
+            { tier: 'ads', label: '含广告', desc: '画面内有博彩字幕/网址水印' }
+        ];
+        const SRC_TIER_RANK = { clean: 0, noburn: 1, unknown: 2, ads: 3 };
+        const SRC_TIER_BY_ID = {};
+        SRC_TIERS.forEach(t => { SRC_TIER_BY_ID[t.tier] = t; });
+        const SRC_UNKNOWN_PROFILE = Object.freeze({ tier: 'unknown', res: '', geo: false, note: '', codec: '' });
+        // ⏱️ 自动选源:含广告/未评测的代理线路最早在测速开始后多久起播(给干净线路一点测出来的时间)。
+        //    只影响 checkEarlyReturn 的"首个代理就绪即播";3s 的 MAX_WAIT_TIME 兜底不变,绝不因偏好干净线路而拉长
+        const EARLY_SETTLE_MS = 1200;
+
         // 🚦 并发池：逐批执行 worker，限制同时进行的请求数。
         //    用于测速——测"全部"资源站以保留完整可用列表，但同时最多 limit 个，避免一次性几十个请求打满连接。
         async function runWithConcurrency(items, limit, worker) {
@@ -6030,6 +6119,14 @@
                     pastCompactThreshold: false,  // 滚动越过 400px(用于搜索框 compact)；仅阈值翻转时更新，避免每帧重渲染
                     hotList: [],
                     sitesMap: {},  // 缓存站点信息（用于客户端测速）
+                    // 🏷️ 线路广告分级表 { site_key: {tier,res,geo,note} }(/api/sites 下发)。先用本地缓存垫底:
+                    //    离线/弱网、历史回放、/api/sites 还没回来时角标也能显示。冻结 = 不做深层响应式(只在整体替换时触发)
+                    siteProfiles: (function () {
+                        try {
+                            const m = JSON.parse(localStorage.getItem('donggua_site_profiles') || 'null');
+                            return Object.freeze(m && typeof m === 'object' ? m : {});
+                        } catch (e) { return Object.freeze({}); }
+                    })(),
                     corsProxyUrl: null,  // CORS 代理 URL（当前主代理；用于中转无法直接访问的资源站 API）
                     corsProxyUrls: [],   // 全部 CORS 代理（多代理冗余；过滤代理故障时轮换到备用 worker）
                     danmakuEnabled: false,  // 🗨️ 弹幕开关（来自 /api/config，配置了 DANMU_API_URL 才为 true）
@@ -6506,25 +6603,44 @@
                     });
                     return this._kzSnapGroups(Object.values(groups)).sort((a, b) => b.sources.length - a.sources.length);
                 },
-                // 快速线路 (延迟 < 600ms)
-                fastSources() {
+                // 已测出可用的线路(延迟 < 9000ms;'...' 测速中 / 9998 用户端播放失败 / 9999 不可用 都不显示)
+                playableSources() {
                     if (!this.currentGroup || !this.currentGroup.sources) return [];
-                    return this.currentGroup.sources.filter(s => {
-                        if (s.latency === '...') return false;
-                        return typeof s.latency === 'number' && s.latency < 600;
+                    return this.currentGroup.sources.filter(s => typeof s.latency === 'number' && s.latency < 9000);
+                },
+                // 🏷️ 按广告分级分组(SRC_TIERS 顺序),组内:快线(<600ms)在前 → 分辨率高在前 → 延迟低在前。
+                //    offset = 本组第一条在 availableSources 里的下标(模板 tabindex 用)。
+                //    ⚡ 测速期间每写一次 latency 都会重算:每条线路只查一次分级(Map 暂存),比较器里不再重复查。
+                sourceGroups() {
+                    const by = {};
+                    const resOf = new Map();
+                    this.playableSources.forEach(s => {
+                        const p = this.srcProfile(s);
+                        resOf.set(s, this._srcResRankOf(p.res));
+                        (by[p.tier] = by[p.tier] || []).push(s);
+                    });
+                    let off = 0;
+                    return SRC_TIERS.filter(t => by[t.tier]).map(t => {
+                        const items = by[t.tier].slice().sort((a, b) =>
+                            ((a.latency >= 600) - (b.latency >= 600)) || (resOf.get(b) - resOf.get(a)) || (a.latency - b.latency));
+                        const g = { tier: t.tier, label: t.label, desc: t.desc, items: items, offset: off };
+                        off += items.length;
+                        return g;
                     });
                 },
-                // 慢速线路 (600ms <= 延迟 < 9000ms，非超时)
-                slowSources() {
-                    if (!this.currentGroup || !this.currentGroup.sources) return [];
-                    return this.currentGroup.sources.filter(s => {
-                        if (s.latency === '...') return false;
-                        return typeof s.latency === 'number' && s.latency >= 600 && s.latency < 9000;
-                    });
-                },
-                // 兼容旧代码的 availableSources（包含快速和慢速）
+                // 全部可用线路 = 分组展开后的顺序。这同时是【显示顺序】【自动换源顺序】(handlePlaybackError)
+                // 和【TV"切换线路"按钮的轮换顺序】——三处一致,用户看到的下一条就是自动会切的下一条
                 availableSources() {
-                    return [...this.fastSources, ...this.slowSources];
+                    const out = [];
+                    this.sourceGroups.forEach(g => { g.items.forEach(s => out.push(s)); });
+                    return out;
+                },
+                // 快速线路 (延迟 < 600ms) / 慢速线路 (600ms <= 延迟 < 9000ms):保留旧名,模板里的 v-if 仍在用
+                fastSources() {
+                    return this.availableSources.filter(s => s.latency < 600);
+                },
+                slowSources() {
+                    return this.availableSources.filter(s => s.latency >= 600);
                 },
                 // V2Board 账户信息（用于设置弹窗显示）
                 v2boardAccount() {
@@ -6844,6 +6960,10 @@
                                 this.sitesMap[site.key] = site;
                             });
                         }
+                        // 🏷️ 线路广告分级表:以服务器为准整体替换(服务器没给 = 空表,不留旧的),并缓存供下次冷启动/离线垫底
+                        const _prof = (sitesData && sitesData.profiles && typeof sitesData.profiles === 'object') ? sitesData.profiles : {};
+                        this.siteProfiles = Object.freeze(_prof);
+                        try { localStorage.setItem('donggua_site_profiles', JSON.stringify(_prof)); } catch (e) { }
                     } catch (e) {
                         console.error('Sites Load Error:', e);
                     }
@@ -7685,19 +7805,6 @@
                         // 设置 rawList（用于显示资源站列表和允许切换）
                         this.rawList = sourcesWithKey;
 
-                        // 获取最佳资源：优先选择直连测速(direct)的资源站，其次是代理(proxy)，最后才是服务器测速(server)
-                        // 1. 优先选择直连测速且延迟合理的资源
-                        let directSources = sourcesWithKey.filter(s => s._testType === 'direct' && s.latency && s.latency < 3000);
-                        // 2. 其次选择代理测速的资源
-                        let proxySources = sourcesWithKey.filter(s => s._testType === 'proxy' && s.latency && s.latency < 3000);
-                        // 3. 最后才考虑服务器测速或无类型的资源
-                        let otherSources = sourcesWithKey.filter(s => (!s._testType || s._testType === 'server') && s.latency && s.latency < 3000);
-
-                        // 按延迟排序
-                        directSources.sort((a, b) => a.latency - b.latency);
-                        proxySources.sort((a, b) => a.latency - b.latency);
-                        otherSources.sort((a, b) => a.latency - b.latency);
-
                         // 选择最佳资源：优先使用用户上次选择的资源站
                         let bestSource = null;
                         if (item.lastSourceKey) {
@@ -7706,9 +7813,10 @@
                                 console.log('[观看历史] 恢复上次资源站:', bestSource.site_name);
                             }
                         }
-                        // 回退：按延迟排序选最快的
+                        // 回退:可达性分档(直连 → 代理 → 服务器测速/无类型,只看 <3000ms 的),档内按广告分级挑(_pickPreferred);
+                        //   都没有才取第一条。分级数据不在快照里(会变),由 srcProfile 按 site_key 查表
                         if (!bestSource) {
-                            bestSource = directSources[0] || proxySources[0] || otherSources[0] || sourcesWithKey[0];
+                            bestSource = this._autoPick(sourcesWithKey, 2, 3000) || sourcesWithKey[0];
                         }
                         const testTypeLabel = bestSource?._testType === 'direct' ? '🎬直连' : (bestSource?._testType === 'proxy' ? '🔀代理' : '📡服务器');
                         console.log('[观看历史] 选择资源站:', bestSource?.site_name, '延迟:', bestSource?.latency, '类型:', testTypeLabel);
@@ -8122,6 +8230,162 @@
                 },
 
                 getLatencyClass(ms) { return ms < 500 ? 'dot-green' : (ms < 2000 ? 'dot-yellow' : 'dot-red'); },
+
+                // ===== 🏷️ 线路广告分级 + 自动选源偏好 =====
+                // 分级来源:搜索结果自带 site_profile(服务器按站点算好) → 退回 siteProfiles[site_key] 查表
+                //   (历史快照 / 刷新线路重建 / 离线上下文造出来的线路对象都不带 site_profile,靠查表兜底) → 未评测。
+                // 运行时降级:"无硬广"的前提是 CF Worker 去广告在链路里;该站被记成"源站封 CF"(_adProxyBad)时播放绕开 worker,
+                //   插播会回来 → 按"未评测"显示和排序。Kazumi 源同理:play() 的去广告分流看的是 url 含不含 .m3u8,而 kz 的 url
+                //   是 /api/kz/ep/…(解析出 HLS 后才换成 finalUrl),所以 kz HLS 从不经过 worker(动漫巴士 dm84 的 19s 中插照播)
+                //   → kz 的"无硬广"一律按"未评测"。等 kz HLS 真走了 worker 再去掉这条。
+                srcProfile(s) {
+                    if (!s) return SRC_UNKNOWN_PROFILE;
+                    const p = s.site_profile || (this.siteProfiles && s.site_key ? this.siteProfiles[s.site_key] : null);
+                    if (!p || typeof p !== 'object') return SRC_UNKNOWN_PROFILE;
+                    let tier = p.tier || p.t;
+                    if (!Object.prototype.hasOwnProperty.call(SRC_TIER_RANK, tier)) tier = 'unknown';
+                    if (tier === 'noburn' && (s._testType === 'kz' || this._isKzSource(s) || this._srcAdBad(s.site_key))) tier = 'unknown';
+                    return { tier: tier, res: String(p.res || p.r || ''), geo: !!p.geo, note: String(p.note || p.n || ''), codec: String(p.codec || p.c || '') };
+                },
+                // _adProxyBad 未命中内存时会读 localStorage+JSON.parse;模板每次重渲染都要问,这里做 2s 记忆(只有 noburn 站会问到)
+                _srcAdBad(siteKey) {
+                    if (!siteKey) return false;
+                    const now = Date.now();
+                    if (!this._srcAdBadMemo || now - (this._srcAdBadMemoTs || 0) > 2000) { this._srcAdBadMemo = {}; this._srcAdBadMemoTs = now; }
+                    if (!Object.prototype.hasOwnProperty.call(this._srcAdBadMemo, siteKey)) this._srcAdBadMemo[siteKey] = this._adProxyBad(siteKey);
+                    return this._srcAdBadMemo[siteKey];
+                },
+                srcTierRank(s) { return SRC_TIER_RANK[this.srcProfile(s).tier]; },
+                _srcResRankOf(res) {
+                    const r = String(res || '').toLowerCase();
+                    return (r.indexOf('4k') >= 0 || r.indexOf('2160') >= 0) ? 3 : r.indexOf('1080') >= 0 ? 2 : r.indexOf('720') >= 0 ? 1 : 0;
+                },
+                srcResRank(s) { return this._srcResRankOf(this.srcProfile(s).res); },
+                srcResLabel(s) {
+                    const r = String(this.srcProfile(s).res || '').toLowerCase();
+                    if (!r) return '';
+                    const k = this._srcResRankOf(r);
+                    return k === 3 ? '4K' : k === 2 ? '1080P' : k === 1 ? '720P' : '标清';
+                },
+                srcTierLabel(s) { return SRC_TIER_BY_ID[this.srcProfile(s).tier].label; },
+                srcTitle(s) {
+                    const p = this.srcProfile(s);
+                    const parts = [SRC_TIER_BY_ID[p.tier].label + '：' + SRC_TIER_BY_ID[p.tier].desc];
+                    if (p.note) parts.push(p.note);
+                    if (p.geo) parts.push('海外受限：部分地区网络可能无法播放');
+                    if (p.codec === 'hevc' && !this._srcHevcOk()) parts.push('H.265 编码：本机浏览器可能无法解码，不会自动选用');
+                    return parts.join('；');
+                },
+                // 本机 MSE 能否解 HEVC(H.265),只探一次。Firefox、不少 Linux/Android Chrome、无硬解的旧 Windows 都不行 ——
+                //   这时 HEVC 源可能只有声音、黑屏、还不报错(自动换源都不触发),所以不能让它以"无广告"身份提档自动起播
+                _srcHevcOk() {
+                    if (this._srcHevcMemo === undefined) {
+                        let ok = false;
+                        try {
+                            const MS = window.MediaSource || window.ManagedMediaSource || window.WebKitMediaSource;
+                            ok = !!(MS && typeof MS.isTypeSupported === 'function' &&
+                                (MS.isTypeSupported('video/mp4; codecs="hvc1.1.6.L120.90"') || MS.isTypeSupported('video/mp4; codecs="hev1.1.6.L120.90"')));
+                        } catch (e) { ok = false; }
+                        this._srcHevcMemo = ok;
+                    }
+                    return this._srcHevcMemo;
+                },
+                // 🚦 可达性分档 —— 自动选源的硬闸门,广告分级只在【同一档内】挑,绝不让"更干净"压过"能不能播":
+                //   0 = 用户端直连测通;以及【无广告且年份对得上】的 Kazumi 源(站长决定:番剧干净高清源与直连同台竞争,
+                //       七色番/月之祠/稀饭 胜过带博彩字幕的 maccms 副本;kz 测速有 600ms 下限,所以永远进不了"<600ms 快线"规则)
+                //       —— 但 HEVC 源(月之祠/稀饭)只在本机能解 H.265 时才提档:kz 测速只测服务器解析、不碰媒体,解不了码测不出来
+                //   1 = 代理测通(CF Worker 能拉到、用户端能播)
+                //   2 = 服务器测速/无类型(服务器通,用户端常播不了,靠自动换源兜底)
+                //   3 = 其余 Kazumi 源(只在 maccms 全不可用时兜底)
+                //  -1 = 不可自动选(未测完/不可用/年份对不上的 kz)
+                _srcReachClass(s) {
+                    if (!s || typeof s.latency !== 'number' || s.latency >= 9000) return -1;
+                    if (s._testType === 'kz' || this._isKzSource(s)) {
+                        if (s._kzMismatch) return -1;
+                        const p = this.srcProfile(s);
+                        return (p.tier === 'clean' && (p.codec !== 'hevc' || this._srcHevcOk())) ? 0 : 3;
+                    }
+                    if (s._testType === 'direct') return 0;
+                    if (s._testType === 'proxy') return 1;
+                    return 2;
+                },
+                // 🏷️ 档内挑选:只在"不比最快的慢太多"(≤ max(最快+800, 最快×2) 且 <3000ms;一个都不满足就全体)的候选里,
+                //   (都 ≥3000ms 时只看相对窗口)按 分级(无广告>无硬广>未评测>含广告) → 分辨率高 → 延迟低 排序取第一。
+                //   cands 由调用方按可达档过滤好;这里绝不从 cands 之外选,所以分级永远推翻不了可达性。
+                _pickPreferred(cands) {
+                    if (!cands || !cands.length) return null;
+                    let fastest = Infinity;
+                    cands.forEach(s => { if (s.latency < fastest) fastest = s.latency; });
+                    const lim = Math.max(fastest + 800, fastest * 2);
+                    const ok = cands.filter(s => s.latency <= lim && s.latency < 3000);
+                    // 没有 <3000ms 的候选时仍守住相对窗口(最快的一定在窗口内,pool 不会空):否则分级单独说了算,
+                    //   3100ms 含广告 vs 8900ms 无广告会挑那条勉强能通的慢线,慢网用户起播更慢
+                    const pool = ok.length ? ok : cands.filter(s => s.latency <= lim);
+                    const meta = new Map();
+                    pool.forEach(s => { const p = this.srcProfile(s); meta.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(p.res)]); });
+                    return pool.slice().sort((a, b) => {
+                        const ma = meta.get(a), mb = meta.get(b);
+                        return (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
+                    })[0];
+                },
+                // 按可达档从 0 往 maxClass 找第一个非空档,档内 _pickPreferred。maxLatency:历史回放只认 <3000ms 的旧测速
+                _autoPick(sources, maxClass, maxLatency) {
+                    const lim = maxLatency || 9000;
+                    const list = (sources || []).filter(s => typeof s.latency === 'number' && s.latency < lim);
+                    for (let c = 0; c <= maxClass; c++) {
+                        const cands = list.filter(s => this._srcReachClass(s) === c);
+                        if (cands.length) return this._pickPreferred(cands);
+                    }
+                    return null;
+                },
+                // ⚡ 测速进行中的提前起播判定(checkEarlyReturn 用;返回 {src, why} 或 null = 继续等):
+                //   ① 第 0 档已有【无广告/无硬广】且 <600ms 的线路 → 立即起播(该档内仍走 _pickPreferred)
+                //   ② 第 0 档已有 ≥2 条 <600ms 快线 → 在第 0 档内 _pickPreferred
+                //   ②' 第 0 档一条 <600ms 都没有、代理档有【无广告/无硬广】<600ms → 立即从代理档挑(排在 ② 之后,绝不越档)
+                //   ③ 测速已过 EARLY_SETTLE_MS(1.2s):第 0 档有就从第 0 档挑,否则代理档有就从代理档挑
+                //      (含广告/未评测的代理不再"首个就绪立刻播",给干净线路 1.2s 测出来;3s 兜底定时器不变)
+                _earlyPick(sources, elapsedMs, fastMs, needFast) {
+                    const FAST = fastMs || 600;
+                    const c0 = [], c1 = [];
+                    (sources || []).forEach(s => { const c = this._srcReachClass(s); if (c === 0) c0.push(s); else if (c === 1) c1.push(s); });
+                    const fast = s => s.latency < FAST;
+                    const good = s => fast(s) && this.srcTierRank(s) <= SRC_TIER_RANK.noburn;
+                    if (c0.some(good)) return { src: this._pickPreferred(c0), why: '已测出无广告快线' };
+                    // ⏳ 还有【无广告/无硬广】线路没测完 → ②③ 先别急着从含广告/未评测里挑,等它测出来(最多到 3s 兜底定时器,
+                    //   那里照样按分级优选)。实测:兰香如故 2 条含广告直连快线(334/349ms)抢在如意(无硬广,1115ms)测完前就被选中。
+                    //   标了"海外受限"的不等:海外用户那边它们多半只能测出服务器档(选不上),每次都等满 3s 只会白白拖慢起播。
+                    const pendingBetter = (sources || []).some(s => s.latency === '...' && this.srcTierRank(s) <= SRC_TIER_RANK.noburn && !this.srcProfile(s).geo);
+                    if (!pendingBetter && c0.filter(fast).length >= (needFast || 2)) return { src: this._pickPreferred(c0), why: '已找到多个用户端快速线路' };
+                    // 代理档的"干净快线"只在第 0 档一条快线都没有时才能抢先 —— 顺序不能倒:先判它的话,2 条含广告直连快线
+                    //   + 1 条无硬广代理快线会选代理,越过了可达性更好的直连(绝不越档)。旧版也是"≥2 直连快线"优先于代理。
+                    if (c1.some(good) && !c0.some(fast)) return { src: this._pickPreferred(c1), why: '已测出无广告代理快线' };
+                    if (elapsedMs > EARLY_SETTLE_MS && !pendingBetter) {
+                        if (c0.length) return { src: this._pickPreferred(c0), why: '用户端可播线路就绪' };
+                        if (c1.length) return { src: this._pickPreferred(c1), why: '代理可播线路就绪' };
+                    }
+                    return null;
+                },
+                _srcTestOrder(list) {
+                    return (list || []).slice().sort((a, b) => (this.srcTierRank(a) - this.srcTierRank(b))
+                        || ((this.srcProfile(a).geo ? 1 : 0) - (this.srcProfile(b).geo ? 1 : 0)));
+                },
+                _srcLogTag(s) {
+                    const c = this._srcReachClass(s);
+                    const tt = s && s._testType;
+                    const via = tt === 'direct' ? '🎬直连' : tt === 'proxy' ? '🔁代理' : tt === 'kz' ? '🎌番剧' : '📡服务器';
+                    return via + (c === 0 && tt === 'kz' ? '(0档)' : '') + '·' + this.srcTierLabel(s);
+                },
+                // 🔁 自动换源的下一条:从失败线路之后【绕一圈】扫(显示顺序已按分级重排,自动选中的线路可能在列表中间,
+                //   只往后扫会漏掉排在它前面、还没试过的线路,过早报"所有线路均无法播放")。
+                //   排除:失败线路本身、本次导航里已试过失败的(_failNav)、年份对不上的 kz;优先【确实有当前这一集】的。
+                _failoverNext(allSources, failingSource, curEpName) {
+                    const all = allSources || [];
+                    let i = all.indexOf(failingSource);
+                    if (i < 0 && failingSource) i = all.findIndex(s => s.site_key === failingSource.site_key);
+                    const order = i >= 0 ? all.slice(i + 1).concat(all.slice(0, i)) : all.slice();
+                    const cands = order.filter(s => s !== failingSource && s._failNav !== _navSeq && !s._kzMismatch);
+                    return cands.find(s => this._sourceHasEpisode(s, curEpName) !== false) || cands[0] || null;
+                },
                 // 投屏功能：纯粹的原生实现
                 // 🔗 打开分享面板（可勾选"从当前进度开始"）
                 openSharePanel() {
@@ -9100,37 +9364,22 @@
                     const FAST_THRESHOLD = 600;  // 快速线路阈值 (ms)
                     const EARLY_RETURN_COUNT = 2;  // 有几个快速线路后提前返回
                     const MAX_WAIT_TIME = 3000;  // 最长等待时间 (ms)
+                    const _openT0 = Date.now();  // 🏷️ 测速起点:_earlyPick 据此决定"含广告/未评测的代理线路"是否已等够(EARLY_SETTLE_MS)
 
-                    // 检查是否可以提前返回 - 优先用户端测速结果
+                    // 检查是否可以提前返回 - 优先用户端测速结果(规则见 _earlyPick;广告分级只在同一可达档内挑,绝不越档)
                     const checkEarlyReturn = () => {
                         if (_openSeq !== _navSeq) return;  // 🧭 已切换到别的剧，停止自动选源
                         if (hasAutoSelected) return;
-
-                        // 优先检查用户端测速(direct)的快速线路
-                        const directFastSources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'direct' && typeof s.latency === 'number' && s.latency < FAST_THRESHOLD
-                        );
-
-                        if (directFastSources.length >= EARLY_RETURN_COUNT) {
-                            hasAutoSelected = true;
-                            directFastSources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[快速返回] 已找到 ${directFastSources.length} 个用户端快速线路，自动选择: ${directFastSources[0].site_name} (${directFastSources[0].latency}ms 🎬)`);
-                            this.switchSource(directFastSources[0]);
-                            return;
-                        }
-
-                        // 没有直连快速线路时：一旦确认有"代理可播(proxy)"的源(海外用户多为此类)，立刻起播，
-                        // 不必等 3s 超时或全部测速完成——这就是"首个可播源就直接播"的关键。
-                        const proxyReady = this.currentGroup.sources.filter(s =>
-                            s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-                        if (proxyReady.length > 0) {
-                            hasAutoSelected = true;
-                            proxyReady.sort((a, b) => a.latency - b.latency);
-                            console.log(`[快速返回] 首个代理可播线路就绪，自动选择: ${proxyReady[0].site_name} (${proxyReady[0].latency}ms 🔁)`);
-                            this.switchSource(proxyReady[0]);
-                        }
+                        if (!this.currentGroup || !this.currentGroup.sources) return;
+                        const r = this._earlyPick(this.currentGroup.sources, Date.now() - _openT0, FAST_THRESHOLD, EARLY_RETURN_COUNT);
+                        if (!r) return;   // 空手不烧标志:等下一个测速回调 / 1.2s 复查 / 3s 定时器 / 测速完成路径
+                        hasAutoSelected = true;
+                        console.log(`[快速返回] ${r.why}，自动选择: ${r.src.site_name} (${r.src.latency}ms ${this._srcLogTag(r.src)})`);
+                        this.switchSource(r.src);
                     };
+                    // ⏱️ "非干净代理线路等 1.2s 再起播"的复查:测速回调恰好都在 1.2s 前到齐、之后长时间没有新回调时,
+                    //    不至于干等到 3s 定时器(海外用户几乎全是代理线路,这一步直接决定起播速度)
+                    const earlySettleTimer = setTimeout(checkEarlyReturn, EARLY_SETTLE_MS + 50);
 
                     // 超时自动选择（优先用户端测速，其次服务器端）
                     // ⚠️ 死锁教训(生产事故):此定时器在 3s 时若【一个源都还没测完】(大剧 40+ 线路、首批 worker 都是慢站/
@@ -9140,45 +9389,18 @@
                     const earlyReturnTimer = setTimeout(() => {
                         if (_openSeq !== _navSeq) return;  // 🧭 已切换到别的剧，放弃超时自动选源
                         if (hasAutoSelected) return;
+                        if (!this.currentGroup || !this.currentGroup.sources) return;
 
-                        // 优先选择用户端测速的结果
-                        let directSources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'direct' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-
-                        if (directSources.length > 0) {
+                        // 可达性分档依次找(直连 → 代理 → 服务器测速),档内按广告分级挑(_pickPreferred):
+                        //   代理 = CF Worker 能拉到、用户端能播;'server' 只是服务器测速通、用户端常播不了(代理 403),放最后兜底。
+                        // 🎌 Kazumi 源不参与 3s 超时抢选(maxClass=2 不含第 3 档):它的测速命中服务器缓存时几乎瞬回,
+                        //    会抢在仍在测的 maccms 直连/代理源前面被选中——例外:【无广告且年份对得上】的 kz 源按站长决定
+                        //    进第 0 档与直连同台竞争(番剧干净高清源胜过带博彩字幕的 maccms 副本),见 _srcReachClass
+                        const pick = this._autoPick(this.currentGroup.sources, 2);
+                        if (pick) {
                             hasAutoSelected = true;
-                            directSources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[超时返回] 选择用户端测速最快的: ${directSources[0].site_name} (${directSources[0].latency}ms 🎬)`);
-                            this.switchSource(directSources[0]);
-                            return;
-                        }
-
-                        // 没有直连：优先"代理可播(proxy)"的源——CF Worker 能拉到、用户端能播；
-                        // 'server' 只是服务器测速通、用户端常播不了(代理 403)，放最后兜底。
-                        let proxySources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-                        if (proxySources.length > 0) {
-                            hasAutoSelected = true;
-                            proxySources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[超时返回] 选择代理可播最快的: ${proxySources[0].site_name} (${proxySources[0].latency}ms 🔁)`);
-                            this.switchSource(proxySources[0]);
-                            return;
-                        }
-
-                        // 最后回退到服务器端测速(可能播不了，靠自动换源兜底)
-                        // 🎌 Kazumi 源不参与 3s 超时抢选:它的测速命中服务器缓存时几乎瞬回,会抢在仍在测的 maccms 直连/代理源前面被选中;
-                        //    这里空手就不烧标志,交给测速完成路径(那里 maccms 全不可用才轮到 kz)
-                        const testedSources = this.currentGroup.sources.filter(s =>
-                            typeof s.latency === 'number' && s.latency < 9000 && s._testType !== 'kz'
-                        );
-
-                        if (testedSources.length > 0) {
-                            hasAutoSelected = true;
-                            testedSources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[超时返回] ${MAX_WAIT_TIME}ms后自动选择: ${testedSources[0].site_name} (${testedSources[0].latency}ms)`);
-                            this.switchSource(testedSources[0]);
+                            console.log(`[超时返回] ${MAX_WAIT_TIME}ms后自动选择: ${pick.site_name} (${pick.latency}ms ${this._srcLogTag(pick)})`);
+                            this.switchSource(pick);
                         }
                         // 一个都没测完 → 不烧标志,等 checkEarlyReturn/测速完成路径接管
                     }, MAX_WAIT_TIME);
@@ -9404,8 +9626,12 @@
                         this._siteHealthSet(source.site_key, source, !source._timedOut);
                         return source;
                     };
-                    await runWithConcurrency(this.currentGroup.sources, 6, cachedWorker);
+                    // 🧪 测速顺序:无广告/无硬广(且非海外受限)的线路先测。并发 6 条一批,排在后面的要等前面测完才轮到——
+                    //   不排序时干净线路常在 3s 兜底定时器之后才测出来,自动选源只能在含广告的里挑(实测:如意排到第 20 位才测)。
+                    //   只改测速先后,不改显示顺序(显示由 sourceGroups 按分级排)。
+                    await runWithConcurrency(this._srcTestOrder(this.currentGroup.sources), 6, cachedWorker);
                     clearTimeout(earlyReturnTimer);
+                    clearTimeout(earlySettleTimer);   // 完成路径自己选源且不置 hasAutoSelected:残留的复查定时器必须清掉,否则会再切一次
                     // 🧭 测速期间用户可能已切换到别的剧（此时 isTestingSources 归 B 所有），丢弃本次结果
                     if (_openSeq !== _navSeq) return;
                     this.isTestingSources = false;  // 测速完成
@@ -9428,34 +9654,12 @@
                     // 如果还没有选择任何源，选择最快的
                     // (兜底条件含 !this.currentSource:任何路径把 hasAutoSelected 烧掉却没真选到源,这里都要接住——防再现"测出绿灯没人选"死锁)
                     if (!hasAutoSelected || !this.currentSource) {
-                        // 优先选择用户端测速(direct)的结果
-                        const directSources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'direct' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-
-                        if (directSources.length > 0) {
-                            console.log(`[测速完成] 选择用户端测速最快的线路: ${directSources[0].site_name} (${directSources[0].latency}ms)`);
-                            this.switchSource(directSources[0]);
-                        } else {
-                            // 没有直连：优先"代理可播(proxy)"的源(CF Worker 能拉到、用户端能播)；'server' 放最后兜底
-                            const proxySources = this.currentGroup.sources.filter(s =>
-                                s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
-                            );
-                            if (proxySources.length > 0) {
-                                console.log(`[测速完成] 选择代理可播最快的线路: ${proxySources[0].site_name} (${proxySources[0].latency}ms)`);
-                                this.switchSource(proxySources[0]);
-                            } else {
-                                // 回退到服务器端测速最快的(可能播不了，靠自动换源兜底)
-                                const fastestAvailable = this.currentGroup.sources.find(s =>
-                                    typeof s.latency === 'number' && s.latency < 9000 && s._testType !== 'kz'
-                                ) || this.currentGroup.sources.find(s =>   // 🎌 maccms 全不可用 → Kazumi 源兜底(年份对不上的不自动选)
-                                    typeof s.latency === 'number' && s.latency < 9000 && !s._kzMismatch
-                                );
-                                if (fastestAvailable) {
-                                    console.log(`[测速完成] 选择服务器测速最快的线路: ${fastestAvailable.site_name} (${fastestAvailable.latency}ms)`);
-                                    this.switchSource(fastestAvailable);
-                                }
-                            }
+                        // 可达性分档依次找:直连(+无广告 kz) → 代理(CF Worker 能拉到、用户端能播) → 服务器测速(可能播不了，靠自动换源兜底)
+                        //   → 🎌 maccms 全不可用才轮到其余 Kazumi 源(年份对不上的不自动选)。档内按广告分级挑(_pickPreferred)
+                        const pick = this._autoPick(this.currentGroup.sources, 3);
+                        if (pick) {
+                            console.log(`[测速完成] 自动选择线路: ${pick.site_name} (${pick.latency}ms ${this._srcLogTag(pick)})`);
+                            this.switchSource(pick);
                         }
                     }
                     // 如果全部不可用，不自动选择，UI会显示提示
@@ -9747,6 +9951,7 @@
                             vod_name: item.vod_name,
                             vod_year: item.vod_year,   // 🎌 Kazumi 源年份校验要用 maccms 源的年份
                             vod_play_url: item.vod_play_url || '',
+                            site_profile: item.site_profile || null,   // 🏷️ 广告分级(缺了也会按 site_key 查 siteProfiles 兜底)
                             latency: undefined,
                             _testType: undefined,
                             _cachedDetail: undefined,
@@ -9830,7 +10035,7 @@
                         // 🗄️ "刷新线路"是手动重测(恢复通道)：强制真测(不读缓存)，测完写回缓存。
                         //    allowDead=false：此路径测速无代理分支(proxy-only 源会误判)，只许缓存 direct/proxy 成功态，不缓存不可用态。
                         const cachedWorker = async (source) => { await latencyWorker(source); if (!this._isKzSource(source)) this._siteHealthSet(source.site_key, source, false); return source; };
-                        await runWithConcurrency(sources, 6, cachedWorker);
+                        await runWithConcurrency(this._srcTestOrder(sources), 6, cachedWorker);   // 同 openDetail:干净线路先测
 
                         // 🧭 测速期间用户可能已切换剧集：丢弃过期结果
                         if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
@@ -13527,31 +13732,26 @@
                     const mySeq = _navSeq;
 
                     // 获取当前线路索引（记住失败源，宽限期后用于判定是否真的要跳过）
+                    // 先按对象找:同一张卡片里可能有同站两条(动漫巴士同名不同年的两部),按 site_key 会认错是哪一条在失败
                     const allSources = this.availableSources;
                     const failingSource = this.currentSource;
-                    // 先按对象找:同一张卡片里可能有同站两条(动漫巴士同名不同年的两部),按 site_key 会认错是哪一条在失败
-                    let currentIndex = allSources.indexOf(failingSource);
-                    if (currentIndex < 0) currentIndex = allSources.findIndex(s => s.site_key === failingSource?.site_key);
+                    // 🎯 优先切到【确实有当前这一集】的线路,而不是无脑取下一个:
+                    //    无脑顺延会切到没有这一集的源 → parseEpisodes 回退播第一集(先导片/预告/空清单)→ 又失败,
+                    //    一路把线路耗尽,而真正有这一集的好源(生产实测 ikun 有"第20260809期加更"且 1279 分片可播)
+                    //    永远轮不上 —— 这就是用户看到的"所有资源站都播不了"。
+                    //    _sourceHasEpisode 用测速时已缓存的剧集表判断,不发请求;返回 null(详情未缓存)按"可试"处理。
+                    // 🔁 绕一圈扫、跳过本次导航已试过的(_failoverNext):列表按广告分级重排后,自动选中的线路可能在中间,
+                    //    旧版只往后扫 + "已是最后一条就报全挂",会漏掉排在前面没试过的线路
+                    const _curEpName = ((this.episodeList || []).find(e => e.url === this.currentUrl) || {}).name;
+                    const nextSource = this._failoverNext(allSources, failingSource, _curEpName);
 
                     // 如果还有下一个线路可用，给一段宽限期后再决定是否切换
-                    if (currentIndex >= 0 && currentIndex < allSources.length - 1) {
+                    if (nextSource) {
                         this.isAutoRetrying = true;
-                        // 🎯 优先切到【确实有当前这一集】的线路,而不是无脑取下一个:
-                        //    无脑顺延会切到没有这一集的源 → parseEpisodes 回退播第一集(先导片/预告/空清单)→ 又失败,
-                        //    一路把线路耗尽,而真正有这一集的好源(生产实测 ikun 有"第20260809期加更"且 1279 分片可播)
-                        //    永远轮不上 —— 这就是用户看到的"所有资源站都播不了"。
-                        //    _sourceHasEpisode 用测速时已缓存的剧集表判断,不发请求;返回 null(详情未缓存)按"可试"处理。
-                        const _curEpName = (this.episodeList || []).find(e => e.url === this.currentUrl)?.name;
-                        let nextSource = null;
-                        for (let i = currentIndex + 1; i < allSources.length; i++) {
-                            if (allSources[i]._kzMismatch) continue;   // 🎌 年份对不上的 Kazumi 源(疑似同名另一部)不当自动换源目标
-                            if (this._sourceHasEpisode(allSources[i], _curEpName) !== false) { nextSource = allSources[i]; break; }
-                        }
-                        if (!nextSource) {
-                            console.log('[Auto-Failover] 后续线路都没有《' + (_curEpName || '本集') + '》,按原顺序试下一个');
-                            nextSource = allSources[currentIndex + 1];
-                        } else if (nextSource !== allSources[currentIndex + 1]) {
-                            console.log('[Auto-Failover] 跳过不含本集的线路,直接切到有《' + _curEpName + '》的:', nextSource.site_name);
+                        if (_curEpName && this._sourceHasEpisode(nextSource, _curEpName) === false) {
+                            console.log('[Auto-Failover] 其余线路都没有《' + _curEpName + '》,按顺序试下一个:', nextSource.site_name);
+                        } else {
+                            console.log('[Auto-Failover] 下一条候选线路:', nextSource.site_name);
                         }
                         this.autoRetryMessage = `正在检测 ${failingSource?.site_name} 线路...`;
                         console.log('[Auto-Failover] 收到错误事件，进入 1.5s 宽限期检测是否真的不可播');
@@ -13581,7 +13781,10 @@
                             this._offMarkBadCache();  // 当前播的若是离线缓存副本→本会话停用该集重定向(保住 failover)
                             this.autoRetryMessage = `${failingSource?.site_name} 播放失败，正在尝试 ${nextSource.site_name}`;
                             console.log(`[Auto-Failover] ${this.autoRetryMessage}`);
-                            if (failingSource) failingSource.latency = 9998;  // 标记为用户端不可用
+                            if (failingSource) {
+                                failingSource.latency = 9998;      // 标记为用户端不可用
+                                failingSource._failNav = mySeq;    // 🔁 本次导航已试过(绕圈扫描不再回到它)
+                            }
                             this.switchSource(nextSource);
                             setTimeout(() => { this.autoRetryMessage = ''; }, 1500);
                         }, 1500);

@@ -45,9 +45,25 @@ const app = express();
 //    模块加载失败(如部署时缺 parse5 依赖)只禁用这批源,绝不拖垮主站;KAZUMI_DISABLE=1 可整体关闭。
 let kazumi = null;
 try { kazumi = require('./lib/kazumi'); } catch (e) { console.warn('[Kazumi] 模块加载失败,规则源已禁用:', e.message); }
+// 🏷️ 资源站档案(无广告/无硬广/未评测/含广告 + 分辨率 + 海外受限):共享模块 lib/site-profiles(api/index.js 同一份)。
+//    只用于前端徽章与"同一可达档内"的选源偏好;加载失败/查询抛错只是不带徽章,绝不影响搜索与播放。
+let siteProfiles = null;
+try { siteProfiles = require('./lib/site-profiles'); } catch (e) { console.warn('[SiteProfiles] 模块加载失败,线路徽章已禁用:', e.message); }
+function profOf(site) {
+    if (!siteProfiles) return undefined;   // undefined → JSON 里直接没有 site_profile 字段,前端回退 /api/sites 的 profiles 表
+    try { return siteProfiles.profileFor(site); } catch (e) { return undefined; }
+}
+// /api/sites 附带的 {key: 档案} 表(含内置规则站)。返回新对象,绝不改 remoteDbCache/db.json 读出的原对象
+function withSiteProfiles(sitesData) {
+    if (!siteProfiles || !sitesData || typeof sitesData !== 'object') return sitesData;
+    try {
+        const base = Array.isArray(sitesData.sites) ? sitesData.sites : [];
+        return Object.assign({}, sitesData, { profiles: siteProfiles.profileMap(withKzSites(base)), profiles_version: siteProfiles.version });
+    } catch (e) { console.warn('[SiteProfiles] profileMap 失败,本次不带徽章:', e.message); return sitesData; }
+}
 // 站点全集 = db.json/远程配置的 maccms 站 + 内置 Kazumi 规则站(db.json 里同 key 的条目优先,便于覆盖/停用)
-function allSites() {
-    const base = ((getDB() || {}).sites) || [];
+function allSites() { return withKzSites(((getDB() || {}).sites) || []); }
+function withKzSites(base) {
     if (!kazumi) return base;
     let kz = [];
     try { kz = kazumi.getSites(); } catch (e) { console.warn('[Kazumi] getSites 失败,本次只用 maccms 站:', e.message); }
@@ -2109,7 +2125,7 @@ app.get('/api/sites', async (req, res) => {
         sitesData = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8').replace(/^\uFEFF/, ''));
     }
 
-    res.json(sitesData);
+    res.json(withSiteProfiles(sitesData));
 });
 
 // 服务器端测速兜底：客户端直连+代理都失败时(混合内容/CORS)由服务器测资源站 API 延迟。
@@ -2669,10 +2685,11 @@ app.get('/api/search', async (req, res) => {
 
         const allResults = [];
         const searchPromises = targetSites.map(async (site) => {
+            const site_profile = profOf(site);   // 🏷️ 发出时才附加:不进 1 小时搜索缓存,改 db.json 覆盖/档案表立即生效
             if (kazumi && kazumi.isKzSite(site)) {   // 🎌 规则站:模块自带关键词策略与缓存
                 try {
                     const r = await kazumi.search(site.key, keyword, originalTitle);
-                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name }));
+                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name, site_profile }));
                 } catch (err) { console.error(`[Search JSON] ${site.name}:`, err.message); }
                 return;
             }
@@ -2680,7 +2697,7 @@ app.get('/api/search', async (req, res) => {
             const cached = cacheManager.get('search', cacheKey);
             if (cached && cached.list) {
                 cached.list.forEach(item => {
-                    allResults.push({ ...item, site_key: site.key, site_name: site.name });
+                    allResults.push({ ...item, site_key: site.key, site_name: site.name, site_profile });
                 });
                 return;
             }
@@ -2697,7 +2714,7 @@ app.get('/api/search', async (req, res) => {
                     site_name: site.name
                 })) : [];
                 cacheManager.set('search', cacheKey, { list }, 3600);
-                allResults.push(...list);
+                allResults.push(...list.map(item => ({ ...item, site_profile })));   // 缓存里的 list 保持不带档案
             } catch (err) {
                 console.error(`[Search JSON] ${site.name}:`, err.message);
             }
@@ -2743,13 +2760,14 @@ app.get('/api/search', async (req, res) => {
 
     // 并行搜索所有站点
     const searchPromises = sites.map(async (site) => {
+        const site_profile = profOf(site);   // 🏷️ 发出时才附加,不写进搜索缓存
         // 🎌 规则站(HTML 刮削的小站):对空格敏感、七色番 wd 只取前 10 字,智能变体对它们全是无效请求还徒增被封风险
         //    → 交给模块:一个"核心关键词",0 结果才回退一次;结果带 _gk 等归一化键供前端并组
         if (kazumi && kazumi.isKzSite(site)) {
             let list = [];
             try { list = ((await kazumi.search(site.key, keyword, originalTitle)) || {}).list || []; }
             catch (error) { console.error(`[SSE Search Error] ${site.name}:`, error.message); }
-            const items = list.map(item => ({ ...item, site_key: site.key, site_name: site.name })).filter(item => {
+            const items = list.map(item => ({ ...item, site_key: site.key, site_name: site.name, site_profile })).filter(item => {
                 const globalKey = `${item.site_key}_${item.vod_id}`;
                 if (sentVodIds.has(globalKey)) return false;
                 sentVodIds.set(globalKey, true);
@@ -2820,7 +2838,8 @@ app.get('/api/search', async (req, res) => {
                 uniqueResults.push({
                     ...item,
                     site_key: site.key,
-                    site_name: site.name
+                    site_name: site.name,
+                    site_profile
                 });
             }
         }

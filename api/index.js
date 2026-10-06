@@ -26,6 +26,22 @@ const withKzSites = (sites) => {
     return base.concat(kz.filter(x => !have.has(x.key)));
 };
 if (kazumi) { try { kazumi.registerRoutes(app); } catch (e) { console.warn('[Kazumi] 路由注册失败:', e.message); } }
+// 🏷️ 资源站档案(徽章/选源偏好):与 server.js 共用 lib/site-profiles(静态 require,Vercel 才会把 profiles.json 打包)。
+//    加载失败/查询抛错只是不带徽章,绝不影响搜索与播放。
+let siteProfiles = null;
+try { siteProfiles = require('../lib/site-profiles'); } catch (e) { console.warn('[SiteProfiles] 模块加载失败,线路徽章已禁用:', e.message); }
+const profOf = (site) => {
+    if (!siteProfiles) return undefined;   // undefined → JSON 里没有 site_profile 字段,前端回退 /api/sites 的 profiles 表
+    try { return siteProfiles.profileFor(site); } catch (e) { return undefined; }
+};
+// /api/sites 附带 {key: 档案} 表(含内置规则站)。返回新对象,绝不改 EMBEDDED_SITES/remoteDbCache
+const withSiteProfiles = (d) => {
+    if (!siteProfiles || !d || typeof d !== 'object') return d;
+    try {
+        const base = Array.isArray(d.sites) ? d.sites : [];
+        return Object.assign({}, d, { profiles: siteProfiles.profileMap(withKzSites(base)), profiles_version: siteProfiles.version });
+    } catch (e) { console.warn('[SiteProfiles] profileMap 失败,本次不带徽章:', e.message); return d; }
+};
 
 // ========== 环境变量 ==========
 const REMOTE_DB_URL = process.env['REMOTE_DB_URL'] || '';
@@ -159,30 +175,32 @@ async function isChineseIP(req) {
 
 // ========== API: /api/sites ==========
 app.get('/api/sites', async (req, res) => {
+    // 所有出口统一走 send:附带档案表(空站点也带内置规则站的档案)
+    const send = (d) => res.json(withSiteProfiles(d));
     try {
         // 优先使用嵌入的站点配置（不过期）
         if (EMBEDDED_SITES) {
-            return res.json(EMBEDDED_SITES);
+            return send(EMBEDDED_SITES);
         }
 
         // 使用远程配置（带缓存）
         const now = Date.now();
         if (remoteDbCache && now - remoteDbLastFetch < REMOTE_DB_CACHE_TTL) {
-            return res.json(remoteDbCache);
+            return send(remoteDbCache);
         }
         if (REMOTE_DB_URL) {
             const response = await axios.get(REMOTE_DB_URL, { timeout: 5000 });
             if (response.data && Array.isArray(response.data.sites)) {
                 remoteDbCache = response.data;
                 remoteDbLastFetch = now;
-                return res.json(remoteDbCache);
+                return send(remoteDbCache);
             }
         }
         // Vercel 环境下没有本地 db.json，返回空
-        return res.json({ sites: [] });
+        return send({ sites: [] });
     } catch (err) {
         console.error('[Remote DB Error]', err.message);
-        return res.json({ sites: [] });
+        return send({ sites: [] });
     }
 });
 
@@ -933,10 +951,11 @@ app.get('/api/search', async (req, res) => {
 
         const allResults = [];
         const searchPromises = targetSites.map(async (site) => {
+            const site_profile = profOf(site);   // 🏷️ 发出时附加(与 server.js 同)
             if (kazumi && kazumi.isKzSite(site)) {
                 try {
                     const r = await kazumi.search(site.key, keyword, originalTitle);
-                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name }));
+                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name, site_profile }));
                 } catch (err) { console.error(`[Search JSON] ${site.name}:`, err.message); }
                 return;
             }
@@ -955,7 +974,8 @@ app.get('/api/search', async (req, res) => {
                             vod_year: item.vod_year,
                             vod_play_url: item.vod_play_url,
                             site_key: site.key,
-                            site_name: site.name
+                            site_name: site.name,
+                            site_profile
                         });
                     });
                 }
@@ -974,10 +994,11 @@ app.get('/api/search', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no');
 
     const searchPromises = sites.map(async (site) => {
+        const site_profile = profOf(site);   // 🏷️ 发出时附加(与 server.js 同)
         if (kazumi && kazumi.isKzSite(site)) {   // 🎌 规则站:核心关键词 + 0 结果才回退一次(模块内实现)
             try {
                 const r = await kazumi.search(site.key, keyword, originalTitle);
-                const list = ((r && r.list) || []).map(item => ({ ...item, site_key: site.key, site_name: site.name }));
+                const list = ((r && r.list) || []).map(item => ({ ...item, site_key: site.key, site_name: site.name, site_profile }));
                 if (list.length > 0) res.write(`data: ${JSON.stringify(list)}\n\n`);
                 return list;
             } catch (err) { console.error(`[Search Error] ${site.name}:`, err.message); return []; }
@@ -1000,7 +1021,8 @@ app.get('/api/search', async (req, res) => {
                 vod_play_from: item.vod_play_from,
                 vod_play_url: item.vod_play_url,
                 site_key: site.key,
-                site_name: site.name
+                site_name: site.name,
+                site_profile
             })) : [];
 
             if (list.length > 0) {
