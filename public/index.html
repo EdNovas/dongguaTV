@@ -137,6 +137,7 @@
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
     <script data-cfasync="false" src="libs/js/kz-titlematch.js?v=1" defer></script>   <!-- 🎌 Kazumi 源片名归一化/并组(服务端 lib/kazumi 共用同一文件) -->
+    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=2" defer></script>   <!-- 🛡️ 插播广告"分辨率突变"判定(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
@@ -2538,6 +2539,17 @@
             font-weight: 500;
         }
 
+        /* 同名多部作品拆开时的年份/集数标注(见 splitSameNameWorks) */
+        .movie-work-label {
+            margin-top: 2px;
+            font-size: calc(11px * var(--ui-scale, 1));
+            color: #999;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         .movie-date {
             font-size: calc(12px * var(--ui-scale, 1));
             color: #666;
@@ -2981,6 +2993,123 @@
 
         .dot-red {
             background: #ff453a;
+        }
+
+        /* 🏷️ 线路分组(lib/site-profiles 审计数据,/api/sites 下发):无广告 > 有插播 > 未评测 > 有水印 > 可能无法播放。
+           旧的 直连/中转/服务 角标已撤(那是测速通道,对用户没意义;_testType 逻辑照旧保留给选源/健康缓存/分诊用)。
+           颜色走变量:全站目前只有深色主题,将来加浅色主题时只需在对应作用域重写这几个变量。 */
+        :root {
+            --src-clean: #34d399;
+            --src-clean-bg: rgba(16, 185, 129, 0.16);
+            --src-insert: #fcd34d;
+            --src-insert-bg: rgba(234, 179, 8, 0.14);
+            --src-unknown: #a1a1aa;
+            --src-unknown-bg: rgba(113, 113, 122, 0.2);
+            --src-ads: #fb923c;
+            --src-ads-bg: rgba(249, 115, 22, 0.16);
+            --src-unreach: #f87171;
+            --src-unreach-bg: rgba(239, 68, 68, 0.13);
+            --src-chip-border: rgba(255, 255, 255, 0.22);
+            --src-chip-text: #c8c8c8;
+            --src-group-text: #8a8a8a;
+            --src-group-line: #333;
+        }
+
+        .src-tag {
+            display: inline-flex;
+            align-items: center;
+            padding: 1px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            line-height: 1.5;
+            font-weight: 600;
+            white-space: nowrap;
+            border: 1px solid transparent;
+        }
+
+        .src-tag.t-clean { color: var(--src-clean); background: var(--src-clean-bg); border-color: var(--src-clean-bg); }
+        .src-tag.t-insert { color: var(--src-insert); background: var(--src-insert-bg); border-color: var(--src-insert-bg); }
+        .src-tag.t-unknown { color: var(--src-unknown); background: var(--src-unknown-bg); border-color: var(--src-unknown-bg); }
+        .src-tag.t-ads { color: var(--src-ads); background: var(--src-ads-bg); border-color: var(--src-ads-bg); }
+        .src-tag.t-unreach { color: var(--src-unreach); background: var(--src-unreach-bg); border-color: var(--src-unreach-bg); }
+
+        /* 分辨率 / 海外受限:描边小角标(信息性,不抢分级标签的颜色) */
+        .src-res,
+        .src-geo {
+            display: inline-flex;
+            align-items: center;
+            padding: 0 4px;
+            border-radius: 3px;
+            font-size: 9px;
+            line-height: 1.6;
+            white-space: nowrap;
+            border: 1px solid var(--src-chip-border);
+            color: var(--src-chip-text);
+        }
+
+        .src-res.hd {
+            color: #fff;
+            border-color: rgba(255, 255, 255, 0.45);
+            font-weight: 600;
+        }
+
+        .src-geo {
+            color: var(--src-unknown);
+            border-style: dashed;
+        }
+
+        /* 选中态底色是品牌红:彩色标签在红底上看不清,统一改成白字半透明底 */
+        .source-pill.active .src-tag,
+        .source-pill.active .src-res,
+        .source-pill.active .src-geo {
+            color: #fff;
+            background: rgba(0, 0, 0, 0.22);
+            border-color: rgba(255, 255, 255, 0.4);
+        }
+
+        .source-pill.slow:not(.active) {
+            opacity: 0.7;
+        }
+
+        /* 手机宽度:名称+延迟+分辨率+分级+海外受限 一行放不下(实测 375px 下"海外受限"被截掉)→
+           角标在线路块内换行,线路块不超出列表宽度 */
+        .source-pill {
+            max-width: 100%;
+            flex-wrap: wrap;
+            row-gap: 4px;
+        }
+
+        @media (max-width: 600px) {
+            .source-pill {
+                gap: 6px;
+                padding: 8px 12px;
+            }
+        }
+
+        /* 分级分组标题:整行(在 flex-wrap 的 .source-list 里占满一行),取代旧的"较慢线路"分隔条 */
+        .src-group-head {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 11px;
+            color: var(--src-group-text);
+        }
+
+        .src-group-head:not(:first-child) {
+            border-top: 1px solid var(--src-group-line);
+            padding-top: 10px;
+            margin-top: 2px;
+        }
+
+        .src-group-head .src-group-count {
+            margin-left: auto;
+            opacity: 0.8;
+        }
+
+        .video-meta .src-tag {
+            margin-left: 6px;
+            vertical-align: middle;
         }
 
         /* 展开/收起按钮 */
@@ -4232,12 +4361,12 @@
 
             <!-- 搜索结果网格 (即使在 loading 也可以显示) -->
             <div class="result-grid" v-if="groupedList.length > 0">
-                <div class="result-card" v-for="group in groupedList" :key="group.name" @click="openDetail(group)">
+                <div class="result-card" v-for="group in groupedList" :key="group.name + '|' + (group._work || '')" @click="openDetail(group)">
                     <div class="poster-wrap">
-                        <img v-if="!isFallback(group.name)" :src="finalPoster(group)" :key="finalPoster(group)"
+                        <img v-if="!isFallback(posterKey(group))" :src="finalPoster(group)" :key="finalPoster(group)"
                             referrerpolicy="no-referrer" loading="lazy" decoding="async"
                             @load="$event.target.classList.add('loaded'); $event.target.parentElement && $event.target.parentElement.classList.add('img-loaded')"
-                            @error="handleImgError(group.name); $event.target.classList.add('loaded'); $event.target.parentElement && $event.target.parentElement.classList.add('img-loaded')">
+                            @error="handleImgError(posterKey(group), group.name); $event.target.classList.add('loaded'); $event.target.parentElement && $event.target.parentElement.classList.add('img-loaded')">
                         <div v-else class="poster-fallback">
                             <i class="fas fa-film mb-2 opacity-50"></i>
                             <div style="font-size:12px; color:#999">{{ group.name }}</div>
@@ -4247,6 +4376,8 @@
                         </div>
                     </div>
                     <div class="movie-name">{{ group.name }}</div>
+                    <!-- 🧩 同名多部作品拆开时标出年份/集数,一眼分得清是哪一部 -->
+                    <div v-if="group._workLabel" class="movie-work-label">{{ group._workLabel }}</div>
                 </div>
             </div>
 
@@ -4562,7 +4693,7 @@
                         <h1 class="video-title">{{ currentGroup.name }}</h1>
                         <div class="video-meta">
                             <template v-if="previewLocked"><i class="fas fa-lock" style="color:#e50914;"></i> 登录后即可观看</template>
-                            <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span></template>
+                            <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
                             <template v-else><i class="fas fa-spinner fa-spin"></i> 正在加载…</template>
                         </div>
                     </div>
@@ -4646,74 +4777,31 @@
                             <i class="fas fa-lock"></i> 登录后解锁全部播放线路
                         </div>
 
-                        <!-- 测速类型图例 -->
-                        <div v-if="!isTestingSources && (fastSources.length > 0 || slowSources.length > 0)"
-                            style="font-size: 11px; color: #666; margin-bottom: 10px; display: flex; gap: 15px; align-items: center;">
-                            <span style="display: flex; align-items: center; gap: 4px;">
-                                <span
-                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">直连</span>
-                                用户端直接访问
-                            </span>
-                            <span style="display: flex; align-items: center; gap: 4px;">
-                                <span
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">中转</span>
-                                通过代理访问
-                            </span>
-                            <span style="display: flex; align-items: center; gap: 4px;">
-                                <span
-                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px;">服务</span>
-                                服务器端测速
-                            </span>
-                        </div>
-
-                        <!-- 快速线路列表 (< 600ms) -->
+                        <!-- 🏷️ 线路分组:无广告 > 有插播 > 未评测 > 有水印 > 可能无法播放(数据:lib/site-profiles,经 /api/sites 与搜索结果下发;
+                             "可能无法播放"= 本机测速只有服务器能通的线路,与档案无关,所以组内每条照样带自己的广告徽章)。
+                             组内排序:快线(<600ms)在前 → 档位优先 → 分辨率高在前 → 延迟低在前。
+                             显示顺序 = 自动换源顺序 = TV"切换线路"顺序(三者都读 availableSources,见 sourceGroups)。
+                             旧的 直连/中转/服务 角标与图例已撤:那是测速通道,用户看不懂也不关心;_testType 逻辑原样保留(选源/健康缓存/去广告分诊都靠它)。 -->
                         <div class="source-list" v-if="fastSources.length > 0 || slowSources.length > 0">
-                            <!-- 快速线路 -->
-                            <div v-for="(source, index) in fastSources" class="source-pill"
-                                :class="{ active: currentSource?.site_key === source.site_key }" :tabindex="10 + index"
-                                @click="switchSource(source)" @keydown.enter="switchSource(source)">
-                                <span>{{ source.site_name }}</span>
-                                <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
-                                <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
-                                <span v-if="source._testType === 'direct'"
-                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    直连
-                                </span>
-                                <span v-else-if="source._testType === 'proxy'"
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    中转
-                                </span>
-                                <span v-else
-                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    服务
-                                </span>
-                            </div>
-                            <!-- 慢速线路分隔符 -->
-                            <div v-if="slowSources.length > 0 && fastSources.length > 0"
-                                style="width: 100%; font-size: 11px; color: #666; padding: 8px 0; border-top: 1px solid #333; margin-top: 5px;">
-                                <i class="fas fa-hourglass-half"></i> 较慢线路 ({{ slowSources.length }})
-                            </div>
-                            <!-- 慢速线路 -->
-                            <div v-for="(source, index) in slowSources" class="source-pill"
-                                :class="{ active: currentSource?.site_key === source.site_key }" style="opacity: 0.7;"
-                                :tabindex="100 + index" @click="switchSource(source)"
-                                @keydown.enter="switchSource(source)">
-                                <span>{{ source.site_name }}</span>
-                                <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
-                                <span style="font-size:10px; opacity:0.6;">{{source.latency}}ms</span>
-                                <span v-if="source._testType === 'direct'"
-                                    style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    直连
-                                </span>
-                                <span v-else-if="source._testType === 'proxy'"
-                                    style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    中转
-                                </span>
-                                <span v-else
-                                    style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; padding: 1px 5px; border-radius: 3px; font-size: 9px; margin-left: 4px;">
-                                    服务
-                                </span>
-                            </div>
+                            <template v-for="g in sourceGroups" :key="'sg-' + g.tier">
+                                <div class="src-group-head" :title="g.desc">
+                                    <span class="src-tag" :class="'t-' + g.tier">{{ g.label }}</span>
+                                    <span>{{ g.desc }}</span>
+                                    <span class="src-group-count">{{ g.items.length }} 条</span>
+                                </div>
+                                <!-- tabindex 封顶 98:与 TV 全屏控制栏的 99~102/200+/300+ 不撞号;同号时按文档顺序,遥控器遍历顺序不变 -->
+                                <div v-for="(source, i) in g.items" class="source-pill"
+                                    :class="{ active: currentSource && currentSource.site_key === source.site_key, slow: source.latency >= 600 }"
+                                    :tabindex="Math.min(10 + g.offset + i, 98)" :title="srcTitle(source)"
+                                    @click="pickSourceManual(source)" @keydown.enter="pickSourceManual(source)">
+                                    <span>{{ source.site_name }}</span>
+                                    <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
+                                    <span style="font-size:10px; opacity:0.6;">{{ source.latency }}ms</span>
+                                    <span v-if="srcResLabel(source)" class="src-res" :class="{ hd: srcResRank(source) >= 2 }">{{ srcResLabel(source) }}</span>
+                                    <span class="src-tag" :class="'t-' + srcGroupOf(source)">{{ srcTierLabel(source) }}</span>
+                                    <span v-if="g.tier === 'unreach' && srcProfile(source).geo" class="src-geo">海外受限</span>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- 全部不可用提示 -->
@@ -5351,6 +5439,7 @@
                 if (window._dgPreferNativeHls || !window.Hls || !Hls.isSupported()) return;   // 原生通道(DPlayer 已设好 video.src)
                 const hls = new Hls((player.options && player.options.pluginOptions && player.options.pluginOptions.hls) || buildOfflineHlsConfig());
                 player.plugins.hls = hls;
+                try { if (window.adClipSkip) window.adClipSkip.attach(hls, video); } catch (e) { }   // 🛡️ 去插播:必须在 loadSource 前挂(要收 MANIFEST_PARSED)
                 hls.loadSource(video.src);
                 hls.attachMedia(video);
                 player.events.on('destroy', () => { try { hls.destroy(); } catch (e) { } if (player.plugins.hls === hls) delete player.plugins.hls; });
@@ -5403,11 +5492,285 @@
                 return { loader: window._OfflineHlsLoader, backBufferLength: 90 };
             } catch (e) { return {}; }
         }
+        // 🛡️ 去插播:按"分辨率突变"跳过藏在正片里的插播广告(判定核心 libs/js/ad-clip-core.js,回归 scripts/adclip-test.mjs)。
+        //   CF Worker 只能在清单层删插播;如意(rycj)把 20-22s 棋牌广告切成和正片一样的 5/6 片一组藏在中间,清单上分不出来,
+        //   但广告是 1280x720、正片 1080x810(成龙历险记 95 集实测 190 段全中、0 误判)。hls.js 每个 DISCONTINUITY 首片转封装时
+        //   发 FRAG_PARSING_INIT_SEGMENT(带宽高),比播放头早一个预加载窗口 → 播到时直接 seek 过去,不改清单(不动时间轴:
+        //   片头标记/进度/离线缓存的时间都照旧,"跳片头多跳几秒"那类时间轴错位不会回来)。
+        //   状态全挂在 hls 实例上(hls._adClip,随实例销毁),每 tick 不写任何 Vue 响应式数据(perf-jank 铁律)。
+        //   不生效:浏览器原生 HLS(iOS/Safari)、Kazumi MP4、直播、多码率主清单、fMP4、投屏、广告过滤开关关闭。
+        //   localStorage donggua_adclip_off=1 可单独关掉;控制台 adClipSkip.status() 看当前判定。
+        window.adClipSkip = {
+            vue: null, OPT: null, COOLDOWN: 1500, MAX_ACTIONS: 30, MAX_ATTEMPTS: 2, BIG_BUFFER: 75,
+            enabled() {
+                try {
+                    return !!(window.AdClipCore && window.Hls && window.AdFilter && window.AdFilter.isEnabled()) &&
+                        localStorage.getItem('donggua_adclip_off') !== '1';
+                } catch (e) { return false; }
+            },
+            // 每个 hls 实例创建时挂一次(_dgHlsCustomType 是全站唯一的 new Hls 处:首建/切集/切源/分诊换代理都经过它)
+            attach(hls, video) {
+                if (!hls || hls._adClip || !window.Hls) return;
+                try {   // 上一个实例(换集/换源/分诊)的"看广告"按钮作废
+                    clearTimeout(this._undoTimer);
+                    const ob = (typeof dp !== 'undefined' && dp && dp.container) ? dp.container.querySelector('.dg-adclip-undo') : null;
+                    if (ob) ob.style.display = 'none';
+                } catch (e) { }
+                const E = Hls.Events, vue = this.vue;
+                const st = hls._adClip = {
+                    hls, video, dead: false, live: false, multi: false, frags: null, groups: [],
+                    res: Object.create(null), off: Object.create(null),
+                    tok: vue ? vue._playToken : null, overrides: Object.create(null), skipped: Object.create(null),
+                    remapped: Object.create(null), attempts: Object.create(null), pendKey: null,
+                    actions: 0, lastActAt: -1e9, selfTo: null, selfAt: 0, endedFired: false, lastWhy: '', lastRes: '', mainRes: '',
+                    lastT: 0, startFromZero: null, userSeeked: false, bufRaised: false, bufOrig: null
+                };
+                const rebuild = () => { try { if (window.AdClipCore) st.groups = AdClipCore.groupsFromFrags(st.frags); } catch (e) { } };
+                hls.on(E.MANIFEST_PARSED, (ev, d) => { try { st.multi = !!(d && d.levels && d.levels.length > 1); } catch (e) { } });
+                hls.on(E.LEVEL_LOADED, (ev, d) => {
+                    try { const det = d && d.details; if (!det) return; st.live = !!det.live; st.frags = det.fragments; rebuild(); } catch (e) { }
+                });
+                hls.on(E.FRAG_PARSED, rebuild);   // 活 Fragment 的 start 在 PTS 修正后会漂(实测 581.2→581.35),落点必须按它重算
+                hls.on(E.FRAG_PARSING_INIT_SEGMENT, (ev, d) => {
+                    try {
+                        if (!d || d.id !== 'main' || !d.frag) return;
+                        const m = d.tracks && d.tracks.video && d.tracks.video.metadata;
+                        if (!m || !(m.width > 0 && m.height > 0)) return;
+                        const k = m.width + 'x' + m.height, cc = d.frag.cc, old = st.res[cc];
+                        st.res[cc] = (old && old !== k) ? AdClipCore.MIXED : k;
+                        if (st.lastRes && k !== st.lastRes) console.log('[去插播] 分辨率 ' + st.lastRes + '→' + k + ' cc' + cc + ' @' + (+d.frag.start).toFixed(1) + 's');
+                        st.lastRes = k;
+                        this._adjustBuffer(st, cc);
+                    } catch (e) { }
+                });
+                // 每组首帧 PTS 偏移(= 首帧 PTS - frag.start):插播从 ~1.45s 重新开始、正片时钟跨过插播"停"一个段长(见 ad-clip-core 头注)
+                hls.on(E.INIT_PTS_FOUND, (ev, d) => {
+                    try {
+                        if (!d || d.id !== 'main' || !d.frag || !(d.timescale > 0)) return;
+                        st.off[d.frag.cc] = d.initPTS / d.timescale;
+                        this._adjustBuffer(st, d.frag.cc);
+                    } catch (e) { }
+                });
+                hls.on(E.DESTROYING, () => { st.dead = true; });
+                if (video && !video._adClipSeekHooked) {
+                    video._adClipSeekHooked = true;
+                    video.addEventListener('seeking', () => { try { window.adClipSkip._onSeeking(video); } catch (e) { } });
+                }
+            },
+            // 预加载窗口:默认 30s(纯媒体清单),40s 级的插播在播到时右侧还没解析出来 → 播一截才封口。
+            //   刚解析出"不像正片"的组(分辨率不同或 PTS 重新开始)就临时把 maxBufferLength 加到 75s,解析回正片后还原(每段广告约多拉 15MB)
+            _adjustBuffer(st, cc) {
+                try {
+                    const h = st.hls;
+                    if (!h || !h.config || st.dead) return;
+                    const r = st.res[cc], o = st.off[cc];
+                    let g = null;
+                    for (let i = 0; i < st.groups.length; i++) if (st.groups[i].cc === cc) { g = st.groups[i]; break; }
+                    if (this._isOdd(st, g, r, o) && !st.bufRaised) { st.bufOrig = h.config.maxBufferLength; h.config.maxBufferLength = Math.max(this.BIG_BUFFER, st.bufOrig || 0); st.bufRaised = true; }
+                } catch (e) { }
+            },
+            _isOdd(st, g, r, o) {
+                return !!((r && st.mainRes && !AdClipCore.sameRes(r, st.mainRes)) || (g && o != null && g.start > 30 && o + g.start < 5));
+            },
+            _restoreBuffer(st, t) {
+                try {
+                    if (!st.bufRaised || !st.hls || !st.hls.config) return;
+                    if (st.groups.some(g => g.start > t && this._isOdd(st, g, st.res[g.cc], st.off[g.cc]))) return;
+                    st.hls.config.maxBufferLength = st.bufOrig; st.bufRaised = false;
+                } catch (e) { }
+            },
+            _cur() {
+                const h = (typeof dp !== 'undefined' && dp && dp.plugins) ? dp.plugins.hls : null;
+                const st = h && h._adClip;
+                return (st && !st.dead && dp.video && st.video === dp.video) ? st : null;
+            },
+            // 用户放行(撤销 / 第二次往回拖进同一段)跨实例记住:重开同一集(同一通道)不再跳它。
+            //   键 = 实际加载的清单地址 + cc:worker 过滤后的清单删掉了广告组,cc 编号与直连/nofilter 通道不同,不能串用
+            _ovKey(st, cc) {
+                const v = this.vue;
+                const u = (st && st.hls && st.hls.url) || (v && v._activeFinalUrl) || (v && v.currentUrl) || '';
+                return 'donggua_adclip_ov|' + u + '|' + cc;
+            },
+            _isOverridden(st, cc) {
+                if (st.overrides[cc]) return true;
+                try { return sessionStorage.getItem(this._ovKey(st, cc)) === '1'; } catch (e) { return false; }
+            },
+            _override(st, ccs) {
+                ccs.forEach(cc => { st.overrides[cc] = 1; try { sessionStorage.setItem(this._ovKey(st, cc), '1'); } catch (e) { } });
+            },
+            _onSeeking(video) {
+                const st = this._cur();
+                if (!st || st.video !== video || !window.AdClipCore) return;
+                const t = video.currentTime, now = performance.now();
+                if (st.selfTo != null && now - st.selfAt < 2000 && Math.abs(t - st.selfTo) < 0.5) return;   // 自己发起的 seek
+                const prevT = st.lastT;
+                st.lastT = t;   // 暂停/缓冲中 check() 不更新 lastT,这里补上(否则下一次拖动的方向会判错)
+                // hls.js 起播跳洞(0→0.1)/跳小空洞/微调都会触发 seeking,幅度都 <2s:不算"用户拖动",否则开头贴片永远不跳
+                if (Math.abs(t - prevT) >= 2) st.userSeeked = true;
+                // 只有【往回】拖进已跳过的段才算用户的意思(往前的 seek 多是跳片头/进度恢复)
+                if (!(t < prevT - 0.5)) return;
+                const gi = AdClipCore.findGroup(st.groups, t);
+                const ccs = gi >= 0 && st.skipped[st.groups[gi].cc];
+                if (!ccs) return;
+                if (ccs.some(cc => this._isOverridden(st, cc))) return;   // 已放行(看广告 / 放弃跳过):广告就是正常时间轴,不再换算
+                const g0 = st.groups.find(g => g.cc === ccs[0]), g1 = st.groups.find(g => g.cc === ccs[ccs.length - 1]);
+                const key = ccs[0] + '-' + ccs[ccs.length - 1];
+                // 刚跳过就按"后退 5s"会落进广告里:第一次按"广告时长为 0"换算回广告之前(和看没有广告的片子一样);
+                //   第二次再往回拖进同一段 = 真想看 → 放行
+                if (g0 && g1 && !st.remapped[key] && prevT >= g1.end && prevT - g1.end < 30) {
+                    st.remapped[key] = 1;
+                    const to = Math.max(0, g0.start - (g1.end - t));
+                    st.selfTo = to; st.selfAt = now; st.lastT = to;
+                    try { dp.seek(to); } catch (e) { }
+                    return;
+                }
+                this._override(st, ccs);
+                console.log('[去插播] 用户往回拖进已跳过的插播段 → 本集放行不再跳它');
+            },
+            // 跳过后 5 秒内显示"看广告"小按钮(误判时的退路):点了就放行这一段并回到段首
+            _showUndo(st, run) {
+                try {
+                    const box = dp && dp.container;
+                    if (!box) return;
+                    let b = box.querySelector('.dg-adclip-undo');
+                    if (!b) {
+                        b = document.createElement('div');
+                        b.className = 'dg-adclip-undo';
+                        b.style.cssText = 'position:absolute;left:12px;bottom:56px;z-index:30;padding:5px 10px;border-radius:14px;' +
+                            'background:rgba(0,0,0,.62);color:#fff;font-size:12px;cursor:pointer;user-select:none;display:none;border:1px solid rgba(255,255,255,.25)';
+                        // 触屏:容器的 touchend 会 preventDefault 吃掉合成 click → 按钮自己处理 touchend
+                        b.addEventListener('touchend', (ev) => { try { ev.stopPropagation(); if (ev.cancelable) ev.preventDefault(); if (b.onclick) b.onclick(ev); } catch (x) { } });
+                        box.appendChild(b);
+                    }
+                    b.textContent = '已跳过 ' + Math.round(run.dur) + ' 秒插播 · 看广告';
+                    b.onclick = (e) => {
+                        try { e.stopPropagation(); } catch (x) { }
+                        if (st.dead || this._cur() !== st) { b.style.display = 'none'; return; }   // 已换集/换源:这个按钮作废
+                        const ccs = [];
+                        for (let i = run.g0; i <= run.g1; i++) if (st.groups[i]) ccs.push(st.groups[i].cc);
+                        this._override(st, ccs);
+                        st.selfTo = run.start; st.selfAt = performance.now();
+                        try { dp.seek(run.start); } catch (x) { }
+                        b.style.display = 'none';
+                    };
+                    b.style.display = 'block';
+                    clearTimeout(this._undoTimer);
+                    this._undoTimer = setTimeout(() => { try { b.style.display = 'none'; } catch (x) { } }, 5000);
+                } catch (e) { }
+            },
+            // seek 落点必须已缓冲(INIT_SEGMENT 在数据真正 append 之前就到;落点未缓冲 / 交界有空洞会卡 ~2s)
+            _landing(v, to) {
+                try {
+                    const b = v.buffered;
+                    for (let i = 0; i < b.length; i++) {
+                        const s = b.start(i), e = b.end(i);
+                        if (to >= s && to + 0.5 <= e) return to;
+                        if (s > to && s - to < 1 && s + 0.5 <= e) return s + 0.05;   // 交界的小空洞:落到下一段缓冲的开头
+                    }
+                } catch (e) { }
+                return null;
+            },
+            // timeupdate 里调用(在跳片头 skipManager 之前);真动作了返回 true,调用方本 tick 不再让别的逻辑 seek
+            check(t) {
+                try {
+                    const vue = this.vue, st = this._cur();
+                    if (!vue || !st || st.live || st.multi || !this.enabled()) return false;
+                    if (vue._liveActive || (vue._activeKz && vue._activeKz.type === 'mp4') || (vue._isCasting && vue._isCasting())) return false;
+                    if (st.tok !== vue._playToken || vue._activePlaySeq !== _navSeq) return false;
+                    const v = dp.video;
+                    if (!v || v.paused || v.seeking || v.readyState < 2 || !isFinite(v.duration)) return false;
+                    if (st.startFromZero === null) st.startFromZero = t < 3 && !st.userSeeked;
+                    st.lastT = t;
+                    const now = performance.now();
+                    if (now - st.lastActAt < this.COOLDOWN || st.actions >= this.MAX_ACTIONS) return false;
+                    const d = AdClipCore.decide(st.groups, cc => st.res[cc], t, this.OPT, {
+                        offOf: cc => st.off[cc], overridden: g => this._isOverridden(st, g.cc),
+                        freshStart: !!st.startFromZero && !st.userSeeked, rate: v.playbackRate || 1
+                    });
+                    if (d.main && d.main.res) st.mainRes = d.main.res;
+                    if (d.why === 'main') this._restoreBuffer(st, t);
+                    // 上一次 seek 若已越过那一段(本 tick 不再判到它),它的失败计数清零:只数"seek 了还在段里"的失败
+                    if (st.pendKey && !(d.run && d.run.key === st.pendKey)) { delete st.attempts[st.pendKey]; st.pendKey = null; }
+                    if (d.run && d.why !== st.lastWhy) {
+                        st.lastWhy = d.why;
+                        console.log('[去插播] ' + d.act + '/' + d.why + ' 段 ' + d.run.start.toFixed(1) + '+' + d.run.dur.toFixed(1) + 's ' + d.run.res +
+                            ' (' + d.run.mode + ') vs 主 ' + d.main.res + ' ' + Math.round(d.main.dur) + '/' + Math.round(d.main.known) + 's' +
+                            (d.run.bridge != null ? ' 架桥残差 ' + d.run.bridge.toFixed(2) + 's' : ''));
+                    }
+                    if (d.act === 'seek') {
+                        const to = this._landing(v, d.to);
+                        if (to == null) return false;   // 落点还没缓冲:下个 tick 再试(这几百毫秒仍在广告里)
+                        const ccs = [];
+                        for (let i = d.run.g0; i <= d.run.g1; i++) ccs.push(st.groups[i].cc);
+                        if ((st.attempts[d.run.key] = (st.attempts[d.run.key] || 0) + 1) > this.MAX_ATTEMPTS) {
+                            ccs.forEach(cc => { st.overrides[cc] = 1; });
+                            console.warn('[去插播] 两次 seek 都没越过该段,放弃(本实例不再跳它)');
+                            return false;
+                        }
+                        ccs.forEach(cc => { st.skipped[cc] = ccs; });
+                        st.pendKey = d.run.key;
+                        st.actions++; st.lastActAt = now; st.selfTo = to; st.selfAt = now; st.lastT = to;
+                        dp.seek(to);
+                        try { dp.notice('已跳过插播广告 ' + Math.round(d.run.dur) + ' 秒', 2500); } catch (e) { }   // 盖掉 DPlayer.seek 自带的"快进 N 秒"
+                        this._showUndo(st, d.run);
+                        return true;
+                    }
+                    if (d.act === 'ended') {
+                        // 片尾广告:和跳片尾共用 _outroSkipped 闸门,绝不触发两次 ended(那会连跳两集)
+                        if (st.endedFired || vue._outroSkipped) return false;
+                        st.endedFired = true; st.actions++; st.lastActAt = now;
+                        vue._outroSkipped = true; vue._introArm = null;
+                        try { dp.notice('已跳过片尾广告', 2500); } catch (e) { }
+                        if (dp.events) dp.events.trigger('ended');
+                        return true;
+                    }
+                } catch (e) { }
+                return false;
+            },
+            status() {
+                const st = this._cur();
+                if (!st) return '无活动 hls 实例';
+                const by = {};
+                st.groups.forEach(g => { const r = st.res[g.cc] || '?'; by[r] = (by[r] || 0) + Math.round(g.dur); });
+                return {
+                    enabled: this.enabled(), live: st.live, multi: st.multi, groups: st.groups.length, resByDur: by, mainRes: st.mainRes,
+                    ptsKnown: Object.keys(st.off).length, actions: st.actions, overrides: Object.keys(st.overrides), lastWhy: st.lastWhy,
+                    freshStart: !!st.startFromZero && !st.userSeeked, bufRaised: st.bufRaised
+                };
+            }
+        };
         let _lastProgressSaveTime = 0;  // timeupdate 节流时间戳（每15秒保存一次）
         // 🧭 导航令牌：每次切换剧集/打开/关闭详情时自增，用于作废上一部剧残留的
         //    异步任务（refreshEpisodes / refreshSources / 测速探测 / 错误回退定时器），
         //    防止旧剧的回调把内容灌进新剧的播放器（串剧）。
         let _navSeq = 0;
+
+        // 🏷️ 线路广告分级(档案数据见 lib/site-profiles/profiles.json,db.json 可用 profile/ad_tier 覆盖)。
+        //   【档案档位 tier】(rank 越小越优先,自动选源只在同一可达档内按它挑):
+        //     clean  0 无广告:无插播、画面无广告字幕(实看帧确认)
+        //     noburn 1 画面干净,但清单里有插播视频片段——靠 CF Worker 去广告 + 播放器分辨率突变跳过来去掉
+        //     insert 2 画面干净,但插播视频广告去不掉(运行时由 noburn 降级而来:去广告不在该线路的播放链路里,见 srcProfile)
+        //     unknown 3 未评测:没测到(多为海外受限)或不在表里
+        //     ads    4 画面里烧录了博彩/网址字幕水印,任何过滤都去不掉
+        //   【给用户看的分组 SRC_GROUPS】用户只关心"看的时候有没有广告":noburn 且去广告生效时和 clean 同属"无广告"
+        //     (用户原话:没有水印、夹层广告被我们去掉了的话也应该是干净的);另加"可能无法播放"组收本机测速没通过的线路,
+        //     放最后(多为海外受限,国内用户测得通就留在原分组里)
+        const SRC_TIER_RANK = { clean: 0, noburn: 1, insert: 2, unknown: 3, ads: 4 };
+        const SRC_GROUPS = [
+            { tier: 'clean', label: '无广告', desc: '画面干净，插播的视频广告会被自动去除' },
+            { tier: 'insert', label: '有插播', desc: '画面干净，但会播放插播的视频广告' },
+            { tier: 'unknown', label: '未评测', desc: '暂无评测数据' },
+            { tier: 'ads', label: '有水印', desc: '画面里有博彩字幕/网址水印，无法去除' },
+            { tier: 'unreach', label: '可能无法播放', desc: '你的网络下测速未通过（多为海外受限），仅供尝试' }
+        ];
+        const SRC_GROUP_BY_ID = {};
+        SRC_GROUPS.forEach(g => { SRC_GROUP_BY_ID[g.tier] = g; });
+        // 档案档位 → 显示分组(徽章文字/颜色)
+        const SRC_TIER_GROUP = { clean: 'clean', noburn: 'clean', insert: 'insert', unknown: 'unknown', ads: 'ads' };
+        const SRC_UNKNOWN_PROFILE = Object.freeze({ tier: 'unknown', res: '', geo: false, note: '', codec: '', clip: false, downgraded: false });
+        // ⏱️ 自动选源:含广告/未评测的代理线路最早在测速开始后多久起播(给干净线路一点测出来的时间)。
+        //    只影响 checkEarlyReturn 的"首个代理就绪即播";3s 的 MAX_WAIT_TIME 兜底不变,绝不因偏好干净线路而拉长
+        const EARLY_SETTLE_MS = 1200;
 
         // 🚦 并发池：逐批执行 worker，限制同时进行的请求数。
         //    用于测速——测"全部"资源站以保留完整可用列表，但同时最多 limit 个，避免一次性几十个请求打满连接。
@@ -5421,6 +5784,177 @@
                 }
             });
             await Promise.all(runners);
+        }
+
+        // 🧩 同名搜索结果 → 按"作品"拆分 + 去重(纯函数,groupedList / refreshSources 共用;scripts/source-list-test.mjs 有回归)。
+        //   为什么:卡片按片名精确分组,而同名的往往不止一部——实测《遮天》:2023 年 183 集动画 + 2025 年单集电影 + 2025 短剧,
+        //   十几个站两部都有 → 一张卡里同一个站出现两次(用户:"有出现多个资源站重复的现象";两条都高亮,因为高亮按 site_key)。
+        //   ① 拆作品:只有出现【同一个站给了两条明显不是同一部】的证据时才拆(没证据维持旧行为,一张卡)。
+        //      "明显不是同一部":一条是电影样(≤2 集)一条是剧集、或剧集数相差一倍以上、或年份差 ≥2;
+        //      但两条首集地址(去掉域名)相同 = 同一部的新旧两份(站内重复上架),不算证据(审查实测:猫眼 2023/183 集与 2025/55 集是同一部)。
+        //      用冲突站的条目做原型(兼容的原型合并、排序固定 → 与 SSE 到达顺序无关),其余所有条目归到最近的原型——
+        //      不会因为某个站更新落后(50 集 vs 183 集)凭空多出一张单线路卡片;首集地址相同的条目跟着集数多的那条走。
+        //      集数未知(kz 搜索结果不带选集,备注也没数字)的归到最大那组。
+        //   ② 同组同站只留一条(集数多的、年份新的、先到的):如七色番同名两条 183话/177话。但同站两条【年份明确不同且首集地址不同】
+        //      多半是不同季/不同年的综艺(天天向上 2023/2024)→ 不丢,挪成单独的作品卡(以前它们混在一张卡里还能点到)。
+        //   ③ 同组不同站但片源完全相同(首集地址一致,如 速博=新浪、金鹰点播=金鹰资源=虎牙、U酷=优酷)只留一条
+        //      (集数多的 → 档案档位好的 → 先到的)——同一份片子测速/换源都是重复劳动,列表里看着也像重复。
+        //   返回 [{ work, sig, label, items }],按覆盖站点数降序。work='' 是主作品(卡片 key / 历史补齐靠它);
+        //   sig 是与名次无关的签名('y2025m' = 2025 年电影样,'' = 没拆),刷新线路/分享深链按它认"哪一部"
+        //   (名次会随搜索结果变化,'' 只表示"当前线路最多的那部");label 形如 '2025 · 全1集'(只在拆出多张卡时显示)。
+        function splitSameNameWorks(items) {
+            const list = (items || []).filter(Boolean);
+            const firstUrl = it => {
+                const roads = String(it.vod_play_url || '').split('$$$');
+                const road = roads.find(r => /\.m3u8/i.test(r)) || roads[0] || '';
+                const ep = road.split('#')[0] || '';
+                const u = ep.indexOf('$') >= 0 ? ep.slice(ep.indexOf('$') + 1) : ep;
+                return /^https?:\/\//i.test(u.trim()) ? u.trim() : '';
+            };
+            // 去掉协议+域名(同一份片子常挂在不同 CDN 域名下),路径至少两段才算(防 /index.m3u8 这种通名误配)
+            const urlKey = it => {
+                const u = firstUrl(it).replace(/^https?:\/\/[^/]+/i, '').split('?')[0];
+                return u.split('/').filter(Boolean).length >= 2 ? u : '';
+            };
+            const sigOf = it => {
+                const roads = String(it.vod_play_url || '').split('$$$').filter(r => r.trim());
+                const road = roads.find(r => /\.m3u8/i.test(r)) || roads[0] || '';
+                let eps = road ? road.split('#').filter(e => e.trim()).length : 0;
+                // kz 搜索结果没有选集:退回看备注里的"更新至183话/全12集"
+                if (!eps) { const m = String(it.vod_remarks || '').match(/(\d{1,4})\s*[集话話期]/); eps = m ? parseInt(m[1], 10) : 0; }
+                const ym = String(it.vod_year || '').match(/(19|20)\d{2}/);
+                return { eps: eps, y: ym ? parseInt(ym[0], 10) : 0, movie: eps > 0 && eps <= 2, uk: urlKey(it) };
+            };
+            const sigs = new Map();
+            list.forEach(it => sigs.set(it, sigOf(it)));
+            const twin = (a, b) => { const x = sigs.get(a).uk; return !!x && x === sigs.get(b).uk; };
+            const dYear = (a, b) => (a.y && b.y) ? Math.abs(a.y - b.y) : 0;
+            const compat = (a, b) => {
+                if (!a.eps || !b.eps) return true;
+                if (a.movie !== b.movie) return false;
+                if (dYear(a, b) >= 2) return false;
+                return a.movie || Math.min(a.eps, b.eps) / Math.max(a.eps, b.eps) >= 0.5;
+            };
+            const dist = (a, p) => (a.movie !== p.movie ? 100 : 0) +
+                ((!a.movie && !p.movie) ? Math.abs(Math.log(a.eps / p.eps)) * 10 : 0) + Math.min(dYear(a, p), 5) * 5;
+            const siteOf = it => it.site_key || it.site_name || '';
+            const bySite = new Map();
+            list.forEach(it => { const k = siteOf(it); if (!bySite.has(k)) bySite.set(k, []); bySite.get(k).push(it); });
+            // ① 冲突证据 → 原型(站内首集地址相同的旧副本不算证据、也不做原型)。
+            //   先收集全部候选再按 (电影样, 年, 集数降序) 排序,用"全连接"合并:候选必须与原型里【每个】成员都兼容 ——
+            //   结果只取决于候选集合、与 SSE 到达顺序无关;同一个站里互相冲突的两条也绝不会并进同一个原型(否则其中一条会被去重吃掉)
+            const cands = [];
+            bySite.forEach(arr => {
+                if (arr.length < 2) return;
+                const known = arr.filter(it => sigs.get(it).eps > 0);
+                if (!known.some((a, i) => known.some((b, j) => j > i && !twin(a, b) && !compat(sigs.get(a), sigs.get(b))))) return;
+                known.filter(it => !known.some(o => o !== it && twin(o, it) && sigs.get(o).eps >= sigs.get(it).eps && (sigs.get(o).eps > sigs.get(it).eps || known.indexOf(o) < known.indexOf(it))))
+                    .forEach(it => cands.push(sigs.get(it)));
+            });
+            cands.sort((a, b) => (a.movie - b.movie) || (a.y - b.y) || (b.eps - a.eps));
+            const protos = [];
+            cands.forEach(s => {
+                const p = protos.find(q => q.members.every(m => compat(m, s)));
+                if (p) { p.members.push(s); if (s.eps > p.sig.eps && !s.movie) p.sig = Object.assign({}, p.sig, { eps: s.eps }); if (!p.sig.y && s.y) p.sig = Object.assign({}, p.sig, { y: s.y }); }
+                else protos.push({ sig: Object.assign({}, s), members: [s], items: [] });
+            });
+            // 原型排序固定(与到达顺序无关):最近原型打平时也总落到同一个
+            protos.sort((a, b) => (a.sig.movie - b.sig.movie) || (a.sig.y - b.sig.y) || (a.sig.eps - b.sig.eps));
+            let clusters;
+            if (protos.length < 2) clusters = [{ sig: null, items: list.slice() }];
+            else {
+                const unknown = [];
+                list.forEach(it => {
+                    const s = sigs.get(it);
+                    if (!s.eps) { unknown.push(it); return; }
+                    let best = protos[0], bd = Infinity;
+                    protos.forEach(p => { const d = dist(s, p.sig); if (d < bd) { bd = d; best = p; } });
+                    best.items.push(it);
+                });
+                // 首集地址相同的条目归到其中集数最多那条所在的作品(旧副本跟着新副本走)
+                const home = new Map();
+                protos.forEach(p => p.items.forEach(it => {
+                    const k = sigs.get(it).uk;
+                    if (!k) return;
+                    const h = home.get(k);
+                    if (!h || sigs.get(it).eps > sigs.get(h.it).eps) home.set(k, { it, p });
+                }));
+                protos.forEach(p => {
+                    p.items = p.items.filter(it => {
+                        const h = home.get(sigs.get(it).uk);
+                        if (!h || h.p === p) return true;
+                        h.p.items.push(it);
+                        return false;
+                    });
+                });
+                const sites = c => new Set(c.items.map(siteOf)).size;
+                clusters = protos.filter(p => p.items.length).sort((a, b) => (sites(b) - sites(a)) || (a.sig.y - b.sig.y));
+                if (!clusters.length) clusters = [{ sig: null, items: [] }];
+                clusters[0].items.push(...unknown);
+            }
+            const tierOf = it => { const t = it.site_profile && (it.site_profile.tier || it.site_profile.t); return Object.prototype.hasOwnProperty.call(SRC_TIER_RANK, t) ? SRC_TIER_RANK[t] : SRC_TIER_RANK.unknown; };
+            // ② 同站只留一条;年份明确不同且首集地址不同的另一条 → 溢出成单独作品(按 年份+电影样 归组)
+            const overflow = [];
+            const dedupe = (arr) => {
+                const keep = new Map();
+                arr.forEach(it => {
+                    const k = siteOf(it);
+                    const cur = keep.get(k);
+                    if (!cur) { keep.set(k, it); return; }
+                    const a = sigs.get(it), b = sigs.get(cur);
+                    const better = a.eps > b.eps || (a.eps === b.eps && a.y > b.y);
+                    const distinct = a.y && b.y && a.y !== b.y && !twin(it, cur) && firstUrl(it) && firstUrl(cur);
+                    const loser = better ? cur : it;
+                    if (better) keep.set(k, it);
+                    if (distinct) overflow.push(loser);
+                });
+                // ③ 片源完全相同只留一条(Map 保持先到顺序)
+                const byUrl = new Map(), result = [];
+                keep.forEach(it => {
+                    const u = firstUrl(it);
+                    if (!u) { result.push(it); return; }
+                    const prev = byUrl.get(u);
+                    if (!prev) { byUrl.set(u, it); result.push(it); return; }
+                    const de = sigs.get(it).eps - sigs.get(prev).eps;
+                    if (de > 0 || (de === 0 && tierOf(it) < tierOf(prev))) { result[result.indexOf(prev)] = it; byUrl.set(u, it); }
+                });
+                return result;
+            };
+            const works = clusters.map(c => ({ items: dedupe(c.items), all: c.items.slice() }));
+            if (overflow.length) {
+                const ex = new Map();
+                overflow.forEach(it => { const s = sigs.get(it); const k = s.y + (s.movie ? 'm' : 's'); if (!ex.has(k)) ex.set(k, []); ex.get(k).push(it); });
+                ex.forEach(arr => works.push({ items: dedupe(arr), all: arr.slice() }));
+            }
+            // 标注/签名按【实际留下的条目】算:年份取出现最多的(打平取新),集数取最大
+            const describe = (arr) => {
+                const yc = {};
+                let eps = 0, movie = false;
+                arr.forEach(it => { const s = sigs.get(it); if (s.y) yc[s.y] = (yc[s.y] || 0) + 1; if (s.eps > eps) { eps = s.eps; movie = s.movie; } });
+                let y = 0, n = 0;
+                Object.keys(yc).forEach(k => { const c = yc[k]; if (c > n || (c === n && +k > y)) { n = c; y = +k; } });
+                return { y, eps, movie };
+            };
+            const out = [];
+            const split = works.filter(w => w.items.length).length > 1;
+            const ds = works.map(w => describe(w.items));
+            const base = ds.map(d => split ? 'y' + (d.y || 0) + (d.movie ? 'm' : 's') : '');
+            const cnt = {};
+            base.forEach(b => { cnt[b] = (cnt[b] || 0) + 1; });
+            const used = new Set();
+            works.forEach((w, i) => {
+                const d = ds[i];
+                let sig = base[i], label = '';
+                if (split) {
+                    // 同年同类型的几部(如 2024 年 40 集电视剧 + 2024 年 100 集短剧):都按集数量级区分,谁先谁后都一样
+                    if (cnt[sig] > 1) sig += 'e' + Math.round(Math.log2(Math.max(1, d.eps)));
+                    while (used.has(sig)) sig += '+';
+                    used.add(sig);
+                    label = (d.y ? d.y + ' · ' : '') + (d.movie ? '全' + d.eps + '集' : (d.eps ? d.eps + '集' : ''));
+                }
+                out.push({ work: i === 0 ? '' : sig, sig: sig, label: label, items: w.items, all: w.all || w.items });
+            });
+            return out;
         }
 
         // 💾 倍速恢复辅助 — 多次重试确保 HLS.js 不会重置
@@ -5467,6 +6001,7 @@
                     previewLocked: false,    // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
                     deepLinkLoading: false,  // ⏳ 已登录深链：立即显示播放页框架(加载态)，搜索/测速在后台进行，避免先闪搜索结果页
                     deepLinkSourceCount: 0,  // ⏳ 深链加载帧里展示"已找到 N 个线路"的动态计数
+                    srcRev: 0,  // 🏷️ 线路分级的非响应式输入(广告过滤开关/绕开去广告记账/hls.js 与去插播核心加载)变了就 +1,让分组和徽章一起重算(不能以 _ 开头:Vue 3 不代理)
                     infoModalData: null,   // 弹窗数据
                     TMDB_IMG_URL: TMDB_IMG_URL,  // 模板中使用
                     TMDB_BACKDROP_URL: TMDB_BACKDROP_URL,
@@ -5479,6 +6014,14 @@
                     pastCompactThreshold: false,  // 滚动越过 400px(用于搜索框 compact)；仅阈值翻转时更新，避免每帧重渲染
                     hotList: [],
                     sitesMap: {},  // 缓存站点信息（用于客户端测速）
+                    // 🏷️ 线路广告分级表 { site_key: {tier,res,geo,note} }(/api/sites 下发)。先用本地缓存垫底:
+                    //    离线/弱网、历史回放、/api/sites 还没回来时角标也能显示。冻结 = 不做深层响应式(只在整体替换时触发)
+                    siteProfiles: (function () {
+                        try {
+                            const m = JSON.parse(localStorage.getItem('donggua_site_profiles') || 'null');
+                            return Object.freeze(m && typeof m === 'object' ? m : {});
+                        } catch (e) { return Object.freeze({}); }
+                    })(),
                     corsProxyUrl: null,  // CORS 代理 URL（当前主代理；用于中转无法直接访问的资源站 API）
                     corsProxyUrls: [],   // 全部 CORS 代理（多代理冗余；过滤代理故障时轮换到备用 worker）
                     danmakuEnabled: false,  // 🗨️ 弹幕开关（来自 /api/config，配置了 DANMU_API_URL 才为 true）
@@ -5661,6 +6204,12 @@
                 }
             },
             async mounted() {
+                // 🏷️ 线路分级依赖的非响应式状态变了 → srcRev++(只在事件里,不按帧)
+                //   广告过滤开关在 DPlayer 设置面板里(ad-filter.js 注入 #ad-filter-toggle,只写 localStorage);冒泡阶段到 document 时它已翻转
+                try {
+                    document.addEventListener('click', (e) => { try { if (e.target && e.target.closest && e.target.closest('#ad-filter-toggle')) { this._srcAdBadMemo = null; this.srcRev++; } } catch (x) { } });
+                    window.addEventListener('load', () => { this.srcRev++; }, { once: true });   // defer 的 hls.js / ad-clip-core 晚于本脚本执行
+                } catch (e) { }
                 console.log('[VERSION] DongguaTV Code Version: 2024-12-19-v2 (showMovieInfo exists)');
                 console.log('[VERSION] Methods available:', Object.keys(this.$options.methods || {}).join(', '));
 
@@ -5927,46 +6476,85 @@
                     const cur = (this.episodeList && this.episodeList.length > 1)
                         ? this.episodeList.find(e => e.url === this.currentUrl) : null;
                     if (cur && cur.name) u += '&ep=' + encodeURIComponent(cur.name);
+                    if (this.currentGroup._workLabel && this.currentGroup._workSig) u += '&w=' + encodeURIComponent(this.currentGroup._workSig);   // 🧩 同名多部:分享出去也开这一部
                     if (this.shareIncludeTime && this.shareSeconds > 0) u += '&t=' + this.shareSeconds;
                     return u;
                 },
                 canNativeShare() { return typeof navigator !== 'undefined' && !!navigator.share; },
                 groupedList() {
                     const groups = {};
+                    const isDefault = (url) => !url || url.includes('mac_default') || url.includes('nopic');
                     this.rawList.forEach(item => {
                         const name = item.vod_name;
-                        if (!groups[name]) groups[name] = { name: name, pic: item.vod_pic, sources: [] };
-                        const isDefault = (url) => !url || url.includes('mac_default') || url.includes('nopic');
+                        if (!groups[name]) groups[name] = { name: name, pic: item.vod_pic, items: [] };
                         if (isDefault(groups[name].pic) && !isDefault(item.vod_pic)) groups[name].pic = item.vod_pic;
                         // 注：图片回退(handleImgError)已在搜索 onmessage 中按新到达的项处理，
                         //     computed 内不再调用，保持纯函数、避免渲染期副作用引发的重渲染抖动。
-
-                        groups[name].sources.push({
-                            ...item,
-                            latency: item.latency || 999
+                        groups[name].items.push(item);
+                    });
+                    // 🧩 同名多部作品拆成多张卡 + 同站/同片源去重(见 splitSameNameWorks)。拆出来的卡片同名(历史/进度/弹幕
+                    //    都按名字存,与拆分前一张卡时的行为一致),靠 _work 区分(卡片 key、历史补齐线路、刷新线路都要对上同一部)
+                    const out = [];
+                    Object.values(groups).forEach(g => {
+                        splitSameNameWorks(g.items).forEach(w => {
+                            if (!w.items.length) return;
+                            let pic = g.pic;
+                            // 拆开后每张卡(含主作品)只用自己作品条目里的海报:宁可空着走 TMDB 兜底,也不借另一部的海报
+                            if (w.label) { const p = w.items.find(it => !isDefault(it.vod_pic)); pic = p ? p.vod_pic : ''; }
+                            out.push({
+                                name: g.name, pic: pic, _work: w.work, _workSig: w.sig, _workLabel: w.label,
+                                sources: w.items.map(item => ({ ...item, latency: item.latency || 999 }))
+                            });
                         });
                     });
-                    return this._kzSnapGroups(Object.values(groups)).sort((a, b) => b.sources.length - a.sources.length);
+                    return this._kzSnapGroups(out).sort((a, b) => b.sources.length - a.sources.length);
                 },
-                // 快速线路 (延迟 < 600ms)
-                fastSources() {
+                // 已测出可用的线路(延迟 < 9000ms;'...' 测速中 / 9998 用户端播放失败 / 9999 不可用 都不显示)
+                playableSources() {
                     if (!this.currentGroup || !this.currentGroup.sources) return [];
-                    return this.currentGroup.sources.filter(s => {
-                        if (s.latency === '...') return false;
-                        return typeof s.latency === 'number' && s.latency < 600;
+                    return this.currentGroup.sources.filter(s => typeof s.latency === 'number' && s.latency < 9000);
+                },
+                // 🏷️ 分组(SRC_GROUPS 顺序),组内:快线(<600ms)在前 → 档位(无广告 > 插播已去除)→ 分辨率高在前 → 延迟低在前。
+                //    "可能无法播放"组:本机测速只有服务器能通(可达档 2,用户端多半播不了,多为海外受限)的线路,放最后、档位优先。
+                //    按【本机测速结果】而非档案里的"海外受限"分:国内用户测得通的海外受限线路留在原分组。
+                //    offset = 本组第一条在 availableSources 里的下标(模板 tabindex 用)。
+                //    ⚡ 测速期间每写一次 latency 都会重算:每条线路只查一次分级(Map 暂存),比较器里不再重复查。
+                sourceGroups() {
+                    const by = {};
+                    const metaOf = new Map();
+                    this.playableSources.forEach(s => {
+                        const p = this.srcProfile(s);
+                        metaOf.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(p.res)]);
+                        const gid = this._srcUnreach(s) ? 'unreach' : SRC_TIER_GROUP[p.tier];
+                        (by[gid] = by[gid] || []).push(s);
+                    });
+                    let off = 0;
+                    return SRC_GROUPS.filter(t => by[t.tier]).map(t => {
+                        const unreach = t.tier === 'unreach';
+                        const items = by[t.tier].slice().sort((a, b) => {
+                            const ma = metaOf.get(a), mb = metaOf.get(b);
+                            // 年份对不上的 kz(多半是同名的另一部)永远垫底;合并后的"无广告"组里它不能压过插播已去除的线路
+                            return ((a._kzMismatch ? 1 : 0) - (b._kzMismatch ? 1 : 0)) ||
+                                (unreach ? 0 : ((a.latency >= 600) - (b.latency >= 600))) || (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
+                        });
+                        const g = { tier: t.tier, label: t.label, desc: t.desc, items: items, offset: off };
+                        off += items.length;
+                        return g;
                     });
                 },
-                // 慢速线路 (600ms <= 延迟 < 9000ms，非超时)
-                slowSources() {
-                    if (!this.currentGroup || !this.currentGroup.sources) return [];
-                    return this.currentGroup.sources.filter(s => {
-                        if (s.latency === '...') return false;
-                        return typeof s.latency === 'number' && s.latency >= 600 && s.latency < 9000;
-                    });
-                },
-                // 兼容旧代码的 availableSources（包含快速和慢速）
+                // 全部可用线路 = 分组展开后的顺序。这同时是【显示顺序】【自动换源顺序】(handlePlaybackError)
+                // 和【TV"切换线路"按钮的轮换顺序】——三处一致,用户看到的下一条就是自动会切的下一条
                 availableSources() {
-                    return [...this.fastSources, ...this.slowSources];
+                    const out = [];
+                    this.sourceGroups.forEach(g => { g.items.forEach(s => out.push(s)); });
+                    return out;
+                },
+                // 快速线路 (延迟 < 600ms) / 慢速线路 (600ms <= 延迟 < 9000ms):保留旧名,模板里的 v-if 仍在用
+                fastSources() {
+                    return this.availableSources.filter(s => s.latency < 600);
+                },
+                slowSources() {
+                    return this.availableSources.filter(s => s.latency >= 600);
                 }
             },
             methods: {
@@ -6253,6 +6841,10 @@
                                 this.sitesMap[site.key] = site;
                             });
                         }
+                        // 🏷️ 线路广告分级表:以服务器为准整体替换(服务器没给 = 空表,不留旧的),并缓存供下次冷启动/离线垫底
+                        const _prof = (sitesData && sitesData.profiles && typeof sitesData.profiles === 'object') ? sitesData.profiles : {};
+                        this.siteProfiles = Object.freeze(_prof);
+                        try { localStorage.setItem('donggua_site_profiles', JSON.stringify(_prof)); } catch (e) { }
                     } catch (e) {
                         console.error('Sites Load Error:', e);
                     }
@@ -6744,7 +7336,10 @@
                         }
                     }
                     if (groupData && Array.isArray(groupData.sources)) {
-                        const fresh = this.groupedList.find(g => g.name === name);
+                        // 🧩 同名多部作品已拆成多张卡:只拿同一部(_work 相同)的卡来补,否则电影的历史会被并进剧集的线路
+                        const cs = this.currentSource;
+                        const hasCur = g => !cs || g.sources.some(s => s.site_key === cs.site_key && String(s.vod_id) === String(cs.vod_id));
+                        const fresh = this.groupedList.find(g => g.name === name && (cs ? hasCur(g) : (!groupData._workSig || (g._workSig || '') === groupData._workSig)));
                         if (fresh && fresh.sources.length > groupData.sources.length) {
                             const existKeys = new Set(groupData.sources.map(s => s.site_key));
                             const merged = groupData.sources.slice();
@@ -6771,6 +7366,9 @@
                         groupData: groupData ? {
                             name: groupData.name,
                             pic: groupData.pic,
+                            _work: groupData._work || '',   // 🧩 同名多部作品里的哪一部(卡片 key)
+                            _workSig: groupData._workSig || '',   // 与名次无关的作品签名(刷新线路/分享深链按它认)
+                            _workLabel: groupData._workLabel || '',
                             sourcesTestedAt: groupData.sourcesTestedAt || null,  // 🕐 测速时间戳：历史回放据此决定是否需要重测(新鲜则用本地缓存)
                             sources: groupData.sources.map((s, idx) => ({
                                 vod_id: s.vod_id,  // 用于刷新集数
@@ -6783,6 +7381,7 @@
                                 site_key: s.site_key || (s.site_name + '_' + idx),  // 用于匹配高亮
                                 latency: s.latency || 500,  // 默认延迟
                                 _testType: s._testType || null,  // 保存测速类型: direct/proxy/server
+                                _srvOnly: !!s._srvOnly,          // 用户端真测过且只有服务器能通("可能无法播放"组)
                                 // 🔧 保留代理标记，否则只能通过代理访问的线路在历史回放时会被当成直连而播放失败
                                 _useProxy: s._useProxy || false,
                                 _proxyUrl: s._proxyUrl || null
@@ -7039,19 +7638,6 @@
                         // 设置 rawList（用于显示资源站列表和允许切换）
                         this.rawList = sourcesWithKey;
 
-                        // 获取最佳资源：优先选择直连测速(direct)的资源站，其次是代理(proxy)，最后才是服务器测速(server)
-                        // 1. 优先选择直连测速且延迟合理的资源
-                        let directSources = sourcesWithKey.filter(s => s._testType === 'direct' && s.latency && s.latency < 3000);
-                        // 2. 其次选择代理测速的资源
-                        let proxySources = sourcesWithKey.filter(s => s._testType === 'proxy' && s.latency && s.latency < 3000);
-                        // 3. 最后才考虑服务器测速或无类型的资源
-                        let otherSources = sourcesWithKey.filter(s => (!s._testType || s._testType === 'server') && s.latency && s.latency < 3000);
-
-                        // 按延迟排序
-                        directSources.sort((a, b) => a.latency - b.latency);
-                        proxySources.sort((a, b) => a.latency - b.latency);
-                        otherSources.sort((a, b) => a.latency - b.latency);
-
                         // 选择最佳资源：优先使用用户上次选择的资源站
                         let bestSource = null;
                         if (item.lastSourceKey) {
@@ -7060,9 +7646,10 @@
                                 console.log('[观看历史] 恢复上次资源站:', bestSource.site_name);
                             }
                         }
-                        // 回退：按延迟排序选最快的
+                        // 回退:可达性分档(直连 → 代理 → 服务器测速/无类型,只看 <3000ms 的),档内按广告分级挑(_pickPreferred);
+                        //   都没有才取第一条。分级数据不在快照里(会变),由 srcProfile 按 site_key 查表
                         if (!bestSource) {
-                            bestSource = directSources[0] || proxySources[0] || otherSources[0] || sourcesWithKey[0];
+                            bestSource = this._autoPick(sourcesWithKey, 2, 3000) || sourcesWithKey[0];
                         }
                         const testTypeLabel = bestSource?._testType === 'direct' ? '🎬直连' : (bestSource?._testType === 'proxy' ? '🔀代理' : '📡服务器');
                         console.log('[观看历史] 选择资源站:', bestSource?.site_name, '延迟:', bestSource?.latency, '类型:', testTypeLabel);
@@ -7476,6 +8063,201 @@
                 },
 
                 getLatencyClass(ms) { return ms < 500 ? 'dot-green' : (ms < 2000 ? 'dot-yellow' : 'dot-red'); },
+
+                // ===== 🏷️ 线路广告分级 + 自动选源偏好 =====
+                // 分级来源:搜索结果自带 site_profile(服务器按站点算好) → 退回 siteProfiles[site_key] 查表
+                //   (历史快照 / 刷新线路重建 / 离线上下文造出来的线路对象都不带 site_profile,靠查表兜底) → 未评测。
+                // 运行时降级:noburn("插播会被去掉")的前提是 CF Worker 去广告真在这条线路的播放链路里(_srcFilterOn)。
+                //   不在链路里 → 降为 insert("有插播"):画面确实干净,但插播会照播。曾经的错误:本地没配 CORS_PROXY_URL
+                //   时如意照样标"插播已自动过滤",用户实看到棋牌插片(2026-10-05)。
+                srcProfile(s) {
+                    void this.srcRev;   // 依赖:非响应式输入变化时整体重算(见 srcRev)
+                    if (!s) return SRC_UNKNOWN_PROFILE;
+                    const p = s.site_profile || (this.siteProfiles && s.site_key ? this.siteProfiles[s.site_key] : null);
+                    if (!p || typeof p !== 'object') return SRC_UNKNOWN_PROFILE;
+                    let tier = p.tier || p.t;
+                    if (!Object.prototype.hasOwnProperty.call(SRC_TIER_RANK, tier)) tier = 'unknown';
+                    const clip = !!p.clip;
+                    // clip:该站有清单上分不出、只能靠播放器按分辨率突变跳的中插(如意)→ 本机跳不了(原生 HLS 等)也算有插播
+                    let downgraded = false;
+                    if (tier === 'noburn' && (!this._srcFilterOn(s) || (clip && !this._srcClipOn()))) { tier = 'insert'; downgraded = true; }
+                    return { tier: tier, res: String(p.res || p.r || ''), geo: !!p.geo, note: String(p.note || p.n || ''), codec: String(p.codec || p.c || ''), clip: clip, downgraded: downgraded };
+                },
+                // 本机播放器能不能按"分辨率突变 / 时间戳重启"跳插播(window.adClipSkip):要走 hls.js(iOS/Safari 是浏览器原生 HLS,
+                //   拿不到每段分辨率与时间戳)、判定核心已加载、广告过滤开关开着、没被单独关掉 —— 与 adClipSkip.enabled() 同一套条件
+                //   (_srcFilterOn 对走代理播放的线路提前返回 true、不看开关,这里必须自己判)
+                _srcClipOn() {
+                    try {
+                        if (window._dgPreferNativeHls || !window.Hls || !window.Hls.isSupported() || !window.AdClipCore) return false;
+                        if (!(window.AdFilter && window.AdFilter.isEnabled())) return false;
+                        return localStorage.getItem('donggua_adclip_off') !== '1';
+                    } catch (e) { return false; }
+                },
+                // 这条线路播放时 CF Worker 去广告在不在链路里(与 play() 的分流条件一致):
+                //   ① 配了 CORS_PROXY_URL;② 走 worker:测速判定要代理(_useProxy,代理即过滤)或 广告过滤开关开着(AdFilter,默认开);
+                //   ③ 该站没被记成"源站封过滤代理"(_adProxyBad,记账期内直连播、不过滤);
+                //   ④ 不是 Kazumi 源:kz 的 url 是 /api/kz/ep/…(解析出 HLS 后才换成同源 finalUrl),play() 从不给它套 worker
+                //      (动漫巴士 dm84 的 19s 中插照播)。等 kz HLS 真走了 worker 再去掉这条。
+                _srcFilterOn(s) {
+                    if (!s || !this.corsProxyUrl) return false;
+                    if (s._testType === 'kz' || this._isKzSource(s)) return false;
+                    if (s._useProxy) return true;
+                    if (!(window.AdFilter && window.AdFilter.isEnabled())) return false;
+                    return !this._srcAdBad(s.site_key);
+                },
+                // _adProxyBad 未命中内存时会读 localStorage+JSON.parse;模板每次重渲染都要问,这里做 2s 记忆(只有 noburn 站会问到)
+                _srcAdBad(siteKey) {
+                    if (!siteKey) return false;
+                    const now = Date.now();
+                    if (!this._srcAdBadMemo || now - (this._srcAdBadMemoTs || 0) > 2000) { this._srcAdBadMemo = {}; this._srcAdBadMemoTs = now; }
+                    if (!Object.prototype.hasOwnProperty.call(this._srcAdBadMemo, siteKey)) this._srcAdBadMemo[siteKey] = this._adProxyBad(siteKey);
+                    return this._srcAdBadMemo[siteKey];
+                },
+                srcTierRank(s) { return SRC_TIER_RANK[this.srcProfile(s).tier]; },
+                _srcResRankOf(res) {
+                    const r = String(res || '').toLowerCase();
+                    return (r.indexOf('4k') >= 0 || r.indexOf('2160') >= 0) ? 3 : r.indexOf('1080') >= 0 ? 2 : r.indexOf('720') >= 0 ? 1 : 0;
+                },
+                srcResRank(s) { return this._srcResRankOf(this.srcProfile(s).res); },
+                srcResLabel(s) {
+                    const r = String(this.srcProfile(s).res || '').toLowerCase();
+                    if (!r) return '';
+                    const k = this._srcResRankOf(r);
+                    return k === 3 ? '4K' : k === 2 ? '1080P' : k === 1 ? '720P' : '标清';
+                },
+                // 徽章用的显示分组(clean/insert/unknown/ads;noburn 去广告生效时与 clean 同显示为"无广告")
+                srcGroupOf(s) { return SRC_TIER_GROUP[this.srcProfile(s).tier]; },
+                srcTierLabel(s) { return SRC_GROUP_BY_ID[this.srcGroupOf(s)].label; },
+                srcTitle(s) {
+                    const p = this.srcProfile(s);
+                    const g = SRC_GROUP_BY_ID[SRC_TIER_GROUP[p.tier]];
+                    const parts = [g.label + '：' + (p.tier === 'clean' ? '无插播、画面无广告' : g.desc)];
+                    // 降级成"有插播"时不再附档案备注:备注写的是"插播会被自动去除",与降级的原因正相反
+                    if (p.note && !p.downgraded) parts.push(p.note);
+                    if (this._srcUnreach(s)) parts.push(SRC_GROUP_BY_ID.unreach.desc);
+                    else if (p.geo) parts.push('海外受限：部分地区网络可能无法播放');
+                    if (p.codec === 'hevc' && !this._srcHevcOk()) parts.push('H.265 编码：本机浏览器可能无法解码，不会自动选用');
+                    return parts.join('；');
+                },
+                // 本机 MSE 能否解 HEVC(H.265),只探一次。Firefox、不少 Linux/Android Chrome、无硬解的旧 Windows 都不行 ——
+                //   这时 HEVC 源可能只有声音、黑屏、还不报错(自动换源都不触发),所以不能让它以"无广告"身份提档自动起播
+                _srcHevcOk() {
+                    if (this._srcHevcMemo === undefined) {
+                        let ok = false;
+                        try {
+                            const MS = window.MediaSource || window.ManagedMediaSource || window.WebKitMediaSource;
+                            ok = !!(MS && typeof MS.isTypeSupported === 'function' &&
+                                (MS.isTypeSupported('video/mp4; codecs="hvc1.1.6.L120.90"') || MS.isTypeSupported('video/mp4; codecs="hev1.1.6.L120.90"')));
+                        } catch (e) { ok = false; }
+                        this._srcHevcMemo = ok;
+                    }
+                    return this._srcHevcMemo;
+                },
+                // 🚦 可达性分档 —— 自动选源的硬闸门,广告分级只在【同一档内】挑,绝不让"更干净"压过"能不能播":
+                //   0 = 用户端直连测通;以及【无广告且年份对得上】的 Kazumi 源(站长决定:番剧干净高清源与直连同台竞争,
+                //       七色番/月之祠/稀饭 胜过带博彩字幕的 maccms 副本;kz 测速有 600ms 下限,所以永远进不了"<600ms 快线"规则)
+                //       —— 但 HEVC 源(月之祠/稀饭)只在本机能解 H.265 时才提档:kz 测速只测服务器解析、不碰媒体,解不了码测不出来
+                //   1 = 代理测通(CF Worker 能拉到、用户端能播)
+                //   2 = 服务器测速/无类型(服务器通,用户端常播不了,靠自动换源兜底)
+                //   3 = 其余 Kazumi 源(只在 maccms 全不可用时兜底)
+                //  -1 = 不可自动选(未测完/不可用/年份对不上的 kz)
+                _srcReachClass(s) {
+                    if (!s || typeof s.latency !== 'number' || s.latency >= 9000) return -1;
+                    if (s._testType === 'kz' || this._isKzSource(s)) {
+                        if (s._kzMismatch) return -1;
+                        const p = this.srcProfile(s);
+                        return (p.tier === 'clean' && (p.codec !== 'hevc' || this._srcHevcOk())) ? 0 : 3;
+                    }
+                    if (s._testType === 'direct') return 0;
+                    if (s._testType === 'proxy') return 1;
+                    return 2;
+                },
+                // 🏷️ 档内挑选:只在"不比最快的慢太多"(≤ max(最快+800, 最快×2) 且 <3000ms;一个都不满足就全体)的候选里,
+                //   (都 ≥3000ms 时只看相对窗口)按 分级(无广告>插播已去除>有插播>未评测>有水印) → 分辨率高 → 延迟低 排序取第一。
+                //   例外:无广告档(clean/noburn)只要 <SRC_CLEAN_PICK_MS 就留在候选里,不受相对窗口限制——实测成龙历险记:
+                //   如意(插播已去除)873ms 被 61ms 的有水印线路挤出窗口(61+800=861),几百毫秒的起播差远不如整集看博彩水印。
+                //   cands 由调用方按可达档过滤好;这里绝不从 cands 之外选,所以分级永远推翻不了可达性。
+                _pickPreferred(cands) {
+                    if (!cands || !cands.length) return null;
+                    let fastest = Infinity;
+                    cands.forEach(s => { if (s.latency < fastest) fastest = s.latency; });
+                    const lim = Math.max(fastest + 800, fastest * 2);
+                    const SRC_CLEAN_PICK_MS = 2000;
+                    // 豁免只用来救"被更差档快线挤出窗口"的无广告线路;豁免的线路之间仍按它们里最快那条的相对窗口比
+                    //   (否则 1900ms 的无广告会压过 80ms 的无广告——两条徽章一样,用户只会觉得起播慢)
+                    const isClean = s => s.latency < SRC_CLEAN_PICK_MS && this.srcTierRank(s) <= SRC_TIER_RANK.noburn;
+                    let fc = Infinity;
+                    cands.forEach(s => { if (isClean(s) && s.latency < fc) fc = s.latency; });
+                    const limC = Math.max(fc + 800, fc * 2);
+                    const ok = cands.filter(s => s.latency < 3000 && (s.latency <= lim || (isClean(s) && s.latency <= limC)));
+                    // 没有 <3000ms 的候选时仍守住相对窗口(最快的一定在窗口内,pool 不会空):否则分级单独说了算,
+                    //   3100ms 含广告 vs 8900ms 无广告会挑那条勉强能通的慢线,慢网用户起播更慢
+                    const pool = ok.length ? ok : cands.filter(s => s.latency <= lim);
+                    const meta = new Map();
+                    pool.forEach(s => { const p = this.srcProfile(s); meta.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(p.res)]); });
+                    return pool.slice().sort((a, b) => {
+                        const ma = meta.get(a), mb = meta.get(b);
+                        return (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
+                    })[0];
+                },
+                // 按可达档从 0 往 maxClass 找第一个非空档,档内 _pickPreferred。maxLatency:历史回放只认 <3000ms 的旧测速
+                _autoPick(sources, maxClass, maxLatency) {
+                    const lim = maxLatency || 9000;
+                    const list = (sources || []).filter(s => typeof s.latency === 'number' && s.latency < lim);
+                    for (let c = 0; c <= maxClass; c++) {
+                        const cands = list.filter(s => this._srcReachClass(s) === c);
+                        if (cands.length) return this._pickPreferred(cands);
+                    }
+                    return null;
+                },
+                // ⚡ 测速进行中的提前起播判定(checkEarlyReturn 用;返回 {src, why} 或 null = 继续等):
+                //   ① 第 0 档已有【无广告/无硬广】且 <600ms 的线路 → 立即起播(该档内仍走 _pickPreferred)
+                //   ② 第 0 档已有 ≥2 条 <600ms 快线 → 在第 0 档内 _pickPreferred
+                //   ②' 第 0 档一条 <600ms 都没有、代理档有【无广告/无硬广】<600ms → 立即从代理档挑(排在 ② 之后,绝不越档)
+                //   ③ 测速已过 EARLY_SETTLE_MS(1.2s):第 0 档有就从第 0 档挑,否则代理档有就从代理档挑
+                //      (含广告/未评测的代理不再"首个就绪立刻播",给干净线路 1.2s 测出来;3s 兜底定时器不变)
+                _earlyPick(sources, elapsedMs, fastMs, needFast) {
+                    const FAST = fastMs || 600;
+                    const c0 = [], c1 = [];
+                    (sources || []).forEach(s => { const c = this._srcReachClass(s); if (c === 0) c0.push(s); else if (c === 1) c1.push(s); });
+                    const fast = s => s.latency < FAST;
+                    const good = s => fast(s) && this.srcTierRank(s) <= SRC_TIER_RANK.noburn;
+                    if (c0.some(good)) return { src: this._pickPreferred(c0), why: '已测出无广告快线' };
+                    // ⏳ 还有【无广告/无硬广】线路没测完 → ②③ 先别急着从含广告/未评测里挑,等它测出来(最多到 3s 兜底定时器,
+                    //   那里照样按分级优选)。实测:兰香如故 2 条含广告直连快线(334/349ms)抢在如意(无硬广,1115ms)测完前就被选中。
+                    //   标了"海外受限"的不等:海外用户那边它们多半只能测出服务器档(选不上),每次都等满 3s 只会白白拖慢起播。
+                    const pendingBetter = (sources || []).some(s => s.latency === '...' && this.srcTierRank(s) <= SRC_TIER_RANK.noburn && !this.srcProfile(s).geo);
+                    if (!pendingBetter && c0.filter(fast).length >= (needFast || 2)) return { src: this._pickPreferred(c0), why: '已找到多个用户端快速线路' };
+                    // 代理档的"干净快线"只在第 0 档一条快线都没有时才能抢先 —— 顺序不能倒:先判它的话,2 条含广告直连快线
+                    //   + 1 条无硬广代理快线会选代理,越过了可达性更好的直连(绝不越档)。旧版也是"≥2 直连快线"优先于代理。
+                    if (c1.some(good) && !c0.some(fast)) return { src: this._pickPreferred(c1), why: '已测出无广告代理快线' };
+                    if (elapsedMs > EARLY_SETTLE_MS && !pendingBetter) {
+                        if (c0.length) return { src: this._pickPreferred(c0), why: '用户端可播线路就绪' };
+                        if (c1.length) return { src: this._pickPreferred(c1), why: '代理可播线路就绪' };
+                    }
+                    return null;
+                },
+                _srcTestOrder(list) {
+                    return (list || []).slice().sort((a, b) => (this.srcTierRank(a) - this.srcTierRank(b))
+                        || ((this.srcProfile(a).geo ? 1 : 0) - (this.srcProfile(b).geo ? 1 : 0)));
+                },
+                _srcLogTag(s) {
+                    const c = this._srcReachClass(s);
+                    const tt = s && s._testType;
+                    const via = tt === 'direct' ? '🎬直连' : tt === 'proxy' ? '🔁代理' : tt === 'kz' ? '🎌番剧' : '📡服务器';
+                    return via + (c === 0 && tt === 'kz' ? '(0档)' : '') + '·' + this.srcTierLabel(s);
+                },
+                // 🔁 自动换源的下一条:从失败线路之后【绕一圈】扫(显示顺序已按分级重排,自动选中的线路可能在列表中间,
+                //   只往后扫会漏掉排在它前面、还没试过的线路,过早报"所有线路均无法播放")。
+                //   排除:失败线路本身、本次导航里已试过失败的(_failNav)、年份对不上的 kz;优先【确实有当前这一集】的。
+                _failoverNext(allSources, failingSource, curEpName) {
+                    const all = allSources || [];
+                    let i = all.indexOf(failingSource);
+                    if (i < 0 && failingSource) i = all.findIndex(s => s.site_key === failingSource.site_key);
+                    const order = i >= 0 ? all.slice(i + 1).concat(all.slice(0, i)) : all.slice();
+                    const cands = order.filter(s => s !== failingSource && s._failNav !== _navSeq && !s._kzMismatch);
+                    return cands.find(s => this._sourceHasEpisode(s, curEpName) !== false) || cands[0] || null;
+                },
                 // 投屏功能：纯粹的原生实现
                 // 🔗 打开分享面板（可勾选"从当前进度开始"）
                 openSharePanel() {
@@ -7551,6 +8333,7 @@
                         const cur = (this.episodeList && this.episodeList.length > 1)
                             ? this.episodeList.find(e => e.url === this.currentUrl) : null;
                         if (cur && cur.name) u += '&ep=' + encodeURIComponent(cur.name);
+                        if (this.currentGroup._workLabel && this.currentGroup._workSig) u += '&w=' + encodeURIComponent(this.currentGroup._workSig);   // 🧩 同名多部:刷新/分享后还开这一部
                         history.replaceState(history.state, '', u);
                     } catch (e) { }
                 },
@@ -7584,7 +8367,7 @@
                         if (liveName) { this._resolveLiveDeepLink(decodeURIComponent(liveName)); return; }  // 📺 ?live=频道名
                         const playName = p.get('play');
                         if (!playName) return;
-                        this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, done: false };
+                        this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, w: p.get('w') || '', done: false };
                         this._deepLinkTargetEp = '';  // 每次深链重置目标集数(真正定位在 tryOpenDeepLink→switchSource 完成)
                         console.log('[深链] ?play=', playName, 'ep=', this._deepLink.ep, 't=', this._deepLink.t);
                         // ⏳ 已登录深链：立刻显示"播放页框架(加载态)"盖住后台搜索结果页，避免"先卡在搜索页很久才打开播放页"。
@@ -7603,7 +8386,7 @@
                         this.autoSearch(playName);
                         // 安全兜底：万一 done/onerror/防抖 都没触发(极少)，12s 后用已到的源打开，避免一直卡加载
                         if (this._dlGraceTimer) clearTimeout(this._dlGraceTimer);
-                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(false), 12000);
+                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(false, true), 12000);
                     } catch (e) { }
                 },
                 // 深链定位打开。不必等"全部站点搜完(done)"——那要等最慢的几个站点；改为"源流式到达停顿(防抖~1.2s)
@@ -7615,12 +8398,25 @@
                     if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
                     if (this._dlDebounce) { clearTimeout(this._dlDebounce); this._dlDebounce = null; }
                 },
-                tryOpenDeepLink(isFinal) {
+                tryOpenDeepLink(isFinal, grace) {
                     const dl = this._deepLink;
                     if (!dl || dl.done) return;
                     const norm = (s) => (s || '').trim();
-                    const group = this.groupedList.find(g => norm(g.name) === norm(dl.name))
-                        || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
+                    // 🧩 同名多部作品:&w= 指定了哪一部就开那一部;还没搜到它就继续等(终局时退回同名第一张)
+                    const same = this.groupedList.filter(g => norm(g.name) === norm(dl.name));
+                    let byW = dl.w ? same.find(g => g._workSig === dl.w) : null;
+                    if (dl.w && !byW && same.length && !isFinal && !grace) return;   // 还在流式到达:先等等(12s 兜底照样开)
+                    if (dl.w && !byW && same.length) {
+                        // 签名对不上(搜索结果变了):按 电影样/剧集 一致、年份最近 找
+                        const m = /^y(\d+)([ms])/.exec(dl.w);
+                        if (m) {
+                            const cands = same.filter(g => g._workSig && g._workSig.charAt(('y' + m[1]).length) === m[2]);
+                            const yy = g => parseInt((/^y(\d+)/.exec(g._workSig) || [])[1] || '0', 10);
+                            cands.sort((a, b) => Math.abs(yy(a) - +m[1]) - Math.abs(yy(b) - +m[1]));
+                            byW = cands[0] || null;
+                        }
+                    }
+                    const group = byW || same[0] || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
                     if (!group) {
                         if (!isFinal) return;  // 还没搜到该剧：继续等(防抖/兜底)，别误判失败
                         // ⬇️ 搜索无果(典型=断网)但该剧有离线缓存 → 深链直接进离线上下文(?ep= 由 _deepLinkTargetEp 定位)
@@ -8308,22 +9104,25 @@
                 },
 
                 finalPoster(item, isHot = false) {
-                    const name = isHot ? item.vod_name : item.name;
-                    return this.imageMap[name] || (isHot ? item.vod_pic : item.pic);
+                    const key = isHot ? item.vod_name : this.posterKey(item);
+                    return this.imageMap[key] || (isHot ? item.vod_pic : item.pic);
                 },
+                // 🧩 同名多部作品拆成多张卡时,海报/回退各自按"片名|作品签名"记,不互相覆盖;没拆的卡仍按片名(与旧行为一致)
+                posterKey(g) { return (g && g.name || '') + (g && g._workLabel && g._workSig ? '|' + g._workSig : ''); },
                 isFallback(name) { return this.fallbackMap[name] === true; },
 
-                handleImgError(name) {
-                    if (this.imageMap[name] || this.fallbackMap[name]) return;
-                    this.fallbackMap[name] = true;
+                handleImgError(key, queryName) {
+                    const name = queryName || key;
+                    if (this.imageMap[key] || this.fallbackMap[key]) return;
+                    this.fallbackMap[key] = true;
                     let cleanName = name.replace(/第[0-9一二三四五六七八九十]+[季部]/g, '').replace(/Season\s*\d+/ig, '').replace(/S\d{1,2}/ig, '').replace(/(HD|BD|1080P|720P|4K|202\d|TC|TS).*/i, '').trim();
                     tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent('/search/multi')}&query=${encodeURIComponent(cleanName)}`)
                         .then(res => res.json()).then(data => {
                             if (data.results && data.results.length > 0) {
                                 const found = data.results.find(i => i.poster_path) || data.results[0];
                                 if (found.poster_path) {
-                                    this.imageMap[name] = `${TMDB_IMG_URL}${found.poster_path}`;
-                                    this.fallbackMap[name] = false;
+                                    this.imageMap[key] = `${TMDB_IMG_URL}${found.poster_path}`;
+                                    this.fallbackMap[key] = false;
                                 }
                             }
                         }).catch(() => { });
@@ -8378,7 +9177,9 @@
                                 //   (不必等最慢站点的 done)，由 openDetail 边测边选、首个可播源就起播。
                                 if (this._deepLink && !this._deepLink.done) {
                                     const norm = (s) => (s || '').trim();
-                                    const g = this.groupedList.find(x => norm(x.name) === norm(this._deepLink.name))
+                                    const dlw = this._deepLink.w;
+                                    const g = (dlw && this.groupedList.find(x => norm(x.name) === norm(this._deepLink.name) && x._workSig === dlw))
+                                        || this.groupedList.find(x => norm(x.name) === norm(this._deepLink.name))
                                         || this.groupedList.find(x => norm(x.name).includes(norm(this._deepLink.name)));
                                     this.deepLinkSourceCount = (g && g.sources) ? g.sources.length : 0;
                                     if (this._dlDebounce) clearTimeout(this._dlDebounce);
@@ -8396,6 +9197,19 @@
                         }
                         // 🔗 深链：搜索结束，定位打开(若防抖未先触发)；无匹配则判失败退出加载态
                         this.$nextTick(() => this.tryOpenDeepLink(true));
+                        // 🧩 卡片打开得早时,它的作品签名是按当时到达的结果算的;结果到齐后按"含正在播放那条线路"的卡校正一次,
+                        //    地址栏/分享出去的 &w= 才和别人搜全之后的签名一致
+                        this.$nextTick(() => {
+                            try {
+                                const g = this.currentGroup, cs = this.currentSource;
+                                if (!g || !g._workLabel || !cs || g._isLive) return;
+                                const card = this.groupedList.find(x => x.name === g.name && x.sources.some(s => s.site_key === cs.site_key && String(s.vod_id) === String(cs.vod_id)));
+                                if (card && card._workSig && card._workSig !== g._workSig) {
+                                    g._work = card._work; g._workSig = card._workSig; g._workLabel = card._workLabel;
+                                    this.syncShareUrl();
+                                }
+                            } catch (e) { }
+                        });
                     });
 
                     this._evtSource.onerror = () => {
@@ -8454,37 +9268,22 @@
                     const FAST_THRESHOLD = 600;  // 快速线路阈值 (ms)
                     const EARLY_RETURN_COUNT = 2;  // 有几个快速线路后提前返回
                     const MAX_WAIT_TIME = 3000;  // 最长等待时间 (ms)
+                    const _openT0 = Date.now();  // 🏷️ 测速起点:_earlyPick 据此决定"含广告/未评测的代理线路"是否已等够(EARLY_SETTLE_MS)
 
-                    // 检查是否可以提前返回 - 优先用户端测速结果
+                    // 检查是否可以提前返回 - 优先用户端测速结果(规则见 _earlyPick;广告分级只在同一可达档内挑,绝不越档)
                     const checkEarlyReturn = () => {
                         if (_openSeq !== _navSeq) return;  // 🧭 已切换到别的剧，停止自动选源
-                        if (hasAutoSelected) return;
-
-                        // 优先检查用户端测速(direct)的快速线路
-                        const directFastSources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'direct' && typeof s.latency === 'number' && s.latency < FAST_THRESHOLD
-                        );
-
-                        if (directFastSources.length >= EARLY_RETURN_COUNT) {
-                            hasAutoSelected = true;
-                            directFastSources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[快速返回] 已找到 ${directFastSources.length} 个用户端快速线路，自动选择: ${directFastSources[0].site_name} (${directFastSources[0].latency}ms 🎬)`);
-                            this.switchSource(directFastSources[0]);
-                            return;
-                        }
-
-                        // 没有直连快速线路时：一旦确认有"代理可播(proxy)"的源(海外用户多为此类)，立刻起播，
-                        // 不必等 3s 超时或全部测速完成——这就是"首个可播源就直接播"的关键。
-                        const proxyReady = this.currentGroup.sources.filter(s =>
-                            s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-                        if (proxyReady.length > 0) {
-                            hasAutoSelected = true;
-                            proxyReady.sort((a, b) => a.latency - b.latency);
-                            console.log(`[快速返回] 首个代理可播线路就绪，自动选择: ${proxyReady[0].site_name} (${proxyReady[0].latency}ms 🔁)`);
-                            this.switchSource(proxyReady[0]);
-                        }
+                        if (hasAutoSelected || this._manualPickNav === _openSeq) return;   // 用户已手动选了线路:自动选源让路
+                        if (!this.currentGroup || !this.currentGroup.sources) return;
+                        const r = this._earlyPick(this.currentGroup.sources, Date.now() - _openT0, FAST_THRESHOLD, EARLY_RETURN_COUNT);
+                        if (!r) return;   // 空手不烧标志:等下一个测速回调 / 1.2s 复查 / 3s 定时器 / 测速完成路径
+                        hasAutoSelected = true;
+                        console.log(`[快速返回] ${r.why}，自动选择: ${r.src.site_name} (${r.src.latency}ms ${this._srcLogTag(r.src)})`);
+                        this.switchSource(r.src);
                     };
+                    // ⏱️ "非干净代理线路等 1.2s 再起播"的复查:测速回调恰好都在 1.2s 前到齐、之后长时间没有新回调时,
+                    //    不至于干等到 3s 定时器(海外用户几乎全是代理线路,这一步直接决定起播速度)
+                    const earlySettleTimer = setTimeout(checkEarlyReturn, EARLY_SETTLE_MS + 50);
 
                     // 超时自动选择（优先用户端测速，其次服务器端）
                     // ⚠️ 死锁教训(生产事故):此定时器在 3s 时若【一个源都还没测完】(大剧 40+ 线路、首批 worker 都是慢站/
@@ -8493,66 +9292,62 @@
                     //    修:只有【真选中了源】才置 hasAutoSelected;空手时保持 false,让后续完成的测速自然接管。
                     const earlyReturnTimer = setTimeout(() => {
                         if (_openSeq !== _navSeq) return;  // 🧭 已切换到别的剧，放弃超时自动选源
-                        if (hasAutoSelected) return;
+                        if (hasAutoSelected || this._manualPickNav === _openSeq) return;   // 用户已手动选了线路:自动选源让路
+                        if (!this.currentGroup || !this.currentGroup.sources) return;
 
-                        // 优先选择用户端测速的结果
-                        let directSources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'direct' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-
-                        if (directSources.length > 0) {
+                        // 可达性分档依次找(直连 → 代理 → 服务器测速),档内按广告分级挑(_pickPreferred):
+                        //   代理 = CF Worker 能拉到、用户端能播;'server' 只是服务器测速通、用户端常播不了(代理 403),放最后兜底。
+                        // 🎌 Kazumi 源不参与 3s 超时抢选(maxClass=2 不含第 3 档):它的测速命中服务器缓存时几乎瞬回,
+                        //    会抢在仍在测的 maccms 直连/代理源前面被选中——例外:【无广告且年份对得上】的 kz 源按站长决定
+                        //    进第 0 档与直连同台竞争(番剧干净高清源胜过带博彩字幕的 maccms 副本),见 _srcReachClass
+                        // 📡 服务器测速档(用户端多半播不了,海外用户就是"海外受限")在 3s 时只有【没有线路还在测】才可选:
+                        //    否则直连/代理还在测、先选上一条注定播不了的,起播反而更慢(实测兰香如故生产环境 3s 选中 dyttzy)。
+                        //    还在测时交给 6.5s 的晚定时器 / 测速完成路径(都不烧空标志)。
+                        const testing = this.currentGroup.sources.some(s => s.latency === '...');
+                        const pick = this._autoPick(this.currentGroup.sources, testing ? 1 : 2);
+                        if (pick) {
                             hasAutoSelected = true;
-                            directSources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[超时返回] 选择用户端测速最快的: ${directSources[0].site_name} (${directSources[0].latency}ms 🎬)`);
-                            this.switchSource(directSources[0]);
-                            return;
-                        }
-
-                        // 没有直连：优先"代理可播(proxy)"的源——CF Worker 能拉到、用户端能播；
-                        // 'server' 只是服务器测速通、用户端常播不了(代理 403)，放最后兜底。
-                        let proxySources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-                        if (proxySources.length > 0) {
-                            hasAutoSelected = true;
-                            proxySources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[超时返回] 选择代理可播最快的: ${proxySources[0].site_name} (${proxySources[0].latency}ms 🔁)`);
-                            this.switchSource(proxySources[0]);
-                            return;
-                        }
-
-                        // 最后回退到服务器端测速(可能播不了，靠自动换源兜底)
-                        // 🎌 Kazumi 源不参与 3s 超时抢选:它的测速命中服务器缓存时几乎瞬回,会抢在仍在测的 maccms 直连/代理源前面被选中;
-                        //    这里空手就不烧标志,交给测速完成路径(那里 maccms 全不可用才轮到 kz)
-                        const testedSources = this.currentGroup.sources.filter(s =>
-                            typeof s.latency === 'number' && s.latency < 9000 && s._testType !== 'kz'
-                        );
-
-                        if (testedSources.length > 0) {
-                            hasAutoSelected = true;
-                            testedSources.sort((a, b) => a.latency - b.latency);
-                            console.log(`[超时返回] ${MAX_WAIT_TIME}ms后自动选择: ${testedSources[0].site_name} (${testedSources[0].latency}ms)`);
-                            this.switchSource(testedSources[0]);
+                            console.log(`[超时返回] ${MAX_WAIT_TIME}ms后自动选择: ${pick.site_name} (${pick.latency}ms ${this._srcLogTag(pick)})`);
+                            this.switchSource(pick);
                         }
                         // 一个都没测完 → 不烧标志,等 checkEarlyReturn/测速完成路径接管
                     }, MAX_WAIT_TIME);
+                    // ⏱️ 晚定时器:还没选上(只剩服务器档能选、其余线路迟迟测不完)时,6.5s 起按 0→2 档兜底一次,不再干等全部测完
+                    const lateReturnTimer = setTimeout(() => {
+                        if (_openSeq !== _navSeq) return;
+                        if (hasAutoSelected || this._manualPickNav === _openSeq) return;   // 用户已手动选了线路:自动选源让路
+                        if (!this.currentGroup || !this.currentGroup.sources) return;
+                        const pick = this._autoPick(this.currentGroup.sources, 2);
+                        if (pick) {
+                            hasAutoSelected = true;
+                            console.log(`[超时返回] 6.5s 兜底自动选择: ${pick.site_name} (${pick.latency}ms ${this._srcLogTag(pick)})`);
+                            this.switchSource(pick);
+                        }
+                    }, 6500);
 
                     const latencyWorker = async (source) => {
                         source.latency = '...';
                         source._useProxy = false;  // 默认不使用代理
                         try {
-                            // 1. 先获取该线路的视频详情(⏱️ 8s 超时:弱网挂起时尽快判失败,别拖住整个测速池)
-                            const detailRes = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`, null, 8000);
-                            const detailData = await detailRes.json();
-
-                            if (!detailData.list || detailData.list.length === 0) {
-                                source.latency = 9999;
-                                return source;
+                            // 1. 选集来源:搜索结果本来就带 vod_play_url(服务器搜索走 ac=detail;实测与详情首集 47/47 一致,
+                            //    switchSource 也是优先用它、根本不看 _cachedDetail)→ 直接拿来测,省掉每条线路一次 /api/detail
+                            //    (冷 p50 218ms、最慢近 1s,首访全量测速快 1-2s)。kz 搜索结果没有选集 / 快照缺选集时才拉详情。
+                            let detail;
+                            if (source.vod_play_url && !this._isKzSource(source)) {
+                                detail = { vod_play_url: source.vod_play_url };
+                            } else {
+                                // ⏱️ 8s 超时:弱网挂起时尽快判失败,别拖住整个测速池
+                                const detailRes = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`, null, 8000);
+                                const detailData = await detailRes.json();
+                                if (!detailData.list || detailData.list.length === 0) {
+                                    source.latency = 9999;
+                                    source._noDeadCache = true;   // 这一部剧拉不到详情 ≠ 整个站不可用:不写 12h 死亡缓存(缓存按站点存,会把该站所有剧藏半天)
+                                    return source;
+                                }
+                                // 2. detail 立即缓存——后续任何测速分支超时都不该丢它
+                                detail = detailData.list[0];
+                                source._cachedDetail = detail;
                             }
-
-                            // 2. 解析出第一个 m3u8 视频 URL(detail 立即缓存——后续任何测速分支超时都不该丢它)
-                            const detail = detailData.list[0];
-                            source._cachedDetail = detail;
                             let playUrl = detail.vod_play_url || '';
 
                             // 处理多线路格式 (用 $$$ 分隔)
@@ -8575,120 +9370,39 @@
 
                             if (!videoUrl || !videoUrl.startsWith('http')) {
                                 source.latency = 9999;
+                                source._noDeadCache = true;   // 同上:这一部剧的地址不对,不代表站点死了
                                 return source;
                             }
 
                             // 检查混合内容：如果页面是 HTTPS 但视频 URL 是 HTTP，回退到服务器端测速
+                            //   (这种线路在 https 页面里本来就播不了:代理只改写 m3u8,分片仍是 http 会被浏览器拦 → 归"可能无法播放")
                             const isPageHttps = window.location.protocol === 'https:';
                             const isVideoHttp = videoUrl.startsWith('http:');
 
                             if (isPageHttps && isVideoHttp) {
-                                // 混合内容，无法直接测试，回退到服务器端延迟
                                 console.log(`[混合内容] ${source.site_name} 视频URL为HTTP，回退到服务器测速`);
-                                const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
-                                const checkData = await checkRes.json();
-                                source.latency = checkData.latency;
-                                source._testType = 'server';  // 服务器端测速
+                                source._srvOnly = true;   // 不论 /api/check 成败都归"可能无法播放"
                                 source._cachedDetail = detail;
+                                const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
+                                this._applyServerCheck(source, await checkRes.json());
                                 checkEarlyReturn();
                                 return source;
                             }
 
-                            // 3. 用户端直接测试 m3u8 URL 的延迟
-                            let directSuccess = false;
-                            let directLatency = 0;
-                            const startTime = Date.now();
-                            const SLOW_THRESHOLD = 1500; // 超过此延迟视为慢速
-
-                            try {
-                                const controller = new AbortController();
-                                const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-                                // m3u8 文件通常配置了 CORS，可以直接 fetch
-                                const testRes = await fetch(videoUrl, {
-                                    method: 'GET',
-                                    cache: 'no-cache',
-                                    signal: controller.signal
-                                });
-
-                                clearTimeout(timeoutId);
-
-                                // ⚠️ 旧版把 testRes.type==='cors' 也算成功——但带 CORS 头的 403/404 错误页 type 同样是 'cors',
-                                //    .ok=false 却被判"可达",于是死站测出延迟显绿灯、点进去播不了(用户实测的核心症状之一)。
-                                //    改为只认真正 2xx(.ok);顺带轻量校验响应体确实是 m3u8(#EXTM3U),挡掉返回 200 却是 HTML/错误页的源。
-                                if (testRes.ok) {
-                                    let bodyOK = true;
-                                    try { const txt = await testRes.clone().text(); bodyOK = await this._m3u8HasFragments(txt, videoUrl); } catch (e) { bodyOK = true; }
-                                    if (bodyOK) {
-                                        directLatency = Date.now() - startTime;
-                                        source.latency = directLatency;
-                                        directSuccess = true;
-                                    }
-                                }
-                            } catch (directError) {
-                                // 直接访问失败，稍后尝试代理
-                                console.log(`[直接访问失败] ${source.site_name}: ${directError.message}`);
-                            }
-
-                            // 4. 如果直接访问失败，或者延迟太高，尝试代理
-                            const shouldTryProxy = !directSuccess || (directSuccess && directLatency > SLOW_THRESHOLD);
-
-                            if (shouldTryProxy && this.corsProxyUrl) {
-                                try {
-                                    const proxyUrl = `${this.corsProxyUrl}/?url=${encodeURIComponent(videoUrl)}`;
-                                    const proxyStartTime = Date.now();
-                                    const proxyController = new AbortController();
-                                    const proxyTimeoutId = setTimeout(() => proxyController.abort(), 6000);
-
-                                    const proxyTestRes = await fetch(proxyUrl, {
-                                        method: 'GET',
-                                        cache: 'no-cache',
-                                        signal: proxyController.signal
-                                    });
-
-                                    clearTimeout(proxyTimeoutId);
-
-                                    let proxyBodyOK = proxyTestRes.ok;
-                                    if (proxyTestRes.ok) { try { const ptxt = await proxyTestRes.clone().text(); proxyBodyOK = await this._m3u8HasFragments(ptxt, proxyUrl); } catch (e) { proxyBodyOK = true; } }
-                                    if (proxyBodyOK) {
-                                        const proxyLatency = Date.now() - proxyStartTime;
-
-                                        // 如果直连失败，使用代理
-                                        // 如果直连成功但代理更快（至少快 30%），使用代理
-                                        const useProxy = !directSuccess || (proxyLatency < directLatency * 0.7);
-
-                                        if (useProxy) {
-                                            source.latency = proxyLatency;
-                                            source._useProxy = true;  // 标记需要使用代理
-                                            source._proxyUrl = this.corsProxyUrl;
-
-                                            if (directSuccess) {
-                                                console.log(`[代理更快] ${source.site_name} (${proxyLatency}ms vs 直连 ${directLatency}ms)`);
-                                            } else {
-                                                console.log(`[代理成功] ${source.site_name} 通过代理访问 (${proxyLatency}ms)`);
-                                            }
-                                            directSuccess = true;
-                                        } else {
-                                            console.log(`[直连更优] ${source.site_name} 直连 ${directLatency}ms vs 代理 ${proxyLatency}ms`);
-                                        }
-                                    }
-                                } catch (proxyError) {
-                                    console.log(`[代理失败] ${source.site_name}: ${proxyError.message}`);
-                                }
-                            }
+                            // 3-4. 用户端直连测速 →(失败或太慢)代理测速,见 _clientProbe(刷新线路共用同一套)
+                            const clientOK = await this._clientProbe(source, videoUrl);
 
                             // 5. 如果仍然失败，回退到服务器端测速
-                            if (!directSuccess) {
+                            if (!clientOK) {
+                                // 用户端直连(+配了代理就连代理)都真试过了还不通 → 只有服务器能通:进"可能无法播放"组
+                                source._srvOnly = true;
                                 try {
                                     const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
-                                    const checkData = await checkRes.json();
-                                    source.latency = checkData.latency;
-                                    source._testType = 'server';
+                                    this._applyServerCheck(source, await checkRes.json());
                                 } catch (e) {
                                     source.latency = 9999;
+                                    source._timedOut = true;   // /api/check 本身没回(超时/断网)是瞬态,不能写 12h 死亡缓存
                                 }
-                            } else {
-                                source._testType = source._useProxy ? 'proxy' : 'direct';
                             }
 
                             // 缓存详情数据，后续切换时可以复用
@@ -8698,7 +9412,7 @@
                             checkEarlyReturn();
 
                         } catch (e) {
-                            // 获取详情失败的兜底处理
+                            // 获取详情失败的兜底处理(这条路径没做过用户端测速,不标 _srvOnly:不知道用户端能不能播)
                             if (e.name !== 'AbortError') {
                                 try {
                                     const detailRes = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}`, null, 8000);
@@ -8707,15 +9421,15 @@
                                         source._cachedDetail = detailData.list[0];
                                         // 无法直接测试，回退到服务器端延迟
                                         const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
-                                        const checkData = await checkRes.json();
-                                        source.latency = checkData.latency;
-                                        source._testType = 'server';  // 服务器端测速
+                                        this._applyServerCheck(source, await checkRes.json());
                                         checkEarlyReturn();
                                     } else {
                                         source.latency = 9999;
+                                        source._noDeadCache = true;   // 这一部剧拉不到详情 ≠ 站点死了
                                     }
                                 } catch (e2) {
                                     source.latency = 9999;
+                                    source._timedOut = true;   // 我们自己的 /api/detail 或 /api/check 没回(超时/断网/5xx),说明不了站点死活
                                 }
                             } else {
                                 // ⏱️ fetchT 超时(弱网/服务器"直连8s→代理"兜底链最长~18s):不能直接判死——
@@ -8723,9 +9437,7 @@
                                 source._timedOut = true;
                                 try {
                                     const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
-                                    const checkData = await checkRes.json();
-                                    source.latency = (typeof checkData.latency === 'number') ? checkData.latency : 9999;
-                                    source._testType = 'server';
+                                    this._applyServerCheck(source, await checkRes.json());
                                     checkEarlyReturn();
                                 } catch (e3) {
                                     source.latency = 9999;
@@ -8739,27 +9451,49 @@
                     //    最先测出的快速源由 checkEarlyReturn / 超时定时器提前选中起播，无需等全部完成
                     // 🔧 关键：测速前先把所有线路标记为"测速中"(latency='...')，否则并发池里尚未轮到的线路
                     //    会保留初始的 999ms 而被显示出来（懒加载：未测速的不显示，测出结果后再出现）
+                    // 🧹 新的线路对象:同一张卡再次打开时 groupedList 给的是同一批对象,上次测速的 _srvOnly/_clientTimeout/_timedOut…
+                    //    会残留;上一轮还在等 /api/check 的测速回来也会改写这一轮的结果。换成浅拷贝,旧一轮只能写到没人显示的旧对象上
+                    this.currentGroup.sources = this.currentGroup.sources.map(s => {
+                        const c = Object.assign({}, s);
+                        ['_srvOnly', '_clientTimeout', '_noServerCache', '_noDeadCache', '_timedOut', '_testType', '_proxyUrl', '_failNav'].forEach(k => { delete c[k]; });
+                        c._useProxy = false;
+                        return c;
+                    });
                     this.currentGroup.sources.forEach(s => { s.latency = '...'; });
-                    // 🗄️ 缓存优先：命中(测通项3天/不可用项12h内)直接套用、跳过测速请求(detail 起播时由 switchSource 按需拉取)；
-                    //    未命中才真测、测完写回缓存。allowDead=true：这是全量测速(含代理)，可缓存不可用态(9999)。
-                    const cachedWorker = async (source) => {
-                        // 🎌 Kazumi 源不读写站点健康缓存:它的可用性是"这部剧这一集解析得出"(还要做年份校验),
-                        //    一部剧解析失败不能把整个站封 12h,一部剧可用也不代表别的剧可用。解析结果服务器有缓存,重测很便宜。
-                        if (this._isKzSource(source)) { await latencyWorker(source); return source; }
-                        const c = this._siteHealthGet(source.site_key);
-                        if (c) {
-                            source.latency = c.latency; source._testType = c._testType;
-                            source._useProxy = c._useProxy; source._proxyUrl = c._proxyUrl;
-                            checkEarlyReturn();
-                            return source;
-                        }
+                    // 🗄️ 缓存优先：命中(测通项3天/只有服务器能通6h/不可用项12h内)直接套用、跳过测速请求(detail 起播时由
+                    //    switchSource 按需拉取);未命中才真测、测完写回缓存。
+                    //    命中项【在进测速池之前】一次性全部套用并判一次提前起播:旧版命中也要在 6 并发池里排队,排在未命中的慢站
+                    //    后面干等(实测兰香如故回访仍要 1s 才起播),现在回访 0 等待。
+                    // 🎌 Kazumi 源不读写站点健康缓存:它的可用性是"这部剧这一集解析得出"(还要做年份校验),
+                    //    一部剧解析失败不能把整个站封 12h,一部剧可用也不代表别的剧可用。解析结果服务器有缓存,重测很便宜。
+                    // 🧪 测速顺序:无广告(且非海外受限)的线路先测。并发 6 条一批,排在后面的要等前面测完才轮到——
+                    //   不排序时干净线路常在 3s 兜底定时器之后才测出来,自动选源只能在有水印的里挑(实测:如意排到第 20 位才测)。
+                    //   只改测速先后,不改显示顺序(显示由 sourceGroups 按分级排)。
+                    const misses = [];
+                    this._srcTestOrder(this.currentGroup.sources).forEach(source => {
+                        const c = this._isKzSource(source) ? null : this._siteHealthGet(source.site_key);
+                        if (!c) { misses.push(source); return; }
+                        source.latency = c.latency; source._testType = c._testType; source._srvOnly = !!c._srvOnly;
+                        source._useProxy = c._useProxy; source._proxyUrl = c._proxyUrl;
+                    });
+                    if (misses.length < this.currentGroup.sources.length) checkEarlyReturn();
+                    const testWorker = async (source) => {
                         await latencyWorker(source);
-                        // ⏱️ 超时(_timedOut)得出的不可用是瞬态信号,不写 12h 死亡缓存(否则弱网一次就封线路半天)
-                        this._siteHealthSet(source.site_key, source, !source._timedOut);
+                        // ⏱️ 超时(_timedOut)得出的不可用是瞬态信号,不写 12h 死亡缓存(否则弱网一次就封线路半天);
+                        //    这一部剧自己的问题(_noDeadCache:拉不到详情/地址不对)也不写——缓存按站点存,会连累该站所有剧。
+                        //    allowServer:全量测速(直连+代理都真试过)得出的"只有服务器能通"可缓存 6h(海外受限站每次重测最拖时间),
+                        //    但用户端自己超时/worker 抖动(_clientTimeout)、这部剧链接坏(_noServerCache)不算,且要两部不同的剧都这样才算站点级
+                        if (!this._isKzSource(source)) {
+                            const srvOK = !!source._srvOnly && !source._timedOut && !source._clientTimeout && !source._noServerCache &&
+                                source._testType === 'server' && source.latency < 9000 && this._siteServerConfirmed(source.site_key, source.vod_id);
+                            this._siteHealthSet(source.site_key, source, !source._timedOut && !source._noDeadCache, srvOK);
+                        }
                         return source;
                     };
-                    await runWithConcurrency(this.currentGroup.sources, 6, cachedWorker);
+                    await runWithConcurrency(misses, 6, testWorker);
                     clearTimeout(earlyReturnTimer);
+                    clearTimeout(lateReturnTimer);
+                    clearTimeout(earlySettleTimer);   // 完成路径自己选源且不置 hasAutoSelected:残留的复查定时器必须清掉,否则会再切一次
                     // 🧭 测速期间用户可能已切换到别的剧（此时 isTestingSources 归 B 所有），丢弃本次结果
                     if (_openSeq !== _navSeq) return;
                     this.isTestingSources = false;  // 测速完成
@@ -8774,7 +9508,11 @@
 
                     // 如果已经有选中的源并且视频已开始播放，不再自动切换
                     // 这样不会打断用户正在观看的内容
-                    if (hasAutoSelected && this.currentSource && this.currentUrl) {
+                    if (this._manualPickNav === _openSeq && this.currentSource) {
+                        console.log(`[测速完成] 用户已手动选线路(${this.currentSource.site_name})，不自动切换`);
+                        return;
+                    }
+                    if ((hasAutoSelected || this._manualPickNav === _openSeq) && this.currentSource && this.currentUrl) {
                         console.log(`[测速完成] 保持当前线路: ${this.currentSource.site_name}，不自动切换`);
                         return;
                     }
@@ -8782,34 +9520,12 @@
                     // 如果还没有选择任何源，选择最快的
                     // (兜底条件含 !this.currentSource:任何路径把 hasAutoSelected 烧掉却没真选到源,这里都要接住——防再现"测出绿灯没人选"死锁)
                     if (!hasAutoSelected || !this.currentSource) {
-                        // 优先选择用户端测速(direct)的结果
-                        const directSources = this.currentGroup.sources.filter(s =>
-                            s._testType === 'direct' && typeof s.latency === 'number' && s.latency < 9000
-                        );
-
-                        if (directSources.length > 0) {
-                            console.log(`[测速完成] 选择用户端测速最快的线路: ${directSources[0].site_name} (${directSources[0].latency}ms)`);
-                            this.switchSource(directSources[0]);
-                        } else {
-                            // 没有直连：优先"代理可播(proxy)"的源(CF Worker 能拉到、用户端能播)；'server' 放最后兜底
-                            const proxySources = this.currentGroup.sources.filter(s =>
-                                s._testType === 'proxy' && typeof s.latency === 'number' && s.latency < 9000
-                            );
-                            if (proxySources.length > 0) {
-                                console.log(`[测速完成] 选择代理可播最快的线路: ${proxySources[0].site_name} (${proxySources[0].latency}ms)`);
-                                this.switchSource(proxySources[0]);
-                            } else {
-                                // 回退到服务器端测速最快的(可能播不了，靠自动换源兜底)
-                                const fastestAvailable = this.currentGroup.sources.find(s =>
-                                    typeof s.latency === 'number' && s.latency < 9000 && s._testType !== 'kz'
-                                ) || this.currentGroup.sources.find(s =>   // 🎌 maccms 全不可用 → Kazumi 源兜底(年份对不上的不自动选)
-                                    typeof s.latency === 'number' && s.latency < 9000 && !s._kzMismatch
-                                );
-                                if (fastestAvailable) {
-                                    console.log(`[测速完成] 选择服务器测速最快的线路: ${fastestAvailable.site_name} (${fastestAvailable.latency}ms)`);
-                                    this.switchSource(fastestAvailable);
-                                }
-                            }
+                        // 可达性分档依次找:直连(+无广告 kz) → 代理(CF Worker 能拉到、用户端能播) → 服务器测速(可能播不了，靠自动换源兜底)
+                        //   → 🎌 maccms 全不可用才轮到其余 Kazumi 源(年份对不上的不自动选)。档内按广告分级挑(_pickPreferred)
+                        const pick = this._autoPick(this.currentGroup.sources, 3);
+                        if (pick) {
+                            console.log(`[测速完成] 自动选择线路: ${pick.site_name} (${pick.latency}ms ${this._srcLogTag(pick)})`);
+                            this.switchSource(pick);
                         }
                     }
                     // 如果全部不可用，不自动选择，UI会显示提示
@@ -9088,7 +9804,26 @@
                             item.vod_name === searchName || item.vod_name?.trim() === searchName?.trim() ||
                             (this._isKzSource(item) && this._kzSameTitle(item, searchName))   // 🎌 kz 源原名与组名不同(见 _kzSnapGroups)
                         );
-                        const results = matched.length > 0 ? matched : data.list;
+                        let results = matched.length > 0 ? matched : data.list;
+                        // 🧩 同名多部作品:只取当前这一部,并做与搜索卡片相同的同站/同片源去重 —— 否则刷新一次又把电影和剧集
+                        //    混回同一个列表、同站出现两次。认"哪一部"的顺序:①含正在播放那条线路(站+vod_id)的作品(最可靠);
+                        //    ②按年份/类型签名 _workSig 对上(不按名次:'' 只表示"当前线路最多的那部",搜索结果一变就会换人);
+                        //    ③都对不上:没拆过的旧数据取主作品,拆过但认不出 → 宁可维持原样不刷(不能把电影的列表换成剧集的)
+                        if (matched.length > 0) {
+                            const works = splitSameNameWorks(matched);
+                            const curVid = this.currentSource && String(this.currentSource.vod_id);
+                            const isCur = it => it.site_key === currentSiteKey && String(it.vod_id) === curVid;
+                            const hasCur = x => !!curVid && x.items.some(isCur);
+                            const hadCur = x => !!curVid && (x.all || []).some(isCur);   // 被同片源去重掉了也算(它的作品还是这一部)
+                            const w = works.find(hasCur) || works.find(hadCur) ||
+                                (reqGroup._workSig ? works.find(x => x.sig === reqGroup._workSig) : null) ||
+                                (works.length === 1 || !reqGroup._workLabel ? works[0] : null);
+                            if (!w) { console.warn('[刷新线路] 同名多部作品里认不出当前这一部,保持原列表'); return; }
+                            if (w.items.length) {
+                                results = w.items;
+                                this.currentGroup._work = w.work; this.currentGroup._workSig = w.sig; this.currentGroup._workLabel = w.label;
+                            }
+                        }
 
                         // 更新资源站列表
                         this.currentGroup.sources = results.map(item => ({
@@ -9098,6 +9833,7 @@
                             vod_name: item.vod_name,
                             vod_year: item.vod_year,   // 🎌 Kazumi 源年份校验要用 maccms 源的年份
                             vod_play_url: item.vod_play_url || '',
+                            site_profile: item.site_profile || null,   // 🏷️ 广告分级(缺了也会按 site_key 查 siteProfiles 兜底)
                             latency: undefined,
                             _testType: undefined,
                             _cachedDetail: undefined,
@@ -9107,8 +9843,15 @@
 
                         console.log(`[刷新线路] 重新搜索完成，找到 ${this.currentGroup.sources.length} 个资源站`);
 
-                        // 并行测速所有新资源站
+                        // 并行测速所有新资源站(用户端测速与 openDetail 同一套 _clientProbe,含代理分支——旧版这里没有代理,
+                        //   代理才通的线路一刷新就被判成"只有服务器能通"、掉进"可能无法播放";/api/check 带 nocache 强制服务器真测)
                         const sources = this.currentGroup.sources;
+                        const checkFresh = async (source) => {
+                            try {
+                                const checkRes = await fetchT(`/api/check?key=${source.site_key}&nocache=1`, null, 6000);
+                                this._applyServerCheck(source, await checkRes.json());
+                            } catch (e) { source.latency = 9999; source._timedOut = true; }
+                        };
                         const latencyWorker = async (source) => {
                             try {
                                 const detailRes = await fetchT(`/api/detail?site_key=${source.site_key}&id=${source.vod_id}&nocache=1`, null, 20000);
@@ -9138,38 +9881,14 @@
                                 }
 
                                 if (window.location.protocol === 'https:' && videoUrl.startsWith('http:')) {
-                                    const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
-                                    const checkData = await checkRes.json();
-                                    source.latency = checkData.latency;
-                                    source._testType = 'server';
+                                    await checkFresh(source);
+                                    source._srvOnly = true;   // https 页面里 http 分片会被浏览器拦:本来就播不了
                                     return source;
                                 }
 
-                                const startTime = Date.now();
-                                const controller = new AbortController();
-                                const timeoutId = setTimeout(() => controller.abort(), 5000);
-                                try {
-                                    const testRes = await fetch(videoUrl, { method: 'GET', cache: 'no-cache', signal: controller.signal });
-                                    clearTimeout(timeoutId);
-                                    if (testRes.ok || testRes.type === 'opaque') {
-                                        source.latency = Date.now() - startTime;
-                                        source._testType = 'direct';
-                                    } else {
-                                        const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
-                                        const checkData = await checkRes.json();
-                                        source.latency = checkData.latency;
-                                        source._testType = 'server';
-                                    }
-                                } catch (fetchErr) {
-                                    clearTimeout(timeoutId);
-                                    try {
-                                        const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
-                                        const checkData = await checkRes.json();
-                                        source.latency = checkData.latency;
-                                        source._testType = 'server';
-                                    } catch (e) {
-                                        source.latency = 9999;
-                                    }
+                                if (!(await this._clientProbe(source, videoUrl))) {
+                                    source._srvOnly = true;
+                                    await checkFresh(source);
                                 }
                             } catch (e) {
                                 source.latency = 9999;
@@ -9179,9 +9898,9 @@
 
                         // 🚦 限并发逐批测速（测全部源、最多 6 并发）
                         // 🗄️ "刷新线路"是手动重测(恢复通道)：强制真测(不读缓存)，测完写回缓存。
-                        //    allowDead=false：此路径测速无代理分支(proxy-only 源会误判)，只许缓存 direct/proxy 成功态，不缓存不可用态。
+                        //    allowDead/allowServer=false：只许缓存 direct/proxy 成功态(一次手动重测的失败不覆盖、不污染站点缓存)。
                         const cachedWorker = async (source) => { await latencyWorker(source); if (!this._isKzSource(source)) this._siteHealthSet(source.site_key, source, false); return source; };
-                        await runWithConcurrency(sources, 6, cachedWorker);
+                        await runWithConcurrency(this._srcTestOrder(sources), 6, cachedWorker);   // 同 openDetail:干净线路先测
 
                         // 🧭 测速期间用户可能已切换剧集：丢弃过期结果
                         if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
@@ -9209,7 +9928,7 @@
                     } catch (e) {
                         console.error('[刷新线路] 失败:', e);
                     } finally {
-                        this.isTestingSources = false;
+                        if (mySeq === _navSeq) this.isTestingSources = false;   // 已切换剧集:isTestingSources 归新上下文(它的 openDetail 自己负责)
                         this.refreshingSources = false;
                     }
                 },
@@ -9468,6 +10187,117 @@
                         } else if (el) { el.remove(); }
                     } catch (e) { }
                 },
+                // 🧪 用户端测速(openDetail 与 刷新线路 共用):直连 →(失败或 >1.5s)代理 → 都不通由调用方问 /api/check。
+                //   写 source.latency/_useProxy/_proxyUrl/_testType('direct'|'proxy');返回 true = 用户端测通。
+                //   顺带打两个"别缓存成'只有服务器能通'"的标记(缓存按站点存,一次误判会连累该站所有剧 6h):
+                //     _clientTimeout:直连/代理自己超时、或 worker 5xx —— 瞬态(弱网/worker 抖动)
+                //     _noServerCache:拿到 2xx 但清单没有分片 —— 这一部剧的链接坏了,不代表站点只能服务器连
+                //   延迟:只算到拿到清单正文;主清单还要拉一次子清单做校验,校验很快(<1s)就不计入,
+                //     慢/挂起(最多等到 5s 中止)则整段计入 —— 子清单挂起的线路不能被当成"快线"
+                async _clientProbe(source, videoUrl) {
+                    const SLOW_THRESHOLD = 1500; // 超过此延迟视为慢速
+                    let directSuccess = false, directLatency = 0;
+                    const startTime = Date.now();
+                    try {
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 5000);
+                        // m3u8 文件通常配置了 CORS，可以直接 fetch
+                        let testRes;
+                        try { testRes = await fetch(videoUrl, { method: 'GET', cache: 'no-cache', signal: controller.signal }); }
+                        catch (e0) { clearTimeout(timeoutId); throw e0; }
+                        // ⚠️ 只认真正 2xx(.ok):带 CORS 头的 403/404 错误页 type 同样是 'cors',旧版据此误判"可达"。
+                        //    顺带校验响应体确实有可播分片,挡掉返回 200 却是 HTML/错误页/空清单的源。
+                        if (!testRes.ok) clearTimeout(timeoutId);
+                        if (testRes.ok) {
+                            let bodyOK = true, tBody = 0, tAll = 0;
+                            try {
+                                const txt = await testRes.clone().text();   // 中止计时器仍在:正文卡住 5s 照样中止
+                                clearTimeout(timeoutId);
+                                tBody = Date.now() - startTime;
+                                bodyOK = await this._m3u8HasFragments(txt, videoUrl);
+                                tAll = Date.now() - startTime;
+                            } catch (e) { clearTimeout(timeoutId); if (e && e.name === 'AbortError') throw e; bodyOK = true; }
+                            if (bodyOK) {
+                                const all = tAll || (Date.now() - startTime);
+                                directLatency = (tBody && all - tBody < 1000) ? tBody : all;
+                                source.latency = directLatency;
+                                directSuccess = true;
+                            } else source._noServerCache = true;
+                        }
+                    } catch (directError) {
+                        if (directError && directError.name === 'AbortError') source._clientTimeout = true;
+                        console.log(`[直接访问失败] ${source.site_name}: ${directError && directError.message}`);
+                    }
+                    if ((!directSuccess || directLatency > SLOW_THRESHOLD) && this.corsProxyUrl) {
+                        try {
+                            const proxyUrl = `${this.corsProxyUrl}/?url=${encodeURIComponent(videoUrl)}`;
+                            const proxyStartTime = Date.now();
+                            const proxyController = new AbortController();
+                            // 直连已经通了(只是慢)时,代理要快 30% 才会被采用 → 等到直连那么久还没回就不必再等(旧版固定等 6s,白占测速池)
+                            const proxyTimeoutId = setTimeout(() => proxyController.abort(), directSuccess ? Math.max(1000, directLatency) : 6000);
+                            let proxyTestRes;
+                            try { proxyTestRes = await fetch(proxyUrl, { method: 'GET', cache: 'no-cache', signal: proxyController.signal }); }
+                            catch (e0) { clearTimeout(proxyTimeoutId); throw e0; }
+                            if (!proxyTestRes.ok) clearTimeout(proxyTimeoutId);
+                            if (proxyTestRes.status >= 500 && !directSuccess) source._clientTimeout = true;   // worker 自己抖动
+                            let proxyBodyOK = proxyTestRes.ok, ptBody = 0, ptAll = 0;
+                            if (proxyTestRes.ok) {
+                                try {
+                                    const ptxt = await proxyTestRes.clone().text();
+                                    clearTimeout(proxyTimeoutId);
+                                    ptBody = Date.now() - proxyStartTime;
+                                    proxyBodyOK = await this._m3u8HasFragments(ptxt, proxyUrl);
+                                    ptAll = Date.now() - proxyStartTime;
+                                } catch (e) { clearTimeout(proxyTimeoutId); if (e && e.name === 'AbortError') throw e; proxyBodyOK = true; }
+                                if (!proxyBodyOK && !directSuccess) source._noServerCache = true;
+                            }
+                            if (proxyBodyOK) {
+                                const pAll = ptAll || (Date.now() - proxyStartTime);
+                                const proxyLatency = (ptBody && pAll - ptBody < 1000) ? ptBody : pAll;
+                                // 直连失败 → 用代理;直连成功但代理快 30% 以上 → 也用代理
+                                if (!directSuccess || proxyLatency < directLatency * 0.7) {
+                                    console.log(directSuccess ? `[代理更快] ${source.site_name} (${proxyLatency}ms vs 直连 ${directLatency}ms)` : `[代理成功] ${source.site_name} 通过代理访问 (${proxyLatency}ms)`);
+                                    source.latency = proxyLatency;
+                                    source._useProxy = true;  // 标记需要使用代理
+                                    source._proxyUrl = this.corsProxyUrl;
+                                    directSuccess = true;
+                                } else {
+                                    console.log(`[直连更优] ${source.site_name} 直连 ${directLatency}ms vs 代理 ${proxyLatency}ms`);
+                                }
+                            }
+                        } catch (proxyError) {
+                            if (proxyError && proxyError.name === 'AbortError' && !directSuccess) source._clientTimeout = true;
+                            console.log(`[代理失败] ${source.site_name}: ${proxyError && proxyError.message}`);
+                        }
+                    }
+                    if (directSuccess) source._testType = source._useProxy ? 'proxy' : 'direct';
+                    return directSuccess;
+                },
+                // /api/check 结果落到线路上(三处兜底共用,别再漏判 transient):服务器那头只是超时 → _timedOut,不写 12h 死亡缓存
+                _applyServerCheck(source, d) {
+                    d = d || {};
+                    const num = typeof d.latency === 'number';
+                    source.latency = num ? d.latency : 9999;
+                    source._testType = 'server';
+                    if (d.transient || !num) source._timedOut = true;   // 429 限流/其它 JSON 错误体 = 没有结论,绝不写 12h 死亡缓存
+                },
+                // "只有服务器能通"要在【两部不同的剧】上都出现,才按站点缓存 6h:同一部剧的链接坏了(403/404)和整站海外受限
+                //   从状态码上分不出来,一部剧的坏链接不能连累该站所有剧(审查实测:如意一部老剧首集死链 → 6h 内每部剧都标"可能无法播放")
+                _siteServerConfirmed(siteKey, vodId) {
+                    try {
+                        const K = 'donggua_site_srv_pending', now = Date.now(), TTL = 6 * 3600 * 1000;
+                        const m = JSON.parse(localStorage.getItem(K) || '{}') || {};
+                        const p = m[siteKey];
+                        const ok = !!(p && String(p.vod) !== String(vodId) && now - (p.ts || 0) < TTL);
+                        if (ok) delete m[siteKey]; else m[siteKey] = { vod: String(vodId), ts: now };
+                        for (const k of Object.keys(m)) { if (now - (m[k].ts || 0) > TTL) delete m[k]; }
+                        localStorage.setItem(K, JSON.stringify(m));
+                        return ok;
+                    } catch (e) { return false; }
+                },
+                // "可能无法播放"组:只收用户端真测过、直连(+代理)都不通、只有服务器能连的线路(_srvOnly)。
+                //   从没在用户端测过的(历史快照里补进来的、详情兜底路径的)不知道能不能播,留在原分组
+                _srcUnreach(s) { return !!(s && s._srvOnly) && this._srcReachClass(s) === 2; },
                 // ✅ m3u8 是否【真的有可播分片】。只验 #EXTM3U 远远不够:master playlist 自身永远没有 EXTINF,
                 //    而"零分片的空清单"(#EXTM3U…#EXT-X-ENDLIST 中间无 EXTINF)语法完全合法却一秒都播不了——
                 //    实测有资源站正是这样,测速判"可用"、选中后播放器静默停在 00:00 且不报错(不报错=不会自动换源)。
@@ -9481,11 +10311,12 @@
                         if (!line) return false;
                         const sub = new URL(line, baseUrl).href;
                         const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
-                        const r = await fetch(sub, { cache: 'no-store', signal: ctl.signal });
-                        clearTimeout(t);
-                        if (!r.ok) return false;
-                        return /#EXTINF/.test(await r.text());
-                    } catch (e) { return true; }   // 网络/CORS 抖动不冤枉源站,交给播放侧的零分片闸兜底
+                        try {
+                            const r = await fetch(sub, { cache: 'no-store', signal: ctl.signal });
+                            if (!r.ok) return false;
+                            return /#EXTINF/.test(await r.text());   // 计时器覆盖到正文读完
+                        } finally { clearTimeout(t); }
+                    } catch (e) { return true; }   // 网络/CORS 抖动不冤枉源站,交给播放侧的零分片闸兜底(最多等 5s,且整段计入延迟)
                 },
                 // 🗄️ 资源站健康度本地缓存(跨剧集, 3天)：site_key → {latency,testType,useProxy,proxyUrl,ts}。
                 //    本地连不通的资源站基本不会再通，缓存上次测速结果 → 刷新页面/?play= 深链/换剧都直接套用、跳过重测；
@@ -9498,29 +10329,33 @@
                         const m = JSON.parse(localStorage.getItem('donggua_site_health2') || '{}') || {};
                         const r = m[siteKey];
                         if (r && typeof r.latency === 'number') {
-                            // 不可用项(9999)缓存短(12h)便于恢复；测通的(direct/proxy)缓存 3 天免重测
-                            const ttl = r.latency >= 9000 ? 12 * 3600 * 1000 : 3 * 24 * 3600 * 1000;
+                            // 不可用项(9999)缓存短(12h)便于恢复；只有服务器能通的(server,多为海外受限)6h;测通的(direct/proxy)缓存 3 天免重测
+                            const ttl = r.latency >= 9000 ? 12 * 3600 * 1000 : r.testType === 'server' ? 6 * 3600 * 1000 : 3 * 24 * 3600 * 1000;
                             if ((Date.now() - (r.ts || 0)) < ttl) {
-                                return { latency: r.latency, _testType: r.testType || null, _useProxy: !!r.useProxy, _proxyUrl: r.proxyUrl || null };
+                                return { latency: r.latency, _testType: r.testType || null, _useProxy: !!r.useProxy, _proxyUrl: r.proxyUrl || null, _srvOnly: !!r.srvOnly };
                             }
                         }
                     } catch (e) { }
                     return null;
                 },
                 // allowDead: 仅当本次是"全量测速"(openDetail，含 direct+proxy+server 全试过)才允许缓存不可用态(9999)。
-                // refreshSources 的测速无 proxy 分支(proxy-only 源会被误判 server/9999)，故它只许缓存 direct/proxy 成功态。
-                _siteHealthSet(siteKey, source, allowDead) {
+                // allowServer: 同上,才允许缓存"只有服务器能通"态(server,6h;调用方还要确认不是瞬态/单剧问题,见 openDetail testWorker)。
+                // refreshSources 只许缓存 direct/proxy 成功态(手动重测,不让一次重测的失败覆盖缓存)。
+                _siteHealthSet(siteKey, source, allowDead, allowServer) {
                     if (!siteKey || !source || typeof source.latency !== 'number') return;  // 中间态('...') 不存
                     const tt = source._testType;
                     const isGood = (tt === 'direct' || tt === 'proxy') && source.latency < 9000;  // 客户端真测通,配置(代理)可靠
                     const isDead = source.latency >= 9000;
-                    // 只缓存：①客户端真测通的(direct/proxy) ②彻底全量测过仍不可用的(allowDead 的 9999)。
-                    // server 兜底态(客户端没测通、仅服务器能连)不缓存——下次仍真测，给客户端重试 direct/proxy 的机会。
-                    if (!isGood && !(isDead && allowDead)) return;
+                    const isServer = tt === 'server' && source.latency < 9000;
+                    // 只缓存：①客户端真测通的(direct/proxy) ②彻底全量测过仍不可用的(allowDead 的 9999)
+                    //   ③全量测过、客户端直连代理都不通只有服务器能连的(allowServer,6h)——旧版不缓存它"给客户端重试机会",
+                    //     结果海外用户每开一部剧都要把这些站重测一遍(详情+直连失败+代理失败+/api/check,单条 0.5-7s),
+                    //     占满 6 并发、回访也要转圈 2-14s(实测)。6h 后照样重测;"刷新线路"随时强制重测。
+                    if (!isGood && !(isDead && allowDead) && !(isServer && allowServer)) return;
                     try {
                         const MAXTTL = 3 * 24 * 3600 * 1000, now = Date.now();
                         const m = JSON.parse(localStorage.getItem('donggua_site_health2') || '{}') || {};
-                        m[siteKey] = { latency: source.latency, testType: tt || null, useProxy: !!source._useProxy, proxyUrl: source._proxyUrl || null, ts: now };
+                        m[siteKey] = { latency: source.latency, testType: tt || null, useProxy: !!source._useProxy, proxyUrl: source._proxyUrl || null, srvOnly: !!(isServer && source._srvOnly), ts: now };
                         for (const k of Object.keys(m)) { if (now - (m[k].ts || 0) > MAXTTL) delete m[k]; }  // 剪枝过期
                         localStorage.setItem('donggua_site_health2', JSON.stringify(m));
                     } catch (e) { }
@@ -9537,9 +10372,15 @@
                         return !!(m[siteKey] && Date.now() - m[siteKey] < 12 * 3600 * 1000);
                     } catch (e) { return false; }
                 },
+                // 用户在线路列表里手点/遥控确认的线路:本次导航内自动选源(提前起播/3s/6.5s/测速完成)不再顶掉它
+                pickSourceManual(source) {
+                    this._manualPickNav = _navSeq;
+                    this.switchSource(source);
+                },
                 _adProxyBadMark(siteKey) {
                     if (!siteKey) return;
                     (this._adProxyBadSites = this._adProxyBadSites || {})[siteKey] = 1;
+                    this._srcAdBadMemo = null; this.srcRev++;   // 分组/徽章立刻按"该站绕开去广告"重算(_srcAdBad 有 2s 记忆,要一起清)
                     try {
                         const m = JSON.parse(localStorage.getItem('donggua_adproxy_bad2') || '{}');
                         m[siteKey] = Date.now();
@@ -9657,6 +10498,7 @@
                     // 🎟️ 播放令牌:每次 play() 都递增(切源/换集/换剧都变)。playSeq 只在【换剧】时变,同一部剧内切源恒等,
                     //    因此绝不能用它给"本次播放"的异步回调(看门狗/重试)做边界——那会让上一个源装的定时器对下一个源生效。
                     const playToken = (this._playToken = (this._playToken || 0) + 1);
+                    try { if (window.adClipSkip) window.adClipSkip.vue = this; } catch (e) { }   // 🛡️ 去插播:attach 时要读到本次的 _playToken(必须早于建/切 hls)
                     try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }   // 🚦 换源/换集:先叫停上一轮后台分析,别让它继续抢新源的带宽
                     // ⏱️ 起播看门狗(不依赖任何 hls 事件的最后一道闸)。
                     //   实测有死源(空清单/极小清单)会让 hls.js 【完全静默】:不触发 LEVEL_LOADED、不触发 FRAG_LOADED、
@@ -9871,8 +10713,10 @@
                                         return;
                                     }
                                     // siteblock:源站封 CF —— 记账
-                                    this._adProxyBadMark(failSite);
+                                    //   记账会让该站从"无广告"降成"有插播"、线路列表立刻重排(srcRev):换线路的目标必须在重排【之前】
+                                    //   按原顺序选好(handlePlaybackError 同步算出下一条),否则会越过后面还没试的无广告线路
                                     if (directOK) {
+                                        this._adProxyBadMark(failSite);
                                         console.log('[播放器] 🛡️ ' + failSite + ' 源站屏蔽过滤代理(worker→403/404)，原站直连，12h 内不再走代理');
                                         try { dp.notice('该线路屏蔽了广告过滤，已直连播放（可能含广告）', 3000); } catch (e) { }
                                         switchTo(fb, '源站屏蔽过滤代理→直连');
@@ -9881,6 +10725,7 @@
                                         try { dp.notice('该线路无法过滤广告，自动换线路…', 2500); } catch (e) { }
                                         this._proxyRetrying = false;
                                         this.handlePlaybackError();
+                                        this._adProxyBadMark(failSite);
                                     }
                                   } catch (e) { this._proxyRetrying = false; console.warn('[播放器] 代理分诊异常,已解闸:', e && e.message); }
                                 })();
@@ -11369,6 +12214,8 @@
 
                                 // 监听播放器事件
                                 dp.on('timeupdate', () => {
+                                    // 🛡️ 去插播先判:它真 seek/结束了本 tick 就不再让跳片头逻辑动(两边同 tick 各 seek 一次会打架)
+                                    if (dp.video && window.adClipSkip && window.adClipSkip.check(dp.video.currentTime)) return;
                                     if (dp.video && window.skipManager) window.skipManager.check(dp.video.currentTime);
                                     this._maybePreloadNext();  // ⏭️ 临近结尾时预加载下一集(内部有节流/守卫)
                                 });
@@ -11481,7 +12328,7 @@
                                 //      用户瞄准齿轮却点到旁边的暗化层就会误暂停 → 拦掉它(底部控制区不该是暂停热区)。
                                 dplayerContainer.addEventListener('click', (e) => {
                                     // 点在真正的控件/各类菜单/弹幕设置上 → 不拦截，照常工作
-                                    if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon')) return;
+                                    if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon, .dg-adclip-undo')) return;
                                     const settingOpen = settingBox && settingBox.classList.contains('dplayer-setting-box-open');
                                     const dmPanel = dplayerContainer.querySelector('.dm-settings-panel');
                                     const dmOpen = dmPanel && dmPanel.style.display === 'block';
@@ -11849,7 +12696,7 @@
                                 _gmode = null;
                                 if (e.touches.length !== 1) return;
                                 if (!_gFull()) return;   // 非全屏:不接管,让页面正常滚动
-                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
+                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .dg-adclip-undo, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
                                 const rect = container.getBoundingClientRect();
                                 _gx = e.touches[0].clientX; _gy = e.touches[0].clientY;
                                 const rx = (_gx - rect.left) / rect.width;
@@ -11920,6 +12767,7 @@
                                 e.target.closest('.dplayer-setting-box') ||
                                 e.target.closest('.dm-settings-panel') ||
                                 e.target.closest('.intro-skip-btn') ||
+                                e.target.closest('.dg-adclip-undo') ||
                                 e.target.closest('.dplayer-comment-box') ||
                                 e.target.closest('.mobile-play-overlay') ||
                                 e.target.closest('.dplayer-mask')) {
@@ -12736,31 +13584,26 @@
                     const mySeq = _navSeq;
 
                     // 获取当前线路索引（记住失败源，宽限期后用于判定是否真的要跳过）
+                    // 先按对象找:同一张卡片里可能有同站两条(动漫巴士同名不同年的两部),按 site_key 会认错是哪一条在失败
                     const allSources = this.availableSources;
                     const failingSource = this.currentSource;
-                    // 先按对象找:同一张卡片里可能有同站两条(动漫巴士同名不同年的两部),按 site_key 会认错是哪一条在失败
-                    let currentIndex = allSources.indexOf(failingSource);
-                    if (currentIndex < 0) currentIndex = allSources.findIndex(s => s.site_key === failingSource?.site_key);
+                    // 🎯 优先切到【确实有当前这一集】的线路,而不是无脑取下一个:
+                    //    无脑顺延会切到没有这一集的源 → parseEpisodes 回退播第一集(先导片/预告/空清单)→ 又失败,
+                    //    一路把线路耗尽,而真正有这一集的好源(生产实测 ikun 有"第20260809期加更"且 1279 分片可播)
+                    //    永远轮不上 —— 这就是用户看到的"所有资源站都播不了"。
+                    //    _sourceHasEpisode 用测速时已缓存的剧集表判断,不发请求;返回 null(详情未缓存)按"可试"处理。
+                    // 🔁 绕一圈扫、跳过本次导航已试过的(_failoverNext):列表按广告分级重排后,自动选中的线路可能在中间,
+                    //    旧版只往后扫 + "已是最后一条就报全挂",会漏掉排在前面没试过的线路
+                    const _curEpName = ((this.episodeList || []).find(e => e.url === this.currentUrl) || {}).name;
+                    const nextSource = this._failoverNext(allSources, failingSource, _curEpName);
 
                     // 如果还有下一个线路可用，给一段宽限期后再决定是否切换
-                    if (currentIndex >= 0 && currentIndex < allSources.length - 1) {
+                    if (nextSource) {
                         this.isAutoRetrying = true;
-                        // 🎯 优先切到【确实有当前这一集】的线路,而不是无脑取下一个:
-                        //    无脑顺延会切到没有这一集的源 → parseEpisodes 回退播第一集(先导片/预告/空清单)→ 又失败,
-                        //    一路把线路耗尽,而真正有这一集的好源(生产实测 ikun 有"第20260809期加更"且 1279 分片可播)
-                        //    永远轮不上 —— 这就是用户看到的"所有资源站都播不了"。
-                        //    _sourceHasEpisode 用测速时已缓存的剧集表判断,不发请求;返回 null(详情未缓存)按"可试"处理。
-                        const _curEpName = (this.episodeList || []).find(e => e.url === this.currentUrl)?.name;
-                        let nextSource = null;
-                        for (let i = currentIndex + 1; i < allSources.length; i++) {
-                            if (allSources[i]._kzMismatch) continue;   // 🎌 年份对不上的 Kazumi 源(疑似同名另一部)不当自动换源目标
-                            if (this._sourceHasEpisode(allSources[i], _curEpName) !== false) { nextSource = allSources[i]; break; }
-                        }
-                        if (!nextSource) {
-                            console.log('[Auto-Failover] 后续线路都没有《' + (_curEpName || '本集') + '》,按原顺序试下一个');
-                            nextSource = allSources[currentIndex + 1];
-                        } else if (nextSource !== allSources[currentIndex + 1]) {
-                            console.log('[Auto-Failover] 跳过不含本集的线路,直接切到有《' + _curEpName + '》的:', nextSource.site_name);
+                        if (_curEpName && this._sourceHasEpisode(nextSource, _curEpName) === false) {
+                            console.log('[Auto-Failover] 其余线路都没有《' + _curEpName + '》,按顺序试下一个:', nextSource.site_name);
+                        } else {
+                            console.log('[Auto-Failover] 下一条候选线路:', nextSource.site_name);
                         }
                         this.autoRetryMessage = `正在检测 ${failingSource?.site_name} 线路...`;
                         console.log('[Auto-Failover] 收到错误事件，进入 1.5s 宽限期检测是否真的不可播');
@@ -12790,7 +13633,10 @@
                             this._offMarkBadCache();  // 当前播的若是离线缓存副本→本会话停用该集重定向(保住 failover)
                             this.autoRetryMessage = `${failingSource?.site_name} 播放失败，正在尝试 ${nextSource.site_name}`;
                             console.log(`[Auto-Failover] ${this.autoRetryMessage}`);
-                            if (failingSource) failingSource.latency = 9998;  // 标记为用户端不可用
+                            if (failingSource) {
+                                failingSource.latency = 9998;      // 标记为用户端不可用
+                                failingSource._failNav = mySeq;    // 🔁 本次导航已试过(绕圈扫描不再回到它)
+                            }
                             this.switchSource(nextSource);
                             setTimeout(() => { this.autoRetryMessage = ''; }, 1500);
                         }, 1500);
@@ -12939,14 +13785,23 @@
                     });
                     const kzByKey = new Map();
                     const out = [];
+                    // 并入时同一个站只留一条(与 splitSameNameWorks ② 一致:都是 kz 就留备注里集数多的)——
+                    //   七色番同时给"遮天"和"遮天(TV版)"时,整组塞进来会让同一个站在卡里出现两次(用户报的"重复")
+                    const epOf = s => { const m = String(s.vod_remarks || '').match(/(\d{1,4})\s*[集话話期]/); return m ? parseInt(m[1], 10) : 0; };
+                    const mergeInto = (dst, srcs) => srcs.forEach(x => {
+                        const k = x.site_key || x.site_name;
+                        const i = dst.sources.findIndex(y => (y.site_key || y.site_name) === k);
+                        if (i < 0) { dst.sources.push(x); return; }
+                        if (this._isKzSource(dst.sources[i]) && epOf(x) > epOf(dst.sources[i])) dst.sources[i] = x;
+                    });
                     list.forEach(g => {
                         if (!kzOnly(g)) { out.push(g); return; }
                         const p = pt(g.name, g.sources[0]);
                         const r = entries.length ? KT.snapToGroup(p, entries) : { how: 'new' };
                         const host = r.how !== 'new' ? hostByKey.get(r.key) : null;
-                        if (host) { host.sources.push(...g.sources); return; }
+                        if (host) { mergeInto(host, g.sources); return; }
                         const twin = kzByKey.get(p.key);
-                        if (twin) { twin.sources.push(...g.sources); return; }
+                        if (twin) { mergeInto(twin, g.sources); return; }
                         kzByKey.set(p.key, g);
                         out.push(g);
                     });

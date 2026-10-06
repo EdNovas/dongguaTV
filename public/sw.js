@@ -14,7 +14,10 @@
 // v28: hls.min.js 换成 AAC-LC 信令补丁版(修 Chromium 138+ 播十分钟后声音低一个八度),预缓存键带 ?v=1.1.5-lc1 与页面引用一致,
 //      旧版 SW 缓存(v27)里的老 hls.min.js 随 activate 清理;不带查询串的话 ignoreSearch 匹配会把老文件继续喂给页面。
 // v29: Kazumi 规则源(七色番/动漫巴士)的 /api/kz/* 端点豁免(签名地址会过期,不能被策略4缓存后陈旧回放)。
-const CACHE_VERSION = 'v29';
+// v30: 新增 libs/js/ad-clip-core.js(播放器按"分辨率突变"跳插播广告的判定核心),预缓存走 SWR。
+// v31: ad-clip-core.js v2(时间戳重启/架桥信号 + 更严的片头片尾/熔断规则)。
+// v32: /api/check 不走缓存(测速结论必须是这一次的)。
+const CACHE_VERSION = 'v32';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -33,6 +36,7 @@ const STATIC_URLS = [
     './libs/js/bootstrap.bundle.min.js',
     './libs/js/hls.min.js?v=1.1.5-lc1',
     './libs/js/kz-titlematch.js?v=1',   // v29: defer 脚本必须预缓存走 SWR,否则弱网下 Network-First 会拖住其后的 DPlayer/DOMContentLoaded
+    './libs/js/ad-clip-core.js?v=2',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号)
     './libs/js/DPlayer.min.js'
 ];
 
@@ -92,6 +96,8 @@ self.addEventListener('fetch', event => {
     if (url.hostname.includes('workers.dev')) return;
     // ④ Kazumi 规则源端点(/api/kz/…):解析结果/清单/302 直链都带签名、会过期,必须每次直达服务器(v29)
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/kz/')) return;
+    // ⑤ 站点测速 /api/check:探测结果不能被策略4缓存、在 4s 竞速/断网时陈旧回放(会吞掉 transient、把超时写成 12h 死亡记录)(v32)
+    if (url.origin === self.location.origin && url.pathname === '/api/check') return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {

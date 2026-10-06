@@ -1,0 +1,1068 @@
+{
+ "_doc": "2026-10-05 本地 /api/search?wd=遮天 的真实结果(只留 遮天/弹指遮天;选集只存首集+集数,测试里还原)。用于 splitSameNameWorks 回归。",
+ "items": [
+  {
+   "site_key": "dyttzy",
+   "site_name": "电影天堂",
+   "vod_id": 9575,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "noburn",
+   "roads": [
+    {
+     "first": "第01集$https://vip.dytt-cinema.com/share/f9fd5ec4c141a95257aa99ef1b590672",
+     "n": 183
+    },
+    {
+     "first": "第01集$https://vip.dytt-cinema.com/20250218/5897_f9fd5ec4/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "kz_7sefun",
+   "site_name": "七色番",
+   "vod_id": "36081",
+   "vod_name": "遮天",
+   "vod_year": "",
+   "vod_remarks": "更新至183话",
+   "tier": "clean",
+   "roads": []
+  },
+  {
+   "site_key": "kz_7sefun",
+   "site_name": "七色番",
+   "vod_id": "38523",
+   "vod_name": "遮天",
+   "vod_year": "",
+   "vod_remarks": "更新至177话",
+   "tier": "clean",
+   "roads": []
+  },
+  {
+   "site_key": "kz_dm84",
+   "site_name": "动漫巴士",
+   "vod_id": "4100",
+   "vod_name": "遮天",
+   "vod_year": "",
+   "vod_remarks": "第183话",
+   "tier": "noburn",
+   "roads": []
+  },
+  {
+   "site_key": "bfzy",
+   "site_name": "暴风资源",
+   "vod_id": "130916",
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "noburn",
+   "roads": [
+    {
+     "first": "第1集$https://s2.bfllvip.com/video/danzhizhetian/0523da506a01/index.m3u8",
+     "n": 80
+    }
+   ]
+  },
+  {
+   "site_key": "ffzy",
+   "site_name": "非凡影视",
+   "vod_id": 51818,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "noburn",
+   "roads": [
+    {
+     "first": "第01集$https://vip.ffzy-plays.com/share/7183145a2a3e0ce2b68cd3735186b1d5",
+     "n": 183
+    },
+    {
+     "first": "第01集$https://vip.ffzy-plays.com/20230503/11270_98a7b781/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "jisu",
+   "site_name": "极速资源",
+   "vod_id": 562,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "unknown",
+   "roads": [
+    {
+     "first": "第01话$https://vv.jisuzyv.com/play/mbkBWNJa",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://vv.jisuzyv.com/play/mbkBWNJa/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "jisu",
+   "site_name": "极速资源",
+   "vod_id": 123554,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "unknown",
+   "roads": [
+    {
+     "first": "全集完结$https://vv.jisuzyv.com/play/1aK0VOYb",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://vv.jisuzyv.com/play/1aK0VOYb/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "jisu",
+   "site_name": "极速资源",
+   "vod_id": 145457,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "unknown",
+   "roads": [
+    {
+     "first": "第1-20集$https://vv.jisuzyv.com/play/5eVGwyva",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://vv.jisuzyv.com/play/5eVGwyva/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "zy360",
+   "site_name": "360资源",
+   "vod_id": 64358,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第001话$https://vod2.maowushi.com/20240427/ow9nOHwO/index.m3u8",
+     "n": 185
+    }
+   ]
+  },
+  {
+   "site_key": "zy360",
+   "site_name": "360资源",
+   "vod_id": 57256,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "遮天$https://vod.guoluche.com/20240806/nE5sT6tl/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "zy360",
+   "site_name": "360资源",
+   "vod_id": 64362,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "遮天$https://vod.guoluche.com/20240806/nE5sT6tl/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "zy360",
+   "site_name": "360资源",
+   "vod_id": 62032,
+   "vod_name": "弹指遮天",
+   "vod_year": "2022",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "遮天$https://vod.guoluche.com/20240806/nE5sT6tl/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "1080zyk",
+   "site_name": "1080资源",
+   "vod_id": "40967",
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://yzzy1.play-cdn16.com/20230503/4012_61589bd1/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "ikun",
+   "site_name": "iKun资源",
+   "vod_id": 48184,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://bfikuncdn.com/20230503/2EsREehQ/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "ukuapi",
+   "site_name": "U酷资源",
+   "vod_id": 46997,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "unknown",
+   "roads": [
+    {
+     "first": "第01集$https://ukzy.ukubf4.com/share/aSCBmIFjBOcNaTKD",
+     "n": 183
+    },
+    {
+     "first": "第01集$https://ukzy.ukubf4.com/20230503/JTvZqQfd/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "ukuapi",
+   "site_name": "U酷资源",
+   "vod_id": 56734,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "unknown",
+   "roads": [
+    {
+     "first": "720P$https://ukzy.ukubf3.com/share/bUkvS4jgDtfA2ZJ1",
+     "n": 1
+    },
+    {
+     "first": "720P$https://ukzy.ukubf3.com/20250527/rseVoKFV/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "mdzy",
+   "site_name": "魔都资源",
+   "vod_id": 7887,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://play.modujx10.com/20240318/juQhmv3M/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "hhzyapi",
+   "site_name": "豪华资源",
+   "vod_id": 49112,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://play.hhuus.com/play/lej5WNyd",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://play.hhuus.com/play/lej5WNyd/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "hhzyapi",
+   "site_name": "豪华资源",
+   "vod_id": 150049,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://play.hhuus.com/play/QdJJ9ZPd",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://play.hhuus.com/play/QdJJ9ZPd/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "hhzyapi",
+   "site_name": "豪华资源",
+   "vod_id": 172152,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://play.hhuus.com/play/PdRAprOb",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://play.hhuus.com/play/PdRAprOb/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "hongniuzy",
+   "site_name": "红牛资源",
+   "vod_id": 141772,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://hn.bfvvs.com/play/YerBWnLe",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://hn.bfvvs.com/play/YerBWnLe/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "hongniuzy",
+   "site_name": "红牛资源",
+   "vod_id": 167119,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://hn.bfvvs.com/play/6dBxYgNa",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://hn.bfvvs.com/play/6dBxYgNa/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "hongniuzy",
+   "site_name": "红牛资源",
+   "vod_id": 182016,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://hn.bfvvs.com/play/0dNwlnDe",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://hn.bfvvs.com/play/0dNwlnDe/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "yzzy",
+   "site_name": "优质资源",
+   "vod_id": "40967",
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://yzzy1.play-cdn16.com/20230503/4012_61589bd1/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "subocaiji",
+   "site_name": "速博资源",
+   "vod_id": 42112,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://play.xluuss.com/play/Ddw26vXb",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://play.xluuss.com/play/Ddw26vXb/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "subocaiji",
+   "site_name": "速博资源",
+   "vod_id": 133170,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://play.xluuss.com/play/oeEAVl0e",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://play.xluuss.com/play/oeEAVl0e/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "subocaiji",
+   "site_name": "速博资源",
+   "vod_id": 148143,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://play.xluuss.com/play/ZdPynp1e",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://play.xluuss.com/play/ZdPynp1e/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "xinlangaa",
+   "site_name": "新浪资源",
+   "vod_id": 179754,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://play.xluuss.com/play/Ddw26vXb",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://play.xluuss.com/play/Ddw26vXb/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "xinlangaa",
+   "site_name": "新浪资源",
+   "vod_id": 207781,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://play.xluuss.com/play/oeEAVl0e",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://play.xluuss.com/play/oeEAVl0e/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "xinlangaa",
+   "site_name": "新浪资源",
+   "vod_id": 230918,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://play.xluuss.com/play/ZdPynp1e",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://play.xluuss.com/play/ZdPynp1e/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "guangsuapi",
+   "site_name": "光速资源",
+   "vod_id": 172228,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://v.gsuus.com/play/9avR6rna",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://v.gsuus.com/play/9avR6rna/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "guangsuapi",
+   "site_name": "光速资源",
+   "vod_id": 194052,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://v.gsuus.com/play/DbDzVRqe",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://v.gsuus.com/play/DbDzVRqe/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "guangsuapi",
+   "site_name": "光速资源",
+   "vod_id": 212604,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://v.gsuus.com/play/YaOxmoYb",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://v.gsuus.com/play/YaOxmoYb/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "jinyingzy",
+   "site_name": "金鹰点播",
+   "vod_id": 42937,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://hd.kuktxu.com/play/neg8WNra",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://hd.kuktxu.com/play/neg8WNra/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "jinyingzy",
+   "site_name": "金鹰点播",
+   "vod_id": 129401,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://hd.kuktxu.com/play/RdGDVZ8e",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://hd.kuktxu.com/play/RdGDVZ8e/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "jinyingzy",
+   "site_name": "金鹰点播",
+   "vod_id": 148825,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://hd.kuktxu.com/play/qaQzoq0b",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://hd.kuktxu.com/play/qaQzoq0b/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "myzy",
+   "site_name": "猫眼资源",
+   "vod_id": 144966,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第001集$https://play.maoyanplay.top/20240427/ow9nOHwO/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "myzy",
+   "site_name": "猫眼资源",
+   "vod_id": 122326,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://play.maoyanplay.top/20240427/ow9nOHwO/index.m3u8",
+     "n": 55
+    }
+   ]
+  },
+  {
+   "site_key": "zuid",
+   "site_name": "最大资源",
+   "vod_id": 76258,
+   "vod_name": "遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集 (下)$https://v8.zuidazym3u8.com/yyv8/202406/08/0v6kBbu2eH14/video/index.m3u8",
+     "n": 2
+    }
+   ]
+  },
+  {
+   "site_key": "zuid",
+   "site_name": "最大资源",
+   "vod_id": 75421,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集$https://v9.zuidazym3u8.com/yyv9/202406/03/c64QE3Kfj318/video/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "wujinys",
+   "site_name": "无尽影视",
+   "vod_id": 114342,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集$https://v4.ppqrrs.com/wjv4/202405/31/HEEHX00rdA76/video/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "moduanime",
+   "site_name": "魔都动漫",
+   "vod_id": 7887,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://play.modujx10.com/20240318/juQhmv3M/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "huyazy",
+   "site_name": "虎牙资源",
+   "vod_id": 40877,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://hd.kuktxu.com/play/neg8WNra",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://hd.kuktxu.com/play/neg8WNra/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "huyazy",
+   "site_name": "虎牙资源",
+   "vod_id": 128930,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://1080p.huyall.com/play/RdGDVZ8e",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://1080p.huyall.com/play/RdGDVZ8e/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "huyazy",
+   "site_name": "虎牙资源",
+   "vod_id": 148017,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://1080p.huyall.com/play/qaQzoq0b",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://1080p.huyall.com/play/qaQzoq0b/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "ukuapi2",
+   "site_name": "优酷资源",
+   "vod_id": 46997,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "unknown",
+   "roads": [
+    {
+     "first": "第01集$https://ukzy.ukubf4.com/share/aSCBmIFjBOcNaTKD",
+     "n": 183
+    },
+    {
+     "first": "第01集$https://ukzy.ukubf4.com/20230503/JTvZqQfd/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "ukuapi2",
+   "site_name": "优酷资源",
+   "vod_id": 56734,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "unknown",
+   "roads": [
+    {
+     "first": "720P$https://ukzy.ukubf3.com/share/bUkvS4jgDtfA2ZJ1",
+     "n": 1
+    },
+    {
+     "first": "720P$https://ukzy.ukubf3.com/20250527/rseVoKFV/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "jyzyapi",
+   "site_name": "金鹰资源",
+   "vod_id": 42937,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01话$https://hd.kuktxu.com/play/neg8WNra",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://hd.kuktxu.com/play/neg8WNra/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "jyzyapi",
+   "site_name": "金鹰资源",
+   "vod_id": 129401,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集完结$https://hd.kuktxu.com/play/RdGDVZ8e",
+     "n": 1
+    },
+    {
+     "first": "全集完结$https://hd.kuktxu.com/play/RdGDVZ8e/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "jyzyapi",
+   "site_name": "金鹰资源",
+   "vod_id": 148825,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第1-20集$https://hd.kuktxu.com/play/qaQzoq0b",
+     "n": 4
+    },
+    {
+     "first": "第1-20集$https://hd.kuktxu.com/play/qaQzoq0b/index.m3u8",
+     "n": 4
+    }
+   ]
+  },
+  {
+   "site_key": "zuidadb",
+   "site_name": "最大点播",
+   "vod_id": 76258,
+   "vod_name": "遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集 (下)$https://v8.zuidazym3u8.com/yyv8/202406/08/0v6kBbu2eH14/video/index.m3u8",
+     "n": 2
+    }
+   ]
+  },
+  {
+   "site_key": "zuidadb",
+   "site_name": "最大点播",
+   "vod_id": 75421,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "全集$https://v9.zuidazym3u8.com/yyv9/202406/03/c64QE3Kfj318/video/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "rycj",
+   "site_name": "如意资源",
+   "vod_id": 23563,
+   "vod_name": "遮天",
+   "vod_year": "2024(未定)",
+   "vod_remarks": "",
+   "tier": "noburn",
+   "roads": [
+    {
+     "first": "第01集$https://cdn.ryplay10.com/20241002/23191_15a2be0b/index.m3u8",
+     "n": 183
+    },
+    {
+     "first": "第01集$https://cdn.ryplay10.com/share/5194b07beb1d4a9c1ab854cc5621ea12",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "zy360b",
+   "site_name": "360资源2",
+   "vod_id": 64358,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第001话$https://vod2.maowushi.com/20240427/ow9nOHwO/index.m3u8",
+     "n": 185
+    }
+   ]
+  },
+  {
+   "site_key": "zy360b",
+   "site_name": "360资源2",
+   "vod_id": 57256,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "遮天$https://vod2.maowushi.com/20240806/nE5sT6tl/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "zy360b",
+   "site_name": "360资源2",
+   "vod_id": 64362,
+   "vod_name": "弹指遮天",
+   "vod_year": "2024",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "遮天$https://vod2.maowushi.com/20240806/nE5sT6tl/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "zy360b",
+   "site_name": "360资源2",
+   "vod_id": 62032,
+   "vod_name": "弹指遮天",
+   "vod_year": "2022",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "遮天$https://vod2.maowushi.com/20240806/nE5sT6tl/index.m3u8",
+     "n": 1
+    }
+   ]
+  },
+  {
+   "site_key": "aqyzy",
+   "site_name": "爱奇艺",
+   "vod_id": 7887,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://play.ly166.com:65/videos/20250311/67cfaab52259a00b2f607d27/675187/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "aqyzy",
+   "site_name": "爱奇艺",
+   "vod_id": 53273,
+   "vod_name": "遮天",
+   "vod_year": "2025",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://play.ly166.com:65/videos/20250621/685613165cf6b9c746f23e80/6gcdf3/index.m3u8",
+     "n": 78
+    }
+   ]
+  },
+  {
+   "site_key": "moduzy",
+   "site_name": "魔都资源2",
+   "vod_id": 7887,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://play.modujx10.com/20240318/juQhmv3M/index.m3u8",
+     "n": 183
+    }
+   ]
+  },
+  {
+   "site_key": "lovedan",
+   "site_name": "艾旦影视",
+   "vod_id": 76372,
+   "vod_name": "遮天",
+   "vod_year": "2023",
+   "vod_remarks": "",
+   "tier": "ads",
+   "roads": [
+    {
+     "first": "第01集$https://vip.ffzy-plays.com/20230503/11270_98a7b781/index.m3u8",
+     "n": 183
+    },
+    {
+     "first": "第01话$https://hd.kuktxu.com/play/neg8WNra/index.m3u8",
+     "n": 183
+    },
+    {
+     "first": "全集 (下)$https://v8.longshengtea.com/yyv8/202406/08/0v6kBbu2eH14/video/index.m3u8",
+     "n": 2
+    },
+    {
+     "first": "第01集$https://yzzy1.play-cdn16.com/20230503/4012_61589bd1/index.m3u8",
+     "n": 183
+    }
+   ]
+  }
+ ]
+}

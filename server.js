@@ -45,9 +45,25 @@ const app = express();
 //    模块加载失败(如部署时缺 parse5 依赖)只禁用这批源,绝不拖垮主站;KAZUMI_DISABLE=1 可整体关闭。
 let kazumi = null;
 try { kazumi = require('./lib/kazumi'); } catch (e) { console.warn('[Kazumi] 模块加载失败,规则源已禁用:', e.message); }
+// 🏷️ 资源站档案(clean/noburn/insert/unknown/ads 档位 + 分辨率 + 海外受限;前端显示 无广告/有插播/未评测/有水印):共享模块 lib/site-profiles(api/index.js 同一份)。
+//    只用于前端徽章与"同一可达档内"的选源偏好;加载失败/查询抛错只是不带徽章,绝不影响搜索与播放。
+let siteProfiles = null;
+try { siteProfiles = require('./lib/site-profiles'); } catch (e) { console.warn('[SiteProfiles] 模块加载失败,线路徽章已禁用:', e.message); }
+function profOf(site) {
+    if (!siteProfiles) return undefined;   // undefined → JSON 里直接没有 site_profile 字段,前端回退 /api/sites 的 profiles 表
+    try { return siteProfiles.profileFor(site); } catch (e) { return undefined; }
+}
+// /api/sites 附带的 {key: 档案} 表(含内置规则站)。返回新对象,绝不改 remoteDbCache/db.json 读出的原对象
+function withSiteProfiles(sitesData) {
+    if (!siteProfiles || !sitesData || typeof sitesData !== 'object') return sitesData;
+    try {
+        const base = Array.isArray(sitesData.sites) ? sitesData.sites : [];
+        return Object.assign({}, sitesData, { profiles: siteProfiles.profileMap(withKzSites(base)), profiles_version: siteProfiles.version });
+    } catch (e) { console.warn('[SiteProfiles] profileMap 失败,本次不带徽章:', e.message); return sitesData; }
+}
 // 站点全集 = db.json/远程配置的 maccms 站 + 内置 Kazumi 规则站(db.json 里同 key 的条目优先,便于覆盖/停用)
-function allSites() {
-    const base = ((getDB() || {}).sites) || [];
+function allSites() { return withKzSites(((getDB() || {}).sites) || []); }
+function withKzSites(base) {
     if (!kazumi) return base;
     let kz = [];
     try { kz = kazumi.getSites(); } catch (e) { console.warn('[Kazumi] getSites 失败,本次只用 maccms 站:', e.message); }
@@ -2122,19 +2138,47 @@ app.get('/api/sites', async (req, res) => {
         sitesData = JSON.parse(fs.readFileSync(DATA_FILE));
     }
 
-    res.json(sitesData);
+    res.json(withSiteProfiles(sitesData));
 });
 
 // 服务器端测速兜底：客户端直连+代理都失败时(混合内容/CORS)由服务器测资源站 API 延迟。
 // 注：此接口在早期重构中丢失，前端一直调用导致 404 → 服务器测速这条兜底失效，已恢复。
+// 🗄️ 内存缓存 + 同站并发合并:海外用户每开一部剧,所有"海外受限"站都会走到这里(实测每次 p50 245ms、最慢 1.6s,
+//    且每次 1-2 个上游请求)。通的缓存 5 分钟、不通的 90 秒;上游【超时】得出的 9999 带 transient:true 且不缓存
+//    ——前端据此不写 12h 死亡缓存(超时是瞬态,不能把站封半天)。只用内存(不进 detail 缓存:json 模式每写一次整文件重写)。
+const checkCache = new Map();      // key -> { data, expiry }
+const checkInflight = new Map();   // key -> Promise<data>
+const CHECK_OK_TTL = 5 * 60 * 1000, CHECK_FAIL_TTL = 90 * 1000, CHECK_CACHE_MAX = 1000;
+const isTimeoutErr = (e) => !!e && (e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT' || /timeout/i.test(String(e.message || '')));
 app.get('/api/check', async (req, res) => {
-    const { key } = req.query;
+    const key = String(req.query.key || '');
+    // 「刷新线路」带 nocache=1:跳过读缓存强制真测(结果照样写回、照样并发合并)
+    const hit = req.query.nocache === '1' ? null : checkCache.get(key);
+    // 缓存里的失败只当【瞬态】发给别的用户:一次上游抖动(502/连接重置)不能经 90s 缓存扩散成每个人本地 12h 的死亡记录;
+    //   只有亲自跑了这次探测的那个请求拿到非 transient 的失败
+    if (hit && hit.expiry > Date.now()) return res.json(hit.data.latency >= 9000 ? Object.assign({}, hit.data, { transient: true }) : hit.data);
+    let p = checkInflight.get(key);
+    const mine = !p;   // 这次请求亲自跑探测;并发合并进来的请求拿到失败时一律按瞬态(同缓存命中的规则)
+    if (!p) {
+        p = runSiteCheck(key).then((data) => {
+            if (!data.transient) {
+                if (checkCache.size >= CHECK_CACHE_MAX) checkCache.delete(checkCache.keys().next().value);
+                checkCache.set(key, { data, expiry: Date.now() + (data.latency < 9000 ? CHECK_OK_TTL : CHECK_FAIL_TTL) });
+            }
+            return data;
+        }).catch(() => ({ latency: 9999, transient: true })).finally(() => checkInflight.delete(key));
+        checkInflight.set(key, p);
+    }
+    const d = await p;
+    res.json(!mine && d.latency >= 9000 && !d.transient ? Object.assign({}, d, { transient: true }) : d);
+});
+async function runSiteCheck(key) {
     try {
         const sites = allSites();
         const site = sites.find(s => s.key === key);
         // 🎌 规则站没有 maccms API:只测站点首页可达(绝不拉媒体,同下方铁律)
-        if (site && kazumi && kazumi.isKzSite(site)) return res.json(await kazumi.check(site.key));
-        if (!site || !site.api) return res.json({ latency: 9999 });
+        if (site && kazumi && kazumi.isKzSite(site)) return await kazumi.check(site.key);
+        if (!site || !site.api) return { latency: 9999 };
         const start = Date.now();
         try {
             // 必须返回【有效 videolist JSON 且有 http 播放地址】才算通——挡掉返回 200 的死站
@@ -2145,26 +2189,29 @@ app.get('/api/check', async (req, res) => {
             //    健康站也常抽到 403/404 过期链接。真实可播性只能由【客户端】直连/代理测速把关,服务器只管
             //    "API 活着且返回正经片库"这一层。
             const UA_HDRS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' };
-            let list = null;
+            let list = null, timedOut = false;
             try {
                 const r = await axios.get(`${site.api}?ac=videolist&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS });
                 list = r.data && Array.isArray(r.data.list) ? r.data.list : null;
-            } catch (e) { }
+            } catch (e) { timedOut = isTimeoutErr(e); }
             if (!list || !list.length) {
                 // 部分 CMS 变体对 ac=videolist 返回空/不支持 → 退回 ac=detail 再试一次(资源站验活的既定铁律)
-                const r2 = await axios.get(`${site.api}?ac=detail&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS });
-                list = r2.data && Array.isArray(r2.data.list) ? r2.data.list : null;
+                try {
+                    const r2 = await axios.get(`${site.api}?ac=detail&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS });
+                    list = r2.data && Array.isArray(r2.data.list) ? r2.data.list : null;
+                    timedOut = false;
+                } catch (e) { timedOut = timedOut || isTimeoutErr(e); }
             }
-            if (!list || !list.length) return res.json({ latency: 9999 });
-            if (!list.some(v => /https?:\/\//.test(String(v.vod_play_url || '')))) return res.json({ latency: 9999 });
-            return res.json({ latency: Date.now() - start, _testType: 'server' });
+            if (!list || !list.length) return timedOut ? { latency: 9999, transient: true } : { latency: 9999 };
+            if (!list.some(v => /https?:\/\//.test(String(v.vod_play_url || '')))) return { latency: 9999 };
+            return { latency: Date.now() - start, _testType: 'server' };
         } catch (e) {
-            return res.json({ latency: 9999 });
+            return isTimeoutErr(e) ? { latency: 9999, transient: true } : { latency: 9999 };
         }
     } catch (e) {
-        return res.json({ latency: 9999 });
+        return { latency: 9999, transient: true };
     }
-});
+}
 
 // 🔗 分享深链预览：未登录用户打开 /?play=剧名 时，前端用本接口拿 TMDB 简介+海报渲染"锁定框架"
 //   （标题+简介+黑屏播放器+登录提示），全程不碰任何资源站(不搜索/不取播放地址)。带内存缓存+限流防刷。
@@ -2682,10 +2729,11 @@ app.get('/api/search', async (req, res) => {
 
         const allResults = [];
         const searchPromises = targetSites.map(async (site) => {
+            const site_profile = profOf(site);   // 🏷️ 发出时才附加:不进 1 小时搜索缓存,改 db.json 覆盖/档案表立即生效
             if (kazumi && kazumi.isKzSite(site)) {   // 🎌 规则站:模块自带关键词策略与缓存
                 try {
                     const r = await kazumi.search(site.key, keyword, originalTitle);
-                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name }));
+                    ((r && r.list) || []).forEach(item => allResults.push({ ...item, site_key: site.key, site_name: site.name, site_profile }));
                 } catch (err) { console.error(`[Search JSON] ${site.name}:`, err.message); }
                 return;
             }
@@ -2693,7 +2741,7 @@ app.get('/api/search', async (req, res) => {
             const cached = cacheManager.get('search', cacheKey);
             if (cached && cached.list) {
                 cached.list.forEach(item => {
-                    allResults.push({ ...item, site_key: site.key, site_name: site.name });
+                    allResults.push({ ...item, site_key: site.key, site_name: site.name, site_profile });
                 });
                 return;
             }
@@ -2710,7 +2758,7 @@ app.get('/api/search', async (req, res) => {
                     site_name: site.name
                 })) : [];
                 cacheManager.set('search', cacheKey, { list }, 3600);
-                allResults.push(...list);
+                allResults.push(...list.map(item => ({ ...item, site_profile })));   // 缓存里的 list 保持不带档案
             } catch (err) {
                 console.error(`[Search JSON] ${site.name}:`, err.message);
             }
@@ -2756,13 +2804,14 @@ app.get('/api/search', async (req, res) => {
 
     // 并行搜索所有站点
     const searchPromises = sites.map(async (site) => {
+        const site_profile = profOf(site);   // 🏷️ 发出时才附加,不写进搜索缓存
         // 🎌 规则站(HTML 刮削的小站):对空格敏感、七色番 wd 只取前 10 字,智能变体对它们全是无效请求还徒增被封风险
         //    → 交给模块:一个"核心关键词",0 结果才回退一次;结果带 _gk 等归一化键供前端并组
         if (kazumi && kazumi.isKzSite(site)) {
             let list = [];
             try { list = ((await kazumi.search(site.key, keyword, originalTitle)) || {}).list || []; }
             catch (error) { console.error(`[SSE Search Error] ${site.name}:`, error.message); }
-            const items = list.map(item => ({ ...item, site_key: site.key, site_name: site.name })).filter(item => {
+            const items = list.map(item => ({ ...item, site_key: site.key, site_name: site.name, site_profile })).filter(item => {
                 const globalKey = `${item.site_key}_${item.vod_id}`;
                 if (sentVodIds.has(globalKey)) return false;
                 sentVodIds.set(globalKey, true);
@@ -2833,7 +2882,8 @@ app.get('/api/search', async (req, res) => {
                 uniqueResults.push({
                     ...item,
                     site_key: site.key,
-                    site_name: site.name
+                    site_name: site.name,
+                    site_profile
                 });
             }
         }
