@@ -54,9 +54,12 @@ function fragsFromGroups(g) {
     return frags;
 }
 
-// 播放模拟。truth(g) -> { res, off, ad }。返回动作列表 + 误伤正片秒数 + 看到广告秒数
+// 播放模拟。truth(g) -> { res, off, ad }。返回动作列表 + 误伤正片秒数 + 实际看到的广告秒数(watched)。
+//   预加载窗口模型与运行时 _adjustBuffer 一致:平时 30s;刚学到"不像正片"的组(分辨率≠主 / PTS 重启)→ 75s;
+//   播放头回到正片且前方没有未结的怪组 → 还原
 function simulate(frags, truth, opts = {}) {
-    const LOOK = opts.look ?? 30, STEP = opts.step ?? 0.25;
+    const BASE = opts.look ?? 30, STEP = opts.step ?? 0.25;
+    let LOOK = BASE, raised = false, mainRes = '';
     const groups = C.groupsFromFrags(frags);
     const total = groups[groups.length - 1].end;
     const res = Object.create(null), off = Object.create(null), overrides = Object.create(null), skipped = Object.create(null);
@@ -70,8 +73,14 @@ function simulate(frags, truth, opts = {}) {
             const tr = truth(g);
             if (tr.res) res[g.cc] = tr.res;
             if (tr.off != null) off[g.cc] = tr.off;
+            if (!opts.noRaise && !raised && isOdd(g)) { raised = true; LOOK = Math.max(75, BASE); }
         }
     };
+    const isOdd = g => {
+        const r = res[g.cc], o = off[g.cc];
+        return !!((r && mainRes && !C.sameRes(r, mainRes)) || (o != null && g.start > 30 && o + g.start < 5));
+    };
+    const watched = Object.create(null);
     const plan = (opts.userSeeks || []).slice().sort((a, b) => a.at - b.at);
     while (t < total && guard++ < 400000) {
         if (plan.length && t >= plan[0].at) {
@@ -85,6 +94,8 @@ function simulate(frags, truth, opts = {}) {
         const d = C.decide(groups, cc => res[cc], t, opts.core, {
             offOf: cc => off[cc], overridden: g => !!overrides[g.cc], freshStart: !userSeeked, rate: opts.rate || 1
         });
+        if (d.main && d.main.res) mainRes = d.main.res;
+        if (raised && d.why === 'main' && !groups.some(g => g.start > t && (res[g.cc] || off[g.cc] != null) && isOdd(g))) { raised = false; LOOK = BASE; }
         if (d.act === 'seek') {
             events.push({ type: 'seek', t, to: d.to, run: d.run, why: d.why });
             const ccs = [];
@@ -94,6 +105,8 @@ function simulate(frags, truth, opts = {}) {
             continue;
         }
         if (d.act === 'ended') { events.push({ type: 'ended', t, run: d.run, why: d.why }); break; }
+        const gw = C.findGroup(groups, t);
+        if (gw >= 0 && truth(groups[gw]).ad) watched[groups[gw].cc] = (watched[groups[gw].cc] || 0) + STEP * (opts.rate || 1);
         t += STEP * (opts.rate || 1);
     }
     // 误伤 = 动作跳过的非广告时长;漏看 = 播放头实际走过的广告时长(粗算:被跳过的广告不计)
@@ -107,7 +120,8 @@ function simulate(frags, truth, opts = {}) {
             if (truth(g).ad) adsCaught.add(g.cc); else contentLost += b - a;
         }
     }
-    return { groups, events, total, contentLost, adsCaught };
+    const maxWatched = Math.max(0, ...Object.values(watched));
+    return { groups, events, total, contentLost, adsCaught, watched, maxWatched };
 }
 
 // ============ 1) 成龙历险记 95 集真实数据 ============
@@ -139,6 +153,7 @@ for (const ep of JK) {
     ok(r.events.filter(e => e.type === 'seek').length === mids.length, ep.key + ' 没有多余的跳转', r.events.map(e => [e.type, e.t, e.run && e.run.dur]));
     maxLost = Math.max(maxLost, r.contentLost);
     ok(r.contentLost <= 0.26 * r.events.length, ep.key + ' 每次动作误伤正片 <= 0.26s', r.contentLost);
+    ok(r.maxWatched <= 0.5, ep.key + ' 每段广告实际看到 <= 0.5s', r.watched);
 }
 ok(midSk === 95 && tailEnd === 95, '95 段中插全跳、95 段片尾全结束', { midSk, tailEnd });
 console.log(`    中插跳过 ${midSk}/95,片尾结束 ${tailEnd}/95,最晚 ${maxLate.toFixed(2)}s 后起跳,单集最多误伤正片 ${maxLost.toFixed(2)}s`);
@@ -156,6 +171,14 @@ console.log(`    中插跳过 ${midSk}/95,片尾结束 ${tailEnd}/95,最晚 ${ma
     ok(r.events.filter(x => x.type === 'seek').length === 5 && !r.events.some(x => x.type === 'override'), 'S1E01 四次拖回广告之前重看 → 每次都照样跳(成功的跳过不算"失败尝试")', r.events.map(x => [x.type, +x.t.toFixed(1)]));
     r = simulate(frags, truth, { startAt: 1000 });
     ok(r.events.length === 1 && r.events[0].type === 'ended', 'S1E01 从 1000s 续看 → 只结束片尾广告', r.events.map(x => [x.type, x.t]));
+    for (const at of [563, 565, 570, 575]) {
+        r = simulate(frags, truth, { startAt: at });
+        e = r.events.find(x => x.type === 'seek');
+        ok(e && Math.abs(e.to - 581.3) < 0.06 && r.maxWatched <= 0.5, 'S1E01 续看直接落在广告中段 @' + at + ' → 立即跳(PTS 重启 + 右侧正片)', { ev: r.events.map(x => [x.type, x.t]), watched: r.watched });
+    }
+    r = simulate(frags, truth, { userSeeks: [{ at: 5, to: 566 }] });
+    e = r.events.find(x => x.type === 'seek');
+    ok(e && e.t < 567 && r.maxWatched <= 1, 'S1E01 开播 5s 就拖进广告中段 → 立即跳', { ev: r.events.map(x => [x.type, x.t]), watched: r.watched });
     r = simulate(frags, truth, { look: 10 });
     e = r.events.find(x => x.type === 'seek');
     ok(e && r.contentLost <= 0.2, 'S1E01 预加载只有 10s(弱网)仍正确', { ev: r.events.map(x => [x.type, +x.t.toFixed(2)]), lost: r.contentLost });
@@ -168,7 +191,7 @@ console.log(`    中插跳过 ${midSk}/95,片尾结束 ${tailEnd}/95,最晚 ${ma
 console.log('[2] 11 个源 117 集(含同分辨率插播)');
 {
     const MS = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/multi-source.json'), 'utf8')).episodes;
-    let ads = 0, caught = 0, lostTotal = 0, fpEps = [];
+    let ads = 0, caught = 0, lostTotal = 0, fpEps = [], watchedTotal = 0, lateEps = [];
     const bySrc = {};
     for (const ep of MS) {
         const frags = fragsFromDurs(ep.g.map(x => x[0]));
@@ -177,6 +200,8 @@ console.log('[2] 11 个源 117 集(含同分辨率插播)');
         const r = simulate(frags, truth);
         const nAds = ep.g.filter(x => x[3]).length;
         ads += nAds; caught += r.adsCaught.size; lostTotal += r.contentLost;
+        watchedTotal += Object.values(r.watched).reduce((a, b) => a + b, 0);
+        if (r.maxWatched > 1) lateEps.push([ep.key, r.watched]);
         const s = bySrc[ep.src] = bySrc[ep.src] || { ads: 0, caught: 0 };
         s.ads += nAds; s.caught += r.adsCaught.size;
         // 每次动作最多吃 landPad(0.1s)+提前量的正片;超过 0.5s 就是误跳了一段正片
@@ -185,7 +210,8 @@ console.log('[2] 11 个源 117 集(含同分辨率插播)');
     ok(fpEps.length === 0, '117 集里没有任何一集误跳正片', fpEps.slice(0, 5));
     const recall = caught / ads;
     ok(recall >= 0.9, '插播召回 >= 90%(只靠分辨率是 69%)', { caught, ads, recall: +recall.toFixed(3), bySrc });
-    console.log(`    插播 ${caught}/${ads} 被跳过(${(recall * 100).toFixed(1)}%),正片总误伤 ${lostTotal.toFixed(1)}s(只算落点余量)`);
+    ok(lateEps.length === 0, '每段插播实际看到 <= 1s(右侧封口靠 75s 预加载及时到位)', lateEps.slice(0, 5));
+    console.log(`    插播 ${caught}/${ads} 被跳过(${(recall * 100).toFixed(1)}%),实际看到广告共 ${watchedTotal.toFixed(1)}s,正片总误伤 ${lostTotal.toFixed(1)}s(只算落点余量)`);
     console.log('    按源:', Object.entries(bySrc).map(([k, v]) => k + ' ' + v.caught + '/' + v.ads).join(' | '));
 }
 
@@ -270,6 +296,28 @@ const sim = (durs, resOf, offOf, opts) => {
     // 同分辨率 + PTS 重启但不架桥(时间戳乱的片源)→ 不动
     r = sim(flat(60, 20), cc => '1920x1080', cc => cc === 30 ? 1.45 - 600 : 1.4);
     ok(r.events.length === 0, '同分辨率、PTS 重启但正片时钟没停(不架桥)→ 不动', r.events.map(e => [e.type, e.t, e.why]));
+    // 早段插播不能被熔断挡掉(熔断不计正在判的段、也不计已架桥确认的插播)
+    {
+        const mkAds = (adList, n) => {
+            const d = [];
+            let tt = 0;
+            const isAd = [];
+            while (tt < 1300) {
+                const a = adList.find(x => Math.abs(x.at - tt) < 10 && !x.used);
+                if (a) { a.used = true; d.push(a.dur); isAd.push(true); tt += a.dur; continue; }
+                d.push(20); isAd.push(false); tt += 20;
+            }
+            const frags = fragsFromDurs(d);
+            const groups = C.groupsFromFrags(frags);
+            let shift = 0;
+            const offs = groups.map((g, i) => { if (isAd[i]) { shift += g.dur; return 1.45 - g.start; } return 1.4 - shift; });
+            return simulate(frags, g => ({ res: isAd[g.cc] ? '1920x1080' : '1920x800', off: offs[g.cc], ad: isAd[g.cc] }));
+        };
+        let r = mkAds([{ at: 240, dur: 44 }]);
+        ok(r.adsCaught.size === 1 && r.maxWatched <= 0.5, '250s 处 44s 长插播(最大资源型)→ 及时跳过', { ev: r.events.map(e => [e.type, e.t, e.why]), watched: r.watched });
+        r = mkAds([{ at: 140, dur: 25 }, { at: 260, dur: 25 }]);
+        ok(r.adsCaught.size === 2 && r.maxWatched <= 0.5, '150s/260s 两段 25s 插播 → 都跳过(熔断不误伤)', { ev: r.events.map(e => [e.type, e.t, e.why]), watched: r.watched });
+    }
     // 偏移还没学到(INIT_PTS_FOUND 没来)→ 宁可不跳
     r = sim(flat(60, 20), cc => cc === 30 ? '1280x720' : '1920x1080', () => undefined);
     ok(r.events.length === 0, '时间戳未知 → 不跳(宁可漏跳)', r.events);

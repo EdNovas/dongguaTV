@@ -6061,6 +6061,11 @@
             // 每个 hls 实例创建时挂一次(_dgHlsCustomType 是全站唯一的 new Hls 处:首建/切集/切源/分诊换代理都经过它)
             attach(hls, video) {
                 if (!hls || hls._adClip || !window.Hls) return;
+                try {   // 上一个实例(换集/换源/分诊)的"看广告"按钮作废
+                    clearTimeout(this._undoTimer);
+                    const ob = (typeof dp !== 'undefined' && dp && dp.container) ? dp.container.querySelector('.dg-adclip-undo') : null;
+                    if (ob) ob.style.display = 'none';
+                } catch (e) { }
                 const E = Hls.Events, vue = this.vue;
                 const st = hls._adClip = {
                     hls, video, dead: false, live: false, multi: false, frags: null, groups: [],
@@ -6111,9 +6116,17 @@
                     const r = st.res[cc], o = st.off[cc];
                     let g = null;
                     for (let i = 0; i < st.groups.length; i++) if (st.groups[i].cc === cc) { g = st.groups[i]; break; }
-                    const odd = (r && st.mainRes && !AdClipCore.sameRes(r, st.mainRes)) || (g && o != null && g.start > 30 && o + g.start < 5);
-                    if (odd && !st.bufRaised) { st.bufOrig = h.config.maxBufferLength; h.config.maxBufferLength = Math.max(this.BIG_BUFFER, st.bufOrig || 0); st.bufRaised = true; }
-                    else if (!odd && st.bufRaised && r && o != null) { h.config.maxBufferLength = st.bufOrig; st.bufRaised = false; }
+                    if (this._isOdd(st, g, r, o) && !st.bufRaised) { st.bufOrig = h.config.maxBufferLength; h.config.maxBufferLength = Math.max(this.BIG_BUFFER, st.bufOrig || 0); st.bufRaised = true; }
+                } catch (e) { }
+            },
+            _isOdd(st, g, r, o) {
+                return !!((r && st.mainRes && !AdClipCore.sameRes(r, st.mainRes)) || (g && o != null && g.start > 30 && o + g.start < 5));
+            },
+            _restoreBuffer(st, t) {
+                try {
+                    if (!st.bufRaised || !st.hls || !st.hls.config) return;
+                    if (st.groups.some(g => g.start > t && this._isOdd(st, g, st.res[g.cc], st.off[g.cc]))) return;
+                    st.hls.config.maxBufferLength = st.bufOrig; st.bufRaised = false;
                 } catch (e) { }
             },
             _cur() {
@@ -6121,37 +6134,43 @@
                 const st = h && h._adClip;
                 return (st && !st.dead && dp.video && st.video === dp.video) ? st : null;
             },
-            // 用户放行(撤销 / 第二次往回拖进同一段)跨实例记住:切源分诊、重开同一集都不再跳它。键 = 本集地址 + cc
-            _ovKey(cc) {
+            // 用户放行(撤销 / 第二次往回拖进同一段)跨实例记住:重开同一集(同一通道)不再跳它。
+            //   键 = 实际加载的清单地址 + cc:worker 过滤后的清单删掉了广告组,cc 编号与直连/nofilter 通道不同,不能串用
+            _ovKey(st, cc) {
                 const v = this.vue;
-                return 'donggua_adclip_ov|' + ((v && v.currentUrl) || '') + '|' + cc;
+                const u = (st && st.hls && st.hls.url) || (v && v._activeFinalUrl) || (v && v.currentUrl) || '';
+                return 'donggua_adclip_ov|' + u + '|' + cc;
             },
             _isOverridden(st, cc) {
                 if (st.overrides[cc]) return true;
-                try { return sessionStorage.getItem(this._ovKey(cc)) === '1'; } catch (e) { return false; }
+                try { return sessionStorage.getItem(this._ovKey(st, cc)) === '1'; } catch (e) { return false; }
             },
             _override(st, ccs) {
-                ccs.forEach(cc => { st.overrides[cc] = 1; try { sessionStorage.setItem(this._ovKey(cc), '1'); } catch (e) { } });
+                ccs.forEach(cc => { st.overrides[cc] = 1; try { sessionStorage.setItem(this._ovKey(st, cc), '1'); } catch (e) { } });
             },
             _onSeeking(video) {
                 const st = this._cur();
                 if (!st || st.video !== video || !window.AdClipCore) return;
                 const t = video.currentTime, now = performance.now();
                 if (st.selfTo != null && now - st.selfAt < 2000 && Math.abs(t - st.selfTo) < 0.5) return;   // 自己发起的 seek
-                st.userSeeked = true;
+                const prevT = st.lastT;
+                st.lastT = t;   // 暂停/缓冲中 check() 不更新 lastT,这里补上(否则下一次拖动的方向会判错)
+                // hls.js 起播跳洞(0→0.1)/跳小空洞/微调都会触发 seeking,幅度都 <2s:不算"用户拖动",否则开头贴片永远不跳
+                if (Math.abs(t - prevT) >= 2) st.userSeeked = true;
                 // 只有【往回】拖进已跳过的段才算用户的意思(往前的 seek 多是跳片头/进度恢复)
-                if (!(t < st.lastT - 0.5)) return;
+                if (!(t < prevT - 0.5)) return;
                 const gi = AdClipCore.findGroup(st.groups, t);
                 const ccs = gi >= 0 && st.skipped[st.groups[gi].cc];
                 if (!ccs) return;
+                if (ccs.some(cc => this._isOverridden(st, cc))) return;   // 已放行(看广告 / 放弃跳过):广告就是正常时间轴,不再换算
                 const g0 = st.groups.find(g => g.cc === ccs[0]), g1 = st.groups.find(g => g.cc === ccs[ccs.length - 1]);
                 const key = ccs[0] + '-' + ccs[ccs.length - 1];
                 // 刚跳过就按"后退 5s"会落进广告里:第一次按"广告时长为 0"换算回广告之前(和看没有广告的片子一样);
                 //   第二次再往回拖进同一段 = 真想看 → 放行
-                if (g0 && g1 && !st.remapped[key] && st.lastT >= g1.end && st.lastT - g1.end < 30) {
+                if (g0 && g1 && !st.remapped[key] && prevT >= g1.end && prevT - g1.end < 30) {
                     st.remapped[key] = 1;
                     const to = Math.max(0, g0.start - (g1.end - t));
-                    st.selfTo = to; st.selfAt = now;
+                    st.selfTo = to; st.selfAt = now; st.lastT = to;
                     try { dp.seek(to); } catch (e) { }
                     return;
                 }
@@ -6169,11 +6188,14 @@
                         b.className = 'dg-adclip-undo';
                         b.style.cssText = 'position:absolute;left:12px;bottom:56px;z-index:30;padding:5px 10px;border-radius:14px;' +
                             'background:rgba(0,0,0,.62);color:#fff;font-size:12px;cursor:pointer;user-select:none;display:none;border:1px solid rgba(255,255,255,.25)';
+                        // 触屏:容器的 touchend 会 preventDefault 吃掉合成 click → 按钮自己处理 touchend
+                        b.addEventListener('touchend', (ev) => { try { ev.stopPropagation(); if (ev.cancelable) ev.preventDefault(); if (b.onclick) b.onclick(ev); } catch (x) { } });
                         box.appendChild(b);
                     }
                     b.textContent = '已跳过 ' + Math.round(run.dur) + ' 秒插播 · 看广告';
                     b.onclick = (e) => {
                         try { e.stopPropagation(); } catch (x) { }
+                        if (st.dead || this._cur() !== st) { b.style.display = 'none'; return; }   // 已换集/换源:这个按钮作废
                         const ccs = [];
                         for (let i = run.g0; i <= run.g1; i++) if (st.groups[i]) ccs.push(st.groups[i].cc);
                         this._override(st, ccs);
@@ -6216,6 +6238,7 @@
                         freshStart: !!st.startFromZero && !st.userSeeked, rate: v.playbackRate || 1
                     });
                     if (d.main && d.main.res) st.mainRes = d.main.res;
+                    if (d.why === 'main') this._restoreBuffer(st, t);
                     // 上一次 seek 若已越过那一段(本 tick 不再判到它),它的失败计数清零:只数"seek 了还在段里"的失败
                     if (st.pendKey && !(d.run && d.run.key === st.pendKey)) { delete st.attempts[st.pendKey]; st.pendKey = null; }
                     if (d.run && d.why !== st.lastWhy) {
@@ -6368,19 +6391,23 @@
             const siteOf = it => it.site_key || it.site_name || '';
             const bySite = new Map();
             list.forEach(it => { const k = siteOf(it); if (!bySite.has(k)) bySite.set(k, []); bySite.get(k).push(it); });
-            // ① 冲突证据 → 原型(站内首集地址相同的旧副本不算证据、也不做原型)
-            const protos = [];
+            // ① 冲突证据 → 原型(站内首集地址相同的旧副本不算证据、也不做原型)。
+            //   先收集全部候选再按 (电影样, 年, 集数降序) 排序,用"全连接"合并:候选必须与原型里【每个】成员都兼容 ——
+            //   结果只取决于候选集合、与 SSE 到达顺序无关;同一个站里互相冲突的两条也绝不会并进同一个原型(否则其中一条会被去重吃掉)
+            const cands = [];
             bySite.forEach(arr => {
                 if (arr.length < 2) return;
                 const known = arr.filter(it => sigs.get(it).eps > 0);
                 if (!known.some((a, i) => known.some((b, j) => j > i && !twin(a, b) && !compat(sigs.get(a), sigs.get(b))))) return;
                 known.filter(it => !known.some(o => o !== it && twin(o, it) && sigs.get(o).eps >= sigs.get(it).eps && (sigs.get(o).eps > sigs.get(it).eps || known.indexOf(o) < known.indexOf(it))))
-                    .forEach(it => {
-                        const s = sigs.get(it);
-                        const p = protos.find(q => compat(q.sig, s));
-                        if (p) { if (s.eps > p.sig.eps && !s.movie) p.sig = Object.assign({}, p.sig, { eps: s.eps }); if (!p.sig.y && s.y) p.sig = Object.assign({}, p.sig, { y: s.y }); }
-                        else protos.push({ sig: Object.assign({}, s), items: [] });
-                    });
+                    .forEach(it => cands.push(sigs.get(it)));
+            });
+            cands.sort((a, b) => (a.movie - b.movie) || (a.y - b.y) || (b.eps - a.eps));
+            const protos = [];
+            cands.forEach(s => {
+                const p = protos.find(q => q.members.every(m => compat(m, s)));
+                if (p) { p.members.push(s); if (s.eps > p.sig.eps && !s.movie) p.sig = Object.assign({}, p.sig, { eps: s.eps }); if (!p.sig.y && s.y) p.sig = Object.assign({}, p.sig, { y: s.y }); }
+                else protos.push({ sig: Object.assign({}, s), members: [s], items: [] });
             });
             // 原型排序固定(与到达顺序无关):最近原型打平时也总落到同一个
             protos.sort((a, b) => (a.sig.movie - b.sig.movie) || (a.sig.y - b.sig.y) || (a.sig.eps - b.sig.eps));
@@ -6444,11 +6471,11 @@
                 });
                 return result;
             };
-            const works = clusters.map(c => ({ items: dedupe(c.items) }));
+            const works = clusters.map(c => ({ items: dedupe(c.items), all: c.items.slice() }));
             if (overflow.length) {
                 const ex = new Map();
                 overflow.forEach(it => { const s = sigs.get(it); const k = s.y + (s.movie ? 'm' : 's'); if (!ex.has(k)) ex.set(k, []); ex.get(k).push(it); });
-                ex.forEach(arr => works.push({ items: dedupe(arr) }));
+                ex.forEach(arr => works.push({ items: dedupe(arr), all: arr.slice() }));
             }
             // 标注/签名按【实际留下的条目】算:年份取出现最多的(打平取新),集数取最大
             const describe = (arr) => {
@@ -6461,17 +6488,22 @@
             };
             const out = [];
             const split = works.filter(w => w.items.length).length > 1;
+            const ds = works.map(w => describe(w.items));
+            const base = ds.map(d => split ? 'y' + (d.y || 0) + (d.movie ? 'm' : 's') : '');
+            const cnt = {};
+            base.forEach(b => { cnt[b] = (cnt[b] || 0) + 1; });
             const used = new Set();
             works.forEach((w, i) => {
-                const d = describe(w.items);
-                let sig = '', label = '';
+                const d = ds[i];
+                let sig = base[i], label = '';
                 if (split) {
-                    sig = 'y' + (d.y || 0) + (d.movie ? 'm' : 's');
+                    // 同年同类型的几部(如 2024 年 40 集电视剧 + 2024 年 100 集短剧):都按集数量级区分,谁先谁后都一样
+                    if (cnt[sig] > 1) sig += 'e' + Math.round(Math.log2(Math.max(1, d.eps)));
                     while (used.has(sig)) sig += '+';
                     used.add(sig);
                     label = (d.y ? d.y + ' · ' : '') + (d.movie ? '全' + d.eps + '集' : (d.eps ? d.eps + '集' : ''));
                 }
-                out.push({ work: i === 0 ? '' : sig, sig: sig, label: label, items: w.items });
+                out.push({ work: i === 0 ? '' : sig, sig: sig, label: label, items: w.items, all: w.all || w.items });
             });
             return out;
         }
@@ -7898,7 +7930,7 @@
                         // 🧩 同名多部作品已拆成多张卡:只拿同一部(_work 相同)的卡来补,否则电影的历史会被并进剧集的线路
                         const cs = this.currentSource;
                         const hasCur = g => !cs || g.sources.some(s => s.site_key === cs.site_key && String(s.vod_id) === String(cs.vod_id));
-                        const fresh = this.groupedList.find(g => g.name === name && hasCur(g) && (!groupData._workSig || (g._workSig || '') === groupData._workSig));
+                        const fresh = this.groupedList.find(g => g.name === name && (cs ? hasCur(g) : (!groupData._workSig || (g._workSig || '') === groupData._workSig)));
                         if (fresh && fresh.sources.length > groupData.sources.length) {
                             const existKeys = new Set(groupData.sources.map(s => s.site_key));
                             const merged = groupData.sources.slice();
@@ -9000,7 +9032,7 @@
                         this.autoSearch(playName);
                         // 安全兜底：万一 done/onerror/防抖 都没触发(极少)，12s 后用已到的源打开，避免一直卡加载
                         if (this._dlGraceTimer) clearTimeout(this._dlGraceTimer);
-                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(false), 12000);
+                        this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(false, true), 12000);
                     } catch (e) { }
                 },
                 // 深链定位打开。不必等"全部站点搜完(done)"——那要等最慢的几个站点；改为"源流式到达停顿(防抖~1.2s)
@@ -9012,14 +9044,24 @@
                     if (this._dlGraceTimer) { clearTimeout(this._dlGraceTimer); this._dlGraceTimer = null; }
                     if (this._dlDebounce) { clearTimeout(this._dlDebounce); this._dlDebounce = null; }
                 },
-                tryOpenDeepLink(isFinal) {
+                tryOpenDeepLink(isFinal, grace) {
                     const dl = this._deepLink;
                     if (!dl || dl.done) return;
                     const norm = (s) => (s || '').trim();
                     // 🧩 同名多部作品:&w= 指定了哪一部就开那一部;还没搜到它就继续等(终局时退回同名第一张)
                     const same = this.groupedList.filter(g => norm(g.name) === norm(dl.name));
-                    const byW = dl.w ? same.find(g => g._workSig === dl.w) : null;
-                    if (dl.w && !byW && same.length && !isFinal) return;
+                    let byW = dl.w ? same.find(g => g._workSig === dl.w) : null;
+                    if (dl.w && !byW && same.length && !isFinal && !grace) return;   // 还在流式到达:先等等(12s 兜底照样开)
+                    if (dl.w && !byW && same.length) {
+                        // 签名对不上(搜索结果变了):按 电影样/剧集 一致、年份最近 找
+                        const m = /^y(\d+)([ms])/.exec(dl.w);
+                        if (m) {
+                            const cands = same.filter(g => g._workSig && g._workSig.charAt(('y' + m[1]).length) === m[2]);
+                            const yy = g => parseInt((/^y(\d+)/.exec(g._workSig) || [])[1] || '0', 10);
+                            cands.sort((a, b) => Math.abs(yy(a) - +m[1]) - Math.abs(yy(b) - +m[1]));
+                            byW = cands[0] || null;
+                        }
+                    }
                     const group = byW || same[0] || this.groupedList.find(g => norm(g.name).includes(norm(dl.name)));
                     if (!group) {
                         if (!isFinal) return;  // 还没搜到该剧：继续等(防抖/兜底)，别误判失败
@@ -9801,6 +9843,19 @@
                         }
                         // 🔗 深链：搜索结束，定位打开(若防抖未先触发)；无匹配则判失败退出加载态
                         this.$nextTick(() => this.tryOpenDeepLink(true));
+                        // 🧩 卡片打开得早时,它的作品签名是按当时到达的结果算的;结果到齐后按"含正在播放那条线路"的卡校正一次,
+                        //    地址栏/分享出去的 &w= 才和别人搜全之后的签名一致
+                        this.$nextTick(() => {
+                            try {
+                                const g = this.currentGroup, cs = this.currentSource;
+                                if (!g || !g._workLabel || !cs || g._isLive) return;
+                                const card = this.groupedList.find(x => x.name === g.name && x.sources.some(s => s.site_key === cs.site_key && String(s.vod_id) === String(cs.vod_id)));
+                                if (card && card._workSig && card._workSig !== g._workSig) {
+                                    g._work = card._work; g._workSig = card._workSig; g._workLabel = card._workLabel;
+                                    this.syncShareUrl();
+                                }
+                            } catch (e) { }
+                        });
                     });
 
                     this._evtSource.onerror = () => {
@@ -9972,10 +10027,10 @@
 
                             if (isPageHttps && isVideoHttp) {
                                 console.log(`[混合内容] ${source.site_name} 视频URL为HTTP，回退到服务器测速`);
+                                source._srvOnly = true;   // 不论 /api/check 成败都归"可能无法播放"
+                                source._cachedDetail = detail;
                                 const checkRes = await fetchT(`/api/check?key=${source.site_key}`, null, 6000);
                                 this._applyServerCheck(source, await checkRes.json());
-                                source._srvOnly = true;
-                                source._cachedDetail = detail;
                                 checkEarlyReturn();
                                 return source;
                             }
@@ -10042,6 +10097,14 @@
                     //    最先测出的快速源由 checkEarlyReturn / 超时定时器提前选中起播，无需等全部完成
                     // 🔧 关键：测速前先把所有线路标记为"测速中"(latency='...')，否则并发池里尚未轮到的线路
                     //    会保留初始的 999ms 而被显示出来（懒加载：未测速的不显示，测出结果后再出现）
+                    // 🧹 新的线路对象:同一张卡再次打开时 groupedList 给的是同一批对象,上次测速的 _srvOnly/_clientTimeout/_timedOut…
+                    //    会残留;上一轮还在等 /api/check 的测速回来也会改写这一轮的结果。换成浅拷贝,旧一轮只能写到没人显示的旧对象上
+                    this.currentGroup.sources = this.currentGroup.sources.map(s => {
+                        const c = Object.assign({}, s);
+                        ['_srvOnly', '_clientTimeout', '_noServerCache', '_noDeadCache', '_timedOut', '_testType', '_proxyUrl', '_failNav'].forEach(k => { delete c[k]; });
+                        c._useProxy = false;
+                        return c;
+                    });
                     this.currentGroup.sources.forEach(s => { s.latency = '...'; });
                     // 🗄️ 缓存优先：命中(测通项3天/只有服务器能通6h/不可用项12h内)直接套用、跳过测速请求(detail 起播时由
                     //    switchSource 按需拉取);未命中才真测、测完写回缓存。
@@ -10091,6 +10154,10 @@
 
                     // 如果已经有选中的源并且视频已开始播放，不再自动切换
                     // 这样不会打断用户正在观看的内容
+                    if (this._manualPickNav === _openSeq && this.currentSource) {
+                        console.log(`[测速完成] 用户已手动选线路(${this.currentSource.site_name})，不自动切换`);
+                        return;
+                    }
                     if ((hasAutoSelected || this._manualPickNav === _openSeq) && this.currentSource && this.currentUrl) {
                         console.log(`[测速完成] 保持当前线路: ${this.currentSource.site_name}，不自动切换`);
                         return;
@@ -10394,8 +10461,10 @@
                         if (matched.length > 0) {
                             const works = splitSameNameWorks(matched);
                             const curVid = this.currentSource && String(this.currentSource.vod_id);
-                            const hasCur = x => !!curVid && x.items.some(it => it.site_key === currentSiteKey && String(it.vod_id) === curVid);
-                            const w = works.find(hasCur) ||
+                            const isCur = it => it.site_key === currentSiteKey && String(it.vod_id) === curVid;
+                            const hasCur = x => !!curVid && x.items.some(isCur);
+                            const hadCur = x => !!curVid && (x.all || []).some(isCur);   // 被同片源去重掉了也算(它的作品还是这一部)
+                            const w = works.find(hasCur) || works.find(hadCur) ||
                                 (reqGroup._workSig ? works.find(x => x.sig === reqGroup._workSig) : null) ||
                                 (works.length === 1 || !reqGroup._workLabel ? works[0] : null);
                             if (!w) { console.warn('[刷新线路] 同名多部作品里认不出当前这一部,保持原列表'); return; }
@@ -10508,7 +10577,7 @@
                     } catch (e) {
                         console.error('[刷新线路] 失败:', e);
                     } finally {
-                        this.isTestingSources = false;
+                        if (mySeq === _navSeq) this.isTestingSources = false;   // 已切换剧集:isTestingSources 归新上下文(它的 openDetail 自己负责)
                         this.refreshingSources = false;
                     }
                 },
@@ -10814,18 +10883,21 @@
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 5000);
                         // m3u8 文件通常配置了 CORS，可以直接 fetch
-                        const testRes = await fetch(videoUrl, { method: 'GET', cache: 'no-cache', signal: controller.signal });
-                        clearTimeout(timeoutId);
+                        let testRes;
+                        try { testRes = await fetch(videoUrl, { method: 'GET', cache: 'no-cache', signal: controller.signal }); }
+                        catch (e0) { clearTimeout(timeoutId); throw e0; }
                         // ⚠️ 只认真正 2xx(.ok):带 CORS 头的 403/404 错误页 type 同样是 'cors',旧版据此误判"可达"。
                         //    顺带校验响应体确实有可播分片,挡掉返回 200 却是 HTML/错误页/空清单的源。
+                        if (!testRes.ok) clearTimeout(timeoutId);
                         if (testRes.ok) {
                             let bodyOK = true, tBody = 0, tAll = 0;
                             try {
-                                const txt = await testRes.clone().text();
+                                const txt = await testRes.clone().text();   // 中止计时器仍在:正文卡住 5s 照样中止
+                                clearTimeout(timeoutId);
                                 tBody = Date.now() - startTime;
                                 bodyOK = await this._m3u8HasFragments(txt, videoUrl);
                                 tAll = Date.now() - startTime;
-                            } catch (e) { bodyOK = true; }
+                            } catch (e) { clearTimeout(timeoutId); if (e && e.name === 'AbortError') throw e; bodyOK = true; }
                             if (bodyOK) {
                                 const all = tAll || (Date.now() - startTime);
                                 directLatency = (tBody && all - tBody < 1000) ? tBody : all;
@@ -10844,17 +10916,20 @@
                             const proxyController = new AbortController();
                             // 直连已经通了(只是慢)时,代理要快 30% 才会被采用 → 等到直连那么久还没回就不必再等(旧版固定等 6s,白占测速池)
                             const proxyTimeoutId = setTimeout(() => proxyController.abort(), directSuccess ? Math.max(1000, directLatency) : 6000);
-                            const proxyTestRes = await fetch(proxyUrl, { method: 'GET', cache: 'no-cache', signal: proxyController.signal });
-                            clearTimeout(proxyTimeoutId);
+                            let proxyTestRes;
+                            try { proxyTestRes = await fetch(proxyUrl, { method: 'GET', cache: 'no-cache', signal: proxyController.signal }); }
+                            catch (e0) { clearTimeout(proxyTimeoutId); throw e0; }
+                            if (!proxyTestRes.ok) clearTimeout(proxyTimeoutId);
                             if (proxyTestRes.status >= 500 && !directSuccess) source._clientTimeout = true;   // worker 自己抖动
                             let proxyBodyOK = proxyTestRes.ok, ptBody = 0, ptAll = 0;
                             if (proxyTestRes.ok) {
                                 try {
                                     const ptxt = await proxyTestRes.clone().text();
+                                    clearTimeout(proxyTimeoutId);
                                     ptBody = Date.now() - proxyStartTime;
                                     proxyBodyOK = await this._m3u8HasFragments(ptxt, proxyUrl);
                                     ptAll = Date.now() - proxyStartTime;
-                                } catch (e) { proxyBodyOK = true; }
+                                } catch (e) { clearTimeout(proxyTimeoutId); if (e && e.name === 'AbortError') throw e; proxyBodyOK = true; }
                                 if (!proxyBodyOK && !directSuccess) source._noServerCache = true;
                             }
                             if (proxyBodyOK) {
@@ -10882,9 +10957,10 @@
                 // /api/check 结果落到线路上(三处兜底共用,别再漏判 transient):服务器那头只是超时 → _timedOut,不写 12h 死亡缓存
                 _applyServerCheck(source, d) {
                     d = d || {};
-                    source.latency = (typeof d.latency === 'number') ? d.latency : 9999;
+                    const num = typeof d.latency === 'number';
+                    source.latency = num ? d.latency : 9999;
                     source._testType = 'server';
-                    if (d.transient) source._timedOut = true;
+                    if (d.transient || !num) source._timedOut = true;   // 429 限流/其它 JSON 错误体 = 没有结论,绝不写 12h 死亡缓存
                 },
                 // "只有服务器能通"要在【两部不同的剧】上都出现,才按站点缓存 6h:同一部剧的链接坏了(403/404)和整站海外受限
                 //   从状态码上分不出来,一部剧的坏链接不能连累该站所有剧(审查实测:如意一部老剧首集死链 → 6h 内每部剧都标"可能无法播放")
@@ -10916,11 +10992,12 @@
                         if (!line) return false;
                         const sub = new URL(line, baseUrl).href;
                         const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
-                        const r = await fetch(sub, { cache: 'no-store', signal: ctl.signal });
-                        clearTimeout(t);
-                        if (!r.ok) return false;
-                        return /#EXTINF/.test(await r.text());
-                    } catch (e) { return true; }   // 网络/CORS 抖动不冤枉源站,交给播放侧的零分片闸兜底
+                        try {
+                            const r = await fetch(sub, { cache: 'no-store', signal: ctl.signal });
+                            if (!r.ok) return false;
+                            return /#EXTINF/.test(await r.text());   // 计时器覆盖到正文读完
+                        } finally { clearTimeout(t); }
+                    } catch (e) { return true; }   // 网络/CORS 抖动不冤枉源站,交给播放侧的零分片闸兜底(最多等 5s,且整段计入延迟)
                 },
                 // 🗄️ 资源站健康度本地缓存(跨剧集, 3天)：site_key → {latency,testType,useProxy,proxyUrl,ts}。
                 //    本地连不通的资源站基本不会再通，缓存上次测速结果 → 刷新页面/?play= 深链/换剧都直接套用、跳过重测；
@@ -11370,8 +11447,10 @@
                                         return;
                                     }
                                     // siteblock:源站封 CF —— 记账
-                                    this._adProxyBadMark(failSite);
+                                    //   记账会让该站从"无广告"降成"有插播"、线路列表立刻重排(srcRev):换线路的目标必须在重排【之前】
+                                    //   按原顺序选好(handlePlaybackError 同步算出下一条),否则会越过后面还没试的无广告线路
                                     if (directOK) {
+                                        this._adProxyBadMark(failSite);
                                         console.log('[播放器] 🛡️ ' + failSite + ' 源站屏蔽过滤代理(worker→403/404)，原站直连，12h 内不再走代理');
                                         try { dp.notice('该线路屏蔽了广告过滤，已直连播放（可能含广告）', 3000); } catch (e) { }
                                         switchTo(fb, '源站屏蔽过滤代理→直连');
@@ -11380,6 +11459,7 @@
                                         try { dp.notice('该线路无法过滤广告，自动换线路…', 2500); } catch (e) { }
                                         this._proxyRetrying = false;
                                         this.handlePlaybackError();
+                                        this._adProxyBadMark(failSite);
                                     }
                                   } catch (e) { this._proxyRetrying = false; console.warn('[播放器] 代理分诊异常,已解闸:', e && e.message); }
                                 })();
@@ -13101,7 +13181,7 @@
                                 //      用户瞄准齿轮却点到旁边的暗化层就会误暂停 → 拦掉它(底部控制区不该是暂停热区)。
                                 dplayerContainer.addEventListener('click', (e) => {
                                     // 点在真正的控件/各类菜单/弹幕设置上 → 不拦截，照常工作
-                                    if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon')) return;
+                                    if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon, .dg-adclip-undo')) return;
                                     const settingOpen = settingBox && settingBox.classList.contains('dplayer-setting-box-open');
                                     const dmPanel = dplayerContainer.querySelector('.dm-settings-panel');
                                     const dmOpen = dmPanel && dmPanel.style.display === 'block';
@@ -13469,7 +13549,7 @@
                                 _gmode = null;
                                 if (e.touches.length !== 1) return;
                                 if (!_gFull()) return;   // 非全屏:不接管,让页面正常滚动
-                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
+                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .dg-adclip-undo, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
                                 const rect = container.getBoundingClientRect();
                                 _gx = e.touches[0].clientX; _gy = e.touches[0].clientY;
                                 const rx = (_gx - rect.left) / rect.width;
@@ -13540,6 +13620,7 @@
                                 e.target.closest('.dplayer-setting-box') ||
                                 e.target.closest('.dm-settings-panel') ||
                                 e.target.closest('.intro-skip-btn') ||
+                                e.target.closest('.dg-adclip-undo') ||
                                 e.target.closest('.dplayer-comment-box') ||
                                 e.target.closest('.mobile-play-overlay') ||
                                 e.target.closest('.dplayer-mask')) {

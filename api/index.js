@@ -221,6 +221,7 @@ app.get('/api/check', async (req, res) => {
     //   只有亲自跑了这次探测的那个请求拿到非 transient 的失败
     if (hit && hit.expiry > Date.now()) return res.json(hit.data.latency >= 9000 ? Object.assign({}, hit.data, { transient: true }) : hit.data);
     let p = checkInflight.get(key);
+    const mine = !p;   // 这次请求亲自跑探测;并发合并进来的请求拿到失败时一律按瞬态(同缓存命中的规则)
     if (!p) {
         p = runSiteCheck(key).then((data) => {
             if (!data.transient) {
@@ -231,7 +232,8 @@ app.get('/api/check', async (req, res) => {
         }).catch(() => ({ latency: 9999, transient: true })).finally(() => checkInflight.delete(key));
         checkInflight.set(key, p);
     }
-    res.json(await p);
+    const d = await p;
+    res.json(!mine && d.latency >= 9000 && !d.transient ? Object.assign({}, d, { transient: true }) : d);
 });
 async function runSiteCheck(key) {
     try {

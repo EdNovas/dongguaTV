@@ -42,7 +42,7 @@
         minMainKnown: 30,    // 主分辨率至少已确认 30s
         mainVsRun: 2,        // 且至少是候选段的 2 倍
         minMainShare: 0.85,  // 候选段之外的已知内容里,主分辨率占比(实测最低 0.931)
-        strongMainKnown: 120,// 段左侧未知(拖进段中/续看)时的加强证据
+        strongMainKnown: 45, // 段左侧未知(拖进段中/续看)时的主分辨率证据下限(此时 hls 只加载过播放头之后的 30-75s;另有 PTS 重启 + 右侧主分辨率 + 0.9 占比把关)
         strongMainShare: 0.9,
         simRel: 0.05,        // 宽、高各差 <5% 视为同一分辨率(1920x1088 vs 1080);实测广告与正片最小差 11%
         bridgeTol: 0.75,     // 架桥残差容差(实测 -0.19~+0.12s;正片组残差≈-段长)
@@ -208,17 +208,26 @@
 
         // 证据:主分辨率已知时长足够、且在"候选段之外"的已知内容里占绝对多数
         var strong = leftUnknown;
-        var needMain = Math.max(strong ? o.strongMainKnown : o.minMainKnown, (strong ? 2 : 1) * o.mainVsRun * run.dur);
+        var needMain = Math.max(strong ? o.strongMainKnown : o.minMainKnown, o.mainVsRun * run.dur);
         if (st.mainDur < needMain) return out('wait', strong ? 'evidence-strong' : 'evidence');
         var rest = st.known - (mode === 'res' ? run.dur : 0);
         if (rest <= 0 || st.mainDur / rest < (strong ? o.strongMainShare : o.minMainShare)) return out('wait', 'main-share');
         // 熔断:已知内容里"非主分辨率 + PTS 重新开始"的组合计太多 → 片源本身就花(或时间戳乱),整集不跳
+        //   不计:正在判的这一段本身、以及前后都是主分辨率且架桥成立的组(已经确认是插播,不是"片源花")
         if (st.known >= o.fuseMinKnown) {
             var odd = 0;
+            var bridged = function (i) {
+                if (i <= 0 || i >= groups.length - 1) return false;
+                var p = groups[i - 1], n = groups[i + 1];
+                if (!isMain(resOf(p.cc)) || !isMain(resOf(n.cc))) return false;
+                var a = offOf(p.cc), b = offOf(n.cc);
+                return a != null && b != null && Math.abs(a - b - groups[i].dur) <= o.bridgeTol;
+            };
             for (var i = 0; i < groups.length; i++) {
+                if (i >= g0 && i <= g1) continue;
                 var rr = resOf(groups[i].cc);
                 if (!rr) continue;
-                if (other(rr) || restart(groups[i])) odd += groups[i].dur;
+                if ((other(rr) || restart(groups[i])) && !bridged(i)) odd += groups[i].dur;
             }
             if (odd / st.known > o.fuseShare) return out('none', 'fuse');
         }

@@ -500,10 +500,36 @@ console.log('[10] splitSameNameWorks');
         ok(ws.every(w => new Set(w.items.map(i => i.site_key)).size === w.items.length), '同名综艺:每张卡里同站只出现一次');
     }
     ok(split(zt).every(w => typeof w.sig === 'string') && split(zt)[0].sig !== '' && split([mk1('a', 40, '2024')])[0].sig === '', 'sig:拆了才有(与名次无关),没拆为空');
+    // 原型合并与到达顺序无关(全连接):同一个站互相冲突的两条绝不并进同一部、也不会被去重吃掉(审查复现用例)
+    {
+        const u = (k, n, tag) => Array.from({ length: n }, (_, i) => '第' + (i + 1) + '集$https://' + k + '.example/' + tag + '/' + i + '.m3u8').join('#');
+        const it = (k, n, tag) => ({ site_key: k, site_name: k, vod_id: k + tag, vod_year: '2024', vod_play_url: u(k, n, tag) });
+        const A = [it('a', 60, 'x'), it('a', 1, 'm'), it('b', 35, 'p'), it('b', 100, 'q'), it('c', 36, 'r'), it('d', 98, 's'), it('e', 1, 't')];
+        const B = [A[2], A[3], A[0], A[1], A[4], A[5], A[6]];
+        const view = ws => ws.map(w => w.sig + ':' + w.items.map(i => i.vod_id).sort().join(',')).sort().join(' | ');
+        eq(view(split(B)), view(split(A)), '冲突站先到/后到,拆分结果完全一样');
+        const all = new Set(); split(A).forEach(w => w.items.forEach(i => all.add(i.vod_id)));
+        ok(all.has('bp') && all.has('bq'), '同站冲突的 35 集与 100 集两条都还在(没有被同站去重吃掉)', [...all]);
+    }
+    // 同年同类型的两部:签名按集数量级区分,与谁的线路多无关
+    {
+        const u = (k, n, tag) => Array.from({ length: n }, (_, i) => '第' + (i + 1) + '集$https://' + k + '.example/' + tag + '/' + i + '.m3u8').join('#');
+        const it = (k, n, tag) => ({ site_key: k, site_name: k, vod_id: k + tag, vod_year: '2024', vod_play_url: u(k, n, tag) });
+        const tvMore = [it('a', 40, 'tv'), it('a', 100, 'sd'), it('b', 40, 'tv'), it('c', 40, 'tv'), it('d', 100, 'sd')];
+        const sdMore = [it('a', 40, 'tv'), it('a', 100, 'sd'), it('b', 100, 'sd'), it('c', 100, 'sd'), it('d', 40, 'tv')];
+        const sigOfEps = (ws, n) => (ws.find(w => w.items.some(i => i.vod_play_url.split('#').length === n)) || {}).sig;
+        eq(sigOfEps(split(tvMore), 40), sigOfEps(split(sdMore), 40), '40 集那部的签名与线路多少无关');
+        eq(sigOfEps(split(tvMore), 100), sigOfEps(split(sdMore), 100), '100 集那部的签名与线路多少无关');
+        ok(sigOfEps(split(tvMore), 40) !== sigOfEps(split(tvMore), 100), '两部签名不同');
+    }
+    // 去重前成员(all):刷新线路认作品要用
+    ok(split(zt).every(w => Array.isArray(w.all) && w.all.length >= w.items.length), 'works 带去重前的全部成员 all');
 
     // 调用方确实用上了(卡片 key 带 _work、历史补齐按 _work 对、刷新线路也拆)
     ok(html.indexOf(":key=\"group.name + '|' + (group._work || '')\"") > 0, '卡片 key 含 _work(同名两张卡不撞 key)');
-    ok(html.indexOf("const fresh = this.groupedList.find(g => g.name === name && hasCur(g) && (!groupData._workSig || (g._workSig || '') === groupData._workSig));") > 0, '历史补齐线路只拿含正在播放那条线路的同一部的卡');
+    ok(html.indexOf("const fresh = this.groupedList.find(g => g.name === name && (cs ? hasCur(g) : (!groupData._workSig || (g._workSig || '') === groupData._workSig)));") > 0, '历史补齐线路:有正在播放的线路就只认"含它的那张卡"(签名会随后续结果变)');
+    ok(/const w = works\.find\(hasCur\) \|\| works\.find\(hadCur\) \|\|/.test(html), '刷新线路:当前线路被同片源去重掉了也认得出是哪一部(hadCur)');
+    ok(/tryOpenDeepLink\(false, true\)/.test(html) && /!isFinal && !grace\) return;/.test(html), '深链 12s 兜底不被 &w= 挡住');
     ok(/const w = works\.find\(hasCur\) \|\|/.test(html), '刷新线路先按"含正在播放那条线路"认作品(名次会变,不按 _work)');
     ok(/u \+= '&w=' \+ encodeURIComponent\(this\.currentGroup\._workSig\)/.test(html) && /w: p\.get\('w'\) \|\| ''/.test(html), '深链带 &w= 作品签名,刷新/分享后开同一部');
     ok(/mergeInto\(host, g\.sources\)/.test(html), 'kz 变体片名并组时同站只留一条');
