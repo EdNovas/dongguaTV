@@ -28,7 +28,8 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
 {
     ok(/^\d{4}-\d{2}-\d{2}$/.test(DATA.version), 'json: version 是日期');
     eq(P.version, DATA.version, 'module: 导出 version');
-    const TIERS = ['clean', 'noburn', 'unknown', 'ads'];
+    const TIERS = ['clean', 'noburn', 'insert', 'unknown', 'ads'];
+    eq(P.TIERS, TIERS, 'module: 档位集合与数据校验一致');
     const RES = [undefined, '4k', '1080p', '720p', 'sd'];
     for (const [k, v] of Object.entries(DATA.hosts)) {
         ok(k === k.toLowerCase() && !/^www\./.test(k) && !/[/:]/.test(k), 'json: host 键已归一化 ' + k);
@@ -68,18 +69,18 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
 {
     const S = (key, api, extra) => Object.assign({ key, name: key, api, active: true }, extra || {});
     eq(P.profileFor(S('rycj', 'https://cj.rycjapi.com/api.php/provide/vod')),
-        { tier: 'noburn', res: '1080p', geo: false, note: '片尾偶有12秒插播', codec: '' }, 'profile: 如意 = 无硬广 1080p');
+        { tier: 'noburn', res: '1080p', geo: false, note: '片尾/中插棋牌片段会被自动去除(中插靠播放器按分辨率跳过)', codec: '', clip: true }, 'profile: 如意 = noburn 1080p');
     eq(P.profileFor(S('ffzy', 'http://api.ffzyapi.com/api.php/provide/vod')).geo, true, 'profile: 非凡 海外受限');
     eq(P.profileFor(S('myzy', 'https://api.maoyanapi.top/api.php/provide/vod')).res, 'sd', 'profile: 猫眼 标清');
     eq(P.profileFor(S('lovedan', 'https://www.lovedan.net/api.php/provide/vod')).tier, 'ads', 'profile: www. 前缀也能命中');
     eq(P.profileFor(S('lzi', 'https://cj.lziapi.com/api.php/provide/vod/')),
-        { tier: 'unknown', res: '', geo: true, note: '', codec: '' }, 'profile: 量子 未评测 + 海外受限');
+        { tier: 'unknown', res: '', geo: true, note: '', codec: '', clip: false }, 'profile: 量子 未评测 + 海外受限');
     // key 不参与 maccms 站查找:同一站在不同部署 key 不同,换 key 仍按域名命中
     eq(P.profileFor(S('whatever', 'https://cj.rycjapi.com/x')).tier, 'noburn', 'profile: maccms 只认域名');
-    eq(P.profileFor(S('new', 'https://unknown-site.example/api')), { tier: 'unknown', res: '', geo: false, note: '', codec: '' }, 'profile: 未知域名 → 未评测');
+    eq(P.profileFor(S('new', 'https://unknown-site.example/api')), { tier: 'unknown', res: '', geo: false, note: '', codec: '', clip: false }, 'profile: 未知域名 → 未评测');
     // 内置规则站:按 key;db.json 里同 key 的 maccms 条目(kazumi 不为 true)不能套用 kz 档案
     eq(P.profileFor({ key: 'kz_7sefun', name: '七色番', kazumi: true, api: '' }).tier, 'clean', 'profile: 七色番 无广告');
-    eq(P.profileFor({ key: 'kz_moonci', kazumi: true, api: '' }), { tier: 'clean', res: '1080p', geo: false, note: 'HEVC', codec: 'hevc' }, 'profile: 月之祠 HEVC 备注');
+    eq(P.profileFor({ key: 'kz_moonci', kazumi: true, api: '' }), { tier: 'clean', res: '1080p', geo: false, note: 'HEVC', codec: 'hevc', clip: false }, 'profile: 月之祠 HEVC 备注');
     eq(P.profileFor({ key: 'kz_dm84', kazumi: true, api: '' }).tier, 'noburn', 'profile: 动漫巴士 无硬广');
     eq(P.profileFor(S('kz_7sefun', 'https://some-maccms.example/api')).tier, 'unknown', 'profile: 同 key 的 maccms 覆盖条目不吃 kz 档案');
     eq(P.profileFor({ key: 'kz_new', kazumi: true, api: '' }).tier, 'unknown', 'profile: 新规则站默认未评测');
@@ -95,12 +96,18 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     eq(P.profileFor({ key: 'r', api, ad_tier: 'ads' }).tier, 'ads', 'override: ad_tier 简写');
     eq(P.profileFor({ key: 'r', api, ad_tier: '无广告' }).tier, 'clean', 'override: ad_tier 中文标签');
     eq(P.profileFor({ key: 'r', api, ad_tier: 'CLEAN' }).tier, 'clean', 'override: ad_tier 大小写');
+    // 前端显示名(无广告/有插播/未评测/有水印)与旧名(无硬广/含广告)都认
+    eq(P.profileFor({ key: 'r', api, ad_tier: '有插播' }).tier, 'insert', 'override: ad_tier 有插播');
+    eq(P.profileFor({ key: 'r', api, ad_tier: 'insert' }).tier, 'insert', 'override: ad_tier insert');
+    eq(P.profileFor({ key: 'r', api, ad_tier: '有水印' }).tier, 'ads', 'override: ad_tier 有水印');
+    eq(P.profileFor({ key: 'r', api, ad_tier: '无硬广' }).tier, 'noburn', 'override: ad_tier 旧名 无硬广');
+    eq(P.profileFor({ key: 'r', api, ad_tier: '含广告' }).tier, 'ads', 'override: ad_tier 旧名 含广告');
     eq(P.profileFor({ key: 'r', api, ad_tier: 'bogus' }).tier, 'unknown', 'override: 写错的档位 → 未评测(不保留旧值,免得以为生效了)');
     eq(P.profileFor({ key: 'r', api, ad_tier: '' }).tier, 'noburn', 'override: 空 ad_tier 忽略');
     eq(P.profileFor({ key: 'r', api, profile: { res: '720P' } }),
-        { tier: 'noburn', res: '720p', geo: false, note: '片尾偶有12秒插播', codec: '' }, 'override: profile 只改写了的字段');
+        { tier: 'noburn', res: '720p', geo: false, note: '片尾/中插棋牌片段会被自动去除(中插靠播放器按分辨率跳过)', codec: '', clip: true }, 'override: profile 只改写了的字段');
     eq(P.profileFor({ key: 'r', api, profile: { t: 'ads', r: '4K', geo: 1, n: '  新横幅  ' } }),
-        { tier: 'ads', res: '4k', geo: true, note: '新横幅', codec: '' }, 'override: profile 短字段');
+        { tier: 'ads', res: '4k', geo: true, note: '新横幅', codec: '', clip: true }, 'override: profile 短字段(没写的 clip 沿用内置)');
     eq(P.profileFor({ key: 'r', api, profile: { note: '' } }).note, '', 'override: 空 note 可清掉内置备注');
     eq(P.profileFor({ key: 'r', api, profile: { c: 'H.265' } }).codec, 'hevc', 'override: 短字段 c 认 H.265 → hevc');
     eq(P.profileFor({ key: 'r', api, profile: { codec: 'avc' } }).codec, '', 'override: 非 HEVC 的 codec → 空');
@@ -108,6 +115,8 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     eq(P.profileFor({ key: 'kz_7sefun', kazumi: true, api: '' }).codec, '', 'profile: 七色番 H.264');
     eq(P.profileFor({ key: 'r', api, profile: { tier: 'clean' }, ad_tier: 'ads' }).tier, 'ads', 'override: ad_tier 在 profile 之后生效');
     eq(P.profileFor({ key: 'r', api, profile: { res: '540p' } }).res, 'sd', 'override: 540p → 标清');
+    eq(P.profileFor({ key: 'r', api, profile: { clip: 0 } }).clip, false, 'override: clip 可关掉');
+    eq(P.profileFor({ key: 'x', api: 'https://zuidazy.me/api' }).clip, false, 'profile: 默认 clip=false');
     eq(P.profileFor({ key: 'r', api, profile: { res: 'weird' } }).res, '', 'override: 认不出的分辨率 → 空');
     eq(P.profileFor({ key: 'r', api, profile: { note: 'x'.repeat(500) } }).note.length, 120, 'override: note 截断');
     eq(P.profileFor({ key: 'r', api, profile: 'ads' }).tier, 'noburn', 'override: profile 非对象忽略');

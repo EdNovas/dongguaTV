@@ -207,8 +207,33 @@ app.get('/api/sites', async (req, res) => {
 // ========== API: /api/check ==========
 // 服务器端测速兜底：客户端直连+代理都失败时(混合内容/CORS)由服务器测资源站 API 延迟。
 // 注：此接口在早期重构中丢失，前端一直调用导致 404 → 服务器测速这条兜底失效，已恢复。
+// 🗄️ 内存缓存 + 同站并发合并(同 server.js;serverless 实例内 best-effort):通的 5 分钟、不通的 90 秒;
+//    上游【超时】得出的 9999 带 transient:true 且不缓存,前端据此不写 12h 死亡缓存。
+const checkCache = new Map();      // key -> { data, expiry }
+const checkInflight = new Map();   // key -> Promise<data>
+const CHECK_OK_TTL = 5 * 60 * 1000, CHECK_FAIL_TTL = 90 * 1000, CHECK_CACHE_MAX = 1000;
+const isTimeoutErr = (e) => !!e && (e.code === 'ECONNABORTED' || e.code === 'ETIMEDOUT' || /timeout/i.test(String(e.message || '')));
 app.get('/api/check', async (req, res) => {
-    const { key } = req.query;
+    const key = String(req.query.key || '');
+    // 「刷新线路」带 nocache=1:跳过读缓存强制真测(结果照样写回、照样并发合并)
+    const hit = req.query.nocache === '1' ? null : checkCache.get(key);
+    // 缓存里的失败只当【瞬态】发给别的用户:一次上游抖动(502/连接重置)不能经 90s 缓存扩散成每个人本地 12h 的死亡记录;
+    //   只有亲自跑了这次探测的那个请求拿到非 transient 的失败
+    if (hit && hit.expiry > Date.now()) return res.json(hit.data.latency >= 9000 ? Object.assign({}, hit.data, { transient: true }) : hit.data);
+    let p = checkInflight.get(key);
+    if (!p) {
+        p = runSiteCheck(key).then((data) => {
+            if (!data.transient) {
+                if (checkCache.size >= CHECK_CACHE_MAX) checkCache.delete(checkCache.keys().next().value);
+                checkCache.set(key, { data, expiry: Date.now() + (data.latency < 9000 ? CHECK_OK_TTL : CHECK_FAIL_TTL) });
+            }
+            return data;
+        }).catch(() => ({ latency: 9999, transient: true })).finally(() => checkInflight.delete(key));
+        checkInflight.set(key, p);
+    }
+    res.json(await p);
+});
+async function runSiteCheck(key) {
     try {
         let sitesData = EMBEDDED_SITES;
         if (!sitesData) {
@@ -226,19 +251,19 @@ app.get('/api/check', async (req, res) => {
         }
         const sites = withKzSites((sitesData && sitesData.sites) || []);
         const site = sites.find(s => s.key === key);
-        if (site && kazumi && kazumi.isKzSite(site)) return res.json(await kazumi.check(site.key));   // 🎌 只测首页可达,不拉媒体
-        if (!site || !site.api) return res.json({ latency: 9999 });
+        if (site && kazumi && kazumi.isKzSite(site)) return await kazumi.check(site.key);   // 🎌 只测首页可达,不拉媒体
+        if (!site || !site.api) return { latency: 9999 };
         const start = Date.now();
         try {
             await axios.get(`${site.api}?ac=list&pg=1`, { timeout: 3000 });
-            return res.json({ latency: Date.now() - start, _testType: 'server' });
+            return { latency: Date.now() - start, _testType: 'server' };
         } catch (e) {
-            return res.json({ latency: 9999 });
+            return isTimeoutErr(e) ? { latency: 9999, transient: true } : { latency: 9999 };
         }
     } catch (e) {
-        return res.json({ latency: 9999 });
+        return { latency: 9999, transient: true };
     }
-});
+}
 
 // ========== API: /api/preview ==========
 // 🔗 分享深链预览：未登录用户打开 /?play=剧名 时，前端用本接口拿 TMDB 简介+海报渲染"锁定框架"

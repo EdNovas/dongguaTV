@@ -1,11 +1,11 @@
 {
-  "_doc": "资源站画质/广告档案(审计快照,加拿大出口,每源 2-4 集抽帧)。hosts 以 API 域名(去 www.)为键,keys 以站点 key 为键(仅内置 Kazumi 规则站)。t=档位 clean|noburn|unknown|ads,r=分辨率 4k|1080p|720p|sd,geo=1 海外受限,n=提示文案,c=hevc 表示 H.265(前端只在本机能解码时才把它当无广告首选),s=0 关键词搜索已关(仅备注)。db.json 里的 site.profile / site.ad_tier 可逐站覆盖,无需发版。改完跑 node scripts/site-profiles-test.mjs",
+  "_doc": "资源站画质/广告档案(审计快照,加拿大出口,每源 2-4 集抽帧)。hosts 以 API 域名(去 www.)为键,keys 以站点 key 为键(仅内置 Kazumi 规则站)。t=档位 clean|noburn|insert|unknown|ads(noburn=画面干净、插播能被去广告去掉,前端在去广告生效时显示为「无广告」,否则显示「有插播」;insert=画面干净但插播去不掉;ads=画面烧录博彩字幕/水印,前端显示「有水印」),r=分辨率 4k|1080p|720p|sd,geo=1 海外受限,n=提示文案,c=hevc 表示 H.265(前端只在本机能解码时才把它当无广告首选),clip=1 表示有只能靠播放器按分辨率突变跳过的中插(iOS/Safari 原生 HLS 上显示为有插播),s=0 关键词搜索已关(仅备注)。db.json 里的 site.profile / site.ad_tier 可逐站覆盖,无需发版。改完跑 node scripts/site-profiles-test.mjs",
   "version": "2026-10-05",
   "hosts": {
     "api.ffzyapi.com": { "t": "noburn", "r": "1080p", "geo": 1, "n": "插播已过滤;多数线路海外403" },
     "bfzyapi.com": { "t": "noburn", "r": "1080p", "geo": 1 },
     "caiji.dyttzyapi.com": { "t": "noburn", "r": "1080p", "geo": 1 },
-    "cj.rycjapi.com": { "t": "noburn", "r": "1080p", "n": "片尾偶有12秒插播" },
+    "cj.rycjapi.com": { "t": "noburn", "r": "1080p", "clip": 1, "n": "片尾/中插棋牌片段会被自动去除(中插靠播放器按分辨率跳过)" },
 
     "tyyszy.com": { "t": "unknown", "geo": 1, "s": 0 },
     "jszyapi.com": { "t": "unknown", "geo": 1 },
@@ -34,7 +34,7 @@
     "api.wujinapi.me": { "t": "ads", "r": "720p" },
     "api.wujinapi.com": { "t": "ads", "r": "720p" },
     "api.wujinapi.cc": { "t": "ads", "r": "720p" },
-    "api.wsyzy.net": { "t": "ads", "r": "1080p", "s": 0 },
+    "api.wsyzy.net": { "t": "noburn", "r": "1080p", "s": 0, "n": "画面干净;约5分钟处12秒中插会被自动去除" },
     "api.apibdzy.com": { "t": "ads", "r": "1080p" },
     "hongniuzy2.com": { "t": "ads", "r": "1080p" },
     "api.xinlangapi.com": { "t": "ads", "r": "1080p" },
