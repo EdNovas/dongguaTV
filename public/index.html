@@ -5750,18 +5750,19 @@
         //     clean  0 无广告:无插播、画面无广告字幕(实看帧确认)
         //     noburn 1 画面干净,但清单里有插播视频片段——靠 CF Worker 去广告 + 播放器分辨率突变跳过来去掉
         //     insert 2 画面干净,但插播视频广告去不掉(运行时由 noburn 降级而来:去广告不在该线路的播放链路里,见 srcProfile)
-        //     unknown 3 未评测:没测到(多为海外受限)或不在表里
-        //     ads    4 画面里烧录了博彩/网址字幕水印,任何过滤都去不掉
+        //     ads    3 画面里烧录了博彩/网址字幕水印,任何过滤都去不掉
+        //     unknown 4 未评测:没测到(审计时全是海外受限站)或不在表里 —— 排最后(与显示一致:并在"可能无法播放"组里)
         //   【给用户看的分组 SRC_GROUPS】用户只关心"看的时候有没有广告":noburn 且去广告生效时和 clean 同属"无广告"
-        //     (用户原话:没有水印、夹层广告被我们去掉了的话也应该是干净的);另加"可能无法播放"组收本机测速没通过的线路,
-        //     放最后(多为海外受限,国内用户测得通就留在原分组里)
-        const SRC_TIER_RANK = { clean: 0, noburn: 1, insert: 2, unknown: 3, ads: 4 };
+        //     (用户原话:没有水印、夹层广告被我们去掉了的话也应该是干净的);最后一组"可能无法播放"收本机测速没通过的线路
+        //     和所有未评测线路(用户:没必要单独多一个"未评测"分类;未评测的都是审计时测不到的海外受限站)。
+        //     'unknown' 这一项只用于徽章文字,不再单独成组
+        const SRC_TIER_RANK = { clean: 0, noburn: 1, insert: 2, ads: 3, unknown: 4 };
         const SRC_GROUPS = [
             { tier: 'clean', label: '无广告', desc: '画面干净，插播的视频广告会被自动去除' },
             { tier: 'insert', label: '有插播', desc: '画面干净，但会播放插播的视频广告' },
-            { tier: 'unknown', label: '未评测', desc: '暂无评测数据' },
             { tier: 'ads', label: '有水印', desc: '请不要相信视频中的任何广告内容' },
-            { tier: 'unreach', label: '可能无法播放', desc: '你的网络下测速未通过（多为海外受限），仅供尝试' }
+            { tier: 'unknown', label: '未评测', desc: '暂无评测数据', chipOnly: true },
+            { tier: 'unreach', label: '可能无法播放', desc: '未评测，或你的网络下测速未通过（多为海外受限），仅供尝试' }
         ];
         const SRC_GROUP_BY_ID = {};
         SRC_GROUPS.forEach(g => { SRC_GROUP_BY_ID[g.tier] = g; });
@@ -6515,8 +6516,8 @@
                     return this.currentGroup.sources.filter(s => typeof s.latency === 'number' && s.latency < 9000);
                 },
                 // 🏷️ 分组(SRC_GROUPS 顺序),组内:快线(<600ms)在前 → 档位(无广告 > 插播已去除)→ 分辨率高在前 → 延迟低在前。
-                //    "可能无法播放"组:本机测速只有服务器能通(可达档 2,用户端多半播不了,多为海外受限)的线路,放最后、档位优先。
-                //    按【本机测速结果】而非档案里的"海外受限"分:国内用户测得通的海外受限线路留在原分组。
+                //    "可能无法播放"组(最后):本机测速只有服务器能通(可达档 2)的线路 + 所有未评测线路;组内用户端测得通的在前,
+                //    再按档位。按【本机测速结果】而非档案里的"海外受限"分:国内用户测得通的海外受限线路(有档案的)留在原分组。
                 //    offset = 本组第一条在 availableSources 里的下标(模板 tabindex 用)。
                 //    ⚡ 测速期间每写一次 latency 都会重算:每条线路只查一次分级(Map 暂存),比较器里不再重复查。
                 sourceGroups() {
@@ -6525,7 +6526,7 @@
                     this.playableSources.forEach(s => {
                         const p = this.srcProfile(s);
                         metaOf.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(p.res)]);
-                        const gid = this._srcUnreach(s) ? 'unreach' : SRC_TIER_GROUP[p.tier];
+                        const gid = (this._srcUnreach(s) || p.tier === 'unknown') ? 'unreach' : SRC_TIER_GROUP[p.tier];
                         (by[gid] = by[gid] || []).push(s);
                     });
                     let off = 0;
@@ -6535,6 +6536,7 @@
                             const ma = metaOf.get(a), mb = metaOf.get(b);
                             // 年份对不上的 kz(多半是同名的另一部)永远垫底;合并后的"无广告"组里它不能压过插播已去除的线路
                             return ((a._kzMismatch ? 1 : 0) - (b._kzMismatch ? 1 : 0)) ||
+                                (unreach ? (this._srcUnreach(a) ? 1 : 0) - (this._srcUnreach(b) ? 1 : 0) : 0) ||   // 本组里用户端测得通的(未评测)排前
                                 (unreach ? 0 : ((a.latency >= 600) - (b.latency >= 600))) || (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
                         });
                         const g = { tier: t.tier, label: t.label, desc: t.desc, items: items, offset: off };
@@ -10339,7 +10341,9 @@
                             // 不可用项(9999)缓存短(12h)便于恢复；只有服务器能通的(server,多为海外受限)6h;测通的(direct/proxy)缓存 3 天免重测
                             const ttl = r.latency >= 9000 ? 12 * 3600 * 1000 : r.testType === 'server' ? 6 * 3600 * 1000 : 3 * 24 * 3600 * 1000;
                             if ((Date.now() - (r.ts || 0)) < ttl) {
-                                return { latency: r.latency, _testType: r.testType || null, _useProxy: !!r.useProxy, _proxyUrl: r.proxyUrl || null, _srvOnly: !!r.srvOnly };
+                                // 'server' 缓存只会在"用户端直连+代理都真测不通"时写入 → 一律当 srvOnly(之前版本写的条目没有这个字段,
+                                //   回放成普通线路会让海外受限站留在原分组,如量子资源显示在"未评测"而不是"可能无法播放")
+                                return { latency: r.latency, _testType: r.testType || null, _useProxy: !!r.useProxy, _proxyUrl: r.proxyUrl || null, _srvOnly: !!r.srvOnly || (r.testType === 'server' && r.latency < 9000) };
                             }
                         }
                     } catch (e) { }
