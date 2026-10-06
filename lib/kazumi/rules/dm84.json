@@ -1,5 +1,5 @@
 {
-    "_credit": "rule fields from Predidit/Kazumi assets/plugins (GPL-3.0); evaluated by our own clean-room engine",
+    "_credit": "rule fields from Predidit/KazumiRules DM84.json (MIT); evaluated by our own clean-room engine",
     "api": "5",
     "type": "anime",
     "name": "DM84",

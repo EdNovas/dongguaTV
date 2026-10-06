@@ -1,13 +1,44 @@
-本目录的规则文件(7sefun.json、dm84.json)中的 Kazumi 规则字段
-(api/type/name/version/muliSources/useWebview/useNativePlayer/userAgent/adBlocker/
-baseURL/searchURL/searchList/searchName/searchResult/chapterRoads/chapterResult)
-取自开源项目 Kazumi 的内置规则 assets/plugins/7sefun.json 与 assets/plugins/DM84.json:
+本目录规则文件中的 Kazumi 规则字段取自 KazumiRules 规则仓库,按 MIT 许可证使用:
 
-  Kazumi — https://github.com/Predidit/Kazumi
-  Copyright (C) Predidit and contributors
-  Licensed under the GNU General Public License v3.0
-  https://www.gnu.org/licenses/gpl-3.0.html
+  KazumiRules — https://github.com/Predidit/KazumiRules
+  Copyright (c) 2024 Predidit
+  Licensed under the MIT License(全文见下)
 
-保留原字段是为了与 Kazumi 规则格式兼容(日后可直接导入更多 Kazumi 规则)。
-"dg" 扩展块(解析器/ID 提取/年份正则等)以及 lib/kazumi/ 下的规则引擎与解析器均为本项目自行实现,
-未复制 Kazumi 的源代码。再分发这两个规则文件时请遵守 GPL-3.0 的相应条款。
+  本项目文件            取自 KazumiRules 的规则文件
+  7sefun.json     ←     7sefun.json  (v1.3)
+  dm84.json       ←     DM84.json    (v1.4)
+  moonci.json     ←     moonci.json  (v1.0)
+  xfdmneo.json    ←     xfdmneo.json (v1.1)
+
+照搬的字段(保持原样,以便与 Kazumi 规则格式兼容、日后可直接导入更多规则):
+api/type/name/version/muliSources/useWebview/useNativePlayer/usePost/useLegacyParser/userAgent/adBlocker/
+referer/baseURL/searchURL/searchList/searchName/searchResult/chapterRoads/chapterResult/searchMode/chapterMode/
+antiCrawlerConfig(各文件有哪些字段以对应的上游文件为准)。
+
+"_credit" 与 "dg" 扩展块(解析器/ID 提取/封面/年份/线路名等),以及 lib/kazumi/ 下的规则引擎与解析器,
+均为本项目自行实现,未复制 Kazumi 应用的任何源代码。
+(历史说明:同样的规则也随 Kazumi 应用(GPL-3.0)内置发布;本目录的许可依据是上述 KazumiRules 的 MIT 许可。)
+
+------------------------------------------------------------------------
+
+MIT License
+
+Copyright (c) 2024 Predidit
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
