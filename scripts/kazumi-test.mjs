@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Kazumi 规则站适配层测试。
 //   node scripts/kazumi-test.mjs          离线:XPath 规则引擎 / 播放页解析 / m3u8 绝对化 / 路由校验 / titlematch 回归
-//   node scripts/kazumi-test.mjs --live   另跑线上冒烟:两站各搜 4 部 → 首个结果详情 → 第 1 集解析 → hls 取清单 / mp4 Range 0-1
+//   node scripts/kazumi-test.mjs --live   另跑线上冒烟:每站各搜 4 部 → 首个结果详情 → 第 1 集解析 → hls 取清单 / mp4 Range 0-1
+//                                         (+ 回退/轮换/指定线路行;月之祠、稀饭每站约 20 次请求,顺序发出)
 // 离线失败退出码非 0;线上失败只打印(上游/地区封锁不归我们管),但会在表格里标出。
 // 改 lib/kazumi/* 或 public/libs/js/kz-titlematch.js 后必跑。
 import { createRequire } from 'node:module';
@@ -77,6 +78,45 @@ const s7 = I.siteOf('kz_7sefun'), dm = I.siteOf('kz_dm84');
     eq(ds.roads[1].eps.map((e) => [e.name, e.nid]), [['短篇16', 1], ['第1集', 2], ['第2集', 3]], '详情排序:含非数字集名时按 nid');
 }
 
+// ============ 2b. 月之祠(moonci) / 稀饭动漫(xfdmneo):KazumiRules 规则 + dg 块(真实页面裁剪快照) ============
+const mc = I.siteOf('kz_moonci'), xf = I.siteOf('kz_xfdm');
+{
+    eq(I.buildSearchUrl(mc, '间谍过家家'), 'https://www.moonci.com/search/-------------.html?wd=%E9%97%B4%E8%B0%8D%E8%BF%87%E5%AE%B6%E5%AE%B6', '月之祠 searchURL');
+    const rm = I.parseSearchHtml(mc, fx('mc_search.html'));
+    eq(rm.map((x) => [x.vid, x.name, x.remarks]), [['1356', '间谍过家家 第2部分', '全13集'], ['335', '间谍过家家 第三季', '全13集'], ['965', '剧场版 间谍过家家 代号：白', '全1集'], ['1366', '间谍过家家', '全12集'], ['1348', '间谍过家家 第二季', '全12集']], '月之祠 搜索:名称/ID/备注');
+    ok(rm.every((x) => /^https:\/\/img2\.[a-z]+\.(me|top)\/.+\.jpg$/.test(x.pic)), '月之祠 搜索:懒加载 data-original 封面', rm.map((x) => x.pic));
+
+    const m1 = I.parseDetailHtml(mc, '272', fx('mc_detail.html'));
+    eq(m1.roads.map((r) => [r.sid, r.label, r.eps.length, r.eps[0].name, r.eps[9].tok]), [[1, 'MP4线①', 10, '第01集', '272-1-10'], [2, 'MP4线②', 10, '第01集', '272-2-10'], [3, 'HLS线', 10, '第01集', '272-3-10']], '月之祠 详情:3 线路 × 10 集,X.n 代号映射为可读线路名');
+    eq([m1.name, m1.year, m1.type, m1.remarks], ['葬送的芙莉莲第二季', '2026', '动漫', '已完结'], '月之祠 详情:名称归一/年份/类型/状态');
+    ok(m1.content.startsWith('芙莉莲是一位千年精灵魔法使') && /^https:\/\/img2\.cycimg\.me\/.+515759_qA1Zc\.jpg$/.test(m1.pic), '月之祠 详情:简介 + 封面', [m1.content.slice(0, 20), m1.pic]);
+    // 228:DOM 顺序 X.3(sid 2)在前、X.4(sid 1)在后 —— 标签按页面顺序对齐,不按 sid
+    const m2 = I.parseDetailHtml(mc, '228', fx('mc_detail_228.html'));
+    eq(m2.roads.map((r) => [r.sid, r.label, r.eps.length]), [[2, 'HLS线', 28], [1, 'MP4线③', 28]], '月之祠 详情:线路标签按页面顺序对齐(sid 乱序)');
+    eq([m2.year, m2.content], ['2023', ''], '月之祠 详情:"暂无简介"占位置空');
+    const m3 = I.parseDetailHtml(mc, '965', fx('mc_movie.html'));
+    eq([m3.name, m3.type, m3.year, m3.roads.map((r) => [r.label, r.eps.map((e) => e.name)])], ['剧场版 间谍过家家 代号：白', '电影', '2023', [['MP4线②', ['1080P']]]], '月之祠 详情:剧场(/type/22 面包屑)→ 电影');
+    ok(I.parseDetailHtml(mc, '272', fx('mc_detail.html')).type === '动漫' && I.parseDetailHtml(mc, '228', fx('mc_detail_228.html')).type === '动漫', '月之祠 详情:番剧不误判为电影');
+
+    eq(I.buildSearchUrl(xf, '间谍过家家'), 'https://dm1.xfdm.pro/search.html?wd=%E9%97%B4%E8%B0%8D%E8%BF%87%E5%AE%B6%E5%AE%B6', '稀饭 searchURL');
+    const rx = I.parseSearchHtml(xf, fx('xf_search.html'));
+    eq(rx.map((x) => [x.vid, x.name, x.remarks]), [['3339', '间谍过家家 第三季', '已完结'], ['2720', '剧场版 间谍过家家 代号：白', '已完结'], ['2032', '间谍过家家 第二季', '已完结'], ['1659', '间谍过家家 第2部分', '已完结'], ['1651', '间谍过家家', '已完结']], '稀饭 搜索:名称/ID/备注');
+    ok(rx.every((x) => /^https:\/\/img2\.cycimg\.me\/.+\.jpg$/.test(x.pic)), '稀饭 搜索:data-src 封面', rx.map((x) => x.pic));
+
+    const x1 = I.parseDetailHtml(xf, '3339', fx('xf_detail.html'));
+    eq(x1.roads.map((r) => [r.sid, r.label, r.eps.length, r.eps[0].name, r.eps[12].tok]), [[1, '新番主线①', 13, '第01集', '3339-1-13'], [2, '新番主线②', 13, '第01集', '3339-2-13'], [3, '备用①', 13, '第01集', '3339-3-13']], '稀饭 详情:线路名去掉集数徽标(新番主线①13 → 新番主线①)');
+    eq([x1.name, x1.year, x1.type, x1.remarks], ['间谍过家家第三季', '2025', '动漫', '已完结'], '稀饭 详情:名称归一/年份/类型/状态');
+    ok(x1.content.startsWith('干练间谍〈黄昏〉') && /^https:\/\/img2\.cycimg\.me\/.+\.jpg$/.test(x1.pic), '稀饭 详情:简介 + 封面', [x1.content.slice(0, 20), x1.pic]);
+    const x2 = I.parseDetailHtml(xf, '2720', fx('xf_movie.html'));
+    eq([x2.name, x2.type, x2.year, x2.roads.map((r) => [r.label, r.eps.map((e) => e.name)])], ['剧场版 间谍过家家 代号：白', '电影', '2023', [['新番主线②', ['1080P']]]], '稀饭 详情:剧场版(/show/3 当前栏目)→ 电影');
+
+    // 线路标签清洗:正则写坏只退回原文,不影响解析;原型键不当映射
+    const bad = I.buildSites({ 'x.json': Object.assign({}, xf.rule, { dg: Object.assign({}, xf.dg, { roadNameStrip: '(', roadNameMap: { '备用①13': 'B' } }) }) }).get('kz_xfdm');
+    eq(I.parseDetailHtml(bad, '3339', fx('xf_detail.html')).roads.map((r) => r.label), ['新番主线①13', '新番主线②13', 'B'], 'roadNameStrip 非法正则 → 原文;roadNameMap 精确映射');
+    const proto = I.buildSites({ 'x.json': Object.assign({}, mc.rule, { dg: Object.assign({}, mc.dg, { roadNameMap: {} }) }) }).get('kz_moonci');
+    eq(I.parseDetailHtml(proto, '272', fx('mc_detail.html').replace('&nbsp;X.1</a>', '&nbsp;constructor</a>')).roads.map((r) => r.label), ['constructor', 'X.2', 'X.3'], 'roadNameMap:原型键(constructor)不被当成映射');
+}
+
 // detail()/search() 走缓存注入,验证对外形状(不联网:直接写缓存)
 {
     const d = I.parseDetailHtml(dm, '5963', fx('dm_detail.html'));
@@ -86,6 +126,11 @@ const s7 = I.siteOf('kz_7sefun'), dm = I.siteOf('kz_dm84');
     eq(it.vod_play_from, '线路2$$$线路1$$$线路3', 'detail(): vod_play_from 用站点线路名 $$$ 连接');
     ok(it.vod_play_url.split('$$$')[0].split('#')[0] === '第1集$/api/kz/ep/kz_dm84/5963-2-1', 'detail(): 集地址是相对 /api/kz/ep/<site>/<vid-sid-nid>', it.vod_play_url.slice(0, 80));
     eq([it.vod_id, it.type_name, it.vod_year, it._kz], ['5963', '动漫', '2026', 1], 'detail(): 字段');
+    I.caches.detailCache.set('kz_moonci|965', I.parseDetailHtml(mc, '965', fx('mc_movie.html')), 60000);
+    I.caches.detailCache.set('kz_xfdm|3339', I.parseDetailHtml(xf, '3339', fx('xf_detail.html')), 60000);
+    const im = (await K.detail('kz_moonci', '965')).list[0], ix = (await K.detail('kz_xfdm', '3339')).list[0];
+    eq([im.vod_play_from, im.vod_play_url, im.type_name], ['MP4线②', '1080P$/api/kz/ep/kz_moonci/965-1-1', '电影'], 'detail(): 月之祠电影');
+    eq([ix.vod_play_from, ix.vod_play_url.split('$$$').map((r) => r.split('#').length), ix.vod_play_url.split('$$$')[2].split('#')[12]], ['新番主线①$$$新番主线②$$$备用①', [13, 13, 13], '第13集$/api/kz/ep/kz_xfdm/3339-3-13'], 'detail(): 稀饭 3 线路');
     I.caches.searchCache.set('kz_dm84|葬送的芙莉莲', I.parseSearchHtml(dm, fx('dm_search.html')).map((r) => ({
         vod_id: r.vid, vod_name: I.normName(r.name), vod_pic: r.pic, vod_remarks: r.remarks, vod_year: '', type_name: '动漫',
         vod_content: '', vod_play_from: '', vod_play_url: '', _kz: 1, _gk: T.titleKey(I.normName(r.name), { remarks: r.remarks }), _season: null, _kind: 't',
@@ -128,6 +173,19 @@ const s7 = I.siteOf('kz_7sefun'), dm = I.siteOf('kz_dm84');
     eq(R.expiryOf('https://o.ctyun.cn/a.mp4?X-Amz-Date=20261004T010000Z&X-Amz-Expires=10800'), Date.parse('2026-10-04T04:00:00Z'), 'expiryOf X-Amz-*');
     eq(R.expiryOf('https://v3.365yg.com/0123456789abcdef0123456789abcdef/6a8b1c2d/video/tos/cn/x/'), 0x6a8b1c2d * 1000, 'expiryOf 字节系路径十六进制');
     eq(R.expiryOf('https://x.qq.com/a.mp4?dis_k=1&dis_t=1791134916'), null, 'expiryOf QQ dis_t(签发时间)不当过期时间');
+
+    // 月之祠:encrypt=1(escape)直链 m3u8,路径含原始中文;稀饭:encrypt=0 直链 mp4。都不走 art.php,解析器离线即可跑通
+    const pm = R.parsePlayerData(fx('mc_play.html'));
+    eq([pm && pm.from, pm && pm.encrypt, pm && pm.url], ['X_3', 1, 'https://dl.playxf.top/新番/2601/Z-葬送的芙莉莲S2/01/福利连01.m3u8'], '月之祠 player_aaaa encrypt=1 解码(中文路径)');
+    const px = R.parsePlayerData(fx('xf_play.html'));
+    eq([px && px.from, px && px.encrypt, px && px.url], ['xfxf1', 0, 'https://apn.moedot.net/d/wo/2510/%E9%97%B4%E8%B0%8D13.mp4'], '稀饭 player_aaaa encrypt=0 直链');
+    const rmc = await R.RESOLVERS.maccms({ site: mc, vid: '272', sid: '3', nid: '1', playUrl: 'unused' }, fx('mc_play.html'));
+    eq([rmc.type, rmc.via, rmc.from, rmc.expiresAt], ['hls', 'direct', 'X_3', null], '月之祠 maccms 解析器:直链 m3u8 → hls(无 art.php)');
+    const rxf = await R.RESOLVERS.maccms({ site: xf, vid: '3339', sid: '1', nid: '13', playUrl: 'unused' }, fx('xf_play.html'));
+    eq([rxf.type, rxf.via, rxf.url], ['mp4', 'direct', 'https://apn.moedot.net/d/wo/2510/%E9%97%B4%E8%B0%8D13.mp4'], '稀饭 maccms 解析器:直链 mp4');
+    // 两站的 compileSite 反解集链接
+    eq([mc.playRe.exec('/anime/272/play/3-10.html').slice(1), mc.playOrder, xf.playRe.exec('/watch/3339/2/13.html').slice(1), xf.playOrder], [['272', '3', '10'], ['vid', 'sid', 'nid'], ['3339', '2', '13'], ['vid', 'sid', 'nid']], 'playPath → 集链接反解正则');
+    ok(!mc.vidRe.test('/anime/272/play/1-1.html') && mc.vidRe.exec('/anime/965.html')[1] === '965' && xf.vidRe.exec('/bangumi/2720.html')[1] === '2720', 'vidFrom:只认详情页链接');
 }
 
 // ============ 4. m3u8 绝对化 / master 拍平 ============
@@ -137,15 +195,23 @@ const s7 = I.siteOf('kz_7sefun'), dm = I.siteOf('kz_dm84');
     eq(out.split('\n'), ['#EXTM3U', '#EXT-X-KEY:METHOD=AES-128,URI="https://cdn.a.com/p/q/key.bin"', '#EXTINF:5,', 'https://cdn.a.com/p/q/seg1.ts?x=1', '#EXT-X-DISCONTINUITY', '#EXTINF:5,', 'https://cdn.a.com/abs/seg2.ts#frag', '#EXT-X-ENDLIST'], 'absolutizeM3u8: URI 行与 URI="" 属性,其它标签原样');
     const master = '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000\nlow/index.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1920x1080\nhigh/index.m3u8\n';
     eq(I.pickVariant(master, 'https://h.com/a/master.m3u8'), 'https://h.com/a/high/index.m3u8', 'pickVariant: 取最高 BANDWIDTH');
+    // 月之祠/稀饭的 playxf 清单:分片是带原始中文的绝对地址 → 百分号编码(hls.js 直接可用)
+    eq(I.absolutizeM3u8('#EXTM3U\n#EXTINF:10.01,\nhttps://dl.playxf.top/新番/2601/Z-葬送的芙莉莲S2/01/福利连01_000.ts\n', 'https://dl.playxf.top/新番/2601/Z-葬送的芙莉莲S2/01/福利连01.m3u8').split('\n')[2],
+        'https://dl.playxf.top/%E6%96%B0%E7%95%AA/2601/Z-%E8%91%AC%E9%80%81%E7%9A%84%E8%8A%99%E8%8E%89%E8%8E%B2S2/01/%E7%A6%8F%E5%88%A9%E8%BF%9E01_000.ts', 'absolutizeM3u8: 原始中文分片路径百分号编码');
 }
 
 // ============ 5. 站点开关 / 名称归一 / isKzSite ============
 {
     eq(K.getSites({ env: { KAZUMI_DISABLE: '1' } }), [], 'KAZUMI_DISABLE=1 → []');
     eq(K.getSites({ env: { KAZUMI_DISABLE: 'ON' } }), [], 'KAZUMI_DISABLE=ON → []');
-    eq(K.getSites({ env: { KAZUMI_DISABLE: '0' } }).length, 2, 'KAZUMI_DISABLE=0 → 不关闭(envFlag 语义)');
-    eq(K.getSites({ env: { KAZUMI_DISABLE: 'off' } }).length, 2, 'KAZUMI_DISABLE=off → 不关闭');
+    eq(K.getSites({ env: { KAZUMI_DISABLE: '0' } }).length, 4, 'KAZUMI_DISABLE=0 → 不关闭(envFlag 语义)');
+    eq(K.getSites({ env: { KAZUMI_DISABLE: 'off' } }).length, 4, 'KAZUMI_DISABLE=off → 不关闭');
     eq(K.getSites({ env: { KAZUMI_SITES: 'dm84' } }).map((s) => s.key), ['kz_dm84'], 'KAZUMI_SITES 白名单');
+    eq(K.getSites({ env: { KAZUMI_SITES: 'moonci, kz_xfdm' } }).map((s) => s.key), ['kz_moonci', 'kz_xfdm'], 'KAZUMI_SITES 白名单:新站(带/不带 kz_ 前缀)');
+    eq(K.getSites({ env: {} }).map((s) => [s.key, s.name]), [['kz_7sefun', '七色番'], ['kz_dm84', '动漫巴士'], ['kz_moonci', '月之祠'], ['kz_xfdm', '稀饭动漫']], '内置 4 站(静态 require,Vercel 可追踪)');
+    eq(Object.keys(I.BUILTIN), ['7sefun.json', 'dm84.json', 'moonci.json', 'xfdmneo.json'], 'BUILTIN 列出全部规则文件');
+    // 规则来源标注:4 个文件都标明 KazumiRules(MIT)
+    ok(Object.values(I.BUILTIN).every((r) => /Predidit\/KazumiRules \S+\.json \(MIT\)/.test(r._credit || '')), '_credit:KazumiRules (MIT)', Object.values(I.BUILTIN).map((r) => r._credit));
     eq(K.getSites({ env: {} })[0], { key: 'kz_7sefun', name: '七色番', kazumi: true, active: true, api: '' }, 'getSites 形状');
     // 只认 kazumi:true:db.json/远程 maccms 源 key 恰以 kz_ 开头、或与内置同 key 覆盖内置时,都必须仍按 maccms 处理
     eq([K.isKzSite({ key: 'kz_x' }), K.isKzSite({ key: 'kz_7sefun', api: 'https://x/api.php/provide/vod' }), K.isKzSite({ key: 'kz_x', kazumi: 'true' }),
@@ -162,7 +228,7 @@ const s7 = I.siteOf('kz_7sefun'), dm = I.siteOf('kz_dm84');
             'proto.json': { dg: { key: 'kz_proto', resolver: 'constructor', vidFrom: '/v/(\\d+)', playPath: '/p/{vid}.html' } },
         }));
     } catch (e) { threw = e; } finally { console.warn = warn; }
-    eq([threw && threw.message, built && [...built.keys()]], [null, ['kz_7sefun', 'kz_dm84']], 'buildSites: 坏规则逐条跳过,不抛错,内置站保留');
+    eq([threw && threw.message, built && [...built.keys()]], [null, ['kz_7sefun', 'kz_dm84', 'kz_moonci', 'kz_xfdm']], 'buildSites: 坏规则逐条跳过,不抛错,内置站保留');
     eq(I.normName('​葬送的芙莉莲  第二季​'), '葬送的芙莉莲第二季', 'normName: 零宽 + 中文与"第"之间空格');
     eq(I.normName('间谍过家家 Part 2'), '间谍过家家 Part 2', 'normName: 其它保持原样');
     eq(K.coreKeyword('【我推的孩子】 第三季'), '我推的孩子', 'coreKeyword 再导出');
@@ -436,6 +502,40 @@ async function live() {
     const srv = await new Promise((r) => { const s = app.listen(0, '127.0.0.1', () => r(s)); });
     const base = `http://127.0.0.1:${srv.address().port}`;
     const routeGet = async (p) => { const r = await axios.get(base + p, { validateStatus: () => true, maxRedirects: 0, transformResponse: [(d) => d] }); return r; };
+    // 浏览器侧取媒体:无 Referer/Origin,只读头几个字节就断开(xfvod 偶尔无视 Range 回 200 整片,不能整段收)
+    const peek = async (u, range) => {
+        const r = await axios.get(u, { headers: { 'User-Agent': R.UA, Range: range }, responseType: 'stream', validateStatus: () => true, timeout: 15000 });
+        const buf = await new Promise((res) => {
+            const cs = []; let n = 0; const end = () => { try { r.data.destroy(); } catch (e) { } res(Buffer.concat(cs)); };
+            r.data.on('data', (c) => { cs.push(c); n += c.length; if (n >= 2048) end(); });
+            r.data.on('end', end); r.data.on('error', end); setTimeout(end, 15000);
+        });
+        return { status: r.status, buf, final: (r.request && r.request.res && r.request.res.responseUrl) || u };
+    };
+    // 走真实路由:/api/kz/ep → 同源地址 → hls 取清单 + 首个分片 TS 同步字节 / mp4 跟 302 后 Range 0-1 期望 206
+    async function verifyEp(siteKey, tok, row) {
+        const ep = await routeGet(`/api/kz/ep/${siteKey}/${tok}`);
+        if (ep.status !== 200) throw new Error(`ep route ${ep.status} ${String(ep.data).slice(0, 120)}`);
+        const j = JSON.parse(ep.data);
+        const r = await K.resolve(siteKey, tok);
+        row.type = j.type; row.road = `${tok.split('-')[1]}→${j.road}`; row.host = host(r.url);
+        if (j.type === 'hls') {
+            const pl = await routeGet(j.url);
+            const n = (String(pl.data).match(/#EXTINF/g) || []).length;
+            const seg = (String(pl.data).split('\n').find((l) => /^https?:\/\//.test(l)) || '');
+            if (pl.status === 200 && n > 0) {
+                const s = await peek(seg, 'bytes=0-1879').catch((e) => ({ status: 'ERR ' + e.code, buf: Buffer.alloc(0) }));
+                const sync = s.buf.length >= 377 && s.buf[0] === 0x47 && s.buf[188] === 0x47 && s.buf[376] === 0x47;
+                // 不同步时打出头 4 字节(DM84 的部分 CDN 分片不是以 0x47 开头的裸 TS;这里只记录,不判失败)
+                row.verify = `EXTINF×${n} seg@${host(seg)} ${s.status} ${sync ? 'TS-sync' : 'head=' + s.buf.slice(0, 4).toString('hex')}`;
+            } else row.verify = pl.status === 409 ? `409→mp4 ${String(pl.data).slice(0, 60)}` : `FAIL ${pl.status} ${String(pl.data).slice(0, 60)}`;
+        } else {
+            const rd = await routeGet(j.url);
+            const loc = rd.headers.location;
+            const m = await peek(loc, 'bytes=0-1').catch((e) => ({ status: 'ERR ' + e.code, final: loc }));
+            row.verify = `302→${host(loc)} Range:${m.status}${host(m.final) !== host(loc) ? ' via ' + host(m.final) : ''}`;
+        }
+    }
 
     for (const site of K.getSites()) {
         const chk = await K.check(site.key);
@@ -453,25 +553,7 @@ async function live() {
                 const roads = d.vod_play_url.split('$$$');
                 row.roads = `${roads.length}/${roads.map((r) => r.split('#').length).join(',')}`;
                 const ep1 = roads[0].split('#')[0].split('$')[1];
-                const tok = ep1.split('/').pop();
-                // 走真实路由:/api/kz/ep → 同源地址
-                const ep = await routeGet(`/api/kz/ep/${site.key}/${tok}`);
-                if (ep.status !== 200) throw new Error(`ep route ${ep.status} ${String(ep.data).slice(0, 120)}`);
-                const j = JSON.parse(ep.data);
-                const r = await K.resolve(site.key, tok);
-                row.type = j.type; row.road = `${tok.split('-')[1]}→${j.road}`; row.host = host(r.url);
-                if (j.type === 'hls') {
-                    const pl = await routeGet(j.url);
-                    const n = (String(pl.data).match(/#EXTINF/g) || []).length;
-                    const seg = (String(pl.data).split('\n').find((l) => /^https?:\/\//.test(l)) || '');
-                    row.verify = pl.status === 200 && n > 0 ? `EXTINF×${n} seg@${host(seg)}` : pl.status === 409 ? `409→mp4 ${String(pl.data).slice(0, 60)}` : `FAIL ${pl.status} ${String(pl.data).slice(0, 60)}`;
-                } else {
-                    const rd = await routeGet(j.url);
-                    const loc = rd.headers.location;
-                    // 浏览器侧行为:跟 302,无 Referer,Range 0-1 → 期望 206
-                    const m = await axios.get(loc, { headers: { 'User-Agent': R.UA, Range: 'bytes=0-1' }, responseType: 'arraybuffer', validateStatus: () => true, timeout: 15000, maxContentLength: 1 << 20 }).catch((e) => ({ status: 'ERR ' + e.code }));
-                    row.verify = `302→${host(loc)} Range:${m.status}`;
-                }
+                await verifyEp(site.key, ep1.split('/').pop(), row);
             } catch (e) {
                 row.verify = 'ERR ' + String(e.message || e).slice(0, 90);
             }
@@ -500,6 +582,17 @@ async function live() {
             row.verify = j.type === 'hls' ? `m3u8 ${r2.status} EXTINF×${(String(r2.data).match(/#EXTINF/g) || []).length}` : `mp4 ${r2.status}→${host(r2.headers.location)}`;
             row.host = j.type === 'hls' ? '-' : host(r2.headers.location);
         } catch (e) { row.verify = 'ERR ' + String(e.message || e).slice(0, 90); }
+        row.ms = Date.now() - t0;
+        rows.push(row);
+    }
+    // 月之祠 / 稀饭:指定线路(HLS 线 + 剧场版 mp4 + 沃盘 302 线),各站的每条 CDN 至少过一次
+    for (const [siteKey, tok, title] of [
+        ['kz_moonci', '272-3-1', 'HLS线 272-3-1'], ['kz_moonci', '965-1-1', '剧场版 965-1-1'],
+        ['kz_xfdm', '44-2-1', '备用① 44-2-1'], ['kz_xfdm', '3390-1-1', '新番主线① 3390-1-1'],
+    ]) {
+        const t0 = Date.now();
+        const row = { site: siteKey, title, hits: '-', first: '-', roads: '-', type: '-', road: '-', host: '-', verify: '-', ms: 0 };
+        try { await verifyEp(siteKey, tok, row); } catch (e) { row.verify = 'ERR ' + String(e.message || e).slice(0, 90); }
         row.ms = Date.now() - t0;
         rows.push(row);
     }

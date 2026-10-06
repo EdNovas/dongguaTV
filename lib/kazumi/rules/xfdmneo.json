@@ -1,0 +1,43 @@
+{
+    "_credit": "rule fields from Predidit/KazumiRules xfdmneo.json (MIT); evaluated by our own clean-room engine",
+    "api": "6",
+    "type": "anime",
+    "name": "xfdmneo",
+    "version": "1.1",
+    "muliSources": true,
+    "useWebview": true,
+    "useNativePlayer": true,
+    "usePost": false,
+    "useLegacyParser": true,
+    "adBlocker": false,
+    "userAgent": "",
+    "baseURL": "https://dm1.xfdm.pro/",
+    "searchURL": "https://dm1.xfdm.pro/search.html?wd=@keyword",
+    "searchList": "//div[@class='public-list-box search-box flex rel']",
+    "searchName": "//div[3]/div[1]/div[1]",
+    "searchResult": "//div[3]/div[2]/a[1]",
+    "chapterRoads": "//ul[@class='anthology-list-play size']",
+    "chapterResult": "//li/a",
+    "referer": "",
+    "dg": {
+        "key": "kz_xfdm",
+        "name": "稀饭动漫",
+        "resolver": "maccms",
+        "playPath": "/watch/{vid}/{sid}/{nid}.html",
+        "detailPath": "/bangumi/{vid}.html",
+        "vidFrom": "/bangumi/(\\d+)\\.html",
+        "searchCover": "//div[2]/a/img/@data-src",
+        "searchRemarks": "//div[2]/a/span[1]",
+        "roadNames": "//div[@class='anthology-tab nav-swiper b-b br']/div/a",
+        "roadNameStrip": "\\s*\\d+$",
+        "detail": {
+            "name": "//h3[@class='slide-info-title hide']",
+            "cover": "//div[@class='detail-pic']/img/@data-src",
+            "content": "//div[@id='height_limit']",
+            "remarks": "re:<em class=\"cor4\">状态：</em><span>([^<]*)</span>",
+            "year": "re:<em class=\"cor4\">年份：</em>((?:19|20)\\d{2})",
+            "movie": "re:href=\"/show/3\\.html\" class=\"current",
+            "movieType": "电影"
+        }
+    }
+}
