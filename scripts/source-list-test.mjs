@@ -43,14 +43,14 @@ const cEnd = html.indexOf('const EARLY_SETTLE_MS = 1200;');
 if (cStart < 0 || cEnd < 0) throw new Error('SRC_* consts not found');
 const consts = html.slice(cStart, cEnd + 'const EARLY_SETTLE_MS = 1200;'.length);
 
-const methods = ['srcProfile', '_srcFilterOn', '_srcClipOn', '_srcUnreach', 'srcGroupOf', '_srcAdBad', 'srcTierRank', '_srcResRankOf', 'srcResRank', 'srcResLabel', 'srcTierLabel', 'srcTitle',
+const methods = ['srcProfile', '_srcFilterOn', '_srcClipOn', '_srcUnreach', '_kzWorkerOk', 'srcGroupOf', '_srcAdBad', 'srcTierRank', '_srcResRankOf', 'srcResRank', 'srcResLabel', 'srcTierLabel', 'srcTitle',
     '_srcReachClass', '_pickPreferred', '_autoPick', '_earlyPick', '_srcLogTag', '_failoverNext', '_isKzSource'];
 const computed = ['playableSources', 'sourceGroups', 'availableSources', 'fastSources', 'slowSources'];
 let objSrc = '{\n';
 methods.forEach(n => { const m = extractMember(n); objSrc += '  ' + n + '(' + m.params + ') ' + m.body + ',\n'; });
 computed.forEach(n => { const m = extractMember(n); objSrc += '  get ' + n + '() ' + m.body + ',\n'; });
 objSrc += '}';
-const factory = new Function('stubs', 'window', 'localStorage', consts + '\nlet _navSeq = 1;\nconst vm = Object.assign(' + objSrc + ', stubs);\n' +
+const factory = new Function('stubs', 'window', 'localStorage', 'location', consts + '\nlet _navSeq = 1;\nconst vm = Object.assign(' + objSrc + ', stubs);\n' +
     'return { vm, setNav(v) { _navSeq = v; }, getNav() { return _navSeq; }, SRC_GROUPS, EARLY_SETTLE_MS };');
 
 function mk(opts) {
@@ -64,7 +64,7 @@ function mk(opts) {
         _adProxyBad: k => !!bad[k],
         _sourceHasEpisode: (s, ep) => ((ep && noEp[s.site_key]) ? false : null),
         _srcHevcOk: () => opts.hevc !== false,
-    }, { AdFilter: { isEnabled: () => opts.adFilter !== false }, Hls: { isSupported: () => true }, AdClipCore: {}, _dgPreferNativeHls: !!opts.nativeHls }, { getItem: () => null, setItem() { }, removeItem() { } });
+    }, { AdFilter: { isEnabled: () => opts.adFilter !== false }, Hls: { isSupported: () => true }, AdClipCore: {}, _dgPreferNativeHls: !!opts.nativeHls }, { getItem: () => null, setItem() { }, removeItem() { } }, { hostname: opts.host || 'localhost' });
 }
 
 // ---------- 迷你断言 ----------
@@ -203,6 +203,19 @@ console.log('[4b] _srcFilterOn:noburn 只有 worker 真在链路里才算插播�
     const nocors = mk({ profiles: { rycj: { tier: 'noburn', note: '插播会被自动去除' } }, cors: false }).vm;
     ok(!/自动去除/.test(nocors.srcTitle(S('rycj', 'direct', 300, null))), '降级成有插播时 tooltip 不再附"会被自动去除"的备注');
     ok(/自动去除/.test(mk({ profiles: { rycj: { tier: 'noburn', note: '插播会被自动去除' } } }).vm.srcTitle(S('rycj', 'direct', 300, null))), '没降级时照常附备注');
+}
+
+{
+    // 动漫巴士(kz HLS):公网部署时清单也经 worker 去广告 → 算插播已去除;本地开发 worker 够不着 → 有插播
+    const P = { kz_dm84: { tier: 'noburn', res: '1080p' } };
+    eq(mk({ profiles: P, host: 'ednovas.video' }).vm.srcProfile(S('kz_dm84', 'kz', 900, null)).tier, 'noburn', '动漫巴士 + 公网域名 + 去广告开着 → 无广告(清单经 worker 过滤)');
+    eq(mk({ profiles: P, host: 'ednovas.video' }).vm.srcTierLabel(S('kz_dm84', 'kz', 900, null)), '无广告', '动漫巴士公网显示 无广告');
+    for (const host of ['localhost', '127.0.0.1', '192.168.1.5', 'nas.local'])
+        eq(mk({ profiles: P, host }).vm.srcProfile(S('kz_dm84', 'kz', 900, null)).tier, 'insert', '动漫巴士 + ' + host + '(worker 拉不到本站)→ 有插播');
+    eq(mk({ profiles: P, host: 'ednovas.video', adBad: { kz_dm84: 1 } }).vm.srcProfile(S('kz_dm84', 'kz', 900, null)).tier, 'insert', 'worker 实测拉不到(记账)→ 有插播');
+    eq(mk({ profiles: P, host: 'ednovas.video', cors: false }).vm.srcProfile(S('kz_dm84', 'kz', 900, null)).tier, 'insert', '没配代理 → 有插播');
+    ok(html.indexOf("const kzHls = !!(this._activeKz && this._activeKz.type === 'hls' && this._kzWorkerOk());") > 0 &&
+        html.indexOf("const isDirectM3U8 = ((url && url.includes('.m3u8')) || kzHls) &&") > 0, 'play():kz HLS 清单也路由到 worker');
 }
 
 // ===== 5. srcProfile / 标签 =====

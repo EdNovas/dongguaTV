@@ -5760,7 +5760,7 @@
             { tier: 'clean', label: '无广告', desc: '画面干净，插播的视频广告会被自动去除' },
             { tier: 'insert', label: '有插播', desc: '画面干净，但会播放插播的视频广告' },
             { tier: 'unknown', label: '未评测', desc: '暂无评测数据' },
-            { tier: 'ads', label: '有水印', desc: '画面里有博彩字幕/网址水印，无法去除' },
+            { tier: 'ads', label: '有水印', desc: '请不要相信视频中的任何广告内容' },
             { tier: 'unreach', label: '可能无法播放', desc: '你的网络下测速未通过（多为海外受限），仅供尝试' }
         ];
         const SRC_GROUP_BY_ID = {};
@@ -8096,11 +8096,11 @@
                 // 这条线路播放时 CF Worker 去广告在不在链路里(与 play() 的分流条件一致):
                 //   ① 配了 CORS_PROXY_URL;② 走 worker:测速判定要代理(_useProxy,代理即过滤)或 广告过滤开关开着(AdFilter,默认开);
                 //   ③ 该站没被记成"源站封过滤代理"(_adProxyBad,记账期内直连播、不过滤);
-                //   ④ 不是 Kazumi 源:kz 的 url 是 /api/kz/ep/…(解析出 HLS 后才换成同源 finalUrl),play() 从不给它套 worker
-                //      (动漫巴士 dm84 的 19s 中插照播)。等 kz HLS 真走了 worker 再去掉这条。
+                //   ④ Kazumi 源:HLS 清单经 worker 过滤要 worker 能从公网拉到本站 /api/kz/m3u8(本地开发/内网部署拉不到 → 不算;
+                //      MP4 线路本来就没有插播)。worker 真拉不到时 play() 的分诊会记 _adProxyBad → 这里自然降回有插播
                 _srcFilterOn(s) {
                     if (!s || !this.corsProxyUrl) return false;
-                    if (s._testType === 'kz' || this._isKzSource(s)) return false;
+                    if ((s._testType === 'kz' || this._isKzSource(s)) && !this._kzWorkerOk()) return false;
                     if (s._useProxy) return true;
                     if (!(window.AdFilter && window.AdFilter.isEnabled())) return false;
                     return !this._srcAdBad(s.site_key);
@@ -10298,6 +10298,13 @@
                 // "可能无法播放"组:只收用户端真测过、直连(+代理)都不通、只有服务器能连的线路(_srvOnly)。
                 //   从没在用户端测过的(历史快照里补进来的、详情兜底路径的)不知道能不能播,留在原分组
                 _srcUnreach(s) { return !!(s && s._srvOnly) && this._srcReachClass(s) === 2; },
+                // Cloudflare Worker 能不能从公网拉到本站(去广告要 worker 去取 /api/kz/m3u8):localhost / 内网 / .local 拉不到
+                _kzWorkerOk() {
+                    try {
+                        const host = String(location.hostname || '').toLowerCase();
+                        return !!host && !/^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.0\.0\.0|\[?::1\]?$)/.test(host) && !/\.(local|localhost|lan|internal)$/.test(host);
+                    } catch (e) { return false; }
+                },
                 // ✅ m3u8 是否【真的有可播分片】。只验 #EXTM3U 远远不够:master playlist 自身永远没有 EXTINF,
                 //    而"零分片的空清单"(#EXTM3U…#EXT-X-ENDLIST 中间无 EXTINF)语法完全合法却一秒都播不了——
                 //    实测有资源站正是这样,测速判"可用"、选中后播放器静默停在 00:00 且不报错(不报错=不会自动换源)。
@@ -10543,7 +10550,8 @@
                             try { if (dp && dp.notice && _noticeSeq === _navSeq) dp.notice('📦 本集已缓存 · 离线播放', 2000); } catch (e) { }
                         }, 1200);
                     } else if (this._activeKz) {
-                        // 🎌 本站同源端点:hls → 服务器取回并绝对化的清单(分片直连 CDN);mp4 → 302 到最新签名直链。不套 worker。
+                        // 🎌 本站同源端点:hls → 服务器取回并绝对化的清单(分片直连 CDN);mp4 → 302 到最新签名直链。
+                        //   hls 清单下面照样套 worker 去广告(见 kzHls;动漫巴士 dytt 线路有 19s 中插),mp4 不套
                         finalUrl = new URL(this._activeKz.url, location.href).href;
                         console.log('[播放器] 🎌 Kazumi 源(' + this._activeKz.type + '):', finalUrl.substring(0, 80));
                     } else if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
@@ -10558,7 +10566,10 @@
                     const originalUrl = finalUrl;  // 保存原始 URL 供代理失败回退
                     // 📺 直播不套去广告(直播 m3u8 是滑窗，时长启发式会毁流；https 直连源也不该再被 worker 包一层)
                     // 📦 已缓存的集也不套(_offCacheRec):缓存的就是净化版,包一层只会让缓存键错位
-                    const isDirectM3U8 = url && url.includes('.m3u8') && !(this.currentSource && this.currentSource._useProxy) && !this._liveActive && !_offCacheRec;
+                    // 🎌 Kazumi HLS:选集地址是 /api/kz/ep/…(不含 .m3u8),解析出的同源清单 /api/kz/m3u8/….m3u8 照样交给 worker 过滤 ——
+                    //   worker 从公网拉本站这个端点(无需登录);本地开发(localhost/内网)worker 够不着,不套
+                    const kzHls = !!(this._activeKz && this._activeKz.type === 'hls' && this._kzWorkerOk());
+                    const isDirectM3U8 = ((url && url.includes('.m3u8')) || kzHls) && !(this.currentSource && this.currentSource._useProxy) && !this._liveActive && !_offCacheRec;
                     if (window.AdFilter && window.AdFilter.isEnabled() && isDirectM3U8 && this.corsProxyUrl) {
                         // 已确认"过滤代理过不了"的线路(源站封代理IP/URL签名绑IP,3天记账)不再反复试代理:
                         // 直连能看但没有过滤——想要无广告请换线路
