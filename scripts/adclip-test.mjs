@@ -391,6 +391,17 @@ console.log('[2e] planCuts / cutPlaylist / toCutTime');
         ok(C.planCuts(gs, cc => cc === 1 ? '1280x720' : '1920x1080', null, { offOf: cc => cc === 1 ? 1.4667 - 15 : (cc === 0 ? 1.48 : 1.48 - 20) }).length === 0, 'planCuts:主分辨率证据不足 → 宁可不剪');
         ok(C.planCuts([], () => '', null, {}).length === 0, 'planCuts:空 → 空');
     }
+    // 剪清单时左侧(前一组)没探到 → 不剪(播放中的"左侧未知"是拖进段中,剪清单时只是那组没探到,验不了架桥)
+    {
+        const F20 = n => Array.from({ length: n }, () => 20);
+        const g = C.groupsFromFrags(fragsFromDurs([].concat(F20(20), [20], F20(20))));
+        // 第 20 组是一段单独编码的正片片段(PTS 重启、同分辨率),前一组(19)探测失败;它后面的正片接着自己的时钟 → 看起来像"右侧封口"
+        const off = cc => cc === 19 ? undefined : cc === 20 ? 1.4667 - 400 : cc < 19 ? 1.48 : 1.48 - 20;
+        const resOf = cc => cc === 19 ? undefined : '1920x1080';
+        ok(C.planCuts(g, resOf, null, { offOf: off }).length === 0, 'planCuts:前一组没探到 → 不剪(不验架桥绝不动刀)');
+        const d = C.decide(g, resOf, g[20].start + 1, null, { offOf: off });
+        ok(d.why !== 'plan-left-unknown', '播放中判定不受影响(没有 planning 标记)', d.why);
+    }
     // cutPlaylist:真实的兰香如故第 1 集清单(分片名脱敏)
     const raw = fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/dytt-lxrg1.m3u8'), 'utf8');
     const BASE = 'https://cdn.example/20260911/x/3000k/hls/mixed.m3u8';
@@ -769,13 +780,328 @@ console.log('[6] 原生 HLS 扫描器端到端');
     ok(r.seeks.length === 0 && r.reqs.length === 0, '原生:donggua_adclip_off=1 → 完全不拉', r.reqs.length);
 }
 
+// ============ 6b) 播放前剪清单端到端(window.adCut + _CutHlsLoader + 原生占位交付,桩 fetch) ============
+console.log('[6b] 播放前剪清单端到端');
+{
+    const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
+    const body = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
+    const ctSrc = html.slice(html.indexOf('window._dgHlsCustomType = function'), html.indexOf('// 🛡️ 去插播:按"分辨率突变"跳过藏在正片里的插播广告'));
+    const TS = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/ts-heads.json'), 'utf8')).samples;
+    const DY = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/dytt.json'), 'utf8')).episodes;
+    const lx = DY.find(e => e.key === 'dytt_lxrg_0');
+    const RAW = fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/dytt-lxrg1.m3u8'), 'utf8');
+    const MEDIA = 'https://cdn.example/20260911/x/3000k/hls/mixed.m3u8';
+    const pm = C.parseMedia(RAW, MEDIA);
+    const S1080 = TS.find(s => s.width === 1920), S720 = TS.find(s => s.width === 1280);
+    const tsWith = (sample, pts) => {   // 真实 PAT/PMT/SPS + 改写首个视频 PES 的 PTS
+        const b = Buffer.from(sample.b64, 'base64'), want = Math.round(pts * 90000);
+        for (let p = 0; p + 188 <= b.length; p += 188) {
+            const pusi = b[p + 1] & 0x40, afc = (b[p + 3] >> 4) & 3; let off = p + 4; if (afc === 3) off += 1 + b[p + 4];
+            if (!pusi || b[off] !== 0 || b[off + 1] !== 0 || b[off + 2] !== 1 || !(b[off + 3] >= 0xe0 && b[off + 3] <= 0xef)) continue;
+            const x = off + 9;
+            b[x] = (b[x] & 0xf0) | ((Math.floor(want / 1073741824) & 7) << 1) | 1; b[x + 1] = Math.floor(want / 4194304) & 0xff;
+            b[x + 2] = ((Math.floor(want / 32768) & 0x7f) << 1) | 1; b[x + 3] = Math.floor(want / 128) & 0xff; b[x + 4] = ((want & 0x7f) << 1) | 1;
+            break;
+        }
+        return new Uint8Array(b);
+    };
+    // 每个分片:所在组的首帧 PTS + 组内前面分片时长之和;分辨率按组(夹具)
+    const segData = new Map(), mixBad = new Set();
+    pm.groups.forEach((g, gi) => {
+        let acc = 0;
+        for (let s = g.sn0; s < g.sn0 + g.n; s++) {
+            const f = pm.frags[s], a0 = acc, isLast = s === g.sn0 + g.n - 1;   // a0:按值捕获(闭包里别引用会继续变的 acc)
+            segData.set(f.url, () => tsWith(lx.g[gi][1] === '1280x720' ? S720 : S1080, lx.g[gi][2] + a0 + (mixBad.has(gi) && isLast ? 250 : 0)));
+            acc += f.duration;
+        }
+    });
+    const mkEnv = (opts = {}) => {
+        const reqs = [], posts = [], lsMap = new Map(opts.ls || []);
+        const fetchStub = async (url, o) => {
+            reqs.push([url, o && o.headers && o.headers.Range, o && o.method]);
+            if (o && o.method === 'POST') {
+                posts.push(JSON.parse(o.body));
+                if (opts.postFail) return { ok: false, status: 503, json: async () => ({}) };
+                return { ok: true, status: 200, json: async () => ({ id: 'x', url: '/api/hls/cut/x.m3u8' }) };
+            }
+            if (url === MEDIA) { if (opts.playlistFail) throw new TypeError('Failed to fetch'); if (opts.playlist503) return { ok: false, status: 503 }; return { ok: true, status: 200, url: MEDIA, text: async () => RAW }; }
+            const s = segData.get(url);
+            if (!s) throw new TypeError('Failed to fetch');
+            if (opts.rangeBlip > 0 && o && o.headers && o.headers.Range) { opts.rangeBlip--; throw new TypeError('network blip'); }
+            if (opts.cdn403) return { ok: false, status: 403 };
+            if (opts.hang) await new Promise(res => setTimeout(res, opts.hang));   // 不理会中止信号的慢请求(扫描内的中止失效时靠 planFor 硬期限兜底)
+            if (opts.slow) await new Promise((res, rej) => { const tm = setTimeout(res, opts.slow); if (o && o.signal) o.signal.addEventListener('abort', () => { clearTimeout(tm); rej(Object.assign(new Error('aborted'), { name: 'AbortError' })); }); });
+            const data = s();
+            const n = o && o.headers && o.headers.Range ? +o.headers.Range.split('-')[1] + 1 : data.length;
+            return { ok: true, status: 206, url, body: null, arrayBuffer: async () => data.slice(0, n).buffer };
+        };
+        const win = { AdClipCore: C, AdFilter: { isEnabled: () => true }, fetch: fetchStub };
+        const ls = { getItem: k => lsMap.has(k) ? lsMap.get(k) : null, setItem: (k, v) => lsMap.set(k, String(v)) };
+        let clock = 0;
+        const make = new Function('window', 'AdClipCore', 'dp', 'localStorage', 'sessionStorage', 'performance', 'fetch', '_navSeq', 'URL', 'AbortController', 'console', 'Hls', 'crypto', 'location', 'btoa',
+            body + '\nreturn window;');
+        const quiet = process.env.ADCUT_DEBUG ? console : { log() { }, warn() { } };
+        const cut = [];
+        const vue = {
+            _playToken: 1, _activePlaySeq: 1, currentSource: { site_key: 'dyttzy' }, hlsCutEnabled: opts.hlsCut !== false,
+            srcProfile: () => ({ clip: opts.clip !== false }), _clipNativeBad: () => false, _clipNativeSet() { },
+            _setActiveCut(st) { cut.push(st); this._activeCut = st; }
+        };
+        const Hls = { Events: { LEVEL_LOADED: 'l', DESTROYING: 'd' } };
+        const cryptoStub = { getRandomValues: (b) => { for (let i = 0; i < b.length; i++) b[i] = (i * 37 + 11) & 255; return b; } };
+        win.crypto = cryptoStub; win.AbortController = AbortController;
+        const w = make(win, C, null, ls, ls, { now: () => (clock += 3) }, fetchStub, 1, URL, AbortController, quiet, Hls, cryptoStub, { origin: 'https://tv.example' }, (s) => Buffer.from(s, 'binary').toString('base64'));
+        w.adClipSkip.vue = vue;
+        return { adCut: w.adCut, adClipSkip: w.adClipSkip, reqs, posts, lsMap, vue, cut, fetchStub, win, opts };
+    };
+    // 1) 全扫描 → 剪两段;第二次同清单 → 会话缓存,不再发请求;换一个页面(新实例)带着本机缓存 → 不发任何分片请求
+    let E = mkEnv();
+    let r = await E.adCut.plan(RAW, MEDIA, 'dyttzy');
+    ok(r && r.cuts.length === 2 && Math.abs(r.removedDur - 34.832) < 0.01 && r.text && C.parseMedia(r.text, MEDIA).frags.length === 699, 'plan:兰香如故扫描后剪两段 34.83s', r && { cuts: r.cuts.map(c => [c.start, c.dur]), known: r.known });
+    const segReq1 = E.reqs.filter(x => /\.ts/.test(x[0])).length;
+    ok(segReq1 >= pm.groups.length && segReq1 <= pm.groups.length + 6, '每组首片一次 + 被剪组末片复核(≤6)', segReq1);
+    ok(E.reqs.filter(x => /\.ts/.test(x[0])).every(x => x[1] === 'bytes=0-16383'), '分片请求全是 Range 前 16KB');
+    r = await E.adCut.plan(RAW, MEDIA, 'dyttzy');
+    ok(r && r.cuts.length === 2 && E.reqs.filter(x => /\.ts/.test(x[0])).length === segReq1, '同一清单第二次:会话缓存,零请求');
+    const E2 = mkEnv({ ls: E.lsMap });
+    r = await E2.adCut.plan(RAW, MEDIA, 'dyttzy');
+    ok(r && r.cuts.length === 2 && r.cached === 'local' && E2.reqs.length === 0, '换页面重开:本机缓存命中,零请求', r && r.cached);
+    // 2) 复核:插播组的末片 PTS 不连续(组内后半其实接着正片)→ 这一段不剪
+    mixBad.add(9);
+    E = mkEnv();
+    r = await E.adCut.plan(RAW, MEDIA, 'dyttzy');
+    ok(r && r.cuts.length === 1 && Math.abs(r.cuts[0].start - 1515.946) < 0.01, '复核没通过的一段不剪,另一段照剪', r && r.cuts.map(c => [c.start, c.dur]));
+    mixBad.clear();
+    // 3) CDN 403 → 立刻停扫、本站 30 分钟不再扫,不剪
+    E = mkEnv({ cdn403: true });
+    r = await E.adCut.plan(RAW, MEDIA, 'dyttzy');
+    ok(r && r.cuts.length === 0 && !r.text && E.reqs.filter(x => /\.ts/.test(x[0])).length <= 6 && E.adCut._blocked.dyttzy > 0, 'CDN 403 → 停扫(≤并发数个请求)且本站暂停扫描', E.reqs.length);
+    // 1b) 本机缓存带核心版本:旧版本写的计划不用(规则修过误判后旧结论作废)
+    {
+        const Eb = mkEnv();
+        await Eb.adCut.plan(RAW, MEDIA, 'dyttzy');
+        const stale = new Map(Eb.lsMap);
+        const m = JSON.parse(stale.get('donggua_adcut_plan'));
+        Object.keys(m).forEach(k => { m[k].v = (C.VERSION || 0) - 1; });
+        stale.set('donggua_adcut_plan', JSON.stringify(m));
+        const E3 = mkEnv({ ls: stale });
+        const r3 = await E3.adCut.plan(RAW, MEDIA, 'dyttzy');
+        ok(r3 && r3.cached === false && E3.reqs.length > 0 && r3.cuts.length === 2, '旧版本核心写的缓存计划不用 → 重扫', r3 && r3.cached);
+    }
+    // 1c) 复核没做完(超时)→ 这次照用,但不进本机缓存、也不留在会话缓存
+    {
+        const E4 = mkEnv({ slow: 5 });
+        E4.adCut.BUDGET = 60000; E4.adCut.VERIFY_MS = 0;
+        const r4 = await E4.adCut.plan(RAW, MEDIA, 'dyttzy');
+        ok(r4 && r4.soft === true && r4.cuts.length === 0 && !E4.lsMap.has('donggua_adcut_plan'), '复核超时 → 不剪、不写本机缓存', r4 && { soft: r4.soft, cuts: r4.cuts.length });
+        const n0 = E4.reqs.length;
+        E4.adCut.VERIFY_MS = 1500;
+        const r5 = await E4.adCut.plan(RAW, MEDIA, 'dyttzy');
+        ok(r5 && r5.cuts.length === 2 && E4.reqs.length > n0, '没做完的结果不留在会话缓存:下次重扫并剪成功');
+    }
+    // 1d) hls.js 硬期限:扫描卡住 → 到点交原样清单;迟到的结果绝不再套用(否则时间轴对不上)
+    {
+        const E5 = mkEnv({ hang: 1500 });
+        E5.adCut.BUDGET = 60; E5.adCut.VERIFY_MS = 20;
+        const sess = E5.adCut.session();
+        const t0 = Date.now();
+        const rr = await E5.adCut.planFor(sess, RAW, MEDIA);
+        ok(rr === null && sess.late === true && Date.now() - t0 < 1600, 'planFor 到硬期限 → 交原样(null)并标记迟到', { ms: Date.now() - t0, late: sess.late });
+        await new Promise(res => setTimeout(res, 2500));
+        ok(!sess.result, '迟到的扫描结果不再挂到会话上(LEVEL_LOADED 不会套用剪段)');
+        ok(!E5.adCut.busy(), '等完不再占着看门狗(busy 归零)');
+    }
+    // 1e) 预扫下一集(低优先级、15s 预算)不进会话缓存:真播放不会加入它而白等;扫完全的结果才放进去
+    {
+        const E7 = mkEnv({ slow: 30 });
+        E7.adCut.prefetch(RAW, MEDIA, 'dyttzy', null);
+        await new Promise(res => setTimeout(res, 50));
+        const key = 'dyttzy|' + C.fingerprint(pm.frags);
+        ok(!E7.adCut._sess.has(key), '预扫进行中:会话缓存里没有它(播放会自己起一轮正常扫描)');
+        for (let k = 0; k < 200 && !E7.adCut._sess.has(key); k++) await new Promise(res => setTimeout(res, 50));
+        ok(E7.adCut._sess.has(key), '预扫扫全后才放进会话缓存(切集时直接用)');
+        const n0 = E7.reqs.length;
+        const rr = await E7.adCut.plan(RAW, MEDIA, 'dyttzy');
+        ok(rr && rr.cuts.length === 2 && E7.reqs.length === n0, '切到下一集:用预扫结果、零请求');
+    }
+    // 1f) 宽限只按真等的时长给:直接返回的(清单剪不了)不让看门狗多等
+    {
+        const E8 = mkEnv();
+        await E8.adCut._hold(Promise.resolve(null));
+        ok(E8.adCut.graceLeft() < 50, '空等不给宽限', E8.adCut.graceLeft());
+    }
+    // 1g) 不带 Range 才成功一次(网络抖动)不粘住;两次才认定这个 CDN 不认 Range
+    {
+        const E9 = mkEnv({ rangeBlip: 1 });
+        const seg = pm.frags[0].url;
+        await E9.adCut._head(seg, 16384);
+        ok(!E9.adCut._noRangeHost['cdn.example'], '一次 Range 失败、不带 Range 成功 → 还不认定(下次照样先试 Range)');
+        E9.opts.rangeBlip = 1;
+        await E9.adCut._head(seg, 16384);
+        ok(E9.adCut._noRangeHost['cdn.example'] === true, '第二次还是这样 → 认定该 CDN 不认 Range(本会话不再带)');
+    }
+    // 4) 非 clip 站、也没学会 → 不剪;学会后 → 剪
+    E = mkEnv({ clip: false });
+    ok(E.adCut.want() === null, '非 clip、没学会的站 → 不剪');
+    E.adClipSkip._learn(E.vue);
+    ok(E.adCut.want() && E.adCut.want().site === 'dyttzy', '播放中真跳到插播后 → 学会,以后剪');
+    // 5) hls.js 清单 loader:原地址不变、数据换成剪后的;主清单记下码率数,多码率不剪
+    {
+        const make2 = new Function('window', 'Hls', 'offlineDB', 'offlineKey', '_navSeq', 'AdClipCore', ctSrc + '\nreturn buildOfflineHlsConfig;');
+        class XhrStub {
+            constructor(cfg) { this.cfg = cfg; this.stats = { loading: {} }; }
+            load(ctx, cfg, cb) { setTimeout(() => cb.onSuccess({ url: ctx.url, data: ctx.url === 'https://cdn.example/master.m3u8' ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\nb.m3u8\n' : RAW }, this.stats, ctx, null), 0); }
+            abort() { } destroy() { }
+        }
+        E = mkEnv();
+        const HlsStub = { DefaultConfig: { loader: XhrStub } };
+        const win2 = { adCut: E.adCut, AdClipCore: C, Hls: HlsStub };
+        const build = make2(win2, HlsStub, { get: () => Promise.resolve(null) }, (u) => u, 1, C);
+        const cfg = build();
+        ok(cfg.pLoader === win2._CutHlsLoader && Object.getPrototypeOf(cfg.pLoader.prototype) === win2._OfflineHlsLoader.prototype, 'pLoader = CutLoader 且继承 OfflineLoader');
+        const sess = E.adCut.session();
+        const L = new cfg.pLoader(Object.assign({}, cfg, { _dgCut: sess }));
+        const got = await new Promise(res => L.load({ type: 'level', url: MEDIA }, {}, { onSuccess: (resp) => res(resp), onError: () => res(null) }));
+        ok(got && got.url === MEDIA && C.parseMedia(got.data, MEDIA).frags.length === 699 && sess.result && sess.result.cuts.length === 2, 'level 清单:地址不变、内容换成剪后的(699 片)', got && got.url);
+        const sess2 = E.adCut.session();
+        const L2 = new cfg.pLoader(Object.assign({}, cfg, { _dgCut: sess2 }));
+        await new Promise(res => L2.load({ type: 'manifest', url: 'https://cdn.example/master.m3u8' }, {}, { onSuccess: res }));
+        const L3 = new cfg.pLoader(Object.assign({}, cfg, { _dgCut: sess2 }));
+        const got3 = await new Promise(res => L3.load({ type: 'level', url: MEDIA }, {}, { onSuccess: res }));
+        ok(sess2.variants === 2 && got3.data === RAW, '多码率主清单 → 子清单不剪(原样)');
+        {
+            const sessA = E.adCut.session();
+            class XhrAlt extends XhrStub { load(ctx, cfg, cb) { setTimeout(() => cb.onSuccess({ url: ctx.url, data: ctx.type === 'manifest' ? '#EXTM3U\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="a",NAME="zh",URI="audio.m3u8"\n#EXT-X-STREAM-INF:BANDWIDTH=1,AUDIO="a"\nv.m3u8\n' : RAW }, this.stats, ctx, null), 0); } }
+            const HlsAlt = { DefaultConfig: { loader: XhrAlt } };
+            const winA = { adCut: E.adCut, AdClipCore: C, Hls: HlsAlt };
+            const cfgA = make2(winA, HlsAlt, { get: () => Promise.resolve(null) }, (u) => u, 1, C)();
+            await new Promise(res => new cfgA.pLoader(Object.assign({}, cfgA, { _dgCut: sessA })).load({ type: 'manifest', url: 'https://cdn.example/m.m3u8' }, {}, { onSuccess: res }));
+            const gA = await new Promise(res => new cfgA.pLoader(Object.assign({}, cfgA, { _dgCut: sessA })).load({ type: 'level', url: MEDIA }, {}, { onSuccess: res }));
+            ok(gA.data === RAW, '主清单带独立音轨(EXT-X-MEDIA URI)→ 视频清单不剪(只剪一路会音画错位)');
+        }
+        const L4 = new cfg.pLoader(Object.assign({}, cfg, { _dgCut: E.adCut.session() }));
+        let late = false;
+        L4.load({ type: 'level', url: MEDIA }, {}, { onSuccess: () => { late = true; } });
+        L4.destroy();
+        await new Promise(res => setTimeout(res, 50));
+        ok(!late, 'loader 销毁后不再回调(剪完也不迟到交付)');
+        const L5 = new cfg.pLoader(Object.assign({}, cfg));
+        const got5 = await new Promise(res => L5.load({ type: 'level', url: MEDIA }, {}, { onSuccess: res }));
+        ok(got5.data === RAW, '不需要剪的实例(没有会话)→ 原样');
+    }
+    // 6) 原生占位交付:src 同步换成本站占位地址;扫描后 POST 剪后清单(带同一个 id);时间轴剪段就位
+    {
+        E = mkEnv();
+        // <video> 桩:带事件(attachNative 挂 loadedmetadata 判断剪后清单是否播起来)
+        const vid = (o) => Object.assign({ _l: {}, currentTime: 0, addEventListener(ty, f) { (this._l[ty] = this._l[ty] || []).push(f); }, removeEventListener(ty, f) { this._l[ty] = (this._l[ty] || []).filter(x => x !== f); }, emit(ty) { (this._l[ty] || []).slice().forEach(f => f()); } }, o);
+        const video = vid({ src: MEDIA, paused: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+        ok(E.adCut.attachNative(video, {}) === true && /^https:\/\/tv\.example\/api\/hls\/cut\/[A-Za-z0-9_-]{24}\.m3u8$/.test(video.src), '原生:src 同步换成本站占位地址', video.src);
+        const id = /cut\/([^.]+)\.m3u8/.exec(video.src)[1];
+        await new Promise(res => setTimeout(res, 50)); for (let k = 0; k < 40 && !E.posts.length; k++) await new Promise(res => setTimeout(res, 20));
+        ok(E.posts.length === 1 && E.posts[0].id === id && C.parseMedia(E.posts[0].m3u8, MEDIA).frags.length === 699, '扫描完把剪后清单(699 片)交给服务器,id 一致', E.posts.length);
+        ok(E.cut.length === 1 && E.cut[0].owner === 'native' && E.cut[0].src === video.src && E.cut[0].cuts.length === 2, '原生:剪段交给 vue 做时间轴换算');
+        ok(video.src.includes('/api/hls/cut/') && !video.played, '交付成功:src 不再变、不额外 play()');
+        // 交付失败 → 换回原地址并继续播
+        E = mkEnv({ postFail: true });
+        const v2 = vid({ src: MEDIA, paused: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+        E.adCut.attachNative(v2, {});
+        for (let k = 0; k < 60 && v2.src !== MEDIA; k++) await new Promise(res => setTimeout(res, 20));
+        ok(v2.src === MEDIA && v2.played === 1 && !E.vue._activeCut, '交付失败 → 换回原地址、继续播、不留剪段', { src: v2.src, played: v2.played });
+        // 原清单读不到(跨域)→ 换回原地址
+        E = mkEnv({ playlistFail: true });
+        const v3 = vid({ src: MEDIA, paused: true, play() { this.played = 1; return Promise.resolve(); } });
+        E.adCut.attachNative(v3, {});
+        for (let k = 0; k < 60 && v3.src !== MEDIA; k++) await new Promise(res => setTimeout(res, 20));
+        ok(v3.src === MEDIA && !v3.played && E.posts.length === 0, '原清单读不到 → 换回原地址(没在播就不自动播)');
+        // 剪后清单在原生播放器上出错(交付成功之后)→ 换回原地址继续播、吞掉同一错误的第二次事件、本站不再接管
+        E = mkEnv();
+        const v5 = vid({ src: MEDIA, paused: false, error: null, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+        E.adCut.attachNative(v5, {});
+        for (let k = 0; k < 60 && !E.posts.length; k++) await new Promise(res => setTimeout(res, 20));
+        await new Promise(res => setTimeout(res, 20));
+        ok(v5.src.includes('/api/hls/cut/'), '交付后仍在占位地址上');
+        v5.error = { code: 4 };
+        ok(E.adCut.onNativeError(v5) === true && v5.src === MEDIA && v5.played === 1, '剪后地址出错 → 换回原地址、继续播,并告诉错误处理链别分诊/换线路');
+        v5.error = null;
+        ok(E.adCut.onNativeError(v5) === true, '同一个错误事件的第二次触发(DPlayer + <video> 各一次)也吞掉');
+        ok(!E.vue._activeCut || E.vue._activeCut.src !== v5.src, '换回原地址后不留剪段(时间轴不再换算)');
+        const v6 = vid({ src: MEDIA });
+        ok(E.adCut.attachNative(v6, {}) === false && v6.src === MEDIA, '出过错的站 3 天内不再接管 src(不会每次播放都失败一次)');
+        ok(E.adCut.onNativeError({ src: MEDIA, error: { code: 2 } }) === false, '与剪清单无关的错误照常交给错误处理链');
+        // 交付之前出错(服务器等超时 / 名额满):只换回原地址,不记"本站剪不了"
+        {
+            const E10 = mkEnv({ slow: 200 });
+            const v9 = vid({ src: MEDIA, paused: false, error: { code: 4 }, play() { return Promise.resolve(); } });
+            E10.adCut.attachNative(v9, {});
+            ok(E10.adCut.onNativeError(v9, 'dp') === true && v9.src === MEDIA, '交付前出错 → 换回原地址');
+            ok(!E10.lsMap.has('donggua_adcut_nativebad'), '交付前出错不记"本站剪不了"(是服务器忙/超时)');
+        }
+        // 原清单 5xx(一时的)→ 换回原地址,不记账
+        {
+            const E11 = mkEnv({ playlist503: true });
+            const v10 = vid({ src: MEDIA, paused: true, play() { return Promise.resolve(); } });
+            E11.adCut.attachNative(v10, {});
+            for (let k = 0; k < 60 && v10.src !== MEDIA; k++) await new Promise(res => setTimeout(res, 20));
+            ok(v10.src === MEDIA && !E11.lsMap.has('donggua_adcut_nativebad'), '原清单 503 → 换回原地址、不记"本站剪不了"');
+        }
+        // 起播看门狗的 startTimeout 不接管(静默卡死要走换线路链);剪后清单播起来之后出错 → 原位续播、不记"本站剪不了"
+        {
+            const E6 = mkEnv();
+            const v7 = vid({ src: MEDIA, paused: false, error: null, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+            E6.adCut.attachNative(v7, {});
+            for (let k = 0; k < 60 && !E6.posts.length; k++) await new Promise(res => setTimeout(res, 20));
+            await new Promise(res => setTimeout(res, 20));
+            const cutSrc = v7.src;
+            ok(E6.adCut.onNativeError(v7, 'startTimeout') === false && v7.src === cutSrc, 'startTimeout 不接管(仍走原来的换线路链)');
+            E6.vue._cutValid = function () { return this._activeCut; };
+            E6.vue._cutToBase = function (x) { return C.fromCutTime(x, this._activeCut.cuts); };
+            E6.vue._isCasting = () => true;
+            ok(E6.adCut.onNativeError(v7, 'dp') === false, '投屏中不接管');
+            E6.vue._isCasting = () => false;
+            v7.emit('loadedmetadata');
+            v7.currentTime = 600;
+            v7.error = { code: 2 };
+            ok(E6.adCut.onNativeError(v7, 'dp') === true && v7.src === MEDIA, '播起来之后出错 → 换回原地址');
+            v7.error = null;
+            v7.emit('loadedmetadata');
+            ok(Math.abs(v7.currentTime - (600 + 19.066)) < 0.01, '原位续播:剪后 600s → 原时间轴 619.07s', v7.currentTime);
+            const v8 = vid({ src: MEDIA });
+            ok(E6.adCut.attachNative(v8, {}) === true, '播起来之后的错误不记"本站剪不了"(下次照样剪)');
+        }
+        // 服务器不支持(Vercel)/ 没开 → 不接管
+        E = mkEnv({ hlsCut: false });
+        const v4 = vid({ src: MEDIA });
+        ok(E.adCut.attachNative(v4, {}) === false && v4.src === MEDIA, '服务器不能托管(hls_cut:false)→ 不接管 src');
+    }
+}
+
 // ============ 7) 接线:原生通道 + SW 更新策略(静态) ============
 console.log('[7] 原生通道 / SW 接线');
 {
     const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
     const sw = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
     const ct = html.slice(html.indexOf('window._dgHlsCustomType = function'), html.indexOf('function buildOfflineHlsConfig()'));
-    ok(/_dgPreferNativeHls \|\| !window\.Hls \|\| !Hls\.isSupported\(\)\) \{[\s\S]{0,200}adClipSkip\.attachNative\(video, player\)[\s\S]{0,120}return;/.test(ct), '原生通道分支挂 attachNative');
+    ok(/_dgPreferNativeHls \|\| !window\.Hls \|\| !Hls\.isSupported\(\)\) \{[\s\S]{0,120}adCut\.attachNative\(video, player\)[\s\S]{0,200}adClipSkip\.attachNative\(video, player\)[\s\S]{0,160}return;/.test(ct), '原生通道:先 adCut 换占位地址(播放前剪),再挂 adClipSkip 静默跳过兜底');
+    ok(/_dgCut: cutSess/.test(ct) && /adCut\.hook\(hls, cutSess\)/.test(ct) && ct.indexOf('adCut.hook(hls, cutSess)') < ct.indexOf('hls.loadSource(video.src)'), 'hls.js:每个实例一个剪清单会话(挂 config),在 loadSource 之前挂好');
+    ok(/class CutLoader extends window\._OfflineHlsLoader/.test(html) && /pLoader: window\._CutHlsLoader \|\| window\._OfflineHlsLoader/.test(html), 'pLoader 继承离线 loader(离线播放的清单照样走本地库)');
+    const ab = html.slice(html.indexOf('window.adCut = {'), html.indexOf('let _lastProgressSaveTime'));
+    ok(ab.length > 1000 && /prof && prof\.clip\) && !this\.learned\(site\)/.test(ab), 'adCut 只对档案 clip 站 + 学会的站剪');
+    ok(/_activeOffCached/.test(ab) && /_liveActive/.test(ab) && /_isCasting/.test(ab), 'adCut:离线副本 / 直播 / 投屏不剪');
+    ok(/e\.status === 403 \|\| e\.status === 429/.test(ab), 'adCut:CDN 403/429 立刻停扫(不连累真实播放)');
+    ok(/groupConsistent/.test(ab), 'adCut:动刀前逐组复核');
+    const body0 = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('window.adCut = {'));
+    ok(/adCut\.learn\(s\.site_key\)/.test(body0) && (body0.match(/this\._learn\(vue\)/g) || []).length === 2, '播放中真跳到插播(seek / 片尾)→ 学会该站');
+    {
+        // 两个看门狗都要看 adCut.busy()(扫描中)和 graceLeft()(刚扫完按真等的时长宽限);两个分支的看门狗结构不同,只查行为不查写法
+        const s0 = html.indexOf('const armStartWatchdog = (ms) =>');
+        const sEnd = s0 >= 0 ? html.slice(s0).search(/\n\s*armStartWatchdog\(14000\);\s*\n/) : -1;   // 最后那行单独的首次装填
+        const startWd = (s0 >= 0 && sEnd > 0) ? html.slice(s0, s0 + sEnd) : '';
+        const f0 = html.indexOf("console.log('[播放器] 回退后仍未起播");
+        const fbWd = f0 >= 0 ? html.slice(Math.max(0, f0 - 1800), f0) : '';
+        ok(/adCut\.busy\(\)/.test(startWd) && /adCut\.graceLeft\(\)/.test(startWd) && /adCut\.busy\(\)/.test(fbWd) && /adCut\.graceLeft\(\)/.test(fbWd),
+            '两个看门狗:扫描中不判死,扫完后按刚才真等的时长再宽限(最多 8s)');
+    }
+    ok(/window\.adCut\.onNativeError\(\(typeof dp !== 'undefined' && dp\) \? dp\.video : null, source\)/.test(html), 'handleError 把错误来源交给 onNativeError(startTimeout 不接管)');
     const body = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
     ok(/const ns = v\._adClipNative;\s*\n\s*if \(ns && !ns\.dead && v\.src === ns\.src\) return ns;/.test(body), '_cur:原生状态(video.src 必须还是挂载时那个)优先于 dp.plugins.hls 上残留的状态');
     ok(/if \(st\.native\) this\._nativePump\(st\)/.test(body), 'check 里驱动原生探测');

@@ -1,5 +1,5 @@
 /*!
- * ad-clip-core.js v4 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
+ * ad-clip-core.js v6 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
  * 不碰 DOM、不碰 hls 实例;运行时包装在 public/index.html 的 window.adClipSkip,回归测试 scripts/adclip-test.mjs。
  *
  * 为什么要它:CF Worker 只能按清单删插播(看 DISCONTINUITY 分组的时长/目录/域名)。如意(rycj)把 20-22 秒的棋牌广告
@@ -219,6 +219,9 @@
             if (lr && !isMain(lr)) return out('none', 'left-mixed');
             if (!lr) leftUnknown = true;
         }
+        // 播放前整份剪(planCuts)时左侧必须已知:播放中'左侧未知'是拖进段中/续看,剪清单时却只是那一组没探到 —— 没有前一组就验不了架桥,
+        //   而剪掉的内容再也看不到(审查实测:前一组探测失败时会把一段真正片剪掉并缓存 30 天)
+        if (leftUnknown && ctx.planning) return out('none', 'plan-left-unknown');
         if (mode === 'pts' && (leftUnknown || !next)) {
             // P 模式只认"前后都看得到"的中插(片尾 P 模式见下方 atEnd 分支)
             if (!next && !leftUnknown) { /* 片尾,下面判 */ } else return out(leftUnknown ? 'wait' : 'none', leftUnknown ? 'pts-left-unknown' : 'pts-edge');
@@ -301,7 +304,7 @@
         var runs = [];
         for (var i = 0; i < groups.length; i++) {
             if (groups[i].dur <= o.lead) continue;   // 短到 t+lead 落进下一组的组,由下一组那次判定覆盖
-            var d = decide(groups, resOf, groups[i].start, o, { offOf: ctx.offOf, freshStart: true, rate: 1 });
+            var d = decide(groups, resOf, groups[i].start, o, { offOf: ctx.offOf, freshStart: true, rate: 1, planning: true });
             if ((d.act !== 'seek' && d.act !== 'ended') || !d.run) continue;
             runs.push({ g0: d.run.g0, g1: d.run.g1, mode: d.run.mode, tail: d.act === 'ended' });
         }
@@ -341,11 +344,77 @@
         return t + s;
     }
 
+    // 媒体清单解析(扫描器 / 播放前剪清单 / 测试共用一份,cc 编号必须与 hls.js 和 cutPlaylist 完全一致):
+    //   cc 从 DISCONTINUITY-SEQUENCE 起,每个 #EXT-X-DISCONTINUITY 让下一个分片 +1;start = EXTINF 累加;url 按 baseUrl 转绝对地址。
+    //   返回 { ok, master:{variants:[url]}|null, live, encrypted, fmp4, byterange, frags, groups }。ok = 能剪/能扫
+    //   (点播、未加密、TS、非 BYTERANGE、至少一个分片)。主清单只返回各码率地址。
+    function parseMedia(text, baseUrl) {
+        var r = { ok: false, master: null, live: false, encrypted: false, fmp4: false, byterange: false, frags: [], groups: [] };
+        if (typeof text !== 'string') return r;
+        text = text.replace(/^﻿/, '');
+        if (!/^\s*#EXTM3U/.test(text)) return r;
+        var lines = text.split(/\r?\n/), i, l;
+        var abs = function (u) { try { return new URL(u, baseUrl).href; } catch (e) { return null; } };
+        if (/#EXT-X-STREAM-INF/i.test(text)) {
+            var vs = [];
+            for (i = 0; i < lines.length; i++) {
+                if (!/^#EXT-X-STREAM-INF/i.test(lines[i].trim())) continue;
+                for (var j = i + 1; j < lines.length; j++) { l = lines[j].trim(); if (l && l[0] !== '#') { var a = abs(l); if (a) vs.push(a); break; } }
+            }
+            r.master = { variants: vs };
+            return r;
+        }
+        r.live = !/#EXT-X-ENDLIST/i.test(text);
+        r.encrypted = /#EXT-X-KEY:(?![^\n]*METHOD=NONE)/i.test(text);
+        r.fmp4 = /#EXT-X-MAP/i.test(text);
+        r.byterange = /#EXT-X-BYTERANGE/i.test(text);
+        var cc = 0, t = 0, dur = null, sn = 0;
+        var m = text.match(/#EXT-X-DISCONTINUITY-SEQUENCE:(\d+)/i);
+        if (m) cc = +m[1];
+        for (i = 0; i < lines.length; i++) {
+            l = lines[i].trim();
+            if (!l) continue;
+            if (/^#EXT-X-DISCONTINUITY(?!-)/i.test(l)) { cc++; continue; }
+            if (/^#EXTINF:/i.test(l)) { dur = parseFloat(l.slice(8)) || 0; continue; }
+            if (l[0] === '#' || dur == null) continue;
+            r.frags.push({ sn: sn++, cc: cc, start: t, duration: dur, url: abs(l) || l });
+            t += dur; dur = null;
+        }
+        r.groups = groupsFromFrags(r.frags);
+        r.ok = r.frags.length > 0 && !r.live && !r.encrypted && !r.fmp4 && !r.byterange;
+        return r;
+    }
+
+    // 清单指纹(剪清单计划缓存用):分片数 + 总时长 + 全部分片文件名(去掉查询串里的时效令牌)的 FNV-1a。
+    //   同一集换了编码/重新切片/worker 删了别的组 → 指纹变 → 缓存作废,重新扫描
+    function fingerprint(frags) {
+        var h = 0x811c9dc5, total = 0;
+        for (var i = 0; i < (frags || []).length; i++) {
+            var f = frags[i], u = String(f.url || ''), q = u.indexOf('?');
+            if (q >= 0) u = u.slice(0, q);
+            u = u.slice(u.lastIndexOf('/') + 1) + '|' + f.cc + '|' + Math.round(f.duration * 1000);
+            for (var k = 0; k < u.length; k++) { h ^= u.charCodeAt(k); h = Math.imul(h, 0x01000193) >>> 0; }
+            total += f.duration;
+        }
+        return (frags || []).length + '-' + Math.round(total * 10) + '-' + (h >>> 0).toString(16);
+    }
+
+    // 剪之前的复核:一个组从头到尾是不是同一支片子(首片与末片同分辨率、末片 PTS = 首片 PTS + 中间分片时长之和)。
+    //   只探每组首片时,"前半是广告后半接着正片、中间没打 DISCONTINUITY"的组会被整组剪掉 —— 剪掉就再也看不到,所以动刀前逐组复核
+    function groupConsistent(first, last, delta, tol) {
+        if (!first || !last) return false;
+        tol = tol == null ? 0.6 : tol;
+        if (first.width > 0 && last.width > 0 && !sameRes(first.width + 'x' + first.height, last.width + 'x' + last.height)) return false;
+        return Math.abs(last.pts - first.pts - delta) <= tol;
+    }
+
     // 把媒体清单里属于 cutCcs 的分片(连同它们前面的标签:EXTINF / DISCONTINUITY …)删掉,其余原样保留;分片地址一律改成绝对地址
     //   (剪后的清单会从 blob: / 本站地址加载,相对地址会解析错)。cc 计数与 hls.js 相同(DISCONTINUITY-SEQUENCE 起,每个 DISCONTINUITY +1)。
     //   加密 / fMP4(EXT-X-MAP)/ BYTERANGE 清单不处理(返回 null):KEY/MAP 是"之后都生效"的状态标签,删块会把它们一起删掉。
     function cutPlaylist(text, baseUrl, cutCcs) {
-        if (typeof text !== 'string' || !/#EXTM3U/.test(text) || !/#EXT-X-ENDLIST/i.test(text)) return null;
+        if (typeof text !== 'string') return null;
+        text = text.replace(/^﻿/, '');   // BOM 不剥会把第一行 "#EXTM3U" 当成分片地址
+        if (!/^\s*#EXTM3U/.test(text) || !/#EXT-X-ENDLIST/i.test(text)) return null;
         if (/#EXT-X-KEY:(?![^\n]*METHOD=NONE)/i.test(text) || /#EXT-X-MAP|#EXT-X-BYTERANGE/i.test(text)) return null;
         var drop = {};
         (cutCcs || []).forEach(function (c) { drop[c] = 1; });
@@ -489,6 +558,7 @@
         } catch (e) { return null; }
     }
 
-    return { VERSION: 4, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
-        planCuts: planCuts, cutPlaylist: cutPlaylist, toCutTime: toCutTime, fromCutTime: fromCutTime };
+    return { VERSION: 6, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
+        planCuts: planCuts, cutPlaylist: cutPlaylist, toCutTime: toCutTime, fromCutTime: fromCutTime,
+        parseMedia: parseMedia, fingerprint: fingerprint, groupConsistent: groupConsistent };
 }));

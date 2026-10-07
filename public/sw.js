@@ -24,7 +24,9 @@
 //      ② 静态库带 ?v= 版本串时先按完整 URL 找缓存:页面引用新版本(?v=3)而缓存里只有旧版本(?v=2)时走网络拿新的,
 //         网络失败或 4s 等不到才回旧版本兜底(旧做法 ignoreSearch 会把旧库喂给新页面)。
 //      ③ ad-clip-core.js v3:多组插播(电影天堂)+ probeTs(iOS/Safari 原生 HLS 读分片头)。
-const CACHE_VERSION = 'v33';
+// v34: 播放前剪清单(ad-clip-core v5);/api/hls/(剪后清单托管)一律直达,不进缓存(每条都是一次性地址,缓存只会无限堆积并回放陈旧内容)。
+// v35: ad-clip-core v6(剪清单时左侧未知不剪;计划缓存带核心版本)。
+const CACHE_VERSION = 'v35';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -43,7 +45,7 @@ const STATIC_URLS = [
     './libs/js/bootstrap.bundle.min.js',
     './libs/js/hls.min.js?v=1.1.5-lc1',
     './libs/js/kz-titlematch.js?v=1',   // v29: defer 脚本必须预缓存走 SWR,否则弱网下 Network-First 会拖住其后的 DPlayer/DOMContentLoaded
-    './libs/js/ad-clip-core.js?v=4',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs + 播放前剪清单)
+    './libs/js/ad-clip-core.js?v=6',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs);v34: v5(播放前剪清单);v35: v6
     './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
     './libs/js/DPlayer.min.js'
 ];
@@ -108,6 +110,8 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && url.pathname === '/api/check') return;
     // ⑥ sw.js 自己(含 ?check= 之类的探测):永远直达服务器,绝不进缓存(v33)
     if (url.origin === self.location.origin && url.pathname === '/sw.js') return;
+    // ⑦ 剪掉插播后的清单托管 /api/hls/cut/<id>.m3u8:一次性地址,直达服务器(v34)
+    if (url.origin === self.location.origin && url.pathname.startsWith('/api/hls/')) return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {
