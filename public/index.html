@@ -89,7 +89,7 @@
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
     <script data-cfasync="false" src="libs/js/kz-titlematch.js?v=1" defer></script>   <!-- 🎌 Kazumi 源片名归一化/并组(服务端 lib/kazumi 共用同一文件) -->
-    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=3" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
+    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=4" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
@@ -6018,20 +6018,13 @@
                         localStorage.getItem('donggua_adclip_off') !== '1';
                 } catch (e) { return false; }
             },
-            _hideUndo() {
-                try {   // 上一个实例(换集/换源/分诊)的"看广告"按钮作废
-                    clearTimeout(this._undoTimer);
-                    const ob = (typeof dp !== 'undefined' && dp && dp.container) ? dp.container.querySelector('.dg-adclip-undo') : null;
-                    if (ob) ob.style.display = 'none';
-                } catch (e) { }
-            },
             _newState(hls, video) {
                 const vue = this.vue;
                 return {
                     hls, video, dead: false, live: false, multi: false, frags: null, groups: [],
                     res: Object.create(null), off: Object.create(null),
                     tok: vue ? vue._playToken : null, overrides: Object.create(null), skipped: Object.create(null),
-                    remapped: Object.create(null), attempts: Object.create(null), pendKey: null,
+                    attempts: Object.create(null), pendKey: null,
                     actions: 0, lastActAt: -1e9, selfTo: null, selfAt: 0, endedFired: false, lastWhy: '', lastRes: '', mainRes: '',
                     lastT: 0, startFromZero: null, userSeeked: false, bufRaised: false, bufOrig: null
                 };
@@ -6045,7 +6038,6 @@
             // 每个 hls 实例创建时挂一次(_dgHlsCustomType 是全站唯一的 new Hls 处:首建/切集/切源/分诊换代理都经过它)
             attach(hls, video) {
                 if (!hls || hls._adClip || !window.Hls) return;
-                this._hideUndo();
                 if (video && video._adClipNative) this._nativeKill(video._adClipNative);   // 同一个 <video> 之前走过原生通道
                 const E = Hls.Events;
                 const st = hls._adClip = this._newState(hls, video);
@@ -6086,7 +6078,6 @@
                 const vue = this.vue;
                 if (!video.src || !window.AdClipCore || typeof AdClipCore.probeTs !== 'function' || !window.fetch || !this.enabled()) return;
                 if (vue && (vue._liveActive || (vue._isCasting && vue._isCasting()))) return;
-                this._hideUndo();
                 const st = video._adClipNative = Object.assign(this._newState(null, video), {
                     native: true, src: video.src, ready: false, failed: false, unsupported: false, reportedOk: false,
                     site: (vue && vue.currentSource && vue.currentSource.site_key) || '',
@@ -6289,19 +6280,14 @@
                 const st = h && h._adClip;
                 return (st && !st.dead && st.video === v) ? st : null;
             },
-            // 用户放行(撤销 / 第二次往回拖进同一段)跨实例记住:重开同一集(同一通道)不再跳它。
-            //   键 = 实际加载的清单地址 + cc:worker 过滤后的清单删掉了广告组,cc 编号与直连/nofilter 通道不同,不能串用
-            _ovKey(st, cc) {
-                const v = this.vue;
-                const u = (st && st.hls && st.hls.url) || (st && st.native && st.src) || (v && v._activeFinalUrl) || (v && v.currentUrl) || '';
-                return 'donggua_adclip_ov|' + u + '|' + cc;
-            },
-            _isOverridden(st, cc) {
-                if (st.overrides[cc]) return true;
-                try { return sessionStorage.getItem(this._ovKey(st, cc)) === '1'; } catch (e) { return false; }
-            },
-            _override(st, ccs) {
-                ccs.forEach(cc => { st.overrides[cc] = 1; try { sessionStorage.setItem(this._ovKey(st, cc), '1'); } catch (e) { } });
+            // 静默 seek:DPlayer.seek 会弹"快进 N 秒"(用户:广告不能以任何形式被看到/感知),这里只做它的其余三件事
+            _seek(to) {
+                try {
+                    const v = dp.video;
+                    v.currentTime = to;
+                    if (dp.danmaku) dp.danmaku.seek();
+                    if (dp.bar && v.duration) dp.bar.set('played', to / v.duration, 'width');
+                } catch (e) { try { dp.seek(to); } catch (x) { } }
             },
             _onSeeking(video) {
                 const st = this._cur();
@@ -6312,56 +6298,18 @@
                 st.lastT = t;   // 暂停/缓冲中 check() 不更新 lastT,这里补上(否则下一次拖动的方向会判错)
                 // hls.js 起播跳洞(0→0.1)/跳小空洞/微调都会触发 seeking,幅度都 <2s:不算"用户拖动",否则开头贴片永远不跳
                 if (Math.abs(t - prevT) >= 2) st.userSeeked = true;
-                // 只有【往回】拖进已跳过的段才算用户的意思(往前的 seek 多是跳片头/进度恢复)
+                // 刚跳过就按"后退 5s"会落进广告里:按"广告时长为 0"换算回广告之前(和看没有广告的片子一样)。
+                //   广告绝不放行(用户:不应该让用户以任何形式看到):其余落进广告的拖动(往前拖 / 从很远处拖回来)由下一个 tick 的判定跳到段后
                 if (!(t < prevT - 0.5)) return;
                 const gi = AdClipCore.findGroup(st.groups, t);
                 const ccs = gi >= 0 && st.skipped[st.groups[gi].cc];
                 if (!ccs) return;
-                if (ccs.some(cc => this._isOverridden(st, cc))) return;   // 已放行(看广告 / 放弃跳过):广告就是正常时间轴,不再换算
                 const g0 = st.groups.find(g => g.cc === ccs[0]), g1 = st.groups.find(g => g.cc === ccs[ccs.length - 1]);
-                const key = ccs[0] + '-' + ccs[ccs.length - 1];
-                // 刚跳过就按"后退 5s"会落进广告里:第一次按"广告时长为 0"换算回广告之前(和看没有广告的片子一样);
-                //   第二次再往回拖进同一段 = 真想看 → 放行
-                if (g0 && g1 && !st.remapped[key] && prevT >= g1.end && prevT - g1.end < 30) {
-                    st.remapped[key] = 1;
+                if (g0 && g1 && prevT >= g1.end && prevT - g1.end < 30) {
                     const to = Math.max(0, g0.start - (g1.end - t));
                     st.selfTo = to; st.selfAt = now; st.lastT = to;
-                    try { dp.seek(to); } catch (e) { }
-                    return;
+                    this._seek(to);
                 }
-                this._override(st, ccs);
-                console.log('[去插播] 用户往回拖进已跳过的插播段 → 本集放行不再跳它');
-            },
-            // 跳过后 5 秒内显示"看广告"小按钮(误判时的退路):点了就放行这一段并回到段首
-            _showUndo(st, run) {
-                try {
-                    const box = dp && dp.container;
-                    if (!box) return;
-                    let b = box.querySelector('.dg-adclip-undo');
-                    if (!b) {
-                        b = document.createElement('div');
-                        b.className = 'dg-adclip-undo';
-                        b.style.cssText = 'position:absolute;left:12px;bottom:56px;z-index:30;padding:5px 10px;border-radius:14px;' +
-                            'background:rgba(0,0,0,.62);color:#fff;font-size:12px;cursor:pointer;user-select:none;display:none;border:1px solid rgba(255,255,255,.25)';
-                        // 触屏:容器的 touchend 会 preventDefault 吃掉合成 click → 按钮自己处理 touchend
-                        b.addEventListener('touchend', (ev) => { try { ev.stopPropagation(); if (ev.cancelable) ev.preventDefault(); if (b.onclick) b.onclick(ev); } catch (x) { } });
-                        box.appendChild(b);
-                    }
-                    b.textContent = '已跳过 ' + Math.round(run.dur) + ' 秒插播 · 看广告';
-                    b.onclick = (e) => {
-                        try { e.stopPropagation(); } catch (x) { }
-                        if (st.dead || this._cur() !== st) { b.style.display = 'none'; return; }   // 已换集/换源:这个按钮作废
-                        const ccs = [];
-                        for (let i = run.g0; i <= run.g1; i++) if (st.groups[i]) ccs.push(st.groups[i].cc);
-                        this._override(st, ccs);
-                        st.selfTo = run.start; st.selfAt = performance.now();
-                        try { dp.seek(run.start); } catch (x) { }
-                        b.style.display = 'none';
-                    };
-                    b.style.display = 'block';
-                    clearTimeout(this._undoTimer);
-                    this._undoTimer = setTimeout(() => { try { b.style.display = 'none'; } catch (x) { } }, 5000);
-                } catch (e) { }
             },
             // seek 落点必须已缓冲(INIT_SEGMENT 在数据真正 append 之前就到;落点未缓冲 / 交界有空洞会卡 ~2s)
             _landing(v, to) {
@@ -6390,7 +6338,7 @@
                     const now = performance.now();
                     if (now - st.lastActAt < this.COOLDOWN || st.actions >= this.MAX_ACTIONS) return false;
                     const d = AdClipCore.decide(st.groups, cc => st.res[cc], t, this.OPT, {
-                        offOf: cc => st.off[cc], overridden: g => this._isOverridden(st, g.cc),
+                        offOf: cc => st.off[cc], overridden: g => !!st.overrides[g.cc],   // 只有"两次 seek 都越不过去"才放弃(防死循环),用户不能放行
                         freshStart: !!st.startFromZero && !st.userSeeked, rate: v.playbackRate || 1
                     });
                     if (d.main && d.main.res) st.mainRes = d.main.res;
@@ -6418,9 +6366,7 @@
                         ccs.forEach(cc => { st.skipped[cc] = ccs; });
                         st.pendKey = d.run.key;
                         st.actions++; st.lastActAt = now; st.selfTo = to; st.selfAt = now; st.lastT = to;
-                        dp.seek(to);
-                        try { dp.notice('已跳过插播广告 ' + Math.round(d.run.dur) + ' 秒', 2500); } catch (e) { }   // 盖掉 DPlayer.seek 自带的"快进 N 秒"
-                        this._showUndo(st, d.run);
+                        this._seek(to);   // 静默:不提示、不给放行按钮(用户要求广告不以任何形式出现)
                         return true;
                     }
                     if (d.act === 'ended') {
@@ -6428,7 +6374,6 @@
                         if (st.endedFired || vue._outroSkipped) return false;
                         st.endedFired = true; st.actions++; st.lastActAt = now;
                         vue._outroSkipped = true; vue._introArm = null;
-                        try { dp.notice('已跳过片尾广告', 2500); } catch (e) { }
                         if (dp.events) dp.events.trigger('ended');
                         return true;
                     }
@@ -13384,7 +13329,7 @@
                                 //      用户瞄准齿轮却点到旁边的暗化层就会误暂停 → 拦掉它(底部控制区不该是暂停热区)。
                                 dplayerContainer.addEventListener('click', (e) => {
                                     // 点在真正的控件/各类菜单/弹幕设置上 → 不拦截，照常工作
-                                    if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon, .dg-adclip-undo')) return;
+                                    if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dplayer-menu, .dplayer-comment-box, .dm-settings-panel, .dplayer-dmset-icon')) return;
                                     const settingOpen = settingBox && settingBox.classList.contains('dplayer-setting-box-open');
                                     const dmPanel = dplayerContainer.querySelector('.dm-settings-panel');
                                     const dmOpen = dmPanel && dmPanel.style.display === 'block';
@@ -13752,7 +13697,7 @@
                                 _gmode = null;
                                 if (e.touches.length !== 1) return;
                                 if (!_gFull()) return;   // 非全屏:不接管,让页面正常滚动
-                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .dg-adclip-undo, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
+                                if (e.target.closest('.dplayer-controller, .dplayer-setting-box, .dm-settings-panel, .intro-skip-btn, .mobile-play-overlay, .dplayer-mask, .dplayer-comment-box, .dplayer-bar-wrap')) return;
                                 const rect = container.getBoundingClientRect();
                                 _gx = e.touches[0].clientX; _gy = e.touches[0].clientY;
                                 const rx = (_gx - rect.left) / rect.width;
@@ -13823,7 +13768,6 @@
                                 e.target.closest('.dplayer-setting-box') ||
                                 e.target.closest('.dm-settings-panel') ||
                                 e.target.closest('.intro-skip-btn') ||
-                                e.target.closest('.dg-adclip-undo') ||
                                 e.target.closest('.dplayer-comment-box') ||
                                 e.target.closest('.mobile-play-overlay') ||
                                 e.target.closest('.dplayer-mask')) {

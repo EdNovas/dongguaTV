@@ -90,8 +90,14 @@ function simulate(frags, truth, opts = {}) {
             const p = plan.shift();
             userSeeked = true;
             const gi = C.findGroup(groups, p.to);
-            if (gi >= 0 && skipped[groups[gi].cc] && p.to < t) { for (const cc of skipped[groups[gi].cc]) overrides[cc] = 1; events.push({ type: 'override', t: p.to }); }
-            t = p.to; bufFrom = t;
+            let to = p.to;
+            // 与运行时 _onSeeking 一致:广告绝不放行;刚跳过(段后 30s 内)往回拖进广告 → 按"广告时长为 0"换算到广告之前
+            if (gi >= 0 && skipped[groups[gi].cc] && p.to < t) {
+                const ccs = skipped[groups[gi].cc];
+                const a = groups.find(g => g.cc === ccs[0]), b = groups.find(g => g.cc === ccs[ccs.length - 1]);
+                if (t >= b.end && t - b.end < 30) { to = Math.max(0, a.start - (b.end - p.to)); events.push({ type: 'remap', t: p.to, to }); }
+            }
+            t = to; bufFrom = t;
         }
         learn();
         const d = C.decide(groups, cc => res[cc], t, opts.core, {
@@ -115,7 +121,7 @@ function simulate(frags, truth, opts = {}) {
     // 误伤 = 动作跳过的非广告时长;漏看 = 播放头实际走过的广告时长(粗算:被跳过的广告不计)
     let contentLost = 0, adsCaught = new Set();
     for (const e of events) {
-        if (e.type === 'override') continue;
+        if (e.type === 'override' || e.type === 'remap') continue;
         const from = e.t, to = e.type === 'ended' ? total : e.to;
         for (const g of groups) {
             const a = Math.max(from, g.start), b = Math.min(to, g.end);
@@ -169,7 +175,9 @@ console.log(`    中插跳过 ${midSk}/95,片尾结束 ${tailEnd}/95,最晚 ${ma
     let e = r.events.find(x => x.type === 'seek');
     ok(e && e.t >= 570 && e.t < 570.3 && Math.abs(e.to - 581.3) < 0.06, 'S1E01 第一次就拖进广告中段 → 时间戳重启确认后立即跳到段尾', r.events);
     r = simulate(frags, truth, { userSeeks: [{ at: 600, to: 565 }] });
-    ok(r.events.filter(x => x.type === 'seek').length === 1 && r.events.some(x => x.type === 'override'), 'S1E01 跳过后用户往回拖进广告 → 放行不再跳', r.events.map(x => [x.type, x.t]));
+    ok(r.events.some(x => x.type === 'remap') && r.events.filter(x => x.type === 'seek').length === 2 && r.maxWatched <= 0.5, 'S1E01 跳过后用户往回拖进广告 → 换算到广告之前(广告当 0 秒),再播到时照样跳,绝不放行', r.events.map(x => [x.type, +x.t.toFixed(1), x.to != null ? +x.to.toFixed(1) : '']));
+    r = simulate(frags, truth, { userSeeks: [{ at: 1000, to: 570 }] });
+    ok(r.events.filter(x => x.type === 'seek').length >= 1 && r.maxWatched <= 0.5 && !r.events.some(x => x.type === 'override'), 'S1E01 从很远处拖回广告中段 → 立即跳到段后(不放行)', r.events.map(x => [x.type, +x.t.toFixed(1)]));
     r = simulate(frags, truth, { userSeeks: [{ at: 600, to: 540 }, { at: 620, to: 540 }, { at: 640, to: 540 }, { at: 660, to: 540 }] });
     ok(r.events.filter(x => x.type === 'seek').length === 5 && !r.events.some(x => x.type === 'override'), 'S1E01 四次拖回广告之前重看 → 每次都照样跳(成功的跳过不算"失败尝试")', r.events.map(x => [x.type, +x.t.toFixed(1)]));
     r = simulate(frags, truth, { startAt: 1000 });
@@ -341,6 +349,80 @@ console.log('[2d] 原生扫描器模式(behind 2 / look 75)跑 rycj 95 集 + 11 
     ok(bad.length === 0, '原生模式:没有任何一集误跳正片 / 漏看 >1s', bad.slice(0, 4));
     ok(caught / ads >= 0.98, '原生模式插播召回 >= 98%', { caught, ads });
     console.log(`    rycj 中插 ${midHit}/${mids}、片尾 ${tailHit}/${tails};其余 ${caught}/${ads} 组`);
+}
+
+// ============ 2e) 播放前整份剪掉:planCuts(全知识)/ cutPlaylist / 时间轴换算 ============
+console.log('[2e] planCuts / cutPlaylist / toCutTime');
+{
+    // 全部真实夹具:每组分辨率/偏移都已知时,剪掉的组 = 真值插播组,一个正片组都不剪
+    let ads = 0, hit = 0, fpG = [];
+    const chk = (key, groups, resOf, offOf, isAd) => {
+        const cuts = C.planCuts(groups, resOf, null, { offOf });
+        const cs = new Set(); cuts.forEach(c => { for (let i = c.g0; i <= c.g1; i++) cs.add(i); });
+        groups.forEach((g, i) => { if (isAd(i)) { ads++; if (cs.has(i)) hit++; } else if (cs.has(i)) fpG.push([key, i]); });
+        return cuts;
+    };
+    for (const ep of JK) {
+        const { groups } = jkTruth(ep);
+        const byCc = new Map(groups.map((g, i) => [g.cc, i]));
+        const adIdx = new Set(groups.map((g, i) => ep.ads.some(a => Math.abs(a.start - g.start) < 0.05) ? i : -1).filter(i => i >= 0));
+        chk(ep.key, groups, cc => { const i = byCc.get(cc); const a = ep.ads.find(x => Math.abs(x.start - groups[i].start) < 0.05); return a ? a.res : ep.main; }, cc => ep.off[byCc.get(cc)], i => adIdx.has(i));
+    }
+    for (const f of ['multi-source', 'dytt']) {
+        for (const ep of JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/' + f + '.json'), 'utf8')).episodes) {
+            const groups = C.groupsFromFrags(fragsFromDurs(ep.g.map(x => x[0])));
+            chk(ep.key, groups, cc => ep.g[cc][1] || undefined, cc => ep.g[cc][2] == null ? undefined : ep.g[cc][2] - groups[cc].start, i => !!ep.g[i][3]);
+        }
+    }
+    ok(hit === ads && fpG.length === 0, 'planCuts:233 集全知识下剪掉的组 = 全部插播组,0 个正片组', { hit, ads, fp: fpG.slice(0, 5) });
+    console.log(`    剪掉插播组 ${hit}/${ads},误剪正片组 ${fpG.length}`);
+    // 安全阀:剪掉超过 15% → 一段都不剪
+    {
+        const F20 = n => Array.from({ length: n }, () => 20);
+        const durs = [].concat(F20(10), [20], F20(5), [20], F20(5));   // 2 段 20s 广告 / 全片 440s(9%)
+        const g = C.groupsFromFrags(fragsFromDurs(durs));
+        let shift = 0;
+        const offs = g.map((x, i) => (i === 10 || i === 16) ? (shift += 20, 1.4667 - x.start) : 1.48 - shift);
+        const resOf = cc => (cc === 10 || cc === 16) ? '1280x720' : '1920x1080';
+        ok(C.planCuts(g, resOf, null, { offOf: cc => offs[cc] }).length === 2, 'planCuts:证据够 → 剪两段');
+        ok(C.planCuts(g, resOf, { maxCutShare: 0.05 }, { offOf: cc => offs[cc] }).length === 0, 'planCuts:剪掉总长超过 maxCutShare → 一段都不剪');
+        // 正片只有 30s、广告 20s:主分辨率证据不足(要 ≥ 2× 段长)→ 不剪
+        const gs = C.groupsFromFrags(fragsFromDurs([15, 20, 15]));
+        ok(C.planCuts(gs, cc => cc === 1 ? '1280x720' : '1920x1080', null, { offOf: cc => cc === 1 ? 1.4667 - 15 : (cc === 0 ? 1.48 : 1.48 - 20) }).length === 0, 'planCuts:主分辨率证据不足 → 宁可不剪');
+        ok(C.planCuts([], () => '', null, {}).length === 0, 'planCuts:空 → 空');
+    }
+    // cutPlaylist:真实的兰香如故第 1 集清单(分片名脱敏)
+    const raw = fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/dytt-lxrg1.m3u8'), 'utf8');
+    const BASE = 'https://cdn.example/20260911/x/3000k/hls/mixed.m3u8';
+    const fr = parseM3u8(raw), gg = C.groupsFromFrags(fr);
+    const lx = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/dytt.json'), 'utf8')).episodes.find(e => e.key === 'dytt_lxrg_0');
+    ok(lx.g.length === gg.length && lx.g.every((x, i) => Math.abs(x[0] - gg[i].dur) < 0.01), '清单夹具与 dytt 夹具逐组对齐');
+    const cuts = C.planCuts(gg, cc => { const i = gg.findIndex(x => x.cc === cc); return lx.g[i][1]; }, null, { offOf: cc => { const i = gg.findIndex(x => x.cc === cc); return lx.g[i][2] - gg[i].start; } });
+    ok(cuts.length === 2 && Math.abs(cuts[0].start - 298) < 0.01 && Math.abs(cuts[0].dur - 19.066) < 0.01 && Math.abs(cuts[1].dur - 15.766) < 0.01, '兰香如故:剪 298s+19.07 与 1515.9s+15.77 两段', cuts.map(c => [c.start, c.dur]));
+    const ccs = []; cuts.forEach(c => { for (let k = c.cc0; k <= c.cc1; k++) ccs.push(k); });
+    const cut = C.cutPlaylist(raw, BASE, ccs);
+    ok(cut && cut.kept === 699 && cut.removed === 9 && Math.abs(cut.removedDur - 34.832) < 0.01, 'cutPlaylist:删 9 片 34.83s,留 699 片', cut && [cut.kept, cut.removed, cut.removedDur]);
+    const cf = parseM3u8(cut.text);
+    const total0 = fr.reduce((a, f) => a + f.duration, 0), total1 = cf.reduce((a, f) => a + f.duration, 0);
+    ok(Math.abs(total0 - total1 - 34.832) < 0.01, '剪后总时长 = 原时长 - 广告');
+    ok(cut.text.split('\n').filter(l => l && l[0] !== '#').every(l => /^https:\/\/cdn\.example\/20260911\/x\/3000k\/hls\/seg\d+\.ts\?hash=x$/.test(l)), '分片地址全部变成绝对地址(保留查询串)');
+    ok(/#EXT-X-ENDLIST\n$/.test(cut.text) && /^#EXTM3U\n#EXT-X-VERSION:3\n/.test(cut.text) && !/\n\n/.test(cut.text), '清单头/ENDLIST 保留,无空行');
+    ok((cut.text.match(/#EXT-X-DISCONTINUITY\n/g) || []).length === (raw.match(/#EXT-X-DISCONTINUITY\r?\n/g) || []).length - 4, 'DISCONTINUITY 随被删的 4 组一起删掉,剩下的组之间仍各有一个');
+    ok(!/seg5[0-9]\.ts/.test('') && !cut.text.includes('/seg' + fr.find(f => f.cc === cuts[0].cc0).sn + '.ts'), '被剪组的分片不在新清单里');
+    // 剪后再分组:与"原分组去掉被剪组"一致
+    const g2 = C.groupsFromFrags(cf);
+    ok(g2.length === gg.length - 4 && Math.abs(g2[9].start - gg[11].start + 19.066) < 0.01, '剪后分组 = 原分组去掉 4 组,后面整体前移');
+    // 拒绝:加密 / fMP4 / BYTERANGE / 非 VOD / 全剪光
+    ok(C.cutPlaylist(raw.replace('#EXT-X-TARGETDURATION', '#EXT-X-KEY:METHOD=AES-128,URI="k"\n#EXT-X-TARGETDURATION'), BASE, ccs) === null, 'cutPlaylist:加密清单不处理');
+    ok(C.cutPlaylist(raw.replace('#EXT-X-TARGETDURATION', '#EXT-X-MAP:URI="i.mp4"\n#EXT-X-TARGETDURATION'), BASE, ccs) === null, 'cutPlaylist:fMP4 不处理');
+    ok(C.cutPlaylist(raw.replace('#EXT-X-ENDLIST', ''), BASE, ccs) === null, 'cutPlaylist:没有 ENDLIST(直播/未完)不处理');
+    ok(C.cutPlaylist(raw, BASE, gg.map(g => g.cc)) === null, 'cutPlaylist:绝不交出 0 分片清单');
+    const same = C.cutPlaylist(raw, BASE, []);
+    ok(same && same.kept === 708 && same.removed === 0, 'cutPlaylist:没有要剪的 → 原样(只改绝对地址)');
+    // 时间轴换算
+    ok(Math.abs(C.toCutTime(100, cuts) - 100) < 1e-9 && Math.abs(C.toCutTime(305, cuts) - 298) < 1e-9 && Math.abs(C.toCutTime(1600, cuts) - (1600 - 34.832)) < 0.01, 'toCutTime:剪点前不变 / 落在广告里 → 广告起点 / 之后整体前移');
+    ok([0, 100, 297.9, 298, 400, 1500, 1515.9, 1600, 2700].every(x => Math.abs(C.fromCutTime(C.toCutTime(x, cuts), cuts) - x) < 1e-6 || (x >= cuts[0].start && x < cuts[0].end)), 'fromCutTime ∘ toCutTime = 恒等(广告内除外)');
+    ok(Math.abs(C.fromCutTime(298, cuts) - (298 + 19.066)) < 0.01, 'fromCutTime:剪后 298s = 原 317.07s(广告后第一帧)');
 }
 
 // ============ 2c) probeTs:从分片开头读首帧 PTS + 分辨率(原生 HLS 用) ============
@@ -554,7 +636,8 @@ console.log('[5] 接线');
     ok(/AdFilter\.isEnabled\(\)/.test(body), '跟随广告过滤开关');
     ok(/vue\._liveActive/.test(body) && /_activeKz\.type === 'mp4'/.test(body) && /_isCasting/.test(body) && /st\.live \|\| st\.multi/.test(body), '直播 / Kazumi MP4 / 投屏 / 多码率 不生效');
     ok(/st\.tok !== vue\._playToken \|\| vue\._activePlaySeq !== _navSeq/.test(body), '令牌守卫(旧实例/旧剧不动作)');
-    ok(/sessionStorage/.test(body), '用户放行的段跨实例记住(切源/分诊/重开同一集不再跳)');
+    ok(!/sessionStorage/.test(body) && !/看广告/.test(html) && !/dg-adclip-undo/.test(html), '广告不能被放行:没有"看广告"按钮、没有跨实例放行记录');
+    ok(!/dp\.notice\(/.test(body) && !/dp\.seek\(to\)/.test(body.replace(/catch \(e\) \{ try \{ dp\.seek\(to\)/, '')), '跳过是静默的:不弹提示、不走 DPlayer.seek(它自带"快进 N 秒"提示)');
     ok(/buffered/.test(body), '落点必须已缓冲才 seek(不卡 2s)');
     ok(/maxBufferLength/.test(body), '发现候选段时临时加大预加载(长插播也能在播到前封口)');
 }
@@ -618,9 +701,10 @@ console.log('[6] 原生 HLS 扫描器端到端');
             return { ok: true, status: 206, url, body: { getReader: () => ({ read: async () => pos >= data.length ? { done: true } : { done: false, value: data.subarray(pos, (pos += 500)) }, cancel: () => Promise.resolve() }) } };
         };
         let clock = 0;
-        const seeks = [], notices = [];
-        const video = { src: MASTER, currentTime: opts.startAt || 0, paused: false, seeking: false, ended: false, readyState: 4, duration: total, playbackRate: 1, _adClipSeekHooked: false, addEventListener() { } };
-        const dpStub = { video, plugins: {}, container: null, seek(x) { seeks.push([+video.currentTime.toFixed(2), +x.toFixed(2)]); video.currentTime = x; }, notice(m) { notices.push(m); }, events: { trigger() { } } };
+        const seeks = [], notices = [], dpSeeks = [];
+        // 播放器之外的 currentTime 赋值 = adClipSkip 的静默 seek(循环推进时间走 _t)
+        const video = { src: MASTER, _t: opts.startAt || 0, get currentTime() { return this._t; }, set currentTime(x) { seeks.push([+this._t.toFixed(2), +x.toFixed(2)]); this._t = x; }, paused: false, seeking: false, ended: false, readyState: 4, duration: total, playbackRate: 1, _adClipSeekHooked: false, addEventListener() { } };
+        const dpStub = { video, plugins: {}, container: null, seek(x) { dpSeeks.push(x); video.currentTime = x; }, notice(m) { notices.push(m); }, events: { trigger() { } }, bar: { set() { } }, danmaku: { seek() { } } };
         const win = { AdClipCore: C, AdFilter: { isEnabled: () => true }, fetch: fetchStub };
         const store = new Map();
         const ls = { getItem: k => (k === 'donggua_adclip_off' && opts.off) ? '1' : null };
@@ -640,17 +724,17 @@ console.log('[6] 原生 HLS 扫描器端到端');
             skip.check(video.currentTime);
             for (let k = 0; k < 3; k++) await tick();
             if (adAt(video.currentTime)) { watchedAd += 0.25; maxRun = Math.max(maxRun, watchedAd); } else watchedAd = 0;
-            video.currentTime += 0.25; clock += 250;
+            video._t += 0.25; clock += 250;
         }
         const st = video._adClipNative;
-        return { seeks, notices, reqs, st, maxRun, marks, status: skip.status && (dpStub.video = video, skip.status()) };
+        return { seeks, notices, dpSeeks, reqs, st, maxRun, marks, status: skip.status && (dpStub.video = video, skip.status()) };
     }
     const lx = DY.find(e => e.key === 'dytt_lxrg_0');   // 1080p 剧集:同分辨率,只能靠时间戳(P 模式跨两组)
     let r = await runNative(lx);
     const adStarts = []; { let s = 0; lx.g.forEach((g, i) => { if (g[3] && !(i > 0 && lx.g[i - 1][3])) adStarts.push(s); s += g[0]; }); }
     ok(r.seeks.length === adStarts.length && r.seeks.every((s, i) => s[0] >= adStarts[i] - 0.3 && s[0] <= adStarts[i] + 0.3), '原生:兰香如故两段 1080p 插播都在开头就跳', { seeks: r.seeks, adStarts });
     ok(r.maxRun <= 0.5, '原生:每段广告实际看到 <= 0.5s', r.maxRun);
-    ok(r.notices.every(m => /已跳过插播广告/.test(m)), '原生:跳过提示');
+    ok(r.notices.length === 0 && r.dpSeeks.length === 0, '原生:静默跳过 —— 不弹提示、不走 dp.seek(它会弹"快进 N 秒")', { notices: r.notices, dpSeeks: r.dpSeeks });
     const segReqs = r.reqs.filter(x => /\.ts/.test(x[0]));
     ok(segReqs.every(x => x[1] === 'bytes=0-16383'), '原生:分片请求全是 Range 前 16KB', segReqs.slice(0, 3));
     ok(new Set(segReqs.map(x => x[0])).size === segReqs.length, '原生:每组首片只探一次', segReqs.length);

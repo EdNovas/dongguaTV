@@ -43,7 +43,7 @@ const STATIC_URLS = [
     './libs/js/bootstrap.bundle.min.js',
     './libs/js/hls.min.js?v=1.1.5-lc1',
     './libs/js/kz-titlematch.js?v=1',   // v29: defer 脚本必须预缓存走 SWR,否则弱网下 Network-First 会拖住其后的 DPlayer/DOMContentLoaded
-    './libs/js/ad-clip-core.js?v=3',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v3(多组插播 + probeTs)
+    './libs/js/ad-clip-core.js?v=4',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs + 播放前剪清单)
     './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
     './libs/js/DPlayer.min.js'
 ];

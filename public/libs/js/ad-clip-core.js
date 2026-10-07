@@ -1,5 +1,5 @@
 /*!
- * ad-clip-core.js v3 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
+ * ad-clip-core.js v4 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
  * 不碰 DOM、不碰 hls 实例;运行时包装在 public/index.html 的 window.adClipSkip,回归测试 scripts/adclip-test.mjs。
  *
  * 为什么要它:CF Worker 只能按清单删插播(看 DISCONTINUITY 分组的时长/目录/域名)。如意(rycj)把 20-22 秒的棋牌广告
@@ -53,7 +53,8 @@
         ptsMaxRun: 45,       // P 模式(同分辨率)一段上限(可跨多组)
         clockTol: 0.5,       // 相邻两组 PTS 偏移差 ≤0.5s = 同一时钟(实测同一支广告/同一段正片的组之间差 0.000s)
         fuseShare: 0.12,     // 已知内容里"非主分辨率 + PTS 重新开始"合计占比上限
-        fuseMinKnown: 300    //   已知 ≥300s 才启用熔断(太少时占比没意义,交给证据规则)
+        fuseMinKnown: 300,   //   已知 ≥300s 才启用熔断(太少时占比没意义,交给证据规则)
+        maxCutShare: 0.15    // planCuts:整集剪掉的总时长上限(实测单集插播合计最多 ~4%)
     };
 
     // hls.js 的 fragments → 按 cc 切成连续组。必须用 hls 实例里的【活】Fragment(FRAG_PARSED 后 start 会按 PTS 修正:
@@ -286,6 +287,93 @@
         return out('seek', mode === 'res' ? 'run' : 'pts-run', { to: next.start + o.landPad });
     }
 
+    // ===== 播放前整份剪掉(v4):每组的分辨率/偏移都探到以后,一次算出全部插播段 =====
+    //   逐组调用 decide(就像播放头刚到该组开头、刚开始播):判定规则与播放中跳过完全同一套(架桥/熔断/片头片尾/年轻时钟……)。
+    //   片头贴片按"刚开始播"判(剪掉后时间轴上就没有它);片尾广告(ended)也剪。重叠的段取并集(各自都已单独通过判定)。
+    //   安全阀:剪掉的总时长 > 全片 maxCutShare(15%)→ 一段都不剪(片源本身花/时间戳乱,交给播放中的保守判定)。
+    //   返回 [{ g0, g1, cc0, cc1, start, end, dur, mode, tail }](按时间排序)
+    function planCuts(groups, resOf, opt, ctx) {
+        ctx = ctx || {};
+        if (!groups || !groups.length) return [];
+        var o = {}, k;
+        for (k in DEF) o[k] = DEF[k];
+        if (opt) for (k in opt) o[k] = opt[k];
+        var runs = [];
+        for (var i = 0; i < groups.length; i++) {
+            if (groups[i].dur <= o.lead) continue;   // 短到 t+lead 落进下一组的组,由下一组那次判定覆盖
+            var d = decide(groups, resOf, groups[i].start, o, { offOf: ctx.offOf, freshStart: true, rate: 1 });
+            if ((d.act !== 'seek' && d.act !== 'ended') || !d.run) continue;
+            runs.push({ g0: d.run.g0, g1: d.run.g1, mode: d.run.mode, tail: d.act === 'ended' });
+        }
+        runs.sort(function (a, b) { return a.g0 - b.g0 || b.g1 - a.g1; });
+        var merged = [];
+        runs.forEach(function (r) {
+            var m = merged[merged.length - 1];
+            if (m && r.g0 <= m.g1) { if (r.g1 > m.g1) m.g1 = r.g1; m.tail = m.tail || r.tail; return; }
+            merged.push({ g0: r.g0, g1: r.g1, mode: r.mode, tail: r.tail });
+        });
+        var total = groups[groups.length - 1].end - groups[0].start, cut = 0;
+        merged.forEach(function (m) {
+            m.cc0 = groups[m.g0].cc; m.cc1 = groups[m.g1].cc;
+            m.start = groups[m.g0].start; m.end = groups[m.g1].end; m.dur = m.end - m.start;
+            cut += m.dur;
+        });
+        if (!(total > 0) || cut > (o.maxCutShare || 0.15) * total) return [];
+        return merged;
+    }
+
+    // 原时间轴 ↔ 剪后时间轴(剪掉的段之后整体前移;落在剪掉的段里 → 段后第一帧)
+    function toCutTime(t, cuts) {
+        var s = 0;
+        for (var i = 0; i < (cuts || []).length; i++) {
+            var c = cuts[i];
+            if (t >= c.end) s += c.dur;
+            else if (t >= c.start) return c.start - s;
+        }
+        return t - s;
+    }
+    function fromCutTime(t, cuts) {
+        var s = 0;
+        for (var i = 0; i < (cuts || []).length; i++) {
+            var c = cuts[i];
+            if (t + s >= c.start) s += c.dur; else break;
+        }
+        return t + s;
+    }
+
+    // 把媒体清单里属于 cutCcs 的分片(连同它们前面的标签:EXTINF / DISCONTINUITY …)删掉,其余原样保留;分片地址一律改成绝对地址
+    //   (剪后的清单会从 blob: / 本站地址加载,相对地址会解析错)。cc 计数与 hls.js 相同(DISCONTINUITY-SEQUENCE 起,每个 DISCONTINUITY +1)。
+    //   加密 / fMP4(EXT-X-MAP)/ BYTERANGE 清单不处理(返回 null):KEY/MAP 是"之后都生效"的状态标签,删块会把它们一起删掉。
+    function cutPlaylist(text, baseUrl, cutCcs) {
+        if (typeof text !== 'string' || !/#EXTM3U/.test(text) || !/#EXT-X-ENDLIST/i.test(text)) return null;
+        if (/#EXT-X-KEY:(?![^\n]*METHOD=NONE)/i.test(text) || /#EXT-X-MAP|#EXT-X-BYTERANGE/i.test(text)) return null;
+        var drop = {};
+        (cutCcs || []).forEach(function (c) { drop[c] = 1; });
+        var lines = text.split(/\r?\n/), head = [], out = [], pend = [], cc = 0, seenSeg = false, removed = 0, removedDur = 0, kept = 0, dur = 0, endTags = [];
+        var m = text.match(/#EXT-X-DISCONTINUITY-SEQUENCE:(\d+)/i);
+        if (m) cc = +m[1];
+        for (var i = 0; i < lines.length; i++) {
+            var l = lines[i].trim();
+            if (!l) continue;
+            if (/^#EXT-X-ENDLIST/i.test(l)) { endTags.push(l); continue; }
+            if (l[0] === '#') {
+                if (/^#EXT-X-DISCONTINUITY(?!-)/i.test(l)) { cc++; pend.push(l); continue; }
+                if (/^#EXTINF:/i.test(l)) { dur = parseFloat(l.slice(8)) || 0; pend.push(l); continue; }
+                // 分片前的其它标签(PROGRAM-DATE-TIME 等)跟着分片走;第一个分片之前的是清单头
+                if (!seenSeg && !pend.length) head.push(l); else pend.push(l);
+                continue;
+            }
+            seenSeg = true;
+            var abs;
+            try { abs = new URL(l, baseUrl).href; } catch (e) { return null; }
+            if (drop[cc]) { removed++; removedDur += dur; }
+            else { for (var j = 0; j < pend.length; j++) out.push(pend[j]); out.push(abs); kept++; }
+            pend = []; dur = 0;
+        }
+        if (!kept) return null;   // 绝不交出 0 分片清单(worker 保险丝同理)
+        return { text: head.concat(out, endTags.length ? endTags : ['#EXT-X-ENDLIST']).join('\n') + '\n', removed: removed, removedDur: removedDur, kept: kept };
+    }
+
     // ===== 浏览器原生 HLS(iOS/iPadOS/Safari)用:从分片开头几 KB 里读出首帧视频 PTS 与分辨率 =====
     //   原生播放器不给页面任何分片信息(没有 hls.js 的 INIT_PTS_FOUND / FRAG_PARSING_INIT_SEGMENT),只能自己取每组首个分片的
     //   前 16KB 解析 MPEG-TS:PAT → PMT → 视频 PID → 第一个 PES 的 PTS;H.264 再从该 PES 的 SPS 算宽高(与 hls.js 同一算法)。
@@ -401,5 +489,6 @@
         } catch (e) { return null; }
     }
 
-    return { DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs };
+    return { VERSION: 4, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
+        planCuts: planCuts, cutPlaylist: cutPlaylist, toCutTime: toCutTime, fromCutTime: fromCutTime };
 }));
