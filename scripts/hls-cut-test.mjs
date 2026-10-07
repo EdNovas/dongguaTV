@@ -12,8 +12,9 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const H = require(path.join(ROOT, 'lib/hls-cut'));
 const C = require(path.join(ROOT, 'public/libs/js/ad-clip-core.js'));
-const express = require(path.join(ROOT, 'node_modules/express'));
-const bodyParser = require(path.join(ROOT, 'node_modules/body-parser'));
+const dep = (m) => { try { return require(path.join(ROOT, 'node_modules', m)); } catch (e) { return require(m); } };   // worktree 没有 node_modules 时走 NODE_PATH
+const express = dep('express');
+const bodyParser = dep('body-parser');
 
 let pass = 0, fail = 0;
 const fails = [];

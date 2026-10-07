@@ -1091,8 +1091,16 @@ console.log('[7] 原生通道 / SW 接线');
     ok(/groupConsistent/.test(ab), 'adCut:动刀前逐组复核');
     const body0 = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('window.adCut = {'));
     ok(/adCut\.learn\(s\.site_key\)/.test(body0) && (body0.match(/this\._learn\(vue\)/g) || []).length === 2, '播放中真跳到插播(seek / 片尾)→ 学会该站');
-    ok(/window\.adCut && window\.adCut\.busy\(\)\) \{ armStartWatchdog\(2000\); return; \}/.test(html) && /window\.adCut && window\.adCut\.busy\(\)\) \{ armFallbackWd\(2000\); return; \}/.test(html) &&
-        (html.match(/window\.adCut && window\.adCut\.graceLeft\(\) > 0/g) || []).length === 2, '两个看门狗:扫描中不判死,扫完后按刚才真等的时长再宽限(最多 8s)');
+    {
+        // 两个看门狗都要看 adCut.busy()(扫描中)和 graceLeft()(刚扫完按真等的时长宽限);两个分支的看门狗结构不同,只查行为不查写法
+        const s0 = html.indexOf('const armStartWatchdog = (ms) =>');
+        const sEnd = s0 >= 0 ? html.slice(s0).search(/\n\s*armStartWatchdog\(14000\);\s*\n/) : -1;   // 最后那行单独的首次装填
+        const startWd = (s0 >= 0 && sEnd > 0) ? html.slice(s0, s0 + sEnd) : '';
+        const f0 = html.indexOf("console.log('[播放器] 回退后仍未起播");
+        const fbWd = f0 >= 0 ? html.slice(Math.max(0, f0 - 1800), f0) : '';
+        ok(/adCut\.busy\(\)/.test(startWd) && /adCut\.graceLeft\(\)/.test(startWd) && /adCut\.busy\(\)/.test(fbWd) && /adCut\.graceLeft\(\)/.test(fbWd),
+            '两个看门狗:扫描中不判死,扫完后按刚才真等的时长再宽限(最多 8s)');
+    }
     ok(/window\.adCut\.onNativeError\(\(typeof dp !== 'undefined' && dp\) \? dp\.video : null, source\)/.test(html), 'handleError 把错误来源交给 onNativeError(startTimeout 不接管)');
     const body = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
     ok(/const ns = v\._adClipNative;\s*\n\s*if \(ns && !ns\.dead && v\.src === ns\.src\) return ns;/.test(body), '_cur:原生状态(video.src 必须还是挂载时那个)优先于 dp.plugins.hls 上残留的状态');
