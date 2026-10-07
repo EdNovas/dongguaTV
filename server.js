@@ -908,6 +908,23 @@ app.use(apiLimiter);
 app.use('/api/search', searchLimiter);
 // 🎌 Kazumi 规则源的播放端点:/api/kz/ep(解析成 {type,url})、/api/kz/m3u8(同源清单)、/api/kz/mp4(302 签名直链)
 if (kazumi) { try { kazumi.registerRoutes(app); } catch (e) { console.warn('[Kazumi] 路由注册失败:', e.message); } }
+// ✂️ 剪掉插播后的清单托管(Safari 原生 HLS / AirPlay / 投屏用,见 lib/hls-cut):服务器只存客户端交上来的清单,自己不拉任何 m3u8。
+//    POST 不强制登录(内容只是规范化后的公网分片清单,6h 空闲过期),靠每 IP 限流 + 全站预算防滥用;被封禁的令牌拒绝。
+//    HLS_CUT_DISABLE=1 关闭(前端据 /api/config 的 hls_cut 退回"播放中静默跳过")。
+const HLS_CUT_ENABLED = !envFlag('HLS_CUT_DISABLE');
+let hlsCut = null;
+try {
+    if (HLS_CUT_ENABLED) {
+        const hlsCutLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, keyGenerator: ipKey, message: { error: 'busy' } });
+        const own = (token) => typeof token === 'string' && Object.prototype.hasOwnProperty.call(PASSWORD_HASH_MAP, token);
+        hlsCut = require('./lib/hls-cut').registerRoutes(app, {
+            postLimiter: hlsCutLimiter,
+            ipOf: ipKey,
+            ownerOf: (req, body) => (body && own(body.token)) ? 't:' + body.token : 'ip:' + ipKey(req),
+            authorize: (token) => (token && own(token) && isBanned(token)) ? 'banned' : 'ok'
+        });
+    }
+} catch (e) { console.warn('[HlsCut] 路由注册失败,原生 HLS 播放前去插播已禁用:', e.message); }
 
 // 对分享预览 API 应用更严格的限流
 app.use('/api/preview', previewLimiter);
@@ -1405,6 +1422,8 @@ app.get('/api/config', (req, res) => {
         requests_enabled: !!process.env.ADMIN_TOKEN,
         // 📺 直播(IPTV)：默认开启，设 LIVE_TV_DISABLED=1 关闭 → 前端隐藏直播区
         live_enabled: LIVE_TV_ENABLED,
+        // ✂️ 剪掉插播后的清单托管可用(Safari 原生 HLS 播放前去插播要它;Vercel 无状态 → false)
+        hls_cut: !!hlsCut,
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });

@@ -26,6 +26,9 @@ const withKzSites = (sites) => {
     return base.concat(kz.filter(x => !have.has(x.key)));
 };
 if (kazumi) { try { kazumi.registerRoutes(app); } catch (e) { console.warn('[Kazumi] 路由注册失败:', e.message); } }
+// ✂️ 剪掉插播后的清单托管:无状态函数存不住(POST 与之后的 GET 可能落在不同实例)→ 只挂 501 桩;/api/config 报 hls_cut:false,
+//    前端在 Safari 原生 HLS 上退回"播放中静默跳过"(hls.js 通道在浏览器里剪,不需要服务器)
+try { require('../lib/hls-cut').registerStub(app); } catch (e) { console.warn('[HlsCut] 桩注册失败:', e.message); }
 // 🏷️ 资源站档案(徽章/选源偏好):与 server.js 共用 lib/site-profiles(静态 require,Vercel 才会把 profiles.json 打包)。
 //    加载失败/查询抛错只是不带徽章,绝不影响搜索与播放。
 let siteProfiles = null;
@@ -784,7 +787,8 @@ app.get('/api/config', (req, res) => {
         multi_user_mode: ACCESS_PASSWORDS.length > 1,
         danmaku_enabled: !!process.env.DANMU_API_URL,  // 🗨️ 弹幕开关
         // 📮 求片：Vercel 无持久 SQLite、不适合求片(需站长长期履行)→ 始终关闭，仅 VPS(server.js) 支持
-        requests_enabled: false
+        requests_enabled: false,
+        hls_cut: false   // ✂️ 无状态后端托管不了剪后的清单(见 lib/hls-cut)
     });
 });
 

@@ -89,7 +89,7 @@
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
     <script data-cfasync="false" src="libs/js/kz-titlematch.js?v=1" defer></script>   <!-- 🎌 Kazumi 源片名归一化/并组(服务端 lib/kazumi 共用同一文件) -->
-    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=4" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
+    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=5" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
@@ -5939,11 +5939,17 @@
         window._dgHlsCustomType = function (video, player) {
             try {
                 if (window._dgPreferNativeHls || !window.Hls || !Hls.isSupported()) {   // 原生通道(DPlayer 已设好 video.src)
-                    try { if (window.adClipSkip) window.adClipSkip.attachNative(video, player); } catch (e) { }   // 🛡️ 去插播:原生 HLS 自己探分片头
+                    try { if (window.adCut) window.adCut.attachNative(video, player); } catch (e) { }   // ✂️ 播放前剪插播:src 换成本站占位地址(必须先于下一行)
+                    try { if (window.adClipSkip) window.adClipSkip.attachNative(video, player); } catch (e) { }   // 🛡️ 去插播:原生 HLS 自己探分片头(静默跳过兜底)
                     return;
                 }
-                const hls = new Hls((player.options && player.options.pluginOptions && player.options.pluginOptions.hls) || buildOfflineHlsConfig());
+                // ✂️ 每个 hls 实例一个剪清单会话(挂在 config 上给 _CutHlsLoader 读;pluginOptions.hls 是整个播放器共用的,不能直接改它)
+                const baseCfg = (player.options && player.options.pluginOptions && player.options.pluginOptions.hls) || buildOfflineHlsConfig();
+                let cutSess = null;
+                try { cutSess = window.adCut ? window.adCut.session() : null; } catch (e) { }
+                const hls = new Hls(cutSess ? Object.assign({}, baseCfg, { _dgCut: cutSess }) : baseCfg);
                 player.plugins.hls = hls;
+                try { if (cutSess) window.adCut.hook(hls, cutSess); } catch (e) { }
                 try { if (window.adClipSkip) window.adClipSkip.attach(hls, video); } catch (e) { }   // 🛡️ 去插播:必须在 loadSource 前挂(要收 MANIFEST_PARSED)
                 hls.loadSource(video.src);
                 hls.attachMedia(video);
@@ -5991,10 +5997,43 @@
                     }
                     window._OfflineHlsLoader = OfflineLoader;
                 }
+                // ✂️ 清单 loader(pLoader):清单从网络/离线库拿到后、交给 hls.js 之前,换成剪掉插播后的文本(window.adCut)。
+                //   pLoader 会顶替 loader 处理清单请求 → 必须继承 OfflineLoader,否则离线播放的清单走不了本地库。
+                //   地址不变(context.url / response.url 原样),hls.js、分诊、投屏、片头通道判断都不知道清单被剪过。
+                //   主清单(多码率)不剪、也让同一实例后面的子清单不剪(各码率各剪一份会不一致,与 adClipSkip 的 st.multi 同口径)。
+                if (!window._CutHlsLoader && window._OfflineHlsLoader) {
+                    class CutLoader extends window._OfflineHlsLoader {
+                        constructor(config) { super(config); this._cut = config && config._dgCut; }
+                        abort() { this._cutGone = true; super.abort(); }
+                        destroy() { this._cutGone = true; super.destroy(); }
+                        load(context, config, callbacks) {
+                            const sess = this._cut;
+                            if (!sess || !sess.want || (context.type !== 'manifest' && context.type !== 'level')) return super.load(context, config, callbacks);
+                            const onOk = callbacks.onSuccess;
+                            super.load(context, config, Object.assign({}, callbacks, {
+                                onSuccess: (resp, stats, ctx, nd) => {
+                                    const done = (data) => { if (!this._cutGone) onOk(data ? Object.assign({}, resp, { data }) : resp, stats, ctx, nd); };
+                                    try {
+                                        const text = resp && typeof resp.data === 'string' ? resp.data : null;
+                                        if (!text || sess.dead || !window.adCut) return done(null);
+                                        if (/#EXT-X-STREAM-INF/i.test(text)) {
+                                            const p = AdClipCore.parseMedia(text, resp.url || ctx.url);
+                                            sess.variants = p.master ? p.master.variants.length : 0;
+                                            return done(null);
+                                        }
+                                        if (sess.variants > 1) return done(null);
+                                        window.adCut.planFor(sess, text, resp.url || ctx.url).then(r => done(r && r.text), () => done(null));
+                                    } catch (e) { done(null); }
+                                }
+                            }));
+                        }
+                    }
+                    window._CutHlsLoader = CutLoader;
+                }
                 // backBufferLength:90 —— 1.1.5 默认 Infinity 把已播部分永远留在 SourceBuffer,10 分钟上下就撞 Chrome 的 12MB 音频/
                 //   150MB 视频上限交给浏览器自己 GC;另据 hls.js #7367,Chrome/Edge 138+ 改了 QuotaExceededError 的类型,1.1.5 可能认不出来而当成
                 //   致命 bufferAppendError → 站内错误链误判换源(该点未在本机单独验证)。自己只留 90s 后向缓冲就基本走不到这条路(回拖 >90s 重拉分片即可)。
-                return { loader: window._OfflineHlsLoader, backBufferLength: 90 };
+                return { loader: window._OfflineHlsLoader, pLoader: window._CutHlsLoader || window._OfflineHlsLoader, backBufferLength: 90 };
             } catch (e) { return {}; }
         }
         // 🛡️ 去插播:按"分辨率突变"跳过藏在正片里的插播广告(判定核心 libs/js/ad-clip-core.js,回归 scripts/adclip-test.mjs)。
@@ -6280,6 +6319,10 @@
                 const st = h && h._adClip;
                 return (st && !st.dead && st.video === v) ? st : null;
             },
+            // 播放中真的跳到了插播 = 这条线路有 worker 删不掉的插播 → 让 adCut 记住这个站,以后在本机播放前就剪掉(不再出现在进度条里)
+            _learn(vue) {
+                try { const s = vue && vue.currentSource; if (s && s.site_key && window.adCut) window.adCut.learn(s.site_key); } catch (e) { }
+            },
             // 静默 seek:DPlayer.seek 会弹"快进 N 秒"(用户:广告不能以任何形式被看到/感知),这里只做它的其余三件事
             _seek(to) {
                 try {
@@ -6367,6 +6410,7 @@
                         st.pendKey = d.run.key;
                         st.actions++; st.lastActAt = now; st.selfTo = to; st.selfAt = now; st.lastT = to;
                         this._seek(to);   // 静默:不提示、不给放行按钮(用户要求广告不以任何形式出现)
+                        this._learn(vue);
                         return true;
                     }
                     if (d.act === 'ended') {
@@ -6374,6 +6418,7 @@
                         if (st.endedFired || vue._outroSkipped) return false;
                         st.endedFired = true; st.actions++; st.lastActAt = now;
                         vue._outroSkipped = true; vue._introArm = null;
+                        this._learn(vue);
                         if (dp.events) dp.events.trigger('ended');
                         return true;
                     }
@@ -6391,6 +6436,312 @@
                     ptsKnown: Object.keys(st.off).length, actions: st.actions, overrides: Object.keys(st.overrides), lastWhy: st.lastWhy,
                     freshStart: !!st.startFromZero && !st.userSeeked, bufRaised: st.bufRaised
                 };
+            }
+        };
+        // ✂️ 播放前把插播广告整段剪掉(用户:"广告应该整片去掉,进度条里都不能有,不应该让用户以任何形式看到")。
+        //   做法:媒体清单交给播放器之前,读每个 DISCONTINUITY 组首个分片的前 16KB(AdClipCore.probeTs:首帧 PTS + 分辨率),用与播放中
+        //   跳过同一套规则(AdClipCore.planCuts → decide:分辨率突变 / 时间戳重启 + 架桥 / 熔断 / 片头片尾)算出插播段,再逐段复核
+        //   (被剪组的末片与首片是同一支片子),然后把这些组从清单里删掉 —— 时长和进度条里就没有广告了。
+        //   · 只对需要的站做:档案标了 clip 的(如意、电影天堂:worker 删不掉 / 源站封 worker)+ 本机播放中真的跳到过插播的站(自动学会,
+        //     30 天)。其余站照常只靠 CF Worker:不扫描、不多等。
+        //   · 代价:每集 ~120 个 16KB 请求(约 2MB);实测加拿大出口 0.9-2.2s,国内更快。预算 BUDGET,到点按已探到的部分剪,剩下的由
+        //     播放中的静默跳过兜底;结果按清单指纹缓存(会话内 + 本机 30 天),分诊换线 / 重开 / 续看不再重扫;下一集在本集最后 2 分钟预扫。
+        //   · hls.js 通道:playlist loader(_CutHlsLoader)把清单文本换成剪后的再交给 hls.js,地址不变(分诊/投屏/片头通道判断都不受影响)。
+        //   · 原生 HLS(Safari/iOS):浏览器只认地址 → DPlayer 设好 src 的同一刻换成本站占位地址 /api/hls/cut/<id>.m3u8,扫描完把剪后的
+        //     清单交给服务器(lib/hls-cut),服务器让 Safari 那个请求一直等到交付再返回 —— src 只设一次,不碰 iOS 的自动播放限制。
+        //   · 时间轴:剪后 = 原时间轴去掉被剪段。进度/历史/片头片尾标记/分享时间/投屏一律按【原时间轴】存取(vue._cutToBase/_cutToPlay),
+        //     与没剪的设备、离线副本、服务器共享标记保持一致(不重蹈"跳片头多跳 20 秒"的时间轴错位)。
+        //   控制台 adCut.status() 看本次播放剪了什么;localStorage donggua_adclip_off=1 连同播放中跳过一起关掉。
+        window.adCut = {
+            BUDGET: 3500, VERIFY_MS: 1500, CONC: 6, HEAD: 16384, NATIVE_DEADLINE: 8000,
+            PLAN_TTL: 30 * 86400e3, PLAN_MAX: 300, LEARN_TTL: 30 * 86400e3, LEARN_MAX: 300,
+            _busy: 0, _sess: new Map(), _blocked: Object.create(null), _last: null,
+            vue() { return window.adClipSkip && window.adClipSkip.vue; },
+            ready() {
+                return !!(window.AdClipCore && typeof AdClipCore.planCuts === 'function' && typeof AdClipCore.parseMedia === 'function' &&
+                    window.fetch && window.adClipSkip && window.adClipSkip.enabled());
+            },
+            // 这次播放要不要剪:播放层面的前提(非直播 / 非离线副本 / 非 MP4 / 非投屏)+ 站点(档案 clip 或已学会)
+            want() {
+                try {
+                    const v = this.vue();
+                    if (!v || !this.ready()) return null;
+                    if (v._liveActive || v._activeOffCached || (v._activeKz && v._activeKz.type === 'mp4') || (v._isCasting && v._isCasting())) return null;
+                    const src = v.currentSource, site = src && src.site_key;
+                    if (!site || this._blocked[site] > Date.now()) return null;
+                    const prof = v.srcProfile ? v.srcProfile(src) : null;
+                    if (!(prof && prof.clip) && !this.learned(site)) return null;
+                    return { site, tok: v._playToken };
+                } catch (e) { return null; }
+            },
+            _lsGet(k) { try { return JSON.parse(localStorage.getItem(k) || '{}') || {}; } catch (e) { return {}; } },
+            _lsSet(k, m, max) {
+                try {
+                    const ks = Object.keys(m), at = x => (m[x] && m[x].at) || m[x] || 0;
+                    if (ks.length > max) ks.sort((a, b) => at(a) - at(b)).slice(0, ks.length - max).forEach(x => delete m[x]);
+                    localStorage.setItem(k, JSON.stringify(m));
+                } catch (e) { }
+            },
+            learned(site) { const t = this._lsGet('donggua_adcut_learn')[site]; return !!(t && Date.now() - t < this.LEARN_TTL); },
+            // 播放中的静默跳过真的跳到了插播 = 这个站有 worker 删不掉的插播 → 以后在本机播放前就剪(adClipSkip.check 调)
+            learn(site) {
+                if (!site) return;
+                const m = this._lsGet('donggua_adcut_learn');
+                if (m[site] && Date.now() - m[site] < 86400e3) return;
+                m[site] = Date.now();
+                this._lsSet('donggua_adcut_learn', m, this.LEARN_MAX);
+                console.log('[去插播] ' + site + ' 有 worker 删不掉的插播 → 以后播放前剪掉');
+            },
+            busy() { return this._busy > 0; },
+            // 读分片头:Range 前 n 字节;Safari ≤15 的 Range 要预检 → 跨域失败时不带 Range 再试(读够即断,不会把整片拉完)
+            async _head(url, n, noRange) {
+                const ctrl = window.AbortController ? new AbortController() : null;
+                const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch (e) { } }, 5000);
+                try {
+                    const opt = { credentials: 'omit', signal: ctrl ? ctrl.signal : undefined };
+                    if (!noRange) opt.headers = { Range: 'bytes=0-' + (n - 1) };
+                    let r;
+                    try { r = await fetch(url, opt); }
+                    catch (e) { if (!noRange && !(e && e.name === 'AbortError')) { clearTimeout(timer); return this._head(url, n, true); } throw e; }
+                    if (!r.ok) { const err = new Error('HTTP ' + r.status); err.status = r.status; throw err; }
+                    const out = new Uint8Array(n);
+                    let len = 0;
+                    if (r.body && r.body.getReader) {
+                        const rd = r.body.getReader();
+                        while (len < n) { const x = await rd.read(); if (x.done) break; const k = Math.min(x.value.length, n - len); out.set(x.value.subarray(0, k), len); len += k; }
+                        try { const c = rd.cancel(); if (c && c.catch) c.catch(() => { }); } catch (e) { }
+                    } else { const b = new Uint8Array(await r.arrayBuffer()); len = Math.min(b.length, n); out.set(b.subarray(0, len)); }
+                    return out.subarray(0, len);
+                } finally { clearTimeout(timer); }
+            },
+            async _probe(url) {
+                let buf = await this._head(url, this.HEAD);
+                let p = AdClipCore.probeTs(buf);
+                if ((!p || (p.codec === 'avc' && !p.width)) && buf.length >= this.HEAD) { buf = await this._head(url, this.HEAD * 4); p = AdClipCore.probeTs(buf); }
+                return p;
+            },
+            // 清单文本 → { cuts, text(剪后清单;没有可剪的为 null), removedDur, known, groups, ms, fp, cached } 或 null(不能剪的清单)。
+            //   同一份清单(按站点 + 指纹)全页只扫一次:几个调用方(首建/分诊换线/预扫下一集)共用同一个结果
+            plan(text, baseUrl, site, conc) {
+                let p;
+                try { p = AdClipCore.parseMedia(text, baseUrl); } catch (e) { return Promise.resolve(null); }
+                if (!p.ok || p.groups.length < 3) return Promise.resolve(null);
+                const fp = AdClipCore.fingerprint(p.frags), key = site + '|' + fp;
+                let pr = this._sess.get(key);
+                if (!pr) {
+                    pr = this._plan(p, site, fp, key, conc || this.CONC);
+                    this._sess.set(key, pr);
+                    pr.catch(() => this._sess.delete(key));
+                    if (this._sess.size > 60) this._sess.delete(this._sess.keys().next().value);
+                }
+                // 剪后文本按调用方自己的清单文本生成(分片地址里的时效令牌可能每次不同,cc 结构由指纹保证一致)
+                return pr.then(r => r ? this._apply(text, baseUrl, r.cuts, r) : null);
+            },
+            _apply(text, baseUrl, cuts, info) {
+                const base = { fp: info.fp, known: info.known, groups: info.groups, ms: info.ms, cached: info.cached, full: info.full };
+                if (!cuts || !cuts.length) return Object.assign(base, { cuts: [], text: null, removedDur: 0 });
+                const ccs = [];
+                cuts.forEach(c => { for (let k = c.cc0; k <= c.cc1; k++) ccs.push(k); });
+                const r = AdClipCore.cutPlaylist(text, baseUrl, ccs);
+                if (!r || !r.removed) return Object.assign(base, { cuts: [], text: null, removedDur: 0 });
+                return Object.assign(base, { cuts, text: r.text, removedDur: r.removedDur });
+            },
+            async _plan(p, site, fp, key, conc) {
+                // 本机缓存(同一集重开 / 续看 / 换回这条线路):按指纹认,被剪的 cc 段必须还在清单里
+                const LS = 'donggua_adcut_plan', gs = p.groups;
+                const hit = this._lsGet(LS)[key];
+                if (hit && Date.now() - hit.at < this.PLAN_TTL && Array.isArray(hit.cuts)) {
+                    const byCc = new Map(gs.map((g, i) => [g.cc, i]));
+                    const cuts = [];
+                    let good = true;
+                    hit.cuts.forEach(c => {
+                        const i0 = byCc.get(c.cc0), i1 = byCc.get(c.cc1);
+                        if (i0 == null || i1 == null || i1 < i0) { good = false; return; }
+                        cuts.push({ cc0: c.cc0, cc1: c.cc1, g0: i0, g1: i1, start: gs[i0].start, end: gs[i1].end, dur: gs[i1].end - gs[i0].start, mode: c.mode, tail: !!c.tail });
+                    });
+                    if (good) return { cuts, fp, cached: 'local', known: gs.length, groups: gs.length, ms: 0, full: true };
+                }
+                this._busy++;
+                const t0 = performance.now();
+                try {
+                    const res = Object.create(null), off = Object.create(null), first = Object.create(null);
+                    let i = 0, ok = 0, fails = 0, stop = false;
+                    const deadline = t0 + this.BUDGET;
+                    const worker = async () => {
+                        while (!stop && i < gs.length) {
+                            if (performance.now() > deadline) { stop = true; return; }
+                            const g = gs[i++];
+                            try {
+                                const pr = await this._probe(p.frags[g.sn0].url);
+                                if (pr) { first[g.cc] = pr; off[g.cc] = pr.pts - g.start; if (pr.width > 0) res[g.cc] = pr.width + 'x' + pr.height; ok++; fails = 0; }
+                            } catch (e) {
+                                if (e && (e.status === 403 || e.status === 429)) {   // CDN 防盗链/限流:立刻停手,别连累真实播放的分片请求
+                                    stop = true; this._blocked[site] = Date.now() + 30 * 60e3;
+                                    console.warn('[去插播] ' + site + ' 分片 CDN 拒绝探测(' + e.status + '),30 分钟内不再播放前扫描');
+                                    return;
+                                }
+                                if (++fails >= 4 && !ok) { stop = true; return; }   // 一开始就连着失败(跨域 / 断网)→ 放弃
+                            }
+                        }
+                    };
+                    await Promise.all(Array.from({ length: conc }, worker));
+                    const known = Object.keys(off).length;
+                    let cuts = AdClipCore.planCuts(gs, cc => res[cc], null, { offOf: cc => off[cc] });
+                    // 复核:被剪的每一组读末片,必须与首片是同一支片子(同分辨率 + PTS 连续)—— 剪掉就再也看不到,宁可这段留给播放中静默跳过
+                    if (cuts.length) {
+                        const vDeadline = performance.now() + this.VERIFY_MS, keep = [];
+                        for (const c of cuts) {
+                            let good = true;
+                            for (let gi = c.g0; gi <= c.g1 && good; gi++) {
+                                const g = gs[gi];
+                                if (g.n < 2) continue;
+                                if (performance.now() > vDeadline) { good = false; break; }
+                                let delta = 0;
+                                for (let s = g.sn0; s < g.sn0 + g.n - 1; s++) delta += p.frags[s].duration;
+                                try { good = AdClipCore.groupConsistent(first[g.cc], await this._probe(p.frags[g.sn0 + g.n - 1].url), delta); } catch (e) { good = false; }
+                            }
+                            if (good) keep.push(c);
+                            else console.log('[去插播] 复核没通过,不剪 ' + c.start.toFixed(1) + 's+' + c.dur.toFixed(1) + 's(播放中静默跳过兜底)');
+                        }
+                        cuts = keep;
+                    }
+                    const ms = Math.round(performance.now() - t0), full = known === gs.length;
+                    // 只缓存有把握的结论:剪了的段(都复核过),或整集探完确认没有插播
+                    if (cuts.length || full) {
+                        const m = this._lsGet(LS);
+                        m[key] = { at: Date.now(), cuts: cuts.map(c => ({ cc0: c.cc0, cc1: c.cc1, mode: c.mode, tail: c.tail ? 1 : 0 })) };
+                        this._lsSet(LS, m, this.PLAN_MAX);
+                    }
+                    console.log('[去插播] 播放前扫描 ' + site + ':' + known + '/' + gs.length + ' 组,' + ms + 'ms,剪掉 ' + cuts.length + ' 段 ' +
+                        cuts.map(c => c.start.toFixed(1) + '+' + c.dur.toFixed(1) + 's').join(' '));
+                    return { cuts, fp, known, groups: gs.length, ms, full, cached: false };
+                } finally { this._busy--; }
+            },
+            // ---- hls.js 通道:每个 hls 实例一个会话(挂在 hls.config._dgCut,_CutHlsLoader 读它) ----
+            session() {
+                const w = this.want();
+                return w ? { want: true, site: w.site, tok: w.tok, variants: 0, result: null, dead: false } : null;
+            },
+            planFor(sess, text, baseUrl) {
+                if (!sess || sess.dead) return Promise.resolve(null);
+                return this.plan(text, baseUrl, sess.site).then(r => {
+                    if (sess.dead || !r) return null;
+                    this._last = { site: sess.site, cuts: r.cuts, removedDur: r.removedDur, known: r.known, groups: r.groups, ms: r.ms, cached: r.cached, channel: 'hls.js' };
+                    if (!r.text) return null;
+                    sess.result = r;
+                    return r;
+                });
+            },
+            // 在 hls 实例上挂:剪后的清单一到(LEVEL_LOADED)就把剪段交给 vue 做时间轴换算
+            hook(hls, sess) {
+                if (!sess) return;
+                hls.on(Hls.Events.LEVEL_LOADED, () => {
+                    try { if (sess.result && !sess.applied) { sess.applied = true; const v = this.vue(); if (v) v._setActiveCut({ owner: hls, cuts: sess.result.cuts }); } } catch (e) { }
+                });
+                hls.on(Hls.Events.DESTROYING, () => { sess.dead = true; });
+            },
+            // ---- 原生 HLS(Safari/iOS):占位地址 + 扫描 + 交付(见 lib/hls-cut)。返回 true = 已接管 src ----
+            attachNative(video, player) {
+                try {
+                    if (video && video._adCutNative) video._adCutNative.dead = true;   // 上一集/上一条线路的交付作废
+                    const v = this.vue();
+                    if (!video || !video.src || !v || !v.hlsCutEnabled || !(window.crypto && crypto.getRandomValues)) return false;
+                    const w = this.want();
+                    if (!w) return false;
+                    if (v._clipNativeBad && v._clipNativeBad(w.site)) return false;   // 这站的清单/分片在本机读不到(跨域等)→ 别换占位地址
+                    const base = video.src;
+                    if (/\/api\/hls\/cut\//.test(base)) return false;
+                    const b = new Uint8Array(18);
+                    crypto.getRandomValues(b);
+                    const id = btoa(String.fromCharCode.apply(null, Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_');
+                    const job = { id, base, cutUrl: location.origin + '/api/hls/cut/' + id + '.m3u8', site: w.site, player, dead: false };
+                    video._adCutNative = job;
+                    video.src = job.cutUrl;   // 与 DPlayer 设 src 同一个任务里换掉:Safari 只会去拉占位地址
+                    this._busy++;
+                    this._nativeRun(video, job).catch(() => { }).finally(() => { this._busy--; });
+                    return true;
+                } catch (e) { return false; }
+            },
+            async _nativeRun(video, job) {
+                const v = this.vue();
+                const alive = () => !job.dead && video._adCutNative === job && video.src === job.cutUrl;
+                let text = null, url = job.base, res = null;
+                const work = (async () => {
+                    let r = await fetch(job.base, { credentials: 'omit' });
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    text = await r.text(); url = r.url || job.base;
+                    const p0 = AdClipCore.parseMedia(text, url);
+                    if (p0.master) {
+                        if (p0.master.variants.length !== 1) { text = null; throw new Error('multi-variant'); }
+                        r = await fetch(p0.master.variants[0], { credentials: 'omit' });
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        text = await r.text(); url = r.url || p0.master.variants[0];
+                    }
+                    res = await this.plan(text, url, job.site);
+                })();
+                // 硬期限:扫描/拉清单超时 → 交原样清单(Safari 那边的请求不能一直挂着)
+                await Promise.race([work.catch(() => { }), new Promise(r => setTimeout(r, this.NATIVE_DEADLINE))]);
+                if (!alive()) return;
+                if (res) this._last = { site: job.site, cuts: res.cuts, removedDur: res.removedDur, known: res.known, groups: res.groups, ms: res.ms, cached: res.cached, channel: '原生 HLS' };
+                let body = res && res.text;
+                const cutOk = !!body;
+                if (!body && text) { const c = AdClipCore.cutPlaylist(text, url, []); body = c && c.text; }   // 原样(只转绝对地址)
+                if (body) {
+                    if (cutOk) v._setActiveCut({ owner: 'native', src: job.cutUrl, cuts: res.cuts });   // 先就位:canplay 之前进度恢复就要用
+                    try {
+                        const r = await fetch('/api/hls/cut', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ id: job.id, m3u8: body, token: localStorage.getItem('emax_auth_hash') || '' })
+                        });
+                        if (r.ok) return;
+                        console.warn('[去插播] 剪后清单交付失败 HTTP ' + r.status + ' → 换回原地址');
+                    } catch (e) { console.warn('[去插播] 剪后清单交付失败 → 换回原地址'); }
+                    if (v._activeCut && v._activeCut.src === job.cutUrl) v._activeCut = null;
+                } else {
+                    console.warn('[去插播] 原生 HLS 读不到原清单(多为跨域)→ 换回原地址,本站 3 天内不再接管');
+                    try { if (v._clipNativeSet) v._clipNativeSet(job.site, true); } catch (e) { }
+                }
+                if (alive()) this._restoreNative(video, job);
+            },
+            // 唯一会换 src 的路径(交付失败):换回原地址;之前已经在播(paused=false,哪怕还在等数据)就继续播,并重挂播放中静默跳过
+            _restoreNative(video, job) {
+                const wasPlaying = !video.paused;
+                job.dead = true; video._adCutNative = null;
+                video.src = job.base;
+                try { if (window.adClipSkip) window.adClipSkip.attachNative(video, job.player); } catch (e) { }
+                if (wasPlaying) { try { const p = video.play(); if (p && p.catch) p.catch(() => { }); } catch (e) { } }
+            },
+            // 投屏(Chromecast):接收端自己拉地址 → 原生通道直接用占位地址;hls.js 通道把剪后的文本交给服务器换一个地址
+            async castUrl() {
+                try {
+                    const v = this.vue(), c = v && v._cutValid && v._cutValid();
+                    if (!c) return null;
+                    if (c.owner === 'native') return c.src;
+                    const sess = c.owner && c.owner.config && c.owner.config._dgCut;
+                    if (!v.hlsCutEnabled || !sess || !sess.result || !sess.result.text) return null;
+                    if (sess.castUrl) return sess.castUrl;
+                    const r = await fetch('/api/hls/cut', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ m3u8: sess.result.text, token: localStorage.getItem('emax_auth_hash') || '' })
+                    });
+                    if (!r.ok) return null;
+                    const j = await r.json();
+                    return (sess.castUrl = location.origin + j.url);
+                } catch (e) { return null; }
+            },
+            // 本集最后 2 分钟预扫下一集(_preloadNextEpisode 拿到媒体清单后调;并发减半,结果进会话缓存,切集时零等待)
+            prefetch(text, baseUrl, site) {
+                try {
+                    if (!site || !this.ready() || this._blocked[site] > Date.now()) return;
+                    const v = this.vue(), src = v && v.currentSource;
+                    const prof = v && v.srcProfile ? v.srcProfile(src) : null;
+                    if (!(prof && prof.clip) && !this.learned(site)) return;
+                    this.plan(text, baseUrl, site, 3).catch(() => { });
+                } catch (e) { }
+            },
+            status() {
+                const v = this.vue(), c = v && v._cutValid && v._cutValid();
+                return { ready: this.ready(), want: this.want(), active: !!c, cuts: c ? c.cuts.map(x => [+x.start.toFixed(1), +x.dur.toFixed(1)]) : [], last: this._last, busy: this._busy };
             }
         };
         let _lastProgressSaveTime = 0;  // timeupdate 节流时间戳（每15秒保存一次）
@@ -7473,6 +7824,8 @@
                         // 🗨️ 弹幕开关（服务端配置了 DANMU_API_URL 才开启）
                         this.danmakuEnabled = !!config.danmaku_enabled;
                         if (this.danmakuEnabled) console.log('[Config] 弹幕已开启');
+                        // ✂️ 服务器能托管剪后的清单(Safari 原生 HLS 播放前剪插播要它;Vercel 无状态 → false,原生通道退回播放中静默跳过)
+                        this.hlsCutEnabled = config.hls_cut === true;
                         // 📮 求片开关（服务端配置了 ADMIN_TOKEN 才开启；否则整个功能隐藏）
                         this.requestsEnabled = !!config.requests_enabled;
                         // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
@@ -9044,7 +9397,8 @@
                 openSharePanel() {
                     if (!this.currentGroup || !this.currentGroup.name) return;
                     this.shareIncludeTime = false;
-                    this.shareSeconds = (typeof dp !== 'undefined' && dp && dp.video) ? Math.floor(dp.video.currentTime || 0) : 0;
+                    // ✂️ 分享原时间轴的秒数(收到的人可能走没剪的线路/设备;打开时再按自己的剪段换算)
+                    this.shareSeconds = (typeof dp !== 'undefined' && dp && dp.video) ? Math.floor(this._cutToBase(dp.video.currentTime || 0)) : 0;
                     this.showSharePanel = true;
                 },
                 // 执行分享：移动端调系统分享面板，桌面端复制链接
@@ -9232,7 +9586,7 @@
                         const seekTick = () => {
                             st++;
                             if (typeof dp !== 'undefined' && dp && dp.video && dp.video.readyState >= 1 && dp.video.duration) {
-                                try { dp.seek(dl.t); dp.notice && dp.notice('▶ 已跳转到分享的时间点'); } catch (e) { }
+                                try { dp.seek(this._cutToPlay(dl.t)); dp.notice && dp.notice('▶ 已跳转到分享的时间点'); } catch (e) { }   // ✂️ 分享的是原时间轴
                                 return;
                             }
                             if (st < 40) setTimeout(seekTick, 300);
@@ -9348,15 +9702,20 @@
                         let session = ctx.getCurrentSession();
                         if (!session) { await ctx.requestSession(); session = ctx.getCurrentSession(); }
                         if (!session) return;
-                        const url = this._activeFinalUrl || this.currentUrl;
+                        let url = this._activeFinalUrl || this.currentUrl;
                         if (!url) { if (this.showMiniToast) this.showMiniToast('当前没有可投屏的视频'); return; }
+                        // ✂️ 播放前剪过插播:投剪后的清单(本站地址,电视自己去拉)、时间不用换算;拿不到剪后地址就投原地址、时间换回原时间轴
+                        let cutUrl = null;
+                        try { cutUrl = window.adCut ? await window.adCut.castUrl() : null; } catch (e) { }
+                        const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                        let t0 = (v && isFinite(v.currentTime)) ? v.currentTime : 0;
+                        if (cutUrl) url = cutUrl; else t0 = this._cutToBase(t0);
                         const mi = new chrome.cast.media.MediaInfo(url, 'application/x-mpegurl');
                         mi.streamType = chrome.cast.media.StreamType.BUFFERED;
                         mi.metadata = new chrome.cast.media.GenericMediaMetadata();
                         mi.metadata.title = (this.currentGroup && this.currentGroup.name) || '投屏';
                         const req = new chrome.cast.media.LoadRequest(mi);
-                        const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
-                        if (v && isFinite(v.currentTime) && v.currentTime > 0) req.currentTime = v.currentTime;
+                        if (t0 > 0) req.currentTime = t0;
                         await session.loadMedia(req);
                         if (this.showMiniToast) this.showMiniToast('📺 已投屏到 Chromecast');
                     } catch (e) {
@@ -10939,6 +11298,18 @@
                     const m = this._introMarks && this._introMarks.marks; if (!m) return;
                     m[this._introMarkKey(ep)] = rec;
                 },
+                // ✂️ 播放前剪掉插播后的时间轴换算(window.adCut 在剪后的清单就位时调 _setActiveCut)。
+                //   剪后时间轴 = 原时间轴去掉被剪段;进度/历史/片头片尾标记/分享时间/投屏一律按【原时间轴】存取,播放器上的 seek/比较才换成剪后时间。
+                //   有效性:hls.js 通道 owner 必须还是当前 dp.plugins.hls;原生通道 video.src 必须还是那个占位地址(换集/分诊换线后自动失效)
+                _setActiveCut(st) { this._activeCut = st || null; },
+                _cutValid() {
+                    const c = this._activeCut;
+                    if (!c || !c.cuts || !c.cuts.length || typeof dp === 'undefined' || !dp || !dp.video) return null;
+                    if (c.owner === 'native') return dp.video.src === c.src ? c : null;
+                    return (dp.plugins && dp.plugins.hls === c.owner) ? c : null;
+                },
+                _cutToBase(t) { const c = this._cutValid(); return (c && isFinite(t)) ? AdClipCore.fromCutTime(t, c.cuts) : t; },
+                _cutToPlay(t) { const c = this._cutValid(); return (c && isFinite(t)) ? AdClipCore.toCutTime(t, c.cuts) : t; },
                 _introChannel() {
                     try {
                         if (this._activeOffCached) return this.corsProxyUrl ? 'f' : 'r';   // 离线包是经代理(去广告)下载的
@@ -10955,7 +11326,7 @@
                         if (outro != null && isFinite(outro)) {
                             body.ed_start = Math.round(Number(outro) * 10) / 10;
                             if (isFinite(outroDuration) && outroDuration > 0) body.duration = Math.round(Number(outroDuration) * 10) / 10;
-                            else try { if (typeof dp !== 'undefined' && dp && dp.video && isFinite(dp.video.duration)) body.duration = Math.round(dp.video.duration * 10) / 10; } catch (e) { }
+                            else try { if (typeof dp !== 'undefined' && dp && dp.video && isFinite(dp.video.duration)) body.duration = Math.round(this._cutToBase(dp.video.duration) * 10) / 10; } catch (e) { }   // ✂️ 原时间轴时长(片尾标记在原时间轴上)
                         }
                         fetch('/api/intro/mark', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -10971,7 +11342,8 @@
                         this.introBtn.show = false; this._introRenderBtn();
                         // ⏳ 按钮提前 LEAD 秒亮出;提前期点击以前是"立刻跳到区间终点"——把区间前那几秒正片也一起跳掉了(用户反馈"多跳了几秒")。
                         //    现在提前期点击只"预约":到区间起点那一刻再跳(check() 里执行),一秒正片都不多切。
-                        const start = this.introBtn.start, now = (typeof dp !== 'undefined' && dp && dp.video) ? (dp.video.currentTime || 0) : 0;
+                        // ✂️ introBtn.start/to 在原时间轴上(见 skipManager.check):播放头换回原时间轴比,seek 时换成剪后时间
+                        const start = this.introBtn.start, now = this._cutToBase((typeof dp !== 'undefined' && dp && dp.video) ? (dp.video.currentTime || 0) : 0);
                         if (isFinite(start) && start > 0 && now < start - 0.3) {
                             this._introArm = { start, to, flag, kind: this.introBtn.kind };
                             try { dp.notice((flag === '_bumpSkipped' ? '开头' : flag === '_outroSkipped' ? '片尾' : '片头') + '开始时自动跳过'); } catch (e) { }
@@ -10982,7 +11354,7 @@
                         if (this.introBtn.kind === 'outro') {
                             if (typeof dp !== 'undefined' && dp) { dp.notice('已跳过片尾'); if (dp.events) dp.events.trigger('ended'); }
                         } else if (typeof dp !== 'undefined' && dp && isFinite(to)) {
-                            dp.seek(to); dp.notice(flag === '_bumpSkipped' ? '已跳过开头' : '已跳过片头');
+                            dp.seek(this._cutToPlay(to)); dp.notice(flag === '_bumpSkipped' ? '已跳过开头' : '已跳过片头');
                         }
                     } catch (e) { }
                 },
@@ -11342,6 +11714,9 @@
                             try {
                                 if (document.hidden) { armStartWatchdog(3000); this._startWdHidden = true; return; }
                                 if (this._startWdHidden) { this._startWdHidden = false; armStartWatchdog(14000); return; }   // 刚从后台回来:重新计满 14s
+                                // ✂️ 播放前剪插播的扫描还在跑(清单要等它)→ 不判死;扫完再给 8s 加载
+                                if (window.adCut && window.adCut.busy()) { this._startWdCut = true; armStartWatchdog(2000); return; }
+                                if (this._startWdCut) { this._startWdCut = false; armStartWatchdog(8000); return; }
                                 const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
                                 if (!v) return;
                                 const hasContent = !v.error && (v.readyState >= 3 || (v.currentTime || 0) > 0.1 || (v.buffered && v.buffered.length > 0));   // 已进 error 态=死透,缓冲过也不算
@@ -11507,6 +11882,8 @@
                                         // 🙈 页面隐藏时 Chrome 推迟媒体加载(见起播看门狗注释),不判死,等可见后再给完整 8s
                                         if (document.hidden) { wdWasHidden = true; armFallbackWd(3000); return; }
                                         if (wdWasHidden) { wdWasHidden = false; armFallbackWd(8000); return; }   // 刚从后台回来:重新计满 8s
+                                        // ✂️ 播放前剪插播的扫描还在跑 → 不判死;扫完再给 8s
+                                        if (window.adCut && window.adCut.busy()) { wdWasHidden = true; armFallbackWd(2000); return; }
                                         this._proxyRetrying = false;
                                         if (dp && dp.video && dp.video.readyState < 3 && (dp.video.currentTime || 0) === 0) {
                                             console.log('[播放器] 回退后仍未起播，自动切换下一个源');
@@ -11925,8 +12302,12 @@
                                         //   三个独立可跳区间:开头贴片(bs~be→「跳过开头」)、片头曲(os~oe→「跳过片头」)、片尾(ed→切下一集),各自只触发一次
                                         const v = this.vue, cur = v && v._introCur;
                                         // switchVideo 换集瞬间会发一次 currentTime=0 的 timeupdate、此时 duration=NaN；此刻绝不自动跳(否则新集从 oe 起播)
-                                        const dur = dp.video && dp.video.duration;
-                                        const safe = time > 1 && isFinite(dur) && dur > 0 && !dp.video.seeking;
+                                        const dur0 = dp.video && dp.video.duration;
+                                        const safe = time > 1 && isFinite(dur0) && dur0 > 0 && !dp.video.seeking;
+                                        // ✂️ 标记都在原时间轴上(服务器共享/离线分析/指纹学习都按原清单算):播放头和时长先换回原时间轴再比,seek 时再换成剪后时间
+                                        const toPlay = (x) => (v && v._cutToPlay) ? v._cutToPlay(x) : x;
+                                        if (v && v._cutToBase) time = v._cutToBase(time);
+                                        const dur = (v && v._cutToBase && isFinite(dur0)) ? v._cutToBase(dur0) : dur0;
                                         // ⏳ 提前期点过"跳过"→ 到区间起点再真正执行(见 introSkipNow)
                                         const arm = v && v._introArm;
                                         if (arm && safe) {
@@ -11934,7 +12315,7 @@
                                             else if (time >= arm.start - 0.15) {
                                                 v._introArm = null; v[arm.flag] = true;
                                                 if (arm.kind === 'outro') { dp.notice('已跳过片尾'); if (dp.events) dp.events.trigger('ended'); }
-                                                else { dp.seek(arm.to); dp.notice(arm.flag === '_bumpSkipped' ? '已跳过开头' : '已跳过片头'); }
+                                                else { dp.seek(toPlay(arm.to)); dp.notice(arm.flag === '_bumpSkipped' ? '已跳过开头' : '已跳过片头'); }
                                                 return;
                                             } else {
                                                 // 预约生效中:按钮保持收起,别在提前期里又把同一个按钮弹回来
@@ -11967,7 +12348,7 @@
                                                     if (!reg.in) { if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); } return; }
                                                     v[reg.flag] = true; if (v.introBtn.show) { v.introBtn.show = false; v._introRenderBtn(); }
                                                     if (reg.kind === 'outro') { dp.notice(reg.notice); if (dp.events) dp.events.trigger('ended'); }
-                                                    else { dp.seek(reg.to); dp.notice(reg.notice); }
+                                                    else { dp.seek(toPlay(reg.to)); dp.notice(reg.notice); }
                                                     return;
                                                 }
                                                 if (v.introSkipShow && (!v.introBtn.show || v.introBtn.to !== reg.to || v.introBtn.kind !== reg.kind)) { v.introBtn.label = reg.label; v.introBtn.to = reg.to; v.introBtn.flag = reg.flag; v.introBtn.kind = reg.kind; v.introBtn.start = reg.start; v.introBtn.show = true; v._introRenderBtn(); }
@@ -12065,7 +12446,8 @@
                                         if (v.paused || v.seeking) return;
                                         if (v.playbackRate !== 1) return;   // 倍速下频谱变形+时间轴错位 → 指纹不可用,本 tick 跳过(不污染 rec/不误配)
                                         if (this.ctx && this.ctx.state === 'suspended') { this.ctx.resume().catch(() => { }); return; }
-                                        const t = v.currentTime;
+                                        // ✂️ 按原时间轴记录(播放前剪过插播时换算回去):录制/学出的片头时间与服务器共享标记、离线分析同一时间轴
+                                        const t = (this.vue && this.vue._cutToBase) ? this.vue._cutToBase(v.currentTime) : v.currentTime;
                                         if (!isFinite(t) || t < 0) return;
                                         if (this.firstT == null) this.firstT = t;   // 记录首个采样时间点:续看从中段起播的残缺指纹不落盘(否则污染学习)
                                         if (t >= this.WIN) { this._maybeLearn(); if (this.timer) { clearInterval(this.timer); this.timer = 0; if (this.recCnt >= 120) this._saveRec(); } return; }
@@ -13919,19 +14301,20 @@
 
                                 if (saved) {
                                     const savedData = JSON.parse(saved);
-                                    const savedTime = Number(savedData.time);
+                                    const savedTime = Number(savedData.time);   // 原时间轴(✂️ 剪过插播时 seek 前换成剪后时间)
                                     const savedDate = new Date(savedData.date);
                                     const now = new Date();
                                     const daysDiff = (now - savedDate) / (1000 * 60 * 60 * 24);
+                                    const playTime = this._cutToPlay(savedTime);
 
                                     // 只恢复30天内的进度，且进度在有效范围内
                                     const isTimeOK = daysDiff < 30;
                                     const isMinOK = savedTime > 60;  // 至少看过1分钟
-                                    const isMaxOK = dp.video.duration && savedTime < dp.video.duration - 120;  // 距离结尾>2分钟
+                                    const isMaxOK = dp.video.duration && playTime < dp.video.duration - 120;  // 距离结尾>2分钟
 
                                     if (isTimeOK && isMinOK && isMaxOK) {
-                                        safeSeek(savedTime);
-                                        dp.notice(`▶ 已恢复上次观看位置 ${Math.floor(savedTime / 60)}:${String(Math.floor(savedTime % 60)).padStart(2, '0')}`, 3000);
+                                        safeSeek(playTime);
+                                        dp.notice(`▶ 已恢复上次观看位置 ${Math.floor(playTime / 60)}:${String(Math.floor(playTime % 60)).padStart(2, '0')}`, 3000);
                                     }
                                 }
                             } catch (e) {
@@ -13946,7 +14329,9 @@
                         // - 距离结尾 < 2分钟 视为完播，清除进度
                         const saveProgress = (currentTime) => {
                             if (this._liveActive) return;  // 📺 直播无进度：不写进度键、不进 VOD 历史(改记最近频道)
-                            const duration = dp.video?.duration || 0;
+                            // ✂️ 进度/历史一律存原时间轴(换线路、换设备、离线副本都对得上;播放前剪过插播时换算回去)
+                            currentTime = this._cutToBase(currentTime);
+                            const duration = this._cutToBase(dp.video?.duration || 0);
 
                             // 获取电影信息用于观看历史
                             const movieName = this.currentGroup?.name || '';
@@ -14043,7 +14428,7 @@
                             const poster = this.currentGroup?.pic || '';
                             const currentEp = this.episodeList?.find(ep => ep.url === this.currentUrl);
                             const episodeName = (currentEp && (this.episodeList?.length > 1 || this._offlineEpisodic())) ? currentEp.name : null;
-                            const duration = dp.video?.duration || 0;
+                            const duration = this._cutToBase(dp.video?.duration || 0);   // ✂️ 原时间轴
                             if (movieName) {
                                 this.addToWatchHistory(movieName, poster, episodeName, duration, duration, this.currentGroup);
                             }
@@ -14133,17 +14518,18 @@
 
                                 if (saved) {
                                     const savedData = JSON.parse(saved);
-                                    const savedTime = Number(savedData.time);
+                                    const savedTime = Number(savedData.time);   // 原时间轴(✂️ 剪过插播时换成剪后时间再 seek)
                                     const savedDate = new Date(savedData.date);
                                     const daysDiff = (new Date() - savedDate) / (1000 * 60 * 60 * 24);
+                                    const playTime = this._cutToPlay(savedTime);
 
                                     const isTimeOK = daysDiff < 7;
                                     const isMinOK = savedTime > 10;
-                                    const isMaxOK = dp.video.duration && savedTime < dp.video.duration - 30;
+                                    const isMaxOK = dp.video.duration && playTime < dp.video.duration - 30;
 
                                     if (isTimeOK && isMinOK && isMaxOK) {
                                         setTimeout(() => {
-                                            safeSeek(savedTime);
+                                            safeSeek(this._cutToPlay(savedTime));
                                             dp.notice(`▶ 已恢复上次观看位置`, 2000);
                                         }, 500);
                                     }
@@ -14668,7 +15054,8 @@
                         if (!m || !m.url) return false;
                         if (this._offRedirectBad && this._offRedirectBad[m.epKey]) return false;
                         if (offlineKey(this.currentUrl) === offlineKey(m.url)) return false;   // 已经在播缓存副本
-                        const t = (dp && dp.video && Number.isFinite(dp.video.currentTime)) ? dp.video.currentTime : 0;
+                        // ✂️ 离线副本是原时间轴(不剪):播放前剪过插播时先换算回原时间再续播
+                        const t = this._cutToBase((dp && dp.video && Number.isFinite(dp.video.currentTime)) ? dp.video.currentTime : 0);
                         console.log('[离线] 播放中断但本集有离线缓存 → 切缓存副本续播 @' + t.toFixed(0) + 's');
                         try { if (dp && dp.notice) dp.notice('网络不稳定，已切换到离线缓存续播', 3000); } catch (e) { }
                         cur.url = m.url;   // 钉回缓存 URL(高亮/下一集一致)
@@ -15275,10 +15662,12 @@
                     try {
                         if (!url.includes('.m3u8')) return;
                         const mySeq = _navSeq;
+                        const site = this.currentSource && this.currentSource.site_key;
                         let finalUrl = url;
                         if (this.currentSource && this.currentSource._useProxy && this.currentSource._proxyUrl) {
                             finalUrl = `${this.currentSource._proxyUrl}/?url=${encodeURIComponent(url)}`;
-                        } else if (window.AdFilter && window.AdFilter.isEnabled() && this.corsProxyUrl) {
+                        } else if (window.AdFilter && window.AdFilter.isEnabled() && this.corsProxyUrl && !this._adProxyBad(site)) {
+                            // 与 play() 同一路由:源站封了 worker 的站(_adProxyBad,如电影天堂)直连 —— 否则预热打到 worker 必 403,预扫的清单也对不上
                             finalUrl = this.corsProxyUrl + '/?url=' + encodeURIComponent(url);
                         }
                         let res, text;
@@ -15301,6 +15690,8 @@
                             text = await res.text();
                             lines = text.split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
                         }
+                        // ✂️ 需要播放前剪插播的站:顺手把下一集也扫好(结果进会话缓存,切集时清单直接剪好、零等待)
+                        try { if (window.adCut && mySeq === _navSeq) window.adCut.prefetch(text, res && res.url ? res.url : baseUrl, site); } catch (e) { }
                         // ⚠️ 分段预热只在【代理路径】做：代理无条件回 ACAO 头安全；直连源若按 Origin 条件回 CORS 头
                         //    且无 Vary:Origin，no-cors 预热会把"无 ACAO 的响应"塞进 HTTP 缓存，反而让 hls.js 的
                         //    CORS 请求命中坏缓存而失败——直连时跳过分段预热(m3u8 预热已完成,收益保留大半)。
