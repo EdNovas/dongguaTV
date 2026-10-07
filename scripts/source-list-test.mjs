@@ -43,7 +43,7 @@ const cEnd = html.indexOf('const EARLY_SETTLE_MS = 1200;');
 if (cStart < 0 || cEnd < 0) throw new Error('SRC_* consts not found');
 const consts = html.slice(cStart, cEnd + 'const EARLY_SETTLE_MS = 1200;'.length);
 
-const methods = ['srcProfile', '_srcFilterOn', '_srcClipOn', '_srcUnreach', '_kzWorkerOk', 'srcGroupOf', '_srcAdBad', 'srcTierRank', '_srcResRankOf', 'srcResRank', 'srcResLabel', 'srcTierLabel', 'srcTitle',
+const methods = ['srcProfile', '_srcFilterOn', '_srcClipOn', '_clipNativeBadMap', '_clipNativeBad', '_clipNativeSet', '_srcUnreach', '_kzWorkerOk', 'srcGroupOf', '_srcAdBad', 'srcTierRank', '_srcResRankOf', 'srcResRank', 'srcResLabel', 'srcTierLabel', 'srcTitle',
     '_srcReachClass', '_pickPreferred', '_autoPick', '_earlyPick', '_srcLogTag', '_failoverNext', '_isKzSource'];
 const computed = ['playableSources', 'sourceGroups', 'availableSources', 'fastSources', 'slowSources'];
 let objSrc = '{\n';
@@ -64,7 +64,7 @@ function mk(opts) {
         _adProxyBad: k => !!bad[k],
         _sourceHasEpisode: (s, ep) => ((ep && noEp[s.site_key]) ? false : null),
         _srcHevcOk: () => opts.hevc !== false,
-    }, { AdFilter: { isEnabled: () => opts.adFilter !== false }, Hls: { isSupported: () => true }, AdClipCore: {}, _dgPreferNativeHls: !!opts.nativeHls }, { getItem: () => null, setItem() { }, removeItem() { } }, { hostname: opts.host || 'localhost' });
+    }, { AdFilter: { isEnabled: () => opts.adFilter !== false }, Hls: { isSupported: () => true }, AdClipCore: opts.oldCore ? {} : { probeTs() { } }, adClipSkip: {}, _dgPreferNativeHls: !!opts.nativeHls, fetch: opts.noFetch ? undefined : () => null, Uint8Array }, { getItem: k => (opts.ls && opts.ls[k]) || null, setItem(k, v) { if (opts.ls) opts.ls[k] = v; }, removeItem() { } }, { hostname: opts.host || 'localhost' });
 }
 
 // ---------- 迷你断言 ----------
@@ -184,11 +184,35 @@ console.log('[4b] _srcFilterOn:noburn 只有 worker 真在链路里才算插播�
 }
 
 {
-    // clip:如意的中插只能靠播放器按分辨率跳 → 原生 HLS(iOS/Safari)上跳不了 → 有插播
+    // clip:如意/电影天堂的插播靠播放器按分辨率突变 / 时间戳重启跳 → 只看本机播放器能不能跳
+    //   (hls.js 通道,或原生 HLS 的 attachNative 扫描器:要 fetch);与 worker 在不在链路里无关(电影天堂源站封 worker,只能直连)
     const R = () => S('rycj', 'direct', 300, null);
     const P = { rycj: { tier: 'noburn', res: '1080p', clip: 1 } };
     eq(mk({ profiles: P }).vm.srcProfile(R()).tier, 'noburn', 'clip 站:hls.js 通道能跳 → 仍算插播已去除');
-    eq(mk({ profiles: P, nativeHls: true }).vm.srcProfile(R()).tier, 'insert', 'clip 站:原生 HLS 跳不了 → 有插播');
+    eq(mk({ profiles: P, nativeHls: true }).vm.srcProfile(R()).tier, 'noburn', 'clip 站:原生 HLS(iOS/Safari)由扫描器自己探分片头 → 也能跳 → 插播已去除');
+    eq(mk({ profiles: P, nativeHls: true, noFetch: true }).vm.srcProfile(R()).tier, 'insert', 'clip 站:原生 HLS 且没有 fetch → 跳不了 → 有插播');
+    eq(mk({ profiles: P, cors: false }).vm.srcProfile(R()).tier, 'noburn', 'clip 站:没配去广告代理也照样靠播放器跳 → 插播已去除');
+    eq(mk({ profiles: P, adBad: { rycj: 1 } }).vm.srcProfile(R()).tier, 'noburn', 'clip 站:源站封了 worker(电影天堂)只能直连 → 播放器照样跳 → 插播已去除');
+    eq(mk({ profiles: { ffzy: { tier: 'noburn' } }, adBad: { ffzy: 1 } }).vm.srcProfile(S('ffzy', 'direct', 300, null)).tier, 'insert', '非 clip 站:源站封了 worker → 有插播(只有 worker 能去)');
+    // 原生扫描器在该站跑不起来(清单/分片跨域、加密、多码率)的记账:原生通道如实标有插播;hls.js 通道不受影响;扫描成功即消账
+    const bad = JSON.stringify({ rycj: Date.now() });
+    eq(mk({ profiles: P, nativeHls: true, ls: { donggua_clipnative_bad: bad } }).vm.srcProfile(R()).tier, 'insert', 'clip 站:原生通道该站扫描器跑不起来过 → 有插播');
+    eq(mk({ profiles: P, ls: { donggua_clipnative_bad: bad } }).vm.srcProfile(R()).tier, 'noburn', 'clip 站:同样的记录对 hls.js 通道无影响');
+    eq(mk({ profiles: P, nativeHls: true, ls: { donggua_clipnative_bad: JSON.stringify({ rycj: Date.now() - 4 * 86400 * 1000 }) } }).vm.srcProfile(R()).tier, 'noburn', 'clip 站:记录 3 天后过期');
+    {
+        const ls = {};
+        const { vm } = mk({ profiles: P, nativeHls: true, ls });
+        vm.srcRev = 0;
+        vm._clipNativeSet('rycj', true);
+        eq(vm.srcProfile(R()).tier, 'insert', '记账后立刻改标有插播');
+        ok(vm.srcRev === 1 && /rycj/.test(ls.donggua_clipnative_bad || ''), '记账:srcRev 自增 + 写 localStorage');
+        vm._clipNativeSet('rycj', false);
+        eq(vm.srcProfile(R()).tier, 'noburn', '之后扫描成功 → 消账,恢复无广告');
+        ok(vm.srcRev === 2, '消账也触发重算');
+        vm._clipNativeSet('rycj', false);
+        ok(vm.srcRev === 2, '没有记录时消账不重复触发重算');
+    }
+    eq(mk({ profiles: P, oldCore: true }).vm.srcProfile(R()).tier, 'insert', 'clip 站:页面配上旧版判定核心(没有 probeTs,SW 过渡期)→ 宁可标有插播');
     eq(mk({ profiles: { ffzy: { tier: 'noburn' } }, nativeHls: true }).vm.srcProfile(S('ffzy', 'direct', 300, null)).tier, 'noburn', '非 clip 站:原生 HLS 照样靠 worker 去插播');
     eq(mk({ profiles: P }).vm.srcProfile(R()).clip, true, 'srcProfile 透出 clip');
 }

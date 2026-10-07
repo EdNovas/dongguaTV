@@ -1,5 +1,5 @@
 /*!
- * ad-clip-core.js v2 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
+ * ad-clip-core.js v4 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
  * 不碰 DOM、不碰 hls 实例;运行时包装在 public/index.html 的 window.adClipSkip,回归测试 scripts/adclip-test.mjs。
  *
  * 为什么要它:CF Worker 只能按清单删插播(看 DISCONTINUITY 分组的时长/目录/域名)。如意(rycj)把 20-22 秒的棋牌广告
@@ -15,7 +15,7 @@
  *
  * 判定(精度优先 —— 宁可漏跳,绝不吃正片):
  *   R 模式(分辨率):连续若干组分辨率(±5% 视为相同)≠ 主分辨率;前后都是主分辨率;且前后组的 PTS 偏移能"架桥"跨过它。
- *   P 模式(时间戳):单组、分辨率与主相同,但首帧 PTS 重新开始且前后架桥成立(同分辨率插播)。
+ *   P 模式(时间戳):分辨率与主相同,但首帧 PTS 重新开始(+ 后面接着同一时钟的组,电影天堂一支广告切成两组)且前后架桥成立。
  *   片头(第一组):只在"刚开始播、没拖动过"时、≤15s 才跳(R 模式);片尾(最后一组):必须 PTS 重新开始、≤25s。
  *   左侧未知(拖进/续看落在段中):必须 PTS 重新开始 + 更强的主分辨率证据。
  *   段长 ≤60s、≤全片 10%;已知内容里非主分辨率 / 重新开始的组合计 >12% → 熔断不跳(片源本身就花)。
@@ -50,9 +50,11 @@
         restartMinStart: 30, //   且该组不在片头 30s 内(正片自己也从 ~1.4s 开始)
         preMax: 15,          // 片头贴片最长(实测 5.25/5.85s);且只在刚开始播时跳
         tailMax: 25,         // 片尾插播最长(实测 12.16-17.67s)
-        ptsMaxRun: 45,       // P 模式(同分辨率)单组上限
+        ptsMaxRun: 45,       // P 模式(同分辨率)一段上限(可跨多组)
+        clockTol: 0.5,       // 相邻两组 PTS 偏移差 ≤0.5s = 同一时钟(实测同一支广告/同一段正片的组之间差 0.000s)
         fuseShare: 0.12,     // 已知内容里"非主分辨率 + PTS 重新开始"合计占比上限
-        fuseMinKnown: 300    //   已知 ≥300s 才启用熔断(太少时占比没意义,交给证据规则)
+        fuseMinKnown: 300,   //   已知 ≥300s 才启用熔断(太少时占比没意义,交给证据规则)
+        maxCutShare: 0.15    // planCuts:整集剪掉的总时长上限(实测单集插播合计最多 ~4%)
     };
 
     // hls.js 的 fragments → 按 cc 切成连续组。必须用 hls 实例里的【活】Fragment(FRAG_PARSED 后 start 会按 PTS 修正:
@@ -136,17 +138,58 @@
             var off = offOf(g.cc);
             return off != null && isFinite(off) && g.start > o.restartMinStart && off + g.start < o.restartMax;
         };
+        var offv = function (g) { var x = offOf(g.cc); return x != null && isFinite(x) ? x : null; };
+        var sameClock = function (a, b) { var x = offv(a), y = offv(b); return x != null && y != null && Math.abs(x - y) <= o.clockTol; };
+        // 同分辨率插播可能跨好几个 DISCONTINUITY 组(电影天堂:8.5s 一组 PTS 从 1.47s 重新开始 + 下一组接着同一时钟 10.6s;
+        //   2026-10-06 实测《兰香如故》113 组里 2 段都是这样)。从"重新开始"的组往后并入:同一时钟的组、紧接着又重新开始的组
+        //   (背靠背的下一支);只并已知且是主分辨率的组;超过 ptsMaxRun 就停(整段交给 pts-too-long 拒掉)。
+        //   下一组未知 → 停在这里,右侧封口/架桥会因为它未知而 wait。
+        var chainEnd = function (i) {
+            var j = i;
+            while (j < groups.length - 1 && groups[j].end - groups[i].start <= o.ptsMaxRun) {
+                var nx = groups[j + 1];
+                if (!isMain(resOf(nx.cc)) || !(sameClock(groups[j], nx) || restart(nx))) break;
+                j++;
+            }
+            return j;
+        };
+        // 后一组的时间戳能被"段内某个重启组的时钟接着走"解释(off(后) ≤ off(重启组)):说明后面的正片可能就是段内那个新时钟
+        //   (合集下一集 / 单独编码的片头卡从 ~1.4s 开始),架桥只是巧合 —— 前一组恰好也是个年轻时钟、长度又碰巧对上
+        //   (2026-10-06 审查构造:广告 20s | 下一集开头 20s | 两组插播 | 下一集继续 → 会把下一集开头 20s 一起跳掉)。
+        //   真插播之后的正片 PTS 是几百秒的老时钟,远大于段内重启时钟(≤ 45+1.5s),不受影响
+        var youngClock = function (i, j, b) {
+            for (var k = i; k <= j; k++) { var ok0 = offv(groups[k]); if (restart(groups[k]) && ok0 != null && b <= ok0 + o.bridgeTol) return true; }
+            return false;
+        };
+        var bridgeOk = function (i, j) {
+            if (i <= 0 || j >= groups.length - 1) return false;
+            var p = groups[i - 1], n = groups[j + 1];
+            if (!isMain(resOf(p.cc)) || !isMain(resOf(n.cc))) return false;
+            var a = offv(p), b = offv(n);
+            if (a == null || b == null || Math.abs(a - b - (groups[j].end - groups[i].start)) > o.bridgeTol) return false;
+            return !youngClock(i, j, b);
+        };
 
         var g0 = gi, g1 = gi, mode;
         if (other(r)) {
             mode = 'res';   // 连续的"非主分辨率"组合并成一段(广告位里背靠背的几支广告分辨率可能各不相同)
             while (g0 > 0 && other(resOf(groups[g0 - 1].cc))) g0--;
             while (g1 < groups.length - 1 && other(resOf(groups[g1 + 1].cc))) g1++;
-        } else if (restart(groups[gi])) {
-            mode = 'pts';   // 同分辨率,但首帧 PTS 重新开始:单组
         } else {
-            // 播放头在正片里:照样带上主分辨率(运行时据此判断前方刚解析出的组"像不像正片",决定要不要加大预加载)
-            return { act: 'none', why: 'main', main: { res: st.main, dur: st.mainDur, known: st.known } };
+            // 同分辨率:往回找 ptsMaxRun 之内、链能接到当前组的"重新开始"组(当前组自己也算)。有几个就优先选前后能架桥的那个
+            //   (合集里下一集正片也从 ~1.4s 开始,它的链会一路接进紧随其后的广告;最早的不一定是广告起点),都架不上取最早的
+            var cands = [];
+            for (var k2 = gi; k2 >= 0 && groups[gi].start - groups[k2].start <= o.ptsMaxRun; k2--) {
+                if (restart(groups[k2]) && isMain(resOf(groups[k2].cc)) && chainEnd(k2) >= gi) cands.unshift(k2);
+            }
+            if (!cands.length) {
+                // 播放头在正片里:照样带上主分辨率(运行时据此判断前方刚解析出的组"像不像正片",决定要不要加大预加载)
+                return { act: 'none', why: 'main', main: { res: st.main, dur: st.mainDur, known: st.known } };
+            }
+            mode = 'pts';
+            g0 = cands[0];
+            for (var c2 = 0; c2 < cands.length; c2++) if (bridgeOk(cands[c2], chainEnd(cands[c2]))) { g0 = cands[c2]; break; }
+            g1 = chainEnd(g0);
         }
         var run = { g0: g0, g1: g1, cc0: groups[g0].cc, cc1: groups[g1].cc, start: groups[g0].start, end: groups[g1].end, res: r, mode: mode };
         run.dur = run.end - run.start;
@@ -195,6 +238,8 @@
         if (atEnd) {
             if (!restart(groups[g0])) return offOf(groups[g0].cc) == null ? out('wait', 'tail-pts-unknown') : out('none', 'tail-no-restart');
             if (run.dur > o.tailMax) return out('none', 'tail-too-long');
+            // 片尾没有"后一组"可架桥:同分辨率只认单组(与 v2 一致)。片尾彩蛋/下集预告单独编码、又被切成两组时,多组链会把它当广告结束整集
+            if (mode === 'pts' && g1 !== g0) return out('none', 'tail-multi');
         }
         // 左侧未知(拖进/续看落在段中):段真实起点不可知 → 必须 PTS 重新开始
         if (leftUnknown && !restart(groups[g0])) return offOf(groups[g0].cc) == null ? out('wait', 'left-pts-unknown') : out('none', 'left-no-restart');
@@ -204,6 +249,7 @@
             if (op == null || on == null || !isFinite(op) || !isFinite(on)) return out('wait', 'bridge-unknown');
             run.bridge = op - on - run.dur;
             if (Math.abs(run.bridge) > o.bridgeTol) return out('none', 'no-bridge');
+            if (mode === 'pts' && youngClock(g0, g1, on)) return out('none', 'young-clock');
         }
 
         // 证据:主分辨率已知时长足够、且在"候选段之外"的已知内容里占绝对多数
@@ -216,18 +262,24 @@
         //   不计:正在判的这一段本身、以及前后都是主分辨率且架桥成立的组(已经确认是插播,不是"片源花")
         if (st.known >= o.fuseMinKnown) {
             var odd = 0;
-            var bridged = function (i) {
-                if (i <= 0 || i >= groups.length - 1) return false;
-                var p = groups[i - 1], n = groups[i + 1];
-                if (!isMain(resOf(p.cc)) || !isMain(resOf(n.cc))) return false;
-                var a = offOf(p.cc), b = offOf(n.cc);
-                return a != null && b != null && Math.abs(a - b - groups[i].dur) <= o.bridgeTol;
-            };
             for (var i = 0; i < groups.length; i++) {
                 if (i >= g0 && i <= g1) continue;
                 var rr = resOf(groups[i].cc);
                 if (!rr) continue;
-                if ((other(rr) || restart(groups[i])) && !bridged(i)) odd += groups[i].dur;
+                var oth = other(rr);
+                if (!oth && !restart(groups[i])) continue;
+                // 整段(连续非主分辨率 / 重新开始的链)前后架桥成立 = 已确认的插播,不算"片源花"
+                var j2 = i;
+                if (oth) { while (j2 < groups.length - 1 && other(resOf(groups[j2 + 1].cc))) j2++; }
+                else j2 = chainEnd(i);
+                if (!bridgeOk(i, j2)) {
+                    for (var q2 = i; q2 <= j2; q2++) {
+                        if (q2 >= g0 && q2 <= g1) continue;
+                        var r2 = resOf(groups[q2].cc);
+                        if (r2 && (other(r2) || restart(groups[q2]))) odd += groups[q2].dur;
+                    }
+                }
+                i = j2;
             }
             if (odd / st.known > o.fuseShare) return out('none', 'fuse');
         }
@@ -235,5 +287,208 @@
         return out('seek', mode === 'res' ? 'run' : 'pts-run', { to: next.start + o.landPad });
     }
 
-    return { DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide };
+    // ===== 播放前整份剪掉(v4):每组的分辨率/偏移都探到以后,一次算出全部插播段 =====
+    //   逐组调用 decide(就像播放头刚到该组开头、刚开始播):判定规则与播放中跳过完全同一套(架桥/熔断/片头片尾/年轻时钟……)。
+    //   片头贴片按"刚开始播"判(剪掉后时间轴上就没有它);片尾广告(ended)也剪。重叠的段取并集(各自都已单独通过判定)。
+    //   安全阀:剪掉的总时长 > 全片 maxCutShare(15%)→ 一段都不剪(片源本身花/时间戳乱,交给播放中的保守判定)。
+    //   返回 [{ g0, g1, cc0, cc1, start, end, dur, mode, tail }](按时间排序)
+    function planCuts(groups, resOf, opt, ctx) {
+        ctx = ctx || {};
+        if (!groups || !groups.length) return [];
+        var o = {}, k;
+        for (k in DEF) o[k] = DEF[k];
+        if (opt) for (k in opt) o[k] = opt[k];
+        var runs = [];
+        for (var i = 0; i < groups.length; i++) {
+            if (groups[i].dur <= o.lead) continue;   // 短到 t+lead 落进下一组的组,由下一组那次判定覆盖
+            var d = decide(groups, resOf, groups[i].start, o, { offOf: ctx.offOf, freshStart: true, rate: 1 });
+            if ((d.act !== 'seek' && d.act !== 'ended') || !d.run) continue;
+            runs.push({ g0: d.run.g0, g1: d.run.g1, mode: d.run.mode, tail: d.act === 'ended' });
+        }
+        runs.sort(function (a, b) { return a.g0 - b.g0 || b.g1 - a.g1; });
+        var merged = [];
+        runs.forEach(function (r) {
+            var m = merged[merged.length - 1];
+            if (m && r.g0 <= m.g1) { if (r.g1 > m.g1) m.g1 = r.g1; m.tail = m.tail || r.tail; return; }
+            merged.push({ g0: r.g0, g1: r.g1, mode: r.mode, tail: r.tail });
+        });
+        var total = groups[groups.length - 1].end - groups[0].start, cut = 0;
+        merged.forEach(function (m) {
+            m.cc0 = groups[m.g0].cc; m.cc1 = groups[m.g1].cc;
+            m.start = groups[m.g0].start; m.end = groups[m.g1].end; m.dur = m.end - m.start;
+            cut += m.dur;
+        });
+        if (!(total > 0) || cut > (o.maxCutShare || 0.15) * total) return [];
+        return merged;
+    }
+
+    // 原时间轴 ↔ 剪后时间轴(剪掉的段之后整体前移;落在剪掉的段里 → 段后第一帧)
+    function toCutTime(t, cuts) {
+        var s = 0;
+        for (var i = 0; i < (cuts || []).length; i++) {
+            var c = cuts[i];
+            if (t >= c.end) s += c.dur;
+            else if (t >= c.start) return c.start - s;
+        }
+        return t - s;
+    }
+    function fromCutTime(t, cuts) {
+        var s = 0;
+        for (var i = 0; i < (cuts || []).length; i++) {
+            var c = cuts[i];
+            if (t + s >= c.start) s += c.dur; else break;
+        }
+        return t + s;
+    }
+
+    // 把媒体清单里属于 cutCcs 的分片(连同它们前面的标签:EXTINF / DISCONTINUITY …)删掉,其余原样保留;分片地址一律改成绝对地址
+    //   (剪后的清单会从 blob: / 本站地址加载,相对地址会解析错)。cc 计数与 hls.js 相同(DISCONTINUITY-SEQUENCE 起,每个 DISCONTINUITY +1)。
+    //   加密 / fMP4(EXT-X-MAP)/ BYTERANGE 清单不处理(返回 null):KEY/MAP 是"之后都生效"的状态标签,删块会把它们一起删掉。
+    function cutPlaylist(text, baseUrl, cutCcs) {
+        if (typeof text !== 'string' || !/#EXTM3U/.test(text) || !/#EXT-X-ENDLIST/i.test(text)) return null;
+        if (/#EXT-X-KEY:(?![^\n]*METHOD=NONE)/i.test(text) || /#EXT-X-MAP|#EXT-X-BYTERANGE/i.test(text)) return null;
+        var drop = {};
+        (cutCcs || []).forEach(function (c) { drop[c] = 1; });
+        var lines = text.split(/\r?\n/), head = [], out = [], pend = [], cc = 0, seenSeg = false, removed = 0, removedDur = 0, kept = 0, dur = 0, endTags = [];
+        var m = text.match(/#EXT-X-DISCONTINUITY-SEQUENCE:(\d+)/i);
+        if (m) cc = +m[1];
+        for (var i = 0; i < lines.length; i++) {
+            var l = lines[i].trim();
+            if (!l) continue;
+            if (/^#EXT-X-ENDLIST/i.test(l)) { endTags.push(l); continue; }
+            if (l[0] === '#') {
+                if (/^#EXT-X-DISCONTINUITY(?!-)/i.test(l)) { cc++; pend.push(l); continue; }
+                if (/^#EXTINF:/i.test(l)) { dur = parseFloat(l.slice(8)) || 0; pend.push(l); continue; }
+                // 分片前的其它标签(PROGRAM-DATE-TIME 等)跟着分片走;第一个分片之前的是清单头
+                if (!seenSeg && !pend.length) head.push(l); else pend.push(l);
+                continue;
+            }
+            seenSeg = true;
+            var abs;
+            try { abs = new URL(l, baseUrl).href; } catch (e) { return null; }
+            if (drop[cc]) { removed++; removedDur += dur; }
+            else { for (var j = 0; j < pend.length; j++) out.push(pend[j]); out.push(abs); kept++; }
+            pend = []; dur = 0;
+        }
+        if (!kept) return null;   // 绝不交出 0 分片清单(worker 保险丝同理)
+        return { text: head.concat(out, endTags.length ? endTags : ['#EXT-X-ENDLIST']).join('\n') + '\n', removed: removed, removedDur: removedDur, kept: kept };
+    }
+
+    // ===== 浏览器原生 HLS(iOS/iPadOS/Safari)用:从分片开头几 KB 里读出首帧视频 PTS 与分辨率 =====
+    //   原生播放器不给页面任何分片信息(没有 hls.js 的 INIT_PTS_FOUND / FRAG_PARSING_INIT_SEGMENT),只能自己取每组首个分片的
+    //   前 16KB 解析 MPEG-TS:PAT → PMT → 视频 PID → 第一个 PES 的 PTS;H.264 再从该 PES 的 SPS 算宽高(与 hls.js 同一算法)。
+    //   返回 { pts(秒), width, height, codec('avc'|'hevc'|'') } 或 null(不是 TS / 加密 / 数据不够)。
+    function probeTs(buf) {
+        var b = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+        var n = b.length, start = -1, i;
+        // 同步字节:允许前面有伪装头(如分片伪装成 PNG),与 hls.js 一样在前 1000 字节内找连续三个 0x47
+        for (i = 0; i < Math.min(1000, n - 376); i++) if (b[i] === 0x47 && b[i + 188] === 0x47 && b[i + 376] === 0x47) { start = i; break; }
+        if (start < 0) return null;
+        var pmtPid = -1, vPid = -1, vType = 0, pts = null, es = [], esLen = 0, collecting = false;
+        for (var p = start; p + 188 <= n; p += 188) {
+            if (b[p] !== 0x47) break;
+            var pusi = (b[p + 1] & 0x40) !== 0, pid = ((b[p + 1] & 0x1f) << 8) | b[p + 2], afc = (b[p + 3] >> 4) & 3;
+            var off = p + 4;
+            if (afc === 2) continue;           // 只有适配域,无负载
+            if (afc === 3) off += 1 + b[p + 4];
+            if (off >= p + 188) continue;
+            if (pid === 0 && pusi && pmtPid < 0) {
+                var q = off + 1 + b[off];      // pointer_field
+                var secLen = ((b[q + 1] & 0x0f) << 8) | b[q + 2];
+                for (var k = q + 8; k + 4 <= q + 3 + secLen - 4; k += 4) {
+                    var prog = (b[k] << 8) | b[k + 1];
+                    if (prog !== 0) { pmtPid = ((b[k + 2] & 0x1f) << 8) | b[k + 3]; break; }
+                }
+            } else if (pid === pmtPid && pusi && vPid < 0) {
+                var r = off + 1 + b[off];
+                var sl = ((b[r + 1] & 0x0f) << 8) | b[r + 2];
+                var end = r + 3 + sl - 4, pil = ((b[r + 10] & 0x0f) << 8) | b[r + 11];
+                for (var s = r + 12 + pil; s + 5 <= end;) {
+                    var st = b[s], epid = ((b[s + 1] & 0x1f) << 8) | b[s + 2], esil = ((b[s + 3] & 0x0f) << 8) | b[s + 4];
+                    if (st === 0x1b || st === 0x24) { vPid = epid; vType = st; break; }
+                    s += 5 + esil;
+                }
+            } else if (pid === vPid && vPid >= 0) {
+                if (pusi) {
+                    if (collecting) break;     // 第一个视频 PES 收齐了
+                    if (b[off] !== 0 || b[off + 1] !== 0 || b[off + 2] !== 1) continue;
+                    var flags = b[off + 7], hdl = b[off + 8];
+                    // PES 头跨到下一个包(适配域很长时):不读 —— 改读下一帧的 PTS 会让偏移差一帧,宁可这组不知道
+                    if (off + 9 + hdl > p + 188) return null;
+                    if (flags & 0x80) {
+                        var x = off + 9;
+                        pts = ((b[x] >> 1) & 7) * 1073741824 + b[x + 1] * 4194304 + (b[x + 2] >> 1) * 32768 + b[x + 3] * 128 + (b[x + 4] >> 1);
+                    }
+                    collecting = true;
+                    es.push(b.subarray(off + 9 + hdl, p + 188)); esLen += p + 188 - (off + 9 + hdl);
+                } else if (collecting) {
+                    es.push(b.subarray(off, p + 188)); esLen += p + 188 - off;
+                    if (esLen > 8192) break;   // SPS 在 PES 最前面,8KB 足够
+                }
+            }
+        }
+        if (pts == null) return null;
+        var outp = { pts: pts / 90000, width: 0, height: 0, codec: vType === 0x1b ? 'avc' : vType === 0x24 ? 'hevc' : '' };
+        if (vType !== 0x1b) return outp;
+        var data = new Uint8Array(esLen), o2 = 0;
+        es.forEach(function (c) { data.set(c, o2); o2 += c.length; });
+        for (i = 0; i + 4 < data.length; i++) {
+            if (data[i] === 0 && data[i + 1] === 0 && data[i + 2] === 1 && (data[i + 3] & 0x1f) === 7) {
+                var wh = parseSps(data.subarray(i + 4));
+                if (wh) { outp.width = wh[0]; outp.height = wh[1]; }
+                break;
+            }
+        }
+        return outp;
+    }
+    // H.264 SPS → [宽, 高](去掉防竞争字节后按 Exp-Golomb 读;裁剪按色度格式换算,与 hls.js readSPS 一致)
+    function parseSps(raw) {
+        var a = [], i;
+        for (i = 0; i < raw.length; i++) {
+            if (i >= 2 && raw[i] === 3 && raw[i - 1] === 0 && raw[i - 2] === 0) continue;
+            if (i + 2 < raw.length && raw[i] === 0 && raw[i + 1] === 0 && raw[i + 2] === 1) break;   // 下一个 NAL
+            a.push(raw[i]);
+        }
+        var pos = 0;
+        // 读过 SPS 末尾一律当坏数据(返回 null),绝不拿补出来的 0 拼一个假分辨率(假分辨率 = 假的"分辨率突变")
+        function bit() { if (pos >= a.length * 8) throw new Error('eof'); var v = (a[pos >> 3] >> (7 - (pos & 7))) & 1; pos++; return v; }
+        function bits(nb) { var v = 0; while (nb--) v = v * 2 + bit(); return v; }
+        function ue() { var z = 0; while (!bit()) { if (++z > 31) throw new Error('ue'); } return (Math.pow(2, z) - 1) + bits(z); }
+        function se() { var v = ue(); return (v & 1) ? (v + 1) / 2 : -v / 2; }
+        try {
+            var profile = bits(8); bits(16); ue();
+            var chroma = 1, frameMbsOnly;
+            if ([100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135].indexOf(profile) >= 0) {
+                chroma = ue();
+                if (chroma === 3) bit();
+                ue(); ue(); bit();
+                if (bit()) {
+                    for (var li = 0; li < (chroma !== 3 ? 8 : 12); li++) {
+                        if (bit()) {
+                            var size = li < 6 ? 16 : 64, last = 8, next = 8;
+                            for (var j = 0; j < size; j++) { if (next !== 0) next = (last + se() + 256) % 256; last = next === 0 ? last : next; }
+                        }
+                    }
+                }
+            }
+            ue();
+            var poc = ue();
+            if (poc === 0) ue();
+            else if (poc === 1) { bit(); se(); se(); var cyc = ue(); if (cyc > 255) return null; for (i = 0; i < cyc; i++) se(); }
+            ue(); bit();
+            var wMbs = ue() + 1, hMap = ue() + 1;
+            frameMbsOnly = bit();
+            if (!frameMbsOnly) bit();
+            bit();
+            var cl = 0, cr = 0, ct = 0, cb = 0;
+            if (bit()) { cl = ue(); cr = ue(); ct = ue(); cb = ue(); }
+            var cux = chroma === 0 ? 1 : (chroma === 3 ? 1 : 2), cuy = (chroma === 1 ? 2 : 1) * (2 - frameMbsOnly);
+            if (chroma === 0) cuy = 2 - frameMbsOnly;
+            var W = wMbs * 16 - (cl + cr) * cux, H = (2 - frameMbsOnly) * hMap * 16 - (ct + cb) * cuy;
+            return (W >= 64 && H >= 64 && W <= 8192 && H <= 8192) ? [W, H] : null;
+        } catch (e) { return null; }
+    }
+
+    return { VERSION: 4, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
+        planCuts: planCuts, cutPlaylist: cutPlaylist, toCutTime: toCutTime, fromCutTime: fromCutTime };
 }));

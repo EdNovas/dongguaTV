@@ -17,7 +17,14 @@
 // v30: 新增 libs/js/ad-clip-core.js(播放器按"分辨率突变"跳插播广告的判定核心),预缓存走 SWR。
 // v31: ad-clip-core.js v2(时间戳重启/架桥信号 + 更严的片头片尾/熔断规则)。
 // v32: /api/check 不走缓存(测速结论必须是这一次的)。
-const CACHE_VERSION = 'v32';
+// v33: 用户:"一般用户刷新一下就该拿到新功能,不会去清 cookie/缓存"。
+//      ① 页面(HTML)从"先回缓存、后台更新"改为【网络优先】:4s 内整页下载完就用新页面,超时/断网/服务器 5xx 才回缓存
+//         (旧做法下只改 index.html 的发版,用户第一次刷新必然还是旧页面,要刷两次)。根路径导航(/?play= 等深链)统一存成 './' 外壳一份,
+//         不再每条深链各存一份 600KB 的页面;/?play=(不带 _spa)可能是给微信/QQ 的分享预览页,不写外壳。sw.js 自身一律直达。
+//      ② 静态库带 ?v= 版本串时先按完整 URL 找缓存:页面引用新版本(?v=3)而缓存里只有旧版本(?v=2)时走网络拿新的,
+//         网络失败或 4s 等不到才回旧版本兜底(旧做法 ignoreSearch 会把旧库喂给新页面)。
+//      ③ ad-clip-core.js v3:多组插播(电影天堂)+ probeTs(iOS/Safari 原生 HLS 读分片头)。
+const CACHE_VERSION = 'v33';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -36,7 +43,8 @@ const STATIC_URLS = [
     './libs/js/bootstrap.bundle.min.js',
     './libs/js/hls.min.js?v=1.1.5-lc1',
     './libs/js/kz-titlematch.js?v=1',   // v29: defer 脚本必须预缓存走 SWR,否则弱网下 Network-First 会拖住其后的 DPlayer/DOMContentLoaded
-    './libs/js/ad-clip-core.js?v=2',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号)
+    './libs/js/ad-clip-core.js?v=4',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs + 播放前剪清单)
+    './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
     './libs/js/DPlayer.min.js'
 ];
 
@@ -98,6 +106,8 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/kz/')) return;
     // ⑤ 站点测速 /api/check:探测结果不能被策略4缓存、在 4s 竞速/断网时陈旧回放(会吞掉 transient、把超时写成 12h 死亡记录)(v32)
     if (url.origin === self.location.origin && url.pathname === '/api/check') return;
+    // ⑥ sw.js 自己(含 ?check= 之类的探测):永远直达服务器,绝不进缓存(v33)
+    if (url.origin === self.location.origin && url.pathname === '/sw.js') return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {
@@ -123,35 +133,43 @@ self.addEventListener('fetch', event => {
         return;
     }
 
-    // 策略2：HTML 页面 - Stale-While-Revalidate（秒开 + 后台更新）
-    // 立即返回缓存(若有)，同时后台拉取最新版写回缓存；新版本由 index.html 的版本检测脚本 + SW 版本号兜底。
-    // ⚠️ SPA 外壳兜底【仅限根路径导航】(/?play= 深链等)：精确缓存 miss 时,网络失败或弱网 5s 未响应才回
-    //    './' 外壳(它每次访问首页都被 SWR 刷新,不陈旧)。/admin、/clear-cache.html 等独立页面绝不回外壳——
-    //    否则在线首次访问就会被劫持成首页。
+    // 策略2：HTML 页面 - 网络优先(4s,算到整页下载完)+ 缓存兜底(v33;原来是 Stale-While-Revalidate)
+    //   为什么改:SWR 先回缓存 → 只改了 index.html 的发版,用户刷新一次看到的仍是旧页面(后台才更新),要再刷一次;
+    //   一般用户只会刷新一下,不会清缓存。现在:网络 4s 内整页回来(且不是 5xx)就用新页面并写回缓存;超时/断网/服务器重启中(5xx)
+    //   才回缓存。竞速输了的网络结果照样写回缓存,下次打开就是新的。
+    // ⚠️ SPA 外壳兜底【仅限根路径导航】(/?play= 深链等):统一存/取 './' 一份(服务器对真实用户的 /?任何参数 都返回同一个 SPA);
+    //    /admin、/clear-cache.html 等独立页面按自己的 URL 存取,绝不回外壳——否则在线首次访问就会被劫持成首页。
     if (url.origin === self.location.origin && (event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/')) {
         event.respondWith((async () => {
             const cache = await caches.open(STATIC_CACHE);
-            const cached = await cache.match(event.request);
+            const isSpaRoot = event.request.mode === 'navigate' && url.pathname === '/';
+            // ⚠️ /?play=…(不带 _spa)对微信/QQ/微博等内置浏览器(server.js isSocialCrawler 认它们)回的是分享预览页(跳转到 &_spa=1),
+            //    不是 SPA —— 绝不能写进外壳键,否则离线/弱网时外壳变成跳转页、来回跳(审查实测)
+            const mayBeSharePage = isSpaRoot && url.searchParams.has('play') && !url.searchParams.has('_spa');
+            const key = isSpaRoot ? './' : event.request;
             const network = fetch(event.request).then(response => {
                 // ⚠️ 只缓存完整的 200 响应:206(分片)会让 cache.put 抛异常、opaque 无法校验 —— 一律跳过
-                if (response && response.status === 200 && response.type !== 'opaque') {
-                    try { cache.put(event.request, response.clone()); } catch (e) { }
+                if (response && response.status === 200 && response.type !== 'opaque' && !mayBeSharePage) {
+                    try { cache.put(key, response.clone()).catch(() => { }); } catch (e) { }
                 }
                 return response;
             });
+            const cached = isSpaRoot
+                ? ((await cache.match('./')) || (await cache.match('./index.html')))
+                : await cache.match(event.request);
             if (cached) {
-                event.waitUntil(network.catch(() => { }));  // 后台静默更新
-                return cached;
-            }
-            const isSpaRoot = event.request.mode === 'navigate' && url.pathname === '/';
-            const shell = isSpaRoot ? (await cache.match('./')) || (await cache.match('./index.html')) : null;
-            if (shell) {
+                // 计时要算到整页下载完(~1MB):只等到响应头就交出去,弱网下页面会卡在半截,还不如用缓存
+                const usable = network.then(r => {
+                    if (!r || !(r.type === 'opaqueredirect' || r.status < 500)) return null;
+                    if (r.type === 'opaqueredirect' || !r.body) return r;
+                    return r.clone().arrayBuffer().then(() => r);
+                }).catch(() => null);
                 const winner = await Promise.race([
-                    network.catch(() => null),
-                    new Promise(resolve => setTimeout(() => resolve(null), 5000))
+                    usable,
+                    new Promise(resolve => setTimeout(() => resolve(null), 4000))
                 ]);
-                if (!winner) event.waitUntil(network.catch(() => { }));  // 竞速输了的网络结果仍写回缓存
-                return winner || shell;
+                if (!winner) event.waitUntil(network.catch(() => { }));  // 竞速输了 / 5xx:网络结果(若是 200)仍写回缓存
+                return winner || cached;
             }
             try {
                 return await network;
@@ -165,24 +183,40 @@ self.addEventListener('fetch', event => {
     // 策略3：静态资源 (CSS/JS/图标) - Stale-While-Revalidate
     // ⚠️ 必须按 pathname 匹配：旧写法 event.request.url.includes('./libs/...') 里绝对 URL 不含 './'，
     //    永不命中(死代码)，libs 全部落到 Network-First，弱网时核心脚本挂起=白屏。
-    // ⚠️ cache.match 必须 ignoreSearch：页面以 'ad-filter.js?v=4.0' 带版本参数引用,预缓存键无查询串,
-    //    精确匹配永 miss——该脚本是 defer,弱网挂起会阻塞 DOMContentLoaded 把整站卡在 loader。
+    // ⚠️ v33:先按【完整 URL(含 ?v=)】找缓存 —— 页面引用了新版本(?v=3)而缓存里只有旧版本(?v=2)时,ignoreSearch 会把旧库
+    //    喂给新页面(新页面调用旧库没有的函数)。完整 URL 未命中 → 走网络拿新版本(写回缓存);网络失败才用 ignoreSearch 找到的
+    //    旧版本兜底(defer 脚本挂起会阻塞 DOMContentLoaded 把整站卡在 loader,有旧的总比白屏好)。预缓存键与页面引用的 ?v= 保持一致。
     if (url.origin === self.location.origin &&
         STATIC_URLS.some(staticUrl => staticUrl !== './' && url.pathname === staticUrl.replace(/^\./, '').split('?')[0])) {   // v28: 预缓存项可带 ?v= 版本串,比对 pathname 时剥掉
-        event.respondWith(
-            caches.open(STATIC_CACHE).then(cache => {
-                return cache.match(event.request, { ignoreSearch: true }).then(cached => {
-                    const fetchPromise = fetch(event.request).then(response => {
-                        if (response && response.status === 200 && response.type !== 'opaque') {
-                            try { cache.put(event.request, response.clone()); } catch (e) { }   // put 抛异常绝不能炸掉响应本身
-                        }
-                        return response;
-                    }).catch(() => cached || new Response('', { status: 503 })); // 必须返回 Response(undefined 会让请求直接报错)
-                    // 返回缓存（如果有），同时后台更新
-                    return cached || fetchPromise;
-                });
-            })
-        );
+        event.respondWith((async () => {
+            const cache = await caches.open(STATIC_CACHE);
+            const exact = await cache.match(event.request);
+            const fetchPromise = fetch(event.request).then(response => {
+                if (response && response.status === 200 && response.type !== 'opaque') {
+                    try { cache.put(event.request, response.clone()).catch(() => { }); } catch (e) { }   // put 抛异常绝不能炸掉响应本身
+                }
+                return response;
+            });
+            if (exact) {   // 同一版本:秒回缓存,后台更新
+                event.waitUntil(fetchPromise.catch(() => { }));
+                return exact;
+            }
+            const old = await cache.match(event.request, { ignoreSearch: true });
+            if (old) {
+                // 有旧版本兜底:网络最多等 4s(弱网下 defer 脚本挂起会卡住 DOMContentLoaded);等不到先用旧的,新版本照样写回缓存
+                const r = await Promise.race([
+                    fetchPromise.then(x => (x && x.ok) ? x : null).catch(() => null),
+                    new Promise(res => setTimeout(() => res(null), 4000))
+                ]);
+                if (!r) event.waitUntil(fetchPromise.catch(() => { }));
+                return r || old;
+            }
+            try {
+                return await fetchPromise;
+            } catch (e) {
+                return new Response('', { status: 503 });   // 必须返回 Response(undefined 会让请求直接报错)
+            }
+        })());
         return;
     }
 

@@ -69,7 +69,7 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
 {
     const S = (key, api, extra) => Object.assign({ key, name: key, api, active: true }, extra || {});
     eq(P.profileFor(S('rycj', 'https://cj.rycjapi.com/api.php/provide/vod')),
-        { tier: 'noburn', res: '1080p', geo: false, note: '片尾/中插棋牌片段会被自动去除(中插靠播放器按分辨率跳过)', codec: '', clip: true }, 'profile: 如意 = noburn 1080p');
+        { tier: 'noburn', res: '1080p', geo: false, note: '中插/片尾广告会被播放器自动跳过', codec: '', clip: true }, 'profile: 如意 = noburn 1080p');
     eq(P.profileFor(S('ffzy', 'http://api.ffzyapi.com/api.php/provide/vod')).geo, true, 'profile: 非凡 海外受限');
     eq(P.profileFor(S('myzy', 'https://api.maoyanapi.top/api.php/provide/vod')).res, 'sd', 'profile: 猫眼 标清');
     eq(P.profileFor(S('lovedan', 'https://www.lovedan.net/api.php/provide/vod')).tier, 'ads', 'profile: www. 前缀也能命中');
@@ -105,7 +105,7 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     eq(P.profileFor({ key: 'r', api, ad_tier: 'bogus' }).tier, 'unknown', 'override: 写错的档位 → 未评测(不保留旧值,免得以为生效了)');
     eq(P.profileFor({ key: 'r', api, ad_tier: '' }).tier, 'noburn', 'override: 空 ad_tier 忽略');
     eq(P.profileFor({ key: 'r', api, profile: { res: '720P' } }),
-        { tier: 'noburn', res: '720p', geo: false, note: '片尾/中插棋牌片段会被自动去除(中插靠播放器按分辨率跳过)', codec: '', clip: true }, 'override: profile 只改写了的字段');
+        { tier: 'noburn', res: '720p', geo: false, note: '中插/片尾广告会被播放器自动跳过', codec: '', clip: true }, 'override: profile 只改写了的字段');
     eq(P.profileFor({ key: 'r', api, profile: { t: 'ads', r: '4K', geo: 1, n: '  新横幅  ' } }),
         { tier: 'ads', res: '4k', geo: true, note: '新横幅', codec: '', clip: true }, 'override: profile 短字段(没写的 clip 沿用内置)');
     eq(P.profileFor({ key: 'r', api, profile: { note: '' } }).note, '', 'override: 空 note 可清掉内置备注');
