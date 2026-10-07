@@ -138,11 +138,31 @@ try {
     ok(g.status === 404 && Date.now() - t2 < 300, '同一 IP 挂起的等待超过上限 → 立刻 404(防挂连接)', Date.now() - t2);
     await Promise.all(hang);
     ok(store.stats().waiting === 0, '等待全部释放', store.stats());
+    // 客户端断开(换集/关页)→ 立刻释放等待名额,不用等满超时
+    {
+        const ac = new AbortController();
+        const pend = fetch(U('/api/hls/cut/' + ID() + '.m3u8'), { signal: ac.signal }).catch(() => null);
+        await new Promise(res => setTimeout(res, 80));
+        ok(store.stats().waiting === 1, '挂起中占 1 个名额', store.stats());
+        ac.abort(); await pend;
+        await new Promise(res => setTimeout(res, 80));
+        ok(store.stats().waiting === 0, '客户端断开 → 名额立刻释放', store.stats());
+    }
     // 坏输入
     ok((await post({ m3u8: raw })).status === 400, '相对地址清单 400');
     ok((await post({ id: 'short', m3u8: cutText })).status === 400, '坏 id 400');
     ok((await post({ token: 'banned', m3u8: cutText })).status === 403, '被封禁的令牌 403');
     ok((await fetch(U('/api/hls/cut/..%2Fsecret.m3u8'))).status === 404 && (await fetch(U('/api/hls/cut/x.m3u8'))).status === 404, '坏文件名 404');
+    // 全站预算只数成功创建的:一堆坏请求不会把正常用户挤成 429
+    {
+        const app2 = express(); app2.use(bodyParser.json({ limit: '5mb' }));
+        const st2 = H.registerRoutes(app2, { globalPerMin: 2 });
+        const s2 = await listen(app2);
+        for (let k = 0; k < 5; k++) await post({ m3u8: raw }, s2);   // 相对地址,全是 400
+        const a1 = await post({ m3u8: cutText }, s2), a2 = await post({ m3u8: absText }, s2), a3 = await post({ m3u8: cutText.replace('#EXT-X-VERSION:3', '#EXT-X-VERSION:4') }, s2);
+        ok(a1.status === 200 && a2.status === 200 && a3.status === 429, '预算只数成功创建(坏请求不消耗),用完了才 429', [a1.status, a2.status, a3.status]);
+        s2.close(); st2._close();
+    }
     // 501 桩
     r = await post({ m3u8: cutText }, stub);
     ok(r.status === 501 && (await fetch(U('/api/hls/cut/' + ID() + '.m3u8', stub))).status === 501, '无状态后端 501 桩');
@@ -155,6 +175,7 @@ console.log('[4] 接线(静态)');
     const server = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
     const api = fs.readFileSync(path.join(ROOT, 'api/index.js'), 'utf8');
     const sw = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
+    ok(/ownerOf: \(req, body\) => 'ip:' \+ ipKey\(req\)/.test(server), '来源按 IP(+ 有效令牌):单密码站不会全站共用一个配额');
     ok(/require\('\.\/lib\/hls-cut'\)\.registerRoutes\(app/.test(server) && server.indexOf("require('./lib/hls-cut')") > server.indexOf('app.use(apiLimiter)'), 'server.js 在通用限流之后注册剪后清单路由');
     ok(/const HLS_CUT_ENABLED = !envFlag\('HLS_CUT_DISABLE'\)/.test(server), '开关走 envFlag(填 0 不会误关)');
     ok(/hls_cut: !!hlsCut/.test(server) && /hls_cut: false/.test(api), '/api/config 报告能力:VPS 看是否注册成功,Vercel 恒为 false');

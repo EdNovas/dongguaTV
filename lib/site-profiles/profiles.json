@@ -4,8 +4,8 @@
   "hosts": {
     "api.ffzyapi.com": { "t": "noburn", "r": "1080p", "geo": 1, "n": "插播已过滤;多数线路海外403" },
     "bfzyapi.com": { "t": "noburn", "r": "1080p", "geo": 1 },
-    "caiji.dyttzyapi.com": { "t": "noburn", "r": "1080p", "geo": 1, "clip": 1, "n": "插播广告会在播放前自动去除" },
-    "cj.rycjapi.com": { "t": "noburn", "r": "1080p", "clip": 1, "n": "插播广告会在播放前自动去除" },
+    "caiji.dyttzyapi.com": { "t": "noburn", "r": "1080p", "geo": 1, "clip": 1, "n": "插播广告会被自动去除(播放前剪掉,或播放中自动跳过)" },
+    "cj.rycjapi.com": { "t": "noburn", "r": "1080p", "clip": 1, "n": "插播广告会被自动去除(播放前剪掉,或播放中自动跳过)" },
 
     "tyyszy.com": { "t": "unknown", "geo": 1, "s": 0 },
     "jszyapi.com": { "t": "unknown", "geo": 1 },

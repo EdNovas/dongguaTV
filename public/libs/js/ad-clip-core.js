@@ -1,5 +1,5 @@
 /*!
- * ad-clip-core.js v5 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
+ * ad-clip-core.js v6 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
  * 不碰 DOM、不碰 hls 实例;运行时包装在 public/index.html 的 window.adClipSkip,回归测试 scripts/adclip-test.mjs。
  *
  * 为什么要它:CF Worker 只能按清单删插播(看 DISCONTINUITY 分组的时长/目录/域名)。如意(rycj)把 20-22 秒的棋牌广告
@@ -219,6 +219,9 @@
             if (lr && !isMain(lr)) return out('none', 'left-mixed');
             if (!lr) leftUnknown = true;
         }
+        // 播放前整份剪(planCuts)时左侧必须已知:播放中'左侧未知'是拖进段中/续看,剪清单时却只是那一组没探到 —— 没有前一组就验不了架桥,
+        //   而剪掉的内容再也看不到(审查实测:前一组探测失败时会把一段真正片剪掉并缓存 30 天)
+        if (leftUnknown && ctx.planning) return out('none', 'plan-left-unknown');
         if (mode === 'pts' && (leftUnknown || !next)) {
             // P 模式只认"前后都看得到"的中插(片尾 P 模式见下方 atEnd 分支)
             if (!next && !leftUnknown) { /* 片尾,下面判 */ } else return out(leftUnknown ? 'wait' : 'none', leftUnknown ? 'pts-left-unknown' : 'pts-edge');
@@ -301,7 +304,7 @@
         var runs = [];
         for (var i = 0; i < groups.length; i++) {
             if (groups[i].dur <= o.lead) continue;   // 短到 t+lead 落进下一组的组,由下一组那次判定覆盖
-            var d = decide(groups, resOf, groups[i].start, o, { offOf: ctx.offOf, freshStart: true, rate: 1 });
+            var d = decide(groups, resOf, groups[i].start, o, { offOf: ctx.offOf, freshStart: true, rate: 1, planning: true });
             if ((d.act !== 'seek' && d.act !== 'ended') || !d.run) continue;
             runs.push({ g0: d.run.g0, g1: d.run.g1, mode: d.run.mode, tail: d.act === 'ended' });
         }
@@ -555,7 +558,7 @@
         } catch (e) { return null; }
     }
 
-    return { VERSION: 5, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
+    return { VERSION: 6, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
         planCuts: planCuts, cutPlaylist: cutPlaylist, toCutTime: toCutTime, fromCutTime: fromCutTime,
         parseMedia: parseMedia, fingerprint: fingerprint, groupConsistent: groupConsistent };
 }));

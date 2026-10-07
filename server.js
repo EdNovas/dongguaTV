@@ -920,7 +920,8 @@ try {
         hlsCut = require('./lib/hls-cut').registerRoutes(app, {
             postLimiter: hlsCutLimiter,
             ipOf: ipKey,
-            ownerOf: (req, body) => (body && own(body.token)) ? 't:' + body.token : 'ip:' + ipKey(req),
+            // 来源 = IP(+ 有效令牌):单密码站所有人共用一个令牌,只按令牌分会把"每来源 12 条"变成全站 12 条
+            ownerOf: (req, body) => 'ip:' + ipKey(req) + ((body && own(body.token)) ? '|t:' + body.token : ''),
             authorize: (token) => (token && own(token) && isBanned(token)) ? 'banned' : 'ok'
         });
     }
