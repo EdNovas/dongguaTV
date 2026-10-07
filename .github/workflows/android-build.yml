@@ -41,6 +41,12 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # 该 action 的 packages 默认是 'tools platform-tools'。Google 已从 SDK 仓库移除过时的 'tools' 包,
+          # 新版 runner 镜像(cmdline-tools 16.0)上 sdkmanager 报 "Failed to find package 'tools'" 并以 exit 1 失败
+          # (v1.1.187 的构建就停在这一步;v1.1.183 那次还是旧镜像)。只装 platform-tools 即可,构建所需的
+          # platforms/build-tools 由 Gradle 按需下载(上面已接受许可)或用镜像自带的。
+          packages: 'platform-tools'
 
       - name: Install Node dependencies
         run: npm install
