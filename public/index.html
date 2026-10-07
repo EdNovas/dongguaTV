@@ -58,54 +58,6 @@
     </script>
 
 
-    <!-- SW 版本检测和强制更新（必须在最开头） -->
-    <script data-cfasync="false">
-        (function () {
-            var REQUIRED_SW_VERSION = 'v24';
-            var STORAGE_KEY = 'sw_cleared_' + REQUIRED_SW_VERSION;
-
-            // 如果已经为这个版本清理过，不再重复
-            if (localStorage.getItem(STORAGE_KEY)) return;
-
-            if ('serviceWorker' in navigator && 'caches' in window) {
-                // 获取当前 SW 版本
-                fetch('./sw.js?check=' + Date.now(), { cache: 'no-store' })
-                    .then(function (res) { return res.text(); })
-                    .then(function (text) {
-                        var match = text.match(/CACHE_VERSION\s*=\s*['"]([^'"]+)['"]/);
-                        var serverVersion = match ? match[1] : 'unknown';
-                        // var serverVersion logged for debug
-
-                        // 如果服务器版本是最新的，检查本地 SW
-                        if (serverVersion === REQUIRED_SW_VERSION) {
-                            navigator.serviceWorker.getRegistrations().then(function (regs) {
-                                if (regs.length > 0) {
-                                    // 强制更新 SW
-                                    regs.forEach(function (reg) {
-                                        reg.update();
-                                    });
-                                }
-                            });
-
-                            // 清除旧版本缓存
-                            caches.keys().then(function (names) {
-                                names.forEach(function (name) {
-                                    if (name.indexOf(REQUIRED_SW_VERSION) === -1) {
-                                        // console.log('[SW Check] Deleting old cache:', name);
-                                        caches.delete(name);
-                                    }
-                                });
-                            });
-
-                            // 标记已清理
-                            try { localStorage.setItem(STORAGE_KEY, '1'); } catch (e) { }
-                        }
-                    })
-                    .catch(function (e) { /* SW Check error handled silently */ });
-            }
-        })();
-    </script>
-
     <!-- 性能优化：DNS 预解析和预连接 -->
     <link rel="dns-prefetch" href="//api.themoviedb.org">
     <link rel="dns-prefetch" href="//image.tmdb.org">
@@ -137,7 +89,7 @@
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
     <script data-cfasync="false" src="libs/js/kz-titlematch.js?v=1" defer></script>   <!-- 🎌 Kazumi 源片名归一化/并组(服务端 lib/kazumi 共用同一文件) -->
-    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=2" defer></script>   <!-- 🛡️ 插播广告"分辨率突变"判定(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
+    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=3" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
@@ -5986,7 +5938,10 @@
         })();
         window._dgHlsCustomType = function (video, player) {
             try {
-                if (window._dgPreferNativeHls || !window.Hls || !Hls.isSupported()) return;   // 原生通道(DPlayer 已设好 video.src)
+                if (window._dgPreferNativeHls || !window.Hls || !Hls.isSupported()) {   // 原生通道(DPlayer 已设好 video.src)
+                    try { if (window.adClipSkip) window.adClipSkip.attachNative(video, player); } catch (e) { }   // 🛡️ 去插播:原生 HLS 自己探分片头
+                    return;
+                }
                 const hls = new Hls((player.options && player.options.pluginOptions && player.options.pluginOptions.hls) || buildOfflineHlsConfig());
                 player.plugins.hls = hls;
                 try { if (window.adClipSkip) window.adClipSkip.attach(hls, video); } catch (e) { }   // 🛡️ 去插播:必须在 loadSource 前挂(要收 MANIFEST_PARSED)
@@ -6048,26 +6003,31 @@
         //   发 FRAG_PARSING_INIT_SEGMENT(带宽高),比播放头早一个预加载窗口 → 播到时直接 seek 过去,不改清单(不动时间轴:
         //   片头标记/进度/离线缓存的时间都照旧,"跳片头多跳几秒"那类时间轴错位不会回来)。
         //   状态全挂在 hls 实例上(hls._adClip,随实例销毁),每 tick 不写任何 Vue 响应式数据(perf-jank 铁律)。
-        //   不生效:浏览器原生 HLS(iOS/Safari)、Kazumi MP4、直播、多码率主清单、fMP4、投屏、广告过滤开关关闭。
+        //   📱 浏览器原生 HLS(iOS/iPadOS/macOS Safari)没有 hls.js 事件可收(用户:"只在 iPad 上有 20 秒左右的插播,电脑上没有"):
+        //   attachNative 自己拉一遍同一个清单分组,再按播放进度只取每组首个分片的前 16KB(AdClipCore.probeTs 读首帧 PTS + SPS 宽高,
+        //   与 hls.js 给的同一套数据),判定/跳转/放行/撤销完全复用下面同一条路径。往前探 75s、往回探两组(拖进/续看落在广告第二组
+        //   时 P 模式要看到前面的重启组),同时最多 2 个请求,每段广告只多拉几十 KB。状态挂在 video._adClipNative(换源/切集重挂)。
+        //   不生效:Kazumi MP4、直播、多码率主清单、fMP4/加密/BYTERANGE、清单或分片跨域拿不到、投屏、广告过滤开关关闭。
         //   localStorage donggua_adclip_off=1 可单独关掉;控制台 adClipSkip.status() 看当前判定。
         window.adClipSkip = {
             vue: null, OPT: null, COOLDOWN: 1500, MAX_ACTIONS: 30, MAX_ATTEMPTS: 2, BIG_BUFFER: 75,
+            NATIVE_LOOK: 75, NATIVE_BEHIND: 2, NATIVE_CONC: 2, NATIVE_HEAD: 16384,
             enabled() {
                 try {
-                    return !!(window.AdClipCore && window.Hls && window.AdFilter && window.AdFilter.isEnabled()) &&
+                    return !!(window.AdClipCore && window.AdFilter && window.AdFilter.isEnabled()) &&
                         localStorage.getItem('donggua_adclip_off') !== '1';
                 } catch (e) { return false; }
             },
-            // 每个 hls 实例创建时挂一次(_dgHlsCustomType 是全站唯一的 new Hls 处:首建/切集/切源/分诊换代理都经过它)
-            attach(hls, video) {
-                if (!hls || hls._adClip || !window.Hls) return;
+            _hideUndo() {
                 try {   // 上一个实例(换集/换源/分诊)的"看广告"按钮作废
                     clearTimeout(this._undoTimer);
                     const ob = (typeof dp !== 'undefined' && dp && dp.container) ? dp.container.querySelector('.dg-adclip-undo') : null;
                     if (ob) ob.style.display = 'none';
                 } catch (e) { }
-                const E = Hls.Events, vue = this.vue;
-                const st = hls._adClip = {
+            },
+            _newState(hls, video) {
+                const vue = this.vue;
+                return {
                     hls, video, dead: false, live: false, multi: false, frags: null, groups: [],
                     res: Object.create(null), off: Object.create(null),
                     tok: vue ? vue._playToken : null, overrides: Object.create(null), skipped: Object.create(null),
@@ -6075,6 +6035,20 @@
                     actions: 0, lastActAt: -1e9, selfTo: null, selfAt: 0, endedFired: false, lastWhy: '', lastRes: '', mainRes: '',
                     lastT: 0, startFromZero: null, userSeeked: false, bufRaised: false, bufOrig: null
                 };
+            },
+            _hookSeeking(video) {
+                if (video && !video._adClipSeekHooked) {
+                    video._adClipSeekHooked = true;
+                    video.addEventListener('seeking', () => { try { window.adClipSkip._onSeeking(video); } catch (e) { } });
+                }
+            },
+            // 每个 hls 实例创建时挂一次(_dgHlsCustomType 是全站唯一的 new Hls 处:首建/切集/切源/分诊换代理都经过它)
+            attach(hls, video) {
+                if (!hls || hls._adClip || !window.Hls) return;
+                this._hideUndo();
+                if (video && video._adClipNative) this._nativeKill(video._adClipNative);   // 同一个 <video> 之前走过原生通道
+                const E = Hls.Events;
+                const st = hls._adClip = this._newState(hls, video);
                 const rebuild = () => { try { if (window.AdClipCore) st.groups = AdClipCore.groupsFromFrags(st.frags); } catch (e) { } };
                 hls.on(E.MANIFEST_PARSED, (ev, d) => { try { st.multi = !!(d && d.levels && d.levels.length > 1); } catch (e) { } });
                 hls.on(E.LEVEL_LOADED, (ev, d) => {
@@ -6102,9 +6076,184 @@
                     } catch (e) { }
                 });
                 hls.on(E.DESTROYING, () => { st.dead = true; });
-                if (video && !video._adClipSeekHooked) {
-                    video._adClipSeekHooked = true;
-                    video.addEventListener('seeking', () => { try { window.adClipSkip._onSeeking(video); } catch (e) { } });
+                this._hookSeeking(video);
+            },
+            // 📱 原生 HLS 通道:DPlayer 已把 video.src 设成要播的地址(worker 过滤后的 / 直连的),这里拉同一个地址
+            attachNative(video, player) {
+                if (!video) return;
+                if (video._adClipNative) this._nativeKill(video._adClipNative);
+                video._adClipNative = null;
+                const vue = this.vue;
+                if (!video.src || !window.AdClipCore || typeof AdClipCore.probeTs !== 'function' || !window.fetch || !this.enabled()) return;
+                if (vue && (vue._liveActive || (vue._isCasting && vue._isCasting()))) return;
+                this._hideUndo();
+                const st = video._adClipNative = Object.assign(this._newState(null, video), {
+                    native: true, src: video.src, ready: false, failed: false, unsupported: false, reportedOk: false,
+                    site: (vue && vue.currentSource && vue.currentSource.site_key) || '',
+                    done: Object.create(null), busy: Object.create(null), tries: Object.create(null), inflight: 0, probeFails: 0, aborts: new Set()
+                });
+                // 播放器销毁时停探(每个播放器只挂一次;switchVideo 每集都会重进 customType,不能每次加一个监听)
+                try {
+                    if (player && player.events && !player._adClipNativeHook) {
+                        player._adClipNativeHook = true;
+                        player.events.on('destroy', () => { if (video._adClipNative) this._nativeKill(video._adClipNative); });
+                    }
+                } catch (e) { }
+                this._hookSeeking(video);
+                this._nativeLoad(st);
+            },
+            _nativeKill(st) {
+                if (!st) return;
+                st.dead = true;
+                try { st.aborts.forEach(k => k()); st.aborts.clear(); } catch (e) { }
+                st.frags = null; st.groups = [];   // 读它们的地方都先看 st.dead
+            },
+            // 扫描器在该站跑没跑起来 → 交给 vue 记账(线路标识:原生通道上该站跑不起来就如实标有插播;之后哪一集跑起来就消账)
+            _nativeReport(st, ok) {
+                try {
+                    const v = this.vue;
+                    if (!st.site || !v || !v._clipNativeSet) return;
+                    if (!ok && (st.dead || (typeof navigator !== 'undefined' && navigator.onLine === false))) return;   // 断网/换集中止不算站点的问题
+                    v._clipNativeSet(st.site, !ok);
+                } catch (e) { }
+            },
+            // 单个请求:10s 超时;换集/换源(_nativeKill)时一并中止。n 给了就只读前 n 字节(Range + 读够即断,服务器不认 Range 也不多拉)。
+            //   Safari ≤15 的 Range 不在 CORS 免预检名单里,而如意/电影天堂的 CDN 预检都不放行 Range → 跨域失败时去掉 Range 再试一次
+            //   (普通 GET 是简单请求,两家都回 ACAO *;读够 n 字节就 cancel,不会把整片拉完)
+            async _nativeFetch(st, url, n, noRange) {
+                if (st.noRange) noRange = true;
+                const ctrl = window.AbortController ? new AbortController() : null;
+                const kill = () => { try { if (ctrl) ctrl.abort(); } catch (e) { } };
+                const timer = setTimeout(kill, 10000);
+                st.aborts.add(kill);
+                try {
+                    const opt = { credentials: 'omit', signal: ctrl ? ctrl.signal : undefined };
+                    if (n && !noRange) opt.headers = { Range: 'bytes=0-' + (n - 1) };
+                    let r;
+                    try { r = await fetch(url, opt); }
+                    catch (e) {
+                        if (n && !noRange && !st.dead && !(e && e.name === 'AbortError')) {
+                            clearTimeout(timer); st.aborts.delete(kill);
+                            const res = await this._nativeFetch(st, url, n, true);
+                            st.noRange = true;   // 本集后面的分片直接不带 Range(省一次注定失败的预检)
+                            return res;
+                        }
+                        throw e;
+                    }
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    if (!n) return { text: await r.text(), url: r.url || url };
+                    const out = new Uint8Array(n);
+                    let len = 0;
+                    if (r.body && r.body.getReader) {
+                        const rd = r.body.getReader();
+                        while (len < n) {
+                            const x = await rd.read();
+                            if (x.done) break;
+                            const k = Math.min(x.value.length, n - len);
+                            out.set(x.value.subarray(0, k), len); len += k;
+                        }
+                        try { const c = rd.cancel(); if (c && c.catch) c.catch(() => { }); } catch (e) { }
+                    } else {
+                        const b = new Uint8Array(await r.arrayBuffer());
+                        len = Math.min(b.length, n); out.set(b.subarray(0, len));
+                    }
+                    return out.subarray(0, len);
+                } finally { clearTimeout(timer); st.aborts.delete(kill); }
+            },
+            async _nativeLoad(st) {
+                try {
+                    let r = await this._nativeFetch(st, st.src);
+                    if (st.dead) return;
+                    if (/#EXT-X-STREAM-INF/i.test(r.text)) {
+                        // 主清单:只有一个码率才跟进(多码率时浏览器会自己切码率,与 hls.js 通道一样不做)
+                        const vs = [], ls = r.text.split(/\r?\n/);
+                        for (let i = 0; i < ls.length; i++) {
+                            if (!/^#EXT-X-STREAM-INF/i.test(ls[i])) continue;
+                            for (let j = i + 1; j < ls.length; j++) { const l = ls[j].trim(); if (l && l[0] !== '#') { vs.push(l); break; } }
+                        }
+                        if (vs.length !== 1) { st.multi = true; this._nativeReport(st, false); return; }
+                        const u = new URL(vs[0], r.url).href;
+                        r = await this._nativeFetch(st, u);
+                        if (st.dead) return;
+                    }
+                    const text = r.text;
+                    if (!/#EXT-X-ENDLIST/i.test(text)) { st.live = true; return; }
+                    if (/#EXT-X-KEY:(?![^\n]*METHOD=NONE)/i.test(text) || /#EXT-X-MAP|#EXT-X-BYTERANGE/i.test(text)) { st.unsupported = true; this._nativeReport(st, false); return; }
+                    // 与 hls.js 同样的分组:#EXT-X-DISCONTINUITY 让下一个分片 cc+1;时间轴 = EXTINF 累加(Safari 的 currentTime 也按它)
+                    const frags = [];
+                    let cc = 0, t = 0, dur = null, sn = 0;
+                    const m = text.match(/#EXT-X-DISCONTINUITY-SEQUENCE:(\d+)/i);
+                    if (m) cc = +m[1];
+                    for (const raw of text.split(/\r?\n/)) {
+                        const l = raw.trim();
+                        if (!l) continue;
+                        if (/^#EXT-X-DISCONTINUITY(?!-)/i.test(l)) { cc++; continue; }
+                        if (/^#EXTINF:/i.test(l)) { dur = parseFloat(l.slice(8)); continue; }
+                        if (l[0] === '#' || dur == null) continue;
+                        frags.push({ sn: sn++, cc, start: t, duration: dur, url: new URL(l, r.url).href });
+                        t += dur; dur = null;
+                    }
+                    st.frags = frags;
+                    st.groups = AdClipCore.groupsFromFrags(frags);
+                    st.ready = true;
+                    console.log('[去插播] 原生 HLS:清单 ' + frags.length + ' 片 / ' + st.groups.length + ' 组,边播边探每组首片');
+                    this._nativePump(st);
+                } catch (e) {
+                    if (!st.dead) { st.failed = true; this._nativeReport(st, false); console.log('[去插播] 原生 HLS 拿不到清单(多为跨域),本集不跳插播:', e && e.message); }
+                }
+            },
+            // 只探"往回两组 ~ 往前 75s"里还没探过的组,同时最多 2 个;只在真的开始播了以后才探(不和起播抢带宽)
+            _nativePump(st) {
+                if (!st || st.dead || !st.ready || st.failed) return;
+                const v = st.video;
+                if (!v || v.src !== st.src || v.readyState < 2) return;
+                if (v.ended) return;
+                const gs = st.groups, t = v.currentTime || 0;
+                const gi = AdClipCore.findGroup(gs, t);
+                if (gi < 0) return;   // 播放头已过最后一组(groups[0].start 恒为 0):前面没东西可探
+                const front = t + this.NATIVE_LOOK;
+                for (let i = Math.max(0, gi - this.NATIVE_BEHIND); i < gs.length && st.inflight < this.NATIVE_CONC; i++) {
+                    const g = gs[i];
+                    if (g.start > front) break;
+                    if (st.done[g.cc] || st.busy[g.cc] || (st.tries[g.cc] || 0) >= 2) continue;
+                    this._nativeProbe(st, g);
+                }
+            },
+            async _nativeProbe(st, g) {
+                const cc = g.cc;
+                st.busy[cc] = 1; st.inflight++;
+                st.tries[cc] = (st.tries[cc] || 0) + 1;
+                try {
+                    const url = st.frags[g.sn0] && st.frags[g.sn0].url;
+                    if (!url) { st.done[cc] = 1; return; }
+                    let p = null;
+                    for (const n of [this.NATIVE_HEAD, this.NATIVE_HEAD * 4]) {
+                        const buf = await this._nativeFetch(st, url, n);
+                        if (st.dead) return;
+                        p = AdClipCore.probeTs(buf);
+                        if ((p && (p.width > 0 || p.codec !== 'avc')) || buf.length < n) break;   // 读到了 / 分片本来就这么短
+                    }
+                    st.done[cc] = 1;
+                    if (!p) {   // 读到了但解析不出(不是 TS / 加密分片)
+                        st.probeFails++;
+                        if (st.probeFails >= 6 && !Object.keys(st.off).length) { st.failed = true; this._nativeReport(st, false); }
+                        return;
+                    }
+                    if (p.width > 0 && p.height > 0) {
+                        const k = p.width + 'x' + p.height;
+                        if (st.lastRes && k !== st.lastRes) console.log('[去插播] 分辨率 ' + st.lastRes + '→' + k + ' cc' + cc + ' @' + g.start.toFixed(1) + 's');
+                        st.res[cc] = k; st.lastRes = k;
+                    }
+                    st.off[cc] = p.pts - g.start;
+                    if (!st.reportedOk) { st.reportedOk = true; this._nativeReport(st, true); }
+                } catch (e) {
+                    if (st.dead) return;
+                    st.probeFails++;
+                    // 连续失败(分片跨域不给读 / 网络断了)→ 本集停探,宁可不跳
+                    if (st.probeFails >= 6 && !Object.keys(st.off).length) { st.failed = true; this._nativeReport(st, false); console.log('[去插播] 原生 HLS 分片头读不到(多为跨域),本集不跳插播'); }
+                } finally {
+                    st.busy[cc] = 0; st.inflight--;
+                    if (!st.dead) this._nativePump(st);
                 }
             },
             // 预加载窗口:默认 30s(纯媒体清单),40s 级的插播在播到时右侧还没解析出来 → 播一截才封口。
@@ -6130,15 +6279,21 @@
                 } catch (e) { }
             },
             _cur() {
-                const h = (typeof dp !== 'undefined' && dp && dp.plugins) ? dp.plugins.hls : null;
+                if (typeof dp === 'undefined' || !dp || !dp.video) return null;
+                const v = dp.video;
+                // 原生通道:video.src 必须还是挂载时那个(切到 Kazumi MP4 等 'normal' 通道不会重挂,旧状态要作废)。
+                //   它比 dp.plugins.hls 上可能残留的状态新(attach 会先作废原生状态;hls.js 通道下 video.src 是 blob:,永远对不上)
+                const ns = v._adClipNative;
+                if (ns && !ns.dead && v.src === ns.src) return ns;
+                const h = dp.plugins ? dp.plugins.hls : null;
                 const st = h && h._adClip;
-                return (st && !st.dead && dp.video && st.video === dp.video) ? st : null;
+                return (st && !st.dead && st.video === v) ? st : null;
             },
             // 用户放行(撤销 / 第二次往回拖进同一段)跨实例记住:重开同一集(同一通道)不再跳它。
             //   键 = 实际加载的清单地址 + cc:worker 过滤后的清单删掉了广告组,cc 编号与直连/nofilter 通道不同,不能串用
             _ovKey(st, cc) {
                 const v = this.vue;
-                const u = (st && st.hls && st.hls.url) || (v && v._activeFinalUrl) || (v && v.currentUrl) || '';
+                const u = (st && st.hls && st.hls.url) || (st && st.native && st.src) || (v && v._activeFinalUrl) || (v && v.currentUrl) || '';
                 return 'donggua_adclip_ov|' + u + '|' + cc;
             },
             _isOverridden(st, cc) {
@@ -6228,6 +6383,7 @@
                     if (vue._liveActive || (vue._activeKz && vue._activeKz.type === 'mp4') || (vue._isCasting && vue._isCasting())) return false;
                     if (st.tok !== vue._playToken || vue._activePlaySeq !== _navSeq) return false;
                     const v = dp.video;
+                    if (st.native) this._nativePump(st);   // 原生通道:边播边探前方的组(内部只补缺,没缺就什么都不做)
                     if (!v || v.paused || v.seeking || v.readyState < 2 || !isFinite(v.duration)) return false;
                     if (st.startFromZero === null) st.startFromZero = t < 3 && !st.userSeeked;
                     st.lastT = t;
@@ -6248,8 +6404,10 @@
                             (d.run.bridge != null ? ' 架桥残差 ' + d.run.bridge.toFixed(2) + 's' : ''));
                     }
                     if (d.act === 'seek') {
-                        const to = this._landing(v, d.to);
-                        if (to == null) return false;   // 落点还没缓冲:下个 tick 再试(这几百毫秒仍在广告里)
+                        // 落点还没缓冲:下个 tick 再试(这几百毫秒仍在广告里)。原生通道不等:浏览器自己的缓冲不受我们控制、
+                        //   预加载窗口也不会因为前面是广告而加大,等它缓冲到段后会把整段广告放完
+                        const to = st.native ? d.to : this._landing(v, d.to);
+                        if (to == null) return false;
                         const ccs = [];
                         for (let i = d.run.g0; i <= d.run.g1; i++) ccs.push(st.groups[i].cc);
                         if ((st.attempts[d.run.key] = (st.attempts[d.run.key] || 0) + 1) > this.MAX_ATTEMPTS) {
@@ -6283,6 +6441,7 @@
                 const by = {};
                 st.groups.forEach(g => { const r = st.res[g.cc] || '?'; by[r] = (by[r] || 0) + Math.round(g.dur); });
                 return {
+                    channel: st.native ? ('原生 HLS' + (st.failed ? '(读不到清单/分片)' : st.unsupported ? '(加密/fMP4,不支持)' : '') + ' 已探 ' + Object.keys(st.done).length + ' 组') : 'hls.js',
                     enabled: this.enabled(), live: st.live, multi: st.multi, groups: st.groups.length, resByDur: by, mainRes: st.mainRes,
                     ptsKnown: Object.keys(st.off).length, actions: st.actions, overrides: Object.keys(st.overrides), lastWhy: st.lastWhy,
                     freshStart: !!st.startFromZero && !st.userSeeked, bufRaised: st.bufRaised
@@ -8726,20 +8885,49 @@
                     let tier = p.tier || p.t;
                     if (!Object.prototype.hasOwnProperty.call(SRC_TIER_RANK, tier)) tier = 'unknown';
                     const clip = !!p.clip;
-                    // clip:该站有清单上分不出、只能靠播放器按分辨率突变跳的中插(如意)→ 本机跳不了(原生 HLS 等)也算有插播
+                    // clip:该站的插播是"播放器按分辨率突变 / 时间戳重启跳过"的(如意藏在正片里的中插、电影天堂切成两组的 1080p 中插,
+                    //   电影天堂的源站还封 worker,只能直连)→ 能不能变干净只看本机播放器能不能跳,与去广告代理在不在链路里无关;
+                    //   其余 noburn 站靠 CF Worker 删清单里的插播,worker 不在链路里就是有插播
                     let downgraded = false;
-                    if (tier === 'noburn' && (!this._srcFilterOn(s) || (clip && !this._srcClipOn()))) { tier = 'insert'; downgraded = true; }
+                    if (tier === 'noburn' && (clip ? !this._srcClipOn(s) : !this._srcFilterOn(s))) { tier = 'insert'; downgraded = true; }
                     return { tier: tier, res: String(p.res || p.r || ''), geo: !!p.geo, note: String(p.note || p.n || ''), codec: String(p.codec || p.c || ''), clip: clip, downgraded: downgraded };
                 },
-                // 本机播放器能不能按"分辨率突变 / 时间戳重启"跳插播(window.adClipSkip):要走 hls.js(iOS/Safari 是浏览器原生 HLS,
-                //   拿不到每段分辨率与时间戳)、判定核心已加载、广告过滤开关开着、没被单独关掉 —— 与 adClipSkip.enabled() 同一套条件
-                //   (_srcFilterOn 对走代理播放的线路提前返回 true、不看开关,这里必须自己判)
-                _srcClipOn() {
+                // 本机播放器能不能按"分辨率突变 / 时间戳重启"跳插播(window.adClipSkip):hls.js 通道收它的事件;浏览器原生 HLS
+                //   (iOS/iPadOS/Safari)由 attachNative 自己拉清单 + 读每组首片头(要 fetch);判定核心已加载(且是 v3:有 probeTs,
+                //   新页面配上 SW 缓存里的旧核心时宁可标有插播)、广告过滤开关开着、没被单独关掉 —— 与 adClipSkip.enabled() 同一套条件
+                //   (_srcFilterOn 对走代理播放的线路提前返回 true、不看开关,这里必须自己判)。
+                //   原生通道还要看该站最近有没有"扫描器读不到"的记录(_clipNativeBad:清单/分片跨域、加密、多码率……)——有就如实标有插播
+                _srcClipOn(s) {
                     try {
-                        if (window._dgPreferNativeHls || !window.Hls || !window.Hls.isSupported() || !window.AdClipCore) return false;
+                        if (!window.AdClipCore || typeof window.AdClipCore.probeTs !== 'function' || !window.adClipSkip) return false;
+                        const viaHlsJs = !window._dgPreferNativeHls && window.Hls && window.Hls.isSupported();
+                        if (!viaHlsJs && !(window.fetch && window.Uint8Array)) return false;
                         if (!(window.AdFilter && window.AdFilter.isEnabled())) return false;
-                        return localStorage.getItem('donggua_adclip_off') !== '1';
+                        if (localStorage.getItem('donggua_adclip_off') === '1') return false;
+                        return viaHlsJs || !(s && this._clipNativeBad(s.site_key));
                     } catch (e) { return false; }
+                },
+                // 📱 原生 HLS 扫描器在某站跑不起来的记账(adClipSkip 回调):3 天 TTL;该站之后哪一集扫描成功就立刻消账
+                _clipNativeBadMap() {
+                    if (!this._clipNativeBadM) {
+                        try { this._clipNativeBadM = JSON.parse(localStorage.getItem('donggua_clipnative_bad') || '{}') || {}; } catch (e) { this._clipNativeBadM = {}; }
+                    }
+                    return this._clipNativeBadM;
+                },
+                _clipNativeBad(siteKey) {
+                    if (!siteKey) return false;
+                    const t = this._clipNativeBadMap()[siteKey];
+                    return !!(t && Date.now() - t < 3 * 86400 * 1000);
+                },
+                _clipNativeSet(siteKey, bad) {
+                    if (!siteKey) return;
+                    const m = this._clipNativeBadMap();
+                    const was = this._clipNativeBad(siteKey);
+                    if (bad) m[siteKey] = Date.now();
+                    else if (m[siteKey]) delete m[siteKey];
+                    else return;
+                    if (was !== !!bad) this.srcRev++;   // 分组/徽章立刻重算
+                    try { localStorage.setItem('donggua_clipnative_bad', JSON.stringify(m)); } catch (e) { }
                 },
                 // 这条线路播放时 CF Worker 去广告在不在链路里(与 play() 的分流条件一致):
                 //   ① 配了 CORS_PROXY_URL;② 走 worker:测速判定要代理(_useProxy,代理即过滤)或 广告过滤开关开着(AdFilter,默认开);
@@ -15232,10 +15420,14 @@
                     })
                     .catch(() => { });
 
-                // 当新 SW 激活时自动刷新页面（防止无限循环）
+                // 当新 SW 激活时自动刷新页面（防止无限循环）:用户刷新一次 → 旧 SW 发现新版 sw.js → 新 SW 接管 → 这里再自动刷新一次,
+                //   新 SW 网络优先给新页面(sw.js v33)。不刷的两种情况:① 第一次装 SW(之前没有控制者)—— 本页就是刚从网络拿的,刷了白刷;
+                //   ② 正在播放 —— 每日定时检查更新时不能把正在看的视频刷掉,下次打开/刷新自然是新版本
                 let swRefreshing = false;
+                const hadController = !!navigator.serviceWorker.controller;
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
-                    if (swRefreshing) return;
+                    if (swRefreshing || !hadController) return;
+                    try { if (typeof dp !== 'undefined' && dp && dp.video && !dp.video.paused && !dp.video.ended) { console.log('[SW] 新版本已就绪,正在播放 → 下次刷新生效'); return; } } catch (e) { }
                     swRefreshing = true;
                     window.location.reload();
                 });
