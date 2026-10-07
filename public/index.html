@@ -6017,8 +6017,7 @@
                                         const text = resp && typeof resp.data === 'string' ? resp.data : null;
                                         if (!text || sess.dead || !window.adCut) return done(null);
                                         if (/#EXT-X-STREAM-INF/i.test(text)) {
-                                            const p = AdClipCore.parseMedia(text, resp.url || ctx.url);
-                                            sess.variants = p.master ? p.master.variants.length : 0;
+                                            sess.variants = (text.match(/#EXT-X-STREAM-INF/gi) || []).length;   // 直接数标签,不依赖地址解析
                                             return done(null);
                                         }
                                         if (sess.variants > 1) return done(null);
@@ -6493,6 +6492,10 @@
                 console.log('[去插播] ' + site + ' 有 worker 删不掉的插播 → 以后播放前剪掉');
             },
             busy() { return this._busy > 0; },
+            // 原生占位交付在本机这个站上出过错(剪后清单播不了 / 交付失败)→ 3 天内该站在本机不再接管 src(不和播放中扫描器的记账混用:
+            //   扫描器读原地址成功会消它自己的账,那会让占位交付每次播放都失败一次再换回)
+            _nativeBad(site) { const t = this._lsGet('donggua_adcut_nativebad')[site]; return !!(t && Date.now() - t < 3 * 86400e3); },
+            _markNativeBad(site) { if (!site) return; const m = this._lsGet('donggua_adcut_nativebad'); m[site] = Date.now(); this._lsSet('donggua_adcut_nativebad', m, 100); },
             // 读分片头:Range 前 n 字节;Safari ≤15 的 Range 要预检 → 跨域失败时不带 Range 再试(读够即断,不会把整片拉完)
             async _head(url, n, noRange) {
                 const ctrl = window.AbortController ? new AbortController() : null;
@@ -6648,7 +6651,7 @@
                     if (!video || !video.src || !v || !v.hlsCutEnabled || !(window.crypto && crypto.getRandomValues)) return false;
                     const w = this.want();
                     if (!w) return false;
-                    if (v._clipNativeBad && v._clipNativeBad(w.site)) return false;   // 这站的清单/分片在本机读不到(跨域等)→ 别换占位地址
+                    if (this._nativeBad(w.site) || (v._clipNativeBad && v._clipNativeBad(w.site))) return false;   // 这站在本机原生剪不了(跨域/交付失败/播放出错)→ 别换占位地址
                     const base = video.src;
                     if (/\/api\/hls\/cut\//.test(base)) return false;
                     const b = new Uint8Array(18);
@@ -6695,18 +6698,33 @@
                         });
                         if (r.ok) return;
                         console.warn('[去插播] 剪后清单交付失败 HTTP ' + r.status + ' → 换回原地址');
+                        if (r.status !== 429 && r.status < 500) this._markNativeBad(job.site);   // 服务器明确拒收(不是一时忙)→ 3 天内不再接管
                     } catch (e) { console.warn('[去插播] 剪后清单交付失败 → 换回原地址'); }
                     if (v._activeCut && v._activeCut.src === job.cutUrl) v._activeCut = null;
                 } else {
-                    console.warn('[去插播] 原生 HLS 读不到原清单(多为跨域)→ 换回原地址,本站 3 天内不再接管');
-                    try { if (v._clipNativeSet) v._clipNativeSet(job.site, true); } catch (e) { }
+                    console.warn('[去插播] 原生 HLS 读不到原清单(跨域 / 多码率)→ 换回原地址,本站 3 天内不再接管');
+                    this._markNativeBad(job.site);
                 }
                 if (alive()) this._restoreNative(video, job);
             },
-            // 唯一会换 src 的路径(交付失败):换回原地址;之前已经在播(paused=false,哪怕还在等数据)就继续播,并重挂播放中静默跳过
+            // 播放器报错时(handleError 最前面调):错误来自剪后清单地址 → 换回原地址、记"本站原生剪不了"、返回 true(调用方不再分诊/换线路)
+            onNativeError(video) {
+                if (!video) return false;
+                const job = video._adCutNative;
+                if (job && !job.dead && video.src === job.cutUrl) {
+                    console.warn('[去插播] 剪后清单在本机原生播放器上出错 → 换回原地址继续播(本站 3 天内不再播放前剪)');
+                    this._markNativeBad(job.site);
+                    try { const v = this.vue(); if (v && v._activeCut && v._activeCut.src === job.cutUrl) v._activeCut = null; } catch (e) { }
+                    this._restoreNative(video, job);
+                    return true;
+                }
+                return !!(video._adCutRestoredAt && performance.now() - video._adCutRestoredAt < 3000 && !video.error);
+            },
+            // 换 src 的路径(交付失败 / 剪后地址出错):换回原地址;之前已经在播(paused=false,哪怕还在等数据)就继续播,并重挂播放中静默跳过
             _restoreNative(video, job) {
                 const wasPlaying = !video.paused;
                 job.dead = true; video._adCutNative = null;
+                video._adCutRestoredAt = performance.now();
                 video.src = job.base;
                 try { if (window.adClipSkip) window.adClipSkip.attachNative(video, job.player); } catch (e) { }
                 if (wasPlaying) { try { const p = video.play(); if (p && p.catch) p.catch(() => { }); } catch (e) { } }
@@ -11822,6 +11840,9 @@
                                         + ' online=' + navigator.onLine);
                                 }
                             } catch (e) { }
+                            // ✂️ 原生通道的剪后清单地址(本站 /api/hls/cut/…)出错 → 同一线路换回原地址继续播(静默跳过兜底),不分诊、不换线路;
+                            //   本站在本机 3 天内不再用占位地址。同一个错误事件 DPlayer 与 <video> 各发一次,换回后 3s 内的重复事件一起吞掉
+                            try { if (window.adCut && window.adCut.onNativeError((typeof dp !== 'undefined' && dp) ? dp.video : null)) return; } catch (e) { }
                             // 🚦 播放一出错就叫停后台离线分析——它正在下几十MB分片抢带宽,是这类"播不了"的常见推手
                             try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }
                             // 🧭 用户已切换到别的剧（_navSeq 变化且 this._activePlaySeq 未被新 play() 刷新到）→ 忽略旧错误

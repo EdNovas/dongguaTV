@@ -799,8 +799,8 @@ console.log('[6b] 播放前剪清单端到端');
     pm.groups.forEach((g, gi) => {
         let acc = 0;
         for (let s = g.sn0; s < g.sn0 + g.n; s++) {
-            const f = pm.frags[s];
-            segData.set(f.url, () => tsWith(lx.g[gi][1] === '1280x720' ? S720 : S1080, lx.g[gi][2] + acc + (mixBad.has(gi) && s === g.sn0 + g.n - 1 ? 250 : 0)));
+            const f = pm.frags[s], a0 = acc, isLast = s === g.sn0 + g.n - 1;   // a0:按值捕获(闭包里别引用会继续变的 acc)
+            segData.set(f.url, () => tsWith(lx.g[gi][1] === '1280x720' ? S720 : S1080, lx.g[gi][2] + a0 + (mixBad.has(gi) && isLast ? 250 : 0)));
             acc += f.duration;
         }
     });
@@ -872,7 +872,7 @@ console.log('[6b] 播放前剪清单端到端');
         const make2 = new Function('window', 'Hls', 'offlineDB', 'offlineKey', '_navSeq', 'AdClipCore', ctSrc + '\nreturn buildOfflineHlsConfig;');
         class XhrStub {
             constructor(cfg) { this.cfg = cfg; this.stats = { loading: {} }; }
-            load(ctx, cfg, cb) { setTimeout(() => cb.onSuccess({ url: ctx.url, data: ctx.url === 'master' ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\nb.m3u8\n' : RAW }, this.stats, ctx, null), 0); }
+            load(ctx, cfg, cb) { setTimeout(() => cb.onSuccess({ url: ctx.url, data: ctx.url === 'https://cdn.example/master.m3u8' ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\na.m3u8\n#EXT-X-STREAM-INF:BANDWIDTH=2\nb.m3u8\n' : RAW }, this.stats, ctx, null), 0); }
             abort() { } destroy() { }
         }
         E = mkEnv();
@@ -887,7 +887,7 @@ console.log('[6b] 播放前剪清单端到端');
         ok(got && got.url === MEDIA && C.parseMedia(got.data, MEDIA).frags.length === 699 && sess.result && sess.result.cuts.length === 2, 'level 清单:地址不变、内容换成剪后的(699 片)', got && got.url);
         const sess2 = E.adCut.session();
         const L2 = new cfg.pLoader(Object.assign({}, cfg, { _dgCut: sess2 }));
-        await new Promise(res => L2.load({ type: 'manifest', url: 'master' }, {}, { onSuccess: res }));
+        await new Promise(res => L2.load({ type: 'manifest', url: 'https://cdn.example/master.m3u8' }, {}, { onSuccess: res }));
         const L3 = new cfg.pLoader(Object.assign({}, cfg, { _dgCut: sess2 }));
         const got3 = await new Promise(res => L3.load({ type: 'level', url: MEDIA }, {}, { onSuccess: res }));
         ok(sess2.variants === 2 && got3.data === RAW, '多码率主清单 → 子清单不剪(原样)');
@@ -923,6 +923,21 @@ console.log('[6b] 播放前剪清单端到端');
         E.adCut.attachNative(v3, {});
         for (let k = 0; k < 60 && v3.src !== MEDIA; k++) await new Promise(res => setTimeout(res, 20));
         ok(v3.src === MEDIA && !v3.played && E.posts.length === 0, '原清单读不到 → 换回原地址(没在播就不自动播)');
+        // 剪后清单在原生播放器上出错(交付成功之后)→ 换回原地址继续播、吞掉同一错误的第二次事件、本站不再接管
+        E = mkEnv();
+        const v5 = { src: MEDIA, paused: false, error: null, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } };
+        E.adCut.attachNative(v5, {});
+        for (let k = 0; k < 60 && !E.posts.length; k++) await new Promise(res => setTimeout(res, 20));
+        await new Promise(res => setTimeout(res, 20));
+        ok(v5.src.includes('/api/hls/cut/'), '交付后仍在占位地址上');
+        v5.error = { code: 4 };
+        ok(E.adCut.onNativeError(v5) === true && v5.src === MEDIA && v5.played === 1, '剪后地址出错 → 换回原地址、继续播,并告诉错误处理链别分诊/换线路');
+        v5.error = null;
+        ok(E.adCut.onNativeError(v5) === true, '同一个错误事件的第二次触发(DPlayer + <video> 各一次)也吞掉');
+        ok(!E.vue._activeCut || E.vue._activeCut.src !== v5.src, '换回原地址后不留剪段(时间轴不再换算)');
+        const v6 = { src: MEDIA };
+        ok(E.adCut.attachNative(v6, {}) === false && v6.src === MEDIA, '出过错的站 3 天内不再接管 src(不会每次播放都失败一次)');
+        ok(E.adCut.onNativeError({ src: MEDIA, error: { code: 2 } }) === false, '与剪清单无关的错误照常交给错误处理链');
         // 服务器不支持(Vercel)/ 没开 → 不接管
         E = mkEnv({ hlsCut: false });
         const v4 = { src: MEDIA };
