@@ -132,6 +132,12 @@ function registerV2boardToken(token, info) {
     PASSWORD_HASH_MAP[token] = info;
 }
 
+// [v2board 分支专用] 机场令牌故意只活在内存、绝不落盘/重启恢复:令牌 = 'v2board_' + 未加盐 sha256(邮箱),
+//   谁知道邮箱谁就算得出来。曾把它存进 SQLite 并在重启时放回(30 天),结果任何知道某人邮箱的人在重启后都能读他的历史/收藏/求片、
+//   把他的推送订阅换成自己的(审查实锤)。要持久化必须先做 HMAC(密钥, 邮箱) 令牌迁移(待站长拍板)。
+//   重启后机场用户的 /api/config 报 sync_enabled:false,前端每次页面加载会补做一次 /api/auth/v2board/check(用面板 auth_data,
+//   不是邮箱)重新登记;推送/收藏通知不因重启断档,见 notifyTokenOk。早期测试版建过的 v2board_tokens 表不再读写(不删:不碍事)。
+
 // 远程配置URL
 const REMOTE_DB_URL = process.env['REMOTE_DB_URL'] || '';
 
@@ -508,6 +514,8 @@ function markSiteNeedsProxy(siteKey, reason = '') {
  * @returns {Promise<object>} - { data, usedProxy, latency }
  */
 async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
+    // 后台任务(收藏更新检查)走单独的分支;交互请求(/api/search、/api/detail…)下面的逻辑一字未改
+    if (options && options.bg) return fetchWithProxyFallbackBg(url, options, siteKey);
     const timeout = options.timeout || 8000;
 
     // 如果该站点之前需要代理且未过期，直接使用代理
@@ -581,6 +589,30 @@ async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
             }
         }
         throw directError;
+    }
+}
+
+// 后台批量请求版(options.bg = true):
+//   · 不做"直连慢 → 再走代理比一比"(批量详情 20 个 id 响应大、本来就慢,对比一次就是多一个请求、还耗 Worker 额度);
+//   · 只读、绝不写 proxyRequiredSites:后台大批量的慢/超时不能把这个站的用户搜索钉到代理 24h(或把它解钉);
+//     已知要代理的站直接走代理;
+//   · 直连失败仍可走一次代理,但要先 options.extra() 占一个请求预算(返回 false = 本轮预算用完,直接按失败处理)。
+async function fetchWithProxyFallbackBg(url, options, siteKey) {
+    const { bg, extra, ...opts } = options;
+    const timeout = opts.timeout || 8000;
+    const viaProxy = (t) => axios.get(`${CORS_PROXY_URL}/?url=${encodeURIComponent(url)}`, { ...opts, timeout: t });
+    const until = siteKey ? proxyRequiredSites.get(siteKey) : 0;   // 只读(shouldUseProxy 会顺手删过期记录)
+    if (CORS_PROXY_URL && until && until > Date.now()) {
+        const r = await viaProxy(timeout);
+        return { data: r.data, usedProxy: true };
+    }
+    try {
+        const r = await axios.get(url, { ...opts, timeout });
+        return { data: r.data, usedProxy: false };
+    } catch (directError) {
+        if (!CORS_PROXY_URL || (typeof extra === 'function' && !extra())) throw directError;
+        const r = await viaProxy(timeout + 2000);
+        return { data: r.data, usedProxy: true };
     }
 }
 
@@ -928,6 +960,39 @@ try {
         });
     }
 } catch (e) { console.warn('[HlsCut] 路由注册失败,原生 HLS 播放前去插播已禁用:', e.message); }
+// 用户令牌校验:只认 PASSWORD_HASH_MAP 自有属性(原型键 'constructor' 等曾绕过登录)
+const ownToken = (token) => typeof token === 'string' && Object.prototype.hasOwnProperty.call(PASSWORD_HASH_MAP, token);
+// 后台发通知(收藏更新/求片结果)前的令牌闸门 —— 只管"发不发",接口鉴权仍用 ownToken;封禁在两个模块里另判。
+//   · 独立密码/主密码令牌:还在 PASSWORD_HASH_MAP 里才发(站长删了/改了这个密码 → 不再发给旧令牌)
+//   · [v2board 分支专用] 机场令牌:不在内存表也照发。它只活在内存(见 registerV2boardToken 下的说明),重启后要等用户再打开网站
+//     才回来 —— 推送恰恰是给不常打开网站的人用的,按内存表判会让每次重启后所有机场用户静默收不到通知。
+//     推送订阅/收藏行只可能是当时通过鉴权的令牌建的,发给它们不扩大谁能拿到什么。main 分支这里只有 ownToken。
+const V2B_TOKEN_RE = /^v2board_[0-9a-f]{64}$/;
+const notifyTokenOk = (token) => ownToken(token) || (typeof token === 'string' && V2B_TOKEN_RE.test(token));
+// 🔔 Web Push(见 lib/webpush):VAPID 密钥优先读 env VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY,没有就首次启动自动生成存 SQLite(站长无需提供);
+//    订阅地址只收已知推送服务主机(防 SSRF);发送失败绝不抛给调用方。需 CACHE_TYPE=sqlite,否则 /api/push/key 报 enabled:false、前端隐藏开关。
+let webPush = null;
+try {
+    webPush = require('./lib/webpush').createWebPush({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        tokenOk: ownToken,             // 接口鉴权(订阅/退订/测试通知)
+        notifyOk: notifyTokenOk,       // 每次发送前现判(见 notifyTokenOk)
+        isBanned: (token) => isBanned(token),
+    });
+    webPush.registerRoutes(app);
+} catch (e) { console.warn('[WebPush] 模块加载失败,推送已禁用:', e.message); webPush = null; }
+// 求片状态变为 已履行/需补充/已拒绝 → 推送给提交人(单条:POST /api/requests/admin;批量:lib/user-stats 回调)。发完不等,失败只记日志
+const REQ_PUSH_BODY = { fulfilled: '有结果了,点开查看', need_info: '站长需要你补充一些信息', rejected: '暂时没能找到,点开查看说明' };
+function notifyRequestStatus(list) {
+    if (!webPush) return;
+    for (const r of (Array.isArray(list) ? list : [list])) {
+        if (!r || !r.user_token || r.from === r.to || !Object.prototype.hasOwnProperty.call(REQ_PUSH_BODY, r.to)) continue;
+        webPush.sendToUser(r.user_token, {
+            title: '《' + String(r.name || '').slice(0, 40) + '》求片有结果了', body: REQ_PUSH_BODY[r.to],
+            url: '/?requests=1', tag: 'req:' + r.id
+        });
+    }
+}
 // 📊 观看/分享实测统计 + 站长后台查询(见 lib/user-stats):前端按"视频真在走且页面在前台"计秒攒批上报,分享链带 s=<分享码> 追踪回流;
 //    站长接口(/api/admin/overview|users|user|shares|requests)全是 SQL 聚合 + 20s 缓存,不再逐行解析 user_history 卡死全站。
 //    需 CACHE_TYPE=sqlite;STATS_DISABLE=1 关闭采集(上报接口 204,/api/config.watch_stats=false)。
@@ -943,10 +1008,56 @@ try {
         isBanned: (token) => isBanned(token),
         identity: (token, label) => userIdentity(token, label),
         adminAuthed: (req) => adminAuthed(req),
-        ipKey
+        ipKey,
+        onRequestStatus: (rows) => notifyRequestStatus(rows)   // 后台批量改求片状态 → 推送提交人
     });
     userStats.registerRoutes(app);
 } catch (e) { console.warn('[UserStats] 模块加载失败,观看/分享统计与新版站长接口已禁用:', e.message); userStats = null; }
+// 🔥 大家都在看(见 lib/popular):watch_stats 近 7 天,除调用者自己以外至少 2 个不同用户(每人 ≥120s)看过才上榜,只给片名(不给人数/时长);
+//    10 分钟全站候选缓存(贡献者令牌只在内存),每个请求扣掉调用者再筛。配了访问密码要有效令牌(?token=)。需 sqlite + 统计开启
+let popular = null;
+try {
+    popular = require('./lib/popular').createPopular({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        enabled: () => STATS_ENABLED && !!REQ_DB_OK(),
+        authRequired: () => ACCESS_PASSWORDS.length > 0,
+        tokenOk: ownToken,
+        isBanned: (token) => isBanned(token)
+    });
+    popular.registerRoutes(app);
+} catch (e) { console.warn('[Popular] 模块加载失败,大家都在看已禁用:', e.message); popular = null; }
+// ❤️ 收藏(追剧)+ 更新提醒(见 lib/favorites):每用户 ≤100 部、全站跟踪 ≤3000 个 (站, 片);后台每 10 分钟只调 maccms 详情 API
+//    批量查集数(每站每批 ≤20 id、每轮 ≤60 请求、并发 2,绝不拉 m3u8),集数变多 → 推送给收藏了它的用户。
+//    需 sqlite;FAV_CHECK_DISABLE=1 只关后台检查(收藏本身照常可用)。匿名 /api/favorites/status 每 IP 30 次/分;
+//    配了访问密码时它也要有效令牌(新登记预算按令牌算)。
+const FAV_CHECK_ENABLED = !envFlag('FAV_CHECK_DISABLE');
+const favSites = () => allSites().filter(s => !(kazumi && kazumi.isKzSite(s)));
+let favorites = null;
+try {
+    favorites = require('./lib/favorites').createFavorites({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        checkEnabled: () => FAV_CHECK_ENABLED && !process.env.VERCEL,
+        authRequired: () => ACCESS_PASSWORDS.length > 0,
+        tokenOk: ownToken,
+        notifyOk: notifyTokenOk,       // 集数变多时给谁发(见 notifyTokenOk)
+        isBanned: (token) => isBanned(token),
+        adminAuthed: (req) => adminAuthed(req),
+        ipKey,
+        // 只有 maccms 站能查更新(番剧规则站 kz_* 是 HTML 刮削,不查)
+        sites: favSites,
+        // 后台检查用:配了 REMOTE_DB_URL 而远程配置还没加载过 → 先按 /api/sites 的同一套逻辑拉;拉不到 → null(本轮跳过,不碰任何行)
+        loadSites: async () => {
+            if (REMOTE_DB_URL && !remoteDbCache && !(await loadRemoteDb())) return null;
+            return favSites();
+        },
+        // bg:不做代理对比、不写共享的代理记忆;直连失败走代理要先 ctl.extra() 占本轮请求预算
+        fetchJson: async (url, siteKey, timeout, ctl) => (await fetchWithProxyFallback(url, { timeout: timeout || 10000, maxContentLength: 8 * 1024 * 1024, bg: true, extra: ctl && ctl.extra }, siteKey)).data,
+        push: (token, payload) => webPush ? webPush.sendToUser(token, payload) : Promise.resolve(null),
+        statusLimiter: rateLimit({ windowMs: 60 * 1000, max: 30, keyGenerator: ipKey, message: { error: '请求过于频繁' } })
+    });
+    favorites.registerRoutes(app);
+    favorites.start();   // 启动 60s 后第一轮,之后每 10 分钟(模块内部到下一轮事件循环才判开关,避开 TDZ)
+} catch (e) { console.warn('[Favorites] 模块加载失败,收藏与更新提醒已禁用:', e.message); favorites = null; }
 
 // 对分享预览 API 应用更严格的限流
 app.use('/api/preview', previewLimiter);
@@ -1454,6 +1565,9 @@ app.get('/api/config', (req, res) => {
         hls_cut: !!hlsCut,
         // 📊 观看计时/分享追踪上报开关(需 sqlite;STATS_DISABLE=1 关)
         watch_stats: !!(userStats && userStats.enabled()),
+        // 🔔 推送可用(需 sqlite + web-push 依赖;密钥自动生成)/ ❤️ 服务器收藏可用(需 sqlite;没开就只用本机收藏)
+        push_enabled: !!(webPush && webPush.enabled()),
+        favorites_enabled: !!(favorites && favorites.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });
@@ -1998,9 +2112,12 @@ app.post('/api/requests/admin', (req, res) => {
             return res.json({ ok: true, deleted: true });
         }
         const st = ['pending', 'fulfilled', 'rejected', 'need_info'].includes(status) ? status : 'fulfilled';
+        const prev = cacheManager.db.prepare('SELECT user_token, name, status FROM content_requests WHERE id = ?').get(id);
         cacheManager.db.prepare(`UPDATE content_requests SET status = ?, fulfill_link = ?, fulfill_note = ?, updated_at = ? WHERE id = ?`)
             .run(st, String(fulfill_link || '').slice(0, 2000), String(fulfill_note || '').slice(0, 500), Date.now(), id);
         if (userStats) userStats.invalidate();
+        // 🔔 状态真的变了才推送(只改链接/说明不打扰)
+        if (prev && prev.status !== st) notifyRequestStatus({ id, user_token: prev.user_token, name: prev.name, from: prev.status, to: st });
         res.json({ ok: true });
     } catch (e) { console.error('[求片履行]', e.message); res.status(500).json({ error: 'Database error' }); }
 });
@@ -2112,29 +2229,31 @@ app.get('/api/tmdb-proxy', async (req, res) => {
 // 注：M3U8 广告过滤已移至 Cloudflare Worker (cloudflare-cors-proxy.js)
 // 客户端通过 CORS_PROXY_URL 路由 M3U8 请求到 CF Worker 进行广告过滤
 
+// 远程站点配置(REMOTE_DB_URL):缓存 5 分钟内直接用,否则拉一次;拉到 → 写缓存并返回,拉不到 → null(调用方自己决定回退)。
+//   /api/sites 与收藏后台检查(lib/favorites 的 loadSites)共用:以前只有 /api/sites 会拉,重启后没人打开首页时
+//   getDB() 一直读本地模板,收藏检查把所有到期行当"站点已删除"推迟一天
+async function loadRemoteDb() {
+    if (!REMOTE_DB_URL) return null;
+    const now = Date.now();
+    if (remoteDbCache && now - remoteDbLastFetch < REMOTE_DB_CACHE_TTL) return remoteDbCache;
+    try {
+        const response = await axios.get(REMOTE_DB_URL, { timeout: 5000 });
+        if (response.data && Array.isArray(response.data.sites)) {
+            remoteDbCache = response.data;
+            remoteDbLastFetch = now;
+            console.log('[Remote] Config loaded successfully');
+            return remoteDbCache;
+        }
+    } catch (err) {
+        console.error('[Remote] Failed to load config:', err.message);
+    }
+    return null;
+}
+
 // 1. 获取站点列表
 app.get('/api/sites', async (req, res) => {
-    let sitesData = null;
-
     // 尝试从远程加载
-    if (REMOTE_DB_URL) {
-        const now = Date.now();
-        if (remoteDbCache && now - remoteDbLastFetch < REMOTE_DB_CACHE_TTL) {
-            sitesData = remoteDbCache;
-        } else {
-            try {
-                const response = await axios.get(REMOTE_DB_URL, { timeout: 5000 });
-                if (response.data && Array.isArray(response.data.sites)) {
-                    sitesData = response.data;
-                    remoteDbCache = sitesData;
-                    remoteDbLastFetch = now;
-                    console.log('[Remote] Config loaded successfully');
-                }
-            } catch (err) {
-                console.error('[Remote] Failed to load config:', err.message);
-            }
-        }
-    }
+    let sitesData = REMOTE_DB_URL ? await loadRemoteDb() : null;
 
     // 回退到本地
     if (!sitesData) {
@@ -3812,6 +3931,39 @@ app.post('/api/auth/v2board', async (req, res) => {
  * Body: { v2boardToken, email }
  * 用 v2board auth_data token 直接查订阅状态，无需密码
  */
+// 这次失败是"面板没答上来"(网络错误/超时/网关或 CDN 的 5xx/限流/崩溃页)还是"面板给了确定答复"?
+//   /check 全部域名都没答上来时回包带 unreachable:true,前端据此让本地仍有效的会话继续用,而不是把人踢下线
+//   (以前面板宕机/被墙/机房到面板的线路抖一下,所有回访用户都被登出,推送订阅也跟着被清)。
+//   · 没有响应(DNS/连接/超时)→ 没答上来
+//   · 408/429 → 没答上来:429 多半是面板按"我们服务器的 IP"限流,所有用户的复查共用这个 IP,不能当成某个人的账号结论
+//   · 403 只有回包是 v2board 自己的 JSON({message:'未登录或登陆已过期'} 这种带字符串 message 的对象)才是"令牌失效"
+//     (v2boardTokenRejected,调用处先判);HTML/字符串回包、或带 cf-mitigated 头 = Cloudflare 质询/1020 封了我们 VPS 的 IP
+//     (面板被打时常开 Under Attack),不是账号结论 → 没答上来、接着试下一个域名(以前任何 403 都当过期,面板一被墙所有人被登出)
+//   · 404/405 → 没答上来:v2board 的 getSubscribe 从不回 404,多半是 domains.json/内置列表里某个旧域名已不再指向面板
+//     (以前算"答复了",一个旧域名就让整次复查丢掉 unreachable)
+//   · 其它 4xx → 面板答复了
+//   · 500 要分开看:v2board 的业务错误就是 abort(500, '具体原因')(如 The user does not exist,账号被删)→ 答复了;
+//     Laravel 崩溃页是 {"message":"Server Error"}(调试模式还带 exception/trace)或一页 HTML → 没答上来
+//   · 其它 5xx(502/503/504/52x,网关/CDN)→ 没答上来
+const v2boardJsonMessage = (d) => !!d && typeof d === 'object' && !Array.isArray(d) && typeof d.message === 'string';
+const v2boardCfMitigated = (r) => { const h = (r && r.headers) || {}; return !!(h['cf-mitigated'] || (typeof h.get === 'function' && h.get('cf-mitigated'))); };
+function v2boardTokenRejected(err) {
+    const r = err && err.response;
+    return !!r && Number(r.status) === 403 && !v2boardCfMitigated(r) && v2boardJsonMessage(r.data);
+}
+function v2boardNoAnswer(err) {
+    const r = err && err.response;
+    if (!r) return true;
+    const st = Number(r.status) || 0;
+    if (st === 408 || st === 429 || st === 404 || st === 405) return true;
+    if (st === 403) return !v2boardTokenRejected(err);
+    if (st < 500) return false;
+    if (st !== 500) return true;
+    const d = r.data;
+    if (!d || typeof d !== 'object' || d.exception || d.trace) return true;
+    const m = typeof d.message === 'string' ? d.message.trim() : '';
+    return !m || /^server error$/i.test(m);
+}
 // /check 每 IP 每分钟最多 20 次(正常用户只在启动/每 2 小时/每 5 天各调一次;以前不限流,可被拿来批量探测)
 const v2boardCheckRate = new Map();
 setInterval(() => { const now = Date.now(); for (const [ip, r] of v2boardCheckRate) if (now > r.resetAt) v2boardCheckRate.delete(ip); }, 10 * 60 * 1000);
@@ -3834,6 +3986,8 @@ app.post('/api/auth/v2board/check', async (req, res) => {
 
     const domains = await getV2BoardDomains();
     let lastError = '服务不可用';
+    // 有没有哪个域名给出了确定答复(见 v2boardNoAnswer);一个都没有 → 回包带 unreachable:true
+    let answered = false;
 
     for (const domain of domains) {
         try {
@@ -3846,6 +4000,7 @@ app.post('/api/auth/v2board/check', async (req, res) => {
 
             const subData = subRes.data;
             if (!subData || !subData.data) {
+                // 2xx 却不是订阅数据(停放页/CDN 维护页/HTML):不是 v2board 的答复,算没答上来
                 lastError = '获取订阅信息失败';
                 continue;
             }
@@ -3930,16 +4085,21 @@ app.post('/api/auth/v2board/check', async (req, res) => {
             });
 
         } catch (err) {
-            if (err.response && err.response.status === 403) {
-                // Token 过期/无效
+            if (v2boardTokenRejected(err)) {
+                // 面板自己(JSON)说令牌过期/无效;CDN 质询/封 IP 的 403 不算,见 v2boardNoAnswer
                 return res.json({ success: false, message: 'Token 已过期，请重新登录', tokenExpired: true });
             }
+            if (!v2boardNoAnswer(err)) answered = true;
             lastError = err.message || '网络错误';
             console.log(`[V2Board] Token 验证域名 ${domain} 失败: ${lastError}`);
         }
     }
 
-    res.json({ success: false, message: lastError });
+    // 面板给过确定答复(如账号已删的 500、404 等):形状不变,前端照旧按失败处理;
+    //   所有域名都没答上来:加 unreachable:true —— 这不是"账号失效",前端可让本地仍有效的会话继续用
+    if (answered) return res.json({ success: false, message: lastError });
+    console.log(`[V2Board] Token 验证:${domains.length} 个面板域名都没答上来(${lastError}),回 unreachable`);
+    res.json({ success: false, unreachable: true, message: '暂时连不上机场面板，请稍后再试' });
 });
 
 // ========== 认证 API ==========

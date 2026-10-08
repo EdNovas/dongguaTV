@@ -1031,6 +1031,14 @@ app.post('/api/danmaku/v3/', (req, res) => res.json({ code: 0, msg: '' }));
 
 // 📊 观看/分享统计:无状态后端没有 SQLite,/api/config 报 watch_stats:false 前端根本不会来;万一来了(旧缓存页面)一律 204 静默丢弃
 app.post(['/api/stats/watch', '/api/stats/share', '/api/stats/share-open'], (req, res) => res.status(204).set('Cache-Control', 'no-store').end());
+// 🔔 推送 / ❤️ 收藏 / 🔥 大家都在看:都要 SQLite(订阅、收藏、观看统计)+ 常驻进程(后台更新检查)→ 无状态后端一律关闭。
+//    /api/config 报 push_enabled/favorites_enabled:false,前端走本机收藏、隐藏推送开关;万一来了(旧缓存页面)返回空桩
+app.get('/api/push/key', (req, res) => res.set('Cache-Control', 'no-store').json({ enabled: false, publicKey: null }));
+app.post(['/api/push/subscribe', '/api/push/unsubscribe', '/api/push/test'], (req, res) => res.status(204).set('Cache-Control', 'no-store').end());
+app.get('/api/favorites', (req, res) => res.set('Cache-Control', 'no-store').json({ enabled: false, limit: 100, items: [] }));
+app.post('/api/favorites/status', (req, res) => res.set('Cache-Control', 'no-store').json({ enabled: false, status: {} }));
+app.post(['/api/favorites/add', '/api/favorites/remove', '/api/favorites/seen'], (req, res) => res.set('Cache-Control', 'no-store').json({ ok: false, enabled: false }));
+app.get('/api/popular', (req, res) => res.set('Cache-Control', 'no-store').json({ window: '7d', items: [] }));
 
 // ========== API: /api/config ==========
 app.get('/api/config', (req, res) => {
@@ -1048,7 +1056,9 @@ app.get('/api/config', (req, res) => {
         // 📮 求片：Vercel 无持久 SQLite、不适合求片(需站长长期履行)→ 始终关闭，仅 VPS(server.js) 支持
         requests_enabled: false,
         hls_cut: false,  // ✂️ 无状态后端托管不了剪后的清单(见 lib/hls-cut)
-        watch_stats: false   // 📊 观看/分享统计要 SQLite(见 lib/user-stats)→ 前端不计时、分享链不带 s=
+        watch_stats: false,  // 📊 观看/分享统计要 SQLite(见 lib/user-stats)→ 前端不计时、分享链不带 s=
+        push_enabled: false,       // 🔔 推送订阅要 SQLite(见 lib/webpush)
+        favorites_enabled: false   // ❤️ 服务器收藏/更新检查要 SQLite + 常驻进程(见 lib/favorites)→ 前端只用本机收藏
     });
 });
 

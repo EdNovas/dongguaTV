@@ -2538,6 +2538,56 @@
             text-overflow: ellipsis;
         }
 
+        /* ⭐ 我的收藏:封面左上角"有更新"红点角标(纯色背景,不用 backdrop-filter——整行最多 100 张,滚动时重绘贵) */
+        .fav-upd-badge {
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            max-width: calc(100% - 36px);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            background: #e50914;
+            color: #fff;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, .5);
+        }
+        .fav-upd-badge::before {
+            content: '';
+            flex: none;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #fff;
+        }
+        /* 详情页标题旁的 ♥ 收藏按钮 */
+        .video-title-row { display: flex; align-items: center; gap: 12px; }
+        .fav-heart {
+            flex: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, .15);
+            background: rgba(255, 255, 255, .08);
+            color: #ddd;
+            font-size: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: transform .15s, background .2s, color .2s;
+        }
+        .fav-heart:hover { background: rgba(255, 255, 255, .16); }
+        .fav-heart:active { transform: scale(.9); }
+        .fav-heart.on { color: #e50914; border-color: rgba(229, 9, 20, .45); background: rgba(229, 9, 20, .12); }
+        .fav-heart:disabled { opacity: .5; cursor: default; }
+
         .movie-date {
             font-size: calc(12px * var(--ui-scale, 1));
             color: #666;
@@ -4263,6 +4313,42 @@
                 </div>
             </div>
 
+            <!-- ⭐ 我的收藏(追剧 + 更新提醒):服务器没开收藏(无 sqlite / Vercel)或一部都没收藏时整段隐藏 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="favoritesEnabled && favList.length > 0"
+                :style="{ marginTop: watchHistory.length ? '48px' : '60px', marginBottom: '10px' }">
+                <div class="section-header" style="display: flex; align-items: center;">
+                    <div class="section-line" style="background: linear-gradient(135deg, #ff4b6e, #e50914);"></div>
+                    <div class="section-title"><i class="fas fa-heart"></i> 我的收藏</div>
+                    <span v-if="favUpdateCount > 0" style="margin-left: 12px; color: #ff6b6b; font-size: 12px;">{{ favUpdateCount }} 部有更新</span>
+                    <span style="margin-left: auto; color: #777; font-size: 12px;">{{ favList.length }} / {{ favLimit }}</span>
+                </div>
+                <div class="scroll-container">
+                    <button class="scroll-btn left" v-show="favCanScrollLeft" @click="scrollRowBy('favRow', -1)"
+                        aria-label="向左滚动收藏"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <div class="hot-row" ref="favRow" @scroll="onFavPopRowScroll('favRow', 'fav')">
+                        <div class="history-card" v-for="item in favSorted" :key="'fav-' + item.fav_id">
+                            <div class="history-delete-btn" title="取消收藏" @click.stop="removeFavorite(item)">
+                                <i class="fas fa-times"></i>
+                            </div>
+                            <div class="poster-wrap" @click="openFavorite(item)">
+                                <img :src="(item.data && item.data.poster) || getPosterUrl('')" :alt="item.data && item.data.name" decoding="async" loading="lazy"
+                                    referrerpolicy="no-referrer"
+                                    @load="$event.target.classList.add('loaded'); $event.target.parentElement && $event.target.parentElement.classList.add('img-loaded')"
+                                    @error="$event.target.src='data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27150%27 height=%27225%27%3E%3Crect fill=%27%23333%27 width=%27150%27 height=%27225%27/%3E%3C/svg%3E'; $event.target.classList.add('loaded'); $event.target.parentElement && $event.target.parentElement.classList.add('img-loaded')">
+                                <div v-if="favHasUpdate(item)" class="fav-upd-badge">{{ favBadgeText(item) }}</div>
+                                <div class="play-icon-overlay">
+                                    <i class="fas fa-play"></i>
+                                </div>
+                            </div>
+                            <div class="movie-name" @click="openFavorite(item)">{{ item.data && item.data.name }}</div>
+                            <div class="movie-date" style="font-size: 11px;">{{ favSubText(item) }}</div>
+                        </div>
+                    </div>
+                    <button class="scroll-btn right" v-show="favCanScrollRight" @click="scrollRowBy('favRow', 1)"
+                        aria-label="向右滚动收藏"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                </div>
+            </div>
+
             <!-- ✨ 为你推荐：基于观看历史的 TMDB 推荐(无历史/无结果时整段隐藏) -->
             <div class="section-container animate__animated animate__fadeInUp" v-if="recommendList.length > 0"
                 style="margin-top: 48px; margin-bottom: 44px;">
@@ -4322,6 +4408,33 @@
                         <button class="rec-pager-btn" :disabled="recommendPage >= recTotalPages()" @click="recPageNext"
                             aria-label="下一页"><i class="fas fa-chevron-right"></i></button>
                     </div>
+                </div>
+            </div>
+
+            <!-- 👥 大家都在看：站内实测观看统计(≥2 个不同用户看过才上榜,只给汇总);不足 4 部整段隐藏 -->
+            <div class="section-container animate__animated animate__fadeInUp" v-if="popularList.length >= 4"
+                style="margin-top: 48px; margin-bottom: 44px;">
+                <div class="section-header" style="display: flex; align-items: center;">
+                    <div class="section-line" style="background: linear-gradient(135deg, #00c6ff, #0072ff);"></div>
+                    <div class="section-title"><i class="fas fa-users"></i> 大家都在看</div>
+                    <span style="margin-left: 12px; color: #777; font-size: 12px;">本站用户最近 7 天常看</span>
+                </div>
+                <div class="scroll-container">
+                    <button class="scroll-btn left" v-show="popularCanScrollLeft" @click="scrollRowBy('popularRow', -1)"
+                        aria-label="向左滚动大家都在看"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <div class="hot-row" ref="popularRow" @scroll="onFavPopRowScroll('popularRow', 'popular')">
+                        <div class="hot-card" v-for="item in popularList" :key="'pop-' + item.title"
+                            @click="autoSearch(item.name)">
+                            <div class="poster-wrap">
+                                <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
+                                    @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
+                            </div>
+                            <div class="movie-name">{{ item.name }}</div>
+                            <div class="movie-date">{{ item.year || '' }}</div>
+                        </div>
+                    </div>
+                    <button class="scroll-btn right" v-show="popularCanScrollRight" @click="scrollRowBy('popularRow', 1)"
+                        aria-label="向右滚动大家都在看"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 </div>
             </div>
 
@@ -4686,6 +4799,30 @@
                         <i class="fas fa-chevron-right" style="color: #666;"></i>
                     </div>
 
+                    <!-- 🔔 更新提醒推送(服务器开了 push 且浏览器支持才显示;iOS 只有"添加到主屏幕"后的 PWA 才有推送) -->
+                    <div v-if="pushUi !== 'hidden'" style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-bell" style="margin-right: 8px; color: #e50914;"></i>更新提醒推送</div>
+                                <div style="color: #888; font-size: 12px; margin-top: 4px;">收藏的剧更新、求片有结果时发系统通知</div>
+                            </div>
+                            <label v-if="pushUi === 'ok'" class="settings-switch">
+                                <input type="checkbox" :checked="pushSubscribed" :disabled="pushBusy" @change="togglePush($event)">
+                                <span class="settings-slider"></span>
+                            </label>
+                        </div>
+                        <div v-if="pushUi === 'ios-hint'" style="color: #888; font-size: 12px; margin-top: 8px;">
+                            iPhone/iPad 需先添加到主屏幕（Safari 分享按钮 → 添加到主屏幕），从主屏幕图标打开后才能开启推送
+                        </div>
+                        <div v-else-if="pushUi === 'need-sync'" style="color: #888; font-size: 12px; margin-top: 8px;">
+                            需使用支持云同步的账号登录后才能开启
+                        </div>
+                        <div v-if="pushUi === 'ok' && pushSubscribed" style="margin-top: 10px;">
+                            <button class="btn btn-outline-light btn-sm" :disabled="pushBusy" @click="pushTest"><i class="fas fa-paper-plane"></i> 发送测试通知</button>
+                        </div>
+                        <div v-if="pushMsg" style="color: #fbbf24; font-size: 12px; margin-top: 8px;">{{ pushMsg }}</div>
+                    </div>
+
                     <!-- 提示信息 -->
                     <div
                         style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
@@ -4850,7 +4987,15 @@
                 <!-- 1. 顶部：标题栏 + 投屏 -->
                 <div class="video-header">
                     <div>
-                        <h1 class="video-title">{{ currentGroup.name }}</h1>
+                        <div class="video-title-row">
+                            <h1 class="video-title">{{ currentGroup.name }}</h1>
+                            <!-- ⭐ 收藏(追剧):直播/离线缓存/未登录预览/深链加载中(还没有线路)不显示 -->
+                            <button v-if="favoritesEnabled && !previewLocked && !currentGroup._isLive && !currentGroup._offlineCtx && currentGroup.sources && currentGroup.sources.length"
+                                class="fav-heart" :class="{ on: !!curFav }" tabindex="2" :disabled="favBusy"
+                                @click="toggleFavorite" :title="curFav ? '取消收藏' : '收藏(追剧,有更新会提醒)'" :aria-label="curFav ? '取消收藏' : '收藏'">
+                                <i :class="curFav ? 'fas fa-heart' : 'far fa-heart'"></i>
+                            </button>
+                        </div>
                         <div class="video-meta">
                             <template v-if="previewLocked"><i class="fas fa-lock" style="color:#e50914;"></i> 登录后即可观看</template>
                             <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
@@ -5209,23 +5354,21 @@
                                 }
                                 return; // 不登出
                             }
+                            // 服务器连不上机场面板(所有域名都失败,R4 的 unreachable 标记)≠ 确认过期:与网络错误一样暂不登出,2 小时后再确认
+                            if (data.unreachable === true) {
+                                console.log('[V2Board] 机场面板暂时连不上，暂不登出');
+                                return;
+                            }
                         } catch (e) {
                             console.error('[V2Board] API 确认失败，网络错误，暂不登出:', e);
                             return;
                         }
                     }
 
-                    // API 确认已过期，执行登出
-                    clearInterval(v2boardExpiryTimer);
+                    // API 确认已过期，执行登出(被动登出只清登录态:收藏/推送留着,同一个人续费后重新登录照旧;
+                    //   换了别的账号登录时,推送由 _pushRefreshState 的归属检查退掉、收藏缓存按账号认,不会串)
                     console.log('[V2Board] API 确认套餐已过期，自动登出');
-                    localStorage.removeItem(AUTH_STORAGE_KEY);
-                    localStorage.removeItem(AUTH_EXPIRY_KEY);
-                    localStorage.removeItem(AUTH_TYPE_KEY);
-                    localStorage.removeItem(V2B_EMAIL_KEY);
-                    localStorage.removeItem(V2B_TOKEN_KEY);
-                    localStorage.removeItem(V2B_PLAN_KEY);
-                    localStorage.removeItem(V2B_LAST_CHECK_KEY);
-                    localStorage.removeItem(V2B_EXPIRES_KEY);
+                    clearAuthState();
                     alert('您的机场套餐已到期，请续费后重新登录。\n\n前往续费: domain.ednovas.xyz');
                     location.reload();
                 }
@@ -5415,6 +5558,11 @@
             return false;
         }
 
+        // 本页加载期内 /api/auth/v2board/check 是否已经有过回答(成功 / 失败 / 面板连不上都算;断网、超时、429 不算)。
+        //   initHistorySync 的"sync_enabled:false → 补验证一次"看它:启动时的 5 天验证刚问过(多半是面板连不上),同一页就不再问第二遍
+        let v2bAnsweredThisLoad = false;
+        function v2boardAnsweredThisLoad() { return v2bAnsweredThisLoad; }
+
         // V2Board Token 免密续期验证
         async function revalidateV2boardSession() {
             const email = localStorage.getItem(V2B_EMAIL_KEY);
@@ -5434,6 +5582,7 @@
 
                 if (res.status === 429) return true;   // 被限流 ≠ 套餐失效:与网络错误一样不阻断使用
                 const data = await res.json();
+                v2bAnsweredThisLoad = true;
 
                 if (data.success) {
                     // 验证成功，更新最后检查时间
@@ -5561,6 +5710,14 @@
                                 window.startApp && window.startApp();
                                 return;
                             }
+                            // 🛰️ 服务器连不上机场面板(所有域名都失败 → unreachable:true)≠ 套餐失效:登录本身没过期就照常进,
+                            //    但不更新"上次验证"时间(下次打开页面再验),本会话最多提示一次。其它失败(过期/token 失效/流量用尽)照旧登出
+                            if (renewResult && typeof renewResult === 'object' && renewResult.unreachable === true) {
+                                startV2boardExpiryTimer();
+                                window.startApp && window.startApp();
+                                noteV2boardUnreachable();
+                                return;
+                            }
                         } else {
                             // 登录已过期（超过1年），尝试自动续期
                             renewResult = await revalidateV2boardSession();
@@ -5628,7 +5785,30 @@
             }
         }
 
-        // 清除认证状态
+        // 机场面板连不上、按上次的登录状态放行后的提示:不挡操作(pointer-events:none,几秒后自己消失),每个会话最多一次
+        let v2bUnreachNoted = false;
+        function noteV2boardUnreachable() {
+            if (v2bUnreachNoted) return;
+            v2bUnreachNoted = true;
+            try {
+                if (sessionStorage.getItem('donggua_v2b_unreach_noted')) return;
+                sessionStorage.setItem('donggua_v2b_unreach_noted', '1');
+            } catch (e) { }
+            try {
+                const t = document.createElement('div');
+                t.className = 'v2b-unreach-note';
+                t.textContent = '机场面板暂时连不上，已按上次的登录状态进入（下次打开会再验证）';
+                t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);max-width:88vw;background:rgba(0,0,0,0.88);color:#fff;padding:10px 18px;border-radius:20px;z-index:2147483600;font-size:13px;line-height:1.5;text-align:center;pointer-events:none;box-shadow:0 6px 24px rgba(0,0,0,.4);';
+                document.body.appendChild(t);
+                setTimeout(() => { t.style.transition = 'opacity .4s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 400); }, 5000);
+            } catch (e) { }
+        }
+
+        // 清除认证状态(被动登出:套餐到期定时器 / 启动验证失败 / 登录过期 / 设置里刷新订阅发现过期 都走这里)。
+        //   ⚠️ 只清登录态。收藏(donggua_favorites / donggua_fav_cache)和推送订阅都留着:被动登出多半是同一个人
+        //      (不勾"记住密码"的 24h 到期、套餐到期续费后重登),清掉 = 非同步用户唯一一份收藏没了、推送悄悄关了。
+        //      换别的账号登录也不会串:收藏缓存、大家都在看缓存都按账号 token 认(_favCacheLoad / fetchPopular),推送订阅由 _pushStartupSync/_pushRefreshState
+        //      按 donggua_push_on 的账号标记检查,不是这个账号开的就退掉。真正"换人"的全量清理只在主动退出(confirmLogout)
         function clearAuthState() {
             localStorage.removeItem(AUTH_STORAGE_KEY);
             localStorage.removeItem(AUTH_EXPIRY_KEY);
@@ -5639,6 +5819,44 @@
             localStorage.removeItem(V2B_LAST_CHECK_KEY);
             localStorage.removeItem(V2B_EXPIRES_KEY);
             if (v2boardExpiryTimer) { clearInterval(v2boardExpiryTimer); v2boardExpiryTimer = null; }
+        }
+
+        // ⭐🔔 主动"退出登录"(confirmLogout,用户自己点的 = 可能换人)时清掉账号相关的本机数据(不依赖 Vue):
+        //   ① 本机收藏 donggua_favorites、同步用户的收藏缓存 donggua_fav_cache、推送开关 donggua_push_on、
+        //      大家都在看缓存 donggua_popular_cache3(扣掉了这个账号自己那一票,本身按账号认,退出时也不留) —— 否则换人登录看到/收到上个人的
+        //   ② 推送订阅绑在旧账号 token 上:浏览器这边退订 + 带旧 token 通知服务器删掉(keepalive,页面紧接着刷新也照样发出)
+        //   被动登出(clearAuthState)不调它,见上。返回 Promise:绝不 reject;没装 SW / 没订阅时立刻完成(刷新页面用 reloadAfterCleanup 最多等 2s)
+        function clearAccountLocalData(oldToken) {
+            try {
+                localStorage.removeItem('donggua_favorites');
+                localStorage.removeItem('donggua_fav_cache');
+                localStorage.removeItem('donggua_push_on');
+                localStorage.removeItem('donggua_popular_cache3');
+                localStorage.removeItem('donggua_popular_cache2');
+            } catch (e) { }
+            return (async () => {
+                try {
+                    if (!('serviceWorker' in navigator) || !navigator.serviceWorker.getRegistration) return;
+                    const reg = await navigator.serviceWorker.getRegistration();   // 没注册 SW 时是 undefined(不像 .ready 会一直等)
+                    const sub = (reg && reg.pushManager) ? await reg.pushManager.getSubscription() : null;
+                    if (!sub) return;
+                    if (oldToken && sub.endpoint) {
+                        try {
+                            fetch('/api/push/unsubscribe', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' }, keepalive: true,
+                                body: JSON.stringify({ token: oldToken, endpoint: sub.endpoint })
+                            }).catch(() => { });
+                        } catch (e) { }
+                    }
+                    try { await sub.unsubscribe(); } catch (e) { }
+                } catch (e) { }
+            })();
+        }
+
+        // 主动退出后刷新页面:先等本机数据清理(推送退订)做完,最多 ms(默认 2s),绝不卡住刷新
+        function reloadAfterCleanup(cleanup, ms) {
+            const cap = new Promise(r => setTimeout(r, ms || 2000));
+            Promise.race([Promise.resolve(cleanup).catch(() => { }), cap]).then(() => location.reload(), () => location.reload());
         }
 
         // 显示登录页面
@@ -7394,6 +7612,23 @@
                     recommendPage: 1,               // 为你推荐：展开网格当前页(分页)
                     recommendCanScrollLeft: false,  // 为你推荐：左箭头显隐
                     recommendCanScrollRight: true,  // 为你推荐：右箭头显隐
+                    // ⭐ 我的收藏(追剧+更新提醒)。同步用户存服务器,其他人存本机 donggua_favorites;条目形状两边一致:
+                    //    { fav_id, data:{name,poster,workSig,workLabel,checkSource,sources,addedEpCount,kind}, added_at, seen_count, status }
+                    favoritesEnabled: false,        // 来自 /api/config(favorites_enabled:服务器有 sqlite 才 true;Vercel 恒 false)
+                    favList: [],
+                    favLimit: 100,                  // 每人最多收藏 100 部(服务器同样卡)
+                    favBusy: false,                 // ♥ 请求中(防连点)
+                    favCanScrollLeft: false,
+                    favCanScrollRight: false,
+                    // 👥 大家都在看(/api/popular + TMDB 补海报)
+                    popularList: [],
+                    popularCanScrollLeft: false,
+                    popularCanScrollRight: true,
+                    // 🔔 Web Push 更新提醒
+                    pushEnabled: false,             // 来自 /api/config(push_enabled)
+                    pushSubscribed: false,          // 本浏览器当前是否已订阅(打开偏好设置时按 pushManager 实况刷新)
+                    pushBusy: false,
+                    pushMsg: '',
                     // 📺 直播(IPTV)
                     liveEnabled: false,             // 来自 /api/config(live_enabled)
                     liveChannels: [],               // 全部直播频道(来自 /api/live/channels)
@@ -7602,6 +7837,8 @@
                     clearTimeout(resizeTimeout);
                     resizeTimeout = setTimeout(() => {
                         this.updateHistoryScrollNeeded();
+                        this.onFavPopRowScroll('favRow', 'fav');            // ⭐ 收藏 / 👥 大家都在看 两行的左右箭头
+                        this.onFavPopRowScroll('popularRow', 'popular');
                     }, 150);
                 }, { passive: true });
 
@@ -7787,6 +8024,28 @@
                 };
             },
             computed: {
+                // ⭐ 详情页这部是否已收藏(♥ 实心)。只依赖 favList 与 currentGroup 的名字/签名,播放中不会反复重算
+                curFav() {
+                    return (this.favoritesEnabled && this.currentGroup) ? this._favFind(this.currentGroup) : null;
+                },
+                // ⭐ 收藏行顺序:有更新的排前面(最近更新的最前),其余按收藏时间倒序
+                favSorted() {
+                    return (this.favList || []).slice().sort((a, b) => {
+                        const ua = this.favHasUpdate(a), ub = this.favHasUpdate(b);
+                        if (ua !== ub) return ua ? -1 : 1;
+                        if (ua) return ((b.status && b.status.changed_at) || 0) - ((a.status && a.status.changed_at) || 0);
+                        return (b.added_at || 0) - (a.added_at || 0);
+                    });
+                },
+                favUpdateCount() { return (this.favList || []).filter(x => this.favHasUpdate(x)).length; },
+                // 🔔 偏好设置里推送那一行显示什么:hidden / ios-hint(iOS 没添加到主屏幕) / need-sync(没登录同步账号) / ok
+                pushUi() {
+                    if (!this.pushEnabled || this.isNativeApp) return 'hidden';   // 安卓 App(Capacitor 壳)内没有 Web Push
+                    const sup = this._pushSupport();
+                    if (sup === 'ios-browser') return 'ios-hint';
+                    if (sup !== 'ok') return 'hidden';
+                    return (this.syncEnabled && this.syncToken) ? 'ok' : 'need-sync';
+                },
                 // 📺 直播分类 tab(全部 + 服务器给的、当前语言下实际存在的分类)
                 liveGroups() {
                     const inLang = this.liveLangFilter === '全部'
@@ -7949,6 +8208,15 @@
                         return { email, planName: '未知', expiryText: '未知', trafficText: '未知' };
                     }
                 }
+            },
+            watch: {
+                // ⭐ 开始播放/换集时清掉这部收藏的"有更新"红点(seen)。currentUrl 只在起播/换集时变,低频
+                currentUrl(v) { if (v) this._favOnPlay(); },
+                // ⭐ 回到首页(关详情页/退出搜索)时刷新收藏状态,最多每 10 分钟一次
+                showDetail(v) { if (!v) this._favRefreshMaybe(); },
+                searched(v) { if (!v) this._favRefreshMaybe(); },
+                // 🔔 打开偏好设置时按浏览器实况刷新推送开关(用户可能在系统设置里关了通知权限)
+                showSettingsModal(v) { if (v) this._pushRefreshState(); }
             },
             methods: {
                 // ========== 📺 直播(IPTV) ==========
@@ -8179,6 +8447,9 @@
                             try { if (window.watchMeter) window.watchMeter.enable(); } catch (e) { }
                             this._shareOpenReport();
                         }
+                        // ⭐ 收藏 / 🔔 推送(都要服务器 sqlite;没有就整个入口隐藏)
+                        this.favoritesEnabled = !!config.favorites_enabled;
+                        this.pushEnabled = !!config.push_enabled;
                         // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
                         this.liveEnabled = !!config.live_enabled;
                         // 🚫 封禁锁屏（站长在后台封了这个用户）
@@ -8300,6 +8571,8 @@
 
                     // ✨ 为你推荐：延迟低优先级加载(等首页榜单先渲染)，无历史时方法内部直接跳过
                     setTimeout(() => this.fetchRecommendations(), 2500);
+                    // 👥 大家都在看：比推荐再晚一点(都是低优先级的 TMDB 查询,错开)
+                    setTimeout(() => this.fetchPopular(), 3500);
 
                     // 📺 直播：先用本地缓存秒显，再延迟拉取最新频道列表
                     this._loadLiveRecentLocal();
@@ -8390,27 +8663,70 @@
                 // ========== 📡 历史同步功能 ==========
 
                 // 初始化同步状态
+                //   ⚠️ 同步与否没确认之前,收藏只"显示"(_favBoot(true)),♥ 不写任何地方;确认失败(弱网/5xx/超时)后
+                //      'online' 事件与回到首页(_favRefreshMaybe)时重试本方法(_favRetryBoot)
                 async initHistorySync() {
                     // 从 localStorage 获取同步 Token (与密码验证使用相同的 key)
-                    const storedToken = localStorage.getItem('emax_auth_hash');
-                    if (storedToken) {
-                        this.syncToken = storedToken;
-
-                        // 检查此 Token 是否启用同步
-                        try {
-                            const res = await fetch(`/api/config?token=${storedToken}`);
-                            const data = await res.json();
-                            this.syncEnabled = data.sync_enabled || false;
-
-                            if (this.syncEnabled) {
-                                // 启用同步，执行首次同步
-                                await this.syncHistory();
-                                await this.pullUserSettings();  // 同步用户偏好(弹幕开关等)
+                    let storedToken = localStorage.getItem('emax_auth_hash');
+                    if (!storedToken) {
+                        this._favBoot();
+                        this._pushStartupSync(false);   // 没登录:浏览器里残留的推送订阅不该留着
+                        return;
+                    }
+                    this.syncToken = storedToken;
+                    if (this._syncChecking) return;
+                    this._syncChecking = true;
+                    let data = null;
+                    try {
+                        // 检查此 Token 是否启用同步(⏱️ 8s 超时:弱网挂起不能让收藏一直处在"未知"态)
+                        data = await this._syncConfigFetch(storedToken);
+                        // 🧾 v2board 账号一定是同步账号:说 sync_enabled:false = 服务器重启后还没重新登记这个 token(服务器不落盘,
+                        //    只有 /api/auth/v2board/check 会登记,启动时 5 天内验证过就跳过)→ 本页加载期内补做一次同一个套餐验证,再读一次配置。
+                        //    启动时的 5 天验证本页已经问过(有回答还没登记上 = 面板连不上)就不再问第二遍;面板连不上/验证失败 → 下面按"只显示"启动,
+                        //    什么都不删、不登出(登出只归启动验证和到期定时器管)。之后 online/回首页的重试只重读配置,不再验证(每页最多一次)
+                        const isV2b = localStorage.getItem('emax_auth_type') === 'v2board';
+                        if (!data.sync_enabled && isV2b && !this._v2bRechecked && typeof revalidateV2boardSession === 'function') {
+                            this._v2bRechecked = true;
+                            const asked = typeof v2boardAnsweredThisLoad === 'function' && v2boardAnsweredThisLoad();
+                            if (!asked) {
+                                try { await revalidateV2boardSession(); } catch (e) { }
+                                storedToken = localStorage.getItem('emax_auth_hash') || storedToken;
+                                this.syncToken = storedToken;
+                                data = await this._syncConfigFetch(storedToken);
                             }
+                        }
+                        if (!data.sync_enabled && isV2b) throw new Error('v2board token 未被服务器确认');   // 宁可只显示,不写进本机列表
+                    } catch (e) {
+                        console.error('[同步] 检查同步状态失败:', e);
+                        this._syncChecking = false;
+                        this._favBoot(true);   // 断网/弱网:只显示上次的收藏(不知道是不是同步用户,♥ 暂不可用),稍后重试
+                        return;
+                    }
+                    this._syncChecking = false;
+                    this.syncEnabled = !!data.sync_enabled;
+                    // ⭐ 收藏:同步与否定了才知道走服务器还是本机(不等历史同步,它可能很慢)
+                    this._favBoot();
+                    // 登录确认前就发出去的账号请求(推送点进来的 ?requests=1、大家都在看)可能吃了 401 → 现在重拉一次
+                    if (this.showRequestModal) this.loadMyRequests();
+                    if (this._popAuthFailed) { this._popAuthFailed = false; this._popLoaded = false; this.fetchPopular(); }
+                    // 🔔 推送:同步用户把浏览器里已有的订阅补报给服务器;不是同步用户/服务器关了推送 → 退掉
+                    this._pushStartupSync(!!data.push_enabled);
+                    if (this.syncEnabled) {
+                        try {
+                            // 启用同步，执行首次同步
+                            await this.syncHistory();
+                            await this.pullUserSettings();  // 同步用户偏好(弹幕开关等)
                         } catch (e) {
-                            console.error('[同步] 检查同步状态失败:', e);
+                            console.error('[同步] 首次同步失败:', e);
                         }
                     }
+                },
+                async _syncConfigFetch(token) {
+                    const res = await fetchT(`/api/config?token=${encodeURIComponent(token)}`, null, 8000);
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    const d = await res.json();
+                    if (!d || typeof d !== 'object') throw new Error('bad config');
+                    return d;
                 },
 
                 // 🗨️ 拉取服务器端用户设置(弹幕开关等)，跨设备记住。应用到 DPlayer 的 localStorage 键，
@@ -8947,10 +9263,16 @@
                                 this.v2bRefreshOk = false;
                                 this.v2bRefreshing = false;
                                 setTimeout(() => {
-                                    clearAuthState();
+                                    clearAuthState();   // 被动登出只清登录态(收藏/推送留着,同一个人续费后重登照旧)
                                     showLoginScreen();
                                     location.reload();
                                 }, 3000);
+                                return;
+                            }
+                            // 服务器连不上机场面板(unreachable)≠ 套餐失效:不登出,只提示稍后再试
+                            if (data.unreachable === true) {
+                                this.v2bRefreshMsg = '❌ 机场面板暂时连不上，请稍后再试';
+                                this.v2bRefreshOk = false;
                                 return;
                             }
                             this.v2bRefreshMsg = '❌ ' + (data.message || '刷新失败');
@@ -8968,6 +9290,8 @@
                 // 退出登录（切换账户）
                 confirmLogout() {
                     if (confirm('确定要退出登录吗？\n退出后需要重新输入密码。\n\n⚠️ 为防止观看历史混淆，本地历史将被清除。')) {
+                        let storedToken = '';
+                        try { storedToken = localStorage.getItem('emax_auth_hash') || ''; } catch (e) { }
                         // 清除认证信息
                         localStorage.removeItem('emax_auth_hash');
                         localStorage.removeItem('emax_auth_expiry');
@@ -8987,15 +9311,22 @@
                         }
                         keysToRemove.forEach(key => localStorage.removeItem(key));
 
+                        // ⭐🔔 收藏(本机列表 + 同步用户的服务器列表缓存)与推送订阅同样按账号隔离:只有这里(用户自己点退出 = 可能换人)
+                        //    全量清 clearAccountLocalData —— 浏览器退订 + 带旧 token 通知服务器,否则换人登录后还会收到上个人的提醒
+                        //    (被动登出 clearAuthState 不清,见 auth 脚本)
+                        const cleanup = clearAccountLocalData(this.syncToken || storedToken);
+
                         // 清除同步状态
                         this.syncEnabled = false;
                         this.syncToken = '';
                         this.watchHistory = [];
+                        this.favList = [];
+                        this.pushSubscribed = false;
 
                         console.log('[登录] 已退出，本地数据已清除');
 
-                        // 刷新页面显示密码输入框
-                        window.location.reload();
+                        // 刷新页面显示密码输入框(推送退订最多等 2s)
+                        reloadAfterCleanup(cleanup);
                     }
                 },
 
@@ -9132,6 +9463,7 @@
                 // 从历史记录直接播放
                 async playFromHistory(item) {
                     if (!item || !item.name) return;
+                    this._cancelDeepLink(true);  // 🔗 作废还在等的深链(否则它稍后会把这里打开的剧关掉/换掉)
                     this._liveActive = false;  // 📺 从历史进入 VOD：清掉直播模式守卫
                     console.log('[观看历史] 点击播放:', item.name, 'groupData:', !!item.groupData, 'episode:', item.episode);
 
@@ -9979,18 +10311,34 @@
                 handleDeepLink() {
                     try {
                         const p = new URLSearchParams(location.search);
+                        // 📮 ?requests=1:求片结果的推送通知点进来 → 打开"我的求片"(求片关着就忽略)
+                        if (p.get('requests') === '1') this._openRequestsDeepLink();
                         const liveName = p.get('live');
                         if (liveName) { this._resolveLiveDeepLink(decodeURIComponent(liveName)); return; }  // 📺 ?live=频道名
                         const playName = p.get('play');
                         if (!playName) return;
-                        this._deepLink = { name: playName, ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, w: p.get('w') || '', done: false };
+                        this._openWorkByName(playName, { ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, w: p.get('w') || '' });
+                    } catch (e) { }
+                },
+                _openRequestsDeepLink() {
+                    // 参数用完就从地址栏去掉:刷新页面不该再弹一次
+                    try { const u = new URL(location.href); u.searchParams.delete('requests'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } catch (e) { }
+                    if (this.requestsEnabled) this.openRequestModal('');
+                },
+                // 按片名(+同名多部的作品签名)搜索并打开一部剧:分享深链 ?play= 与"我的收藏"(没有观看历史时)共用。
+                //   搜索流式到达后由 tryOpenDeepLink 选中对应的卡再 openDetail,期间显示播放页加载帧
+                _openWorkByName(playName, o) {
+                    try {
+                        o = o || {};
+                        this._cancelDeepLink(false);   // 上一个还没落地的深链作废(它的定时器别打到这一个身上)
+                        this._deepLink = { name: playName, ep: o.ep || '', t: o.t || 0, w: o.w || '', done: false, es: null };
                         this._deepLinkTargetEp = '';  // 每次深链重置目标集数(真正定位在 tryOpenDeepLink→switchSource 完成)
                         console.log('[深链] ?play=', playName, 'ep=', this._deepLink.ep, 't=', this._deepLink.t);
                         // ⏳ 已登录深链：立刻显示"播放页框架(加载态)"盖住后台搜索结果页，避免"先卡在搜索页很久才打开播放页"。
                         //    搜索"全部完成"后再 openDetail(拿完整源列表选可直连播放的最快线路)；加载帧覆盖等待期；openDetail 会清掉 deepLinkLoading。
                         this.previewLocked = false;
                         this.deepLinkLoading = true;
-                        const prevPic = (this.currentGroup && this.currentGroup.pic) || '';
+                        const prevPic = o.pic || (this.currentGroup && this.currentGroup.pic) || '';
                         this.currentGroup = { name: playName, pic: prevPic, sources: [] };
                         this.currentSource = null;
                         this.episodeList = [];
@@ -10000,10 +10348,28 @@
                         this.showDetail = true;
                         document.body.classList.add('detail-open');
                         this.autoSearch(playName);
+                        this._deepLink.es = this._evtSource || null;   // 记下这次深链自己的搜索连接(作废时只关它,不碰用户自己的搜索)
                         // 安全兜底：万一 done/onerror/防抖 都没触发(极少)，12s 后用已到的源打开，避免一直卡加载
                         if (this._dlGraceTimer) clearTimeout(this._dlGraceTimer);
                         this._dlGraceTimer = setTimeout(() => this.tryOpenDeepLink(false, true), 12000);
                     } catch (e) { }
+                },
+                // 用户自己导航了(返回 / 搜别的 / 开别的剧 / 点继续观看)→ 作废还没落地的深链(分享 ?play= 或收藏卡片按片名打开)。
+                //   否则它的搜索 done/防抖/12s 兜底会在之后把用户正在看的播放页关掉(showDetail=false),或把别的剧开到用户面前。
+                //   closeEs:还在搜的那条深链搜索连接(只认它自己的那条)一并关掉。返回是否真的作废了一个进行中的深链
+                _cancelDeepLink(closeEs) {
+                    const dl = this._deepLink;
+                    if (!dl || dl.done) return false;
+                    dl.done = true;
+                    this._clearDeepLinkTimers();
+                    this.deepLinkLoading = false;
+                    if (closeEs && dl.es && this._evtSource === dl.es) {
+                        try { dl.es.close(); } catch (e) { }
+                        this._evtSource = null;
+                        this.loading = false;
+                    }
+                    dl.es = null;
+                    return true;
                 },
                 // 深链定位打开。不必等"全部站点搜完(done)"——那要等最慢的几个站点；改为"源流式到达停顿(防抖~1.2s)
                 // 即认为本批已基本到齐"就打开(此时通常已含可播的源)，openDetail 再边测边选。配合 checkEarlyReturn
@@ -10299,6 +10665,7 @@
                     }
 
                     this.scrollToTop();
+                    this._cancelDeepLink(true);   // 🔗 还没落地的深链作废(否则它的搜索结束后又把播放页开回来)
                     // 关闭播放详情页
                     this.showDetail = false;
                     if (dp) dp.pause();
@@ -10535,6 +10902,657 @@
                     if (this.recommendCanScrollLeft !== left) this.recommendCanScrollLeft = left;
                     if (this.recommendCanScrollRight !== right) this.recommendCanScrollRight = right;
                 },
+                // 收藏 / 大家都在看 两行共用的横向滚动与左右箭头(箭头状态只在变化时写,滚动时不整树重渲染)
+                //   ⚠️ 不能叫 onRowScroll:分类榜单已有 onRowScroll(key)(左箭头 + 手机滑到底加载更多),对象字面量同名键后者静默覆盖前者
+                //      (scripts/index-methods-test.mjs 守着 methods 里不许有重复键)
+                scrollRowBy(ref, dir) {
+                    const row = this.$refs[ref];
+                    if (row) row.scrollBy({ left: dir * row.clientWidth * 0.8, behavior: 'smooth' });
+                },
+                onFavPopRowScroll(ref, key) {
+                    const row = this.$refs[ref];
+                    if (!row) return;
+                    const l = row.scrollLeft > 10, r = row.scrollLeft + row.clientWidth < row.scrollWidth - 10;
+                    if (this[key + 'CanScrollLeft'] !== l) this[key + 'CanScrollLeft'] = l;
+                    if (this[key + 'CanScrollRight'] !== r) this[key + 'CanScrollRight'] = r;
+                },
+
+                // ========== ⭐ 我的收藏(追剧 + 更新提醒) ==========
+                // fav_id = 剧名;同名多部拆了卡的带作品签名(剧名|w:<签名>),与历史/分享深链 &w= 同口径
+                _favIdOf(name, workSig) {
+                    const n = String(name || '').trim();
+                    return workSig ? n + '|w:' + workSig : n;
+                },
+                _favWorkSig(g) { return (g && g._workLabel && g._workSig) ? String(g._workSig) : ''; },
+                _favIsSync() { return !!(this.syncEnabled && this.syncToken); },
+                // 当前这部对应哪条收藏:先按 fav_id;收藏时没拆卡、现在同名拆成多部(或反过来)时按收藏时的检查线路认
+                _favFind(g) {
+                    const list = this.favList || [];
+                    if (!g || !g.name || !list.length) return null;
+                    const id = this._favIdOf(g.name, this._favWorkSig(g));
+                    const hit = list.find(x => x && x.fav_id === id);
+                    if (hit) return hit;
+                    const same = list.filter(x => x && x.data && x.data.name === g.name && x.data.checkSource);
+                    if (!same.length) return null;
+                    const srcs = g.sources || [];
+                    return same.find(x => {
+                        const c = x.data.checkSource;
+                        return srcs.some(s => s && s.site_key === c.site_key && String(s.vod_id) === String(c.vod_id));
+                    }) || null;
+                },
+                favHasUpdate(item) {
+                    const st = item && item.status;
+                    return !!(st && (st.ep_count | 0) > (item.seen_count | 0));
+                },
+                // 封面角标文字:「更新至第N集」。latest_ep 是资源站的集名(第12集 / 12 / 20240105 / HD中字…),认得出就用它,认不出用集数
+                favBadgeText(item) {
+                    if (!this.favHasUpdate(item)) return '';
+                    const st = item.status, n = st.ep_count | 0;
+                    const ep = String(st.latest_ep || '').trim();
+                    if (/^\d{1,4}$/.test(ep)) return '更新至第' + parseInt(ep, 10) + '集';
+                    let m = /^第\s*0*([0-9]+|[一二三四五六七八九十百零〇两]+)\s*([集期话話回])/.exec(ep);
+                    if (m) return '更新至第' + m[1] + m[2];
+                    m = /^((?:19|20)\d{2})[-.]?(\d{2})[-.]?(\d{2})/.exec(ep);   // 综艺常按日期命名(20240105 / 2024-01-05期)
+                    if (m) return '更新至' + m[2] + '-' + m[3];
+                    if (ep && ep.length <= 8 && /[0-9一二三四五六七八九十]/.test(ep)) return '更新至' + ep;
+                    return n ? '更新至第' + n + '集' : '有更新';
+                },
+                // 卡片名下面那行:资源站备注(更新至xx/已完结) > 已完结 > 同名多部标注 > 集数
+                favSubText(item) {
+                    const st = item && item.status, d = (item && item.data) || {};
+                    const r = st ? String(st.remarks || '').trim() : '';
+                    if (r) return r.length > 14 ? r.slice(0, 14) + '…' : r;
+                    if (st && st.finished) return '已完结';
+                    if (d.workLabel) return d.workLabel;
+                    if (!d.checkSource) return '不支持更新提醒';   // 只有番剧 kz_* 线路时收藏的:只是书签,没有可查更新的线路
+                    return (st && st.ep_count) ? '共 ' + st.ep_count + ' 集' : '';
+                },
+                // 集数口径与服务器后台检查一致:$$$ 分路取第一个含 m3u8 的(否则第一路),按 # 数
+                _favEpCountOf(src) {
+                    let pu = String((src && (src.vod_play_url || (src._cachedDetail && src._cachedDetail.vod_play_url))) || '');
+                    if (!pu) return 0;
+                    if (pu.includes('$$$')) { const sets = pu.split('$$$'); pu = sets.find(x => x.toLowerCase().includes('m3u8')) || sets[0]; }
+                    return pu.split('#').filter(x => x && x.trim()).length;
+                },
+                // 收藏条目(瘦身):检查线路 = 正在用的线路(番剧 kz_* 线路查不了更新 → 换第一条 maccms 线路);最多带 10 条线路
+                _favBuildItem(g, cs, eps) {
+                    const okSrc = s => !!(s && s.site_key && s.vod_id != null && String(s.vod_id) !== '' && !this._isKzSource(s));
+                    const slim = s => ({ site_key: String(s.site_key), vod_id: String(s.vod_id), site_name: String(s.site_name || '') });
+                    const all = (g && g.sources) || [];
+                    const check = okSrc(cs) ? cs : (all.find(okSrc) || null);
+                    const sources = [], seen = new Set();
+                    [check].concat(all).forEach(s => {
+                        if (sources.length >= 10 || !okSrc(s) || seen.has(s.site_key)) return;
+                        seen.add(s.site_key); sources.push(slim(s));
+                    });
+                    const n = check ? (this._favEpCountOf(check) || (check === cs ? ((eps && eps.length) || 0) : 0)) : 0;
+                    const workSig = this._favWorkSig(g);
+                    const pk = this.posterKey(g);
+                    const poster = String((this.imageMap && this.imageMap[pk]) || (g && g.pic) || '');
+                    return {
+                        name: String((g && g.name) || '').trim(), poster: poster.slice(0, 500),
+                        workSig, workLabel: workSig ? String(g._workLabel || '') : '',
+                        checkSource: check ? slim(check) : null, sources, addedEpCount: n, kind: 'vod'
+                    };
+                },
+                // 本机收藏加一条(纯函数):重复添加 = 更新 data(与服务器同语义);满了不加
+                _favLocalAdd(list, entry, limit) {
+                    const cur = Array.isArray(list) ? list.filter(x => x && x.fav_id) : [];
+                    const i = cur.findIndex(x => x.fav_id === entry.fav_id);
+                    if (i >= 0) { const next = cur.slice(); next[i] = Object.assign({}, cur[i], { data: entry.data }); return { ok: true, list: next }; }
+                    if (cur.length >= (limit || 100)) return { ok: false, error: 'limit', list: cur };
+                    return { ok: true, list: [entry].concat(cur) };
+                },
+                // 把 /api/favorites/status 的结果并进本机收藏(纯函数)。收藏时没拿到集数(0)的,第一次查到的集数当基线——不然一收藏就亮红点
+                _favMergeStatus(list, map) {
+                    const has = k => !!map && Object.prototype.hasOwnProperty.call(map, k);
+                    return (list || []).map(x => {
+                        const c = x && x.data && x.data.checkSource;
+                        const k = c ? c.site_key + '|' + c.vod_id : '';
+                        const st = (k && has(k)) ? map[k] : null;
+                        if (!st || typeof st !== 'object') return x;
+                        const y = Object.assign({}, x, { status: st });
+                        if (!((y.seen_count | 0) > 0)) y.seen_count = st.ep_count | 0;
+                        return y;
+                    });
+                },
+                _favLocalLoad() {
+                    try {
+                        const a = JSON.parse(localStorage.getItem('donggua_favorites') || '[]');
+                        return Array.isArray(a) ? a.filter(x => x && x.fav_id && x.data).slice(0, this.favLimit || 100) : [];
+                    } catch (e) { return []; }
+                },
+                _favLocalSave(list) { try { localStorage.setItem('donggua_favorites', JSON.stringify(list || [])); } catch (e) { } },
+                // 同步用户的服务器列表也缓存一份(按 token 前缀认人):冷启动秒显、断网也看得到
+                _favCacheLoad() {
+                    try {
+                        const c = JSON.parse(localStorage.getItem('donggua_fav_cache') || 'null');
+                        const t = String(this.syncToken || '').slice(0, 16);
+                        return (c && t && c.t === t && Array.isArray(c.items)) ? c.items : null;
+                    } catch (e) { return null; }
+                },
+                _favCacheSave(items) {
+                    try { localStorage.setItem('donggua_fav_cache', JSON.stringify({ t: String(this.syncToken || '').slice(0, 16), items: items || [] })); } catch (e) { }
+                },
+                // 收藏启动。displayOnly = 同步与否还没确认(弱网/5xx/超时):只显示上次的列表,不进"已启动"态 ——
+                //   ♥ / 删除 / seen 在 _favBooted 之前一律不写(否则同步账号的收藏会落进本机列表、再也不上服务器)
+                //   本机列表 donggua_favorites 只在"非同步"模式显示/使用(同步模式只把它一次性迁进账号,_favMigrateLocal):
+                //   被动登出不清它,换个同步账号登录也不能把它当成这个账号的收藏显示出来
+                _favBoot(displayOnly) {
+                    if (this._favBooted || !this.favoritesEnabled) return;
+                    if (displayOnly) {
+                        this._favDisplayOnly = true;
+                        // 只显示态:这个账号自己的服务器列表缓存优先;v2board 账号一定是同步账号 → 不拿本机列表充数
+                        let v2b = false;
+                        try { v2b = localStorage.getItem('emax_auth_type') === 'v2board'; } catch (e) { }
+                        this.favList = this._favCacheLoad() || (v2b ? [] : this._favLocalLoad());
+                        if (!this._favOnlineHooked) {
+                            this._favOnlineHooked = true;
+                            window.addEventListener('online', () => this._favRetryBoot(true));
+                        }
+                        return;
+                    }
+                    this._favBooted = true;
+                    this._favDisplayOnly = false;
+                    // 模式定了:先把"只显示态"可能摆出来的列表换成这个模式该有的(同步 = 本账号缓存,不是本机列表),再去拉
+                    this.favList = this._favIsSync() ? (this._favCacheLoad() || []) : this._favLocalLoad();
+                    this.loadFavorites();
+                },
+                // 只做过"只显示"启动时重试确认同步状态(重跑 initHistorySync:成功则按确定的模式启动收藏,同步用户顺带补上首次历史同步)
+                _favRetryBoot(force) {
+                    if (this._favBooted || !this._favDisplayOnly || this._syncChecking || !this.favoritesEnabled) return;
+                    if (!force && Date.now() - (this._favRetryAt || 0) < 30000) return;   // 回首页触发的重试最多 30s 一次
+                    this._favRetryAt = Date.now();
+                    this.initHistorySync();
+                },
+                // 一次性迁移:这台设备上以前存在本机的收藏(没登录/没开同步时加的)→ 并进账号的服务器收藏,然后删掉本机列表。
+                //   按本机顺序(新的在前)逐条 add(已在服务器上的跳过);满 100 部停下;网络/服务器出错留下剩余的下次再迁。返回迁过去的条数
+                async _favMigrateLocal(serverItems) {
+                    const local = this._favLocalLoad();
+                    if (!local.length || !this._favIsSync()) return 0;
+                    const have = new Set((serverItems || []).map(x => x && x.fav_id));
+                    let count = (serverItems || []).length, moved = 0, full = false;
+                    const left = local.slice();
+                    try {
+                        while (left.length) {
+                            const x = left[0];
+                            if (!have.has(x.fav_id)) {
+                                if (count >= this.favLimit) { full = true; break; }
+                                // seen 基线带过去(取较大者),迁移后不会凭空亮红点
+                                const item = Object.assign({}, x.data, { addedEpCount: Math.max((x.data && x.data.addedEpCount) | 0, x.seen_count | 0) });
+                                const r = await fetchT('/api/favorites/add', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.syncToken, item })
+                                }, 10000);
+                                let d = {};
+                                try { d = (await r.json()) || {}; } catch (e) { }
+                                if (d.error === 'limit') { if (d.limit > 0) this.favLimit = d.limit; full = true; break; }
+                                if (r.ok && d.ok) { moved++; count++; have.add(String(d.fav_id || x.fav_id)); }
+                                else if (r.status !== 400) break;   // 401/403/429/5xx:不是这条的问题,剩下的下次再迁(400 = 条目本身不合格,丢掉)
+                            }
+                            left.shift();
+                            this._favLocalSave(left);   // 迁一条记一条:中途断网也不会重复/丢
+                        }
+                    } catch (e) { /* 网络错误:剩下的留在本机,下次加载再迁 */ }
+                    if (full || !left.length) {
+                        try { localStorage.removeItem('donggua_favorites'); } catch (e) { }
+                        if (full && left.length) this.showMiniToast('收藏已满 ' + this.favLimit + ' 部，本机另有 ' + left.length + ' 部没能同步到账号');
+                    }
+                    if (moved) console.log('[收藏] 本机收藏已并入账号:', moved, '部');
+                    return moved;
+                },
+                // 拉收藏:同步用户读服务器(状态由服务器后台检查维护);其他人读本机 + 问服务器这些线路的最新集数
+                async loadFavorites() {
+                    if (!this.favoritesEnabled || this._favLoading) return;
+                    this._favLoading = true;
+                    this._favLoadedAt = Date.now();
+                    try {
+                        if (this._favIsSync()) {
+                            if (!this.favList.length) { const c = this._favCacheLoad(); if (c) this.favList = c; }
+                            const pull = async () => {
+                                const r = await fetchT(`/api/favorites?token=${encodeURIComponent(this.syncToken)}`, null, 10000);
+                                const d = await r.json();
+                                if (d && d.enabled === false) { this.favoritesEnabled = false; this.favList = []; return false; }
+                                if (!d || !Array.isArray(d.items)) return false;
+                                if (d.limit > 0) this.favLimit = d.limit;
+                                this.favList = d.items.filter(x => x && x.fav_id && x.data);
+                                this._favCacheSave(this.favList);
+                                return true;
+                            };
+                            // 拿到服务器列表后再迁本机的(要知道哪些已经在服务器上、离 100 部还差几部);迁过去了就再拉一次(带上服务器的状态/排序)
+                            if (await pull() && await this._favMigrateLocal(this.favList)) await pull();
+                        } else {
+                            this.favList = this._favLocalLoad();
+                            await this._favLocalStatus();
+                        }
+                    } catch (e) {
+                        console.warn('[收藏] 加载失败:', e);
+                    } finally {
+                        this._favLoading = false;
+                        this.$nextTick(() => this.onFavPopRowScroll('favRow', 'fav'));
+                        // 推送点进来直接开播(?play=)时开播先于收藏加载完 → 那时 _favOnPlay 什么都没做;列表到了再补一次清红点
+                        this._favOnPlay();
+                    }
+                },
+                // 本机收藏查更新:去重后一次最多 100 条(服务器每 IP 30 次/分钟,这里最多 10 分钟一次 + 每次新收藏一次)
+                //   🔐 带登录 token:有密码的站服务器只认已登录的(没 token = 401,本机收藏永远登记不上、永远没有更新角标)。
+                //      非同步用户(主密码)的 syncToken 由 initHistorySync 填;还没填时直接读本地登录 token。没密码的站发空串,服务器不看
+                async _favLocalStatus() {
+                    const q = [], seen = new Set();
+                    this._favLocalLoad().forEach(x => {
+                        const c = x.data && x.data.checkSource;
+                        const k = c && c.site_key && c.vod_id ? c.site_key + '|' + c.vod_id : '';
+                        if (k && !seen.has(k)) { seen.add(k); q.push({ site_key: String(c.site_key), vod_id: String(c.vod_id) }); }
+                    });
+                    if (!q.length) return;
+                    let token = this.syncToken || '';
+                    if (!token) { try { token = localStorage.getItem('emax_auth_hash') || ''; } catch (e) { } }
+                    try {
+                        const r = await fetchT('/api/favorites/status', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, items: q.slice(0, 100) })
+                        }, 10000);
+                        if (!r.ok) return;   // 401 登录失效 / 429 限流 / 未开启:下次再查
+                        const d = await r.json();
+                        if (!d || !d.status || typeof d.status !== 'object') return;
+                        // 请求期间用户可能增删过:以最新的本机列表为底合并
+                        const list = this._favMergeStatus(this._favLocalLoad(), d.status);
+                        this._favLocalSave(list);
+                        if (!this._favIsSync()) this.favList = list;
+                    } catch (e) { }
+                },
+                _favRefreshMaybe() {
+                    this.$nextTick(() => { this.onFavPopRowScroll('favRow', 'fav'); this.onFavPopRowScroll('popularRow', 'popular'); });   // 首页刚显示:箭头按真实宽度校正
+                    if (!this._favBooted) { this._favRetryBoot(false); return; }   // 只做过"只显示"启动:再确认一次同步状态
+                    if (!this.favoritesEnabled) return;
+                    if (Date.now() - (this._favLoadedAt || 0) < 10 * 60 * 1000) return;
+                    this.loadFavorites();
+                },
+                // 详情页 ♥
+                async toggleFavorite() {
+                    const g = this.currentGroup;
+                    if (!g || !g.name || this.favBusy || !this.favoritesEnabled) return;
+                    // 同步状态还没确认(弱网/服务器出错/启动检查还没回来):不知道该写服务器还是本机 → 先不写
+                    if (!this._favBooted) { this.showMiniToast('网络异常，稍后再试'); this._favRetryBoot(false); return; }
+                    const cur = this.curFav;
+                    if (cur) {
+                        this.favBusy = true;
+                        try { await this.removeFavorite(cur); } finally { this.favBusy = false; }
+                        return;
+                    }
+                    const full = () => this.showMiniToast('收藏已满 ' + this.favLimit + ' 部，请先删掉一些');
+                    if (this.favList.length >= this.favLimit) { full(); return; }
+                    const data = this._favBuildItem(g, this.currentSource, this.episodeList);
+                    if (!data.name) return;
+                    const entry = { fav_id: this._favIdOf(data.name, data.workSig), data, added_at: Date.now(), seen_count: data.addedEpCount || 0, status: null };
+                    this.favBusy = true;
+                    try {
+                        if (this._favIsSync()) {
+                            const r = await fetchT('/api/favorites/add', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.syncToken, item: data })
+                            }, 10000);
+                            let d = {};
+                            try { d = (await r.json()) || {}; } catch (e) { }
+                            if (d.error === 'limit') { if (d.limit > 0) this.favLimit = d.limit; full(); return; }
+                            if (!r.ok || !d.ok) { this.showMiniToast('收藏失败，请稍后再试'); return; }
+                            if (d.fav_id) entry.fav_id = String(d.fav_id);
+                            this.favList = [entry].concat(this.favList.filter(x => x.fav_id !== entry.fav_id));
+                            this._favCacheSave(this.favList);
+                        } else {
+                            const res = this._favLocalAdd(this._favLocalLoad(), entry, this.favLimit);
+                            if (!res.ok) { full(); return; }
+                            this._favLocalSave(res.list);
+                            this.favList = res.list;
+                            this._favLocalStatus();   // 立刻登记进服务器的检查队列,并拿这部的当前集数
+                        }
+                        let on = false;
+                        try { on = !!localStorage.getItem('donggua_push_on'); } catch (e) { }
+                        // 只有番剧 kz_* 线路(查不了更新):照样收藏成书签,但别承诺更新提醒
+                        if (!data.checkSource) this.showMiniToast('❤️ 已收藏（该线路不支持更新提醒）');
+                        else this.showMiniToast(this.pushUi === 'ok' && !on ? '❤️ 已收藏（偏好设置里可开启更新推送）' : '❤️ 已收藏，有更新会在首页「我的收藏」提醒');
+                        this.$nextTick(() => this.onFavPopRowScroll('favRow', 'fav'));
+                    } catch (e) {
+                        this.showMiniToast('收藏失败，请稍后再试');
+                    } finally {
+                        this.favBusy = false;
+                    }
+                },
+                async removeFavorite(item) {
+                    if (!item || !item.fav_id) return;
+                    if (!this._favBooted) { this.showMiniToast('网络异常，稍后再试'); this._favRetryBoot(false); return; }   // 同 ♥:模式没定不写
+                    const id = item.fav_id, prev = this.favList;
+                    this.favList = prev.filter(x => x.fav_id !== id);   // 乐观删除,服务器失败再放回
+                    if (this._favIsSync()) {
+                        try {
+                            const r = await fetchT('/api/favorites/remove', {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.syncToken, fav_id: id })
+                            }, 10000);
+                            let d = {};
+                            try { d = (await r.json()) || {}; } catch (e) { }
+                            if (!r.ok || d.ok === false) throw new Error(d.error || ('HTTP ' + r.status));
+                            this._favCacheSave(this.favList);
+                        } catch (e) {
+                            this.favList = prev;
+                            this.showMiniToast('取消收藏失败，请稍后再试');
+                            return;
+                        }
+                    } else {
+                        this._favLocalSave(this._favLocalLoad().filter(x => x.fav_id !== id));
+                    }
+                    this.$nextTick(() => this.onFavPopRowScroll('favRow', 'fav'));
+                },
+                // 点收藏卡片:有观看历史就和"继续观看"完全一样(续播上次的集数/进度/线路);没看过就按片名搜索打开
+                openFavorite(item) {
+                    const d = (item && item.data) || {};
+                    const name = d.name || (item && item.fav_id) || '';
+                    if (!name) return;
+                    const h = (this.watchHistory || []).find(x => x && x.name === name &&
+                        (!d.workSig || !x.groupData || !x.groupData._workSig || x.groupData._workSig === d.workSig));
+                    if (h) { this.playFromHistory(h); return; }
+                    this._openWorkByName(name, { w: d.workSig || '', pic: d.poster || '' });
+                },
+                // 起播/换集:这部是收藏且亮着红点 → seen 清红点
+                _favOnPlay() {
+                    try {
+                        if (!this.favoritesEnabled || this._liveActive || !(this.favList || []).length) return;
+                        const g = this.currentGroup;
+                        if (!g || g._isLive || g._offlineCtx) return;
+                        const f = this.curFav;
+                        if (f && this.favHasUpdate(f)) this._favMarkSeen(f, (this.episodeList || []).length);
+                    } catch (e) { }
+                },
+                // 打开了就算看到了:取「当前线路集数」与「检查线路集数」的较大者——当前线路可能比检查线路少几集,红点也该清
+                _favMarkSeen(f, count) {
+                    if (!f || !this._favBooted) return;   // 只显示态:不知道写哪边,不写(下次确认后按服务器/本机的状态来)
+                    const n = Math.max(count | 0, (f.status && f.status.ep_count) | 0);
+                    if (n <= (f.seen_count | 0)) return;
+                    f.seen_count = n;
+                    if (this._favIsSync()) {
+                        fetch('/api/favorites/seen', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: this.syncToken, fav_id: f.fav_id, count: n })
+                        }).catch(() => { });
+                        this._favCacheSave(this.favList);
+                    } else {
+                        const list = this._favLocalLoad();
+                        const x = list.find(y => y.fav_id === f.fav_id);
+                        if (x) { x.seen_count = Math.max(x.seen_count | 0, n); this._favLocalSave(list); }
+                    }
+                },
+
+                // ========== 👥 大家都在看 ==========
+                // /api/popular(站内汇总,≥2 个不同用户看过才上榜)→ TMDB 按片名补海报/年份。列表缓存 30 分钟,片名→海报缓存 7 天
+                //   ⚠️ 片名是各用户端上报的自由文本:只上 TMDB 认得出(有海报)的片,认不出的整条丢掉;不是精确同名的,显示 TMDB 的片名 ——
+                //      任意文字(广告/骚扰)刷进统计也到不了每个人的首页。只用 title(人数/时长/集数不读,也不显示)
+                async fetchPopular() {
+                    if (this._popLoaded) return;
+                    this._popLoaded = true;
+                    try {
+                        // 列表缓存按调用者认(t = 登录 token 前 16 位,与收藏缓存同口径):/api/popular 扣掉了调用者自己那一票,每个账号拿到的不一样 ——
+                        //   同一台设备换号登录(主动退出 / 被动登出后别人登录)不能拿上个账号的列表,否则和自己的一对比就能反推出上个人看过什么
+                        const CK = 'donggua_popular_cache3', TTL = 30 * 60 * 1000;
+                        try { localStorage.removeItem('donggua_popular_cache'); localStorage.removeItem('donggua_popular_cache2'); } catch (e) { }   // 旧格式(含人数、没过滤 / 不分账号)
+                        let tok = this.syncToken || '';
+                        try { tok = tok || localStorage.getItem('emax_auth_hash') || ''; } catch (e) { }
+                        const t = String(tok).slice(0, 16);
+                        let list = null;
+                        try {
+                            const c = JSON.parse(localStorage.getItem(CK) || 'null');
+                            if (c && c.t === t && Array.isArray(c.list) && Date.now() - (c.ts || 0) < TTL) list = c.list;
+                        } catch (e) { }
+                        if (!list) {
+                            const r = await fetchT('/api/popular?window=7d' + (tok ? '&token=' + encodeURIComponent(tok) : ''), null, 8000);
+                            const d = await r.json();
+                            // 401(如服务器重启后 v2board token 还没重新登记)/ 403 / 回包不对:这次不显示,也不缓存(否则空行挂 30 分钟)
+                            const good = !!(r.ok && d && Array.isArray(d.items));
+                            this._popAuthFailed = r.status === 401;   // initHistorySync 确认登录后据此重拉一次
+                            const seen = new Set();
+                            list = (good ? d.items : [])
+                                .map(x => ({ title: String((x && x.title) || '').trim() }))
+                                .filter(x => x.title && x.title.length <= 80 && !seen.has(x.title) && seen.add(x.title))
+                                .slice(0, 20);
+                            list = list.length >= 4 ? (await this._popularPosters(list)).filter(x => x.poster_path) : [];
+                            if (good) { try { localStorage.setItem(CK, JSON.stringify({ t, ts: Date.now(), list })); } catch (e) { } }
+                        }
+                        list = list.filter(x => x && x.title && x.name && x.poster_path)
+                            .map(x => ({ title: String(x.title), name: String(x.name), poster_path: String(x.poster_path), year: String(x.year || '') }));
+                        this.popularList = list.length >= 4 ? list : [];
+                        this.$nextTick(() => this.onFavPopRowScroll('popularRow', 'popular'));
+                    } catch (e) { console.warn('[大家都在看] 获取失败:', e); }
+                },
+                async _popularPosters(list) {
+                    const CK = 'donggua_tmdb_title', TTL = 7 * 24 * 3600 * 1000, NEG_TTL = 24 * 3600 * 1000;
+                    const cache = Object.create(null);   // 片名当键:无原型,防 __proto__ 之类的片名
+                    try { Object.assign(cache, JSON.parse(localStorage.getItem(CK) || '{}') || {}); } catch (e) { }
+                    const now = Date.now();
+                    // 旧缓存条目没有 n(TMDB 片名) → 当没命中重查
+                    const miss = list.filter(x => { const c = cache[x.title]; return !c || (c.p && typeof c.n !== 'string') || now - (c.ts || 0) > (c.p ? TTL : NEG_TTL); });
+                    await runWithConcurrency(miss, 3, async (x) => {
+                        // 与图片回退同一套清洗(去 第N季/Season/清晰度后缀),优先片名完全一致的结果
+                        const q = x.title.replace(/第[0-9一二三四五六七八九十]+[季部]/g, '').replace(/Season\s*\d+/ig, '').replace(/\s*(HD|BD|1080P|720P|4K)\s*$/i, '').trim() || x.title;
+                        const sr = await tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent('/search/multi')}&query=${encodeURIComponent(q)}&language=zh-CN`).then(r => r.json());
+                        const rs = ((sr && sr.results) || []).filter(r => r && (r.media_type === 'tv' || r.media_type === 'movie') && r.poster_path && !r.adult);
+                        const nm = r => String(r.title || r.name || '').trim();
+                        const exact = rs.find(r => nm(r) === x.title || nm(r) === q) || null;
+                        const hit = exact || rs[0] || null;
+                        // 显示名:精确同名(只差 第N季/清晰度 这类被剥掉的后缀)用站内片名,否则用 TMDB 的片名
+                        cache[x.title] = hit ? { p: hit.poster_path, n: exact ? x.title : nm(hit), y: String(hit.first_air_date || hit.release_date || '').slice(0, 4), ts: now } : { p: '', ts: now };
+                    });
+                    const keys = Object.keys(cache);
+                    if (keys.length > 300) keys.sort((a, b) => (cache[a].ts || 0) - (cache[b].ts || 0)).slice(0, keys.length - 300).forEach(k => { delete cache[k]; });
+                    try { localStorage.setItem(CK, JSON.stringify(cache)); } catch (e) { }
+                    return list.map(x => { const c = cache[x.title]; return Object.assign({}, x, { poster_path: (c && c.p) || '', name: (c && c.n) || '', year: (c && c.y) || '' }); });
+                },
+
+                // ========== 🔔 Web Push 更新提醒 ==========
+                // ok / ios-browser(iPhone/iPad 没添加到主屏幕:Safari 网页里没有 PushManager) / none
+                _pushSupport() {
+                    try {
+                        const ua = navigator.userAgent || '';
+                        const ios = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+                        const standalone = navigator.standalone === true || !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+                        if (ios && !standalone) return 'ios-browser';
+                        return (('serviceWorker' in navigator) && ('PushManager' in window) && ('Notification' in window)) ? 'ok' : 'none';
+                    } catch (e) { return 'none'; }
+                },
+                _b64uToU8(s) {
+                    const b = String(s || '').replace(/-/g, '+').replace(/_/g, '/');
+                    const raw = atob(b + '='.repeat((4 - b.length % 4) % 4));
+                    const out = new Uint8Array(raw.length);
+                    for (let i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+                    return out;
+                },
+                // 浏览器里现有订阅是不是用服务器当前这把公钥订的(服务器换过钥匙,旧订阅就收不到了)
+                _pushSameKey(sub, key) {
+                    try {
+                        const a = sub && sub.options && sub.options.applicationServerKey;
+                        if (!a || !key) return true;   // 部分浏览器拿不到,当一致
+                        const x = new Uint8Array(a), y = this._b64uToU8(key);
+                        if (x.length !== y.length) return false;
+                        for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return false;
+                        return true;
+                    } catch (e) { return true; }
+                },
+                async _pushKey() {
+                    if (this._pushPublicKey) return this._pushPublicKey;
+                    try {
+                        const r = await fetchT('/api/push/key', null, 8000);
+                        const d = await r.json();
+                        if (d && d.enabled && d.publicKey) this._pushPublicKey = String(d.publicKey);
+                    } catch (e) { }
+                    return this._pushPublicKey || '';
+                },
+                _swReady(ms) {
+                    if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+                    return Promise.race([navigator.serviceWorker.ready.catch(() => null), new Promise(r => setTimeout(() => r(null), ms || 5000))]);
+                },
+                // keepalive:退出登录时紧接着刷新页面,请求也要发出去
+                _pushPost(url, body) {
+                    return fetchT(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true }, 10000)
+                        .then(async r => {
+                            let d = null;
+                            try { d = await r.json(); } catch (e) { }
+                            return { ok: r.ok && !(d && d.ok === false), status: r.status, d: d || {} };
+                        });
+                },
+                // 服务器错误码 → 给用户看的话(lib/webpush 的 error 字段)
+                _pushErrText(res) {
+                    const e = res && res.d && res.d.error;
+                    const map = {
+                        auth: '登录已失效，请重新登录后再试', banned: '账号已被停用', disabled: '服务器暂未开启推送',
+                        rate: '测试通知每分钟只能发一次，请稍后再试', no_subscription: '服务器上没有这台设备的订阅，请关掉开关再重新打开',
+                        endpoint: '这个浏览器的推送服务不在支持范围内', keys: '订阅信息不完整，请关掉开关再重新打开',
+                        subscription: '订阅信息不完整，请关掉开关再重新打开', db: '服务器出错，请稍后再试'
+                    };
+                    if (e && Object.prototype.hasOwnProperty.call(map, e)) return map[e];
+                    if (res && res.status === 429) return map.rate;
+                    if (res && res.d && res.d.sent === 0) return '推送服务没有接收（订阅可能已失效），请关掉开关再重新打开';
+                    return '失败：' + (e || ('HTTP ' + (res ? res.status : '?')));
+                },
+                // donggua_push_on 记的是"哪个账号在这台设备上开的推送"(token 前 16 位;旧版写的 '1' 当作当前账号)
+                _pushOwnerTag() { return String(this.syncToken || '').slice(0, 16); },
+                _pushOwnedByMe() {
+                    let v = '';
+                    try { v = localStorage.getItem('donggua_push_on') || ''; } catch (e) { }
+                    return !!v && (v === '1' || v === this._pushOwnerTag());
+                },
+                // 🔔 启动时(同步状态确认后)跑一次:浏览器里已有订阅 →
+                //   同步用户 + 已授权 + 服务器开着推送:幂等补报给服务器(服务器可能因连续发送失败删过它,或浏览器轮换了订阅);
+                //   不是同步用户 / 服务器关了推送:这条订阅不该留着 → 浏览器退订 + 尽量通知服务器删掉
+                async _pushStartupSync(serverPush) {
+                    if (this._pushStartupDone) return;
+                    this._pushStartupDone = true;
+                    try {
+                        if (this.isNativeApp || this._pushSupport() !== 'ok') return;
+                        if ('serviceWorker' in navigator && !this._pushMsgHooked) {
+                            // sw.js 的 pushsubscriptionchange 重新订阅后发来 'dg-push-resub' → 立刻把新 endpoint 报给服务器
+                            this._pushMsgHooked = true;
+                            navigator.serviceWorker.addEventListener('message', (ev) => {
+                                if (ev && ev.data === 'dg-push-resub') { this._pushResynced = false; this._pushRefreshState(); }
+                            });
+                        }
+                        const reg = await this._swReady(5000);
+                        const sub = (reg && reg.pushManager) ? await reg.pushManager.getSubscription() : null;
+                        if (!sub) return;
+                        if (serverPush && this._favIsSync()) {
+                            if (Notification.permission === 'granted') await this._pushRefreshState();
+                            return;
+                        }
+                        try { localStorage.removeItem('donggua_push_on'); } catch (e) { }
+                        const token = this.syncToken;
+                        if (token && sub.endpoint) this._pushPost('/api/push/unsubscribe', { token, endpoint: sub.endpoint }).catch(() => { });
+                        try { await sub.unsubscribe(); } catch (e) { }
+                        this.pushSubscribed = false;
+                    } catch (e) { }
+                },
+                async _pushRefreshState() {
+                    if (this.pushUi !== 'ok') return;
+                    this.pushMsg = '';
+                    try {
+                        const reg = await this._swReady(3000);
+                        let sub = (reg && reg.pushManager) ? await reg.pushManager.getSubscription() : null;
+                        // 不是这个账号开的(换号登录前没退干净):别把上个人的订阅悄悄过户给现在的账号 → 退掉,要的话自己再开
+                        //   (被动登出不退订,换号登录的保护就靠这里;上个账号在服务器上的那条订阅,浏览器退订后下次发送 404/410 由服务器删掉)
+                        if (sub && !this._pushOwnedByMe()) {
+                            try { await sub.unsubscribe(); } catch (e) { }
+                            sub = null;
+                            try { localStorage.removeItem('donggua_push_on'); } catch (e) { }
+                        }
+                        const on = !!sub && Notification.permission === 'granted';
+                        if (this.pushSubscribed !== on) this.pushSubscribed = on;
+                        if (on && !this._pushResynced) {
+                            // 每次打开页面补报一次(幂等,endpoint 是主键):服务器可能因连续发送失败删过这条订阅,或换了登录账号
+                            this._pushResynced = true;
+                            const key = await this._pushKey();
+                            if (key && !this._pushSameKey(sub, key)) {
+                                try { await sub.unsubscribe(); } catch (e) { }
+                                this.pushSubscribed = false;
+                                this.pushMsg = '服务器的推送密钥变了，请重新打开开关';
+                                return;
+                            }
+                            this._pushPost('/api/push/subscribe', { token: this.syncToken, subscription: sub.toJSON() }).catch(() => { });
+                            try { localStorage.setItem('donggua_push_on', this._pushOwnerTag()); } catch (e) { }   // 旧版的 '1' 升级成账号标记
+                        }
+                    } catch (e) { }
+                },
+                async togglePush(e) {
+                    const want = !!(e && e.target && e.target.checked);
+                    if (want) await this.pushSubscribe(); else await this.pushUnsubscribe();
+                    try { if (e && e.target) e.target.checked = this.pushSubscribed; } catch (x) { }
+                },
+                async pushSubscribe() {
+                    if (this.pushBusy || this.pushUi !== 'ok') return;
+                    this.pushBusy = true;
+                    this.pushMsg = '';
+                    try {
+                        // 先要权限,而且必须在这次点击的同一调用栈里发起(Safari 要求;先 await 网络会被当成非用户操作拒掉)
+                        let perm = Notification.permission;
+                        if (perm !== 'granted') {
+                            perm = await new Promise(res => { const p = Notification.requestPermission(res); if (p && p.then) p.then(res, () => res('default')); });
+                        }
+                        if (perm !== 'granted') {
+                            this.pushMsg = perm === 'denied' ? '通知权限已被拒绝：请在浏览器或系统设置里允许本站通知后再打开' : '没有获得通知权限';
+                            return;
+                        }
+                        const key = await this._pushKey();
+                        if (!key) { this.pushMsg = '服务器暂未开启推送'; return; }
+                        const reg = await this._swReady(8000);
+                        if (!reg || !reg.pushManager) { this.pushMsg = '后台服务(Service Worker)未就绪，请刷新页面后再试'; return; }
+                        let sub = await reg.pushManager.getSubscription();
+                        if (sub && !this._pushSameKey(sub, key)) { try { await sub.unsubscribe(); } catch (x) { } sub = null; }
+                        if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: this._b64uToU8(key) });
+                        const res = await this._pushPost('/api/push/subscribe', { token: this.syncToken, subscription: sub.toJSON() });
+                        if (!res.ok) {
+                            try { await sub.unsubscribe(); } catch (x) { }   // 服务器没收下 → 浏览器这边也撤掉,两边一致
+                            this.pushMsg = this._pushErrText(res);
+                            return;
+                        }
+                        this.pushSubscribed = true;
+                        this._pushResynced = true;
+                        try { localStorage.setItem('donggua_push_on', this._pushOwnerTag()); } catch (x) { }   // 记下是哪个账号开的
+                        this.showMiniToast('🔔 已开启更新提醒推送');
+                    } catch (e) {
+                        this.pushMsg = '开启失败：' + ((e && e.message) || e);
+                    } finally {
+                        this.pushBusy = false;
+                    }
+                },
+                async pushUnsubscribe() {
+                    if (this.pushBusy) return;
+                    this.pushBusy = true;
+                    this.pushMsg = '';
+                    try {
+                        await this._pushUnsubscribeAll(this.syncToken);
+                        this.pushSubscribed = false;
+                        this.showMiniToast('已关闭更新提醒推送');
+                    } finally {
+                        this.pushBusy = false;
+                    }
+                },
+                // 退订本浏览器的推送(浏览器 + 服务器两边)。退出登录也走这里;任何失败都吞掉,绝不抛
+                async _pushUnsubscribeAll(token) {
+                    try { localStorage.removeItem('donggua_push_on'); } catch (e) { }
+                    try {
+                        if (!('serviceWorker' in navigator)) return;
+                        const reg = await this._swReady(1500);
+                        const sub = (reg && reg.pushManager) ? await reg.pushManager.getSubscription() : null;
+                        if (!sub) return;
+                        const post = (token && sub.endpoint) ? this._pushPost('/api/push/unsubscribe', { token, endpoint: sub.endpoint }).catch(() => { }) : null;
+                        try { await sub.unsubscribe(); } catch (e) { }
+                        if (post) await post;
+                    } catch (e) { }
+                },
+                async pushTest() {
+                    if (this.pushBusy || !this.syncToken) return;
+                    this.pushBusy = true;
+                    this.pushMsg = '';
+                    try {
+                        const res = await this._pushPost('/api/push/test', { token: this.syncToken });
+                        if (res.ok) this.showMiniToast('🔔 测试通知已发出，几秒内应收到');
+                        else this.pushMsg = this._pushErrText(res);
+                    } catch (e) {
+                        this.pushMsg = '发送失败：' + ((e && e.message) || e);
+                    } finally {
+                        this.pushBusy = false;
+                    }
+                },
 
                 // 📮 求片
                 reqStatusText(s) { return ({ pending: '待处理', fulfilled: '已提供', rejected: '无法提供', need_info: '需补充信息' })[s] || s; },
@@ -10596,9 +11614,16 @@
                         if (res.ok) await this.loadMyRequests();
                     } catch (e) { alert('撤销失败，请重试'); }
                 },
+                // 401 不清空列表:服务器重启后 v2board token 要等 initHistorySync 补做套餐验证才重新登记,
+                //   点「求片有结果了」推送进来的那次加载常常先打开求片(?requests=1)—— 以前直接显示「还没有求片记录」。确认后 initHistorySync 会重拉
                 async loadMyRequests() {
                     if (!this.syncToken) return;
-                    try { const r = await fetch(`/api/requests/mine?token=${encodeURIComponent(this.syncToken)}`).then(r => r.json()); this.myRequests = r.requests || []; } catch (e) { }
+                    try {
+                        const res = await fetch(`/api/requests/mine?token=${encodeURIComponent(this.syncToken)}`);
+                        if (!res.ok) return;
+                        const r = await res.json();
+                        this.myRequests = (r && r.requests) || [];
+                    } catch (e) { }
                 },
                 // 老的 #admin 入口 → 重定向到独立后台页 /admin(public/admin.html:求片/用户/观看/分享统计都在那里)。
                 //   首页里原来那套后台弹窗(模板早已删除,方法还读已下线的 /api/admin/users 旧格式)整体移除
@@ -10688,6 +11713,18 @@
                 doSearch() {
                     if (!this.keyword) return;
 
+                    // 🔗 搜的不是还在等的深链那部 → 用户换了目标:作废深链(加载帧还盖着就收起,露出这次的搜索结果)。同名重搜不算,深链照常等这次的结果
+                    const _dl = this._deepLink;
+                    if (_dl && !_dl.done && String(this.keyword).trim() !== String(_dl.name || '').trim()) {
+                        const _frame = this.deepLinkLoading;
+                        this._cancelDeepLink(true);
+                        if (_frame) {
+                            this.showDetail = false;
+                            this.isTestingSources = false;
+                            document.body.classList.remove('detail-open');
+                        }
+                    }
+
                     if (this._evtSource) {
                         this._evtSource.close();
                         this._evtSource = null;
@@ -10715,6 +11752,7 @@
                         url += `&original=${encodeURIComponent(this._originalTitle)}`;
                     }
                     this._evtSource = new EventSource(url);
+                    if (this._deepLink && !this._deepLink.done) this._deepLink.es = this._evtSource;   // 深链(同名)用的是这条
 
                     this._evtSource.onmessage = (e) => {
                         try {
@@ -10784,6 +11822,8 @@
                     };
                 },
                 async openDetail(group) {
+                    // 🔗 用户自己开了一部(深链自己落地时 tryOpenDeepLink 先置 done 再调这里,不受影响)→ 作废还在等的深链
+                    this._cancelDeepLink(true);
                     // ⬇️ 断网守卫:设备离线且该剧有离线缓存 → 跳过测速直接进离线上下文
                     //    (否则全线路测成 9999,死在"所有采集站均不可用",缓存躺在 IDB 里够不着)
                     if (navigator.onLine === false && group && group.name) {
@@ -11104,6 +12144,10 @@
                     // ⏭️ 跳过片头：停指纹引擎(存下已录指纹)、清本集标记与按钮
                     try { if (window.afpEngine) window.afpEngine.stop(); } catch (e) { }
                     this._introCur = null; this._introEpKey = null; this.introBtn.show = false; try { this._introRenderBtn(); } catch(e){}
+                    // 🔗 深链(分享 ?play= / 收藏卡片按片名打开)还没落地就退出:作废它,否则它的搜索 done/防抖/兜底稍后会把
+                    //    用户接下来打开的播放页关掉或换成别的剧。它那条搜索用户从没看见过(一直盖着加载帧)→ 还在搜就一并收掉,回到打开前的首页
+                    const _dlSearching = !!(this._deepLink && !this._deepLink.done && this._deepLink.es && this._evtSource === this._deepLink.es);
+                    if (this._cancelDeepLink(true) && _dlSearching) this.clearSearch();
                     this._clearDeepLinkTimers();
                     document.body.classList.remove('detail-open');
                     if (dp) dp.pause();
@@ -11809,7 +12853,9 @@
                         //    现在提前期点击只"预约":到区间起点那一刻再跳(check() 里执行),一秒正片都不多切。
                         // ✂️ introBtn.start/to 在原时间轴上(见 skipManager.check):播放头换回原时间轴比,seek 时换成剪后时间
                         const start = this.introBtn.start, now = this._cutToBase((typeof dp !== 'undefined' && dp && dp.video) ? (dp.video.currentTime || 0) : 0);
-                        if (isFinite(start) && start > 0 && now < start - 0.3) {
+                        // 片尾按钮显示为「下一集」时,点了就是要看下一集 → 立即切,不预约(预约只为不多切片头前的正片)
+                        const nextNow = this.introBtn.kind === 'outro' && this.introBtn.label === '下一集';
+                        if (!nextNow && isFinite(start) && start > 0 && now < start - 0.3) {
                             this._introArm = { start, to, flag, kind: this.introBtn.kind };
                             try { dp.notice((flag === '_bumpSkipped' ? '开头' : flag === '_outroSkipped' ? '片尾' : '片头') + '开始时自动跳过'); } catch (e) { }
                             return;
@@ -11817,7 +12863,8 @@
                         this._introArm = null;   // 立即跳过:清掉可能残留的预约,防二次 seek
                         this[flag] = true;   // 开头贴片/片头曲/片尾各自只触发一次
                         if (this.introBtn.kind === 'outro') {
-                            if (typeof dp !== 'undefined' && dp) { dp.notice('已跳过片尾'); if (dp.events) dp.events.trigger('ended'); }
+                            // 走 ended:记 100% 进度 + 切下一集(自带"即将播放下一集"提示,下一集按钮不再多弹"已跳过片尾")
+                            if (typeof dp !== 'undefined' && dp) { if (!nextNow) dp.notice('已跳过片尾'); if (dp.events) dp.events.trigger('ended'); }
                         } else if (typeof dp !== 'undefined' && dp && isFinite(to)) {
                             dp.seek(this._cutToPlay(to)); dp.notice(flag === '_bumpSkipped' ? '已跳过开头' : '已跳过片头');
                         }
@@ -11836,9 +12883,19 @@
                                 el.addEventListener('click', (e) => { e.stopPropagation(); this.introSkipNow(); });
                                 c.appendChild(el);
                             }
-                            el.innerHTML = '<i class="fas fa-forward"></i> ' + (this.introBtn.label || '跳过片头');
+                            const lb = this.introBtn.label || '跳过片头';
+                            el.innerHTML = '<i class="fas ' + (lb === '下一集' ? 'fa-step-forward' : 'fa-forward') + '"></i> ' + lb;
                         } else if (el) { el.remove(); }
                     } catch (e) { }
+                },
+                // 片尾按钮是否显示成「下一集」:有下一集且不是单集循环(循环/最后一集仍叫「跳过片尾」,行为不变)
+                _outroNextEp() {
+                    try {
+                        if (this._liveActive || (typeof dp !== 'undefined' && dp && dp.setting && dp.setting.loop)) return false;
+                        const list = this.episodeList || [];
+                        const i = list.findIndex(ep => ep.url === this.currentUrl);
+                        return i >= 0 && i < list.length - 1;
+                    } catch (e) { return false; }
                 },
                 // 🧪 用户端测速(openDetail 与 刷新线路 共用):直连 →(失败或 >1.5s)代理 → 都不通由调用方问 /api/check。
                 //   写 source.latency/_useProxy/_proxyUrl/_testType('direct'|'proxy');返回 true = 用户端测通。
@@ -12819,7 +13876,7 @@
                                             let reg = null;
                                             if (cur.be > cur.bs && time >= cur.bs - L && time < cur.be - 1 && !v._bumpSkipped) reg = { start: cur.bs, to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: cur.src === 'afp' || (cur.bv || 0) >= 2, notice: '已自动跳过开头', in: time >= cur.bs };
                                             else if (cur.oe > cur.os && time >= cur.os - L && time < cur.oe - 1 && !v._introSkipped) reg = { start: cur.os, to: cur.oe, label: '跳过片头', flag: '_introSkipped', kind: 'op', ok: cur.src === 'afp' || (cur.v || 0) >= 2, notice: '已自动跳过片头', in: time >= cur.os };
-                                            else if (cur.ed > 0 && time >= cur.ed - L && time < dur - 2 && !v._outroSkipped) reg = { start: cur.ed, to: 0, label: '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: cur.edSrc === 'afp' || (cur.ev || 0) >= 2, notice: '已自动跳过片尾', in: time >= cur.ed };
+                                            else if (cur.ed > 0 && time >= cur.ed - L && time < dur - 2 && !v._outroSkipped) reg = { start: cur.ed, to: 0, label: v._outroNextEp() ? '下一集' : '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: cur.edSrc === 'afp' || (cur.ev || 0) >= 2, notice: '已自动跳过片尾', in: time >= cur.ed };
                                             if (reg) {
                                                 // 自动跳过只信【被佐证的】标记(票数≥2 或本会话实测检出),防单条误学/被刷的坏标记直接跳走正片
                                                 if (v.introSkipAuto && reg.ok) {
@@ -14914,7 +15971,8 @@
                             }
 
                             // 自动播放下一集（非单曲循环模式下）
-                            if (!dp.loop) {
+                            // 循环开关在 dp.setting.loop(DPlayer 自己的 ended 读的也是它);dp.loop 从来不存在 → 以前开了循环照样切下一集
+                            if (!(dp.setting && dp.setting.loop)) {
                                 this.playNextEpisode(true);
                             }
                         });
