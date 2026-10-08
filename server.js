@@ -91,7 +91,9 @@ const PASSWORD_HASH = ACCESS_PASSWORDS.length > 0
     : '';
 
 // 生成密码到哈希的映射（用于历史同步）
-const PASSWORD_HASH_MAP = {};
+// ⚠️ 必须无原型:普通 {} 上 PASSWORD_HASH_MAP['constructor'] / ['__proto__'] / ['toString'] 都是真值,
+//    passwordHash:'constructor' 就能通过 /api/auth/verify 和各接口的 !PASSWORD_HASH_MAP[token] 校验(审查实锤)
+const PASSWORD_HASH_MAP = Object.create(null);
 ACCESS_PASSWORDS.forEach((pwd, index) => {
     const hash = crypto.createHash('sha256').update(pwd).digest('hex');
     PASSWORD_HASH_MAP[hash] = {
@@ -105,12 +107,12 @@ console.log(`[System] Password mode: ${ACCESS_PASSWORDS.length > 1 ? 'Multi-user
 
 // 反查：token(=SHA256(独立密码)) → 原始独立密码。仅用于站长后台辨认"是哪个独立密码用户"。
 // 只在 ADMIN_TOKEN 鉴权后的后台接口里用到，不外泄。
-const HASH_TO_PASSWORD = {};
+const HASH_TO_PASSWORD = Object.create(null);
 ACCESS_PASSWORDS.forEach(pwd => { HASH_TO_PASSWORD[crypto.createHash('sha256').update(pwd).digest('hex')] = pwd; });
 // 求片/统计后台展示用：把 token 翻成人能认的身份
 function userIdentity(token, label) {
     if (label && String(label).trim()) return String(label).trim();
-    if (token && HASH_TO_PASSWORD[token]) return '独立密码: ' + HASH_TO_PASSWORD[token];
+    if (token && HASH_TO_PASSWORD[token]) return ((PASSWORD_HASH_MAP[token] && PASSWORD_HASH_MAP[token].index === 0) ? '主密码: ' : '独立密码: ') + HASH_TO_PASSWORD[token];
     if (token && String(token).startsWith('v2board_')) return 'v2board用户#' + String(token).slice(8, 16);
     return (token ? String(token).slice(0, 12) : '匿名');
 }
@@ -911,6 +913,25 @@ try {
         });
     }
 } catch (e) { console.warn('[HlsCut] 路由注册失败,原生 HLS 播放前去插播已禁用:', e.message); }
+// 📊 观看/分享实测统计 + 站长后台查询(见 lib/user-stats):前端按"视频真在走且页面在前台"计秒攒批上报,分享链带 s=<分享码> 追踪回流;
+//    站长接口(/api/admin/overview|users|user|shares|requests)全是 SQL 聚合 + 20s 缓存,不再逐行解析 user_history 卡死全站。
+//    需 CACHE_TYPE=sqlite;STATS_DISABLE=1 关闭采集(上报接口 204,/api/config.watch_stats=false)。
+//    deps 全是调用时才取值的闭包:REQ_DB_OK/adminAuthed 定义在下面,构造时还在 TDZ。
+const STATS_ENABLED = !envFlag('STATS_DISABLE');
+let userStats = null;
+try {
+    userStats = require('./lib/user-stats').createUserStats({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        enabled: () => STATS_ENABLED && !!REQ_DB_OK(),
+        // 只认内存表;重启后还没 /check 的机场 token,模块的三个上报接口另按 user_stats 登录记录放行(不影响其它接口鉴权)
+        tokenInfo: (token) => (typeof token === 'string' && Object.prototype.hasOwnProperty.call(PASSWORD_HASH_MAP, token)) ? PASSWORD_HASH_MAP[token] : null,
+        isBanned: (token) => isBanned(token),
+        identity: (token, label) => userIdentity(token, label),
+        adminAuthed: (req) => adminAuthed(req),
+        ipKey
+    });
+    userStats.registerRoutes(app);
+} catch (e) { console.warn('[UserStats] 模块加载失败,观看/分享统计与新版站长接口已禁用:', e.message); userStats = null; }
 
 // 对分享预览 API 应用更严格的限流
 app.use('/api/preview', previewLimiter);
@@ -990,7 +1011,9 @@ async function renderSharePage(req, res, rawName) {
     const ePoster = escapeHtml(poster);
     const desc = escapeHtml(`在 E视界 免费在线观看《${name}》，多线路高清播放。`);
     const playUrl = `${siteUrl}/?play=${encodeURIComponent(name)}`;
-    const spaUrl = `/?play=${encodeURIComponent(name)}&_spa=1`;
+    // 📊 分享码 s 要跟着跳回 SPA:微信/QQ 内置浏览器的真人也会先落到这一页(isSocialCrawler 把它们算进来了),丢了就记不到"带来登录"
+    const shareCode = /^[A-Za-z0-9]{6,16}$/.test(String(req.query.s || '')) ? String(req.query.s) : '';
+    const spaUrl = `/?play=${encodeURIComponent(name)}&_spa=1${shareCode ? '&s=' + shareCode : ''}`;
     const html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -1024,6 +1047,10 @@ async function renderSharePage(req, res, rawName) {
 // ⚠️ 关键：动态注入站点 URL 到 index.html
 // 自动将 meta 标签中的 ednovas.video 替换为当前访问的网站地址
 app.get(['/', '/index.html'], async (req, res) => {
+    // 📊 分享回流:?s=<分享码> → 记一次打开(真人)/预览(平台抓卡片)。放在分支之前 = 爬虫页与 SPA 两条路都覆盖;
+    //    同步的几次索引小查询,异常在模块里吞掉,这里再包一层,绝不影响页面返回。
+    //    打开/预览由模块按 UA 自己判:isSocialCrawler 连微信/QQ/搜狗的真人浏览器都算(为了出卡片页),不能拿来区分。
+    if (req.query.s && userStats) { try { userStats.recordShareOpen(req); } catch (e) { } }
     // 🔗 分享深链：社交爬虫请求 /?play=剧名 时返回富预览卡片；真实用户(无 bot UA 或带 _spa)照常拿 SPA
     if (req.query.play && !req.query._spa && isSocialCrawler(req)) {
         try { return await renderSharePage(req, res, req.query.play); }
@@ -1410,6 +1437,8 @@ app.get('/api/config', (req, res) => {
         live_enabled: LIVE_TV_ENABLED,
         // ✂️ 剪掉插播后的清单托管可用(Safari 原生 HLS 播放前去插播要它;Vercel 无状态 → false)
         hls_cut: !!hlsCut,
+        // 📊 观看计时/分享追踪上报开关(需 sqlite;STATS_DISABLE=1 关)
+        watch_stats: !!(userStats && userStats.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });
@@ -1822,8 +1851,9 @@ function touchUser(token, opts) {
         const now = Date.now();
         const exists = cacheManager.db.prepare('SELECT 1 FROM user_stats WHERE user_token = ?').get(token);
         if (exists) {
-            cacheManager.db.prepare('UPDATE user_stats SET last_active = ?, last_login = COALESCE(?, last_login), label = COALESCE(?, label) WHERE user_token = ?')
-                .run(now, opts.login ? now : null, (opts.label && String(opts.label).trim()) ? String(opts.label).trim() : null, token);
+            // first_seen 可能为空(后台封禁时给没记录的 token 插的行),第一次真活跃时补上
+            cacheManager.db.prepare('UPDATE user_stats SET last_active = ?, first_seen = COALESCE(first_seen, ?), last_login = COALESCE(?, last_login), label = COALESCE(?, label) WHERE user_token = ?')
+                .run(now, now, opts.login ? now : null, (opts.label && String(opts.label).trim()) ? String(opts.label).trim() : null, token);
         } else {
             cacheManager.db.prepare('INSERT INTO user_stats (user_token, label, first_seen, last_login, last_active, banned) VALUES (?, ?, ?, ?, ?, 0)')
                 .run(token, (opts.label && String(opts.label).trim()) ? String(opts.label).trim() : null, now, opts.login ? now : null, now);
@@ -1843,6 +1873,16 @@ function adminTokenMatch(provided) {
     try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
 }
 
+// 求片海报只收 TMDB:路径 '/xxx.jpg' 或 image.tmdb.org 的完整地址(统一存成路径,后台经 /api/tmdb-image 代理显示)。
+//   其它地址一律存空 —— 后台会渲染海报,任意外链 = 站长一打开求片页,IP/UA/查看时间就送到提交者的服务器。
+//   文件名规则与 /api/tmdb-image 的白名单一致。
+function tmdbPosterPath(p) {
+    const s = String(p || '').trim();
+    if (/^\/[A-Za-z0-9]+\.(jpg|jpeg|png|webp)$/i.test(s)) return s;
+    const m = s.match(/^https?:\/\/image\.tmdb\.org\/t\/p\/[A-Za-z0-9]+\/([A-Za-z0-9]+\.(?:jpg|jpeg|png|webp))$/i);
+    return m ? '/' + m[1] : '';
+}
+
 // 提交求片（需登录账号）
 app.post('/api/requests', (req, res) => {
     if (!ADMIN_TOKEN) return res.status(403).json({ error: '求片功能未开启' });  // 未配 ADMIN_TOKEN = 功能关闭
@@ -1860,8 +1900,9 @@ app.post('/api/requests', (req, res) => {
         const info = cacheManager.db.prepare(`INSERT INTO content_requests (user_token, user_label, name, tmdb_id, poster, note, year, aka, cast_info, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).run(
             token, String(label || '').slice(0, 120), String(name).trim().slice(0, 200),
-            String(tmdb_id || '').slice(0, 40), String(poster || '').slice(0, 400), String(note || '').slice(0, 500),
+            String(tmdb_id || '').slice(0, 40), tmdbPosterPath(poster), String(note || '').slice(0, 500),
             String(year || '').slice(0, 20), String(aka || '').slice(0, 200), String(cast || '').slice(0, 200), now, now);
+        if (userStats) userStats.invalidate();   // 📊 后台概览/用户列表的求片数有 20s 缓存
         res.json({ ok: true, id: info.lastInsertRowid });
     } catch (e) { console.error('[求片提交]', e.message); res.status(500).json({ error: 'Database error' }); }
 });
@@ -1875,6 +1916,7 @@ app.post('/api/requests/cancel', (req, res) => {
     if (!REQ_DB_OK() || !id) return res.status(400).json({ error: 'Bad request' });
     try {
         const info = cacheManager.db.prepare("DELETE FROM content_requests WHERE id = ? AND user_token = ? AND status IN ('pending', 'need_info')").run(id, token);
+        if (info.changes && userStats) userStats.invalidate();
         res.json({ ok: true, deleted: info.changes });
     } catch (e) { res.status(500).json({ error: 'Database error' }); }
 });
@@ -1915,13 +1957,16 @@ app.post('/api/requests/admin', (req, res) => {
     if (!adminTokenMatch(admin)) return res.status(403).json({ error: 'Forbidden' });
     if (!REQ_DB_OK() || !id) return res.status(400).json({ error: 'Bad request' });
     try {
+        // 📊 改完都清统计缓存:否则后台概览"待处理求片"、用户的求片数要过 20s 才变(批量接口/封禁早就清了)
         if (action === 'delete') {
             cacheManager.db.prepare('DELETE FROM content_requests WHERE id = ?').run(id);
+            if (userStats) userStats.invalidate();
             return res.json({ ok: true, deleted: true });
         }
         const st = ['pending', 'fulfilled', 'rejected', 'need_info'].includes(status) ? status : 'fulfilled';
         cacheManager.db.prepare(`UPDATE content_requests SET status = ?, fulfill_link = ?, fulfill_note = ?, updated_at = ? WHERE id = ?`)
             .run(st, String(fulfill_link || '').slice(0, 2000), String(fulfill_note || '').slice(0, 500), Date.now(), id);
+        if (userStats) userStats.invalidate();
         res.json({ ok: true });
     } catch (e) { console.error('[求片履行]', e.message); res.status(500).json({ error: 'Database error' }); }
 });
@@ -1932,75 +1977,8 @@ const adminAuthed = (req) => {
     return adminTokenMatch(t);
 };
 
-// 用户统计列表 + 聚合（观看数据从 user_history 现算；活跃/登录/封禁从 user_stats）
-app.get('/api/admin/users', (req, res) => {
-    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
-    if (!REQ_DB_OK()) return res.json({ users: [], aggregates: {} });
-    try {
-        const now = Date.now(), DAY = 86400000;
-        // 1. 每用户观看聚合(数量/最近观看)
-        const hist = {};
-        for (const r of cacheManager.db.prepare('SELECT user_token, COUNT(*) cnt, MAX(updated_at) last FROM user_history GROUP BY user_token').all()) {
-            hist[r.user_token] = { watch_count: r.cnt, last_watch: r.last, watch_seconds: 0 };
-        }
-        // 2. 估算观看时长：每剧 ≈ (当前集序号-1)*单集时长 + 当前集已看进度。
-        //    比只算"当前集位置"更接近真实(老办法严重低估多集剧)，但仍是估算(前面集未必真看完/快进)→ 前端标"估"。
-        //    ORDER BY 使限量扫描确定(取最近 N 条)，避免无序 LIMIT 的不确定取样。
-        for (const row of cacheManager.db.prepare('SELECT user_token, item_data FROM user_history ORDER BY updated_at DESC LIMIT 200000').all()) {
-            const a = hist[row.user_token]; if (!a) continue;
-            try {
-                const d = JSON.parse(row.item_data) || {};
-                const pt = Number(d.progressTime) || 0;       // 当前集已看秒数
-                const pd = Number(d.progressDuration) || 0;   // 当前集时长
-                const em = String(d.episode || '').match(/(\d+)/);
-                const epIdx = em ? parseInt(em[1]) : 1;
-                let secs = pt;
-                if (epIdx > 1 && pd > 0 && pd < 86400) secs = (epIdx - 1) * pd + pt;  // 前面整集 + 当前进度
-                if (secs > 0 && secs < 200 * 86400) a.watch_seconds += secs;          // 上限防脏数据
-            } catch (e) { }
-        }
-        // 3. 求片数 + 身份标签兜底(email 来自求片记录)
-        const reqCnt = {}, labelMap = {};
-        for (const r of cacheManager.db.prepare('SELECT user_token, COUNT(*) cnt FROM content_requests GROUP BY user_token').all()) reqCnt[r.user_token] = r.cnt;
-        for (const r of cacheManager.db.prepare("SELECT user_token, MAX(user_label) lbl FROM content_requests WHERE user_label IS NOT NULL AND user_label != '' GROUP BY user_token").all()) labelMap[r.user_token] = r.lbl;
-        // 4. user_stats 行
-        const statMap = {};
-        for (const s of cacheManager.db.prepare('SELECT * FROM user_stats').all()) statMap[s.user_token] = s;
-        // 5. 全量 token = 观看者 ∪ 求片者 ∪ 已追踪
-        const tokens = new Set([...Object.keys(hist), ...Object.keys(reqCnt), ...Object.keys(statMap)]);
-        const users = [];
-        for (const tk of tokens) {
-            const st = statMap[tk] || {}, h = hist[tk] || {};
-            users.push({
-                token: tk,
-                identity: userIdentity(tk, st.label || labelMap[tk] || ''),
-                is_v2board: String(tk).startsWith('v2board_'),
-                watch_count: h.watch_count || 0,
-                last_watch: h.last_watch || null,
-                watch_minutes: Math.round((h.watch_seconds || 0) / 60),
-                request_count: reqCnt[tk] || 0,
-                first_seen: st.first_seen || null,
-                last_login: st.last_login || null,
-                last_active: st.last_active || h.last_watch || null,
-                banned: !!st.banned,
-                banned_at: st.banned_at || null
-            });
-        }
-        users.sort((a, b) => (b.last_active || 0) - (a.last_active || 0));
-        const aggregates = {
-            total_users: users.length,
-            active_1d: users.filter(u => u.last_active && now - u.last_active < DAY).length,
-            active_7d: users.filter(u => u.last_active && now - u.last_active < 7 * DAY).length,
-            active_30d: users.filter(u => u.last_active && now - u.last_active < 30 * DAY).length,
-            banned_count: users.filter(u => u.banned).length,
-            v2board_users: users.filter(u => u.is_v2board).length,
-            total_watch_count: users.reduce((s, u) => s + u.watch_count, 0),
-            total_watch_hours: Math.round(users.reduce((s, u) => s + u.watch_minutes, 0) / 60),
-            total_requests: users.reduce((s, u) => s + u.request_count, 0)
-        };
-        res.json({ users: users.slice(0, 1000), aggregates });
-    } catch (e) { console.error('[Admin Users]', e.message); res.status(500).json({ error: 'Database error' }); }
-});
+// 用户统计列表/概览/详情 → 见 lib/user-stats(GET /api/admin/users|overview|user|shares|requests,SQL 聚合 + 20s 缓存)。
+// 旧实现同步 JSON.parse 最多 20 万行 user_history 估算时长,会阻塞事件循环把全站一起卡死,已删除。
 
 // 封禁 / 解封（被封用户：/api/config 返回 banned→前端锁屏；历史同步/求片接口一律 403）
 app.post('/api/admin/ban', (req, res) => {
@@ -2012,7 +1990,12 @@ app.post('/api/admin/ban', (req, res) => {
         const b = banned ? 1 : 0, now = Date.now();
         const exists = cacheManager.db.prepare('SELECT 1 FROM user_stats WHERE user_token = ?').get(token);
         if (exists) cacheManager.db.prepare('UPDATE user_stats SET banned = ?, banned_at = ? WHERE user_token = ?').run(b, b ? now : null, token);
-        else cacheManager.db.prepare('INSERT INTO user_stats (user_token, first_seen, last_active, banned, banned_at) VALUES (?, ?, ?, ?, ?)').run(token, now, now, b, b ? now : null);
+        // 没有统计行的老用户(只有旧同步历史/求片):不能写 first_seen/last_active = now —— 后台会把这个封禁的沉睡用户算成"今日活跃""7 日新增"。
+        //   last_active 留空;first_seen 取他最早的同步历史/求片时间(都没有就留空)
+        else cacheManager.db.prepare(`INSERT INTO user_stats (user_token, first_seen, banned, banned_at) VALUES (?, (SELECT MIN(t) FROM (
+                SELECT MIN(updated_at) t FROM user_history WHERE user_token = ?
+                UNION ALL SELECT MIN(created_at) FROM content_requests WHERE user_token = ?)), ?, ?)`).run(token, token, token, b, b ? now : null);
+        if (userStats) userStats.invalidate();   // 📊 用户列表有 20s 缓存,封禁/解封要立刻反映
         res.json({ ok: true, banned: !!b });
     } catch (e) { res.status(500).json({ error: 'Database error' }); }
 });
@@ -2299,11 +2282,20 @@ app.get('/api/preview', async (req, res) => {
 // 🗨️ 弹幕代理：把"剧名+集名"映射到自建第三方弹幕聚合服务(danmu_api，兼容弹弹play，聚合爱优腾芒B等平台弹幕)，
 //   再转成 DPlayer v3 格式。按 DPlayer 约定 danmaku.api='/api/danmaku/'，它会 GET /api/danmaku/v3/?id=<剧名|集名>。
 //   需配置环境变量 DANMU_API_URL(你部署的 danmu_api 地址)；未配置则返回空弹幕(功能优雅降级，不报错)。
-const danmakuCache = new Map(); // "剧名|集名" -> { data, expiry }
+const danmakuCache = new Map(); // "剧名|集名" -> { data, lowConf, expiry }  只放空结果/低置信结果(短期);高贴合非空结果进 danmakuStore
 const danmakuSearchCache = new Map(); // norm(剧名) -> { animes, expiry } 同剧各集复用搜索结果
-const DANMAKU_CACHE_TTL = 30 * 60 * 1000;
+const danmakuUrlMode = new Map();    // danmu_api 实例 -> 发现它不认 comment?url=(老版本,只能按 id)的时间
 const DANMAKU_MISS_TTL = 90 * 1000; // 空结果只缓存 90s：弹幕空多为 danmu_api 被上游(iqiyi)限流的瞬时失败，短缓存让下次很快重试成功(成功后再长缓存)
+const DANMAKU_LOWCONF_TTL = 10 * 60 * 1000;
 const DANMAKU_CACHE_MAX = 1000;
+// 🗄️ 高贴合非空弹幕的服务器长缓存(见 lib/danmaku-store):SQLite 持久(gzip)+ 内存热层,7 天新鲜、过期先回旧的再后台重抓,
+//    同一集并发只打一次 danmu_api。热剧大家都在看的那几集,一周最多回源一次,重启也不丢。
+//    DANMAKU_STORE_VER:改了弹幕匹配逻辑(哪集配哪份弹幕)就 bump,旧的持久结果整体作废。
+const DANMAKU_STORE_VER = 'm1';
+const danmakuStore = require('./lib/danmaku-store').createStore({
+    db: () => (cacheManager.type === 'sqlite' && cacheManager.db) ? cacheManager.db : null,
+    freshMs: (Number(process.env.DANMAKU_CACHE_DAYS) > 0 ? Number(process.env.DANMAKU_CACHE_DAYS) : 7) * 86400e3,
+});
 const DANMAKU_MAX = 12000; // 单集弹幕上限(超出按时间均匀采样)。提到 1.2w 让峰值更密、"海量弹幕"开关效果明显；unlimited 关时 DPlayer 仍按轨道限并发渲染，不会卡
 const DANMAKU_SEARCH_TTL = 3 * 60 * 1000; // danmu_api 的 episodeId 会过期(实测<10min)，搜索结果只短存，防复用过期id取到空弹幕
 let danmakuWinStart = 0, danmakuWinCount = 0;
@@ -2570,17 +2562,264 @@ function danmakuMoviePick(parts, want) {
     }
     return null;   // 源全是额外条目(预告/花絮),我方要正片 → 宁可没有(不拿预告弹幕铺正片)
 }
-// 从【一个 danmu_api 实例】取某剧某集弹幕：搜索 → 同剧多平台(iqiyi/360/...)回退 → 返回 DPlayer 数组(空=该实例没取到)
-async function fetchDanmakuFromInstance(base, token, title, ep) {
-    base = String(base).replace(/\/$/, '');
-    const prefix = token ? `/${encodeURIComponent(token)}` : '';
-    const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+// 🏅 弹幕候选排序(纯函数;scripts/danmaku-match-test.mjs 把它从 server.js / api/index.js 抽出来用真实候选回放,两份必须一致)。
+//   danmu_api 按剧名搜出的候选 animeTitle 形如 "片名(年份)【类型】from 来源",这里挑出"就是我方这部"的那几个。
+//   返回 { pool, bestTier, why }:pool = 最佳档内排好序的候选(调用方依次取集,最多试 3 个);bestTier 决定缓存多久。
+//   贴合度分档:
+//     0 精确同名(标点/繁体数字/罗马数字/海贼王↔航海王 已归一);
+//     1 结构化等价 —— 去年份同名 / 季号写法不同(庆余年2↔第二季、仙剑奇侠传三↔第三部)/ 我方没写季号↔"第一季"、我方"第一季"↔裸名 /
+//       年份式↔季号式 / 只差版本标签(未删减版、国语)/ "剧场版"位置不同 / 演员版本名且年份对得上 / 带[卫视版][全季]等标签的同名页;
+//     2 只是名字互相包含(低置信:可能是续集/前传/同名别的作品,只短缓存);
+//     9 不要:明确是别的季、电影↔非电影、路演/直播/花絮/纯享/小剧场等衍生内容、短剧撞名、年份差太多的翻拍。
+//   hints(前端带来的我方信息;旧前端没有):type = 资源站分类(国产剧/大陆综艺/动作片/现代都市…),year = 资源站年份,eps = 我方集数。
+//   规则全部用真实候选回放校过(scripts/fixtures/danmaku/real-cases.json:6 组约 200 例,读线上弹幕核对过内容)。原则:宁可没弹幕,不错配。
+const DANMAKU_VERSION_ONLY = /^(?:(?:无删减|未删减|删减|完整|普通话|国语|粤语|沪语|闽南语|台语|原声|中字|中文字幕|双语|tv|加长|导演剪辑|会员|独播|4k|高清|蓝光|中配|日配|日语|英语|韩语|电视剧|剧集|hd|dvd)版?)+$/i;
+// 衍生内容(不是这部作品本身的时间轴):路演直播、发布会、花絮、纯享/高光剪辑、解说、小剧场……
+const DANMAKU_DERIVED = /路演|直播|发布会|特辑|幕后|花絮|预告|片花|采访|专访|访谈|解说|片段|混剪|剪辑|reaction|首映|彩蛋|纯享|精华|精编|高光|速看|浓缩|直拍|加更|plus|探班|看点|二创|赏析|盘点|vlog|回顾|小剧场|番外篇|周边|手办|制作特辑|合集/i;
+// 我方自己就是剪辑版(纯享/精编/高光…):只有同样是这种剪辑的候选才对得上时间轴(held-out 实锤:纯享版配到了完整版)
+const DANMAKU_EDIT = /纯享|精编|高光|精华|速看|浓缩|解说/;
+function danmakuKindOfOurs(type, eps) {
+    const t = String(type || '');
+    let k = null;
+    if (/综艺|真人秀|晚会|脱口秀/.test(t)) k = 'variety';
+    else if (/动画片|动画电影|动漫电影|剧场版|电影版/.test(t)) k = 'movie';
+    else if (/动漫|番剧|动画/.test(t)) k = 'anime';
+    else if (/纪录|记录/.test(t)) k = null;                 // 纪录片既有单部也有系列,不判(弹幕源也常把纪录片标成综艺)
+    else if (/片$|电影|影片/.test(t)) k = 'movie';          // 动作片/剧情片/喜剧片…(先于"剧":剧情片不是剧集)。信分类不信集数:有站把一部电影切成十几段
+    else if (/短剧|现代都市|古装仙侠|穿越重生|女频|男频|爽剧|爽文|脑洞|战神|赘婿|甜宠|逆袭|萌宝|虐恋|总裁|神医|神豪|穿书/.test(t)) k = 'short';   // 短剧分类:常借名剧的名字(人世间/误杀/父母爱情1999);不放"年代/民国/宫斗"这类普通剧集也会用的词
+    else if (/剧/.test(t)) k = 'tv';                        // 国产剧/韩剧/美剧/港剧/台剧/日剧/海外剧…
+    if (!k && (Number(eps) || 0) >= 3) k = 'series';
+    return k;
+}
+function danmakuKindOfCand(a) {
+    const raw = String((a && a.animeTitle) || '');
+    if (/剧场版|电影版|\bmovie\b|\bfilm\b/i.test(raw.replace(/【[^】]*】/g, ''))) return 'movie';   // 弹幕源常把动画电影标成【动漫】,看片名里的"剧场版"
+    const m = raw.match(/【([^】]*)】/);
+    const s = [a && a.typeDescription, a && a.type, m && m[1]].filter(Boolean).join(' ');
+    if (/电影|movie/i.test(s)) return 'movie';
+    if (/综艺/.test(s)) return 'variety';
+    if (/动漫|动画|番剧|anime/i.test(s)) return 'anime';
+    if (/电视剧|剧集|连续剧|\btv\b/i.test(s)) return 'tv';
+    return null;
+}
+function danmakuRankCandidates(animes, title, hints) {
+    hints = hints || {};
+    const CN_DIGIT = { 壹: '一', 贰: '二', 叁: '三', 肆: '四', 伍: '五', 陆: '六', 柒: '七', 捌: '八', 玖: '九', 拾: '十' };
+    const ROMAN = { Ⅰ: '1', Ⅱ: '2', Ⅲ: '3', Ⅳ: '4', Ⅴ: '5', Ⅵ: '6', Ⅶ: '7', Ⅷ: '8', Ⅸ: '9', Ⅹ: '10' };
+    // 归一:去空白和标点(后宫·甄嬛传=后宫甄嬛传、神雕侠侣：问世间=神雕侠侣:问世间)、大写数字/罗马数字、海贼王=航海王
+    const norm = s => String(s || '').replace(/[壹贰叁肆伍陆柒捌玖拾]/g, c => CN_DIGIT[c]).replace(/[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]/g, c => ROMAN[c])
+        .replace(/[\s·•・.。,，、:：;；!！?？'"‘’“”「」『』《》〈〉<>\-—–_~～/\\|]/g, '').toLowerCase().replace(/航海王/g, '海贼王');
     // 🏷️ danmu_api 的 animeTitle 常带 " from 平台" 尾巴——不剥掉的话 core/norm 精确档【永远打不中】,
     //    一切都掉进包含档(对抗审查实锤:韩国版/杂牌因此与正主同档,平台排序反而让错剧排前)。
     const stripFrom = s => String(s || '').replace(/\s+from\s+[a-z0-9_]+\s*$/i, '');
     const core = s => norm(String(stripFrom(s)).split(/[(（【\[]/)[0]);
     const normT = s => norm(stripFrom(s));
     const nt = norm(title), ct = core(title);
+    // 片名后紧跟的 [..] / （..） 标签(长相思[全季]、漫长的季节[卫视版]、王牌对王牌（普通话）);年份括号不算
+    const tagOf = a => { const m = stripFrom(a && a.animeTitle).match(/^[^(（【\[]*[\[（(]([^\]）)]*)[\]）)]/); return (m && !/^\s*(?:19|20)\d{2}\s*$/.test(m[1]) && !/^\s*0{3}\d\s*$/.test(m[1])) ? norm(m[1]) : ''; };
+    // 季号解析成数字：认"第N季/第N部/Season N/SN" + 片名尾部裸数字("庆余年2"/"斗破苍穹4",排除 19xx/20xx 年份)。
+    //   尾裸数字要看括号前的片名:候选是"庆余年2(2024)【电视剧】from 360",整串的结尾是"】"(旧版因此认不出候选的季号,
+    //   "庆余年第二季"反而配到了"庆余年(2019)"= 第一季,真实数据回放实锤)
+    // 片名里的年份:"天龙八部2003/快乐大本营2012"是版本/季的年份;但"请回答1988"(2015 年的剧)里 1988 是名字的一部分 ——
+    //   比资源站年份早 2 年以上的当名字(不剥、不当年份用)。之后所有"剧名年份"都用 yearM(已排除名字里的年份)。
+    const yearRaw = String(title).match(/(?:19|20)\d{2}/);
+    const hintYear = Number(hints.year) > 1900 ? Number(hints.year) : 0;
+    const yearInName = !!(yearRaw && hintYear && Number(yearRaw[0]) < hintYear - 1);
+    const yearM = yearInName ? null : yearRaw;
+    const seasonOf = s => { s = stripFrom(s); const m = s.match(/第\s*([0-9一二两三四五六七八九十]+)\s*[季部]|season\s*0*(\d+)|\bS0*(\d{1,2})\b/i); if (m) return danmakuCn2Num(m[1] || m[2] || m[3]); const t = s.split(/[(（【\[]/)[0].match(/(?<![0-9])([2-9]|1[0-9])\s*$/); return t ? parseInt(t[1], 10) : null; };
+    const wantSeason = seasonOf(title);
+    // 去掉季号后的名字(与 seasonOf 同口径):"庆余年第二季"/"庆余年2" → "庆余年"
+    const SEASON_RE = /第[0-9一二两三四五六七八九十]+[季部]|season0*\d+|\bs0*\d{1,2}\b/gi;
+    const unSeason = c => c.replace(SEASON_RE, '').replace(/(?<![0-9])([2-9]|1[0-9])$/, '');
+    const baseOf = s => unSeason(core(s));
+    const ctSeasonless = unSeason(ct);
+    const CN_NUM = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
+    // 尾裸数字季号(庆余年2)去掉后用于包含匹配——否则弹幕源的"庆余年 第二季"(核心名不含"2")进不了候选,只剩第一季页 → 整季错配。
+    const ctBase = wantSeason != null ? ct.replace(/([2-9]|1\d)$/, '') : ct;
+    // 尾缀年份综艺名(王牌对王牌2024):去年份后才可能与"王牌对王牌 第九季"互相包含(否则正主进不了候选、只剩裸基名=第一季 → 整季串台,对抗审查实锤)
+    const ctNoYear = yearInName ? ct : ct.replace(/((?:19|20)\d{2})\s*$/, '');
+    const unMovie = c => c.replace(/剧场版|电影版/g, '');
+    // 我方年份:剧名里的年份(快乐大本营2012 / 天龙八部2003)比资源站 vod_year(常是开播年)更具体
+    const ourYear = (yearM ? Number(yearM[0]) : 0) || hintYear;
+    // 我方自己是剪辑版(纯享/精编…)时,候选也必须是同一种剪辑
+    const ourEdit = (ct.match(DANMAKU_EDIT) || [])[0] || '';
+    const ourEps = Number(hints.eps) || 0;
+    const epCount = a => (a && Array.isArray(a.episodes)) ? a.episodes.length : null;
+    const yearOf = a => { const m = String((a && a.animeTitle) || '').match(/[(（]((?:19|20)\d{2})[)）]/); return m ? Number(m[1]) : null; };
+    const junkYear = a => /[(（]0{3}\d[)）]/.test(String((a && a.animeTitle) || ''));   // "海贼王系列(0001)"这类年份为 0 的杂项条目
+    const yDist = a => { const y = yearOf(a); return (ourYear && y) ? Math.abs(y - ourYear) : null; };
+    const remOf = (c, stem) => {   // 两名互相包含时,多出来的那截;不包含返回 null
+        if (!stem || !c || c === stem) return null;
+        return c.includes(stem) ? c.replace(stem, '') : (stem.includes(c) ? stem.replace(c, '') : null);
+    };
+    const derived = r => !!r && DANMAKU_DERIVED.test(r) && !DANMAKU_DERIVED.test(ct);
+    // 🏅 名字贴合度分档(见函数头注释)
+    const fitTier = a => {
+        const c = core(a.animeTitle);
+        if (!c) return 9;
+        const tag = tagOf(a);
+        if (ourEdit && !c.includes(ourEdit) && !tag.includes(ourEdit)) return 9;   // 我方纯享版/精编版 ≠ 完整版
+        if (derived(tag)) return 9;
+        const tagged = !!tag && !DANMAKU_VERSION_ONLY.test(tag);
+        if (c === ct || normT(a.animeTitle) === nt) return tagged ? 1 : 0;
+        const s = seasonOf(a.animeTitle), bc = baseOf(a.animeTitle);
+        const r1 = remOf(c, ct), r2 = ctNoYear !== ct ? remOf(c, ctNoYear) : null;
+        if (derived(r1) || derived(r2)) return 9;   // 路演直播/花絮/纯享/小剧场……不是这部作品的时间轴
+        // "XX之YY" 多出来的是"之…"副标题 = 续作/衍生(爸爸去哪儿第三季之听爸爸的话、唐朝诡事录之西行、鬼吹灯之精绝古城)
+        if ((r1 && /^之/.test(r1)) || (r2 && /^之/.test(r2))) return 9;
+        if (ctNoYear && ctNoYear !== ct && c === ctNoYear) return 1;
+        //   候选名自带年份尾巴("误杀 2019(2019)"):去掉后与我方同名、且这个年份就是它自己的年份
+        { const cy = c.match(/((?:19|20)\d{2})$/); if (cy && c.slice(0, -4) === ct && yearOf(a) === Number(cy[1])) return 1; }
+        //   同一部的不同版本名(知否…网络版 ↔ 知否… DVD版):两边各去掉结尾一个"XX版"后同名、年份对得上 → 结构化等价(再靠集数挑对剪辑)
+        { // 逐个长度试"去掉结尾 1~6 字 + 版"(正则贪婪会多剥:知否…绿肥红瘦dvd版 会被剥成"知否知否应是绿")
+          const stems = x => { const out = new Set([x]); if (/版$/.test(x)) for (let k = 1; k <= 6 && k < x.length - 1; k++) out.add(x.slice(0, x.length - 1 - k)); return out; };
+          const sc = stems(c), dd = yDist(a);
+          if (dd != null && dd <= 1 && !/剧场|电影/.test(c + ct) && [...stems(ct)].some(x => x.length >= 3 && sc.has(x) && (x !== c || x !== ct))) return 1; }
+        // 明确是别的季:我方没写季号(=第一季/第一部),候选写着第 2 季以上(长相思 第二季、斗罗大陆2绝世唐门 动态漫画 第5季)→ 不同季,不要
+        if (wantSeason == null && s != null && s >= 2 && (bc === ct || c.includes(ct))) return 9;
+        // ① 季号写法不同:两边季号都认得出且相同、去掉季号后同名(庆余年2 ↔ 庆余年第二季;旧版"第二季→2"方向根本配不上)
+        if (wantSeason != null && s === wantSeason && bc && bc === ctSeasonless) return 1;
+        //   中文数字结尾 ↔ 第N部/季:仙剑奇侠传三 ↔ 仙剑奇侠传 第三部(两个方向)
+        if (s != null && s >= 2 && s <= 10 && bc && (ct === bc + CN_NUM[s] || ct === bc + s)) return 1;
+        if (wantSeason != null && wantSeason >= 2 && wantSeason <= 10 && s == null && (c === ctSeasonless + CN_NUM[wantSeason])) return 1;
+        //   第一季 ↔ 裸名:我方没写季号 ↔ 候选"第一季";我方"第一季" ↔ 候选裸名
+        if (wantSeason == null && s === 1 && bc === ct) return 1;
+        if (wantSeason === 1 && s == null && (c === ctSeasonless || c === ctSeasonless + '1')) return 1;   // 爱情公寓第一季 ↔ 爱情公寓1
+        // ② 年份式 ↔ 季号式:我方剧名带年份,候选标题带同一年份,去掉季号后同名
+        if (yearM && ctNoYear !== ct && String(a.animeTitle).includes(yearM[0]) && bc === unSeason(ctNoYear)) return 1;
+        // ③ 只差版本标签(未删减版/国语/粤语/TV版…);"剧场版"位置不同(咒术回战0 剧场版 ↔ 剧场版 咒术回战0)
+        if ((r1 && DANMAKU_VERSION_ONLY.test(r1)) || (r2 && DANMAKU_VERSION_ONLY.test(r2) && String(a.animeTitle).includes(yearM[0]))) return 1;
+        if (/剧场版|电影版/.test(c + ct) && unMovie(c) === unMovie(ct)) return 1;
+        // ④ 演员/版本名("胡军版"/"黄日华版"):同名翻拍的版本标记,只有年份对得上才算这一部
+        const d = yDist(a);
+        if (((r1 && /^.{1,6}版$/.test(r1)) || (r2 && /^.{1,6}版$/.test(r2))) && d != null && d <= 1) return 1;
+        // 名字互相包含(或去季号/去年份后包含)—— 低置信。两个字的名字太容易被包含(死神 ⊂ 死神少爷与黑女仆、狂飙 ⊂ 狂飙兄弟),不认
+        const contains = c.includes(ct) || ct.includes(c)
+            || (ctBase !== ct && ctBase && c.includes(ctBase))
+            || (ctNoYear !== ct && ctNoYear && (c.includes(ctNoYear) || ctNoYear.includes(c)));
+        if (contains && Math.min(c.length, (ctNoYear || ct).length) > 2) return 2;
+        return 9;
+    };
+    // 🎬 类型:
+    //   硬冲突只有"电影 ↔ 非电影"(综艺"王牌对王牌"绝不能拿 1998 年同名电影的弹幕);
+    //   其它先找同类型(剧集≠动漫:苍兰诀/三体/大奉打更人 的电视剧与动画同名同年),没有同类型才放宽到相近类型(剧集~动漫~短剧)
+    let ourKind = danmakuHintKind(hints);
+    // 片名自带的版本标记比资源站分类可靠:"苍兰诀（动画版）"有站标成内地剧,"凡人修仙传真人版"有站标成动漫(实测)
+    if (/动画版|动漫版/.test(String(title)) && ourKind !== 'movie') ourKind = 'anime';
+    else if (/真人版|电视剧版/.test(String(title)) && (ourKind === 'anime' || ourKind === 'series' || !ourKind)) ourKind = 'tv';
+    if (/剧场版|电影版/.test(String(title)) && ourKind !== 'variety') ourKind = 'movie';   // 我方片名自带"剧场版"(分类常写成国产动漫)
+    const isMovie = k => k === 'movie';
+    // 综艺 ↔ 非综艺 也是硬冲突(新西游记 第八季 ≠ 西游记(1986)电视剧;天龙八部(2009)【综艺】≠ 天龙八部电视剧)
+    const isVariety = k => k === 'variety';
+    const near = k => (ourKind === 'series' || ourKind === 'tv' || ourKind === 'anime' || ourKind === 'short') && (k === 'tv' || k === 'anime');
+    // 动画电影(动画片/动漫电影/剧场版):弹幕源常把它标成【动漫】(熊出没·重启未来),名字精确/结构化等价时也认
+    const animatedMovie = ourKind === 'movie' && (hints.kind === 'amovie' || /动画|动漫/.test(String(hints.type || '')) || /剧场版/.test(String(title)));
+    let candidates = (animes || []).filter(a => {
+        if (fitTier(a) >= 9) return false;
+        const k = danmakuKindOfCand(a);
+        if (!ourKind || !k) return true;
+        if (ourKind === 'series') return !isMovie(k);   // 只知道是多集:排除电影即可
+        if (animatedMovie && k === 'anime') { const n = epCount(a); return fitTier(a) === 0 && (n == null || n <= 3); }   // 鬼灭之刃 无限列车篇【动漫】是 7 集 TV 版,不是剧场版
+        return isMovie(ourKind) === isMovie(k) && isVariety(ourKind) === isVariety(k);
+    });
+    if (ourKind && ourKind !== 'series') {
+        const exactKind = ourKind === 'short' ? 'tv' : ourKind;
+        if (candidates.some(a => danmakuKindOfCand(a) === exactKind)) candidates = candidates.filter(a => { const k = danmakuKindOfCand(a); return !k || k === exactKind; });
+        else if (candidates.some(a => near(danmakuKindOfCand(a)))) candidates = candidates.filter(a => { const k = danmakuKindOfCand(a); return !k || near(k); });
+    }
+    // 🗓️ 年份偏好(在分档之前——标题带年份时,含该年份的候选是最强信号:"王牌对王牌2024"该选"第九季(2024)"而不是裸基名第一季页)
+    if (candidates.length > 1 && yearM) { const withYear = candidates.filter(a => String(a.animeTitle || '').includes(yearM[0])); if (withYear.length) candidates = withYear; }
+    // 🗓️ 季号/续集号：先取精确同季(我方"第一季"时裸名也算第一季);没有精确同季时【无论单/多候选】剔除 裸基名(第一部/第一季)和季号明确不同的——
+    //    它们是不同作品,宁可没弹幕不错配。(单候选旁路已修:明确异季的唯一候选此前会被原样保留,对抗审查实锤)
+    if (wantSeason != null && candidates.length) {
+        const exact = candidates.filter(a => { const s = seasonOf(a.animeTitle); return s === wantSeason || (wantSeason === 1 && s == null && core(a.animeTitle) === ctSeasonless) || fitTier(a) <= 1; });
+        if (exact.length) candidates = exact;
+        // 裸基名(去掉季号后与我方同名、自己不带季号)= 第一季,要第 2 季以上时不要
+        else candidates = candidates.filter(a => { const s = seasonOf(a.animeTitle); const c = core(a.animeTitle); return (s == null || s === wantSeason) && c !== ctBase && !(wantSeason >= 2 && s == null && c === ctSeasonless); });
+    }
+    const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
+    const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
+    // 排序:贴合档 → 不带标签的 → 年份接近 → 平台弹幕量;回退循环只在【最佳档】内轮换——iqiyi 正主瞬时空 → 同档 qq 接棒(合法多平台回退),
+    // 绝不落到包含档杂牌(对抗审查实锤:正主瞬时空时杂牌错弹幕被回退捡走并 LONG_CACHE 固化 7 天)。
+    const yKey = a => { const d = yDist(a); return d == null ? 50 : d; };
+    const tagKey = a => { const t = tagOf(a); return (t && !DANMAKU_VERSION_ONLY.test(t)) ? 1 : 0; };
+    candidates.sort((a, b) => (fitTier(a) - fitTier(b)) || (tagKey(a) - tagKey(b)) || (yKey(a) - yKey(b))
+        || ((PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6)));
+    // 🗓️ 翻拍/重名:我方有年份时,逐档找"年份对得上"的;某档全是差太多的就看下一档。容差:精确同名 ≤3 年(弹幕源有时写出品年,
+    //    神雕侠侣:问世间 差 3 年),结构化/低置信 ≤1 年。综艺(一个页面跨很多年)与类型未知(纪录片常被标成综艺、年份是上架年)只排序不剔。
+    //    年份未知的候选不因年份被剔。短剧只认精确/结构化且年份 ≤1(它们常借名剧的名字)。
+    const yearStrict = ourYear && ourKind && ourKind !== 'variety';
+    const exactKind = ourKind === 'short' ? 'tv' : ourKind;
+    const isPlainName = a => { const c = core(a.animeTitle); return !tagKey(a) && (c === ct || c === ctNoYear); };
+    let rejected = '';
+    const epsOk = a => { const n = epCount(a); return n != null && Math.abs(n - ourEps) <= 1; };
+    const epsMatchT1 = ourEps >= 3 && candidates.some(a => fitTier(a) === 1 && epsOk(a));
+    for (const tier of [0, 1, 2]) {
+        if (ourKind === 'short' && tier >= 2) break;
+        let pool = candidates.filter(a => fitTier(a) === tier);
+        // 年份为 0 的杂项条目("海贼王系列(0001)")只在名字精确时才认(短剧常就是 0001)
+        if (tier >= 1 && ourYear) pool = pool.filter(a => !junkYear(a));
+        // 低置信档只认同类型(封神榜2000 电视剧 ≠ 封神榜传奇(2000)动画)
+        if (tier >= 2 && ourKind && ourKind !== 'series') pool = pool.filter(a => { const k = danmakuKindOfCand(a); return !k || k === exactKind; });
+        // 年份式命名的综艺(花儿与少年2026):低置信档必须同一年(别的季常只差一年)
+        if (tier >= 2 && ourKind === 'variety' && yearM) pool = pool.filter(a => yDist(a) === 0);
+        if (!pool.length) continue;
+        if (tier === 0 && epsMatchT1 && pool.every(a => epCount(a) != null && !epsOk(a))) continue;   // 少年神探狄仁杰 40 集 ↔ DVD版 40 集,不是 36 集播出版
+        if (yearStrict) {
+            const lim = ourKind === 'short' ? 1 : (tier === 0 ? 3 : 1);
+            const ok = pool.filter(a => { const d = yDist(a); return d == null ? (ourKind !== 'short' || tier === 0) : d <= lim; });
+            if (!ok.length) { rejected = 'year-mismatch'; continue; }
+            pool = ok;
+        }
+        // 同一部的不同剪辑(少年神探狄仁杰 DVD版 40 集 / 播出版 36 集):集数对得上(±1)的优先,对不上的分集会错位
+        const byEps = ourEps >= 3 ? pool.filter(epsOk) : [];
+        if (byEps.length) pool = byEps;
+        else {
+            const plain = pool.filter(a => !tagKey(a));
+            if (plain.length) pool = plain;   // 同档里有不带[卫视版][全季]标签的正片页就只用它(标签页常是不同剪辑/合集)
+            const exact = pool.filter(isPlainName);
+            if (exact.length) pool = exact;   // 有和我方同名的正片页就不要"XX字幕版/XX版"变体(天天向上2019 ↔ 天天向上 越南语字幕版)
+        }
+        // 只知道是多集(或完全没提示)时,同档里剧集/动漫/综艺/电影混在一起 = 分不出是哪部(苍兰诀 电视剧与动画同名同年)→ 宁可不选
+        //   (从历史/离线续看时没有分类提示,旧版会随手挑一个并长缓存 7 天,审查实锤)
+        if ((!ourKind && !hints.type && !hints.kind) || ourKind === 'series') {
+            const kinds = new Set(pool.map(danmakuKindOfCand).filter(Boolean));
+            if (kinds.size > 1) return { pool: [], bestTier: 9, why: 'ambiguous-kind' };
+        }
+        return { pool, bestTier: tier, why: `tier${tier}${ourKind ? ' kind=' + ourKind : ''}${ourYear ? ' year=' + ourYear : ''}` };
+    }
+    return { pool: [], bestTier: 9, why: rejected || (candidates.length ? 'filtered' : 'no-candidate') };
+}
+// 前端提示里的类型:v5 新前端直接送归一后的 k:(tv/anime/movie/amovie=动画电影/variety/short/series),旧的只送资源站分类 t:
+function danmakuHintKind(hints) {
+    if (hints && hints.kind) return hints.kind === 'amovie' ? 'movie' : hints.kind;
+    return danmakuKindOfOurs(hints && hints.type, hints && hints.eps);
+}
+// 弹幕请求 id 解析(两后端共用,纯函数):剧名|集名|版本[|k:类型|t:资源站分类|y:年份|n:集数]。只认这几个前缀,其它段忽略。
+//   缓存键只带真正影响匹配的部分(类型 + 年份):同名的综艺与电影、不同年份的翻拍各自缓存;集数会随更新变,不进键。
+function danmakuParseId(id) {
+    const hints = {};
+    let title = '', ep = '';
+    try {
+        const parts = String(id || '').split('|'); title = (parts[0] || '').trim(); ep = (parts[1] || '').trim();
+        for (const p of parts.slice(2)) {
+            const m = String(p).match(/^([ktyn]):(.{1,40})$/);
+            if (!m) continue;
+            if (m[1] === 't') hints.type = m[2].trim();
+            else if (m[1] === 'k' && /^(tv|anime|movie|amovie|variety|short|series)$/.test(m[2])) hints.kind = m[2];
+            else if (m[1] === 'y' && /^(19|20)\d{2}$/.test(m[2])) hints.year = Number(m[2]);
+            else if (m[1] === 'n' && /^\d{1,5}$/.test(m[2])) hints.eps = Number(m[2]);
+        }
+    } catch (e) { }
+    const k = hints.kind || danmakuKindOfOurs(hints.type, hints.eps);
+    const cacheKey = title + '|' + ep + (k ? '|k:' + k : '') + (hints.year ? '|y:' + hints.year : '');
+    return { title, ep, hints, cacheKey };
+}
+// 从【一个 danmu_api 实例】取某剧某集弹幕：搜索 → 同剧多平台(iqiyi/360/...)回退 → 返回 DPlayer 数组(空=该实例没取到)
+async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
+    base = String(base).replace(/\/$/, '');
+    const prefix = token ? `/${encodeURIComponent(token)}` : '';
+    const nt = String(title || '').replace(/\s+/g, '').toLowerCase();
     // 搜索结果按【实例+剧名】缓存：不同实例的 episodeId 体系不同，key 必须带 base，否则串实例取到失效 id
     let animes;
     const skey = base + '||' + nt;
@@ -2604,54 +2843,59 @@ async function fetchDanmakuFromInstance(base, token, title, ep) {
             danmakuSearchCache.set(skey, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
         }
     }
-    // 季号解析成数字：认"第N季/Season N/SN" + 剧名尾部裸数字("庆余年2"/"斗破苍穹4",排除 19xx/20xx 年份)。"第2季"="第二季"=Season2=S2。
-    //   注意对 animeTitle 先 stripFrom——"庆余年2 from qq" 的尾裸数字判定会被 from 尾巴击穿(对抗审查实锤)。
-    const yearM = String(title).match(/(?:19|20)\d{2}/);
-    const seasonOf = s => { s = stripFrom(s); const m = s.match(/第\s*([0-9一二两三四五六七八九十]+)\s*季|season\s*0*(\d+)|\bS0*(\d{1,2})\b/i); if (m) return danmakuCn2Num(m[1] || m[2] || m[3]); const t = s.match(/(?<![0-9])([2-9]|1[0-9])\s*$/); return t ? parseInt(t[1], 10) : null; };
-    const wantSeason = seasonOf(title);
-    // 尾裸数字季号(庆余年2)去掉后用于包含匹配——否则弹幕源的"庆余年 第二季"(核心名不含"2")进不了候选,只剩第一季页 → 整季错配。
-    const ctBase = wantSeason != null ? ct.replace(/([2-9]|1\d)$/, '') : ct;
-    // 尾缀年份综艺名(王牌对王牌2024):去年份后才可能与"王牌对王牌 第九季"互相包含(否则正主进不了候选、只剩裸基名=第一季 → 整季串台,对抗审查实锤)
-    const ctNoYear = ct.replace(/((?:19|20)\d{2})\s*$/, '');
-    // 🏅 名字贴合度分档:0=精确 1=去年份精确(裸基名,弱于精确) 2=包含。排序先档后平台,回退只在最佳档内。
-    const fitTier = a => {
-        const c = core(a.animeTitle);
-        if (!c) return 9;
-        if (c === ct || normT(a.animeTitle) === nt) return 0;
-        if (ctNoYear && ctNoYear !== ct && c === ctNoYear) return 1;
-        if (c.includes(ct) || ct.includes(c)
-            || (ctBase !== ct && ctBase && c.includes(ctBase))
-            || (ctNoYear !== ct && ctNoYear && (c.includes(ctNoYear) || ctNoYear.includes(c)))) return 2;
-        return 9;
-    };
-    let candidates = animes.filter(a => fitTier(a) < 9);
-    // 🗓️ 年份偏好(在分档之前——标题带年份时,含该年份的候选是最强信号:"王牌对王牌2024"该选"第九季(2024)"而不是裸基名第一季页)
-    if (candidates.length > 1 && yearM) { const withYear = candidates.filter(a => String(a.animeTitle || '').includes(yearM[0])); if (withYear.length) candidates = withYear; }
-    // 🗓️ 季号/续集号：先取精确同季；没有精确同季时【无论单/多候选】剔除 裸基名(第一部/第一季)和季号明确不同的——
-    //    它们是不同作品,宁可没弹幕不错配。(单候选旁路已修:明确异季的唯一候选此前会被原样保留,对抗审查实锤)
-    if (wantSeason != null && candidates.length) {
-        const exact = candidates.filter(a => seasonOf(a.animeTitle) === wantSeason);
-        if (exact.length) candidates = exact;
-        else candidates = candidates.filter(a => { const s = seasonOf(a.animeTitle); return (s == null || s === wantSeason) && core(a.animeTitle) !== ctBase; });
-    }
+    // 🏅 候选排序见 danmakuRankCandidates(分档 + 类型 + 年份 + 季号 + 平台)
+    const { pool, bestTier, why } = danmakuRankCandidates(animes, title, hints);
+    if (!pool.length) { console.log(`[弹幕诊断] "${title}" @${base}: ${animes.length} 个候选里没有可用的(${why})`); return []; }
     const platOf = s => { const m = String(s || '').match(/from\s+([a-z0-9]+)/i); return m ? m[1].toLowerCase() : ''; };
-    const PLAT_RANK = { iqiyi: 0, qq: 1, tencent: 1, youku: 2, bilibili: 3, mango: 4, imgo: 4, '360': 5, migu: 9 };
-    // 排序:贴合档优先,同档才比平台弹幕量;回退循环只在【最佳档】内轮换——iqiyi 正主瞬时空 → 同档 qq 接棒(合法多平台回退),
-    // 绝不落到包含档杂牌(对抗审查实锤:正主瞬时空时杂牌错弹幕被回退捡走并 LONG_CACHE 固化 7 天)。
-    candidates.sort((a, b) => (fitTier(a) - fitTier(b)) || ((PLAT_RANK[platOf(a.animeTitle)] ?? 6) - (PLAT_RANK[platOf(b.animeTitle)] ?? 6)));
-    const bestTier = candidates.length ? fitTier(candidates[0]) : 9;
-    const pool = candidates.filter(a => fitTier(a) === bestTier);
-    const preferYear = yearM ? yearM[0] : null;   // 跨年同月日消歧(回看旧季不误取新季)
+    const yearM = String(title).match(/(?:19|20)\d{2}/);
+    // 跨年同月日消歧(回看旧季不误取新季):剧名里的年份优先,没有就用资源站年份
+    const preferYear = yearM ? yearM[0] : ((hints && Number(hints.year) > 1900) ? String(Number(hints.year)) : null);
     for (let tries = 0; tries < pool.length && tries < 3; tries++) {
         const episode = pickDanmakuEpisode(pool[tries].episodes, ep, preferYear);
-        if (!episode || !episode.episodeId) continue;
+        if (!episode || (!episode.episodeId && !episode.url)) continue;
         const _c0 = Date.now();
-        try {
-            const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 25000 });
-            const d = dandanToDplayer((cr.data && cr.data.comments) || []);
-            console.log(`[弹幕诊断] comment/${episode.episodeId} (${platOf(pool[tries].animeTitle) || '?'}) → ${d.length} 条 (${Date.now() - _c0}ms)`);
-            if (d.length) { d._tier = bestTier; return d; }   // _tier 供端点分级缓存:包含档结果不给 7 天长缓存
-        } catch (e) { console.warn(`[弹幕诊断] comment/${episode.episodeId} 失败: ${e.code || ''} ${e.response ? 'HTTP' + e.response.status : e.message} (${Date.now() - _c0}ms)`); }
+        // 🔑 优先按【视频地址】取弹幕(comment?url=,无状态)。comment/<episodeId> 的 id 是 danmu_api【单个实例内存里】的自增号
+        //    (globals.episodeNum):部署在 CF Workers 等多实例上、或重启后,搜索落在实例 A、取弹幕落在实例 B,同一个号在 B 上
+        //    指向 B 最近搜过的别的剧 —— 真实回放实锤:三国演义拿到鬼灭之刃、庆余年第二季拿到刑侦剧、红楼梦拿到海贼王……
+        //    再被我们长缓存 7 天。按地址取没有这个问题;老版本 danmu_api 不认 ?url= 时才退回按 id,且按 id 的结果一律当低置信(只短缓存)。
+        //    按地址取只交给 danmu_api 的 getCommentByUrl 能处理的地址:http(s)(番组计划 bgm.tv / 巴哈 ani.gamer 的集地址它只在按 id 时特殊处理)
+        //    与 local:。合并源("tencent:…<分隔>iqiyi:…")、renren:123 这类非 http 地址只能按 id。
+        const rawUrl = String(episode.url || '');
+        const url = (/^local:/.test(rawUrl) || (/^https?:\/\//i.test(rawUrl) && !/bgm\.tv|bangumi\.tv|ani\.gamer\.com\.tw/i.test(rawUrl))) ? rawUrl : '';
+        let d = null, via = '';
+        // 记下"这个 danmu_api 不认 ?url="的时间;1 小时后再试一次(站长升级了 danmu_api 不用重启本站)
+        const urlUnsupported = () => { const t = danmakuUrlMode.get(base); return !!t && Date.now() - t < 3600e3; };
+        if (url && !urlUnsupported()) {
+            try {
+                const cr = await axios.get(`${base}${prefix}/api/v2/comment`, { params: { url, chConvert: '0', format: 'json' }, timeout: 12000 });
+                if (!cr.data || !Array.isArray(cr.data.comments)) throw new Error('bad body');
+                d = dandanToDplayer(cr.data.comments);
+                via = 'url';
+                danmakuUrlMode.delete(base);
+            } catch (e) {
+                const st = e.response && e.response.status;
+                // 只有"这个 danmu_api 根本不认 ?url="(老版本:404,或 400 缺参数)才记下、以后对它改走按 id;
+                //   429/5xx/超时/网络错 是这一次失败 —— 跳过这个候选,绝不退回按 id(按 id 正是多实例串剧的那条路,审查实锤)
+                const body = e.response && e.response.data;
+                if (st === 404 || (st === 400 && /missing|commentid|url/i.test(JSON.stringify(body || '')))) danmakuUrlMode.set(base, Date.now());
+                console.warn(`[弹幕诊断] comment?url 失败: ${e.code || ''} ${st ? 'HTTP' + st : e.message} (${Date.now() - _c0}ms)`);
+                if (!urlUnsupported()) continue;
+            }
+        }
+        // 按 id:只在 ①这个 danmu_api 不支持按地址取,或 ②这一集没有可按地址取的地址 且 站长声明 danmu_api 是单实例(DANMU_API_SINGLE_INSTANCE=1)时才用。
+        //   多实例上按 id 会串到别的剧,所以按 id 的结果一律低置信、不缓存(见端点 viaId)。
+        const idAllowed = urlUnsupported() || (!url && /^(1|true|yes|on)$/i.test(String(process.env.DANMU_API_SINGLE_INSTANCE || '').trim()));
+        if (d === null && episode.episodeId && idAllowed) {
+            try {
+                const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 12000 });
+                d = dandanToDplayer((cr.data && cr.data.comments) || []);
+                via = 'id';
+            } catch (e) { console.warn(`[弹幕诊断] comment/${episode.episodeId} 失败: ${e.code || ''} ${e.response ? 'HTTP' + e.response.status : e.message} (${Date.now() - _c0}ms)`); }
+        }
+        if (d === null) continue;
+        console.log(`[弹幕诊断] comment(${via}) ${via === 'url' ? url : episode.episodeId} (${platOf(pool[tries].animeTitle) || '?'}) 《${pool[tries].animeTitle}》 ${why} → ${d.length} 条 (${Date.now() - _c0}ms)`);
+        // _tier 供端点分级缓存:包含档、以及按 id 取到的(可能串到别的剧)都不给长缓存、不进持久层
+        if (d.length) { d._tier = via === 'url' ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; return d; }
     }
     return [];
 }
@@ -2661,70 +2905,103 @@ app.get('/api/danmaku/v3/', async (req, res) => {
     //   (事故：CF 的"浏览器缓存TTL=1年"会把空响应在每个用户浏览器冻结一年 → 某集偶发一次取空就永久没弹幕。
     //    服务器侧另有 90s miss 缓存护住上游，所以 no-store 不会反复打 danmu_api。)
     // 取到非空弹幕才长缓存：弹幕近乎静态 → 7 天新鲜 + 30 天 stale-while-revalidate(过期先回旧缓存秒开、后台重抓)。
+    //   服务器自己也按同样的口径长存(danmakuStore:SQLite 持久,DANMAKU_CACHE_DAYS 天新鲜,默认 7)。
     // 注意：缓存键 = ?id=剧名|集名(稳定)；不要去缓存 danmu_api 的 comment/{id}(id 会过期、键永远变)。
     const LONG_CACHE = 'public, max-age=604800, s-maxage=604800, stale-while-revalidate=2592000';
     res.set('Cache-Control', 'no-store');
     const DANMU_API_URL = process.env.DANMU_API_URL;
     if (!DANMU_API_URL) return res.json(empty);
 
-    let title = '', ep = '';
-    try { const parts = String(req.query.id || '').split('|'); title = (parts[0] || '').trim(); ep = (parts[1] || '').trim(); } catch (e) { }
+    // id = 剧名|集名|版本[|k:类型|t:资源站分类|y:年份|n:集数](解析与缓存键见 danmakuParseId,两后端共用)
+    const { title, ep, hints, cacheKey } = danmakuParseId(req.query.id);
     if (!title) return res.json(empty);
 
-    const cacheKey = title + '|' + ep;
+    const storeKey = DANMAKU_STORE_VER + '|' + cacheKey;
+    // ① 服务器长缓存(高贴合非空):新鲜期内直接回;过期了也先回旧的(秒开),同时后台重抓一次——
+    //    重抓拿到空/低置信不覆盖旧的(上游瞬时空不能冲掉好弹幕),一小时内不再重试这一集。
+    const hit = danmakuStore.get(storeKey);
+    if (hit) {
+        if (!hit.fresh && danmakuStore.refreshAllowed(storeKey) && danmakuBudgetOk()) {
+            danmakuStore.once('bg|' + storeKey, async () => {
+                const r = await fetchDanmakuFresh(title, ep, hints);
+                if (r.data.length && !r.lowConf && !r.viaId) danmakuStore.put(storeKey, r.data);
+                else danmakuStore.refreshFailed(storeKey);
+            }).catch(() => danmakuStore.refreshFailed(storeKey));
+        }
+        res.set('Cache-Control', LONG_CACHE);
+        return res.type('application/json').send(hit.json);
+    }
+    // ② 空 / 低置信结果的短期内存缓存(不落盘):低置信只给 CDN 10 分钟,空的 no-store
     const cached = danmakuCache.get(cacheKey);
-    if (cached && cached.expiry > Date.now()) { if (cached.data.length) res.set('Cache-Control', LONG_CACHE); return res.json({ code: 0, version: 3, data: cached.data, msg: '' }); }
+    if (cached && cached.expiry > Date.now()) {
+        if (cached.data.length && !cached.viaId) res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+        return res.json({ code: 0, version: 3, data: cached.data, msg: '' });
+    }
     if (!danmakuBudgetOk()) return res.json(empty);
 
     try {
-        // 多源回退：DANMU_API_URL 支持逗号分隔多个实例(不同主机/区域=不同出口IP,绕开单实例被上游限流)；
-        //   DANMU_API_TOKEN 逗号分隔则按序与各实例配对，单个则全部实例共用。
-        const bases = String(DANMU_API_URL).split(',').map(s => s.trim()).filter(Boolean);
-        const tokens = String(process.env.DANMU_API_TOKEN || '').split(',').map(s => s.trim());
-        const instances = bases.map((b, i) => ({ base: b, token: tokens.length > 1 ? (tokens[i] || '') : (tokens[0] || '') }));
-        // 🏁 并行赛跑：所有实例同时查，第一个返回【高贴合(_tier≤1)非空】的立即采用——一个实例卡死/401 不再拖累其它。
-        //    包含档(_tier≥2)结果不立即定音:压 1.5s 等高贴合结果到来——防"降级实例的杂牌错弹幕抢跑赢过健康实例的
-        //    正主弹幕"(对抗审查实锤:多实例冗余反成投毒面)。1.5s 内没有更好的才用它。
-        const raceInstances = () => new Promise(resolve => {
-            if (!instances.length) return resolve([]);
-            let pending = instances.length, held = null, timer = null, done = false;
-            const finish = v => { if (done) return; done = true; if (timer) clearTimeout(timer); resolve(v); };
-            for (const inst of instances) {
-                fetchDanmakuFromInstance(inst.base, inst.token, title, ep)
-                    .then(d => {
-                        if (d && d.length) {
-                            if ((d._tier ?? 9) <= 1) return finish(d);
-                            if (!held) { held = d; timer = setTimeout(() => finish(held), 1500); }
-                        }
-                    })
-                    .catch(() => { })
-                    .finally(() => { if (--pending === 0) finish(held || []); });
-            }
+        // ③ 回源:同一集同时只打一次 danmu_api(热剧新集刚出,几十人同时点开也只抓一次)
+        const out = await danmakuStore.once(storeKey, async () => {
+            const r = await fetchDanmakuFresh(title, ep, hints);
+            if (r.data.length && !r.lowConf && !r.viaId) return { json: danmakuStore.put(storeKey, r.data), long: true };
+            if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
+            danmakuCache.set(cacheKey, { data: r.data, lowConf: r.lowConf, viaId: r.viaId, expiry: Date.now() + (r.data.length && !r.viaId ? DANMAKU_LOWCONF_TTL : DANMAKU_MISS_TTL) });
+            return { json: danmakuStore.toJson(r.data), long: false, n: r.viaId ? 0 : r.data.length };
         });
-        let data = await raceInstances();
-        // 全空 → 多为上游(iqiyi)限流的瞬时空(实测同集隔几秒重试即满)：等 3s 再赛一轮。
-        //   (搜索级空快照已不再缓存,这轮重试会真正重新搜索。)
-        //   超出集数时 pickDanmakuEpisode 返回 null → 各实例本就返回空、这里也取不到，保持空。
-        if (!data.length && instances.length) {
-            await new Promise(r => setTimeout(r, 3000));
-            data = await raceInstances();
-        }
-        // 包含档(杂牌名字沾边)结果置信低:服务器只缓存 10 分钟、CDN/浏览器只给 10 分钟——错了也只错一阵,
-        // 不再被 7 天 LONG_CACHE 固化(对抗审查实锤:史莱姆事故的错弹幕曾三层缓存一周)。
-        const lowConf = !!(data && data.length && (data._tier ?? 9) >= 2);
-        // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
-        data.sort((a, b) => a[0] - b[0]);
-        // 热门剧单集可达 1.5w+ 条(payload~1.5MB)：按时间均匀采样到上限，控制体积与前端渲染压力
-        if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
-        if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
-        danmakuCache.set(cacheKey, { data, expiry: Date.now() + (data.length ? (lowConf ? 10 * 60 * 1000 : DANMAKU_CACHE_TTL) : DANMAKU_MISS_TTL) });
-        if (data.length) res.set('Cache-Control', lowConf ? 'public, max-age=600, s-maxage=600' : LONG_CACHE);
-        return res.json({ code: 0, version: 3, data, msg: '' });
+        if (out.long) res.set('Cache-Control', LONG_CACHE);
+        else if (out.n) res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
+        return res.type('application/json').send(out.json);
     } catch (e) {
         console.error('[弹幕] 获取失败:', e.message);
         return res.json(empty);
     }
 });
+// 回源抓一集弹幕(多实例赛跑 + 全空重试 + 排序 + 采样)。返回 { data, lowConf }。
+async function fetchDanmakuFresh(title, ep, hints) {
+    // 多源回退：DANMU_API_URL 支持逗号分隔多个实例(不同主机/区域=不同出口IP,绕开单实例被上游限流)；
+    //   DANMU_API_TOKEN 逗号分隔则按序与各实例配对，单个则全部实例共用。
+    const bases = String(process.env.DANMU_API_URL || '').split(',').map(s => s.trim()).filter(Boolean);
+    const tokens = String(process.env.DANMU_API_TOKEN || '').split(',').map(s => s.trim());
+    const instances = bases.map((b, i) => ({ base: b, token: tokens.length > 1 ? (tokens[i] || '') : (tokens[0] || '') }));
+    // 🏁 并行赛跑：所有实例同时查，第一个返回【高贴合(_tier≤1)非空】的立即采用——一个实例卡死/401 不再拖累其它。
+    //    包含档(_tier≥2)结果不立即定音:压 1.5s 等高贴合结果到来——防"降级实例的杂牌错弹幕抢跑赢过健康实例的
+    //    正主弹幕"(对抗审查实锤:多实例冗余反成投毒面)。1.5s 内没有更好的才用它。
+    const raceInstances = () => new Promise(resolve => {
+        if (!instances.length) return resolve([]);
+        let pending = instances.length, held = null, timer = null, done = false;
+        const finish = v => { if (done) return; done = true; if (timer) clearTimeout(timer); resolve(v); };
+        for (const inst of instances) {
+            fetchDanmakuFromInstance(inst.base, inst.token, title, ep, hints)
+                .then(d => {
+                    if (d && d.length) {
+                        if ((d._tier ?? 9) <= 1) return finish(d);
+                        if (!held) { held = d; timer = setTimeout(() => finish(held), 1500); }
+                    }
+                })
+                .catch(() => { })
+                .finally(() => { if (--pending === 0) finish(held || []); });
+        }
+    });
+    // ⏱️ 总时限:单轮最多 40s(慢实例 3 个候选 × 12s + 搜索),超时按"这次没取到"处理——同一集的并发观众都在等这一次
+    const deadline = (p, ms) => new Promise(resolve => { const t = setTimeout(() => resolve([]), ms); p.then(v => { clearTimeout(t); resolve(v); }); });
+    let data = await deadline(raceInstances(), 40000);
+    // 全空 → 多为上游(iqiyi)限流的瞬时空(实测同集隔几秒重试即满)：等 3s 再赛一轮。
+    //   (搜索级空快照已不再缓存,这轮重试会真正重新搜索。)
+    //   超出集数时 pickDanmakuEpisode 返回 null → 各实例本就返回空、这里也取不到，保持空。
+    if (!data.length && instances.length) {
+        await new Promise(r => setTimeout(r, 3000));
+        data = await deadline(raceInstances(), 40000);
+    }
+    // 包含档(杂牌名字沾边)结果置信低:服务器只缓存 10 分钟、CDN/浏览器只给 10 分钟——错了也只错一阵,
+    // 不再被 7 天 LONG_CACHE 固化(对抗审查实锤:史莱姆事故的错弹幕曾三层缓存一周)。
+    const lowConf = !!(data && data.length && (data._tier ?? 9) >= 2);
+    const viaId = !!(data && data._viaId);   // 按 id 取的(多实例上可能是别的剧):端点一律 no-store、只在内存放 90 秒
+    // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
+    data.sort((a, b) => a[0] - b[0]);
+    // 热门剧单集可达 1.5w+ 条(payload~1.5MB)：按时间均匀采样到上限，控制体积与前端渲染压力
+    if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
+    return { data, lowConf, viaId };
+}
 // 借来的弹幕只读：DPlayer 发送弹幕会 POST 到此，直接成功返回不持久化(避免报错)
 app.post('/api/danmaku/v3/', (req, res) => res.json({ code: 0, msg: '' }));
 
@@ -2773,6 +3050,7 @@ app.get('/api/search', async (req, res) => {
                     vod_name: item.vod_name,
                     vod_pic: item.vod_pic,
                     vod_year: item.vod_year,   // 刷新线路后 Kazumi 源的年份校验要用
+                    type_name: item.type_name, // 刷新线路后弹幕匹配提示(分类)要用
                     vod_play_url: item.vod_play_url,
                     site_key: site.key,
                     site_name: site.name
@@ -3267,6 +3545,12 @@ app.post('/api/auth/verify', (req, res) => {
     // 检查是否匹配任一密码
     const userInfo = PASSWORD_HASH_MAP[inputHash];
     if (userInfo !== undefined) {
+        // 📊 独立密码登录也记进用户统计:真登录(password)记 last_login;会话恢复(passwordHash)只算一次活跃(模块内 5 分钟节流)。
+        //    touchVisit 顺带记最近设备;它自己校验 token 是否真是已配置的密码,统计失败绝不影响登录。
+        try {
+            if (password && !passwordHash) touchUser(inputHash, { login: true });
+            if (userStats) userStats.touchVisit(inputHash, req);
+        } catch (e) { }
         // 密码有效
         res.json({
             success: true,

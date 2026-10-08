@@ -757,42 +757,7 @@
         .req-fulfill { margin-top: 6px; }
         .req-dl { color: #46d369; font-size: 13px; text-decoration: none; }
         .req-dl:hover { text-decoration: underline; }
-        .req-admin-toggle {
-            display: flex; align-items: center; gap: 8px; margin-top: 18px; padding: 10px 0; cursor: pointer;
-            color: #888; font-size: 13px; border-top: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        .req-admin-toggle:hover { color: #ccc; }
-        .req-admin { margin-top: 4px; }
         .req-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-
-        /* 站长后台：用户统计 / 封禁 */
-        .admin-modal { max-width: 780px !important; }
-        .admin-tabs { display: flex; gap: 8px; margin: 4px 0 16px; }
-        .admin-tabs button {
-            flex: 1; padding: 9px 12px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.12);
-            background: rgba(255,255,255,0.04); color: #bbb; font-size: 14px; cursor: pointer; transition: all 0.2s;
-        }
-        .admin-tabs button.active { background: rgba(229,9,20,0.18); border-color: rgba(229,9,20,0.4); color: #fff; }
-        .admin-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-        @media (max-width: 600px) { .admin-stats-grid { grid-template-columns: repeat(2, 1fr); } }
-        .admin-stat-card {
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 10px; padding: 12px 8px; text-align: center;
-        }
-        .asc-num { font-size: 22px; font-weight: 800; color: #fff; line-height: 1.1; }
-        .asc-lbl { font-size: 11px; color: #999; margin-top: 4px; }
-        .admin-user-table { display: flex; flex-direction: column; gap: 8px; max-height: 50vh; overflow-y: auto; }
-        .admin-user-row {
-            background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07);
-            border-radius: 10px; padding: 10px 12px;
-        }
-        .admin-user-row.banned { background: rgba(239,68,68,0.07); border-color: rgba(239,68,68,0.25); }
-        .aur-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-        .aur-id { color: #eee; font-size: 14px; font-weight: 600; word-break: break-all; }
-        .aur-tag { font-size: 10px; padding: 1px 7px; border-radius: 8px; background: rgba(59,130,246,0.18); color: #93c5fd; }
-        .aur-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; color: #9a9a9a; font-size: 12px; margin-bottom: 8px; }
-        .aur-stats i { color: #777; margin-right: 2px; }
-        .aur-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
         /* 被封禁锁屏 */
         .ban-lock {
@@ -4624,7 +4589,7 @@
 
                     <!-- 复制链接 -->
                     <div style="display:flex; gap:8px; margin-bottom:14px;">
-                        <input readonly :value="shareUrl" onclick="this.select()"
+                        <input readonly :value="shareUrl" onclick="this.select()" @copy="onShareInputCopy"
                             style="flex:1; min-width:0; box-sizing:border-box; background:#2a2a2a; border:1px solid #3a3a3a; color:#ccc; border-radius:10px; padding:11px 12px; font-size:12px;">
                         <button @click="confirmShare" style="background:linear-gradient(135deg,#e50914,#b00610); color:#fff; border:none; border-radius:10px; padding:11px 20px; font-weight:bold; cursor:pointer; white-space:nowrap;">复制</button>
                     </div>
@@ -4946,6 +4911,15 @@
         const AUTH_STORAGE_KEY = 'emax_auth_hash';
         const AUTH_EXPIRY_KEY = 'emax_auth_expiry';
 
+        // 🔗 分享落地:链接带 ?s=<分享码> → 趁地址栏还没被改写(syncShareUrl / closeDetail 会去掉它)先存进 sessionStorage。
+        //    没登录的访客要先过登录墙,登录后 startApp → initApp 才报 /api/stats/share-open(记"这次分享带来了登录")再删。
+        (function () {
+            try {
+                const s = new URLSearchParams(location.search).get('s');
+                if (s && /^[A-Za-z0-9]{6,16}$/.test(s)) sessionStorage.setItem('donggua_share_ref', s);
+            } catch (e) { }
+        })();
+
         // Check if already authenticated
         function isAuthenticated() {
             const storedHash = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -5266,6 +5240,31 @@
         fetchClientPublicIP();
 
         let dp = null;
+        // 🗨️ 弹幕读写后端(替换 DPlayer 自带的 axios 版,请求/响应格式完全一致),多一道"这份弹幕还要不要"的闸:
+        //    播放器全站复用一个实例,弹幕请求是异步的(第三方匹配常要好几秒)——上一部剧/上一集的请求晚到时,
+        //    DPlayer 会照单写进当前弹幕列表。want = 当前播放要的弹幕 id(直播/未开弹幕 = null);
+        //    回来的不是 want → 直接丢弃、不回调(DPlayer 什么都不改,也不弹"弹幕加载失败")。
+        const _dmBackend = {
+            want: null,
+            read(o) {
+                const m = /[?&]id=([^&]*)/.exec(o.url || '');
+                const id = m ? m[1] : '';
+                fetch(o.url, { credentials: 'same-origin' })
+                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                    .then(d => {
+                        if (id !== _dmBackend.want) return;   // 已换剧/换集/进直播 → 晚到的旧弹幕不要
+                        if (d && d.code === 0) { if (o.success) o.success((d.data || []).map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] }))); }
+                        else if (o.error) o.error(d && d.msg);
+                    })
+                    .catch(e => { if (id !== _dmBackend.want) return; console.error(e); if (o.error) o.error(); });
+            },
+            send(o) {
+                fetch(o.url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o.data) })
+                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                    .then(d => { if (d && d.code === 0) { if (o.success) o.success(d); } else if (o.error) o.error(d && d.msg); })
+                    .catch(e => { console.error(e); if (o.error) o.error(); });
+            }
+        };
         // 🛡️ 安全跳转：媒体在换源/代理回退重载时 currentTime 会是 NaN，相对跳转会把 NaN 写进 currentTime →
         //    DPlayer 抛 "non-finite" TypeError、可能打断换源。所有跳转统一走守卫，非有限值直接跳过。
         const safeSeek = (t) => { if (dp && Number.isFinite(t) && t >= 0) { try { dp.seek(t); } catch (e) { } } };
@@ -6287,6 +6286,262 @@
                 return { ready: this.ready(), want: this.want(), active: !!c, cuts: c ? c.cuts.map(x => [+x.start.toFixed(1), +x.dur.toFixed(1)]) : [], last: this._last, busy: this._busy };
             }
         };
+        // ⏱️ 实测观看时长(站长后台的观看时长/集数/看过的剧都以它为准,取代旧的"按进度估算")。每秒看一眼播放器,只有【真在看】才计:
+        //   · 视频在走:未暂停/未结束/readyState≥2,且 currentTime 比上一秒前进了(卡缓冲、暂停、拖回去都不算);
+        //   · 有人在看:页面可见,或画中画中(页面隐藏、小窗在播);4 小时没碰过鼠标/键盘/触屏(自动连播挂机)不算;
+        //   · 每秒计 min(墙钟间隔, 播放实际推进÷倍速+0.5, 封顶 5s;画中画隐藏时计时器被节流 → 封顶 70s),休眠唤醒不会一下记几小时。
+        //   按 (vod|live, 剧名/频道, 集名) 累加,每 60s / 切后台 / 关页打成批次 → localStorage 待发队列 → 逐批上报,2xx 才删。
+        //   服务器按批次 id 去重(保留 3 天),所以关页时 sendBeacon 发了不删、下次启动再补发不会重复计;离线照常累计,联网补发:
+        //   发不出去时每分钟的新累计并进队尾那批【还没发过】的(同剧集秒数相加)→ 队列按不同剧集数涨、不按分钟涨(40 批上限不再把离线时长截成 40 分钟)。
+        //   播放器会重建、<video> 会被换掉 → 每秒重新 querySelector,不缓存元素;currentSrc 变了(换集/换线/重建)重设基线。
+        //   ⚠️ 本段会被 scripts/adclip-test.mjs 连同 adClipSkip/adCut 一起抽出来在 Node 里求值 → 定义时不能碰 document/navigator(只在 enable() 之后用)。
+        //   控制台 watchMeter.status() 看当前累计 / 待发批次 / 上一秒为什么没计(why)。
+        window.watchMeter = {
+            TICK: 1000, FLUSH_MS: 60e3, IDLE_MS: 4 * 3600e3, CAP: 5, CAP_PIP: 70, MAX_PENDING: 40, MAX_ITEMS: 60, MAX_SEC: 14400,
+            // 发过(可能已到服务器)的批次 2 天后不再补发(服务器去重只留 3 天,再发会重复计;tx 只记第一次发送,重试不刷新);没发出去的最多留 7 天
+            TX_TTL: 2 * 86400e3, AT_TTL: 7 * 86400e3,
+            MERGE_MS: 86400e3,   // 只往 1 天内建的批次里并:整批按建时过 AT_TTL,并得太久一过期就连新累计一起丢
+            LS: 'donggua_watch_pending', API: '/api/stats/watch',
+            _on: false, _bound: false, _timer: 0, _acc: Object.create(null), _sess: Object.create(null),
+            _v: null, _src: '', _ct: 0, _cur: null, _wall: 0, _input: 0, _flushAt: 0, _why: 'off', _total: 0,
+            _mem: [], _memOnly: false, _sending: false, _fail: 0, _retryAt: 0,
+            enable() {
+                if (this._on) return;
+                this._on = true;
+                this._input = this._flushAt = Date.now();
+                this._wall = 0; this._v = null; this._cur = null; this._why = 'start';
+                if (!this._bound) {
+                    this._bound = true;
+                    try {
+                        const mark = () => { this._input = Date.now(); };
+                        ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev => window.addEventListener(ev, mark, { capture: true, passive: true }));
+                        document.addEventListener('visibilitychange', () => {
+                            if (!this._on) return;
+                            if (document.visibilityState === 'visible') mark();
+                            else this.flush('hidden');   // 切后台:手机上这常常是最后一个可靠事件
+                        });
+                        window.addEventListener('pagehide', () => this._beacon());
+                        window.addEventListener('online', () => { this._retryAt = 0; this._send(); });
+                    } catch (e) { }
+                }
+                this._prune();
+                this._send();   // 补发上次没发完 / 关页时 beacon 过的批次(服务器去重)
+                this._timer = setInterval(() => { try { this._tick(); } catch (e) { } }, this.TICK);
+            },
+            disable() { this._on = false; clearInterval(this._timer); this._timer = 0; this._why = 'off'; },
+            _tick() {
+                const now = Date.now();
+                const dt = this._wall ? (now - this._wall) / 1000 : 0;
+                this._wall = now;
+                this._why = this._measure(dt);   // '' = 这一秒计入了
+                if (now - this._flushAt >= this.FLUSH_MS || now < this._flushAt) this.flush('timer');
+            },
+            _measure(dt) {
+                const v = document.querySelector('#dplayer video');
+                if (!v) { this._v = null; return 'no-video'; }
+                const src = v.currentSrc || v.src || '', ct = +v.currentTime || 0;
+                const prevCt = this._ct, same = v === this._v && src === this._src;
+                this._v = v; this._src = src; this._ct = ct;   // 基线每秒都更新:暂停/卡住/隐藏期间也跟着走,恢复后只算新推进的
+                // 记在谁头上跟着【媒体源】走:换台/换剧时 currentGroup 先变,旧视频还要再播几秒(测线路)才换源 →
+                // 换源那一刻取一次 (类型,剧,集) 钉住,同一个源播多久都记给它(换集/换线/重建都会换 currentSrc)
+                if (!same) { this._cur = this._ident(); return 'new-src'; }
+                if (v.paused || v.ended) return 'paused';
+                if (v.readyState < 2) return 'buffering';
+                const adv = ct - prevCt;
+                if (!(adv > 0.05)) return 'stalled';   // 往回拖 = 负数,也不算
+                const hidden = document.hidden;
+                if (hidden && !(document.pictureInPictureElement || v.webkitPresentationMode === 'picture-in-picture')) return 'hidden';
+                if (Date.now() - this._input > this.IDLE_MS) return 'idle';
+                let token = '';
+                try { token = localStorage.getItem('emax_auth_hash') || ''; } catch (e) { }
+                if (!token) return 'no-token';
+                const cur = this._cur || (this._cur = this._ident());   // 换源那刻还没剧名(极少)→ 有了再钉
+                if (!cur) return 'no-title';
+                const rate = v.playbackRate > 0 ? v.playbackRate : 1;
+                const inc = Math.min(dt, hidden ? this.CAP_PIP : this.CAP, adv / rate + 0.5);
+                if (!(inc > 0)) return 'clock';   // 首个 tick / 系统时钟回拨
+                const dur = +v.duration;
+                this._add(cur.k, cur.t, cur.e, inc, cur.k === 'vod' && isFinite(dur) && dur > 60 && ct >= dur * 0.9);
+                return '';
+            },
+            // 当前播放是谁:直播 = 频道名、集名空;点播 = 剧名 + 当前集名(按 currentUrl 在选集里找)
+            _ident() {
+                try {
+                    const vue = window.vueApp, g = vue && vue.currentGroup;
+                    if (!g || !g.name) return null;
+                    const live = !!(vue._liveActive || g._isLive);
+                    let ep = '';
+                    if (!live) { const c = (vue.episodeList || []).find(x => x.url === vue.currentUrl); ep = this.epLabel(c && c.name); }
+                    return { k: live ? 'live' : 'vod', t: String(g.name).trim().slice(0, 200), e: ep.slice(0, 120) };
+                } catch (e) { return null; }
+            },
+            // 集名归一:各线路写法不同(第06集/第6集/06/EP6),不归一的话换条线路看同一集,后台会算成两集。
+            //   只动"整个集名就是一个 ≤3 位集号"的写法;带 上/下/纯享 等后缀的、≥4 位的(日期式 0624 / 20240624 期)原样保留
+            epLabel(name) {
+                const s = String(name == null ? '' : name).trim();
+                const m = /^(?:第\s*(\d+)\s*([集话話期])|ep\.?\s*(\d+)|(\d+))$/i.exec(s);
+                if (!m) return s;
+                const d = m[1] || m[3] || m[4];
+                if (d.length >= 4) return s;
+                return '第' + parseInt(d, 10) + (m[2] === '期' ? '期' : '集');
+            },
+            _add(k, t, e, inc, nearEnd) {
+                const key = k + '\n' + t + '\n' + e;
+                const a = this._acc[key] || (this._acc[key] = { k, t, e, s: 0, c: 0 });
+                a.s += inc;
+                this._sess[key] = (this._sess[key] || 0) + inc;
+                this._total += inc;
+                // 看完 = 播到 ≥90%,且本页这一集真看了 ≥30s(直接拖到结尾/连点跳集不算看完)
+                if (nearEnd && this._sess[key] >= 30) a.c = 1;
+            },
+            // 累计 → 待发批次(每批 ≤60 项),再尝试上报。不足 1 秒的零头(连同看完标记)留到下一批
+            flush(reason) {
+                if (!this._on) return;
+                this._flushAt = Date.now();
+                const items = [];
+                for (const key in this._acc) {
+                    const a = this._acc[key], s = Math.floor(a.s);
+                    if (s < 1) continue;
+                    items.push({ k: a.k, t: a.t, e: a.e, s: Math.min(s, this.MAX_SEC), c: a.c });
+                    if (a.s - s < 0.01) delete this._acc[key]; else { a.s -= s; a.c = 0; }
+                }
+                if (items.length) {
+                    let token = '';
+                    try { token = localStorage.getItem('emax_auth_hash') || ''; } catch (e) { }
+                    if (token) {
+                        const now = Date.now();
+                        this._patch(list => {
+                            let rest = items;
+                            // 断网/退避时 _send 发不出去:并进队尾那批(没发过 = 无 tx、同 token、1 天内建的),同 (k,t,e) 秒数相加(每条 ≤4h,
+                            //   满了余数另起)、新剧集追加到 60 项为止。发过的批次服务器可能已按 id 收下 → 内容不能再变,只能另起新批
+                            const last = list[list.length - 1];
+                            if (last && !last.tx && last.token === token && now - (last.at || 0) < this.MERGE_MS) {
+                                rest = [];
+                                for (const it of items) {
+                                    const o = last.items.find(x => x && x.k === it.k && x.t === it.t && x.e === it.e);
+                                    if (o) {
+                                        const add = Math.min(it.s, Math.max(0, this.MAX_SEC - (+o.s || 0)));
+                                        o.s = (+o.s || 0) + add;
+                                        if (it.c) o.c = 1;
+                                        if (it.s > add) rest.push({ k: it.k, t: it.t, e: it.e, s: it.s - add, c: it.c });
+                                    } else if (last.items.length < this.MAX_ITEMS) last.items.push(it);
+                                    else rest.push(it);
+                                }
+                            }
+                            for (let i = 0; i < rest.length; i += this.MAX_ITEMS)
+                                list.push({ id: this._bid(), token, items: rest.slice(i, i + this.MAX_ITEMS), at: now });
+                        });
+                    }
+                }
+                if (reason !== 'pagehide') this._send();
+            },
+            _bid() {
+                let r = '';
+                try { const b = new Uint8Array(8); crypto.getRandomValues(b); for (let i = 0; i < b.length; i++) r += (b[i] % 36).toString(36); } catch (e) { }
+                while (r.length < 8) r += Math.floor(Math.random() * 36).toString(36);
+                return 'w' + Date.now().toString(36) + '_' + r;   // [A-Za-z0-9_-]{8,40}
+            },
+            // 待发队列:localStorage 读改写(多个标签页共用一份,重复发的由服务器按批次去重);存储不可用 → 退回内存(本页有效)
+            _load() {
+                if (!this._memOnly) {
+                    let raw = null, bad = false;
+                    try { raw = localStorage.getItem(this.LS); } catch (e) { bad = true; }
+                    if (!bad) {
+                        let a = null;
+                        try { a = JSON.parse(raw || '[]'); } catch (e) { }
+                        return Array.isArray(a) ? a.filter(b => b && typeof b.id === 'string' && typeof b.token === 'string' && Array.isArray(b.items)) : [];
+                    }
+                    this._memOnly = true;
+                }
+                return this._mem.slice();
+            },
+            _save(list) {
+                if (list.length > this.MAX_PENDING) list = list.slice(list.length - this.MAX_PENDING);   // 超出丢最旧
+                this._mem = list;
+                if (this._memOnly) return;
+                try {
+                    if (list.length) localStorage.setItem(this.LS, JSON.stringify(list));
+                    else localStorage.removeItem(this.LS);
+                } catch (e) { this._memOnly = true; }
+            },
+            _patch(fn) { const list = this._load(); fn(list); this._save(list); },
+            _prune() {
+                const now = Date.now();
+                this._patch(list => {
+                    for (let i = list.length - 1; i >= 0; i--) {
+                        const b = list[i];
+                        if ((b.tx && now - b.tx > this.TX_TTL) || !(now - (b.at || 0) < this.AT_TTL)) list.splice(i, 1);
+                    }
+                });
+            },
+            _body(b) { return JSON.stringify({ token: b.token, batch: b.id, items: b.items }); },
+            // 逐批 POST(keepalive:切后台/关页途中也能发完)。2xx(含 204 / {dup:true})才删;4xx(408/429 除外)= 这批服务器永远不收 → 也删;
+            // 断网/5xx/超时 → 停这一轮,指数退避(30s → 最多 15 分钟)
+            async _send() {
+                if (!this._on || this._sending || Date.now() < this._retryAt) return;
+                try { if (navigator.onLine === false) return; } catch (e) { }
+                this._sending = true;
+                try {
+                    for (const id of this._load().map(b => b.id)) {
+                        let drop = false, b = null;
+                        // 发之前从存储取这批的【当前】内容并打 tx(同步完成):之后 flush 不会再往里并,发出去的就是 2xx 后删掉的那份。
+                        //   tx 只记第一次:重试不刷新,TX_TTL 才始终从"服务器最早可能收下"算起,落在服务器 3 天去重窗口内
+                        this._patch(l => { const x = l.find(y => y.id === id); if (x) { if (!x.tx) x.tx = Date.now(); b = x; } });
+                        if (!b) continue;   // 别的标签页已发完删掉了
+                        try {
+                            const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+                            const tm = ctl ? setTimeout(() => ctl.abort(), 15000) : 0;
+                            let r;
+                            try {
+                                r = await fetch(this.API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: this._body(b), keepalive: true, credentials: 'same-origin', signal: ctl ? ctl.signal : undefined });
+                            } finally { clearTimeout(tm); }
+                            drop = r.ok || (r.status >= 400 && r.status < 500 && r.status !== 408 && r.status !== 429);
+                        } catch (e) { }
+                        if (!drop) {
+                            this._fail++;
+                            this._retryAt = Date.now() + Math.min(15 * 60e3, 30e3 * Math.pow(2, Math.min(this._fail - 1, 5)));
+                            return;
+                        }
+                        this._patch(l => { const i = l.findIndex(y => y.id === b.id); if (i >= 0) l.splice(i, 1); });
+                    }
+                    this._fail = 0; this._retryAt = 0;
+                } catch (e) {
+                } finally { this._sending = false; }
+            },
+            // 关页:先把累计打成批次,再用 sendBeacon 发全部待发批次(页面卸载后浏览器照样送达);不删 —— 下次启动补发,服务器去重
+            _beacon() {
+                if (!this._on) return;
+                try {
+                    this.flush('pagehide');
+                    // 断网时 sendBeacon 照样返回 true(只是入队,发不出去)→ 不发也不打 tx:否则这些批次被当成"可能已到服务器",
+                    //   2 天没联网就被 TX_TTL 丢掉,下次离线打开也不能再往里并
+                    if (navigator.onLine === false) return;
+                    if (!navigator.sendBeacon) { this._send(); return; }
+                    const now = Date.now();
+                    this._patch(list => {
+                        for (const b of list) {
+                            const body = this._body(b);
+                            let ok = false;
+                            try { ok = navigator.sendBeacon(this.API, new Blob([body], { type: 'application/json' })); }
+                            catch (e) { try { ok = navigator.sendBeacon(this.API, new Blob([body], { type: 'text/plain;charset=UTF-8' })); } catch (e2) { } }   // 老 Chrome 不许非简单类型
+                            if (!ok) break;   // beacon 队列满(64KB)→ 剩下的下次启动补发
+                            if (!b.tx) b.tx = now;   // 只记第一次发送(见 _send)
+                        }
+                    });
+                } catch (e) { }
+            },
+            status() {
+                const pending = this._load();
+                return {
+                    enabled: this._on, why: this._why || 'counting', sessionSeconds: Math.round(this._total),
+                    acc: Object.keys(this._acc).map(k => { const a = this._acc[k]; return { k: a.k, t: a.t, e: a.e, s: +a.s.toFixed(1), c: a.c }; }),
+                    pending: pending.length, pendingSeconds: pending.reduce((n, b) => n + b.items.reduce((m, x) => m + (x.s || 0), 0), 0),
+                    idleFor: this._input ? Math.round((Date.now() - this._input) / 1000) : null,
+                    nextFlushIn: this._on ? Math.max(0, Math.round((this._flushAt + this.FLUSH_MS - Date.now()) / 1000)) : null,
+                    sending: this._sending, fail: this._fail, retryIn: Math.max(0, Math.round((this._retryAt - Date.now()) / 1000)), memOnly: this._memOnly
+                };
+            }
+        };
         let _lastProgressSaveTime = 0;  // timeupdate 节流时间戳（每15秒保存一次）
         // 🧭 导航令牌：每次切换剧集/打开/关闭详情时自增，用于作废上一部剧残留的
         //    异步任务（refreshEpisodes / refreshSources / 测速探测 / 错误回退定时器），
@@ -6547,6 +6802,7 @@
                     showSharePanel: false,   // 分享面板
                     shareIncludeTime: false, // 是否带"从当前进度开始"
                     shareSeconds: 0,         // 当前播放秒数（用于带时间分享）
+                    shareCode: '',           // 📊 分享码(链接里的 &s=):开面板/每次分享动作后换新码 → 每个码 = 一次分享 + 一个渠道,站长后台按码统计带来的打开/登录
                     previewLocked: false,    // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
                     deepLinkLoading: false,  // ⏳ 已登录深链：立即显示播放页框架(加载态)，搜索/测速在后台进行，避免先闪搜索结果页
                     deepLinkSourceCount: 0,  // ⏳ 深链加载帧里展示"已找到 N 个线路"的动态计数
@@ -6575,6 +6831,7 @@
                     corsProxyUrls: [],   // 全部 CORS 代理（多代理冗余；过滤代理故障时轮换到备用 worker）
                     danmakuEnabled: false,  // 🗨️ 弹幕开关（来自 /api/config，配置了 DANMU_API_URL 才为 true）
                     requestsEnabled: false, // 📮 求片开关（来自 /api/config：仅 VPS/server.js 配了 ADMIN_TOKEN 才为 true；Vercel 始终 false）
+                    watchStatsEnabled: false, // ⏱️ 实测观看时长 + 分享统计(来自 /api/config.watch_stats:服务器 sqlite 且未设 STATS_DISABLE 才为 true;Vercel 恒 false)
                     playbackErrorCount: 0,  // 播放失败计数
                     isAutoRetrying: false,  // 是否正在自动重试
                     autoRetryMessage: '',  // 自动切换提示信息
@@ -6607,16 +6864,7 @@
                     reqRefillFromId: null,  // need_info 补充重提时来源记录 id（提交成功后删掉它，避免堆积孤儿）
                     reqSubmitting: false,
                     myRequests: [],
-                    showAdminPage: false,   // 站长后台（访问 网址#admin 才出现，与求片弹窗分离）
-                    reqAdminToken: '',
-                    reqAdminAuthed: false,
-                    adminRequests: [],
-                    adminTab: 'requests',   // 后台 tab：求片管理 / 用户统计
-                    adminUsers: [],
-                    adminAggregates: {},
-                    adminLoadingUsers: false,
-                    adminUserHistory: null, // drill-in：某用户观看记录
-                    adminUserHistoryName: '',
+                    // 站长后台已独立成 /admin(public/admin.html);首页只留 #admin → /admin 的跳转(_syncAdminHash)
                     userBanned: false,      // 被站长封禁 → 锁屏
                     showOfflinePanel: false,  // ⬇️ 离线缓存面板开关
                     offlineList: [],          // ⬇️ 已缓存剧集元数据列表
@@ -7020,14 +7268,16 @@
                 // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
                 shareUrl() {
                     if (!this.currentGroup || !this.currentGroup.name) return location.origin + '/';
-                    if (this.currentGroup._isLive) return location.origin + '/?live=' + encodeURIComponent(this.currentGroup.name);  // 📺 直播分享链
+                    // 📊 分享码(统计开启 + 已登录才有,见 _shareCanTrack):收到的人打开/登录按码归到这次分享
+                    const sc = (this.watchStatsEnabled && this.shareCode) ? '&s=' + this.shareCode : '';
+                    if (this.currentGroup._isLive) return location.origin + '/?live=' + encodeURIComponent(this.currentGroup.name) + sc;  // 📺 直播分享链
                     let u = location.origin + '/?play=' + encodeURIComponent(this.currentGroup.name);
                     const cur = (this.episodeList && this.episodeList.length > 1)
                         ? this.episodeList.find(e => e.url === this.currentUrl) : null;
                     if (cur && cur.name) u += '&ep=' + encodeURIComponent(cur.name);
                     if (this.currentGroup._workLabel && this.currentGroup._workSig) u += '&w=' + encodeURIComponent(this.currentGroup._workSig);   // 🧩 同名多部:分享出去也开这一部
                     if (this.shareIncludeTime && this.shareSeconds > 0) u += '&t=' + this.shareSeconds;
-                    return u;
+                    return u + sc;
                 },
                 canNativeShare() { return typeof navigator !== 'undefined' && !!navigator.share; },
                 groupedList() {
@@ -7213,7 +7463,7 @@
                     document.body.classList.add('detail-open');
                     await this.$nextTick();  // 等 player-layout(#dplayer 容器)渲染出来，否则 play() 里 DPlayer 取不到容器报错
                     if (seq !== this._liveOpenSeq || !this._liveActive) return;  // 已被新的打开/换台/关闭取代
-                    try { if (dp && dp.danmaku) dp.danmaku.clear(); } catch (e) { }  // 清残留 VOD 弹幕
+                    this._danmakuDrop();  // 🗨️ 丢掉上一部剧的弹幕(只 clear() 会让旧弹幕在直播里从头重放)
                     this.addLiveRecent(ch);
                     // 依次测线路，挑第一条通的(都不通就用第一条，让播放器自行报错/代理回退)
                     this.liveTesting = true;
@@ -7330,6 +7580,12 @@
                         this.hlsCutEnabled = config.hls_cut === true;
                         // 📮 求片开关（服务端配置了 ADMIN_TOKEN 才开启；否则整个功能隐藏）
                         this.requestsEnabled = !!config.requests_enabled;
+                        // ⏱️ 实测观看时长 + 分享统计(服务器 sqlite 且没设 STATS_DISABLE 才开;离线用缓存配置时照常累计,联网补发)
+                        this.watchStatsEnabled = !!config.watch_stats;
+                        if (this.watchStatsEnabled) {
+                            try { if (window.watchMeter) window.watchMeter.enable(); } catch (e) { }
+                            this._shareOpenReport();
+                        }
                         // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
                         this.liveEnabled = !!config.live_enabled;
                         // 🚫 封禁锁屏（站长在后台封了这个用户）
@@ -7404,7 +7660,7 @@
                     // 6. 🔗 处理分享深链 ?play=（自动搜索并打开对应剧）
                     this.handleDeepLink();
 
-                    // 7. 🛡️ 站长后台：访问 网址#admin 显示后台(隐藏入口，与普通用户分离)
+                    // 7. 🛡️ 站长后台：访问 网址#admin → 跳独立后台页 /admin(隐藏入口，与普通用户分离)
                     this._syncAdminHash();
                     window.addEventListener('hashchange', () => this._syncAdminHash());
 
@@ -7931,6 +8187,8 @@
                                 vod_content: s.vod_content || '',  // 剧情介绍
                                 site_name: s.site_name,
                                 site_key: s.site_key || (s.site_name + '_' + idx),  // 用于匹配高亮
+                                type_name: s.type_name || '',   // 🗨️ 弹幕匹配提示(分类/年份):从"继续观看"打开时也要带上,
+                                vod_year: s.vod_year || '',     //    否则同名同年的电视剧/动画(苍兰诀)分不出来
                                 latency: s.latency || 500,  // 默认延迟
                                 _testType: s._testType || null,  // 保存测速类型: direct/proxy/server
                                 _srvOnly: !!s._srvOnly,          // 用户端真测过且只有服务器能通("可能无法播放"组)
@@ -8846,7 +9104,56 @@
                     this.shareIncludeTime = false;
                     // ✂️ 分享原时间轴的秒数(收到的人可能走没剪的线路/设备;打开时再按自己的剪段换算)
                     this.shareSeconds = (typeof dp !== 'undefined' && dp && dp.video) ? Math.floor(this._cutToBase(dp.video.currentTime || 0)) : 0;
+                    this.shareCode = this._shareCanTrack() ? this._shareNewCode() : '';   // 📊 每次开面板一个新码
                     this.showSharePanel = true;
+                },
+                // ========== 📊 分享统计(站长后台:谁分享了什么、发到哪个渠道、带来多少打开/登录) ==========
+                //   一个分享码 = 一次分享动作:动作前登记(POST /api/stats/share,码 + 渠道 + 剧/集),动作后换新码。
+                //   服务器只认登记过的码(没登记的 &s= 打开时直接忽略),所以没 token(没登录/免密站)就干脆不带码。
+                _shareCanTrack() {
+                    if (!this.watchStatsEnabled) return false;
+                    try { return !!localStorage.getItem('emax_auth_hash'); } catch (e) { return false; }
+                },
+                _shareNewCode() {
+                    const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+                    let s = '';
+                    try { const b = new Uint8Array(10); crypto.getRandomValues(b); for (let i = 0; i < b.length; i++) s += A[b[i] % A.length]; } catch (e) { }
+                    while (s.length < 10) s += A[Math.floor(Math.random() * A.length)];
+                    return s;
+                },
+                // 分享动作【之前】调:确保有码并登记(fire-and-forget,失败不影响分享本身)。channel = wechat|qq|…|native|copy
+                _shareTrack(channel) {
+                    try {
+                        if (!this._shareCanTrack()) return;
+                        if (!this.shareCode) this.shareCode = this._shareNewCode();
+                        const g = this.currentGroup || {}, live = !!g._isLive;
+                        const cur = live ? null : (this.episodeList || []).find(e => e.url === this.currentUrl);
+                        const body = {
+                            token: localStorage.getItem('emax_auth_hash') || '', code: this.shareCode, channel,
+                            kind: live ? 'live' : 'vod', title: g.name || '', episode: window.watchMeter ? window.watchMeter.epLabel(cur && cur.name) : ((cur && cur.name) || ''),   // 集名与观看统计同一套归一
+                            t: (!live && this.shareIncludeTime && this.shareSeconds > 0) ? this.shareSeconds : 0
+                        };
+                        fetch('/api/stats/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => { });
+                    } catch (e) { }
+                },
+                // 分享动作【之后】调:换新码(下一次分享/换渠道单独计)
+                _shareRotate() {
+                    if (this.shareCode) this.shareCode = this._shareNewCode();
+                },
+                // 链接框里手动选中复制(不点「复制」按钮)也算一次 copy 分享。换码延后一拍:复制动作完成前别改输入框的值
+                onShareInputCopy() {
+                    this._shareTrack('copy');
+                    setTimeout(() => this._shareRotate(), 0);
+                },
+                // 📊 带 ?s= 分享码进站(落地脚本已存 sessionStorage)→ 应用启动且已登录后报一次 share-open(服务器记"带来登录",
+                //    同一 码+用户 只记一次,分享者本人不记)。服务器答复了(非 5xx)就删;断网/5xx 留着,本标签页下次启动再报
+                _shareOpenReport() {
+                    let code = '', token = '';
+                    try { code = sessionStorage.getItem('donggua_share_ref') || ''; token = localStorage.getItem('emax_auth_hash') || ''; } catch (e) { return; }
+                    if (!code || !token) return;
+                    fetch('/api/stats/share-open', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, token }), keepalive: true })
+                        .then(r => { if (r.status < 500) { try { sessionStorage.removeItem('donggua_share_ref'); } catch (e) { } } })
+                        .catch(() => { });
                 },
                 // 执行分享：移动端调系统分享面板，桌面端复制链接
                 // 纯复制分享链接到剪贴板（返回是否成功；不弹任何 UI）
@@ -8863,9 +9170,12 @@
                 },
                 // 「复制」按钮：只复制链接，不调系统分享（系统分享由「更多 App」按钮负责）
                 async confirmShare() {
+                    this._shareTrack('copy');   // 📊 先登记这次分享的码
+                    const url = this.shareUrl;  // 换码前取定(下面 prompt 兜底也要同一个码)
                     const ok = await this.copyShareLink();
                     if (ok) this.showMiniToast('🔗 链接已复制');
-                    else window.prompt('复制此链接分享：', this.shareUrl);
+                    else window.prompt('复制此链接分享：', url);
+                    this._shareRotate();
                 },
                 // 秒数格式化 mm:ss
                 formatSeconds(s) {
@@ -8875,6 +9185,10 @@
                 },
                 // 🔗 分享到指定社交平台
                 shareTo(platform) {
+                    this._shareTrack(platform);   // 📊 先登记这次分享的码(下面取的 url 带的就是它)
+                    try { this._shareToInner(platform); } finally { this._shareRotate(); }   // url 已在同步阶段取定(copyShareLink 也是开头同步取),换码不影响这次
+                },
+                _shareToInner(platform) {
                     const url = this.shareUrl;
                     const name = (this.currentGroup && this.currentGroup.name) || '';
                     const text = `一起看《${name}》`;
@@ -9566,78 +9880,8 @@
                     if (!this.syncToken) return;
                     try { const r = await fetch(`/api/requests/mine?token=${encodeURIComponent(this.syncToken)}`).then(r => r.json()); this.myRequests = r.requests || []; } catch (e) { }
                 },
-                async adminLoadRequests() {
-                    if (!this.reqAdminToken) return;
-                    try {
-                        // 令牌走请求头，不进 URL（避免落入访问日志/Referer）
-                        const r = await fetch('/api/requests/admin', { headers: { 'X-Admin-Token': this.reqAdminToken } }).then(r => r.json());
-                        if (r.requests) { this.adminRequests = r.requests; this.reqAdminAuthed = true; }
-                        else alert('管理员令牌无效');
-                    } catch (e) { alert('加载失败'); }
-                },
-                async adminFulfill(r, action) {
-                    try {
-                        const body = { admin: this.reqAdminToken, id: r.id, status: action, fulfill_link: r.fulfill_link, fulfill_note: r.fulfill_note };
-                        if (action === 'delete') { if (!confirm('删除这条求片？')) return; body.action = 'delete'; }
-                        const res = await fetch('/api/requests/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
-                        if (res.ok) {
-                            // ⚠️ 不再整表 reload——那会把站长正在输入框里的 link/note 清掉(先 need_info 再输链接再标已提供→链接丢失的根因)。
-                            //    改为本地原地更新状态,保留输入内容;删除则本地移除。
-                            if (action === 'delete') this.adminRequests = this.adminRequests.filter(x => x.id !== r.id);
-                            else { r.status = action; r.updated_at = Date.now(); }
-                        } else alert('操作失败');
-                    } catch (e) { alert('操作失败'); }
-                },
-                // 用户统计：拉取用户列表 + 聚合
-                async adminLoadUsers() {
-                    if (!this.reqAdminToken) return;
-                    this.adminLoadingUsers = true;
-                    try {
-                        const r = await fetch('/api/admin/users', { headers: { 'X-Admin-Token': this.reqAdminToken } }).then(r => r.json());
-                        this.adminUsers = r.users || [];
-                        this.adminAggregates = r.aggregates || {};
-                    } catch (e) { alert('加载用户失败'); }
-                    this.adminLoadingUsers = false;
-                },
-                async adminBanUser(u, banned) {
-                    if (!confirm(banned ? ('封禁用户「' + u.identity + '」？被封后该用户将无法使用本站。') : ('解封用户「' + u.identity + '」？'))) return;
-                    try {
-                        const res = await fetch('/api/admin/ban', {
-                            method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': this.reqAdminToken },
-                            body: JSON.stringify({ token: u.token, banned: banned })
-                        }).then(r => r.json());
-                        if (res.ok) { u.banned = res.banned; this.adminAggregates.banned_count = (this.adminAggregates.banned_count || 0) + (banned ? 1 : -1); }
-                        else alert('操作失败');
-                    } catch (e) { alert('操作失败'); }
-                },
-                async adminViewUserHistory(u) {
-                    this.adminUserHistoryName = u.identity;
-                    this.adminUserHistory = [];
-                    try {
-                        const r = await fetch('/api/admin/user-history?token=' + encodeURIComponent(u.token), { headers: { 'X-Admin-Token': this.reqAdminToken } }).then(r => r.json());
-                        this.adminUserHistory = r.history || [];
-                    } catch (e) { this.adminUserHistory = []; }
-                },
-                // 后台时间/时长展示
-                adminFmtTime(ts) {
-                    if (!ts) return '—';
-                    const d = new Date(ts), now = Date.now(), diff = now - ts;
-                    if (diff < 60000) return '刚刚';
-                    if (diff < 3600000) return Math.floor(diff / 60000) + '分钟前';
-                    if (diff < 86400000) return Math.floor(diff / 3600000) + '小时前';
-                    if (diff < 7 * 86400000) return Math.floor(diff / 86400000) + '天前';
-                    const p = n => (n < 10 ? '0' + n : '' + n);
-                    return (d.getFullYear() === new Date(now).getFullYear() ? '' : d.getFullYear() + '-') + p(d.getMonth() + 1) + '-' + p(d.getDate());
-                },
-                adminFmtMinutes(min) {
-                    min = Math.round(min || 0);
-                    if (min < 60) return min + '分';
-                    return Math.floor(min / 60) + '时' + (min % 60 ? (min % 60) + '分' : '');
-                },
-                // 站长后台：访问 网址#admin 时打开(由 mounted 的 hash 监听调用)
-                // 未配 ADMIN_TOKEN(requestsEnabled=false)则求片功能整体关闭，后台也彻底隐身——
-                // 与三处用户入口的门控一致。requestsEnabled 来自 /api/config，mounted 里在本方法之前已就绪。
-                // 老的 #admin 入口 → 重定向到独立后台页 /admin(独立轻量页，可搜索/分页，不再是首页里的卡顿弹窗)
+                // 老的 #admin 入口 → 重定向到独立后台页 /admin(public/admin.html:求片/用户/观看/分享统计都在那里)。
+                //   首页里原来那套后台弹窗(模板早已删除,方法还读已下线的 /api/admin/users 旧格式)整体移除
                 _syncAdminHash() {
                     const h = (location.hash || '').toLowerCase();
                     if (h === '#admin' || h === '#/admin') {
@@ -10419,6 +10663,7 @@
                             vod_id: item.vod_id,
                             vod_name: item.vod_name,
                             vod_year: item.vod_year,   // 🎌 Kazumi 源年份校验要用 maccms 源的年份
+                            type_name: item.type_name || '',   // 🗨️ 弹幕匹配提示要用(_danmakuHints)
                             vod_play_url: item.vod_play_url || '',
                             site_profile: item.site_profile || null,   // 🏷️ 广告分级(缺了也会按 site_key 查 siteProfiles 兜底)
                             latency: undefined,
@@ -10603,14 +10848,65 @@
                         // 末尾 |v3 是缓存版本：CF 曾把"暂时为空"的弹幕响应按 1 年浏览器TTL 缓存进了各用户浏览器(中毒)，
                         // 改 URL 即让旧的中毒缓存 miss、重新拉取。服务器只取 split('|') 的前两段(剧名|集名)，第三段被忽略、
                         // 不影响匹配与服务器缓存键。将来若再需强制刷新弹幕缓存，把版本号往上 bump 即可。
-                        // (v2→v3: 修"带年份期号撞任意年份同月日"串台;v3→v4: 综艺匹配16项对抗审查大修后再冲一次缓存)
-                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v4'),
+                        // (v2→v3: 修"带年份期号撞任意年份同月日"串台;v3→v4: 综艺匹配16项对抗审查大修后再冲一次缓存;
+                        //  v4→v5: 带上我方的分类/年份/集数提示,服务器据此排除同名电影↔综艺、不同年份的翻拍、别的季)
+                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v5' + this._danmakuHints()),
                         api: '/api/danmaku/',
                         user: '观众',
                         // 弹幕显示区域由 CSS(.dplayer-danmaku height:33%)限制到顶部 1/3，
                         // 不用 DPlayer 的 bottm 选项(% 语义按宽度算、不可靠)。unlimited 由用户"海量弹幕"开关控制。
                         unlimited: false
                     };
+                },
+                // 🗨️ 本次播放不带弹幕(直播/未开弹幕):把复用播放器里上一部剧的弹幕【整份】丢掉。
+                //    DPlayer 的 danmaku.clear() 只清屏、不清列表(dan),还把读指针归零 → 旧列表按新视频的时间从头重放
+                //    (实测:看完《兰香如故》进 CCTV9 直播,满屏兰香如故的弹幕)。在飞的旧请求由 _dmBackend.want=null 作废。
+                _danmakuDrop() {
+                    _dmBackend.want = null;
+                    this._lastDanmakuKey = null;   // 列表已丢:回到原来那集要重新拉
+                    try {
+                        if (typeof dp === 'undefined' || !dp || !dp.danmaku) return;
+                        dp.danmaku.dan = [];
+                        dp.danmaku.clear();
+                        if (dp.template && dp.template.danmakuLoading) dp.template.danmakuLoading.style.display = 'none';
+                    } catch (e) { }
+                },
+                // 🗨️ 弹幕匹配提示:我方这部的类型(归一后的 k:)、年份、集数。服务器用它在同名候选里挑对的那部
+                //    (综艺"王牌对王牌"别配到 1998 年同名电影;天龙八部 2003 版别配到 1997 版;苍兰诀 电视剧≠动画)。
+                //    返回 "|k:…|y:…|n:…"(缺的段省略)。优先用【当前线路】自己的分类/年份,没有才取其它线路的多数票;
+                //    番剧规则源(kz)的分类是写死的"动漫"、年份也不可靠,不参与。送归一后的类型而不是原始分类名:
+                //    国产剧/内地剧/大陆剧 是同一类,原样送会把 CDN 缓存拆成好几份(审查实锤)。
+                _danmakuKindOf(type) {   // ⚠️ 与 server.js / api/index.js 的 danmakuKindOfOurs 同口径(动画电影单列 amovie)
+                    const t = String(type || '');
+                    if (!t) return '';
+                    if (/综艺|真人秀|晚会|脱口秀/.test(t)) return 'variety';
+                    if (/动画片|动画电影|动漫电影|剧场版/.test(t)) return 'amovie';
+                    if (/电影版/.test(t)) return 'movie';
+                    if (/动漫|番剧|动画/.test(t)) return 'anime';
+                    if (/纪录|记录/.test(t)) return '';
+                    if (/片$|电影|影片/.test(t)) return 'movie';
+                    if (/短剧|现代都市|古装仙侠|穿越重生|女频|男频|爽剧|爽文|脑洞|战神|赘婿|甜宠|逆袭|萌宝|虐恋|总裁|神医|神豪|穿书/.test(t)) return 'short';
+                    if (/剧/.test(t)) return 'tv';
+                    return '';
+                },
+                _danmakuHints() {
+                    try {
+                        const isKz = s => !!(s && (s._kz || /^kz_/.test(s.site_key || '')));
+                        const srcs = ((this.currentGroup && this.currentGroup.sources) || []).filter(s => !isKz(s));
+                        const yearOf = s => { const m = String((s && s.vod_year) || '').match(/(19|20)\d{2}/); return m ? m[0] : ''; };
+                        const top = (vals) => {
+                            const cnt = new Map();
+                            vals.forEach(v => { if (v) cnt.set(v, (cnt.get(v) || 0) + 1); });
+                            let best = '', n = 0;
+                            cnt.forEach((c, v) => { if (c > n) { best = v; n = c; } });
+                            return best;
+                        };
+                        const cur = isKz(this.currentSource) ? null : this.currentSource;
+                        const kind = this._danmakuKindOf(cur && cur.type_name) || top(srcs.map(s => this._danmakuKindOf(s.type_name)));
+                        const year = yearOf(cur) || top(srcs.map(yearOf));
+                        const eps = (this.episodeList || []).length;
+                        return (kind ? '|k:' + kind : '') + (year ? '|y:' + year : '') + (eps ? '|n:' + eps : '');
+                    } catch (e) { return ''; }
                 },
                 // 弹幕"是否需要重载"的判定键：剧名 + 集号(归一化)。换源时不同站点集名写法常不同
                 // (第6集/第06集/06/6/EP6)，但同一集弹幕是一样的，归一化后同集=同键 → 不重拉/不闪烁。
@@ -11093,6 +11389,12 @@
                         console.log('[Kazumi] MP4 直链:当前 <video> 已接入 WebAudio(片头指纹),重建播放器以免跨域静音');
                         this._dpRebuildFresh();
                     }
+                    // 🗨️ 播放器是"不带弹幕"时建的(本次会话先看了直播):DPlayer 只在构造时初始化弹幕模块,之后 switchVideo
+                    //    带弹幕参数也是空操作 → 整个会话看剧都没弹幕。要弹幕而当前实例没有弹幕模块 → 重建(同样须在 isFreshPlayer 之前)。
+                    if (typeof dp !== 'undefined' && dp && !dp.danmaku && this._buildDanmakuOption()) {
+                        console.log('[弹幕] 播放器是不带弹幕建的(先看了直播),重建以挂上弹幕');
+                        this._dpRebuildFresh();
+                    }
                     this.currentUrl = url;
                     this.playbackErrorCount = 0;  // 重置错误计数
                     this._proxyRetried = false;    // 重置代理重试标记
@@ -11447,6 +11749,9 @@
                     const danmakuKey = this._danmakuKey();
                     const danmakuReload = !!danmakuOpt && danmakuKey !== this._lastDanmakuKey;
                     if (danmakuOpt) this._lastDanmakuKey = danmakuKey;
+                    // 本次播放不带弹幕(直播/未开弹幕)→ 上一部的弹幕整份丢掉;要加载新弹幕(新建播放器/换集)→ 只收这一份
+                    if (!danmakuOpt) this._danmakuDrop();
+                    else if (!dp || danmakuReload) _dmBackend.want = danmakuOpt.id;
 
                     if (!dp) {
                         console.log('[播放器] 创建新的 DPlayer 实例');
@@ -11462,6 +11767,7 @@
                             video: { url: finalUrl, type: (this._activeKz && this._activeKz.type === 'mp4') ? 'normal' : 'hls', customType: { hls: window._dgHlsCustomType } },   // 🎯 MSE 可用即强制 hls.js(见 _dgHlsCustomType);🎌 Kazumi MP4 直链走原生 <video>
                             pluginOptions: { hls: buildOfflineHlsConfig() },  // ⬇️ 离线缓存优先的 hls loader(无缓存时行为与原生一致)
                             danmaku: danmakuOpt || undefined,  // 🗨️ 弹幕(借第三方聚合)；未开启则 undefined(DPlayer 不初始化弹幕)
+                            apiBackend: _dmBackend,            // 🗨️ 晚到的旧弹幕不写进当前播放(见 _dmBackend)
                             contextmenu: [
                                 { text: '🎬 E视界MAX', link: '/' },
                                 { text: '⚡ 当前速度: 1x', click: () => { } }
