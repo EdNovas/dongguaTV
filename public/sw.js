@@ -27,7 +27,9 @@
 // v34: 播放前剪清单(ad-clip-core v5);/api/hls/(剪后清单托管)一律直达,不进缓存(每条都是一次性地址,缓存只会无限堆积并回放陈旧内容)。
 // v35: ad-clip-core v6(剪清单时左侧未知不剪;计划缓存带核心版本)。
 // v36: 站长后台/历史/设置/求片/统计/认证与带 token 的 API 一律直达不缓存(升版同时清掉旧缓存里已存的这些响应)。
-const CACHE_VERSION = 'v36';
+// v37: Web Push 更新提醒(push / notificationclick);收藏 /api/favorites* 与推送 /api/push/* 一律直达不缓存。
+// v38: pushsubscriptionchange(浏览器轮换/作废订阅时用原来的选项重新订阅,并通知已打开的页面立刻把新地址报给服务器)。
+const CACHE_VERSION = 'v38';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -115,7 +117,8 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/hls/')) return;
     // ⑧ 按用户/站长的数据一律直达、不进缓存(v36):站长后台接口带全站用户数据(缓存键不含 X-Admin-Token,弱网/断网会被
     //    不鉴权回放)、历史/设置/求片/统计是每个人自己的(退出登录后还留在 Cache Storage)。缓存审计 P1-1。
-    if (url.origin === self.location.origin && /^\/api\/(admin|requests|history|settings|stats|auth)\//.test(url.pathname)) return;
+    //    v37:收藏(/api/favorites 与 /api/favorites/*)、推送(/api/push/*)同理;(\/|$) 让不带子路径的 /api/favorites 也算
+    if (url.origin === self.location.origin && /^\/api\/(admin|requests|history|settings|stats|auth|favorites|push)(\/|$)/.test(url.pathname)) return;
     //    带 token 参数的请求(config?token=…)同理:按用户的,不缓存
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/') && url.searchParams.has('token')) return;
 
@@ -334,6 +337,68 @@ async function trimCache(cache, max) {
             await cache.delete(keys[i]);
         }
     }
+}
+
+// 🔔 Web Push(v37):服务器发来的 payload 是 JSON {title, body, url, tag}。
+//    userVisibleOnly 订阅要求每条推送都必须弹出通知(否则浏览器会显示"本站在后台更新了"并可能吊销订阅),所以解析失败也给一条兜底通知。
+self.addEventListener('push', event => {
+    let d = {};
+    try { d = event.data ? event.data.json() : {}; } catch (e) {
+        try { d = { body: event.data ? event.data.text() : '' }; } catch (e2) { d = {}; }
+    }
+    const title = String(d.title || 'E视界');
+    const opts = {
+        body: String(d.body || ''),
+        icon: '/icon.png',
+        badge: '/icon.png',
+        data: { url: safeNotifyUrl(d.url) }
+    };
+    // 同一部剧的多次更新合并成一条(tag 相同就替换),renotify 让替换时仍响铃/震动;没有 tag 时不能设 renotify(会抛 TypeError)
+    if (d.tag) { opts.tag = String(d.tag); opts.renotify = true; }
+    event.waitUntil(self.registration.showNotification(title, opts));
+});
+
+// 点通知:有已打开的本站窗口就切过去并跳到目标页(深链 ?play= / ?requests=1 由页面自己处理),否则开新窗口
+self.addEventListener('notificationclick', event => {
+    event.notification.close();
+    const url = safeNotifyUrl(event.notification.data && event.notification.data.url);
+    event.waitUntil((async () => {
+        const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const win = wins.find(c => { try { return new URL(c.url).origin === self.location.origin; } catch (e) { return false; } });
+        if (win) {
+            try { await win.focus(); } catch (e) { }
+            try { if (win.navigate) { await win.navigate(url); return; } } catch (e) { }   // 不受本 SW 控制的窗口 navigate 会失败 → 开新窗口
+        }
+        if (self.clients.openWindow) await self.clients.openWindow(url);
+    })());
+});
+
+// 🔔 浏览器轮换/作废了推送订阅(v38):用原订阅的选项(同一把服务器公钥)重新订阅。SW 拿不到登录 token,
+//    新地址由页面上报:通知已打开的本站页面立刻补报('dg-push-resub'),没开着的话下次打开页面时启动补报(_pushStartupSync)。
+//    任何失败都吞掉(没有权限/没有旧选项时什么也不做)
+self.addEventListener('pushsubscriptionchange', event => {
+    event.waitUntil((async () => {
+        try {
+            const old = event.oldSubscription;
+            const key = old && old.options && old.options.applicationServerKey;
+            let sub = event.newSubscription || null;
+            if (!sub) {
+                if (!key) return;
+                sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+            }
+            if (!sub) return;
+            const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+            wins.forEach(c => { try { c.postMessage('dg-push-resub'); } catch (e) { } });
+        } catch (e) { }
+    })());
+});
+
+// 通知里的跳转地址只认本站(服务器只会发站内相对地址;别的一律回首页,防被利用跳外站)
+function safeNotifyUrl(u) {
+    try {
+        const x = new URL(String(u || '/'), self.location.origin);
+        return x.origin === self.location.origin ? x.href : self.location.origin + '/';
+    } catch (e) { return self.location.origin + '/'; }
 }
 
 // 监听消息（可选：手动清理缓存）

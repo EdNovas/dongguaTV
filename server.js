@@ -493,6 +493,8 @@ function markSiteNeedsProxy(siteKey, reason = '') {
  * @returns {Promise<object>} - { data, usedProxy, latency }
  */
 async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
+    // 后台任务(收藏更新检查)走单独的分支;交互请求(/api/search、/api/detail…)下面的逻辑一字未改
+    if (options && options.bg) return fetchWithProxyFallbackBg(url, options, siteKey);
     const timeout = options.timeout || 8000;
 
     // 如果该站点之前需要代理且未过期，直接使用代理
@@ -566,6 +568,30 @@ async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
             }
         }
         throw directError;
+    }
+}
+
+// 后台批量请求版(options.bg = true):
+//   · 不做"直连慢 → 再走代理比一比"(批量详情 20 个 id 响应大、本来就慢,对比一次就是多一个请求、还耗 Worker 额度);
+//   · 只读、绝不写 proxyRequiredSites:后台大批量的慢/超时不能把这个站的用户搜索钉到代理 24h(或把它解钉);
+//     已知要代理的站直接走代理;
+//   · 直连失败仍可走一次代理,但要先 options.extra() 占一个请求预算(返回 false = 本轮预算用完,直接按失败处理)。
+async function fetchWithProxyFallbackBg(url, options, siteKey) {
+    const { bg, extra, ...opts } = options;
+    const timeout = opts.timeout || 8000;
+    const viaProxy = (t) => axios.get(`${CORS_PROXY_URL}/?url=${encodeURIComponent(url)}`, { ...opts, timeout: t });
+    const until = siteKey ? proxyRequiredSites.get(siteKey) : 0;   // 只读(shouldUseProxy 会顺手删过期记录)
+    if (CORS_PROXY_URL && until && until > Date.now()) {
+        const r = await viaProxy(timeout);
+        return { data: r.data, usedProxy: true };
+    }
+    try {
+        const r = await axios.get(url, { ...opts, timeout });
+        return { data: r.data, usedProxy: false };
+    } catch (directError) {
+        if (!CORS_PROXY_URL || (typeof extra === 'function' && !extra())) throw directError;
+        const r = await viaProxy(timeout + 2000);
+        return { data: r.data, usedProxy: true };
     }
 }
 
@@ -913,6 +939,35 @@ try {
         });
     }
 } catch (e) { console.warn('[HlsCut] 路由注册失败,原生 HLS 播放前去插播已禁用:', e.message); }
+// 用户令牌校验:只认 PASSWORD_HASH_MAP 自有属性(原型键 'constructor' 等曾绕过登录)
+const ownToken = (token) => typeof token === 'string' && Object.prototype.hasOwnProperty.call(PASSWORD_HASH_MAP, token);
+// 后台发通知(收藏更新/求片结果)前的令牌闸门 —— 只管"发不发",接口鉴权仍用 ownToken;封禁在两个模块里另判。
+//   · 独立密码/主密码令牌:还在 PASSWORD_HASH_MAP 里才发(站长删了/改了这个密码 → 不再发给旧令牌)
+const notifyTokenOk = (token) => ownToken(token);
+// 🔔 Web Push(见 lib/webpush):VAPID 密钥优先读 env VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY,没有就首次启动自动生成存 SQLite(站长无需提供);
+//    订阅地址只收已知推送服务主机(防 SSRF);发送失败绝不抛给调用方。需 CACHE_TYPE=sqlite,否则 /api/push/key 报 enabled:false、前端隐藏开关。
+let webPush = null;
+try {
+    webPush = require('./lib/webpush').createWebPush({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        tokenOk: ownToken,             // 接口鉴权(订阅/退订/测试通知)
+        notifyOk: notifyTokenOk,       // 每次发送前现判(见 notifyTokenOk)
+        isBanned: (token) => isBanned(token),
+    });
+    webPush.registerRoutes(app);
+} catch (e) { console.warn('[WebPush] 模块加载失败,推送已禁用:', e.message); webPush = null; }
+// 求片状态变为 已履行/需补充/已拒绝 → 推送给提交人(单条:POST /api/requests/admin;批量:lib/user-stats 回调)。发完不等,失败只记日志
+const REQ_PUSH_BODY = { fulfilled: '有结果了,点开查看', need_info: '站长需要你补充一些信息', rejected: '暂时没能找到,点开查看说明' };
+function notifyRequestStatus(list) {
+    if (!webPush) return;
+    for (const r of (Array.isArray(list) ? list : [list])) {
+        if (!r || !r.user_token || r.from === r.to || !Object.prototype.hasOwnProperty.call(REQ_PUSH_BODY, r.to)) continue;
+        webPush.sendToUser(r.user_token, {
+            title: '《' + String(r.name || '').slice(0, 40) + '》求片有结果了', body: REQ_PUSH_BODY[r.to],
+            url: '/?requests=1', tag: 'req:' + r.id
+        });
+    }
+}
 // 📊 观看/分享实测统计 + 站长后台查询(见 lib/user-stats):前端按"视频真在走且页面在前台"计秒攒批上报,分享链带 s=<分享码> 追踪回流;
 //    站长接口(/api/admin/overview|users|user|shares|requests)全是 SQL 聚合 + 20s 缓存,不再逐行解析 user_history 卡死全站。
 //    需 CACHE_TYPE=sqlite;STATS_DISABLE=1 关闭采集(上报接口 204,/api/config.watch_stats=false)。
@@ -928,10 +983,56 @@ try {
         isBanned: (token) => isBanned(token),
         identity: (token, label) => userIdentity(token, label),
         adminAuthed: (req) => adminAuthed(req),
-        ipKey
+        ipKey,
+        onRequestStatus: (rows) => notifyRequestStatus(rows)   // 后台批量改求片状态 → 推送提交人
     });
     userStats.registerRoutes(app);
 } catch (e) { console.warn('[UserStats] 模块加载失败,观看/分享统计与新版站长接口已禁用:', e.message); userStats = null; }
+// 🔥 大家都在看(见 lib/popular):watch_stats 近 7 天,除调用者自己以外至少 2 个不同用户(每人 ≥120s)看过才上榜,只给片名(不给人数/时长);
+//    10 分钟全站候选缓存(贡献者令牌只在内存),每个请求扣掉调用者再筛。配了访问密码要有效令牌(?token=)。需 sqlite + 统计开启
+let popular = null;
+try {
+    popular = require('./lib/popular').createPopular({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        enabled: () => STATS_ENABLED && !!REQ_DB_OK(),
+        authRequired: () => ACCESS_PASSWORDS.length > 0,
+        tokenOk: ownToken,
+        isBanned: (token) => isBanned(token)
+    });
+    popular.registerRoutes(app);
+} catch (e) { console.warn('[Popular] 模块加载失败,大家都在看已禁用:', e.message); popular = null; }
+// ❤️ 收藏(追剧)+ 更新提醒(见 lib/favorites):每用户 ≤100 部、全站跟踪 ≤3000 个 (站, 片);后台每 10 分钟只调 maccms 详情 API
+//    批量查集数(每站每批 ≤20 id、每轮 ≤60 请求、并发 2,绝不拉 m3u8),集数变多 → 推送给收藏了它的用户。
+//    需 sqlite;FAV_CHECK_DISABLE=1 只关后台检查(收藏本身照常可用)。匿名 /api/favorites/status 每 IP 30 次/分;
+//    配了访问密码时它也要有效令牌(新登记预算按令牌算)。
+const FAV_CHECK_ENABLED = !envFlag('FAV_CHECK_DISABLE');
+const favSites = () => allSites().filter(s => !(kazumi && kazumi.isKzSite(s)));
+let favorites = null;
+try {
+    favorites = require('./lib/favorites').createFavorites({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        checkEnabled: () => FAV_CHECK_ENABLED && !process.env.VERCEL,
+        authRequired: () => ACCESS_PASSWORDS.length > 0,
+        tokenOk: ownToken,
+        notifyOk: notifyTokenOk,       // 集数变多时给谁发(见 notifyTokenOk)
+        isBanned: (token) => isBanned(token),
+        adminAuthed: (req) => adminAuthed(req),
+        ipKey,
+        // 只有 maccms 站能查更新(番剧规则站 kz_* 是 HTML 刮削,不查)
+        sites: favSites,
+        // 后台检查用:配了 REMOTE_DB_URL 而远程配置还没加载过 → 先按 /api/sites 的同一套逻辑拉;拉不到 → null(本轮跳过,不碰任何行)
+        loadSites: async () => {
+            if (REMOTE_DB_URL && !remoteDbCache && !(await loadRemoteDb())) return null;
+            return favSites();
+        },
+        // bg:不做代理对比、不写共享的代理记忆;直连失败走代理要先 ctl.extra() 占本轮请求预算
+        fetchJson: async (url, siteKey, timeout, ctl) => (await fetchWithProxyFallback(url, { timeout: timeout || 10000, maxContentLength: 8 * 1024 * 1024, bg: true, extra: ctl && ctl.extra }, siteKey)).data,
+        push: (token, payload) => webPush ? webPush.sendToUser(token, payload) : Promise.resolve(null),
+        statusLimiter: rateLimit({ windowMs: 60 * 1000, max: 30, keyGenerator: ipKey, message: { error: '请求过于频繁' } })
+    });
+    favorites.registerRoutes(app);
+    favorites.start();   // 启动 60s 后第一轮,之后每 10 分钟(模块内部到下一轮事件循环才判开关,避开 TDZ)
+} catch (e) { console.warn('[Favorites] 模块加载失败,收藏与更新提醒已禁用:', e.message); favorites = null; }
 
 // 对分享预览 API 应用更严格的限流
 app.use('/api/preview', previewLimiter);
@@ -1439,6 +1540,9 @@ app.get('/api/config', (req, res) => {
         hls_cut: !!hlsCut,
         // 📊 观看计时/分享追踪上报开关(需 sqlite;STATS_DISABLE=1 关)
         watch_stats: !!(userStats && userStats.enabled()),
+        // 🔔 推送可用(需 sqlite + web-push 依赖;密钥自动生成)/ ❤️ 服务器收藏可用(需 sqlite;没开就只用本机收藏)
+        push_enabled: !!(webPush && webPush.enabled()),
+        favorites_enabled: !!(favorites && favorites.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });
@@ -1977,9 +2081,12 @@ app.post('/api/requests/admin', (req, res) => {
             return res.json({ ok: true, deleted: true });
         }
         const st = ['pending', 'fulfilled', 'rejected', 'need_info'].includes(status) ? status : 'fulfilled';
+        const prev = cacheManager.db.prepare('SELECT user_token, name, status FROM content_requests WHERE id = ?').get(id);
         cacheManager.db.prepare(`UPDATE content_requests SET status = ?, fulfill_link = ?, fulfill_note = ?, updated_at = ? WHERE id = ?`)
             .run(st, String(fulfill_link || '').slice(0, 2000), String(fulfill_note || '').slice(0, 500), Date.now(), id);
         if (userStats) userStats.invalidate();
+        // 🔔 状态真的变了才推送(只改链接/说明不打扰)
+        if (prev && prev.status !== st) notifyRequestStatus({ id, user_token: prev.user_token, name: prev.name, from: prev.status, to: st });
         res.json({ ok: true });
     } catch (e) { console.error('[求片履行]', e.message); res.status(500).json({ error: 'Database error' }); }
 });
@@ -2125,29 +2232,31 @@ app.get('/api/m3u8-proxy', async (req, res) => {
     }
 });
 
+// 远程站点配置(REMOTE_DB_URL):缓存 5 分钟内直接用,否则拉一次;拉到 → 写缓存并返回,拉不到 → null(调用方自己决定回退)。
+//   /api/sites 与收藏后台检查(lib/favorites 的 loadSites)共用:以前只有 /api/sites 会拉,重启后没人打开首页时
+//   getDB() 一直读本地模板,收藏检查把所有到期行当"站点已删除"推迟一天
+async function loadRemoteDb() {
+    if (!REMOTE_DB_URL) return null;
+    const now = Date.now();
+    if (remoteDbCache && now - remoteDbLastFetch < REMOTE_DB_CACHE_TTL) return remoteDbCache;
+    try {
+        const response = await axios.get(REMOTE_DB_URL, { timeout: 5000 });
+        if (response.data && Array.isArray(response.data.sites)) {
+            remoteDbCache = response.data;
+            remoteDbLastFetch = now;
+            console.log('[Remote] Config loaded successfully');
+            return remoteDbCache;
+        }
+    } catch (err) {
+        console.error('[Remote] Failed to load config:', err.message);
+    }
+    return null;
+}
+
 // 1. 获取站点列表
 app.get('/api/sites', async (req, res) => {
-    let sitesData = null;
-
     // 尝试从远程加载
-    if (REMOTE_DB_URL) {
-        const now = Date.now();
-        if (remoteDbCache && now - remoteDbLastFetch < REMOTE_DB_CACHE_TTL) {
-            sitesData = remoteDbCache;
-        } else {
-            try {
-                const response = await axios.get(REMOTE_DB_URL, { timeout: 5000 });
-                if (response.data && Array.isArray(response.data.sites)) {
-                    sitesData = response.data;
-                    remoteDbCache = sitesData;
-                    remoteDbLastFetch = now;
-                    console.log('[Remote] Config loaded successfully');
-                }
-            } catch (err) {
-                console.error('[Remote] Failed to load config:', err.message);
-            }
-        }
-    }
+    let sitesData = REMOTE_DB_URL ? await loadRemoteDb() : null;
 
     // 回退到本地
     if (!sitesData) {
