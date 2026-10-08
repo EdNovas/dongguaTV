@@ -1468,6 +1468,8 @@ app.get('/api/debug', (req, res) => {
 });
 
 // ========== 历史记录同步 API ==========
+// 📦 历史条目瘦身(只留上次线路的选集串、去掉简介与本机测速字段),与前端推送前的规则一致(lib/history-slim)
+const { slimHistoryItem } = require('./lib/history-slim');
 
 // 获取服务器上的历史记录
 app.get('/api/history/pull', (req, res) => {
@@ -1494,14 +1496,20 @@ app.get('/api/history/pull', (req, res) => {
     touchUser(userToken);  // 记录活跃
 
     try {
-        const stmt = cacheManager.db.prepare('SELECT item_id, item_data, updated_at FROM user_history WHERE user_token = ?');
+        // 只下发最近 100 部(客户端本地只留 50):旧版每次启动整份下发,历史只增不减时越来越大
+        const stmt = cacheManager.db.prepare('SELECT item_id, item_data, updated_at FROM user_history WHERE user_token = ? ORDER BY updated_at DESC LIMIT 100');
         const rows = stmt.all(userToken);
 
-        const history = rows.map(row => ({
-            id: row.item_id,
-            data: JSON.parse(row.item_data),
-            updated_at: row.updated_at
-        }));
+        // 旧客户端存进来的胖条目(每条线路的完整选集串、简介、测速字段)下发时瘦身,并顺手写回(一次性迁移,之后就小了)
+        const rewrite = cacheManager.db.prepare('UPDATE user_history SET item_data = ? WHERE user_token = ? AND item_id = ? AND updated_at = ?');
+        const history = rows.map(row => {
+            let data = JSON.parse(row.item_data);
+            if (row.item_data.length > 20000) {
+                data = slimHistoryItem(data);
+                try { rewrite.run(JSON.stringify(data), userToken, row.item_id, row.updated_at); } catch (e) { }
+            }
+            return { id: row.item_id, data, updated_at: row.updated_at };
+        });
 
         // 删除墓碑：让其它设备据此压制"已删但本地还在"的记录,不再复活
         const deleted = cacheManager.db.prepare('SELECT item_id, deleted_at FROM user_history_deleted WHERE user_token = ?').all(userToken).map(r => ({ id: r.item_id, deleted_at: r.deleted_at }));
@@ -1560,7 +1568,8 @@ app.post('/api/history/push', (req, res) => {
         let saved = 0;
         const transaction = cacheManager.db.transaction(() => {
             // 1. 插入历史，但被【更新的删除墓碑】压制的不入库(防复活)；若该条比墓碑更新=重新观看,清墓碑后入库
-            for (const item of history) {
+            // 增量推送后一次只有几条;老客户端全量推送也最多收 200 条
+            for (const item of history.slice(0, 200)) {
                 if (!item.id || !item.data) continue;
                 const upd = item.updated_at || Date.now();
                 const td = tomb.get(item.id);
@@ -1569,8 +1578,12 @@ app.post('/api/history/push', (req, res) => {
                 // ⏱️ 更新者胜(last-writer-wins)：服务器已有更新的版本(别的设备看到了更靠后的集/进度) → 不被旧推送覆盖。
                 //    根治"iPad 看到16集、手机却把进度压回14集"——陈旧设备的旧 updated_at 推送不再 INSERT OR REPLACE 掉新数据。
                 const cur = existingUpd.get(item.id);
-                if (cur != null && cur > upd) continue;
-                insertStmt.run(token, item.id, JSON.stringify(item.data), upd);
+                // 时间戳相同 = 同一个版本(旧版全量推送每分钟都会把所有行重写一遍),跳过
+                if (cur != null && cur >= upd) continue;
+                // 入库前瘦身(老客户端推的胖条目也一样);瘦身后仍超 64KB 的异常条目不收
+                const json = JSON.stringify(slimHistoryItem(item.data));
+                if (json.length > 65536) continue;
+                insertStmt.run(token, item.id, json, upd);
                 saved++;
             }
             // 2. 墓碑驱动删除（替代危险的"服务器有、推送里没有就删"隐式删除——那会在多设备/本地条数上限不一致

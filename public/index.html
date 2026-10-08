@@ -8381,7 +8381,7 @@
                         }
                     }
 
-                    // 同步始终推送完整数据（服务器无本地配额限制）
+                    // 同步:增量推送(只推版本变了的条目,瘦身后几 KB),不受本地配额裁剪影响
                     if (this.syncEnabled && this.syncToken) {
                         this.pushHistoryToServer();
                     }
@@ -8525,13 +8525,23 @@
                         //    ② 本地更新(本机刚看、还没推上去) → 保留本地，不被旧的服务器副本覆盖。
                         //    被墓碑压制的(已删且之后没再看)一律剔除。
                         const byName = new Map();
-                        const consider = (d) => {
+                        const consider = (d, preferThis) => {
                             if (!d || !d.name || this._isTombstoned(tomb, d)) return;
                             const ex = byName.get(d.name);
-                            if (!ex || new Date(d.watchedAt || 0).getTime() > new Date(ex.watchedAt || 0).getTime()) byName.set(d.name, d);
+                            const t = new Date(d.watchedAt || 0).getTime(), te = ex ? new Date(ex.watchedAt || 0).getTime() : -1;
+                            if (!ex || t > te || (preferThis && t === te)) byName.set(d.name, d);
                         };
-                        serverHistory.forEach(s => consider(s.data));
-                        this.watchHistory.forEach(consider);  // 本地若比服务器新(刚看未推) → 胜出保留
+                        serverHistory.forEach(s => consider(s.data, false));
+                        // 本地若比服务器新(刚看未推) → 胜出保留;同一个版本时也留本地的(本地是完整快照,服务器上的是瘦身版)
+                        this.watchHistory.forEach(d => consider(d, true));
+
+                        // 📦 记下服务器已有的版本与墓碑:之后增量推送只推和它不一样的(本地更新的那几部)
+                        {
+                            const st = this._histSyncLoad();
+                            serverHistory.forEach(s => { if (s && s.data && s.data.name) st.items[s.data.name] = s.data.watchedAt; });
+                            (data.deleted || []).forEach(d => { if (d && d.id) st.tombs[d.id] = d.deleted_at; });
+                            this._histSyncSave(st);
+                        }
                         const newHistory = [...byName.values()];
 
                         // 按时间排序（最新的在前）
@@ -8622,62 +8632,123 @@
                     this._doPushHistory();
                 },
 
-                // 实际执行推送
+                // 📦 增量同步:记下"服务器已确认"的每条历史版本(watchedAt)与每个删除墓碑,推送时只发和它不一样的。
+                //    旧版每分钟把全部 50 条(每条带所有线路的完整选集串,24KB~200KB)整份推上去:单次 1~9MB,超过 5MB 被 413
+                //    还照打"推送成功";关页 beacon 超 64KB 必失败(缓存审计 P0-2)。按账号隔离(换号不串)。
+                _histSyncLoad() {
+                    const t = String(this.syncToken || '').slice(0, 16);
+                    try {
+                        const s = JSON.parse(localStorage.getItem('donggua_hist_synced') || 'null');
+                        if (s && s.t === t && s.items && s.tombs) return s;
+                    } catch (e) { }
+                    return { t, items: {}, tombs: {} };
+                },
+                _histSyncSave(s) { try { localStorage.setItem('donggua_hist_synced', JSON.stringify(s)); } catch (e) { } },
+                // 与服务器 lib/history-slim 同一套规则(scripts/history-sync-test.mjs 校验两边一致):只留上次线路的选集串,
+                //   去掉简介与本机测速字段(测速结果同步到别的设备反而让它 24h 内按错的结果选线)
+                _slimHistoryItem(d) {
+                    if (!d || typeof d !== 'object') return d;
+                    const out = Object.assign({}, d);
+                    const g = d.groupData;
+                    if (g && typeof g === 'object' && Array.isArray(g.sources)) {
+                        const srcs = g.sources.slice(0, 40);
+                        let keep = srcs.findIndex(s => s && s.site_key && s.site_key === d.lastSourceKey && s.vod_play_url);
+                        if (keep < 0) keep = srcs.findIndex(s => s && s.vod_play_url);
+                        const slimSource = (s, keepPlayUrl) => {
+                            if (!s || typeof s !== 'object') return null;
+                            const o = { vod_id: s.vod_id, vod_name: s.vod_name, site_name: s.site_name, site_key: s.site_key };
+                            if (s.type_name) o.type_name = s.type_name;
+                            if (s.vod_year) o.vod_year = s.vod_year;
+                            if (keepPlayUrl && s.vod_play_url) o.vod_play_url = String(s.vod_play_url).slice(0, 60000);
+                            return o;
+                        };
+                        out.groupData = {
+                            name: g.name, pic: g.pic, _work: g._work || '', _workSig: g._workSig || '', _workLabel: g._workLabel || '',
+                            sources: srcs.map((s, i) => slimSource(s, i === keep)).filter(Boolean),
+                        };
+                    }
+                    return out;
+                },
+                // 这次要推的:版本和"服务器已确认"不同的历史条目 + 没确认过的墓碑
+                _histPending() {
+                    const st = this._histSyncLoad();
+                    const items = (this.watchHistory || []).filter(it => it && it.name && st.items[it.name] !== it.watchedAt);
+                    const tomb = this._loadTombstones();
+                    const tombs = Object.keys(tomb).filter(id => st.tombs[id] !== tomb[id]).map(id => ({ id, deleted_at: tomb[id] }));
+                    return { items, tombs };
+                },
+
+                // 实际执行推送(增量:只推变化的)
                 async _doPushHistory() {
                     if (!this.syncEnabled || !this.syncToken) return;
 
                     this._lastPushTime = Date.now();
 
                     try {
-                        // 构建推送数据
-                        const historyToSync = this.watchHistory.map(item => ({
+                        const { items, tombs } = this._histPending();
+                        if (!items.length && !tombs.length) return;   // 没有变化:不发请求
+                        // 发送那一刻的版本号:推送期间又看了一会儿(watchedAt 变了)的条目,确认的是旧版本、下次还会推新版本
+                        const sent = items.map(it => [it.name, it.watchedAt]);
+                        const historyToSync = items.map(item => ({
                             id: item.name,  // 使用名称作为唯一 ID
-                            data: item,
+                            data: this._slimHistoryItem(item),
                             updated_at: new Date(item.watchedAt).getTime()
                         }));
-
-                        const tomb = this._loadTombstones();
-                        const deleted = Object.keys(tomb).map(id => ({ id, deleted_at: tomb[id] }));
-                        await fetch('/api/history/push', {
+                        const res = await fetch('/api/history/push', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 token: this.syncToken,
                                 history: historyToSync,
-                                deleted: deleted,
+                                deleted: tombs,
                                 // 顺带上报自己的邮箱，让站长后台能显示是谁(否则只有登录时才有，老用户一直缺)
                                 label: localStorage.getItem('emax_v2board_email') || ''
                             })
                         });
-                        console.log('[同步] 推送成功，共', historyToSync.length, '条记录,', deleted.length, '条墓碑');
+                        if (!res.ok) { console.warn('[同步] 推送失败 HTTP', res.status, '(下次重试)'); return; }
+                        const j = await res.json().catch(() => ({}));
+                        // 服务器没存下(没开同步 / 服务器没有 SQLite)→ 不记"已确认",以后还会推
+                        if (!j || j.sync_enabled === false || j.message) { console.warn('[同步] 服务器未保存历史:', (j && j.message) || 'sync disabled'); return; }
+                        const st = this._histSyncLoad();
+                        sent.forEach(([name, at]) => { st.items[name] = at; });
+                        tombs.forEach(t => { st.tombs[t.id] = t.deleted_at; });
+                        // 只留本地还在的条目/墓碑的确认记录,不无限增长
+                        const names = new Set((this.watchHistory || []).map(it => it && it.name));
+                        Object.keys(st.items).forEach(k => { if (!names.has(k)) delete st.items[k]; });
+                        const tombNow = this._loadTombstones();
+                        Object.keys(st.tombs).forEach(k => { if (tombNow[k] == null) delete st.tombs[k]; });
+                        this._histSyncSave(st);
+                        console.log('[同步] 增量推送成功:', historyToSync.length, '条记录,', tombs.length, '条墓碑');
                     } catch (e) {
                         console.error('[同步] 推送历史失败:', e);
                     }
                 },
 
                 // 使用 sendBeacon 进行最后一次推送（页面关闭时调用）
+                //   只发变化的条目(通常就是正在看的这一部,瘦身后几 KB);sendBeacon 有 64KB 上限 → 按最近观看优先装到 60KB 为止。
+                //   发出去也不记"已确认"(beacon 不知道成没成功):下次打开会再推一次,服务器对同一版本直接跳过。
                 pushHistoryBeacon() {
                     if (!this.syncEnabled || !this.syncToken) return;
 
                     try {
-                        const historyToSync = this.watchHistory.map(item => ({
-                            id: item.name,
-                            data: item,
-                            updated_at: new Date(item.watchedAt).getTime()
-                        }));
-
-                        const tomb = this._loadTombstones();
-                        const data = JSON.stringify({
-                            token: this.syncToken,
-                            history: historyToSync,
-                            deleted: Object.keys(tomb).map(id => ({ id, deleted_at: tomb[id] })),
-                            label: localStorage.getItem('emax_v2board_email') || ''
-                        });
+                        const { items, tombs } = this._histPending();
+                        if (!items.length && !tombs.length) return;
+                        const base = { token: this.syncToken, history: [], deleted: tombs, label: localStorage.getItem('emax_v2board_email') || '' };
+                        let size = JSON.stringify(base).length;
+                        const sorted = items.slice().sort((a, b) => new Date(b.watchedAt || 0).getTime() - new Date(a.watchedAt || 0).getTime());
+                        for (const item of sorted) {
+                            const entry = { id: item.name, data: this._slimHistoryItem(item), updated_at: new Date(item.watchedAt).getTime() };
+                            const add = JSON.stringify(entry).length + 1;
+                            if (size + add > 60000) continue;
+                            base.history.push(entry); size += add;
+                        }
+                        if (!base.history.length && !tombs.length) return;
+                        const data = JSON.stringify(base);
 
                         // sendBeacon 确保页面关闭时数据也能发送
                         if (navigator.sendBeacon) {
-                            navigator.sendBeacon('/api/history/push', new Blob([data], { type: 'application/json' }));
-                            console.log('[同步] Beacon 推送');
+                            const ok = navigator.sendBeacon('/api/history/push', new Blob([data], { type: 'application/json' }));
+                            console.log('[同步] Beacon 推送', ok ? '已排队' : '被拒(下次打开再推)', base.history.length, '条');
                         }
                     } catch (e) {
                         console.error('[同步] Beacon 推送失败:', e);
@@ -8904,6 +8975,7 @@
 
                         // 清除本地观看历史（防止不同用户数据交叉）
                         localStorage.removeItem('donggua_watch_history');
+                        localStorage.removeItem('donggua_hist_synced');   // 增量同步的"服务器已确认"记录(本来就按账号隔离,退出时一并清掉)
 
                         // 清除所有播放进度记录
                         const keysToRemove = [];
