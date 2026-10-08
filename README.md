@@ -380,7 +380,7 @@ DPlayer + hls.js（打过补丁，修正 Chrome 长时间播放后声音变低�
 ### 账号、同步与求片
 
 - **访问密码**：`ACCESS_PASSWORD` 逗号分隔多个时，第 1 个是多人共用的主密码（不同步），其余每个是一个独立用户。注意：目前密码只拦截页面，搜索等接口本身不校验密码。
-- **同步**：独立用户的观看历史（含删除记录，跨设备不会被同步回来）、弹幕开关/样式、封面大小、最近频道跨设备同步。需 `CACHE_TYPE=sqlite`。
+- **同步**：独立用户的观看历史（含删除记录，跨设备不会被同步回来）、弹幕开关/样式、封面大小、最近频道跨设备同步。需 `CACHE_TYPE=sqlite`。历史是增量同步：只推送有变化的那几部，每部只带上次用的线路的选集，播放中每次推送几 KB。
 - **求片**：配了 `ADMIN_TOKEN` 才出现。登录用户可提交想看但站内没有的片（可附年份、外文名、导演主演、备注），每人最多 3 条待处理、可撤销；站长在后台贴链接（磁力/下载/站内/外站均可）或标记"需补充信息 / 无法提供"，用户在「我的求片」查看。
 - **封禁**：站长可封禁用户，被封用户整站锁屏，同步与求片接口一律拒绝。
 
@@ -504,6 +504,7 @@ cp /opt/dongguaTV/db.json /root/backup/
 | `node scripts/danmaku-cache-test.mjs` | 弹幕服务器缓存 |
 | `node scripts/user-stats-test.mjs` | 观看与分享统计、站长后台接口 |
 | `node scripts/watch-meter-test.mjs` | 播放页观看计时（只在真的在播时计、离线合并补发） |
+| `node scripts/history-sync-test.mjs` | 观看历史增量同步（只推变化的、瘦身、双设备端到端） |
 | `node scripts/check-hls-lc-patch.mjs` | hls.js 音频补丁（升级 hls.js 时必跑） |
 
 - **改了前端库**：`public/sw.js` 里预缓存的库要同时升 `?v=` 和 `CACHE_VERSION`。
