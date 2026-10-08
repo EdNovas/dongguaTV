@@ -1,0 +1,9211 @@
+[
+ {
+  "group": "g1-seasons",
+  "keyword": "庆余年",
+  "title": "庆余年第二季",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "",
+   "eps": 36
+  },
+  "ep": "第18集",
+  "candidates": [
+   {
+    "animeTitle": "庆余年第二季(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "庆余年第一季 特别版(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "庆余年(2019)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "庆余年第二季(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 36-ep 2024 group is S2; only one S2 candidate. Traps: bare 庆余年(2019) and 庆余年第一季 特别版(2024).",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "庆余年",
+  "title": "庆余年 第一季",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "",
+   "eps": 46
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "庆余年第一季 特别版(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "庆余年第二季(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "庆余年(2019)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "《庆余年》独家专访(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "庆余年(2019)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 46-ep 2019 S1 is 庆余年(2019). 庆余年第一季 特别版(2024) is a 25-ep compressed recut with different episode boundaries, so it does not count. Trap: 特别版 is the only candidate whose name contains 第一季, so a season filter picks it.",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "庆余年",
+  "title": "庆余年之风起沧州",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "",
+   "eps": 74
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "Our group is a 74-ep 2024 spin-off/short drama. 360 returns no candidates, so the correct output is no danmaku.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "长相思",
+  "title": "长相思第二季",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 23
+  },
+  "ep": "第10集",
+  "candidates": [
+   {
+    "animeTitle": "长相思 第二部(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "长相思 第二季(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "长相思 第一季(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "长相思(1947)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长相思[全季](2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "长相思(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "长相思 第二季(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 23-ep 2024 S2 drama. Traps: 长相思 第二部(2024)【动漫】 (anime), 长相思[全季] (combined), 长相思(1947)【电影】, 长相思(2024)【动漫】.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "长相思",
+  "title": "长相思",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产剧",
+   "eps": 42
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "长相思(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "长相思 第二部(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "长相思 第二季(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "长相思 第一季(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "长相思(1947)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长相思  动态漫解说(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "长相思 动态漫画(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "长相思[全季](2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "长相思 第一季(2023)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 2023 drama (39 eps + extras) is S1. The exact-name candidates are 长相思(2024)【动漫】 and 长相思(1947)【电影】 (a 周璇 film), both wrong. 长相思[全季](2024) may hold S1+S2 under continuous numbering but is unverified, so it is left out.",
+  "prod": {
+   "n": 151,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "唐朝诡事录",
+  "title": "唐朝诡事录",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "国产剧",
+   "eps": 36
+  },
+  "ep": "第18集",
+  "candidates": [
+   {
+    "animeTitle": "唐朝诡事录(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐朝诡事录之长安(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐朝诡事录之西行(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "唐朝诡事录(2022)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name and year. Sequels 之西行/之长安 are traps by containment.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "唐朝诡事录",
+  "title": "唐朝诡事录之西行",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 49
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "唐朝诡事录之西行(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐朝诡事录(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐朝诡事录之长安(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "唐朝诡事录之西行(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name and year. Traps: 唐朝诡事录(2022) and 之长安(2025).",
+  "prod": {
+   "n": 7075,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "唐朝诡事录",
+  "title": "唐朝诡事录之长安",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产剧",
+   "eps": 40
+  },
+  "ep": "第20集",
+  "candidates": [
+   {
+    "animeTitle": "唐朝诡事录之长安(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "唐朝诡事录之长安(2025)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name and year; it is the only candidate.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "琅琊榜",
+  "title": "琅琊榜",
+  "ours": {
+   "vod_year": "2015",
+   "type_name": "国产剧",
+   "eps": 55
+  },
+  "ep": "第27集",
+  "candidates": [
+   {
+    "animeTitle": "琅琊榜(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "琅琊榜之风起长林(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "炕头琅琊榜(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "黄河文化大会·琅琊风云榜(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "琅琊榜(2015)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name and year. Trap: 琅琊榜之风起长林 by containment.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "琅琊榜",
+  "title": "琅琊榜之风起长林",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "国产剧",
+   "eps": 50
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "琅琊榜之风起长林(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "琅琊榜之风起长林(2017)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name and year.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "琅琊榜",
+  "title": "琅琊榜粤语",
+  "ours": {
+   "vod_year": "2015",
+   "type_name": "国产剧",
+   "eps": 40
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "A Cantonese 40-ep cut. 360 has no candidates, and Mandarin 54-ep danmaku would not line up with its episodes anyway.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "鬼吹灯",
+  "title": "鬼吹灯之黄皮子坟",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "国产剧",
+   "eps": 20
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "鬼吹灯之黄皮子坟(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "黄皮子坟(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "鬼吹灯之黄皮子坟(2017)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 20-ep 2017 TV series equals the exact-name 2017 电视剧.",
+  "prod": {
+   "n": 3366,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "鬼吹灯",
+  "title": "鬼吹灯之黄皮子坟",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "恐怖片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "鬼吹灯之黄皮子坟(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "黄皮子坟(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "黄皮子坟(2021)【电影】from 360"
+  ],
+  "truthWhy": "Our 2021 web film (HD国语) is 360's 黄皮子坟(2021)【电影】. Trap: the same-name 2017 TV series is the exact-name candidate. The prod id carries no year/type, so this film and the TV series share a title key.",
+  "prod": {
+   "n": 128,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "鬼吹灯",
+  "title": "鬼吹灯之南海归墟",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "动作片",
+   "eps": 16
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "鬼吹灯之南海归墟(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼吹灯之南海归墟(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "鬼吹灯之南海归墟(2022)【电影】from 360"
+  ],
+  "truthWhy": "Our 2023 film (HD国语) is the 2022/23 film (year within ±1). Trap: 鬼吹灯之南海归墟(2025)【动漫】 has the exact same name.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "老九门",
+  "title": "老九门",
+  "ours": {
+   "vod_year": "2016",
+   "type_name": "国产剧",
+   "eps": 52
+  },
+  "ep": "第24集",
+  "candidates": [
+   {
+    "animeTitle": "老九门(2016)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "老九门番外之虎骨梅花(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "老九门番外之二月花开(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "老九门之青山海棠(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "老九门(2016)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name and year. The 番外 films and 青山海棠 are containment traps.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "老九门",
+  "title": "老九门番外之虎骨梅花",
+  "ours": {
+   "vod_year": "2016",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "老九门番外之虎骨梅花(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "老九门番外之虎骨梅花(2016)【电影】from 360"
+  ],
+  "truthWhy": "Exact name and year.",
+  "prod": {
+   "n": 343,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "老九门",
+  "title": "老九门之青山海棠",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "老九门之青山海棠(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "老九门之青山海棠(2022)【电影】from 360"
+  ],
+  "truthWhy": "Exact name and year.",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "流浪地球",
+  "title": "流浪地球",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "科幻片",
+   "eps": 2
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "流浪地球(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球2(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球2：再次冒险(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "末世万物升级系统(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "流浪地球(2020)【电影】from 360"
+  ],
+  "truthWhy": "The film is 2019; 360 lists 2020 (within ±1). Traps: 流浪地球2 and 流浪地球2：再次冒险 by containment.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "流浪地球",
+  "title": "流浪地球2",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "科幻片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "流浪地球2(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球2：再次冒险(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "流浪地球2(2023)【电影】from 360"
+  ],
+  "truthWhy": "Exact name. Traps: base 流浪地球(2020) (sequel number) and 再次冒险 (documentary).",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "流浪地球",
+  "title": "流浪地球(特别版)",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "科幻片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "流浪地球(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "流浪地球(2020)【电影】from 360"
+  ],
+  "truthWhy": "A special/extended edition of the same film, so it is acceptable (minor timing drift).",
+  "prod": {
+   "n": 458,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "斗罗大陆",
+  "title": "斗罗大陆",
+  "ours": {
+   "vod_year": "2018",
+   "type_name": "国产动漫",
+   "eps": 265
+  },
+  "ep": "第130集",
+  "candidates": [
+   {
+    "animeTitle": "斗罗大陆(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆(2021)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2 绝世唐门 荣耀篇 动态漫画(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆Ⅱ绝世唐门 海神缘高光合集(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆Ⅱ绝世唐门  新七怪高光合集(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆Ⅱ绝世唐门 第二次魂师大赛纯享版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆Ⅱ绝世唐门 第一次斗魂大赛精剪版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆Ⅱ绝世唐门合集篇(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆剧场版 剑道尘心(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆4终极斗罗（上）(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2：绝世唐门第一季(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2：绝世唐门第二季(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆5重生唐三 动态漫画(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆5重生唐三(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆5重生唐三·动态漫(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 合集(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "斗罗大陆(2018)【动漫】from 360"
+  ],
+  "truthWhy": "Our 265-ep 2018 anime. Trap: 斗罗大陆(2021)【电视剧】 (live action) has the exact same name, plus many sequels by containment.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "斗罗大陆",
+  "title": "斗罗大陆之燃魂战",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 39
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "斗罗大陆之燃魂战(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "斗罗大陆之燃魂战(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name and year; it is the only candidate.",
+  "prod": {
+   "n": 338,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "斗罗大陆",
+  "title": "斗罗大陆2：绝世唐门",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产动漫",
+   "eps": 173
+  },
+  "ep": "第100集",
+  "candidates": [
+   {
+    "animeTitle": "斗罗大陆2绝世唐门(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2：绝世唐门第一季(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2：绝世唐门第二季(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第六季(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第五季(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第四季(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第三季(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2 绝世唐门 荣耀篇 动态漫画(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "《斗罗大陆2绝世唐门》第一季(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 合集(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 动态漫画 第6季(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第6季·动态漫(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第5季·动态漫(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第二季：荣耀篇（上）(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第二季：荣耀篇（下）(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 动态漫画 第5季(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第3季·动态漫(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 动态漫画 第4季(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗罗大陆2绝世唐门 第4季·动态漫(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "Our group is the 2023 3D anime (173 eps, weekly since 2023). Every candidate for this exact title is a 2018-2024 动态漫画 season (26/28/52 eps per 360 upinfo). The 3D anime 斗罗大陆Ⅱ绝世唐门(2023)【动漫】 shows up only under other search titles (斗罗大陆II绝世唐门 / 斗罗大陆). The fullwidth colon also blocks exact-tier matches.",
+  "prod": {
+   "n": 441,
+   "verdict": "unclear"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "甄嬛传",
+  "title": "甄嬛传",
+  "ours": {
+   "vod_year": "2011",
+   "type_name": "国产剧",
+   "eps": 76
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "后宫甄嬛传(2011)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "甄嬛传之鸾凤还巢(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "甄嬛爱不停——甄嬛传小主节晚会(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "甄嬛传（美版）(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "揭秘甄嬛传(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "正解甄嬛传(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "甄嬛传十级学者穿越后称霸后宫(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "后宫甄嬛传(2011)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 76-ep 2011 drama is 后宫甄嬛传. Trap: 甄嬛传（美版）(2018) has core name exactly 甄嬛传 (exact tier), while the real show is only a containment match. 甄嬛传之鸾凤还巢(2015) is also a containment match.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "甄嬛传",
+  "title": "后宫·甄嬛传",
+  "ours": {
+   "vod_year": "2011",
+   "type_name": "国产剧",
+   "eps": 76
+  },
+  "ep": "第38集",
+  "candidates": [
+   {
+    "animeTitle": "后宫甄嬛传(2011)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "后宫甄嬛传(2011)【电视剧】from 360"
+  ],
+  "truthWhy": "The only candidate is the same show; the names differ only by the middle dot.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "甄嬛传",
+  "title": "甄嬛爱不停",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "大陆综艺",
+   "eps": 6
+  },
+  "ep": "20250111小主节晚会上",
+  "candidates": [
+   {
+    "animeTitle": "甄嬛爱不停——甄嬛传小主节晚会(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "甄嬛爱不停——甄嬛传小主节晚会(2025)【综艺】from 360"
+  ],
+  "truthWhy": "Our 2025 variety show (6 parts dated 20250111: 小主节晚会 上/中/下 + 小主陪你一起看 上/中/下) is this gala.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "仙剑奇侠传",
+  "title": "仙剑奇侠传",
+  "ours": {
+   "vod_year": "2005",
+   "type_name": "国产剧",
+   "eps": 34
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "仙剑奇侠传 第三部(2009)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑奇侠传(2004)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑奇侠传5(2012)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "仙剑奇侠传六(2015)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "仙剑奇侠传三(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "《仙剑奇侠传三》纯享版(2009)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑云之凡(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑四(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑奇侠传前传：酒剑仙(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "仙剑奇侠传(2004)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 2005 34-ep drama; 360 lists 2004 (within ±1). Traps: 第三部, 仙剑奇侠传三(2025 动漫), 5, 六, 前传 film.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "仙剑奇侠传",
+  "title": "仙剑奇侠传三",
+  "ours": {
+   "vod_year": "2009",
+   "type_name": "国产剧",
+   "eps": 37
+  },
+  "ep": "第18集",
+  "candidates": [
+   {
+    "animeTitle": "仙剑奇侠传 第三部(2009)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑奇侠传三(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "仙剑奇侠传(2004)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "《仙剑奇侠传三》纯享版(2009)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "仙剑奇侠传 第三部(2009)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 2009 37-ep TV drama is 360's 仙剑奇侠传 第三部. Trap: 仙剑奇侠传三(2025)【动漫】 has the exact same name. 《仙剑奇侠传三》纯享版 is a recut.",
+  "prod": {
+   "n": 1123,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "仙剑奇侠传",
+  "title": "仙剑奇侠传叁",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产动漫",
+   "eps": 26
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "仙剑奇侠传 第三部(2009)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑奇侠传三(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "仙剑奇侠传(2004)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "《仙剑奇侠传三》纯享版(2009)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑奇侠传六(2015)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "仙剑奇侠传5(2012)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "仙剑云之凡(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑四(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "仙剑奇侠传前传：酒剑仙(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "仙剑奇侠传三(2025)【动漫】from 360"
+  ],
+  "truthWhy": "叁 is a variant of 三; same 2025 anime, 26 eps. Trap: a name-only matcher falls back to 仙剑奇侠传(2004) by containment.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "欢乐颂",
+  "title": "欢乐颂",
+  "ours": {
+   "vod_year": "2016",
+   "type_name": "国产剧",
+   "eps": 42
+  },
+  "ep": "第21集",
+  "candidates": [
+   {
+    "animeTitle": "欢乐颂2(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂(2016)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂5(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂4(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂3(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂(1999)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "重现贝多芬(2006)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "喜悦(1950)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "买奇酷之梦想三国欢乐颂(2017)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "熊熊欢乐颂第2季[磨耳朵英文版](2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "优米萌欢乐颂(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "熊熊欢乐颂 第2季(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "欢乐颂(2016)【电视剧】from 360"
+  ],
+  "truthWhy": "Our 42-ep 2016 drama. Traps: 欢乐颂(1999)【电影】 has the exact same name; 欢乐颂2-5 by containment.",
+  "prod": {
+   "n": 134,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "欢乐颂",
+  "title": "欢乐颂2",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "国产剧",
+   "eps": 55
+  },
+  "ep": "第28集",
+  "candidates": [
+   {
+    "animeTitle": "欢乐颂2(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "熊熊欢乐颂 第2季(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "熊熊欢乐颂第2季[磨耳朵英文版](2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "欢乐颂(2016)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂(1999)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "优米萌欢乐颂(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "欢乐颂5(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂4(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂3(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "欢乐颂2(2017)【电视剧】from 360"
+  ],
+  "truthWhy": "Exact name. Traps: 欢乐颂(2016) base and 熊熊欢乐颂 第2季 (same season number).",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "欢乐颂",
+  "title": "欢乐颂",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "欢乐颂2(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂(2016)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂5(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂4(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂3(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "欢乐颂(1999)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "重现贝多芬(2006)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "喜悦(1950)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "买奇酷之梦想三国欢乐颂(2017)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "熊熊欢乐颂第2季[磨耳朵英文版](2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "优米萌欢乐颂(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "熊熊欢乐颂 第2季(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "Our 2019 喜剧片 is a 2019 comedy film (probably the US Ode to Joy). The only same-name candidates are the 2016 TV drama and a 1999 film, so none applies.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "父母爱情",
+  "title": "父母爱情",
+  "ours": {
+   "vod_year": "2014",
+   "type_name": "国产剧",
+   "eps": 45
+  },
+  "ep": "第22集",
+  "candidates": [
+   {
+    "animeTitle": "父母爱情(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "父母爱情(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "父母爱情 45集版(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "父母爱情(2014)【电视剧】from 360",
+   "父母爱情 45集版(2014)【电视剧】from 360"
+  ],
+  "truthWhy": "Our group is the 2014 drama (44/45 eps depending on site). The 45集版 is the same work with slightly different episode boundaries. Trap: 父母爱情(2023)【电影】 has the exact same name.",
+  "prod": {
+   "n": 8650,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "父母爱情",
+  "title": "父母爱情1999",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "现代都市",
+   "eps": 2
+  },
+  "ep": "第1-30集",
+  "candidates": [
+   {
+    "animeTitle": "父母爱情(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "父母爱情 45集版(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "父母爱情(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "A 2025 short drama (63 eps). 360 only has the 2014 drama and the 2023 film. Trap: dropping the year turns 父母爱情1999 into the bare 父母爱情.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g1-seasons",
+  "keyword": "父母爱情",
+  "title": "新：父母爱情",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "现代都市",
+   "eps": 2
+  },
+  "ep": "第1-20集",
+  "candidates": [
+   {
+    "animeTitle": "父母爱情(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "父母爱情(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "A 2025 short drama (39 eps). Trap: containment match to 父母爱情(2014).",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "天龙八部",
+  "title": "天龙八部2003",
+  "ours": {
+   "vod_year": "2003",
+   "type_name": "国产剧",
+   "eps": 40
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "天龙八部 胡军版(2003)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "天龙八部 胡军版(2003)【电视剧】from 360"
+  ],
+  "truthWhy": "唯一候选即胡军版2003(40集),与我方2003/40集一致。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "天龙八部",
+  "title": "天龙八部",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "内地剧",
+   "eps": 50
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "天龙八部 胡军版(2003)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部(2009)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "天龙八部 黄日华版(1997)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新天龙八部之天山童姥(1994)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "天龙八部之六脉神剑[粤语版](1982)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部之六脉神剑[普通话版](1982)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部钟汉良版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部之乔峰传 粤语(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "天龙八部之乔峰传(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "新天龙八部 浙江卫视TV版(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新天龙八部(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "《天龙八部之乔峰传》深度推荐(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "天龙八部 漫动画(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "漫动画·天龙八部(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "360搜\"天龙八部\"无2021杨祐宁版;候选是2003胡军/1997黄日华/2013钟汉良/新天龙八部2013-14/1994&2023电影/2009综艺/2019漫动画,全是别的版本。同名陷阱:\"天龙八部 胡军版(2003)\"排第一、\"天龙八部(2009)【综艺】\"名字完全相同。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "天龙八部",
+  "title": "天龙八部",
+  "ours": {
+   "vod_year": "1977",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "天龙八部 胡军版(2003)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部(2009)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "天龙八部 黄日华版(1997)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新天龙八部之天山童姥(1994)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "天龙八部之六脉神剑[粤语版](1982)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部之六脉神剑[普通话版](1982)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部钟汉良版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "天龙八部之乔峰传 粤语(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "天龙八部之乔峰传(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "新天龙八部 浙江卫视TV版(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新天龙八部(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "《天龙八部之乔峰传》深度推荐(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "天龙八部 漫动画(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "漫动画·天龙八部(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "1977邵氏电影不在候选中;同名陷阱:\"天龙八部(2009)【综艺】\"完全同名、多个同名电视剧版本、1994/2023电影。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "射雕英雄传",
+  "title": "射雕英雄传2017",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "国产剧",
+   "eps": 52
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "射雕英雄传(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传 胡歌版(2008)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传之铁血丹心(1983)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传之华山论剑(1983)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传3(1981)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "射雕英雄传之东邪西毒(1983)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传 李亚鹏版(2003)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传(1977)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "射雕英雄传[普通话版](1994)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传[粤语版](1994)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传之九阴真经[普通话版](1993)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传之九阴真经[粤语版](1993)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传 94版(1994)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传94版(1994)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "射雕英雄传：侠之大者(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "射雕英雄传第三集(1981)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "射雕英雄传之九阴白骨爪(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "射鵰英雄传续集(1977)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "射雕英雄传(2017)【电视剧】from 360"
+  ],
+  "truthWhy": "2017杨旭文版52集,年份类型都吻合。同名陷阱:射雕英雄传(1977)【电影】完全同名,94版/83版/胡歌版/李亚鹏版等。",
+  "prod": {
+   "n": 80,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "射雕英雄传",
+  "title": "射雕英雄传李亚鹏版",
+  "ours": {
+   "vod_year": "2003",
+   "type_name": "国产剧",
+   "eps": 42
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "射雕英雄传 李亚鹏版(2003)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "射雕英雄传 李亚鹏版(2003)【电视剧】from 360"
+  ],
+  "truthWhy": "唯一候选即2003李亚鹏版42集。",
+  "prod": {
+   "n": 4876,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "射雕英雄传",
+  "title": "射雕英雄传：侠之大者",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "射雕英雄传：侠之大者(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "射雕英雄传(2017)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "射雕英雄传：侠之大者(2025)【电影】from 360"
+  ],
+  "truthWhy": "2025肖战电影,首个候选完全吻合;第二候选射雕英雄传(2017)电视剧是名字包含陷阱。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "倚天屠龙记",
+  "title": "倚天屠龙记邓超版",
+  "ours": {
+   "vod_year": "2009",
+   "type_name": "国产剧",
+   "eps": 40
+  },
+  "ep": "倚天屠龙记邓超版第01-02集",
+  "candidates": [
+   {
+    "animeTitle": "倚天屠龙记 苏有朋版(2003)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "唯一候选是苏有朋版(2003),不是邓超版(2009),属\"同名不同版\"陷阱。集名为\"第01-02集\"合并集。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "倚天屠龙记",
+  "title": "倚天屠龙记",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "国产剧",
+   "eps": 50
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "倚天屠龙记(1963)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "倚天屠龙记(1994)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "倚天屠龙记2(1978)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "倚天屠龙记 苏有朋版(2003)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "倚天屠龙记之魔教教主(1993)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "倚天屠龙记 78版(1978)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "倚天屠龙记 01版(2001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "倚天屠龙记大结局(1978)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "倚天屠龙记[粤语版](2001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "倚天屠龙记[普通话版](2001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "倚天屠龙记86版[普通话版](1986)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "倚天屠龙记之九阳神功(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "倚天屠龙记之圣火雄风(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "倚天屠龙记之九阳神功 粤语(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《倚天屠龙记之九阳神功》深度推荐(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "候选无2019曾舜晞版(只有1963/1978/1993/2022电影,1986/1994/2001/2003剧)。同名陷阱:倚天屠龙记(1994)【电视剧】、倚天屠龙记(1963)【电影】完全同名。",
+  "prod": {
+   "n": 9541,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "倚天屠龙记",
+  "title": "倚天屠龙记之圣火雄风",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "倚天屠龙记之圣火雄风(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "倚天屠龙记之圣火雄风(2022)【电影】from 360"
+  ],
+  "truthWhy": "唯一候选,名称年份类型完全吻合。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "西游记",
+  "title": "西游记",
+  "ours": {
+   "vod_year": "1986",
+   "type_name": "国产剧",
+   "eps": 25
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "西游记(1986)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "西游记(1966)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "西游记的故事 第2季(2015)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "西游记的故事 第1季(2014)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "西游记之大闹天宫(2014)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "西游记后传(2001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "西游记续集 03版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "西游记之大圣归来(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "西游记 浙版(2010)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "西游记·女儿国(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "西游记之孙悟空三打白骨精(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "西游记98动画版(2010)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "西游记动画 99年版(1999)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "西游记的故事(2015)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "新西游记(2011)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "西游记(1986)【电视剧】from 360"
+  ],
+  "truthWhy": "86版央视25集,候选第一个即是。陷阱:西游记(1966)【电影】完全同名、西游记 浙版(2010)、动画版。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "西游记",
+  "title": "西游记后传",
+  "ours": {
+   "vod_year": "2000",
+   "type_name": "国产剧",
+   "eps": 30
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "西游记后传(2001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "西游记后传大圣降妖(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "西游记后传(2001)【电视剧】from 360"
+  ],
+  "truthWhy": "2000/2001(±1)同一部30集剧。陷阱:西游记后传大圣降妖(2025)【动漫】。",
+  "prod": {
+   "n": 3369,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "西游记",
+  "title": "新西游记 第八季",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "日韩综艺",
+   "eps": 11
+  },
+  "ep": "第1期",
+  "candidates": [
+   {
+    "animeTitle": "西游记(1986)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新西游记(2011)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "韩综《新西游记8》不在候选;候选只有西游记(1986)剧、新西游记(2011)剧。陷阱:\"新西游记(2011)【电视剧】\"与我方剥季号后同名。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "红楼梦",
+  "title": "红楼梦",
+  "ours": {
+   "vod_year": "2010",
+   "type_name": "国产剧",
+   "eps": 50
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "红楼梦 1962(1962)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦(1945)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦(2010)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "红楼梦(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "红楼梦 87版(1987)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新红楼梦(2009)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "红楼梦越剧版(2002)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "红楼梦 少儿版 孩子成长必看经典名著(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "红楼梦少儿动画(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "红楼梦里学速算，用古典文学碰撞现代数学(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "红楼梦之金玉良缘(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦第六部：宝玉化石(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦第五部：晴雯夭亡(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦第四部：二尤惨死(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦第三部：凤姐泼醋(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦第二部：黛玉葬花(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红楼梦第一部：宝黛相会(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "新红楼梦(2009)【电视剧】from 360"
+  ],
+  "truthWhy": "我方2010/50集=李少红版;360记作\"新红楼梦(2009)\"(导演李少红,杨洋/蒋梦婕/李沁),年份±1。陷阱:\"红楼梦(2010)【动漫】\"同名同年但是儿童动画;87版、1945/1962电影、2022越剧。",
+  "prod": {
+   "n": 97,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "红楼梦",
+  "title": "红楼梦1987",
+  "ours": {
+   "vod_year": "1987",
+   "type_name": "国产剧",
+   "eps": 36
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "红楼梦 87版(1987)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "红楼梦 87版(1987)【电视剧】from 360"
+  ],
+  "truthWhy": "唯一候选即87版。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "红楼梦",
+  "title": "红楼梦之金玉良缘",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "剧情片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "红楼梦之金玉良缘(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "红楼梦之金玉良缘(2024)【电影】from 360"
+  ],
+  "truthWhy": "唯一候选,完全吻合。",
+  "prod": {
+   "n": 3539,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "三国演义",
+  "title": "三国演义",
+  "ours": {
+   "vod_year": "1994",
+   "type_name": "国产剧",
+   "eps": 84
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "三国演义(1994)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新三国演义(2010)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新三国大电影版(2010)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "三国演义 音频版(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义故事精选 音频版(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义经典名著 第3季(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义广播剧(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义经典名著 第二季(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义之阿信哥哥讲三国(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义 新版(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义 少儿版 孩子成长必看经典名著(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义手绘版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义少儿动画(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义动画版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义3D(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "ahakid启蒙：《三国演义》故事精选(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "必看经典动画系列：给孩子看的《三国演义》(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "三国演义(1994)【电视剧】from 360"
+  ],
+  "truthWhy": "94版央视84集,第一候选。陷阱:新三国演义(2010)、大量同名少儿动漫/音频版。",
+  "prod": {
+   "n": 5539,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "三国演义",
+  "title": "三国演义3D",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产动漫",
+   "eps": 60
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "三国演义3D(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "三国演义3D(2025)【动漫】from 360"
+  ],
+  "truthWhy": "唯一候选,同名同年同类型。",
+  "prod": {
+   "n": 692,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "三国演义",
+  "title": "三国演义",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "中国动漫",
+   "eps": 86
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "三国演义(1994)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新三国演义(2010)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新三国大电影版(2010)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "三国演义 音频版(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义故事精选 音频版(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义经典名著 第3季(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义广播剧(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义经典名著 第二季(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义之阿信哥哥讲三国(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义 新版(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义 少儿版 孩子成长必看经典名著(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义手绘版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义少儿动画(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义动画版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三国演义3D(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "ahakid启蒙：《三国演义》故事精选(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "必看经典动画系列：给孩子看的《三国演义》(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "候选里没有2017年的86集动画(只有94剧、2010新三国、2020-2026各种少儿动漫;三国演义3D记为2025/60集,集数不符)。名字陷阱:三国演义(1994)【电视剧】完全同名。",
+  "prod": {
+   "n": 2000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "笑傲江湖",
+  "title": "笑傲江湖 第四季",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "大陆综艺",
+   "eps": 13
+  },
+  "ep": "第20190525期",
+  "candidates": [
+   {
+    "animeTitle": "笑傲江湖 第四季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖4 会员Plus版(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖2：东方不败(1992)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "笑傲江湖 第三季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖 第二季(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "新笑傲江湖 TV版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖 第一季(2014)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "新笑傲江湖(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖 李亚鹏版(2001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖(1990)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "新笑傲江湖DVD版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖 马景涛版(2000)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "笑傲江湖 第四季(2019)【综艺】from 360"
+  ],
+  "truthWhy": "喜剧综艺第四季2019。\"笑傲江湖4 会员Plus版(2019)\"是同季加长版(时间轴不同,未列入)。陷阱:笑傲江湖2：东方不败(1992)电影、第一/二/三季、2013剧。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "笑傲江湖",
+  "title": "笑傲江湖2013",
+  "ours": {
+   "vod_year": "2013",
+   "type_name": "国产剧",
+   "eps": 56
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "笑傲江湖(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新笑傲江湖 TV版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新笑傲江湖DVD版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "笑傲江湖(2013)【电视剧】from 360",
+   "新笑傲江湖 TV版(2013)【电视剧】from 360",
+   "新笑傲江湖DVD版(2013)【电视剧】from 360"
+  ],
+  "truthWhy": "三个都是于正/霍建华2013版(演员表相同);我方56集最贴DVD版,TV版42集。陷阱:新笑傲江湖(2018)。",
+  "prod": {
+   "n": 848,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "笑傲江湖",
+  "title": "笑傲江湖",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "剧情片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "笑傲江湖 第四季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖 第三季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖 第二季(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖 第一季(2014)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖(1990)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "新笑傲江湖(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖2：东方不败(1992)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "笑傲江湖 李亚鹏版(2001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新笑傲江湖 TV版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖 马景涛版(2000)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖任贤齐版(1995)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新笑傲江湖DVD版(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖2：东方不败 粤语(1992)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "笑傲江湖4 会员Plus版(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖 天津卫视(2011)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "笑傲江湖00版(2000)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖84版[粤语版](1984)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "笑傲江湖84版[普通话版](1984)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "2025电影不在候选。陷阱:笑傲江湖(1990)【电影】同名同类型、笑傲江湖 第四季综艺排第一、笑傲江湖(2013)剧同名。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "神雕侠侣",
+  "title": "神雕侠侣2014",
+  "ours": {
+   "vod_year": "2014",
+   "type_name": "国产剧",
+   "eps": 54
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "新神雕侠侣(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "新神雕侠侣(2014)【电视剧】from 360"
+  ],
+  "truthWhy": "2014陈晓/陈妍希版,360名为\"新神雕侠侣(2014)\"。",
+  "prod": {
+   "n": 33,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "神雕侠侣",
+  "title": "神雕侠侣",
+  "ours": {
+   "vod_year": "2006",
+   "type_name": "内地剧",
+   "eps": 41
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "神雕侠侣(2003)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "神雕侠侣(2006)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "神雕侠侣(1982)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "神雕侠侣 古天乐版(1995)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新神雕侠侣(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "神雕侠侣 黄晓明版(2006)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "神雕侠侣82版(1982)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "九一神雕侠侣(1991)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "神雕侠侣:问世间(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "杨过与小龙女(1982)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "九二神雕之痴心情长剑(1999)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "神雕侠侣(2006)【电视剧】from 360",
+   "神雕侠侣 黄晓明版(2006)【电视剧】from 360"
+  ],
+  "truthWhy": "2006黄晓明/刘亦菲版41集,360有两条同一作品。陷阱:神雕侠侣(2003)【动漫】、(1982)【电影】同名;新神雕侠侣(2014)。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "神雕侠侣",
+  "title": "神雕侠侣：问世间",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "神雕侠侣:问世间(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "神雕侠侣:问世间(2022)【电影】from 360"
+  ],
+  "truthWhy": "360这条简介/主演(赵华为、王梓莼,导演林珍钊)与TMDB 2025版完全相同,是同一部;360年份2022是出品年,严格±1年规则会误杀。",
+  "prod": {
+   "n": 546,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "鹿鼎记",
+  "title": "鹿鼎记2020",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "国产剧",
+   "eps": 45
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "鹿鼎记(2020)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "鹿鼎记(2020)【电视剧】from 360"
+  ],
+  "truthWhy": "2020张一山版45集,唯一候选。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "鹿鼎记",
+  "title": "鹿鼎记",
+  "ours": {
+   "vod_year": "2008",
+   "type_name": "内地剧",
+   "eps": 50
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "鹿鼎记(1983)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "鹿鼎记(2020)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "鹿鼎記2(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "鹿鼎记 1983(1983)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "鹿鼎记 韩栋版(2014)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "鹿鼎记 陈小春版(1998)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "鹿鼎记[粤语版](1998)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "鹿鼎记84版[粤语版](1984)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "鹿鼎记84版[普通话版](1984)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "鹿鼎记II:神龙教(0001)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "候选无2008黄晓明版(只有1983电影、2020/2014/1998/1984剧、2026电影、鹿鼎记II)。同名陷阱:鹿鼎记(2020)【电视剧】、鹿鼎记(1983)【电影】完全同名。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "鹿鼎记",
+  "title": "鹿鼎记2：神龙教",
+  "ours": {
+   "vod_year": "1992",
+   "type_name": "喜剧片",
+   "eps": 2
+  },
+  "ep": "HD国语版",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "以此标题搜不到任何候选(360里该片名为\"鹿鼎记II:神龙教(0001)\",只在搜\"鹿鼎记\"时出现,年份为错误的0001)。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "包青天",
+  "title": "包青天",
+  "ours": {
+   "vod_year": "1993",
+   "type_name": "内地剧",
+   "eps": 236
+  },
+  "ep": "第50集",
+  "candidates": [
+   {
+    "animeTitle": "包青天(1993)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "包青天之开封奇案(2013)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "少年包青天第1部(2000)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "包青天之七侠五义(2010)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "包青天08版(2008)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "包青天之通判劫(2008)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "包青天  白龙驹(2008)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "包青天(1993)【电视剧】from 360"
+  ],
+  "truthWhy": "93台视金超群版236集,第一候选。陷阱:包青天08版、开封奇案、少年包青天第1部等。",
+  "prod": {
+   "n": 5678,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "包青天",
+  "title": "少年包青天2",
+  "ours": {
+   "vod_year": "2001",
+   "type_name": "国产剧",
+   "eps": 40
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "少年包青天第1部(2000)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "少年包青天第3部(2005)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "360只返回第1部(2000)和第3部(2005),没有第2部;第1部年份2000与2001在±1内,是\"错季\"陷阱。",
+  "prod": {
+   "n": 4587,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "包青天",
+  "title": "包青天再起风云粤语",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "香港剧",
+   "eps": 30
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "此标题搜不到任何候选。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "还珠格格",
+  "title": "还珠格格",
+  "ours": {
+   "vod_year": "1998",
+   "type_name": "国产剧",
+   "eps": 24
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "还珠格格 第三部(2004)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "还珠格格2015(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "新还珠格格(2011)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "360搜\"还珠格格\"只返回第三部(2004)、2015电影、新还珠格格(2011),没有1998第一部。陷阱:\"还珠格格 第三部\"错季。",
+  "prod": {
+   "n": 1,
+   "verdict": "unclear"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "还珠格格",
+  "title": "还珠格格第二部",
+  "ours": {
+   "vod_year": "1999",
+   "type_name": "国产剧",
+   "eps": 48
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "还珠格格 第三部(2004)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "新还珠格格(2011)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "还珠格格2015(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "候选无第二部,只有第三部(2004)/新还珠(2011)/2015电影;\"还珠格格 第三部\"是错季陷阱。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "还珠格格",
+  "title": "新还珠格格",
+  "ours": {
+   "vod_year": "2011",
+   "type_name": "国产剧",
+   "eps": 98
+  },
+  "ep": "第50集",
+  "candidates": [
+   {
+    "animeTitle": "新还珠格格(2011)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "还珠格格 第三部(2004)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "还珠格格2015(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "新还珠格格(2011)【电视剧】from 360"
+  ],
+  "truthWhy": "2011李晟/海陆版98集。",
+  "prod": {
+   "n": 4,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "水浒传",
+  "title": "水浒传1998",
+  "ours": {
+   "vod_year": "1998",
+   "type_name": "国产剧",
+   "eps": 43
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "水浒传(1998)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "水浒传(1998)【电视剧】from 360"
+  ],
+  "truthWhy": "98央视版43集,唯一候选。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "水浒传",
+  "title": "水浒传2011",
+  "ours": {
+   "vod_year": "2011",
+   "type_name": "国产剧",
+   "eps": 86
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "此标题搜不到任何候选(360无2011新水浒传)。同名卡\"水浒传 | 2011– | 国产剧 | 86集\"会以\"水浒传\"搜索→只有水浒传(1998)剧/1972电影/2003动漫,全是错版本。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g2-remakes",
+  "keyword": "水浒传",
+  "title": "北方谦三水浒传",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "日剧",
+   "eps": 7
+  },
+  "ep": "第1集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "此标题搜不到任何候选(2026 WOWOW织田裕二日剧)。",
+  "prod": {
+   "n": 8467,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "王牌对王牌",
+  "title": "王牌对王牌第九季",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "大陆综艺",
+   "eps": 60
+  },
+  "ep": "第20250905期",
+  "candidates": [
+   {
+    "animeTitle": "王牌对王牌 第9季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌第9季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第4季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第3季(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第二季(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第一季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌(1998)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "王牌对王牌 第8季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第八季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第三季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第四季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第五季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第七季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第六季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第5季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌（普通话）(1998)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "王牌对王牌第二季精彩片段(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "王牌对王牌 第9季(2025)【综艺】from 360",
+   "王牌对王牌第9季(2025)【综艺】from 360"
+  ],
+  "truthWhy": "Season 9 (2025); two platform pages (qq/qiyi) of the same season. Traps: 王牌对王牌(1998)【电影】 and seasons 1-8 in the same list.",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "王牌对王牌",
+  "title": "王牌对王牌",
+  "ours": {
+   "vod_year": "1998",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "王牌对王牌 第一季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌(1998)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "王牌对王牌 第四季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第六季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第5季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第3季(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第二季(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第4季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌（普通话）(1998)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "王牌对王牌粉丝特约版(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "谈判专家(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "王牌对王牌 第9季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第8季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌第9季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第八季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 精编版(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第三季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第五季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 夏日限定(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "王牌对王牌(1998)【电影】from 360",
+   "王牌对王牌（普通话）(1998)【电影】from 360"
+  ],
+  "truthWhy": "Our group is the 1998 film (The Negotiator); the 普通话 dub page is the same film. 谈判专家(2024) is the HK remake (different film). Trap: the bare name also equals the variety 王牌对王牌 第一季(2016) and all variety seasons.",
+  "prod": {
+   "n": 1741,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "王牌对王牌",
+  "title": "王牌对王牌第四季",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "大陆综艺",
+   "eps": 24
+  },
+  "ep": "第03期",
+  "candidates": [
+   {
+    "animeTitle": "王牌对王牌 第4季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第四季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第3季(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第二季(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第一季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌(1998)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "王牌对王牌（普通话）(1998)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "王牌对王牌 第9季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第8季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌第9季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第八季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第三季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第五季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第七季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第六季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "王牌对王牌 第5季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "王牌对王牌 第4季(2019)【综艺】from 360",
+   "王牌对王牌 第四季(2020)【综艺】from 360"
+  ],
+  "truthWhy": "Season 4 aired 2019; the bilibili1 page \"第四季(2020)\" is the same season with upload-year metadata. Traps: other seasons + the 1998 film.",
+  "prod": {
+   "n": 3737,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "奔跑吧",
+  "title": "奔跑吧·茶马古道篇",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "大陆综艺",
+   "eps": 17
+  },
+  "ep": "20241130",
+  "candidates": [
+   {
+    "animeTitle": "奔跑吧·茶马古道篇(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "奔跑吧茶马古道篇(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "奔跑吧·茶马古道篇(2024)【综艺】from 360",
+   "奔跑吧茶马古道篇(2024)【综艺】from 360"
+  ],
+  "truthWhy": "Exact same spin-off season, two platform pages (youku+qq / qiyi).",
+  "prod": {
+   "n": 1047,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "奔跑吧",
+  "title": "奔跑吧第十季",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "大陆综艺",
+   "eps": 59
+  },
+  "ep": "20260419第1期",
+  "candidates": [
+   {
+    "animeTitle": "奔跑吧第10季(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "奔跑吧 第10季(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "奔跑吧第10季(2026)【综艺】from 360",
+   "奔跑吧 第10季(2026)【综艺】from 360"
+  ],
+  "truthWhy": "Season 10 (2026), qiyi and qq pages.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "奔跑吧",
+  "title": "奔跑吧第一季",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "大陆综艺",
+   "eps": 13
+  },
+  "ep": "奔跑吧S01E01.20170414",
+  "candidates": [
+   {
+    "animeTitle": "奔跑吧 第一季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "奔跑吧兄弟第一季(2014)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "奔跑吧兄弟 第一季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "旅行格欣 奔跑吧 加拿大 第一季(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "奔跑吧(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "奔跑吧！兄弟(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "奔跑吧！少年(2026)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "奔跑吧，医生(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "奔跑吧！精英(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "奔跑吧梦想(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "奔跑吧兄弟(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "奔跑吧(2017)【综艺】from 360",
+   "奔跑吧 第一季(2020)【综艺】from 360"
+  ],
+  "truthWhy": "Our group = 奔跑吧 2017 (first season after the rename). 360 \"奔跑吧(2017)\" is it; bilibili1 \"奔跑吧 第一季(2020)\" is the same season with bilibili upload year (cf. 奔跑吧兄弟 第一季(2020) bilibili1 = the 2014 show). Traps: 奔跑吧兄弟第一季(2014) (different era/cast), 奔跑吧！兄弟(2015)【电影】, 旅行格欣 奔跑吧 加拿大 第一季(2017), dramas 奔跑吧，医生/精英.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "极限挑战",
+  "title": "极限挑战第十季",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "大陆综艺",
+   "eps": 36
+  },
+  "ep": "第2期",
+  "candidates": [
+   {
+    "animeTitle": "极限挑战 第10季(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第10季(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第四季(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第一季(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第三季(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第二季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第二季(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第一季(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第9季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第九季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第8季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第七季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第5季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第5季升级版(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第三季张艺兴CUT(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第一季(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "极限挑战 第10季(2024)【综艺】from 360",
+   "极限挑战第10季(2024)【综艺】from 360"
+  ],
+  "truthWhy": "Season 10 (2024), qq and youku/qiyi pages. 360 episode titles list 黄景瑜/黄明昊/岳云鹏/余文乐.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "极限挑战",
+  "title": "极限挑战第一季",
+  "ours": {
+   "vod_year": "2015",
+   "type_name": "大陆综艺",
+   "eps": 13
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "极限挑战 第一季(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第一季(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第一季(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "极限挑战 第四季(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第三季(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第二季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第二季(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第9季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第10季(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第10季(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第九季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第8季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战 第七季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第5季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第5季升级版(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "极限挑战第三季张艺兴CUT(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "极限挑战 第一季(2015)【综艺】from 360",
+   "极限挑战第一季(2015)【综艺】from 360"
+  ],
+  "truthWhy": "Season 1 (2015). \"极限挑战第一季(2015)【电视剧】from 360\" (xigua) is probably the same show mis-typed as 电视剧 (left out). Traps: seasons 2-10, 极限挑战第二季(2026) douyin re-upload.",
+  "prod": {
+   "n": 379,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "极限挑战",
+  "title": "极限挑战之皇家宝藏",
+  "ours": {
+   "vod_year": "2016",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "极限挑战之皇家宝藏(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "极限挑战之皇家宝藏(2016)【电影】from 360"
+  ],
+  "truthWhy": "The 2016 spin-off film; single exact candidate.",
+  "prod": {
+   "n": 138,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "向往的生活",
+  "title": "向往的生活",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "国产剧",
+   "eps": 35
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "向往的生活 第三季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活(2021)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "向往的生活 第二季(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第七季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第六季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第五季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第四季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活老友记(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活2 独享版(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活-戏如人生(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活6 VIP加长版(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活6 会员Plus版(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活5 会员Plus版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活5 VIP加长版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 全季精华版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活4 越南语字幕版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活4 会员Plus版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "向往的生活(2021)【电视剧】from 360"
+  ],
+  "truthWhy": "Our group is the 35-ep rural drama (包家屯, Guangxi, produced 2019); 360's only 电视剧 entry 向往的生活(2021) is that drama (year = broadcast year). Trap: bare-name variety 向往的生活(2017)【综艺】 (variety S1) and all variety seasons.",
+  "prod": {
+   "n": 907,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "向往的生活",
+  "title": "向往的生活第六季",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "大陆综艺",
+   "eps": 47
+  },
+  "ep": "20220429",
+  "candidates": [
+   {
+    "animeTitle": "向往的生活 第六季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活6 VIP加长版(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活6 会员Plus版(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第三季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第二季(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活老友记(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第七季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 全季精华版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第五季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的生活 第四季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "向往的渔乐生活 第二季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "向往的生活 第六季(2022)【综艺】from 360"
+  ],
+  "truthWhy": "Season 6 main page. 向往的生活6 VIP加长版 / 会员Plus版 are different cuts (different timeline), left out. Traps: other seasons, 向往的渔乐生活 第二季.",
+  "prod": {
+   "n": 1408,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "向往的生活",
+  "title": "向往的生活-戏如人生",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "大陆综艺",
+   "eps": 37
+  },
+  "ep": "第20250926期",
+  "candidates": [
+   {
+    "animeTitle": "向往的生活-戏如人生(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "向往的生活-戏如人生(2025)【综艺】from 360"
+  ],
+  "truthWhy": "Exact single candidate (2025 season).",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "乘风破浪",
+  "title": "乘风破浪的姐姐第一季",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "大陆综艺",
+   "eps": 45
+  },
+  "ep": "第02期",
+  "candidates": [
+   {
+    "animeTitle": "乘风破浪的姐姐 第二季（越南版）(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 第二季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 越南语字幕版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐2 越南语字幕版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐2 舞台直拍版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱X乘风破浪的姐姐(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 会员加长版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪 第三季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "乘风破浪的姐姐(2020)【综艺】from 360",
+   "乘风破浪的姐姐 越南语字幕版(2020)【综艺】from 360"
+  ],
+  "truthWhy": "Season 1 (2020) has no season marker on 360. 越南语字幕版 = same episodes with Vietnamese subs (acceptable). 会员加长版 is a different cut (left out). Traps: 乘风破浪的姐姐 第二季(2021), 乘风破浪 第三季(2022), 第二季（越南版）(2025, Vietnamese remake), 密室大逃脱X乘风破浪的姐姐 crossover.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "乘风破浪",
+  "title": "乘风破浪",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "乘风破浪(2017)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "乘风破浪 第三季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪(1975)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "乘风破浪 1957(1997)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 第二季（越南版）(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 越南语字幕版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐2 越南语字幕版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 第二季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐2 舞台直拍版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 会员加长版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的妻子(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪赴山海(2026)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "京剧猫之乘风破浪(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "湖南卫视乘风破浪(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱X乘风破浪的姐姐(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "青春引航 乘风破浪 芒果TV2020战略发布会(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "摇滚藏獒3：乘风破浪(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "乘风破浪(2017)【电影】from 360"
+  ],
+  "truthWhy": "Han Han 2017 film. Traps: 乘风破浪(1975)【电视剧】 TVB drama, 乘风破浪 1957(1997)【电影】, 乘风破浪 第三季(2022)【综艺】, 摇滚藏獒3：乘风破浪(2023)【电影】.",
+  "prod": {
+   "n": 23,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "乘风破浪",
+  "title": "乘风破浪的姐姐",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "现代都市",
+   "eps": 4
+  },
+  "ep": "第1-20集",
+  "candidates": [
+   {
+    "animeTitle": "乘风破浪的姐姐(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 第二季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 第二季（越南版）(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 越南语字幕版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐2 越南语字幕版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐2 舞台直拍版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪的姐姐 会员加长版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱X乘风破浪的姐姐(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乘风破浪 第三季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "Our group is a 2025 short drama (type 现代都市, eps bundled 第1-20集…). 360 only has the 2020 variety 乘风破浪的姐姐(2020)【综艺】 with the exact same name - same-name trap. Correct = no danmaku. Note: 现代都市 contains no 剧/片, so a type-aware matcher sees kind=null->series and may accept the variety.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "中国有嘻哈",
+  "title": "中国有嘻哈",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "大陆综艺",
+   "eps": 18
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns no results at all for 中国有嘻哈 (show delisted). Correct = no danmaku.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "中国有嘻哈",
+  "title": "中国有嘻哈2017",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "大陆综艺",
+   "eps": 13
+  },
+  "ep": "20170701",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns nothing for this title either.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "中国新说唱",
+  "title": "中国新说唱2024",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "大陆综艺",
+   "eps": 52
+  },
+  "ep": "第20240511期上",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns no results for any 中国新说唱 query (also tried 中国新说唱/第三季/第二季). By the 360-only model truth is []; but production served on-topic danmaku, so prod evidently has another source/instance.",
+  "prod": {
+   "n": 732,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "中国新说唱",
+  "title": "中国新说唱2020",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "大陆综艺",
+   "eps": 27
+  },
+  "ep": "中国新说唱第三季01上",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "No 360 results. (2020 = season 3 if another source is used.)",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "中国新说唱",
+  "title": "中国新说唱 第一季",
+  "ours": {
+   "vod_year": "2018",
+   "type_name": "大陆综艺",
+   "eps": 13
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "No 360 results.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "歌手",
+  "title": "歌手2025",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "大陆综艺",
+   "eps": 150
+  },
+  "ep": "第20250516期",
+  "candidates": [
+   {
+    "animeTitle": "歌手2025(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "歌手2025 竖屏直拍版(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "歌手2025 直拍REACTION(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "歌手2025 纯享版(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "歌手2025(2025)【综艺】from 360"
+  ],
+  "truthWhy": "Main page. 竖屏直拍版 / 直拍REACTION / 纯享版 are other versions (different content/timeline), left out.",
+  "prod": {
+   "n": 5093,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "歌手",
+  "title": "歌手2018",
+  "ours": {
+   "vod_year": "2018",
+   "type_name": "大陆综艺",
+   "eps": 14
+  },
+  "ep": "第01期",
+  "candidates": [
+   {
+    "animeTitle": "歌手 2018(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "歌手(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "歌手多看点 2018(2018)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "歌手 2018(2018)【综艺】from 360",
+   "歌手(2018)【综艺】from 360"
+  ],
+  "truthWhy": "Season 6 renamed 歌手2018; both pages are it. 歌手多看点 2018 is a side show (left out).",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "歌手",
+  "title": "我是歌手 第二季",
+  "ours": {
+   "vod_year": "2014",
+   "type_name": "大陆综艺",
+   "eps": 14
+  },
+  "ep": "第20140103期",
+  "candidates": [
+   {
+    "animeTitle": "我是歌手第二季(2014)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "我是歌手第三季(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "我是歌手第四季(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "我是歌手第一季(2013)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "我是歌手第四季之歌手直播间(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "我是歌手第四季抢鲜版(2016)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "我是歌手踢馆音乐小屋(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "歌手·当打之年(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "我是歌手 谁来踢馆(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "我是歌手第二季(2014)【综艺】from 360"
+  ],
+  "truthWhy": "Season 2 (2014). Traps: 我是歌手第一/三/四季, 第四季之歌手直播间, 歌手·当打之年(2020).",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "快乐大本营",
+  "title": "快乐大本营2020",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "大陆综艺",
+   "eps": 67
+  },
+  "ep": "20200111期",
+  "candidates": [
+   {
+    "animeTitle": "快乐大本营(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "快乐大本营 越南语字幕版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "快乐大本营(2015)【综艺】from 360",
+   "快乐大本营 越南语字幕版(2020)【综艺】from 360"
+  ],
+  "truthWhy": "360 has one series-wide page 快乐大本营(2015) whose episode list is partitioned by year (360 episodeszongyi y=2020 returns 2020 periods); 越南语字幕版(2020) = same episodes subtitled. The year on the candidate (2015) is not the season year - a strict year filter would wrongly reject it.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "快乐大本营",
+  "title": "快乐大本营2012",
+  "ours": {
+   "vod_year": "1997",
+   "type_name": "大陆综艺",
+   "eps": 30
+  },
+  "ep": "20121229期",
+  "candidates": [
+   {
+    "animeTitle": "快乐大本营(2015)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "快乐大本营(2015)【综艺】from 360"
+  ],
+  "truthWhy": "Only the series-wide page; 360 has y=2012 periods. Our vod_year is 1997 (show start) while the title says 2012 - year-distance logic sees 1997/2012/2015 all disagreeing.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "快乐大本营",
+  "title": "快乐大本营之快乐到家",
+  "ours": {
+   "vod_year": "2013",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "快乐到家(2013)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "快乐到家(2013)【电影】from 360"
+  ],
+  "truthWhy": "Same 2013 film (alternate title 快乐到家); candidate name is contained in ours.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "脱口秀大会",
+  "title": "脱口秀大会第五季",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "大陆综艺",
+   "eps": 37
+  },
+  "ep": "第1期上",
+  "candidates": [
+   {
+    "animeTitle": "脱口秀大会 第4季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会 第2季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会云海选(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "360 only has 脱口秀大会(2017)=S1, 第2季(2019), 第4季(2021), 云海选(2020) - no season 5. Traps: bare-name S1 page and 第4季.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "脱口秀大会",
+  "title": "脱口秀大会 第三季",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "大陆综艺",
+   "eps": 12
+  },
+  "ep": "第2集",
+  "candidates": [
+   {
+    "animeTitle": "脱口秀大会 第4季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会 第2季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会云海选(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "No season 3 on 360 (same 4 candidates as above; 云海选(2020) is the online audition show, not S3). By the 360 model truth is [].",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "脱口秀大会",
+  "title": "脱口秀大会第一季",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "大陆综艺",
+   "eps": 12
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "脱口秀大会 第4季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会 第2季(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会(2017)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "脱口秀大会云海选(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "脱口秀大会(2017)【综艺】from 360"
+  ],
+  "truthWhy": "S1 = bare-name page (2017). Traps: 第2季/第4季/云海选.",
+  "prod": {
+   "n": 156,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "披荆斩棘",
+  "title": "披荆斩棘2025",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "大陆综艺",
+   "eps": 65
+  },
+  "ep": "第20250809期",
+  "candidates": [
+   {
+    "animeTitle": "披荆斩棘2025(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘2025 舞台纯享版(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘的哥哥 越南版(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘的太子妃(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "披荆斩棘2025(2025)【综艺】from 360"
+  ],
+  "truthWhy": "Main 2025 page. 舞台纯享版 is another cut; 披荆斩棘的哥哥 越南版 is the Vietnamese remake; 披荆斩棘的太子妃 is a drama.",
+  "prod": {
+   "n": 858,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "披荆斩棘",
+  "title": "披荆斩棘第二季",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "大陆综艺",
+   "eps": 60
+  },
+  "ep": "第20220909期",
+  "candidates": [
+   {
+    "animeTitle": "披荆斩棘 第二季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘的哥哥 越南版 第二季(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘第四季(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘 第三季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘4 竖屏舞台纯享版(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘4 舞台纯享版(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘2026 训练室全纪录(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "披荆斩棘 第二季(2022)【综艺】from 360"
+  ],
+  "truthWhy": "Season 2 (2022). Traps: 披荆斩棘的哥哥 越南版 第二季(2026), 第三季/第四季, 2026 训练室全纪录.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "披荆斩棘",
+  "title": "披荆斩棘2026",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "大陆综艺",
+   "eps": 96
+  },
+  "ep": "第20260815期上",
+  "candidates": [
+   {
+    "animeTitle": "披荆斩棘2026(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘2026 直拍机位(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘2026 训练室全纪录(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "披荆斩棘2026 舞台纯享版(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "披荆斩棘2026(2026)【综艺】from 360"
+  ],
+  "truthWhy": "Main 2026 page; 直拍机位/训练室全纪录/舞台纯享版 are side cuts.",
+  "prod": {
+   "n": 722,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "密室大逃脱",
+  "title": "密室大逃脱第八季",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "大陆综艺",
+   "eps": 96
+  },
+  "ep": "20260722上",
+  "candidates": [
+   {
+    "animeTitle": "密室大逃脱 第八季(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "密室大逃脱 第八季(2026)【综艺】from 360"
+  ],
+  "truthWhy": "Exact season 8 page.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "密室大逃脱",
+  "title": "密室大逃脱第一季",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "大陆综艺",
+   "eps": 29
+  },
+  "ep": "20190330期",
+  "candidates": [
+   {
+    "animeTitle": "密室大逃脱(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "豆精灵密室大逃脱 第三季(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "豆精灵密室大逃脱 第二季(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "密室大逃脱 第八季(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 第七季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 第六季(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 第五季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 第四季(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 第三季(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱第二季 大神版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 第二季(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 IP对撞季2024(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 IP对撞季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "大嘴巴密室逃脱大侦探 第2季(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "密室大逃脱 大神版(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "节奏盒子之密室大逃脱(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "豆精灵密室大逃脱(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "密室大逃脱8 大神版(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱8 大神版 互动影游(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱7 大神版(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "密室大逃脱(2019)【综艺】from 360"
+  ],
+  "truthWhy": "S1 = bare-name page (2019). Traps: 密室大逃脱 大神版(2019) (same year, extended 大神 version), 豆精灵密室大逃脱 第二/三季【动漫】, later seasons.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g3-variety",
+  "keyword": "密室大逃脱",
+  "title": "密室大逃脱大神版第一季",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "大陆综艺",
+   "eps": 13
+  },
+  "ep": "20190408期",
+  "candidates": [
+   {
+    "animeTitle": "密室大逃脱 大神版(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱8 大神版(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱8 大神版 互动影游(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱7 大神版(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱6 大神版(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱4 大神版之大神聊天室(2022)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱3 大神版之大神聊天室(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱3 大神版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱(2019)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱 IP对撞季(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱3 会员Plus版(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "密室大逃脱2 会员Plus版(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "密室大逃脱 大神版(2019)【综艺】from 360"
+  ],
+  "truthWhy": "S1 大神版 (2019). Traps: regular 密室大逃脱(2019) same year; 密室大逃脱8/7/6/3 大神版 (season digit sits before 大神版, so a trailing-number season parser misses it).",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "间谍过家家",
+  "title": "间谍过家家第三季",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "日韩动漫",
+   "eps": 13
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns no candidate for 间谍过家家第三季 (S3 not listed); correct behaviour = no danmaku.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "间谍过家家",
+  "title": "间谍过家家",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "日韩动漫",
+   "eps": 25
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "间谍过家家 第一季(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 第二季(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 代号：白（普通话）(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "间谍过家家 第1季[日语版](2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 第1季[普通话版](2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 第一季 普通话版(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 第2季 普通话(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 第二季 中配版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 粤配版(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 日配版(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 中配版(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "间谍过家家 普通话版(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "爆笑呆呆间谍过家家(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "间谍过家家(2022)【动漫】from 360",
+   "间谍过家家 第1季[日语版](2022)【动漫】from 360",
+   "间谍过家家 第1季[普通话版](2022)【动漫】from 360",
+   "间谍过家家 日配版(2022)【动漫】from 360",
+   "间谍过家家 中配版(2022)【动漫】from 360",
+   "间谍过家家 粤配版(2022)【动漫】from 360",
+   "间谍过家家 普通话版(2022)【动漫】from 360",
+   "间谍过家家 第一季(2024)【动漫】from 360",
+   "间谍过家家 第一季 普通话版(2024)【动漫】from 360"
+  ],
+  "truthWhy": "Our group = S1 (Part1+Part2, 25 eps, 2022). All listed are S1 (360: 全25集) in different dubs; the two (2024) entries are S1 re-listings (year = platform listing), content-equivalent; main 间谍过家家(2022) preferred. 普通话版(2022) has 37 eps (S1+S2 merged) but ep1=S1E1.",
+  "prod": {
+   "n": 5744,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "间谍过家家",
+  "title": "间谍过家家 代号：白",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "动漫电影",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "间谍过家家 代号：白（普通话）(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "间谍过家家(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "间谍过家家 代号：白（普通话）(2024)【电影】from 360"
+  ],
+  "truthWhy": "Same 2023 film; 360 lists the Mandarin release (CN release 2024, 1:49:59), year +1.",
+  "prod": {
+   "n": 640,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "葬送的芙莉莲",
+  "title": "葬送的芙莉莲",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "日韩动漫",
+   "eps": 28
+  },
+  "ep": "第14集",
+  "candidates": [
+   {
+    "animeTitle": "葬送的芙莉莲(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "葬送的芙莉莲 普通话(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "葬送的芙莉莲[普通话版](2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "葬送的芙莉莲 中配版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "葬送的芙莉莲(2023)【动漫】from 360",
+   "葬送的芙莉莲[普通话版](2023)【动漫】from 360",
+   "葬送的芙莉莲 中配版(2023)【动漫】from 360",
+   "葬送的芙莉莲 普通话(2025)【动漫】from 360"
+  ],
+  "truthWhy": "All four are S1 (360: 全28集 each) in different dubs; 普通话(2025) is the S1 Mandarin dub listed 2025. Main 葬送的芙莉莲(2023) preferred.",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "葬送的芙莉莲",
+  "title": "葬送的芙莉莲第二季",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "日韩动漫",
+   "eps": 10
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "葬送的芙莉莲 普通话(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "葬送的芙莉莲[普通话版](2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "葬送的芙莉莲 中配版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "葬送的芙莉莲(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "Only S1 entries exist on 360 (all 全28集); S2 (2026) not listed -> must not fall back to S1.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "葬送的芙莉莲",
+  "title": "葬送的芙莉莲 ～●●的魔法～",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "日韩动漫",
+   "eps": 4
+  },
+  "ep": "第15集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns nothing for the mini-anime 葬送的芙莉莲 ～●●的魔法～.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "鬼灭之刃",
+  "title": "鬼灭之刃",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "日韩动漫",
+   "eps": 26
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "鬼灭之刃 第1季(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 柱训练篇(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 游郭篇 中配版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 刀匠村篇(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 粤配版(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 无限列车篇 中配版(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 柱合会议·蝶屋篇(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 那田蜘蛛山篇(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 游郭篇(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 兄妹之绊(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 中配版(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 无限列车篇(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "「鬼灭之刃」交响音乐会～鬼灭之奏～(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "鬼灭之刃 第1季(2019)【动漫】from 360",
+   "鬼灭之刃(2019)【动漫】from 360",
+   "鬼灭之刃 中配版(2020)【动漫】from 360",
+   "鬼灭之刃 粤配版(2022)【动漫】from 360"
+  ],
+  "truthWhy": "Our group = S1 26 eps (2019). Those four are 全26集 S1 (粤配/中配 are dubs, year = dub release).",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "鬼灭之刃",
+  "title": "鬼灭之刃 游郭篇",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "日韩动漫",
+   "eps": 12
+  },
+  "ep": "01集",
+  "candidates": [
+   {
+    "animeTitle": "鬼灭之刃 游郭篇(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 游郭篇 中配版(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 柱训练篇(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 刀匠村篇(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "鬼灭之刃 游郭篇(2022)【动漫】from 360",
+   "鬼灭之刃 游郭篇 中配版(2023)【动漫】from 360"
+  ],
+  "truthWhy": "Same arc (aired Dec 2021-Feb 2022, 360 year 2022); 中配版 = dub.",
+  "prod": {
+   "n": 1533,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "鬼灭之刃",
+  "title": "鬼灭之刃剧场版无限列车篇",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "动画片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "鬼灭之刃 无限列车篇 中配版(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "鬼灭之刃 无限列车篇(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "Our group is the 2020 theatrical film (动画片->电影). 360 only offers the 7-ep TV re-cut (全7集) and its dub; TV ep1 is an original episode, so no candidate is the film.",
+  "prod": {
+   "n": 4752,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "进击的巨人",
+  "title": "进击的巨人真人版：前篇",
+  "ours": {
+   "vod_year": "2015",
+   "type_name": "科幻片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 has no 进击的巨人 entries at all (search returns only unrelated 无敌巨鲨大战进击巨人).",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "进击的巨人",
+  "title": "进击的巨人第二季",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "日韩动漫",
+   "eps": 12
+  },
+  "ep": "第1集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "No 进击的巨人 entries on 360.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "进击的巨人",
+  "title": "进击的巨人 最终季 Part.2",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "日本动漫",
+   "eps": 12
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "No 进击的巨人 entries on 360.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "海贼王",
+  "title": "海贼王",
+  "ours": {
+   "vod_year": "1999",
+   "type_name": "日韩动漫",
+   "eps": 1180
+  },
+  "ep": "第1000集",
+  "candidates": [
+   {
+    "animeTitle": "航海王(1999)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "海贼王系列(0001)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "航海王(1999)【动漫】from 360"
+  ],
+  "truthWhy": "航海王 is the official CN title of One Piece (360 titlealias=海贼王, 1999, 更新至1180集). 海贼王系列(0001) is a 1-ep figurine promo (desc: 海贼王手办).",
+  "prod": {
+   "n": 5627,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "海贼王",
+  "title": "海贼王(真人版)第二季",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "欧美剧",
+   "eps": 8
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns nothing for the live-action S2.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "海贼王",
+  "title": "海贼王剧场版Z",
+  "ours": {
+   "vod_year": "2012",
+   "type_name": "动画片",
+   "eps": 2
+  },
+  "ep": "HD中字版",
+  "candidates": [
+   {
+    "animeTitle": "航海王 剧场版12：FILM Z(2012)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "航海王 剧场版12：FILM Z(2012)【动漫】from 360"
+  ],
+  "truthWhy": "Same film (One Piece Film Z, 2012) under official title 航海王; 360 types it 动漫 while ours is 动画片 (movie).",
+  "prod": {
+   "n": 272,
+   "verdict": "match"
+  },
+  "knownMiss": "译名(海贼王/航海王)+剧场版编号(剧场版12：FILM Z),名字层面配不上"
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "名侦探柯南",
+  "title": "名侦探柯南",
+  "ours": {
+   "vod_year": "1996",
+   "type_name": "日韩动漫",
+   "eps": 1275
+  },
+  "ep": "第500集",
+  "candidates": [
+   {
+    "animeTitle": "名侦探柯南(1996)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南（日语版）(1996)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版5：通往天国的倒计时(2001)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版6：贝克街的亡灵(2002)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版8：银翼的魔术师(2004)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版9：水平线上的阴谋(2005)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版4：瞳孔中的暗杀者(2000)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版2：第十四个目标(1998)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版14：天空的遇难船(2010)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版11：绀碧之棺(2007)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南 剧情篇全集(2015)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版18异次元的狙击手(2014)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版15：沉默的15分钟(2011)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "名侦探柯南(1996)【动漫】from 360",
+   "名侦探柯南（日语版）(1996)【动漫】from 360"
+  ],
+  "truthWhy": "TV series 1996 (main + Japanese-audio listing).",
+  "prod": {
+   "n": 5264,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "名侦探柯南",
+  "title": "名侦探柯南：独眼的残像",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动画片",
+   "eps": 2
+  },
+  "ep": "HD中字",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns nothing for 名侦探柯南：独眼的残像 (also nothing for 独眼的残像 alone).",
+  "prod": {
+   "n": 781,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "名侦探柯南",
+  "title": "名侦探柯南国语版",
+  "ours": {
+   "vod_year": "1996",
+   "type_name": "日韩动漫",
+   "eps": 1275
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "名侦探柯南(1996)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南（日语版）(1996)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版5：通往天国的倒计时(2001)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版6：贝克街的亡灵(2002)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版8：银翼的魔术师(2004)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版9：水平线上的阴谋(2005)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版4：瞳孔中的暗杀者(2000)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版2：第十四个目标(1998)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版14：天空的遇难船(2010)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版11：绀碧之棺(2007)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南 剧情篇全集(2015)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版18异次元的狙击手(2014)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "名侦探柯南剧场版15：沉默的15分钟(2011)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "名侦探柯南(1996)【动漫】from 360",
+   "名侦探柯南（日语版）(1996)【动漫】from 360"
+  ],
+  "truthWhy": "Same TV series; 国语版 is a dub label. Main entry preferred.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "凡人修仙传",
+  "title": "凡人修仙传",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "国产动漫",
+   "eps": 196
+  },
+  "ep": "第100集",
+  "candidates": [
+   {
+    "animeTitle": "凡人修仙传(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "凡人修仙传(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 字幕助听版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 手语版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 解说版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "凡人修仙传(2020)【动漫】from 360"
+  ],
+  "truthWhy": "Donghua 2020 (360: 更新至194集) = our group.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "凡人修仙传",
+  "title": "凡人修仙传真人版",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产剧",
+   "eps": 30
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "凡人修仙传 手语版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 解说版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "凡人修仙传(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 字幕助听版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "凡人修仙传(2025)【电视剧】from 360",
+   "凡人修仙传 字幕助听版(2025)【电视剧】from 360",
+   "凡人修仙传 手语版(2025)【电视剧】from 360",
+   "凡人修仙传 解说版(2025)【电视剧】from 360"
+  ],
+  "truthWhy": "Live-action 2025 series (杨洋). Accessibility versions (subtitle/sign-language/audio-description, only 1-2 eps on 360) are the same video; main entry preferred.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "凡人修仙传",
+  "title": "凡人修仙传",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产剧",
+   "eps": 30
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "凡人修仙传(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "凡人修仙传(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 字幕助听版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 手语版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "凡人修仙传 解说版(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "凡人修仙传(2025)【电视剧】from 360",
+   "凡人修仙传 字幕助听版(2025)【电视剧】from 360",
+   "凡人修仙传 手语版(2025)【电视剧】from 360",
+   "凡人修仙传 解说版(2025)【电视剧】from 360"
+  ],
+  "truthWhy": "Our group is the 2025 live-action (国产剧, 30 eps) despite the bare name.",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "完美世界",
+  "title": "完美世界",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "国产动漫",
+   "eps": 288
+  },
+  "ep": "第100集",
+  "candidates": [
+   {
+    "animeTitle": "完美世界(1988)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "完美世界(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美的世界(1993)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "完美世界剧场版 九劫焚天(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界速看版(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界石昊封神战绩TOP10(0001)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界美食图鉴(0001)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界合集篇(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界剧场版(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界：少年至尊篇·动态漫(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界：少年至尊篇(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界 第一季(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界双食记(2016)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界双食记第一季(2016)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美的世界(2019)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "完美的世界（普通话）(1993)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "完美世界(2021)【动漫】from 360"
+  ],
+  "truthWhy": "Donghua 2021 (更新至288集) = our group.",
+  "prod": {
+   "n": 80,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "完美世界",
+  "title": "完美世界剧场版",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产动漫",
+   "eps": 3
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "完美世界剧场版(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界(1988)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "完美世界(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界剧场版 九劫焚天(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "完美世界速看版(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "完美世界剧场版(2024)【动漫】from 360"
+  ],
+  "truthWhy": "Same 2024 剧场版 (火桑林 / 火灵儿 story).",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "完美世界",
+  "title": "完美世界2018",
+  "ours": {
+   "vod_year": "2018",
+   "type_name": "爱情片",
+   "eps": 1
+  },
+  "ep": "HD",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns nothing for 完美世界2018; base-name search only has 1988 film / 1993 & 2019 完美的世界, none 2018.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "斗破苍穹",
+  "title": "斗破苍穹年番",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "国产动漫",
+   "eps": 218
+  },
+  "ep": "第100集",
+  "candidates": [
+   {
+    "animeTitle": "斗破苍穹年番(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹年番总集篇(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "斗破苍穹年番(2022)【动漫】from 360"
+  ],
+  "truthWhy": "Same weekly series.",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "斗破苍穹",
+  "title": "斗破苍穹4：逃亡",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "斗破苍穹4：逃亡(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "斗破苍穹4：逃亡(2025)【电影】from 360"
+  ],
+  "truthWhy": "Same 2025 web film, unique exact candidate.",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "斗破苍穹",
+  "title": "斗破苍穹第一季",
+  "ours": {
+   "vod_year": "2017",
+   "type_name": "国产动漫",
+   "eps": 14
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "斗破苍穹 动态漫画 第一季(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "斗破苍穹[DVD版](2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "斗破苍穹(2017)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹·觉醒(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "斗破苍穹 第2季(2018)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹特别篇2沙之澜歌(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹3：除恶(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "斗破苍穹·止戈(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "斗破苍穹 第5季·动态漫(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第五季 动态漫(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第二季 动态漫画(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第三季 动态漫画(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第3季·动态漫(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第2季·动态漫(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第4季·动态漫(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第4季(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 第3季(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 动态漫画(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "斗破苍穹 动态漫画 第5季(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "斗破苍穹(2017)【动漫】from 360"
+  ],
+  "truthWhy": "S1 3D donghua 2017 (全12集) = our 斗破苍穹第一季 (2017).",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "一人之下",
+  "title": "一人之下第六季",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "国产动漫",
+   "eps": 26
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "一人之下 第6季(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "一人之下 第6季(2026)【动漫】from 360"
+  ],
+  "truthWhy": "Same season.",
+  "prod": {
+   "n": 16,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "一人之下",
+  "title": "一人之下第五季",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "国产动漫",
+   "eps": 12
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "一人之下 第5季(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "一人之下 第5季(2022)【动漫】from 360"
+  ],
+  "truthWhy": "Same season.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "一人之下",
+  "title": "一人之下·锈铁重现",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "动画片",
+   "eps": 2
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "一人之下剧场版：锈铁重现(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "一人之下剧场版：锈铁重现(2024)【动漫】from 360"
+  ],
+  "truthWhy": "Same 2024 film; 360 types it 动漫 while ours is 动画片 (movie); title '剧场版：' vs '·'.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "咒术回战",
+  "title": "咒术回战",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "日韩动漫",
+   "eps": 24
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "咒术回战 0(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "咒术回战 第1季(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "咒术回战 第二季(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "咒术回战 第2季(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "咒术回战(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "剧场版 咒术回战0(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "剧场版 咒术回战 0(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "咒术回战 粤语(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "咒术回战 第1季(2020)【动漫】from 360",
+   "咒术回战(2020)【动漫】from 360",
+   "咒术回战 粤语(2020)【动漫】from 360"
+  ],
+  "truthWhy": "S1 (全24集) in main/explicit-S1/Cantonese listings.",
+  "prod": {
+   "n": 5670,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "咒术回战",
+  "title": "咒术回战第三季",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "日韩动漫",
+   "eps": 12
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 returns nothing for S3.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "咒术回战",
+  "title": "咒术回战0 剧场版",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "动漫电影",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "剧场版 咒术回战0(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "剧场版 咒术回战 0(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "剧场版 咒术回战0(2021)【动漫】from 360",
+   "剧场版 咒术回战 0(2021)【动漫】from 360"
+  ],
+  "truthWhy": "Same 2021 film; 360 puts 剧场版 as prefix and types it 动漫.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "刺客伍六七",
+  "title": "刺客伍六七",
+  "ours": {
+   "vod_year": "2018",
+   "type_name": "国产动漫",
+   "eps": 14
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "刺客伍六七小剧场(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "伍六七之记忆碎片(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "伍六七之暗影宿命(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "伍六七之玄武国篇(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "伍六七之最强发型师(2019)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "360 has no S1 (2018) entry; candidates are 刺客伍六七小剧场(2021, 12 shorts) and sequels S2-S5 under 伍六七之… names.",
+  "prod": {
+   "n": 97,
+   "verdict": "unclear"
+  }
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "刺客伍六七",
+  "title": "刺客伍六七第三季",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "国产动漫",
+   "eps": 10
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "伍六七之玄武国篇(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "刺客伍六七小剧场(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "伍六七之玄武国篇(2021)【动漫】from 360"
+  ],
+  "truthWhy": "S3 of 刺客伍六七 = 伍六七之玄武国篇 (2021, 10 eps) - sequel-subtitle naming with no shared title text.",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  },
+  "knownMiss": "第三季在弹幕源改名为《伍六七之玄武国篇》,名字层面配不上"
+ },
+ {
+  "group": "g4-anime",
+  "keyword": "刺客伍六七",
+  "title": "伍六七之暗影宿命",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产动漫",
+   "eps": 10
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "伍六七之暗影宿命(2023)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "伍六七之暗影宿命(2023)【动漫】from 360"
+  ],
+  "truthWhy": "Unique exact candidate.",
+  "prod": {
+   "n": 6448,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "兰香如故",
+  "title": "兰香如故",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "国产剧",
+   "eps": 47
+  },
+  "ep": "第20集",
+  "candidates": [
+   {
+    "animeTitle": "兰香如故(2026)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "兰香如故(2026)【电视剧】from 360"
+  ],
+  "truthWhy": "唯一候选,同名同年同类型。",
+  "prod": {
+   "n": 2370,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "藏海传",
+  "title": "藏海传",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产剧",
+   "eps": 40
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "藏海传(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "藏海传 高光版(2026)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "《藏海传》非遗魔法探险队(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "藏海传(2025)【电视剧】from 360"
+  ],
+  "truthWhy": "40集正片。藏海传 高光版(2026)是20集剪辑版(集号对不上),《藏海传》非遗魔法探险队是衍生动漫。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "藏海传",
+  "title": "藏海传 高光版",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "国产剧",
+   "eps": 20
+  },
+  "ep": "第05集",
+  "candidates": [
+   {
+    "animeTitle": "藏海传 高光版(2026)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "藏海传 高光版(2026)【电视剧】from 360"
+  ],
+  "truthWhy": "同名同年的20集高光版,唯一候选。",
+  "prod": {
+   "n": 425,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "藏海传",
+  "title": "藏海传粤语",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产剧",
+   "eps": 30
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 按原名\"藏海传粤语\"搜不到任何条目。粤语版30集(国语版40集),即使拿国语版弹幕集号也对不上。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "长安的荔枝",
+  "title": "长安的荔枝",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产剧",
+   "eps": 35
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "长安的荔枝(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "长安的荔枝(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《长安的荔枝》优酷独家幕后记录(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "长安的荔枝(2025)【电视剧】from 360"
+  ],
+  "truthWhy": "雷佳音版35集剧。陷阱:同名同年的电影(大鹏版)也是 tier0,生产 id 只有\"剧名|集名\",区分不了剧集和电影。",
+  "prod": {
+   "n": 2393,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "长安的荔枝",
+  "title": "长安的荔枝",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "剧情片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "长安的荔枝(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "长安的荔枝(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《长安的荔枝》优酷独家幕后记录(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "长安的荔枝(2025)【电影】from 360"
+  ],
+  "truthWhy": "2025年大鹏版电影。同名同年的剧集是陷阱(同一个 vod_name,只能靠集名\"正片\"区分)。",
+  "prod": {
+   "n": 201,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "长安的荔枝",
+  "title": "长安的荔枝电影版",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "长安的荔枝(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《长安的荔枝》优酷独家幕后记录(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "长安的荔枝(2025)【电影】from 360"
+  ],
+  "truthWhy": "同一部电影;\"电影版\"只是区分剧集的标签。幕后记录不是正片。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "繁花",
+  "title": "繁花",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产剧",
+   "eps": 30
+  },
+  "ep": "第15集",
+  "candidates": [
+   {
+    "animeTitle": "繁花(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "那树繁花(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "一路繁花相送(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "繁花似锦(2021)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "繁花沦陷(0001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "繁花初见不知迟(0001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "繁花剧场版(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "繁花[沪语版](2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "星绽繁花(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "从被弃那天，开启满世繁花(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "一路繁花第2季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "一路繁花(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "江南之黎里繁花(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "丝路繁花——一带一路倡议十周年音乐会(2023)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "乡里繁花遇良人(0001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "一路繁花相送 41集版(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "她说繁花已落幕(2026)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "双面繁花(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "一路繁花开(2019)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "海上繁花(2021)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "繁花(2023)【电视剧】from 360",
+   "繁花[沪语版](2023)【电视剧】from 360"
+  ],
+  "truthWhy": "王家卫30集剧;沪语版是同一剧(只差配音)也可以。陷阱:繁花剧场版(2024)、一路繁花*综艺、那树繁花、繁花似锦等。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "繁花",
+  "title": "一路繁花",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "大陆综艺",
+   "eps": 41
+  },
+  "ep": "20250111第1期上",
+  "candidates": [
+   {
+    "animeTitle": "一路繁花第2季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "一路繁花(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "一路繁花相送(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "一路繁花相送 41集版(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "一路繁花开(2019)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "一路繁花(2025)【综艺】from 360"
+  ],
+  "truthWhy": "第一季旅行综艺(刘晓庆/李小冉)。陷阱:一路繁花第2季(同年)、一路繁花相送(2018剧)、一路繁花开(2019剧)。",
+  "prod": {
+   "n": 976,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "繁花",
+  "title": "一路繁花2",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "大陆综艺",
+   "eps": 51
+  },
+  "ep": "20251024上",
+  "candidates": [
+   {
+    "animeTitle": "一路繁花第2季(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "一路繁花相送(2018)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "一路繁花(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "一路繁花开(2019)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "一路繁花第2季(2025)【综艺】from 360"
+  ],
+  "truthWhy": "第二季。陷阱:裸名 一路繁花(2025)=第一季,同年。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "狂飙",
+  "title": "狂飙",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产剧",
+   "eps": 39
+  },
+  "ep": "第20集",
+  "candidates": [
+   {
+    "animeTitle": "狂飙(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "狂飙古惑仔(2000)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "狂飙猎杀(2012)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "狂飙支队(2012)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "GT赛车：极速狂飙(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "怒斩狂飙(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "极速狂飙(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "子弹狂飙(2003)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "夺路狂飙(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红色行动队热血狂飙(2011)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "越野狂飙(2005)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "狂飙(2023)【电视剧】from 360"
+  ],
+  "truthWhy": "张译/张颂文版39集剧。其余候选是名字里含\"狂飙\"的电影/剧(狂飙支队2012等)。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "狂飙",
+  "title": "狂飙古惑仔",
+  "ours": {
+   "vod_year": "2000",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "HD粤语",
+  "candidates": [
+   {
+    "animeTitle": "狂飙古惑仔(2000)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "狂飙古惑仔(2000)【电影】from 360"
+  ],
+  "truthWhy": "唯一候选,同名同年电影。",
+  "prod": {
+   "n": 200,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "狂飙",
+  "title": "F1：狂飙飞车",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动作片",
+   "eps": 2
+  },
+  "ep": "正片",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 上没有这部片(试过 F1狂飙飞车/F1:狂飙飞车/狂飙飞车/F1,都没有相关条目)。",
+  "prod": {
+   "n": 9194,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "三体",
+  "title": "三体",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "国产动漫",
+   "eps": 15
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "三体(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "三体(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三体(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "三体·周年纪念版(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "我的三体 第四季(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "我的三体(2014)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "我的三体之章北海传(2020)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "我的三体·罗辑传(2016)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "三体(2022)【动漫】from 360"
+  ],
+  "truthWhy": "B站2022年三体动画。陷阱:三体(2016)电影、三体(2023)电视剧都是同名 tier0;生产 id 没有年份/类型。",
+  "prod": {
+   "n": 1972,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "三体",
+  "title": "三体2023",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产剧",
+   "eps": 40
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "三体(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "三体(2023)【电视剧】from 360"
+  ],
+  "truthWhy": "带年份后缀的名字 → 腾讯2023版剧(张鲁一/于和伟),唯一候选。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "三体",
+  "title": "三体 第一季",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "欧美剧",
+   "eps": 8
+  },
+  "ep": "第1集",
+  "candidates": [
+   {
+    "animeTitle": "三体(2016)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "三体(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "三体(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "Netflix 版《三体》(2024),360 上没有;三个候选(2016电影/2022动画/2023剧)都是别的改编。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  },
+  "knownMiss": "Netflix 版(2024)与腾讯版(2023)同名、年份只差 1 年,候选里分不出国别——已知会错配"
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "人世间",
+  "title": "人世间",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "国产剧",
+   "eps": 58
+  },
+  "ep": "第30集",
+  "candidates": [
+   {
+    "animeTitle": "人世间(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "人世间(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "人世间(2022)【电视剧】from 360"
+  ],
+  "truthWhy": "雷佳音/殷桃58集剧。陷阱:同名的人世间(2026)【动漫】也是 tier0。",
+  "prod": {
+   "n": 160,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "人世间",
+  "title": "人世间",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "现代都市",
+   "eps": 4
+  },
+  "ep": "第1-20集",
+  "candidates": [
+   {
+    "animeTitle": "人世间(2026)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "人世间(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "2024年82集短剧,跟2022年剧、2026年动漫都无关。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "漫长的季节",
+  "title": "漫长的季节",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产剧",
+   "eps": 18
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "漫长的季节(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "漫长的季节[卫视版](2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "漫长的季节-无障碍版(AI制作)(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "漫长的季节(2023)【电视剧】from 360"
+  ],
+  "truthWhy": "12集原版。[卫视版]是18集重剪版(集号对不上),也是 tier0(core 在\"[\"处截断);无障碍版(AI制作,2025)是重新发行版。",
+  "prod": {
+   "n": 370,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "漫长的季节",
+  "title": "漫长的季节[卫视版]",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产剧",
+   "eps": 25
+  },
+  "ep": "第10集",
+  "candidates": [
+   {
+    "animeTitle": "漫长的季节[卫视版](2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "漫长的季节[卫视版](2023)【电视剧】from 360"
+  ],
+  "truthWhy": "18集卫视剪辑版,按这个名字搜只有一个候选。",
+  "prod": {
+   "n": 920,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "莲花楼",
+  "title": "莲花楼",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "国产剧",
+   "eps": 47
+  },
+  "ep": "第20集",
+  "candidates": [
+   {
+    "animeTitle": "莲花楼(2023)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "莲花楼(2023)【电视剧】from 360"
+  ],
+  "truthWhy": "成毅版40集剧,唯一候选。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "莲花楼",
+  "title": "《莲花楼》主题演唱会——就在江湖之上",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "大陆综艺",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360 上没有这个演唱会。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "与凤行",
+  "title": "与凤行",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 48
+  },
+  "ep": "第10集",
+  "candidates": [
+   {
+    "animeTitle": "与凤行(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "推市营业中·与凤行专场(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "与凤行(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "赵丽颖/林更新39集剧。推市营业中专场是衍生综艺。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "与凤行",
+  "title": "推市营业中—《与凤行》专场",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "大陆综艺",
+   "eps": 3
+  },
+  "ep": "上期",
+  "candidates": [
+   {
+    "animeTitle": "推市营业中·与凤行专场(2024)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "推市营业中·与凤行专场(2024)【综艺】from 360"
+  ],
+  "truthWhy": "同一档团综;只是标点不同(—《》 vs ·)。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "与凤行",
+  "title": "与凤行之女状元",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "现代都市",
+   "eps": 1
+  },
+  "ep": "全集完结",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "无关短剧,360 上没有。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "大奉打更人",
+  "title": "大奉打更人之世间无我这般人",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "大奉打更人之世间无我这般人(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "大奉打更人之世间无我这般人(2025)【电影】from 360"
+  ],
+  "truthWhy": "杨千幻番外电影,唯一候选。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "大奉打更人",
+  "title": "大奉打更人",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 41
+  },
+  "ep": "第20集",
+  "candidates": [
+   {
+    "animeTitle": "大奉打更人(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "大奉打更人之世间无我这般人(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "大奉打更人·动态漫画(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "推市营业中·大奉打更人专场(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "大奉打更人(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "王鹤棣40集剧。陷阱:动态漫画(2024动漫)、同系列电影(2025)、推市营业中综艺。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "大奉打更人",
+  "title": "大奉打更人",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产动漫",
+   "eps": 150
+  },
+  "ep": "第100集",
+  "candidates": [
+   {
+    "animeTitle": "大奉打更人(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "大奉打更人之世间无我这般人(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "大奉打更人·动态漫画(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "推市营业中·大奉打更人专场(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "大奉打更人·动态漫画(2024)【动漫】from 360"
+  ],
+  "truthWhy": "我方这组是150集动态漫画,跟40集真人剧共用同一个 vod_name。名字匹配器会选 tier0 的电视剧,不选 tier2 的动态漫画。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "永夜星河",
+  "title": "永夜星河",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 32
+  },
+  "ep": "第10集",
+  "candidates": [
+   {
+    "animeTitle": "永夜星河(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "永夜星河(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "虞书欣/丁禹兮剧,唯一候选。",
+  "prod": {
+   "n": 1220,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "苍兰诀",
+  "title": "苍兰诀",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "国产剧",
+   "eps": 56
+  },
+  "ep": "第10集",
+  "candidates": [
+   {
+    "animeTitle": "苍兰诀 第2季(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "苍兰诀(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "苍兰诀(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "苍兰诀(2022)【电视剧】from 360"
+  ],
+  "truthWhy": "虞书欣/王鹤棣36集真人剧。陷阱:同名同年的苍兰诀(2022)【动漫】也是 tier0;生产 id 没有类型。",
+  "prod": {
+   "n": 4054,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "苍兰诀",
+  "title": "苍兰诀",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "国产动漫",
+   "eps": 36
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "苍兰诀 第2季(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "苍兰诀(2022)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "苍兰诀(2022)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "苍兰诀(2022)【动漫】from 360"
+  ],
+  "truthWhy": "2022年24集动画。陷阱:同名同年的真人剧,以及苍兰诀 第2季(2025)动漫。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g5-dramas",
+  "keyword": "苍兰诀",
+  "title": "苍兰诀2影三界篇",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "国产动漫",
+   "eps": 26
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "按原名搜360没结果;真正对应的 苍兰诀 第2季(2025)【动漫】 只有搜\"苍兰诀\"才出现。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "哪吒之魔童闹海",
+  "title": "哪吒之魔童闹海",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动画片",
+   "eps": 1
+  },
+  "ep": "HD",
+  "candidates": [
+   {
+    "animeTitle": "哪吒之魔童闹海(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《哪吒之魔童闹海》冲击全球票房第五 电影频道融媒体直播(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《哪吒之魔童闹海》“百亿进行时”特别直播(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "哪吒之魔童闹海赏析神作杀疯了(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "哪吒之魔童闹海赏析开启封神宇宙(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "《哪吒之魔童闹海》赏析：重塑肉身之旅(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "哪吒之魔童闹海赏析：命运的枷锁(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "不破不立：《哪吒之魔童闹海》幕后纪录片(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《不破不立》——哪吒之魔童闹海幕后纪录片(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "哪吒2魔童闹海赏析：人人都是小哪吒(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   },
+   {
+    "animeTitle": "哪吒闹海(1979)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "哪吒之魔童闹海(2025)【电影】from 360"
+  ],
+  "truthWhy": "同一部2025电影。其余是电影频道直播、youku\"赏析\"短片(标【动漫】:我方类型动画片,若偏好动漫会误选)、不破不立纪录片、1979《哪吒闹海》【动漫】。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "哪吒之魔童闹海",
+  "title": "《不破不立》——哪吒之魔童闹海幕后纪录片",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "纪录片",
+   "eps": 1
+  },
+  "ep": "HD",
+  "candidates": [
+   {
+    "animeTitle": "《不破不立》——哪吒之魔童闹海幕后纪录片(2025)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "《不破不立》——哪吒之魔童闹海幕后纪录片(2025)【综艺】from 360"
+  ],
+  "truthWhy": "唯一候选与我方同名同年,即同一部幕后纪录片;360把它归【综艺】(我方纪录片),严格类型过滤会误杀。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "哪吒之魔童闹海",
+  "title": "哪吒之魔童闹海—抢先版",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动画片",
+   "eps": 1
+  },
+  "ep": "哪吒之魔童闹海—抢先版",
+  "candidates": [
+   {
+    "animeTitle": "哪吒之魔童闹海(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《哪吒之魔童闹海》冲击全球票房第五 电影频道融媒体直播(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《哪吒之魔童闹海》“百亿进行时”特别直播(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "哪吒之魔童闹海赏析神作杀疯了(2025)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "哪吒之魔童闹海(2025)【电影】from 360"
+  ],
+  "truthWhy": "\"—抢先版\"是同一部电影的早期/枪版资源,作品相同(时间轴可能略有偏差)。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "封神第一部",
+  "title": "封神第一部：朝歌风云",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "动作片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "封神第一部：朝歌风云(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "封神第一部：朝歌风云(2023)【电影】from 360"
+  ],
+  "truthWhy": "唯一候选,同名同年同类型。",
+  "prod": {
+   "n": 7861,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "封神第一部",
+  "title": "封神第二部：战火西岐",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "动作片",
+   "eps": 2
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "《封神第二部：战火西岐》“路演日志”青岛站电影频道融媒体直播(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《封神第二部：战火西岐》“路演日志”西安站电影频道融媒体直播(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《封神第二部：战火西岐》“路演日志”上海站电影频道融媒体直播(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "360对该名只返回3条\"路演日志\"电影频道直播(m1905),没有正片;包含式匹配会误选直播。正确行为=无弹幕。",
+  "prod": {
+   "n": 6849,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "满江红",
+  "title": "满江红",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "剧情片",
+   "eps": 2
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "满江红(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "红粉世家(2012)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "我在等你回家(2012)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "满江红(2023)【电影】from 360"
+  ],
+  "truthWhy": "同名同年电影;另两个候选(红粉世家2012/我在等你回家2012电视剧)是360模糊召回的无关剧。",
+  "prod": {
+   "n": 2041,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "满江红",
+  "title": "满江红1992",
+  "ours": {
+   "vod_year": "1992",
+   "type_name": "国产剧",
+   "eps": 6
+  },
+  "ep": "第01集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360对\"满江红1992\"无任何候选;1992年6集电视剧不在360。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "满江红",
+  "title": "满江红之怒发冲冠",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "短剧",
+   "eps": 75
+  },
+  "ep": "第1集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "短剧,360无候选。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "热辣滚烫",
+  "title": "热辣滚烫",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "剧情片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "热辣滚烫(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "热辣滚烫之华丽变身(0001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "热辣滚烫-无障碍版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "我那热辣滚烫的婚姻(0001)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "《热辣滚烫》幕后纪实：我只活一次(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "热辣滚烫(2024)【电影】from 360",
+   "热辣滚烫-无障碍版(2024)【电影】from 360"
+  ],
+  "truthWhy": "正片与无障碍版是同一部电影;陷阱:热辣滚烫之华丽变身(0001)【电视剧】、我那热辣滚烫的婚姻(0001)【电视剧】、《热辣滚烫》幕后纪实(电影)。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "热辣滚烫",
+  "title": "热辣滚烫的妈咪",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "现代都市",
+   "eps": 4
+  },
+  "ep": "第1-20集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "竖屏短剧,360无候选。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "飞驰人生2",
+  "title": "飞驰人生2",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "喜剧片",
+   "eps": 2
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "飞驰人生2(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生2 字幕助听版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生之殇(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "哥哥的飞驰人生(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "飞驰人生热爱篇(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "飞驰人生3 解说版(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生 无障碍版(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "飞驰人生2(2024)【电影】from 360",
+   "飞驰人生2 字幕助听版(2024)【电影】from 360"
+  ],
+  "truthWhy": "正片+字幕助听版同一部电影;陷阱:飞驰人生(2019)、飞驰人生 无障碍版(2019)、飞驰人生3 解说版(2026)、飞驰人生热爱篇(2024)【电视剧】、飞驰人生之殇(2026)【综艺】、哥哥的飞驰人生(2021)【综艺】。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "飞驰人生2",
+  "title": "飞驰人生3",
+  "ours": {
+   "vod_year": "2026",
+   "type_name": "喜剧片",
+   "eps": 2
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "飞驰人生3 解说版(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生3 字幕助听版(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《飞驰人生3》制作特辑(0000)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《飞驰人生3》超长幕后特辑(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生之殇(2026)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "哥哥的飞驰人生(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "飞驰人生热爱篇(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "飞驰人生2(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "飞驰人生 无障碍版(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "飞驰人生3 字幕助听版(2026)【电影】from 360",
+   "飞驰人生3 解说版(2026)【电影】from 360"
+  ],
+  "truthWhy": "360无普通正片条目,只有字幕助听版/解说版(同演员同简介的无障碍版本,即同一部电影);制作特辑/超长幕后特辑是花絮,飞驰人生/飞驰人生2/热爱篇是同系列别的作品(陷阱)。",
+  "prod": {
+   "n": 2752,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "飞驰人生2",
+  "title": "飞驰人生热爱篇",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 28
+  },
+  "ep": "第14集",
+  "candidates": [
+   {
+    "animeTitle": "飞驰人生热爱篇(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "飞驰人生热爱篇(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "唯一候选,同名同年电视剧。",
+  "prod": {
+   "n": 8859,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "唐人街探案3",
+  "title": "唐人街探案3",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "唐人街探案3(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案系列电影合集(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案2 无障碍版(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐探1900(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案2(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐人街探案(2020)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐人街探案2(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "唐人街探案3(2020)【电影】from 360"
+  ],
+  "truthWhy": "360年份2020(原定档期),我方2021,±1内。陷阱:唐人街探案(2015)/唐人街探案2(2018)电影、同名网剧唐人街探案(2020)/唐人街探案2(2024)【电视剧】、系列电影合集、唐探1900。",
+  "prod": {
+   "n": 115,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "唐人街探案3",
+  "title": "唐人街探案",
+  "ours": {
+   "vod_year": "2020",
+   "type_name": "国产剧",
+   "eps": 12
+  },
+  "ep": "第01集",
+  "candidates": [
+   {
+    "animeTitle": "唐人街探案2(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案3(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案2(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐人街探案(2020)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐人街探案系列电影合集(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案2 无障碍版(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐探1900(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "唐人街探案(2020)【电视剧】from 360"
+  ],
+  "truthWhy": "我方是2020网剧12集(邱泽/张钧甯),对应360同名同年电视剧。同名陷阱:唐人街探案(2015)【电影】名字完全相等,只看名字会选电影。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "唐人街探案3",
+  "title": "唐人街探案2",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "国产剧",
+   "eps": 25
+  },
+  "ep": "第08集",
+  "candidates": [
+   {
+    "animeTitle": "唐人街探案2(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案2(2024)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐人街探案2 无障碍版(2018)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案系列电影合集(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐探1900(2025)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "唐人街探案(2020)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "唐人街探案3(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "唐人街探案2(2024)【电视剧】from 360"
+  ],
+  "truthWhy": "我方是2024网剧(16集),对应360同名同年电视剧(邱泽/尚语贤)。同名陷阱:唐人街探案2(2018)【电影】完全同名且排第一。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "让子弹飞",
+  "title": "让子弹飞",
+  "ours": {
+   "vod_year": "2010",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "让子弹飞(2010)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "让子弹飞(2010)【电影】from 360"
+  ],
+  "truthWhy": "唯一候选,同名同年电影。",
+  "prod": {
+   "n": 1063,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "让子弹飞",
+  "title": "让子弹飞四川话版",
+  "ours": {
+   "vod_year": "2010",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "按原名\"让子弹飞四川话版\"搜360无候选(同一部电影的方言版,只在搜\"让子弹飞\"时才出现)。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "西游记之大圣归来",
+  "title": "西游记之大圣归来",
+  "ours": {
+   "vod_year": "2015",
+   "type_name": "动画片",
+   "eps": 1
+  },
+  "ep": "HD国语版",
+  "candidates": [
+   {
+    "animeTitle": "西游记之大圣归来(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "西游记之大圣归来DVD(2015)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "西游记之大圣归来(2015)【电影】from 360",
+   "西游记之大圣归来DVD(2015)【动漫】from 360"
+  ],
+  "truthWhy": "电影条目与DVD条目是同一部动画电影。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "你好，李焕英",
+  "title": "你好，李焕英",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "喜剧片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "360对\"你好，李焕英\"/\"你好李焕英\"/\"李焕英\"均返回空(搜索层面无候选)。",
+  "prod": {
+   "n": 3552,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "误杀",
+  "title": "误杀",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "剧情片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "误杀2(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀 2019(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀(1922)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀记忆(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "误杀3 解说版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀3 手语版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀3 字幕助听版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀瞒天记(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "菜刀班尖刀连(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [
+   "误杀 2019(2019)【电影】from 360"
+  ],
+  "truthWhy": "我方2019电影对应\"误杀 2019\"(肖央/谭卓/陈冲,仅huanxi)。强陷阱:\"误杀(1922)【电影】\"名字与我方完全相等,实为1922年美国默片《Manslaughter》(塞西尔·B·德米尔);另有误杀2/误杀3各版本、误杀瞒天记、误杀记忆。",
+  "prod": {
+   "n": 3692,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "误杀",
+  "title": "误杀",
+  "ours": {
+   "vod_year": "2025",
+   "type_name": "现代都市",
+   "eps": 3
+  },
+  "ep": "第1-20集",
+  "candidates": [
+   {
+    "animeTitle": "误杀2(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀 2019(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀(1922)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀记忆(2025)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   },
+   {
+    "animeTitle": "误杀3 解说版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀3 手语版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀3 字幕助听版(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀瞒天记(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "菜刀班尖刀连(2015)【电视剧】from 360",
+    "type": "电视剧",
+    "typeDescription": "电视剧"
+   }
+  ],
+  "truth": [],
+  "truthWhy": "我方是2025年60集短剧(同名\"误杀\"),360候选里没有这部短剧;2019电影/1922默片都是同名陷阱。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "误杀",
+  "title": "误杀瞒天记",
+  "ours": {
+   "vod_year": "2015",
+   "type_name": "剧情片",
+   "eps": 2
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "误杀瞒天记(2015)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "误杀 2019(2019)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "误杀瞒天记(2015)【电影】from 360"
+  ],
+  "truthWhy": "同名同年印度电影。",
+  "prod": {
+   "n": 205,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "消失的她",
+  "title": "消失的她",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "剧情片",
+   "eps": 1
+  },
+  "ep": "HD中字",
+  "candidates": [
+   {
+    "animeTitle": "消失的她(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "消失的她 字幕助听版(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "消失的她（IMAX）(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "消失的她 无障碍版(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "《消失的她》深度推荐(2026)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "消失的她(2023)【电影】from 360",
+   "消失的她 字幕助听版(2023)【电影】from 360",
+   "消失的她（IMAX）(2023)【电影】from 360",
+   "消失的她 无障碍版(2023)【电影】from 360"
+  ],
+  "truthWhy": "我方年份2022(360为2023,±1);四个条目都是同一部电影的不同版本。《消失的她》深度推荐(2026)是解说短片(陷阱)。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "消失的她",
+  "title": "孤注一掷之消失的她",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "现代都市",
+   "eps": 4
+  },
+  "ep": "全集",
+  "candidates": [],
+  "truth": [],
+  "truthWhy": "短剧,360无候选。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "长津湖",
+  "title": "长津湖",
+  "ours": {
+   "vod_year": "2021",
+   "type_name": "战争片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "长津湖(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖之水门桥(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖之水门桥战记(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖战记（音频版）(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖战役回忆录(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖续集：水门桥战役(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖战役（纪实）(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖大决战(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖战记(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖往事(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "冰血长津湖(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "血战长津湖(2021)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   },
+   {
+    "animeTitle": "个十百千万(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "长津湖(2022)【电影】from 360"
+  ],
+  "truthWhy": "360把2021年的长津湖记为2022(±1)。陷阱:续集长津湖之水门桥(2022),以及一串年份正好=2021的youku杂条目(长津湖战记/往事/大决战/续集：水门桥战役等),冰血长津湖(2020)【综艺】、血战长津湖(2021)【综艺】;偏好年份精确相等的匹配器会选错。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "长津湖",
+  "title": "长津湖之水门桥",
+  "ours": {
+   "vod_year": "2022",
+   "type_name": "战争片",
+   "eps": 1
+  },
+  "ep": "正片",
+  "candidates": [
+   {
+    "animeTitle": "长津湖之水门桥(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖之水门桥战记(2022)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "长津湖续集：水门桥战役(2021)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "长津湖之水门桥(2022)【电影】from 360"
+  ],
+  "truthWhy": "同名同年电影;长津湖之水门桥战记(2022)、长津湖续集：水门桥战役(2021)是youku杂条目(陷阱)。",
+  "prod": {
+   "n": 12000,
+   "verdict": "match"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "长津湖",
+  "title": "冰血长津湖",
+  "ours": {
+   "vod_year": "2011",
+   "type_name": "纪录片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "冰血长津湖(2020)【综艺】from 360",
+    "type": "综艺",
+    "typeDescription": "综艺"
+   }
+  ],
+  "truth": [
+   "冰血长津湖(2020)【综艺】from 360"
+  ],
+  "truthWhy": "360条目简介与TMDB(2011八一厂纪录片)逐字相同,是同一部纪录片;但360年份2020、类型综艺,按\"年份±1/类型兼容\"的硬规则会被排除,需要容忍。",
+  "prod": {
+   "n": 12000,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "流浪地球2",
+  "title": "流浪地球2",
+  "ours": {
+   "vod_year": "2023",
+   "type_name": "科幻片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "流浪地球2(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球2：再次冒险(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "流浪地球2(2023)【电影】from 360"
+  ],
+  "truthWhy": "同名同年电影;陷阱:流浪地球2：再次冒险(2024)幕后纪录片、流浪地球(2020)。",
+  "prod": {
+   "n": 0,
+   "verdict": "empty"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "流浪地球2",
+  "title": "流浪地球",
+  "ours": {
+   "vod_year": "2019",
+   "type_name": "科幻片",
+   "eps": 2
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "流浪地球(2020)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球2(2023)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "流浪地球2：再次冒险(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   },
+   {
+    "animeTitle": "末世万物升级系统(2024)【动漫】from 360",
+    "type": "动漫",
+    "typeDescription": "动漫"
+   }
+  ],
+  "truth": [
+   "流浪地球(2020)【电影】from 360"
+  ],
+  "truthWhy": "360年份2020,我方2019(±1);陷阱:流浪地球2(2023)、流浪地球2：再次冒险(2024)、末世万物升级系统【动漫】。",
+  "prod": {
+   "n": 21,
+   "verdict": "mismatch"
+  }
+ },
+ {
+  "group": "g6-movies",
+  "keyword": "流浪地球2",
+  "title": "流浪地球2：再次冒险",
+  "ours": {
+   "vod_year": "2024",
+   "type_name": "记录片",
+   "eps": 1
+  },
+  "ep": "HD国语",
+  "candidates": [
+   {
+    "animeTitle": "流浪地球2：再次冒险(2024)【电影】from 360",
+    "type": "电影",
+    "typeDescription": "电影"
+   }
+  ],
+  "truth": [
+   "流浪地球2：再次冒险(2024)【电影】from 360"
+  ],
+  "truthWhy": "唯一候选,同名同年(我方记录片,360归电影)。",
+  "prod": {
+   "n": 2731,
+   "verdict": "match"
+  }
+ }
+]

@@ -26,7 +26,8 @@
 //      ③ ad-clip-core.js v3:多组插播(电影天堂)+ probeTs(iOS/Safari 原生 HLS 读分片头)。
 // v34: 播放前剪清单(ad-clip-core v5);/api/hls/(剪后清单托管)一律直达,不进缓存(每条都是一次性地址,缓存只会无限堆积并回放陈旧内容)。
 // v35: ad-clip-core v6(剪清单时左侧未知不剪;计划缓存带核心版本)。
-const CACHE_VERSION = 'v35';
+// v36: 站长后台/历史/设置/求片/统计/认证与带 token 的 API 一律直达不缓存(升版同时清掉旧缓存里已存的这些响应)。
+const CACHE_VERSION = 'v36';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -112,6 +113,11 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && url.pathname === '/sw.js') return;
     // ⑦ 剪掉插播后的清单托管 /api/hls/cut/<id>.m3u8:一次性地址,直达服务器(v34)
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/hls/')) return;
+    // ⑧ 按用户/站长的数据一律直达、不进缓存(v36):站长后台接口带全站用户数据(缓存键不含 X-Admin-Token,弱网/断网会被
+    //    不鉴权回放)、历史/设置/求片/统计是每个人自己的(退出登录后还留在 Cache Storage)。缓存审计 P1-1。
+    if (url.origin === self.location.origin && /^\/api\/(admin|requests|history|settings|stats|auth)\//.test(url.pathname)) return;
+    //    带 token 参数的请求(config?token=…)同理:按用户的,不缓存
+    if (url.origin === self.location.origin && url.pathname.startsWith('/api/') && url.searchParams.has('token')) return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {

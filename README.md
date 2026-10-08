@@ -1,12 +1,10 @@
 # E视界 (DongguaTV Enhanced Edition)
 
-现代流媒体聚合播放器，基于 Node.js + Express + Vue 3 构建。原版项目：[Minerchu/dongguaTV](https://github.com/Minerchu/dongguaTV)
+现代流媒体聚合播放器：用 TMDb 做影视资料、聚合多个 Maccms 采集站做播放源，基于 Node.js + Express + Vue 3。原版项目：[Minerchu/dongguaTV](https://github.com/Minerchu/dongguaTV)
 
-相比原版，本作重构了前后端，新增了**实时流式搜索、弹幕、分享深链与未登录预览、TMDB 反代、智能 CORS 代理与边缘去广告、多用户历史云同步、SEO/社媒卡片、Android/PWA/TV 模式**等大量功能。
+在原版基础上重构了前后端，并加入了：流式搜索、按广告情况分组的线路与自动选源、边缘 + 播放器两级去广告、跳过片头片尾、弹幕、直播、离线缓存、多用户云同步、站长后台、分享深链、PWA / Android / TV 模式等。
 
-## 演示
-
-https://ednovas-test.vercel.app （不包含任何数据）
+**演示**：https://ednovas-test.vercel.app （不含任何数据）
 
 <img width="2547" height="1226" alt="image" src="https://github.com/user-attachments/assets/15392a90-9078-45b6-828d-829402669950" />
 
@@ -16,781 +14,511 @@ https://ednovas-test.vercel.app （不包含任何数据）
 
 ---
 
-## 📚 目录
+## 目录
 
-- [✨ 核心特性](#-核心特性)
-- [🎨 界面升级](#-界面升级)
-- [🛠️ 技术栈](#️-技术栈)
-- [🔧 前置准备](#-前置准备)
-- [📦 安装与运行](#-安装与运行)
-  - [环境变量总表](#环境变量总表)
-- [🚀 部署](#-部署)
-  - [Docker 部署](#-docker-部署推荐)
-  - [Vercel 部署](#-vercel-部署)
-  - [PM2 部署](#️-linux-服务器部署-pm2)
-  - [宝塔面板部署](#-宝塔面板-aapanel-部署)
-- [🔒 安全与高级功能](#-安全与高级功能)
-- [🛡️ 广告过滤](#️-广告过滤)
-- [📡 直播电视 (IPTV)](#-直播电视-iptv)
-- [⏭️ 跳过片头/片尾](#-跳过片头片尾自动学习--全站共享)
-- [🗨️ 弹幕](#️-弹幕)
-- [🔗 分享、深链与未登录预览](#-分享深链与未登录预览)
-- [🔎 SEO 与社媒卡片](#-seo-与社媒卡片)
-- [📺 TV 模式](#-tv-模式)
-- [🎛️ 偏好设置](#️-偏好设置)
-- [🤖 Android APP](#-android-app)
-- [💾 数据维护与备份](#-数据维护与备份)
-- [⚠️ 免责声明](#️-免责声明)
+- [功能一览](#功能一览)
+- [快速开始](#快速开始)：[准备](#1-准备) · [部署](#2-部署) · [环境变量](#3-环境变量)
+- [可选组件](#可选组件)：[CORS 代理](#cors-代理去广告依赖它) · [TMDB 反代](#tmdb-反代大陆用户) · [弹幕服务](#弹幕服务-danmu_api)
+- [功能说明](#功能说明)：[线路与测速](#线路分组与自动选源) · [去广告](#去广告) · [播放器](#播放器) · [跳过片头片尾](#跳过片头片尾) · [弹幕](#弹幕) · [直播](#直播-iptv) · [离线缓存](#离线缓存) · [账号与同步](#账号同步与求片) · [站长后台](#站长后台) · [分享与 SEO](#分享深链与-seo) · [TV 模式与偏好设置](#tv-模式与偏好设置)
+- [Android App](#android-app)
+- [数据与备份](#数据与备份)
+- [开发与测试](#开发与测试)
+- [致谢与免责声明](#致谢)
 
 ---
 
-## ✨ 核心特性
+## 功能一览
 
-### 🎬 双引擎数据驱动
-- **TMDb**：高质量电影/剧集元数据（海报、背景图、评分、简介、演职员表）
-- **CMS 聚合源 (Maccms)**：集成多个自定义第三方资源站 API，自动**全网测速**，智能过滤失效源
+| 方面 | 说明 |
+|---|---|
+| **找片** | TMDb 海报/背景/评分/简介 + 多个 Maccms 采集站聚合；SSE 流式搜索（边搜边显示）；自动生成关键词变体、英文名自动转中文名；同名不同作品自动拆成多张卡片并标年份/集数；内置 4 个番剧规则源 |
+| **首页** | 本周趋势轮播、20 个榜单（含随机盲盒）、继续观看、为你推荐、分类快捷入口、直播频道 |
+| **线路** | 按"看的时候有没有广告"分组（无广告 / 有插播 / 有水印 / 可能无法播放）+ 分辨率角标；本机测速 + 服务器兜底测速，结果按站缓存；播放失败自动换线路 |
+| **去广告** | Cloudflare Worker 边缘剔除广告分段；Worker 删不掉的插播，由播放器在播放前把整段从清单里剪掉（进度条里都没有） |
+| **播放** | 倍速 0.5–3x、进度记忆、自动下一集并预热、画中画、投屏（AirPlay / Chromecast）、手势、跳过片头片尾（自动学习、全站共享）、弹幕 |
+| **直播** | 约 1800 个频道、13 种语言 × 22 个种类筛选、最近观看、多线路自动切换 |
+| **离线** | 按集离线缓存到本机；断网时自动用缓存续播 |
+| **账号** | 访问密码（多密码 = 多用户）、观看历史与设置跨设备同步、求片、封禁 |
+| **站长后台** | `/admin`：实测观看时长、每人看了什么、分享从哪个 App 打开、求片处理 |
+| **分享** | `?play=剧名&ep=集名&t=秒` 深链、各社交平台分享、未登录预览框、社媒卡片、SEO 页面与 sitemap |
+| **多端** | PWA（正常刷新即更新）、Android App、TV 模式（遥控器导航） |
 
-### 🔍 智能搜索与聚合
-- **实时流式搜索 (SSE)**：结果边搜边显，即时反馈，源数量实时跳动
-- **智能关键词匹配**：自动生成搜索变体（去除副标题、季数后缀等），同时搜索中英文名
-- **自动英中翻译**：检测英文搜索词时自动通过 TMDB 获取中文译名（如 "Stranger Things" → "怪奇物语"）
-- **自动分组与合并**：同一影片的不同线路自动聚合到一张卡片
-- **🎌 番剧规则源**：内置 4 个番剧站（规则取自开源规则仓库 [KazumiRules](https://github.com/Predidit/KazumiRules) 的 XPath 规则，MIT 许可，见 `lib/kazumi/rules/NOTICE`；规则引擎与地址解析为本项目自行实现），服务端抓取搜索/选集并解析真实播放地址，结果自动并入同一部剧的卡片；可用 `KAZUMI_DISABLE=1` 关闭
-- **多级缓存**：SQLite / JSON / 内存，热搜词秒级响应
-
-### 📺 沉浸式播放体验
-- **影院模式**：暗色系沉浸布局，剧集网格选择（DPlayer + HLS.js）
-- **🗨️ 弹幕**：可挂接自建弹幕聚合服务，聚合爱奇艺/腾讯/优酷/B站/芒果/360 等平台弹幕（需配置 `DANMU_API_URL`，详见[弹幕](#️-弹幕)）
-- **双模式测速**：客户端直连测速 + 服务器端兜底测速（`/api/check`），真实反映可用性
-- **自动故障转移**：播放失败自动切换下一可用线路
-- **倍速播放**：0.5x–2x 调速，选择记忆到本地，TV 模式带专用调速按钮
-- **投屏支持**：集成 DLNA/AirPlay 本地投屏（自动保持屏幕常亮）
-- **🛡️ 边缘去广告**：通过 CORS 代理在 Cloudflare Worker 边缘按时长剔除 M3U8 广告分段（详见[广告过滤](#️-广告过滤)）
-
-### 📡 直播电视
-- **多源聚合**：聚合公开 M3U 直播源（vbskycn + iptv-org），中文频道 + 12 种国际语言，约 **1800 频道 / 22 种类 / 13 语**，服务器侧 6h 缓存并预热
-- **语言 × 种类双重筛选**：播放页按【语言】+【种类】两级筛选，分页网格（每页 48、左右翻页箭头、只渲染当前页防卡），并支持「最近观看频道」
-- **诚实可达性**：服务器逐源测速，标注「能播/置灰」，绝不让被封的源诈活（CCTV 等央视海外受运营商内网 IP 限制，详见[直播电视](#-直播电视-iptv)）
-- **成人频道门控**：站长可经 `LIVE_M3U_ADULT` 注入成人源（本仓库不内置），受前端 NSFW 过滤开关控制显隐
-- **直播深链**：直播频道可分享 `?live=频道名`，打开自动定位播放
-
-### 🔗 分享与深链
-- **一键分享**：生成 `?play=剧名&ep=集名&t=秒数` 深链，可复制或分享到微信/QQ/Telegram/WhatsApp/Facebook/X/Instagram
-- **未登录预览锁定框**：未登录用户打开分享链接，仅展示标题+简介+海报（来自 `/api/preview`，**不访问任何资源站**），登录后解锁播放
-- **社媒卡片**：社交爬虫抓取分享链接时返回 OpenGraph / Twitter Card 富预览
-
-### 🌏 大陆用户优化
-- **智能 IP 检测**：Cloudflare 头 + `api.ip.sb` 地理库判定大陆/海外，自动切换 TMDB 反代模式（或用 `SERVER_IN_CHINA=true` 强制）
-- **本地资源优先**：核心依赖库（Vue、Bootstrap、DPlayer、HLS.js 等）全部本地化部署，无 CDN 依赖，秒开
-- **智能 CORS 代理**：资源站直连失败或过慢时自动走代理并"记住"该站点（24h），自动重写 m3u8、绕过防盗链
-- **一键安装脚本**：交互式配置
-
-### 📱 多端支持
-- **Android App**：沉浸式状态栏，适配刘海屏（Capacitor）
-- **PWA**：添加到主屏幕即点即用，Service Worker 离线缓存；页面网络优先（4 秒内拿不到才用缓存），发版后用户正常刷新一次就是新版本，不用清缓存（`public/sw.js` 里改了预缓存的库要同时升 `?v=` 和 `CACHE_VERSION`）
-- **电视/盒子**：TV 模式遥控器导航，自动检测智能电视；启动屏自带 WebView 兼容性检测
-
-### 🔒 安全与访问控制
-- **全局访问密码**：支持记住登录状态 1 年
-- **多用户模式**：每个密码一个独立用户，观看历史跨设备云同步
-- **接口限流**：按 IP 分级限流（通用 600/分、搜索 120/分、预览 40/分等），并对 TMDB/弹幕上游调用做全站封顶防刷
-- **远程配置加载**：`REMOTE_DB_URL` / `SITES_JSON` 多站点统一管理
+> 部分功能依赖服务器能力，**Vercel 无状态部署不支持**：见 [Vercel 的限制](#vercel)。
 
 ---
 
-## 🎨 界面升级
+## 快速开始
 
-| 功能区域 | 原版 | **增强版** |
-| :--- | :--- | :--- |
-| **首页视觉** | 简单列表 | Netflix 风格 Hero 轮播，全屏动态背景 |
-| **导航栏** | 固定顶部 | 智能融合，初始透明，滚动变黑 |
-| **搜索框** | 固定位置 | 动态交互，下滑自动吸顶缩小 |
-| **榜单浏览** | 有限静态列表 | 无限滚动，20+ 细分榜单 |
-| **搜索体验** | 等待 loading | 实时流式加载 (SSE) |
-| **线路选择** | 单一延迟 | 双模式测速（直连/代理/服务器兜底） |
-| **播放失败** | 手动切换 | 自动故障转移 |
-| **启动体验** | 分块加载 | 优雅启动屏 + WebView 兼容性检测 |
+### 1. 准备
 
----
+**TMDb API Key（必需）**：注册 [TMDb](https://www.themoviedb.org/signup) → [API 设置](https://www.themoviedb.org/settings/api) 申请（类型选 Developer）→ 复制 **API Key (v3 auth)**。
 
-## 🛠️ 技术栈
-
-| 类别 | 技术 |
-|------|------|
-| **Frontend** | Vue.js 3 (CDN), Bootstrap 5, FontAwesome 6, DPlayer, HLS.js |
-| **Backend** | Node.js, Express, Axios, express-rate-limit |
-| **Data Sources** | TMDb API v3, 多个 Maccms CMS API |
-| **Deployment** | Docker (多架构), Vercel, PM2, 宝塔面板 |
-| **Cache** | SQLite (推荐，better-sqlite3 + WAL), JSON File, Memory |
-| **Proxy / Edge** | Cloudflare Workers (TMDB 反代 / CORS 代理 + 去广告), 或自建 `proxy-server.js` |
-| **Mobile** | Capacitor (Android), PWA (Service Worker + Manifest) |
-
----
-
-## 🔧 前置准备
-
-### 1. ⚠️ 配置采集源 (重要)
-
-本项目**不包含**任何内置影视资源接口。需自行添加合法的 Maccms V10 (JSON 格式) 接口。
-
-所有配置存储在 `db.json` 文件中（首次运行自动生成）：
+**采集源（必需）**：本项目**不内置**任何资源接口，需自行准备合法的 Maccms V10 JSON 接口，写进 `db.json`（首次运行会由 `db.template.json` 生成一份占位）：
 
 ```json
 {
   "sites": [
-    {
-      "key": "unique_key1",
-      "name": "站点名称1",
-      "api": "https://...",
-      "active": true
-    }
+    { "key": "site1", "name": "站点名称", "api": "https://example.com/api.php/provide/vod/" }
   ]
 }
 ```
 
-### 2. 获取 TMDb API Key (必需)
+- 站点只能靠删除来停用（`active` 字段不生效）。
+- 可选字段 `ad_tier` / `profile` 用来覆盖线路分组，见[线路分组](#线路分组与自动选源)。
+- 也可以用 `REMOTE_DB_URL` 远程加载（5 分钟缓存，失败回退本地）；Vercel 上用 `SITES_JSON`。
 
-1. 注册：[Create Account](https://www.themoviedb.org/signup)
-2. 申请 API：[API Settings](https://www.themoviedb.org/settings/api) → **Create**
-3. 应用类型选 **Developer**，用途填 "Personal learning project"
-4. 复制 **API Key (v3 auth)** 备用
+### 2. 部署
 
-### 3. 大陆用户：部署 TMDB 反代 (可选)
+需要 **Node.js 20 或更新**（推荐 22；`better-sqlite3` 已不支持 18）。要用多用户同步、求片、站长后台、观看统计，请设 **`CACHE_TYPE=sqlite`**。
 
-TMDB 在大陆无法直接访问，需要配置反向代理：
+#### Docker（推荐）
 
-1. 登录 [Cloudflare Dashboard](https://dash.cloudflare.com/) → **Workers & Pages** → **Create Worker**
-2. 复制 `cloudflare-tmdb-proxy.js` 内容到编辑器 → **Save and Deploy**
-3. 获取 Worker URL，在 `.env` 中配置：
-   ```env
-   TMDB_PROXY_URL=https://tmdb-proxy.your-name.workers.dev
-   # 若服务器本身在大陆，建议同时设置 SERVER_IN_CHINA=true 强制走反代
-   ```
-
-### 4. 资源站 CORS 代理 (可选)
-
-当服务器或用户无法直接访问资源站时，系统自动通过 CORS 代理中转。**边缘去广告也依赖此代理**。
-
-**核心功能：**
-- ✅ 智能学习：直连失败或过慢（>1.5s）时自动改走代理，并记住该站点 24h
-- ✅ 双延迟比较：仅当直连 >1500ms 且代理快 30% 以上才切换，避免无谓代理
-- ✅ m3u8 重写：自动把 ts 分片改写为经代理（ts 视频本身仍由 CDN 直传，不二次代理）
-- ✅ 防盗链绕过：上游返回 401/403/404/451 时自动去掉 Referer/Origin 重试
-- ✅ 边缘去广告：按时长剔除广告分段（详见[广告过滤](#️-广告过滤)）
-
-**线路标识（按"看的时候有没有广告"分组，自动选源也按此偏好）：** 🟢 无广告（画面干净；插播的视频广告由去广告代理或播放器去除——如意、电影天堂由播放器在播放前整段剪掉(iOS/Safari 需 server.js 部署,Vercel 上改为播放中自动跳过),剪不到的播放中静默跳过；关闭广告过滤时这类线路改标「有插播」，未配置 `CORS_PROXY_URL` 时只靠代理去广告的线路也改标「有插播」）｜ 🟡 有插播（画面干净，但插播广告去不掉）｜ 🟠 有水印（画面里烧录了广告水印，无法去除；界面只提示「请不要相信视频中的任何广告内容」）｜ 🔴 可能无法播放（未评测的线路，以及本机测速只有服务器能通的线路——多为海外受限，排在最后仅供尝试；有档案的海外受限线路国内用户测得通时照常显示在原分组）；另附分辨率角标（1080P/720P/标清）。分级数据在 `lib/site-profiles/profiles.json`，可在 `db.json` 里用站点的 `profile` / `ad_tier` 字段覆盖（认 `clean`/`noburn`/`insert`/`unknown`/`ads` 或中文名）。直连/中转只是测速通道，界面不再显示。同名但不是同一部的作品（如《遮天》动画与同名电影）会拆成多张卡片并标注年份/集数；同一张卡里同一个站只出现一次，首集地址完全相同的多个站（同一份片源换了个 API 名字）只保留一条。测速结果按站点缓存在本机（测通 3 天 / 只有服务器能通 6 小时 / 不可用 12 小时），回访直接套用、不再重测，「刷新线路」可强制重测。
-
-#### 方案 A：Cloudflare Workers 部署
-
-> ⚠️ 免费版每日 10 万次请求限制。个人自用通常没问题，多人使用建议用 VPS 方案。
-
-1. Cloudflare → **Workers & Pages** → **Create Worker**
-2. 复制 `cloudflare-cors-proxy.js` → **Save and Deploy**
-3. 配置 `.env`：
-   ```env
-   CORS_PROXY_URL=https://cors-proxy.your-name.workers.dev
-   ```
-
-#### 方案 B：VPS / Node.js 部署
+镜像：`ednovas/dongguatv:latest`（Docker Hub）或 `ghcr.io/ednovas/dongguatv:latest`，支持 amd64 / arm64 / armv7。
 
 ```bash
-npm install express axios cors dotenv
-PORT=8080 node proxy-server.js
-# 或 PM2 守护：pm2 start proxy-server.js --name cors-proxy
-# 可选：设置 PROXY_PASSWORD 后，调用需带 Authorization: Bearer <password>
-```
+# 先建好文件，否则 Docker 会把它们当成目录挂载(报 EISDIR)
+touch cache.db && echo '{"sites":[]}' > db.json && mkdir -p cache/images
 
-`.env` 配置：`CORS_PROXY_URL=http://your-vps-ip:8080`
-
-### 5. 弹幕服务 (可选)
-
-如需弹幕，需自行部署一个 `danmu_api`（聚合主流平台弹幕、兼容弹弹play 的服务），然后在 `.env` 配置 `DANMU_API_URL`。详见[弹幕](#️-弹幕)章节。
-
----
-
-## 📦 安装与运行
-
-### 🚀 一键安装脚本 (推荐)
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/ednovas/dongguaTV/main/install.sh | bash
-```
-
-脚本会引导输入 TMDB API Key、反代地址、运行端口等。
-
-### 手动安装
-
-```bash
-# 1. 安装 Node.js v18+
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
-
-# 2. (可选) SQLite 编译工具 —— 使用 CACHE_TYPE=sqlite 时必需
-sudo apt-get install -y build-essential python3
-
-# 3. 安装依赖
-git clone https://github.com/ednovas/dongguaTV.git
-cd dongguaTV && npm install
-
-# 4. 配置环境变量
-cp .env.example .env && nano .env
-
-# 5. 启动
-node server.js
-```
-
-访问 `http://localhost:3000`
-
-### 环境变量总表
-
-| 变量名 | 必填 | 默认 | 说明 |
-|--------|------|------|------|
-| `TMDB_API_KEY` | ✅ | — | TMDb API 密钥，核心元数据来源 |
-| `PORT` | ❌ | `3000` | 服务监听端口 |
-| `CACHE_TYPE` | ❌ | `json` | 缓存类型：`json` / `sqlite` / `memory` / `none`。历史同步需 `sqlite` |
-| `ACCESS_PASSWORD` | ❌ | — | 访问密码；逗号分隔多个则开启多用户（首个为管理员，不同步） |
-| `TMDB_PROXY_URL` | ❌ | — | TMDB 反代地址（大陆用户） |
-| `SERVER_IN_CHINA` | ❌ | — | 设为 `true` 时所有 TMDB 请求强制走 `TMDB_PROXY_URL` |
-| `CORS_PROXY_URL` | ❌ | — | 资源站/m3u8 的 CORS 代理与边缘去广告地址。**可逗号分隔配多个做冗余**（如 `https://cors.a.workers.dev,https://cors.b.workers.dev`）：第一个为主代理，主代理临时故障（5xx/超时）时前端自动切换到备用 worker 保住广告过滤 |
-| `REMOTE_DB_URL` | ❌ | — | 远程 `db.json` 地址（5 分钟缓存，失败回退本地） |
-| `SITES_JSON` | ❌ | — | 直接内嵌站点配置（JSON 或 Base64），主要用于 Vercel |
-| `DANMU_API_URL` | ❌ | — | 自建 `danmu_api` 地址；配置后开启弹幕。**支持逗号分隔多实例**（并行赛跑、抗限流）。详见[弹幕](#️-弹幕) |
-| `DANMU_API_TOKEN` | ❌ | — | `danmu_api` 鉴权令牌；**逗号分隔与多实例按序配对**，单个则共用 |
-| `SITE_URL` | ❌ | 自动探测* | 分享卡片/SEO 用的站点根地址 |
-| `PROXY_PASSWORD` | ❌ | — | 自建 `proxy-server.js` 的 Bearer 鉴权口令 |
-| `ADMIN_TOKEN` | ❌ | — | 站长令牌，**也是「求片」功能的总开关**：不设则求片整体关闭（前端隐藏入口、后端拒收）。设置后用户可提交求片（含外文名/年份/导演主演等信息，单人最多 3 条待处理、可自行撤销），站长在求片弹窗"站长管理"里输入它即可看全部求片，并贴链接履行（下载/磁力/站内播放/外站均可）或标记"需补充信息 / 无法提供" |
-| `LIVE_M3U_URL` | ❌ | `live.zbds.top/tv/iptv4.m3u` | 直播主源 M3U（vbskycn）。详见[直播电视](#-直播电视-iptv) |
-| `LIVE_M3U_FALLBACK` | ❌ | gh-proxy 镜像 | 主源拉取失败时的备源 |
-| `LIVE_M3U_IPTVORG` | ❌ | iptv-org `countries/cn.m3u` | 中文频道补充源 |
-| `LIVE_M3U_ZHO` | ❌ | iptv-org `languages/zho.m3u` | 华语频道补充源——收录大量**海外 CDN** 华语源（CGTN 全家、CCTV-4 America/Europe、NTD 等），海外可达性远好于 `cn.m3u` |
-| `LIVE_M3U_EXTRA` | ❌ | — | 自定义上游 M3U（逗号分隔多个），用于注入**付费 IPTV 的 m3u**——海外稳定播更多被封频道的可靠路 |
-| `LIVE_M3U_DISABLE` | ❌ | — | 设为 `1` 关闭所有内置直播源，仅保留 `LIVE_M3U_EXTRA` 自定义源 |
-| `LIVE_M3U_ADULT` | ❌ | — | 成人直播源（逗号分隔），归"成人"分类，受前端 NSFW 过滤开关控制显隐；仓库**不内置任何地址** |
-| `KAZUMI_DISABLE` | ❌ | — | 设为 `1` 关闭内置番剧规则源（Kazumi 格式，服务端刮削+解析） |
-| `KAZUMI_SITES` | ❌ | 全部 | 只启用指定的番剧规则源（逗号分隔，填站点键如 `7sefun,dm84,moonci,xfdm`） |
-| `LIVE_TV_DISABLED` | ❌ | — | 设为 `1` 整体关闭直播（前端隐藏直播区、`/api/live/channels` 返回 `enabled:false`） |
-| `LIVE_NO_VALIDATE` | ❌ | — | 设为 `1` 跳过服务端逐源测速验证（默认开启，用于标注频道能播/置灰） |
-
-> \* `SITE_URL` 未设置时自动从请求 `Host`/`X-Forwarded-Host` 头推断，最终回退为 `https://ednovas.video`。
->
-> 💡 注：`DANMU_API_URL`、`DANMU_API_TOKEN`、`SERVER_IN_CHINA`、`SITE_URL`、`PROXY_PASSWORD` 这几项当前未写入 `.env.example`，但代码均已支持，按需在 `.env` 中直接添加即可。
-
----
-
-## 🚀 部署
-
-### 🐳 Docker 部署（推荐）
-
-> **🎉 多架构支持**：自动匹配 `linux/amd64`、`linux/arm64`、`linux/arm/v7`
-
-镜像同时发布到 **GitHub Container Registry** 和 **Docker Hub**，选择任一即可：
-
-| 镜像源 | 地址 |
-|--------|------|
-| **Docker Hub** | `docker.io/ednovas/dongguatv:latest` |
-| **GHCR** | `ghcr.io/ednovas/dongguatv:latest` |
-
-> 💡 如果 `ghcr.io` 拉取报 `manifest unknown`，请使用 Docker Hub 镜像或升级 Docker 到 20.10+。
-
-#### 快速启动
-
-```bash
-docker run -d -p 3000:3000 \
-  -e TMDB_API_KEY="your_api_key_here" \
-  -e ACCESS_PASSWORD="your_password" \
-  --name donggua-tv \
-  --restart unless-stopped \
-  ednovas/dongguatv:latest
-```
-
-#### 完整配置（持久化数据）
-
-```bash
-# 1. 先创建文件，防止 Docker 将其识别为目录
-touch db.json cache.db
-echo '{"sites":[]}' > db.json
-mkdir -p cache/images
-
-# 2. 启动
-docker run -d -p 3000:3000 \
-  -e TMDB_API_KEY="your_api_key_here" \
-  -e ACCESS_PASSWORD="your_password" \
-  -e TMDB_PROXY_URL="https://tmdb-proxy.your-name.workers.dev" \
+docker run -d --name donggua-tv --restart unless-stopped -p 3000:3000 \
+  -e TMDB_API_KEY="your_api_key" \
+  -e CACHE_TYPE=sqlite \
+  -e ACCESS_PASSWORD="main_pw,user1_pw,user2_pw" \
+  -e ADMIN_TOKEN="a_long_random_string" \
   -e CORS_PROXY_URL="https://cors-proxy.your-name.workers.dev" \
-  -e DANMU_API_URL="https://your-danmu-api.workers.dev" \
-  -e REMOTE_DB_URL="https://example.com/db.json" \
   -v $(pwd)/db.json:/app/db.json \
   -v $(pwd)/cache.db:/app/cache.db \
   -v $(pwd)/cache/images:/app/public/cache/images \
-  --name donggua-tv \
-  --restart unless-stopped \
   ednovas/dongguatv:latest
 ```
 
-> ⚠️ 如果报错 `EISDIR: illegal operation on a directory`，说明没有先创建文件。执行 `rm -rf db.json && touch db.json` 后重试。
-
-#### Docker Compose
+<details>
+<summary>Docker Compose / 本地构建</summary>
 
 ```yaml
 services:
   donggua-tv:
     image: ednovas/dongguatv:latest
     container_name: donggua-tv
-    ports:
-      - "3000:3000"
+    ports: ["3000:3000"]
     environment:
-      - TMDB_API_KEY=your_api_key_here
-      - TMDB_PROXY_URL=https://tmdb-proxy.your-name.workers.dev
+      - TMDB_API_KEY=your_api_key
+      - CACHE_TYPE=sqlite
+      - ACCESS_PASSWORD=main_pw,user1_pw
+      - ADMIN_TOKEN=a_long_random_string
       - CORS_PROXY_URL=https://cors-proxy.your-name.workers.dev
-      - ACCESS_PASSWORD=your_secure_password
-      - REMOTE_DB_URL=https://example.com/db.json
     volumes:
       - ./db.json:/app/db.json
       - ./cache.db:/app/cache.db
+      - ./cache/images:/app/public/cache/images
     restart: unless-stopped
 ```
 
-```bash
-touch db.json cache.db
-docker compose up -d
-```
-
-#### 本地构建镜像
-
-```bash
-docker build -t donggua-tv .
-docker run -d -p 3000:3000 -e TMDB_API_KEY="your_key" --name donggua-tv donggua-tv
-```
-
----
-
-### ▲ Vercel 部署
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fednovas%2FdongguaTV&env=TMDB_API_KEY,SITES_JSON,REMOTE_DB_URL,ACCESS_PASSWORD,TMDB_PROXY_URL&envDescription=TMDB_API_KEY%20is%20required.%20Use%20SITES_JSON%20(Base64)%20or%20REMOTE_DB_URL%20for%20site%20config.&envLink=https%3A%2F%2Fgithub.com%2Fednovas%2FdongguaTV%23-vercel-%E9%83%A8%E7%BD%B2)
-
-#### 环境变量配置
-
-在 **Settings → Environment Variables** 中添加：
-
-- `TMDB_API_KEY`（必填）
-- `REMOTE_DB_URL` 或 `SITES_JSON`（二选一，推荐 `SITES_JSON`）
-- `ACCESS_PASSWORD`、`TMDB_PROXY_URL`、`DANMU_API_URL`（可选）
-
-> **SITES_JSON 用法：** 直接填入 JSON 或 Base64 编码的 db.json 内容：
-> ```
-> SITES_JSON={"sites":[{"key":"ffzy","name":"非凡影视","api":"https://api.ffzyapi.com/api.php/provide/vod/"}]}
-> ```
-
-#### 常见问题
-
-| 问题 | 解决 |
-|------|------|
-| 环境变量不生效 | 修改后必须 **Redeploy** |
-| 显示 missing | 检查变量名大小写，确认勾选 **Production** |
-| 诊断 | 访问 `/api/debug` 查看运行状态 |
-
-#### Vercel 限制
-
-由于 Serverless 无法持久化文件系统：
-
-- ❌ SQLite 缓存（自动改用内存缓存）
-- ❌ 本地图片缓存
-- ❌ 本地 db.json（必须配置 `REMOTE_DB_URL` 或 `SITES_JSON`）
-- ❌ 多用户历史同步（需要持久化存储）
-
----
-
-### 🖥️ Linux 服务器部署 (PM2)
-
-```bash
-# 安装 Node.js + PM2
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-sudo apt-get install -y nodejs
-npm install -g pm2
-
-# 获取代码
-git clone https://github.com/ednovas/dongguaTV.git
-cd dongguaTV && npm install
-cp .env.example .env && nano .env
-
-# 启动并设置开机自启
-pm2 start server.js --name "donggua-tv"
-pm2 save && pm2 startup
-```
-
----
-
-### 🏰 宝塔面板 (aaPanel) 部署
-
-1. **软件商店** 安装 **Node.js 版本管理器** (v18+)
-2. SSH 安装编译工具（`CACHE_TYPE=sqlite` 时需要）：
-   ```bash
-   # Ubuntu/Debian
-   sudo apt-get install build-essential python3 -y
-   # CentOS
-   sudo yum groupinstall "Development Tools" -y && sudo yum install python3 -y
-   ```
-3. **网站** → **Node 项目** → **添加**，启动选项 `server.js`，端口 `3000`
-4. 配置 `.env` 文件，重启服务
-5. 映射/绑定域名
-
----
-
-## 🔒 安全与高级功能
-
-### 全局访问密码
-
-```env
-ACCESS_PASSWORD=your_secure_password
-```
-
-开启后访问任何页面都需要密码，登录状态最长记住 1 年。
-
-### 远程配置文件
-
-```env
-REMOTE_DB_URL=https://example.com/my-config/db.json
-```
-
-> 5 分钟内存缓存，远程失败自动降级到本地 db.json。
-
-### 多用户模式与历史同步
-
-多个密码用逗号分隔，每个密码代表一个独立用户：
-
-```env
-ACCESS_PASSWORD=admin_password,user1_pass,user2_pass
-```
-
-| 密码位置 | 行为 |
-|---------|------|
-| 第一个 | 传统模式，历史仅存本地 |
-| 第二个及之后 | 云同步，历史跨设备同步 |
-
-**同步特性：** 自动同步 · 本地优先 · 智能合并（以最新观看记录为准） · 隐蔽状态提示。
-（端点：`/api/history/pull`、`/api/history/push`、`/api/history/clear`）
-
-> ⚠️ 历史同步**仅在 `CACHE_TYPE=sqlite` 模式下可用**。
-
-### 接口限流
-
-服务端内置按真实客户端 IP（`CF-Connecting-IP` / `X-Real-IP`，含 IPv6 子网归一）的分级限流：通用 API 600/分、搜索 120/分、预览 40/分等；并对 TMDB、弹幕等上游调用做**全站每分钟封顶**，防止被人用伪造 IP + 变换参数刷成放大器。
-
----
-
-## 🛡️ 广告过滤
-
-去广告在 **Cloudflare Worker（CORS 代理）边缘侧**完成，因此**需先配置 `CORS_PROXY_URL`** 并让 m3u8 经代理加载（直连不经代理时不去广告）。
-
-### 工作原理
-
-代理在改写 m3u8 时（`cloudflare-cors-proxy.js` 的 `rewriteM3u8`）：
-
-1. **按时长剔除广告段组**：识别 `#EXT-X-DISCONTINUITY` 标记切出的分段组，剔除"时长约 3–120 秒且分片数 <15"的可疑广告组；
-2. **去内联追踪/广告分片**：丢弃时长极短（<0.5s）的非 ts 追踪分片，以及指向 `.vip`/`.bet`/`.casino`/`.top`/`.xyz`/`.buzz`/`.click` 等可疑 TLD 的分片；
-3. **清理 SSAI 标签**：去除 `#EXT-X-CUE`、`#EXT-X-DATERANGE`、`#EXT-X-SCTE35` 等服务端插播元数据；
-4. **正片直传**：真正的 ts 视频分片仍由源站 CDN 直接拉取，不经代理二次中转。
-5. **保险丝（v2.3，必须重新部署 Worker）**：部分资源站会把整集按"每 5 个分片一个 `#EXT-X-DISCONTINUITY`"均匀切块（一集 300+ 组、每组 ~20s、零广告），旧规则会把所有组都当广告删光、返回一份 **0 分片的"合法" m3u8**——hls.js 只报一个非致命 `levelEmptyError` 然后静默，表现为"所有资源站都播不了、点播放没反应、console 干净"。现在只要"广告"占比 >50% 或过滤后没有任何内容组，就判定为切块而非贴片，整份放行；且任何情况下都不再输出 0 分片清单。
-6. **无过滤通道**：`<代理>/?nofilter=1&url=<m3u8>` 只做 CORS/防盗链改写、不做广告判定（子清单链接自动继承）。前端在探测到"过滤后清单为空"时会自动改走这条通道（老版 Worker 不认该参数时退回直连/换线路）。
-
-> 说明：广告判定基于**分段时长/数量启发式**，而非维护广告平台域名黑名单。客户端仅决定"是否把该 m3u8 交给代理"，实际剔除发生在边缘。**改动 `cloudflare-cors-proxy.js` 后需要在 Cloudflare Dashboard 里重新粘贴部署**（前端更新不会自动更新 Worker）。回归：`node scripts/worker-test.mjs`。
-
-### 播放器端：播放前把 Worker 删不掉的插播整段剪掉
-
-有的资源站（如「如意资源」）把 20 秒左右的棋牌广告重新切成和正片一样的分片块藏在正片中间，清单层面和正片分不出来，Worker 删不掉；「电影天堂」的源站则直接封 Worker（只能直连），每集在约 5 分钟、25 分钟、61 分钟处各插一段 16–19 秒的广告（切成两个 `#EXT-X-DISCONTINUITY` 段）。但这类广告在解码层和正片不一样：**分辨率不同**（成龙历险记：正片 1080×810、广告 1280×720），或分辨率相同但**首帧时间戳从 ~1.47 秒重新开始**、而正片的时钟跨过广告"停"了正好一个广告的长度。
-
-- **播放前剪掉（进度条里就没有广告）**：清单交给播放器之前，读每个段首个分片的前 16KB（首帧时间戳 + SPS 分辨率），按上面的规则判出插播、再逐段复核（被剪段的末片与首片是同一支片子），然后把这些段从清单里删掉——总时长、进度条、拖动都没有广告，也没有任何提示。每集约 120 个小请求（约 2MB），实测 1–2 秒；结果按清单指纹缓存在本机 30 天，同一集重开/续看不再扫描，本集最后 2 分钟预扫下一集。
-- **只对需要的站做**：档案标了 `clip` 的站（如意、电影天堂），以及本机播放中真的跳到过插播的站（自动学会，30 天）。其余站照常只靠 Worker，不扫描、不多等。分片 CDN 拒绝探测（403/429）时立刻停手。
-- **iOS / iPadOS / Mac Safari**：浏览器原生 HLS 只认地址，所以剪好的清单交给服务器托管（`/api/hls/cut/<id>.m3u8`，见 `lib/hls-cut`；服务器只存客户端交上来的清单，自己不拉任何 m3u8）。播放器一开始就拿到这个本站地址，服务器等扫描结果交上来再返回，地址只设一次。Vercel 等无状态部署托管不了，`/api/config` 报 `hls_cut:false`，原生通道退回下面的静默跳过；`HLS_CUT_DISABLE=1` 可关闭。
-- **兜底：播放中静默跳过**：没剪到的（扫描超时、未学会的站、剪后清单在本机播放出错时自动换回原地址）播到时直接 seek 过去，片尾的直接进入下一集；不提示、不能"看广告"，拖进广告也会被跳到段后。
-- **时间轴**：进度、观看历史、片头片尾标记、分享时间、投屏都按**原时间轴**存取，在剪过的播放上自动换算——换线路、换设备、离线副本之间位置都对得上。
-- 跟随设置里的「广告过滤」开关；`localStorage.donggua_adclip_off = '1'` 可单独关闭；控制台 `adCut.status()`（剪了什么）、`adClipSkip.status()`（静默跳过的判定，含 hls.js / 原生 HLS 通道）。
-- 不生效：直播、多码率主清单、加密/fMP4 清单、番剧规则源的 MP4 线路、离线副本。
-- 判定核心 `public/libs/js/ad-clip-core.js`，回归 `node scripts/adclip-test.mjs`（如意 95 集 + 11 个源 117 集 + 电影天堂 21 集真实数据回放，剪清单/原生交付端到端）、`node scripts/hls-cut-test.mjs`（服务器托管）。
-
-### 代理失败时的分诊（能播优先，过滤尽力，不误伤好站）
-
-相当一部分源站 CDN 会**封 Cloudflare 机房出口 IP**或把播放地址签名绑定客户端 IP——这类线路**直连正常、经 worker 代理必 403/超时**。但 worker 自身也可能临时抖动（CF 503 / 免费额度波动）。播放失败时客户端**把本集 m3u8 通过 worker 再取一次、按真实返回状态精确三分类**（worker 会加 CORS 头，这次探测能读到状态/内容）：
-
-- **worker 5xx / 429 / 超时 / 网络失败 = 过滤代理自身临时故障** → 本集直连兜底，**绝不记账、不换线路**，下次播放自动重试过滤（避免 worker 一次抽风就把常用站误关小黑屋、广告全回来）；
-- **worker 403 / 404 / 451 或 200 但非 m3u8 = 源站真封 CF** → 记账 **12 小时**（localStorage）；本站直连可达就原站直连（弹"可能含广告"），否则（proxy-only）自动换线路保过滤；
-- **worker 200 且是 `#EXTM3U` = 过滤代理其实正常**，原错误是偶发 → 直接重试走过滤代理，不记账不换线。
-
----
-
-## 📡 直播电视 (IPTV)
-
-聚合公开 M3U 直播源（默认 [vbskycn/iptv](https://github.com/vbskycn/iptv) + [iptv-org](https://github.com/iptv-org/iptv)），在首页提供「直播频道」入口，复用现有播放器（DPlayer + HLS.js，靠 `currentGroup._isLive` 与点播区分）。涵盖**中文频道 + 12 种国际语言**，约 **1800 频道 / 22 种类 / 13 语**，服务器侧 6 小时缓存并启动预热。
-
-### 频道组织与筛选
-
-- **语言 × 种类双重筛选**：播放页顶部两行筛选——【语言】（中文 / English / Español / Français / Deutsch / Русский / العربية / Português / Italiano / 日本語 / 한국어 / हिन्दी / Tiếng Việt）+【种类】（央视/卫视/体育/电影/电视剧/新闻/纪实/少儿/音乐…，**随当前语言动态显示该语言下实际存在的类**）。
-- **分页网格**：每页 48 个频道，网格左右两侧翻页箭头（随网格滚动常驻视口）+ 底部页码；切换语言/种类自动回到第 1 页。**只渲染当前页**，上千频道也不卡顿。
-- **最近观看频道**：记录最近打开的频道（本地存储 + 跨设备同步），可单个删除或一键清空。
-- **跟随封面大小**：频道卡尺寸随「偏好设置」里的封面/文字大小（`--ui-scale`）一起缩放。
-- **分享深链**：直播频道可分享 `?live=频道名` 深链，打开后自动定位并播放该频道。
-
-### 可达性与限制（重要）
-
-- 直播多为 **http 运营商源**，浏览器混合内容 + 跨域限制 → **必须配置 `CORS_PROXY_URL`（Cloudflare Worker）** 才能播。**智能路由**：https 源由浏览器直连（可走用户自己的国内代理）、http 源经 Worker 升级 https。
-- 服务器侧对每个频道首源做**可达性测速**（能识别 backup/待机占位/无信号），标注「能播 / 不能播」，能播的排前、不能播的**置灰**——只如实标注，**不会让被封的源诈活**。测速本身也依赖 `CORS_PROXY_URL`（**未配代理则不测速、不置灰**）；可用 `LIVE_NO_VALIDATE=1` 跳过验证。
-- **CCTV 等央视频道海外大多放不了**：它们多为运营商内网 IP（地域 + 版权封锁），CF 边缘从境外发起的回源会被运营商拒（**与用户自己的 IP 无关**）。CGTN、CCTV-4/9/13、各卫视、国际频道一般可看。
-- **想稳定看更多被封频道**：用 `LIVE_M3U_EXTRA` 注入付费 IPTV 的 https m3u（智能路由直连、可走国内代理）。
-
-### 成人频道（可选，默认隐藏）
-
-站长可用 `LIVE_M3U_ADULT`（逗号分隔）注入成人直播源——**本仓库不内置任何色情地址**。这些频道归入「成人」分类，受前端**「成人内容过滤」（NSFW）开关**控制：默认开启 = 隐藏，关闭后才会在筛选里出现「成人」类。
-
-> 设 `LIVE_TV_DISABLED=1` 可整体关闭直播。直播功能面向 **VPS / 自托管**；Vercel 部署未挂直播端点 → 那边直播区自动隐藏（优雅降级）。
-
----
-
-## ⏭️ 跳过片头/片尾（自动学习 + 全站共享）
-
-奈飞式「跳过片头/片尾」，**无需人工逐集打点**：本地看两集后自动学出片头区间与片尾起点，之后每集播到片头处弹出「跳过片头」按钮、播到片尾处弹出「跳过片尾」按钮；自动模式下片尾会直接走播放结束流程并切下一集。学到的时间点上报服务器，**全站共享**——别人看同一部剧第一集就有按钮。
-
-- **原理**：**音频响度包络互相关**（真实剧集数据上比频谱指纹稳得多）。**画面不参与**（不同码率/水印会失效，音频对编码差异不敏感）。两条学习路径：
-  - **离线抓 m3u8（首选，不用看片头/片尾）**：后台抓这集+邻集的 m3u8（有多码率时自动选**最低码率**）、拆 TS 取 AAC、逐段解码成 10Hz 响度包络（解完即弃不占内存）→ 前 4→8→10 分钟互相关找片头，尾部 4 分钟互相关找片尾起点，extent+整段双重复核杀假阳性，边界精确到 ±1s。学出后本剧每个新集只做一次轻量“定位”，标记自动上传共享——**首个观众学一遍，全站受益**。**iOS 也能用**（不依赖 WebAudio 采集）。AES-128 加密源自动解密；无法解码的源回退下面这条。
-  - **边看边学（兜底，零额外带宽）**：`createMediaElementSource` 挂在正在播放的音频上取频谱指纹，看两集后学出、后续集实时匹配。iOS 原生 HLS 下取不到采样 → iOS 走离线路径或消费共享标记。
-  - **流量说明**：离线分析要下载分片，有低码率变体的源每集约 10~20MB；只有单一高码率的源每集可能 50MB+。省流量模式/2G/蜂窝流量自动禁用；单剧上限 700MB + 每会话总上限 2000MB（命中都会在控制台打日志）；学习/定位结果全站共享，同剧不重复分析。
-- **☁️ 包络云备份（`/api/intro/env`）**：学习成果（几 KB 的响度包络）自动备份服务器。时间标记绑死线路时间轴借不了，但包络是"内容音频的形状"，**跨设备、跨用户、跨线路（资源站）通用**——A 线路学出的片头曲，换 B 线路只需抓本集"定位"（流量约减半、免两集冷启动）。借来的包络必须本线路实测命中才转正登记；失配自动丢弃回退冷启动学习，坏数据自灭不占坑。
-- **开头贴片也能跳**：不少源在每集最开头都会放同一段片头贴片（网络视听许可证、平台方 logo 等，往往几十秒）——学习时自动识别为**独立的第二区间**（两集都贴在开头且不长），播放到贴片处弹「跳过开头」、播放到片头曲处弹「跳过片头」，各跳各的；贴片不会再被误当成片头曲（识别为疑似贴片后会继续扩窗找真片头）。
-- **共享标记**：按 `(剧名, 线路, 集号)` 存服务器（`/api/intro/mark(s)`），多用户 ±5s 加权计票收敛（SponsorBlock 模式）；错值/被刷值由诚实多数逐票削正；贴片区间与片尾起点独立计票。**自动跳过只信被佐证（≥2 票或本机实测）的标记**，单条误学最多弹一个可忽略的按钮、绝不误跳正片。
-- **设置**：偏好设置里「跳过按钮」（默认开）/「自动跳过片头/片尾」（默认关，开了不弹按钮直接跳；片尾直接切下一集）。全流程自动，无需手动打点。
-- **适用范围**：**不按类型限制**——剧集/动漫/综艺/电影全部启用。有固定开场的（含不少综艺）都能学到并跳过；没有固定片头曲的（部分综艺）自然学不出、返回空即可（不误跳，安全）。单集电影不做跨集自学，但仍消费全站共享标记。
-- **限制**：无法解码的源（少数 fMP4/非 AES 加密）离线路径跳过、回退边看边学；倍速/续看跳段时的边看边学不采样（离线路径不受影响）。
-- **存储**：标记走缓存层（`CACHE_TYPE` 任意值都可用，独立于 VOD 详情缓存；`sqlite` 跨重启持久）。无需额外环境变量。
-
----
-
-## 🗨️ 弹幕
-
-播放器可挂接弹幕，数据来自一个**自建的第三方弹幕聚合服务 `danmu_api`**（[huangxd-/danmu_api](https://github.com/huangxd-/danmu_api)，兼容弹弹play、聚合爱奇艺/腾讯/优酷/B站/芒果/360 等平台）。本站后端把"剧名+集名"映射到该服务、抓取并转成 DPlayer v3 格式喂给播放器。
-
-### 启用方式
-
-1. 自行部署一个 `danmu_api` 服务（**推荐 Docker/Node 自托管**，原因见下文「部署选择」）。
-2. 配置环境变量：
-   ```env
-   # 单实例：
-   DANMU_API_URL=https://your-danmu-api.example.com
-   DANMU_API_TOKEN=your_token
-   # 多实例（逗号分隔，多出口 IP 抗限流）：哪个先返回非空就用谁（并行赛跑）
-   DANMU_API_URL=http://127.0.0.1:9321,https://backup-danmu.example.com
-   DANMU_API_TOKEN=token1,token2          # 逗号分隔与各实例配对；只填一个则全部共用
-   ```
-3. 重启服务。**未配置 `DANMU_API_URL` 时弹幕优雅降级**（返回空、不报错、不影响播放）。
-
-### 前端弹幕设置（播放器内）
-
-控制栏有独立的「弹幕设置」按钮（视频设置齿轮左侧），点开滑块面板可调，且**全部跨设备同步**（存 `user_settings`）：
-
-| 项 | 说明 |
-|---|---|
-| 显示弹幕 / 海量弹幕 | 开关（海量=允许重叠不丢弃） |
-| 行数 | 弹幕占屏行数 1–20（按单行高换算容器限高） |
-| 速度 | Lv.1–10，越大越快（动画时长 20s→2s） |
-| 字号 | 12–44px |
-| 字体 | 默认 / 微软雅黑 / 黑体 / 宋体 / 楷体 / 仿宋（子列表每项以各自字体显示） |
-| 不透明度 | 10–100% |
-
-弹幕设置面板与视频设置（齿轮）互斥；菜单开着点视频画面 = 关菜单 + 隐藏控制栏（不暂停）。倍速跨集保持（本地记住）。
-
-### 后端抓取与缓存
-
-- 端点：`GET /api/danmaku/v3/?id=<剧名|集名>`（DPlayer 约定）。
-- **主标题归一**（去 `(2022)`/`【国产剧】` 等后缀，防"破事精英"误配"破事精英 第二季"）、**集号识别**（抓"第N集/话/期"、忽略剧名数字）、**平台回退排序**（爱奇艺/腾讯/优酷/360 优先，跳过常空的源）。
-- **多实例并行赛跑**：`DANMU_API_URL` 多实例时 `Promise.any` 并发，第一个非空即用——某实例卡死/限流不拖累其它。
-- **缓存**：搜索结果按剧名短缓存（同剧各集复用）；非空弹幕长缓存（7 天 + 30 天 stale-while-revalidate）；**空/出错一律 `no-store`**（绝不让 CDN/浏览器缓存"暂时为空"，否则某集偶发取空会被长期冻结）。单集上限 12000 条按时间均匀采样。
-- **防刷**：上游查询全站每分钟封顶。
-
-### `danmu_api` 推荐配置参数
-
-> 下面是 **`danmu_api` 服务自身**的环境变量（不是本站的）。经实测，这几项对"快、稳、不被限"最关键：
-
-| 参数 | 建议值 | 作用 |
-|---|---|---|
-| `TOKEN` | 自定义 | API 鉴权令牌（与本站 `DANMU_API_TOKEN` 对应） |
-| `RATE_LIMIT_MAX_REQUESTS` | `0` | 关闭每 IP 限流——本站是单服务器代理、整站流量同一 IP，默认 `3/分` 会被限成大量 429 |
-| `SOURCE_ORDER` | `360`（国产剧）| "搜索匹配"源；`360` 一次聚合即定位 爱奇艺/腾讯/B站。**别用默认含 `douban`**（它内部串多平台、最慢） |
-| `PLATFORM_ORDER` | `qiyi,qq` | 优先取哪个平台的弹幕（爱奇艺/腾讯最多最稳；B站维护成本高、对国产剧弱） |
-| `OTHER_SERVER` | 一个可用的 danmu_api 地址 | **兜底**：自家抓空时转它（借其干净出口 IP），治"整集没弹幕" |
-| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | 免费 Upstash | **持久缓存**——serverless 上没它，剧集临时 ID 映射跨请求即丢 → `comment not found`，配上即根治 |
-| `BILIBILI_COOKIE` | B站 `SESSDATA` | 绕过 B站 对机房 IP 的风控（仅 B站 这一路需要） |
-| `VOD_REQUEST_TIMEOUT` | `6000` | 单源超时（默认 10s），调小让慢源快速失败 |
-
-### 部署选择（重要）
-
-- **CF Workers / Netlify / Vercel（serverless）**：共享出口 IP，常被弹幕平台**按 IP 限流/风控**（繁忙节点会 0 字节挂死）；CF Workers 还有**单请求子请求上限**（免费版 50，长视频会"后半段没弹幕"），内存缓存跨请求/跨节点失效（**必须配 Redis**，否则频繁 `comment not found`）。
-- **✅ 推荐：Docker/Node 自托管**（自己的 VPS）：专用 IP 不易被限、**无子请求上限**（长视频弹幕抓全）、单进程内存常驻（ID 映射不丢、可不依赖 Redis）。本站 `DANMU_API_URL` 指向 `http://127.0.0.1:9321` 即可：
-  ```bash
-  docker run -d --name danmu-api --restart unless-stopped -p 127.0.0.1:9321:9321 \
-    -e TOKEN=your_token -e RATE_LIMIT_MAX_REQUESTS=0 \
-    -e SOURCE_ORDER=360 -e PLATFORM_ORDER=qiyi,qq \
-    -v /opt/danmu/cache:/app/.cache logvar/danmu-api:latest
-  ```
-
----
-
-## 🔗 分享、深链与未登录预览
-
-### 分享深链
-
-播放页可一键生成深链并复制 / 分享到微信、QQ、Telegram、WhatsApp、Facebook、X、Instagram（App 内走原生分享）：
-
-```
-https://your-site.com/?play=剧名&ep=集名&t=秒数
-```
-
-打开深链会自动（必要时先登录）搜索并定位到对应剧集、从指定时间点续播。
-
-### 未登录预览锁定框
-
-未登录用户打开分享深链时，会看到一个**锁定预览框**：仅显示标题、TMDB 简介与海报，播放器为黑屏并提示登录。该预览数据来自 `GET /api/preview?name=<剧名>`，**全程不搜索、不访问任何资源站**，登录后才解锁真正播放。
-
-接口侧带内存缓存（命中 6h、未命中 10min）+ 单 IP 限流（40/分）+ 全站 TMDB 调用封顶（300/分），避免被当作 TMDB 放大器。
-
-### 社媒卡片
-
-当社交平台爬虫（按 User-Agent 识别）抓取 `/?play=剧名` 时，服务器返回带 OpenGraph / Twitter Card 的富预览页（标题/海报/简介），普通用户照常拿到 SPA。
-
----
-
-## 🔎 SEO 与社媒卡片
-
-为便于搜索引擎收录与社交分享，服务端额外提供：
-
-| 路径 | 说明 |
-|------|------|
-| `/movie/:id`、`/tv/:id` | 服务端渲染的影片详情页，含 OpenGraph、Twitter Card、JSON-LD 结构化数据与 canonical 链接 |
-| `/sitemap.xml` | 自动生成的站点地图 |
-| `/robots.txt` | 动态注入当前站点地址（取 `SITE_URL` 或自动探测的 Host） |
-
-如需保证卡片/规范链接使用固定域名，设置 `SITE_URL=https://your-domain.com`。
-
----
-
-## 📺 TV 模式
-
-页面底部提供 TV 模式切换入口，支持遥控器方向键导航。
-
-| 操作 | 效果 |
-|------|------|
-| 点击底部 📺 TV 按钮 | 切换 TV 模式 |
-| URL `?tv=1` / `?tv=0` | 手动控制 |
-
-**TV 模式特性：** 方向键导航 · 焦点高亮 · 确认键选择 · 返回键退出 · 专用倍速/换源按钮
-
-**自动检测：** Android TV · Fire TV · Samsung Tizen · LG WebOS · Roku · Chromecast
-
-> 启动时会做 WebView 兼容性检测（Proxy/fetch/Promise 等），老旧电视盒子内核不支持时给出提示而非白屏。
-
----
-
-## 🎛️ 偏好设置
-
-页面底部 ⚙️ 偏好设置按钮，配置自动保存到 `localStorage`。
-
-| 选项 | 说明 | 默认 |
-|------|------|------|
-| 隐藏随机盲盒 | 关闭首页随机推荐板块 | 关闭 |
-| 过滤成人内容 | 按 MPAA（隐藏 NC-17）与电视分级（隐藏 TV-MA）过滤 | **开启** |
-
----
-
-## 🤖 Android APP
-
-### 自动构建 (GitHub Actions)
-
-推送 `v*.*.*` 格式的 Tag 时自动触发构建，在 **Releases** 页面下载 APK（通用包，含 armeabi-v7a / arm64-v8a / x86 / x86_64）。
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-### 自定义构建
-
-无需修改代码，在 GitHub **Actions** → **Android Build & Release** → **Run workflow** 中填入：
-- Server URL、App Name、Version Tag
-
-构建会自动从站点图标生成应用图标并签名（有 Release 签名密钥则用之，否则回退 debug 签名）。
-
-### 默认配置
-
-| 配置项 | 值 |
-|--------|-----|
-| App 名称 | E视界 |
-| 默认服务器 | `https://ednovas.video` |
-| App ID | `com.ednovas.donguatv` |
-| 图标来源 | 自动从 `public/icon.png` 生成 |
-
-### 代码修改 (高级)
-
-<details>
-<summary>点击展开</summary>
-
-**修改服务器地址：** 编辑 `capacitor.config.json` 的 `server.url`
-
-**修改 App 名称：** 编辑 `android/app/src/main/res/values/strings.xml`（`capacitor.config.json` 的 `appName` 不会自动同步到原生工程）
-
-**修改版本号：** 编辑 `android/app/build.gradle` 的 `versionCode` / `versionName`
-
-**本地构建：**
-```bash
-npm install && npx cap sync android
-cd android && ./gradlew assembleRelease
-```
-APK 位于 `android/app/build/outputs/apk/release/`
-
+本地构建：`docker build -t donggua-tv .`。注意 `.dockerignore` 目前不排除 `db.json`、`cache.db`，构建前请移走它们，免得把用户数据打进镜像。
 </details>
 
-### ⚠️ App 问题与替代方案
+> SQLite 用 WAL 模式，最近的写入可能还在旁边的 `cache.db-wal` 里；上面只挂载了 `cache.db` 本身，**重建容器前请先 `docker stop`**，备份方法见[数据与备份](#数据与备份)。
 
-遇到安装失败、闪退、播放异常等问题？推荐以下替代方案：
+#### 一键脚本 / 手动 / PM2
 
-1. **🌐 网页版（推荐）** — 兼容性最好，无需安装，电视推荐当贝浏览器
-2. **📺 投屏播放** — 点击「一键投屏」，支持 DLNA/AirPlay
-3. **📱 PWA 模式** — 浏览器中「添加到主屏幕」
+```bash
+curl -fsSL https://raw.githubusercontent.com/ednovas/dongguaTV/main/install.sh | bash
+```
+
+脚本会询问 TMDb Key、TMDB 反代、端口、缓存类型、访问密码、安装目录，并用 PM2 启动（进程名 `donggua-tv`）。CORS 代理、弹幕、站长令牌等需要之后在 `.env` 里补。
+
+手动安装：
+
+```bash
+git clone https://github.com/ednovas/dongguaTV.git && cd dongguaTV
+npm install                          # 没有预编译包时需要 build-essential python3 编译 better-sqlite3
+cp .env.example .env && nano .env    # 至少填 TMDB_API_KEY
+node server.js                       # 或 pm2 start server.js --name donggua-tv && pm2 save && pm2 startup
+```
+
+宝塔面板：软件商店装 Node.js 版本管理器（20+）→ 网站 → Node 项目 → 添加，启动文件 `server.js`、端口 `3000` → 配好 `.env` 后重启。
+
+#### Vercel
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fednovas%2FdongguaTV&env=TMDB_API_KEY,SITES_JSON,REMOTE_DB_URL,ACCESS_PASSWORD,TMDB_PROXY_URL&envDescription=TMDB_API_KEY%20is%20required.%20Use%20SITES_JSON%20(Base64)%20or%20REMOTE_DB_URL%20for%20site%20config.&envLink=https%3A%2F%2Fgithub.com%2Fednovas%2FdongguaTV%23vercel)
+
+在 Settings → Environment Variables 填 `TMDB_API_KEY`，以及 `SITES_JSON`（JSON 或 Base64 的 db.json 内容，推荐）或 `REMOTE_DB_URL`。改完变量要 **Redeploy**。
+
+<a id="vercel"></a>**Vercel 的限制**（Serverless 无状态，只跑 `api/index.js`）：
+
+- **数据与同步**：没有 SQLite，所以没有历史/设置同步、求片、站长后台和观看统计。
+- **广告过滤**：`CORS_PROXY_URL` 不生效，没有边缘去广告。iOS/Safari 上"播放前剪插播"也退化为播放中跳过。
+- **页面与功能**：没有直播、跳过片头的共享标记、分享卡片、`/movie` 与 `/tv` SEO 页、sitemap。
+- **搜索**：没有关键词变体、英文转中文和搜索缓存。
+
+想要完整功能请用 VPS / Docker。
+
+### 3. 环境变量
+
+只有 `TMDB_API_KEY` 必填。
+
+**基础**
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `TMDB_API_KEY` | — | **必填**。TMDb v3 Key |
+| `PORT` | `3000` | 监听端口 |
+| `CACHE_TYPE` | `json` | `sqlite`（推荐，同步/求片/后台/统计都要它）/ `json` / `memory` / `none`。SQLite 起不来时会自动退回 `memory` |
+| `ACCESS_PASSWORD` | — | 访问密码。逗号分隔多个 = 多用户：**第 1 个是共用的"主密码"（不同步）**，其余每个是一个独立用户（历史/设置跨设备同步）。登录可选"记住 1 年" |
+| `ADMIN_TOKEN` | — | 站长令牌：开启 `/admin` 站长后台与**求片**功能（不设则两者都关闭） |
+| `SITE_URL` | 按请求 Host 推断 | 分享卡片、SEO、sitemap 用的站点地址 |
+
+**采集源与网络**
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `REMOTE_DB_URL` | — | 远程 db.json（5 分钟缓存，失败回退本地） |
+| `SITES_JSON` | — | 仅 Vercel：直接填 JSON 或 Base64 的站点配置，优先于 `REMOTE_DB_URL` |
+| `CORS_PROXY_URL` | — | Cloudflare Worker CORS 代理，**边缘去广告与直播都靠它**。可逗号分隔多个，第一个是主代理，故障时前端自动换备用 |
+| `TMDB_PROXY_URL` | — | TMDB 反代。图片与搜索翻译设了就用；`/api/tmdb-proxy` 按访客 IP 判断大陆才走 |
+| `SERVER_IN_CHINA` | — | 设 `true`：服务器自己发起的 TMDB 请求（分享卡片、预览、SEO 页、sitemap）强制走反代 |
+
+**弹幕**
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `DANMU_API_URL` | — | 自建 `danmu_api` 地址，设了才有弹幕；逗号分隔多个实例并行赛跑 |
+| `DANMU_API_TOKEN` | — | 对应令牌；逗号分隔按顺序与实例配对，只填一个则共用 |
+| `DANMAKU_CACHE_DAYS` | `7` | 服务器缓存一集弹幕多少天后再回源更新（过期先回旧的、后台更新） |
+| `DANMU_API_SINGLE_INSTANCE` | — | `1` = 声明 danmu_api 只有一个实例（自己 VPS 上的 Docker）。这时没有视频地址的集（合并源、番组计划等）也可以按 ID 取；多实例（CF Workers 等）别开，会串到别的剧 |
+
+**直播**
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `LIVE_TV_DISABLED` | — | `1` = 关闭直播 |
+| `LIVE_M3U_URL` / `LIVE_M3U_FALLBACK` | vbskycn 源 / 其镜像 | 主源与备源 |
+| `LIVE_M3U_IPTVORG` / `LIVE_M3U_ZHO` | iptv-org `cn.m3u` / `zho.m3u` | 中文 / 华语补充源（`zho` 多为海外 CDN，海外可达性更好） |
+| `LIVE_M3U_EXTRA` | — | 自定义 M3U（逗号分隔），如付费 IPTV |
+| `LIVE_M3U_DISABLE` | — | `1` = 关闭所有内置源，只留 `EXTRA` / `ADULT` |
+| `LIVE_M3U_ADULT` | — | 成人直播源（逗号分隔，仓库不内置），受前端成人过滤开关控制 |
+| `LIVE_NO_VALIDATE` | — | `1` = 跳过服务器对频道的可达性测试 |
+
+**功能开关**
+
+| 变量 | 默认 | 说明 |
+|---|---|---|
+| `KAZUMI_DISABLE` | — | `1` = 关闭内置番剧规则源 |
+| `KAZUMI_SITES` | 全部 | 只启用指定番剧源：`7sefun,dm84,moonci,xfdm` |
+| `HLS_CUT_DISABLE` | — | `1` = 关闭服务器托管剪后清单（iOS/Safari 播放前剪插播要它） |
+| `STATS_DISABLE` | — | `1` = 关闭观看时长与分享统计（站长后台里就只有基础信息） |
+
+> 布尔开关认 `1/true/yes/on`，填 `0/false` 等于没开。
 
 ---
 
-## 💾 数据维护与备份
+## 可选组件
 
-核心数据文件：
+### CORS 代理（去广告依赖它）
 
-| 文件 | 说明 |
-|------|------|
-| `db.json` | 采集源配置（重要） |
-| `cache.db` | SQLite 缓存数据库（含用户观看历史） |
-| `cache_search.json` / `cache_detail.json` | JSON 模式缓存 |
+浏览器直连资源站失败或太慢时，经代理中转；**边缘去广告、直播播放、服务器测速都依赖它**。推荐 Cloudflare Worker：
+
+1. Cloudflare → Workers & Pages → Create Worker，粘贴 `cloudflare-cors-proxy.js` → Deploy；
+2. `.env` 里配 `CORS_PROXY_URL=https://cors-proxy.your-name.workers.dev`（可再部署一个做备用，逗号分隔）。
+
+- **额度**：免费版每天 10 万次请求，自用足够。
+- **更新**：改了 `cloudflare-cors-proxy.js` 要回 Dashboard 重新粘贴部署，网站更新不会带上 Worker。
+- **只有 Worker 版才会**：
+  - 去广告；
+  - 遇到 401/403/404/451 时去掉 Referer 重试；
+  - 让视频分片直连 CDN、不经代理二次中转。
+
+`proxy-server.js` 是一个最简 Node 中转（`PORT=8080 node proxy-server.js`，只用 Node 内置模块）。它**只做 CORS 转发，不去广告、所有分片都经它转发**，而且生成的地址是 `http://`，在 HTTPS 站点上会被浏览器拦截，需要前面再套 HTTPS。它的 `PROXY_PASSWORD` 目前前端不会发送，设了会导致所有代理请求 403。
+
+### TMDB 反代（大陆用户）
+
+TMDB 在大陆访问不了：Cloudflare 新建 Worker，粘贴 `cloudflare-tmdb-proxy.js` 部署，`.env` 配 `TMDB_PROXY_URL=https://tmdb-proxy.your-name.workers.dev`（服务器在大陆再加 `SERVER_IN_CHINA=true`）。
+
+### 弹幕服务 danmu_api
+
+弹幕来自自建的 [huangxd-/danmu_api](https://github.com/huangxd-/danmu_api)（兼容弹弹play，聚合爱奇艺/腾讯/优酷/B站/芒果/360 等）。推荐在自己的 VPS 上用 Docker 跑：
 
 ```bash
-# 备份
-mkdir -p ~/backup
-cp /opt/dongguaTV/db.json ~/backup/
-[ -f /opt/dongguaTV/cache.db ] && cp /opt/dongguaTV/cache.db ~/backup/
+docker run -d --name danmu-api --restart unless-stopped -p 127.0.0.1:9321:9321 \
+  -e TOKEN=your_token -e RATE_LIMIT_MAX_REQUESTS=0 \
+  -e SOURCE_ORDER=360 -e PLATFORM_ORDER=qiyi,qq \
+  -v /opt/danmu/cache:/app/.cache logvar/danmu-api:latest
+```
 
-# 清理缓存
-rm /opt/dongguaTV/cache.db  # 或 rm /opt/dongguaTV/cache_*.json
-pm2 restart donggua-tv
+然后配 `DANMU_API_URL=http://127.0.0.1:9321`、`DANMU_API_TOKEN=your_token`。
+
+<details>
+<summary>danmu_api 参数建议与部署选择</summary>
+
+| 参数（danmu_api 自己的） | 建议 | 作用 |
+|---|---|---|
+| `TOKEN` | 自定义 | 与本站 `DANMU_API_TOKEN` 一致（不一致会静默拿不到弹幕） |
+| `RATE_LIMIT_MAX_REQUESTS` | `0` | 关掉每 IP 限流——本站所有请求都来自同一个服务器 IP |
+| `SOURCE_ORDER` | `360` | 搜索源；别用默认带 `douban` 的（最慢） |
+| `PLATFORM_ORDER` | `qiyi,qq` | 优先取爱奇艺/腾讯弹幕 |
+| `OTHER_SERVER` | 另一个可用实例 | 自家抓空时转它 |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | Upstash 免费版 | serverless 部署必配，否则频繁 `comment not found` |
+| `BILIBILI_COOKIE` | B站 `SESSDATA` | 只有 B站 这一路需要 |
+| `VOD_REQUEST_TIMEOUT` | `6000` | 单源超时 |
+
+部署在 CF Workers / Vercel 等 serverless 上的问题：出口 IP 共享容易被平台限流；CF 免费版每请求最多 50 个子请求（长视频后半段没弹幕）；没有 Redis 时缓存跨请求丢失。自己的 VPS 跑 Docker 没有这些问题。
+</details>
+
+---
+
+## 功能说明
+
+### 线路分组与自动选源
+
+线路按"看的时候有没有广告"分四组显示，自动选源也按这个顺序偏好：
+
+| 分组 | 含义 | 何时归入 |
+|---|---|---|
+| 🟢 无广告 | 画面干净，插播的视频广告会被去除 | 档案为 `clean`，或 `noburn` 且去广告真在链路里（见下） |
+| 🟡 有插播 | 画面干净，但插播广告去不掉 | `noburn` 但去广告不可用（如没配 `CORS_PROXY_URL`、关了广告过滤），或 db.json 指定 |
+| 🟠 有水印 | 画面里烧录了广告，无法去除 | 档案为 `ads`；界面只提示"请不要相信视频中的任何广告内容" |
+| 🔴 可能无法播放 | 排在最后，仅供尝试 | 未评测的站（不在档案里的自定义站都在这），或本机测速只有服务器能通（多为海外受限） |
+
+- **档案**：分级数据在 `lib/site-profiles/profiles.json`，按 API 域名匹配。另有分辨率角标（4K / 1080P / 720P / 标清）、海外受限、H.265 标记（本机不能解 H.265 时不自动选）。
+- **覆盖档案**：在 `db.json` 的站点里写 `"ad_tier": "noburn"`（认 `clean`/`noburn`/`insert`/`unknown`/`ads` 或 无广告/有插播/有水印 等中文名），或写 `"profile": { "tier": ..., "res": "1080p", "geo": 1, "clip": 1 }` 逐项覆盖。
+- **自动选源**：先比可达性（本机直连 → 代理 → 只有服务器能通），同一可达档内才按广告分组和速度挑。
+- **测速缓存**：结果按站点存在本机：测通 3 天、只有服务器能通 6 小时、不可用 12 小时，回访直接套用；「刷新线路」强制重测。
+- **播放失败**：自动换到下一条（优先有当前这一集的线路）；全部失败时如有离线缓存则切到缓存。
+- **卡片合并**：同一部剧的各站线路合并到一张卡片。同一个站只保留一条；首集地址相同的多个站（同一片源换了 API 名）也只留一条。同名但不是同一部的作品（如同名动画与电影）拆成多张卡片并标年份/集数。
+
+### 去广告
+
+两级配合，用户看到的效果是：**插播广告直接没有，进度条里也没有，没有任何"跳过广告"按钮**。
+
+**① 边缘（Cloudflare Worker，`cloudflare-cors-proxy.js` v2.4）**：m3u8 经 Worker 时按分段时长剔除广告，规则按顺序：
+
+1. **候选**：以 `#EXT-X-DISCONTINUITY` 切分成组，3–120 秒且少于 15 个分片的组是候选广告。
+2. **豁免**：
+   - 只有一组的清单不处理；
+   - 镜头切分的正片碎片，以及"每 N 片切一块"的定长打包，都不删。
+3. **其它剔除**：
+   - 不足 0.5 秒的非 ts 追踪分片；
+   - 与正片不同注册域名、且挂在 `.vip/.bet/.top/.xyz` 等可疑后缀下的分片。
+4. **保险丝**：要删掉的超过总时长 20%，或删完一个内容组都不剩，就整份放行。任何情况下都不会输出 0 分片清单。
+5. **其它**：
+   - 删过东西时顺带清理 `#EXT-X-CUE` / `DATERANGE` / `SCTE35`；
+   - 直播与多码率主清单不过滤；
+   - `?nofilter=1` 只做转发不过滤。
+
+**② 播放器（播放前剪掉插播）**：有的站（如意、电影天堂）把 15–20 秒的广告切成和正片一样的分片藏在中间，或干脆屏蔽 Worker，边缘删不掉。但这类广告在解码层和正片不同（分辨率不同，或首帧时间戳重新开始）。
+
+- **怎么剪**：播放器在拿到清单后、开播前，读每段第一个分片的前 16KB 判断，然后把插播段从清单里删掉。每集约 120 个小请求、1–2 秒，结果按清单指纹在本机缓存 30 天。看到本集最后 2 分钟时会预扫下一集。
+- **只扫需要的站**：档案标了 `clip` 的站，以及本机播放中真跳到过插播的站（自动记住 30 天）。CDN 拒绝探测（403/429）时立即停手。
+- **iOS / Safari**：原生 HLS 只认地址，剪好的清单交给服务器托管（`/api/hls/cut`，服务器只存客户端交上来的文本、自己不拉 m3u8）。
+- **兜底**：没剪到的，播到时直接静默跳过去，片尾的直接进下一集。
+- **时间轴**：进度、历史、片头标记、分享时间、投屏都按原始时间轴存取，换线路/设备都对得上。
+- **范围**：跟随播放器设置里的「广告过滤」开关。直播、多码率主清单、加密/fMP4 清单、番剧 MP4 线路、离线副本不处理。
+
+<details>
+<summary>代理失败时的分诊（能播优先，过滤尽力，不误伤好站）</summary>
+
+不少源站 CDN 会封 Cloudflare 出口 IP（直连正常、经 Worker 必 403）。播放失败时客户端经 Worker 再取一次本集 m3u8，按真实返回分类：
+
+- **Worker 5xx / 429 / 超时**：Worker 自身故障。先试备用 Worker，都不行才本集直连，不记账、下次照常走过滤。
+- **403 / 404 / 451，或 200 但不是 m3u8**：源站封了 CF。记 12 小时；能直连就直连（提示可能有广告），否则换线路。
+- **200 且有分片**：只是偶发错误，直接重试过滤代理。
+- **200 但 0 分片**：先试 `?nofilter=1`，再试直连，最后换线路。
+</details>
+
+### 播放器
+
+DPlayer + hls.js（打过补丁，修正 Chrome 长时间播放后声音变低沉的问题）。
+
+- **倍速与进度**：倍速 0.5–3x，记住选择；进度记忆在 30 天内、看过 1 分钟以上时恢复；播完自动下一集，最后 2 分钟预热下一集。
+- **画中画与投屏**：画中画；投屏依次尝试 AirPlay、Chromecast（投的是剪过广告的清单）、浏览器远程播放，都不行时给出指引并复制直链。
+- **屏幕常亮**：播放中保持屏幕常亮。
+- **手机**：控制栏只留播放 / 下一集 / 设置 / 全屏，其余在齿轮菜单里；双击左右侧快退/快进 10 秒；全屏时左侧滑动调亮度、右侧调音量。
+- **桌面**：空格键暂停/播放，另有 DPlayer 自带快捷键。
+- **起播看门狗**：14 秒内没有任何画面就自动换线路。
+
+### 跳过片头片尾
+
+奈飞式「跳过片头 / 跳过片尾」，不用人工打点。
+
+- **怎么学**：播放稳定后，后台拉本集和邻集的 m3u8（有多码率时选最低码率），解出音频算 10Hz 响度包络，再做互相关找出片头曲和片尾的位置。iOS 也能用，AES-128 加密源会自动解密。解不了的源就在播放时边看边学。
+- **全站共享**：学到的时间按（剧名、线路、集号、时间轴通道）上报服务器，多人 ±5 秒加权投票。**自动跳过只信被佐证过的标记**（至少 2 票或本机实测）。学习成果（几 KB 的包络）也备份到服务器，换线路只需定位、不用重学。
+- **开头贴片**：每集开头相同的许可证、平台 logo 会单独识别成「跳过开头」。
+- **设置**：偏好设置里「跳过按钮」（默认开）、「自动跳过片头/片尾」（默认关，开了直接跳，片尾直接下一集）。
+- **流量**：低码率源每集约 10–20MB；省流量模式、2G 和蜂窝网络下不分析；单剧上限 700MB、每次会话 2000MB。
+
+### 弹幕
+
+需配 [danmu_api](#弹幕服务-danmu_api)，未配置时自动隐藏、不报错。
+
+- **前端**：控制栏有独立的弹幕设置（手机在齿轮 → 弹幕样式），可调显示/海量、行数 1–20、速度 1–10 级、字号 12–44、6 种字体、不透明度 10–100%。开关和样式跨设备同步（海量开关只存本机）。
+- **服务器匹配**：按"剧名 + 集名"去 danmu_api 匹配，宁可没弹幕也不错配。
+  - **前端提示**：播放页会带上这部剧的类型（由资源站分类归一）、年份、集数作为提示，从「继续观看」打开时也一样。
+  - **防撞名**：综艺不会拿到同名电影的弹幕，不同年份的翻拍按年份区分，没写季号的不会配到第二季。
+  - **识别写法差异**：季号写法不同（庆余年2 ↔ 庆余年第二季）、版本标签（未删减版、国语）、标点和大写数字都能认出来。
+  - **衍生内容**：路演、花絮、纯享、解说、小剧场这类不当作正片。
+  - **回归测试**：规则用约 200 个真实用例回放测试（`scripts/danmaku-match-test.mjs`）。
+- **按视频地址取弹幕**：danmu_api 的集 ID 只在单个实例的内存里有效，多实例部署（如 CF Workers）时按 ID 取会串到别的剧。现在按视频地址取；按地址取遇到限流/超时就跳过这一次，不退回按 ID。只有 danmu_api 是不支持按地址取的老版本时才按 ID 取，且这类结果不缓存（建议升级 danmu_api）。
+- **多实例**：并行赛跑，名字贴合的结果优先。
+- **服务器缓存**：贴合度高的结果在服务器上 SQLite 持久缓存（压缩存储，默认 7 天后后台更新，过期期间先回旧的）。同一集多人同时打开只回源一次，重启不丢。名字只是沾边的低置信结果只缓存 10 分钟，空结果不缓存。单集最多 12000 条，超出按时间均匀采样。
+- **切换内容**：切到直播或别的剧时，上一部的弹幕会被整份丢弃，晚到的旧弹幕响应也会被丢弃。
+
+### 直播 (IPTV)
+
+聚合公开 M3U（[vbskycn/iptv](https://github.com/vbskycn/iptv) + [iptv-org](https://github.com/iptv-org/iptv)），约 1800 个频道。
+
+- **筛选**：中文 + 12 种外语（共 13 种语言）、22 个种类，按「语言 × 种类」两级筛选。每页 48 个，只渲染当前页。
+- **最近观看与线路**：最近观看最多 12 个频道，跨设备同步；每个频道有多条线路，失败自动换下一条；可分享 `?live=频道名`。
+- **可达性**：
+  - 直播多为 http 运营商源，**必须配 `CORS_PROXY_URL`**：https 源浏览器直连，http 源经 Worker 升级。
+  - 服务器在后台测每个频道的前 2 条线路，通的排前，不通的置灰（未配代理时不测）。
+  - CCTV 等央视频道多为运营商内网地址，海外大多放不了；想稳定看可以用 `LIVE_M3U_EXTRA` 接付费 IPTV。
+- **成人频道**：用 `LIVE_M3U_ADULT` 注入（本仓库不内置），归「成人」类，默认被成人过滤开关隐藏。
+
+### 离线缓存
+
+- **缓存**：播放页可按集离线缓存（存在浏览器 IndexedDB，经去广告代理下载，下载的就是去过广告的版本），可看进度、取消、删除、查看占用。
+- **断网时**：自动切到已缓存的集续播；没网打开时，用已缓存的集合成一个离线选集列表。
+
+### 账号、同步与求片
+
+- **访问密码**：`ACCESS_PASSWORD` 逗号分隔多个时，第 1 个是多人共用的主密码（不同步），其余每个是一个独立用户。注意：目前密码只拦截页面，搜索等接口本身不校验密码。
+- **同步**：独立用户的观看历史（含删除记录，跨设备不会被同步回来）、弹幕开关/样式、封面大小、最近频道跨设备同步。需 `CACHE_TYPE=sqlite`。
+- **求片**：配了 `ADMIN_TOKEN` 才出现。登录用户可提交想看但站内没有的片（可附年份、外文名、导演主演、备注），每人最多 3 条待处理、可撤销；站长在后台贴链接（磁力/下载/站内/外站均可）或标记"需补充信息 / 无法提供"，用户在「我的求片」查看。
+- **封禁**：站长可封禁用户，被封用户整站锁屏，同步与求片接口一律拒绝。
+
+### 站长后台
+
+打开 `https://你的域名/admin`，输入 `ADMIN_TOKEN` 登录（需 `CACHE_TYPE=sqlite`）。
+
+- **概览**：
+  - 用户数（按独立密码 / 主密码等类型拆分）、今日 / 7 日 / 30 日活跃、近 7 日新增；
+  - 今日与近 30 天观看时长、近 30 天每日柱状图；
+  - 热门剧 Top、直播 Top、分享来源分布、待处理求片。
+- **用户**：
+  - 按用户类型、活跃状态（今日/7日/30日活跃、沉睡、从未观看、已封禁、有求片、有分享）筛选，可搜索；
+  - 可按观看时长、观看集数、看过剧数、最近活跃、最近登录、分享带来的打开数等排序；
+  - 点开某人可看他看过的每部剧（时长、集数、逐集明细）、近 60 天每日观看、同步历史、分享记录、求片，并可封禁/解封。
+- **求片**：
+  - 按状态分栏计数，可搜索、按"最多人想看"排序，同一部片多人求会显示"N 人想看"；
+  - 处理时可用常用回复模板，支持批量处理。
+- **分享**：每条分享的渠道、带来的打开次数（去重）、打开来源、带来的登录。
+
+**观看时长是实测的**：
+
+- 只在视频真的在播（画面在走，暂停/缓冲不算）且页面在前台（或画中画）时计时；
+- 4 小时没有任何操作视为挂机，不再计时；
+- 每分钟和切走页面时上报，断网时先存本机、恢复后补发（服务器按批次去重，每人每天最多计 24 小时）。
+
+"看过一集" = 这一集实际看了 2 分钟以上，或看到 90%。旧版按进度估算的时长只在用户详情的同步历史里作参考（标"估"）。
+
+**分享来源**：
+
+- 每次分享生成一个短码附在链接上（`&s=`）。
+- 有人打开时，服务器按打开者浏览器的 User-Agent 识别是从哪个 App 打开的（微信、QQ、微博、钉钉、Telegram 等），并做去重，不存原始 IP。
+- 社交平台抓取链接预览也会记一笔，能看出链接被发到了哪里。
+
+不想统计可设 `STATS_DISABLE=1`。
+
+### 分享深链与 SEO
+
+- **深链**：播放页可分享 `/?play=剧名&ep=集名&t=秒数`（同名多部作品时带 `&w=` 区分），可复制或分享到微信、QQ、Telegram、WhatsApp、Facebook、X、Instagram，或调起系统分享。
+- **未登录预览**：未登录的人打开分享链接，只看到标题、简介、海报（来自 `/api/preview`，**不访问任何资源站**），登录后才能播放。
+- **社媒卡片**：社交平台爬虫抓取分享链接时，服务器返回带 OpenGraph / Twitter Card 的预览页。
+- **SEO**：`/movie/:id`、`/tv/:id` 服务端渲染详情页（含 JSON-LD），以及 `/sitemap.xml`、`/robots.txt`。想固定域名就设 `SITE_URL`。
+
+### TV 模式与偏好设置
+
+**TV 模式**：页面底部按钮开启，或访问 `?tv=1` / `?tv=0`（会记住）。
+
+- **自动开启**：Android TV、Fire TV、Tizen、WebOS、Google TV 等设备会自动开启，Android App 默认开启。
+- **遥控器操作**：方向键导航、确认键选择、返回键退出，播放时有专用的倍速、换线路、±10 秒、选集按钮。
+- **兼容性检测**：启动时检测 WebView 兼容性，老内核给出提示而不是白屏。
+
+**偏好设置**（页面底部 ⚙️）：
+
+| 选项 | 默认 | 说明 |
+|---|---|---|
+| 隐藏随机盲盒 | 关 | 首页不显示随机推荐 |
+| 过滤成人内容 | 开 | 随机盲盒只出 PG-13 / TV-14 及以下；同时隐藏成人直播频道 |
+| 跳过按钮 | 开 | 片头/片尾处显示跳过按钮 |
+| 自动跳过片头/片尾 | 关 | 直接跳，不弹按钮 |
+| 封面/文字大小 | 标准 | 小 / 标准 / 大 / 特大，跨设备同步 |
+
+---
+
+## Android App
+
+App 是一个 Capacitor 外壳，打开内置的站点地址（默认 `https://ednovas.video`），App ID `com.ednovas.donguatv`，最低 Android 7.0。
+
+- **自动构建**：推送 `v*.*.*` 格式的 tag（如 `git tag v1.0.0 && git push origin v1.0.0`）会触发 GitHub Actions，在 Releases 下载通用 APK。
+- **自定义构建**：在 Actions → Android Build & Release → Run workflow 填服务器地址、App 名称、版本号即可，不用改代码。
+- **签名**：配置了仓库 Secrets（`SIGNING_KEY` Base64 keystore、`KEY_STORE_PASSWORD`、`ALIAS`、`KEY_PASSWORD`）就用它签名，否则用 debug 签名。
+- **图标**：由 `public/icon.png` 自动生成。
+
+<details>
+<summary>本地构建</summary>
+
+需要 Node 22+、JDK 21、Android SDK 36。改服务器地址编辑 `capacitor.config.json` 的 `server.url`，改名称编辑 `android/app/src/main/res/values/strings.xml`，改版本编辑 `android/app/build.gradle`。
+
+```bash
+npm install && npx cap sync android
+cd android && ./gradlew assembleRelease   # 产物是未签名的 app-release-unsigned.apk，需自行签名
+```
+</details>
+
+App 有问题时，网页版和 PWA（浏览器「添加到主屏幕」）兼容性最好；电视推荐当贝浏览器。
+
+---
+
+## 数据与备份
+
+| 文件 | 内容 |
+|---|---|
+| `db.json` | 采集源配置 |
+| `cache.db`（+ `cache.db-wal` / `-shm`） | SQLite：**用户历史、设置、求片、用户统计与封禁、观看统计、分享记录、片头片尾标记**、弹幕缓存、各类缓存 |
+| `cache_search.json` / `cache_detail.json` / `cache_intro.json` / `cache_intro_env.json` | 仅 `CACHE_TYPE=json` 时：缓存与片头片尾标记 |
+| `public/cache/images/` | TMDB 图片缓存（上限 1GB，自动淘汰） |
+
+> ⚠️ `cache.db` 不只是缓存，删掉它会丢掉所有用户数据。只想清缓存请不要删它。
+
+备份 SQLite 请用在线备份（不用停服务，也不会漏掉 WAL 里的数据）：
+
+```bash
+sqlite3 /opt/dongguaTV/cache.db ".backup '/root/backup/cache-$(date +%F).db'"
+cp /opt/dongguaTV/db.json /root/backup/
 ```
 
 ---
 
-## 📝 贡献与致谢
+## 开发与测试
 
-本项目由 **kk爱吃王哥呆阿龟头** 设计编写，**ednovas** 优化了功能和部署流程。弹幕能力借助开源 `danmu_api`（聚合主流平台、兼容弹弹play）。数据由 **TMDb** 和各式 **Maccms** API 提供。
+单文件前端 `public/index.html`（Vue 3），后端 `server.js`（VPS）/ `api/index.js`（Vercel），功能模块在 `lib/`（番剧规则源、剪后清单托管、线路档案、弹幕缓存、用户统计）。
+
+| 回归脚本 | 覆盖 |
+|---|---|
+| `node scripts/worker-test.mjs` | Worker 去广告规则 |
+| `node scripts/adclip-test.mjs` | 播放器剪插播（真实清单回放） |
+| `node scripts/hls-cut-test.mjs` | 剪后清单服务器托管 |
+| `node scripts/source-list-test.mjs` | 线路分组、拆卡、去重、测速缓存 |
+| `node scripts/site-profiles-test.mjs` | 线路档案 |
+| `node scripts/kazumi-test.mjs` | 番剧规则源 |
+| `node scripts/danmaku-match-test.mjs` | 弹幕候选匹配（约 340 个真实用例回放，含留出集） |
+| `node scripts/danmaku-cache-test.mjs` | 弹幕服务器缓存 |
+| `node scripts/user-stats-test.mjs` | 观看与分享统计、站长后台接口 |
+| `node scripts/watch-meter-test.mjs` | 播放页观看计时（只在真的在播时计、离线合并补发） |
+| `node scripts/check-hls-lc-patch.mjs` | hls.js 音频补丁（升级 hls.js 时必跑） |
+
+- **改了前端库**：`public/sw.js` 里预缓存的库要同时升 `?v=` 和 `CACHE_VERSION`。
+- **改了 Worker**：需要重新部署 Worker。
 
 ---
 
-## ⚠️ 免责声明
+## 致谢
 
-1. **仅供学习交流**：本项目仅作为 Node.js 和 Vue 3 的学习练手项目开源。
-2. **API 说明**：本项目不内置任何有效的影视资源采集接口，文档/代码中的地址仅为占位示例。
-3. **自行配置**：使用者需自行寻找合法的 Maccms V10/JSON 接口，并遵守相关法律法规。
-4. **内容无关**：开发者不存储、不发布、不参与任何视频内容的制作与传播。
+由 **kk爱吃王哥呆阿龟头** 设计编写，**ednovas** 优化功能与部署。弹幕借助开源 [danmu_api](https://github.com/huangxd-/danmu_api)；番剧规则取自 [KazumiRules](https://github.com/Predidit/KazumiRules)（MIT，见 `lib/kazumi/rules/NOTICE`）；数据来自 **TMDb** 与各 **Maccms** 接口。
 
----
+## 免责声明
 
-*Enjoy your movie night! 🍿*
+1. 本项目仅作为 Node.js 与 Vue 3 的学习项目开源。
+2. 本项目不内置任何影视资源接口，文档与代码中的地址均为占位示例。
+3. 使用者需自行寻找合法接口并遵守当地法律法规。
+4. 开发者不存储、不发布、不参与任何视频内容的制作与传播。
