@@ -29,7 +29,8 @@
 // v36: 站长后台/历史/设置/求片/统计/认证与带 token 的 API 一律直达不缓存(升版同时清掉旧缓存里已存的这些响应)。
 // v37: Web Push 更新提醒(push / notificationclick);收藏 /api/favorites* 与推送 /api/push/* 一律直达不缓存。
 // v38: pushsubscriptionchange(浏览器轮换/作废订阅时用原来的选项重新订阅,并通知已打开的页面立刻把新地址报给服务器)。
-const CACHE_VERSION = 'v38';
+// v39: 预缓存 libs/js/qrcode-generator.min.js?v=2.0.4(截帧分享卡片的二维码库;页面首次用到才按需加载,预缓存让它走 SWR、断网也能生成)。
+const CACHE_VERSION = 'v39';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -50,6 +51,7 @@ const STATIC_URLS = [
     './libs/js/kz-titlematch.js?v=1',   // v29: defer 脚本必须预缓存走 SWR,否则弱网下 Network-First 会拖住其后的 DPlayer/DOMContentLoaded
     './libs/js/ad-clip-core.js?v=6',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs);v34: v5(播放前剪清单);v35: v6
     './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
+    './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
     './libs/js/DPlayer.min.js'
 ];
 

@@ -39,3 +39,13 @@ android-tv/build_*.txt
 
 /.claude
 .claude/
+
+# 宣传片工程:依赖与渲染产物
+promo/tools/node_modules/
+promo/**/renders/
+promo/**/snapshots/
+promo/**/.hyperframes/frame-packets/
+promo/**/capture-stderr.log
+/promo
+promo/**/.scratch/
+promo/**/qa/

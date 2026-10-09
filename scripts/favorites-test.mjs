@@ -5,7 +5,17 @@
 //     next_check(连载 4h/完结 72h/有变化 2h)、失败退避 1h→6h→24h、跟踪表两块容量(没人收藏的行 ≤ maxWatch − anonReserve,
 //     匿名挤不掉任何行;服务器收藏用任何空位,表全满只挤 ≥24h 没人要的;洪水 flood/flood2/flood3、收藏/取消刷行 evict-anon)、
 //     查无此片连续 2 次删行(只在同一回包有别的 id 时才记;整批一个都没回 = 站点抽风,按失败退避,blip;有人收藏的 24h 后再看)、
-//     每 IP 新登记预算、14 天无人问的没人收藏行清理、通知闸门 notifyOk(机场令牌不在内存表照推)、绝不请求任何 .m3u8
+//     每 IP 新登记预算、14 天无人问的没人收藏行清理、通知闸门 notifyOk(机场令牌不在内存表照推)、绝不请求任何 .m3u8;
+//     追更日历:total/chg_log 迁移、vod_total 0/垃圾/偏小/888 占位/综艺按期数编号的不认、chg_log 只记真涨集(来回跳/基线不记,距上次查到 >8h 的记成断档)、
+//     一次更新一笔(6h 内的几次涨集并笔、只留 35 天、最多 40 笔)、inferCadence(周三四/日更/工作日/太少/35 天外/北京时间 (p, t] 窗口与零点后 1h 边界/
+//     完结/停更/不规律/每部剧按自己的检测钟点切日/只出现一次的星期几不算/跟踪不满 7 天不报)、真实调度(10 分钟一轮、2h/4h 复查、请求 3s、
+//     资源站延迟)多种子模拟、列表与匿名 status 带 total/cadence、/api/tmdb-proxy 的 /tv/{id}(及 /season/{n}、/season/{n}/episode/{e})只缓存 1 小时;
+//     第二轮:chg_log 每笔带 p(上一次查到)、只按 6h 并笔(相隔 23h 的不并)、按 (p, t] 窗口对齐钟点定星期几 + clock、
+//     真实调度逐天检查(日更 22:00/23:00/00:00、周五 22:00、周三四、周一至三、周六上午)、季终 11/11(备注没写完结)不报规律;
+//     第三轮:vod_total 永远 = 当前集数的站不存 total(S3)、凌晨才查到但有一周 01:00 前就查到了的晚间剧算前一天晚上 + 锚点并列按钟点取(S4)、
+//     报出的星期几要稳(随机日/隔天更/周更 5 周只更 3 周 → null,S6);
+//     第四轮(T3):隔了 >8h 才看到涨集记成断档 {u:1},断档盖住的日子不算漏更(资源站夜里挂几小时/服务器停机不再丢星期几),
+//     statusOf 把最后一次查成功的时刻交给 inferCadence(资源站正挂着的那几晚不算没更);/season/{n}/episode/{e} 也只缓存 1 小时(T6)
 //  ③ lib/popular 单元:除调用者外 ≥2 个不同用户才上榜(匿名按"他也看过"算)、每人 <120s 不算、封禁用户不算、只算 vod、
 //     只有 7 天窗口、按扣掉调用者后的人数/时长排序、上限 20、全站一份候选缓存、探测复现(review2/srvfix/pop-probe.js)
 //  ④ 端到端:临时目录起真正的 server.js(CACHE_TYPE=sqlite),db.json 指向本地假 maccms 站,走真实 HTTP
@@ -22,7 +32,7 @@ const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dep = (m) => { try { return require(path.join(ROOT, 'node_modules', m)); } catch (e) { return require(m); } };   // worktree 没有 node_modules 时走 NODE_PATH
 const Database = dep('better-sqlite3');
-const { createFavorites, parsePlayUrl, vodStatus, parseDetail, normItem, favIdOf, DEF } = require(path.join(ROOT, 'lib/favorites'));
+const { createFavorites, parsePlayUrl, vodStatus, parseDetail, normItem, favIdOf, parseTotal, pickTotal, inferCadence, isoWeekday, DEF } = require(path.join(ROOT, 'lib/favorites'));
 const { createPopular } = require(path.join(ROOT, 'lib/popular'));
 const { createUserStats } = require(path.join(ROOT, 'lib/user-stats'));
 
@@ -31,6 +41,8 @@ const ok = (c, msg, extra) => { if (c) pass++; else { fail++; console.log('  ✗
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const HOUR = 3600e3, DAYMS = 86400e3;
+// 北京时间(UTC+8)→ ms
+const bj = (y, mo, d, h, mi) => Date.UTC(y, mo - 1, d, h - 8, mi || 0);
 
 // ---------------- 假 maccms 站 ----------------
 // vods: "<站>|<id>" → { name, eps, remarks };vod_play_url 两路:第一路是网盘分享(不含 m3u8、集数多 5),第二路才是 m3u8(指回本服务器,
@@ -72,8 +84,9 @@ function startMock() {
             const share = [], m3u = [];
             for (let i = 1; i <= v.eps + 5; i++) share.push(`第${String(i).padStart(2, '0')}集$https://pan.example/${id}/${i}`);
             for (let i = 1; i <= v.eps; i++) m3u.push(`第${String(i).padStart(2, '0')}集$http://127.0.0.1:${port}/m3u8/${site}/${id}/${i}/index.m3u8`);
+            // vod_total:没给就是 0(资源站没填时就是这样,绝不能当"共 0 集")
             list.push({ vod_id: /^\d+$/.test(id) ? Number(id) : id, vod_name: v.name, vod_remarks: v.remarks || ('更新至' + v.eps + '集'),
-                vod_play_from: 'share$$$m3u8', vod_play_url: share.join('#') + '$$$' + m3u.join('#') + '#', vod_content: 'x'.repeat(200) });
+                vod_play_from: 'share$$$m3u8', vod_play_url: share.join('#') + '$$$' + m3u.join('#') + '#', vod_content: 'x'.repeat(200), vod_total: v.total == null ? 0 : v.total });
         }
         const body = JSON.stringify({ code: 1, msg: '数据列表', page: 1, pagecount: 1, limit: '20', total: list.length, list });
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });   // 不少资源站就是这么回的(还带 BOM)
@@ -84,7 +97,7 @@ function startMock() {
         port = srv.address().port;
         r({
             vods, log, failSites, slowSites, remote, srv, base: `http://127.0.0.1:${port}`, port,
-            set: (site, id, eps, remarks, name) => vods.set(site + '|' + id, { eps, remarks, name: name || `${site}-${id}` }),
+            set: (site, id, eps, remarks, name, total) => vods.set(site + '|' + id, { eps, remarks, name: name || `${site}-${id}`, total }),
             reset: () => { log.length = 0; maxActive = 0; },
             get maxActive() { return maxActive; },
             setDelay: (ms) => { delay = ms; }, setBom: (b) => { bom = b; },
@@ -93,7 +106,9 @@ function startMock() {
     }));
 }
 const fetchJson = async (url) => {
-    const r = await fetch(url);
+    // 连接层失败重试一次:长时间的纯内存模拟(真实调度逐天检查)卡住事件循环后,假站那头已关掉的 keep-alive 连接会被拿来复用("fetch failed")
+    let r;
+    try { r = await fetch(url); } catch (e) { r = await fetch(url); }
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return await r.text();   // 字符串(带 BOM):走模块自己的 parseDetail
 };
@@ -154,6 +169,196 @@ console.log('① 纯函数');
     ok(it.checkSource === null, '非法 vod_id / 未知站 → 没有检查线路', it.checkSource);
     ok(normItem({ name: '  ' }, siteOk) === null && normItem(null, siteOk) === null && normItem('x', siteOk) === null, '没有剧名 → 拒收');
     ok(favIdOf('剧A', '') === '剧A' && favIdOf('剧A', 'y1') === '剧A|w:y1', 'fav_id 口径');
+
+    // ---- 追更日历:vod_total ----
+    ok(parseTotal(30) === 30 && parseTotal('30') === 30 && parseTotal(' 36 ') === 36 && parseTotal(3000) === 3000, 'parseTotal:正整数/数字串');
+    ok([0, '0', '', '  ', null, undefined, '全30集', '30集', 30.5, '30.5', -3, '-3', '1e3', NaN, Infinity, 1e9, true, {}, [30]].every(x => parseTotal(x) === null), 'parseTotal:0/垃圾/小数/负数/超大 → null');
+    ok(vodStatus({ vod_play_url: 'a$x.m3u8', vod_total: '24' }).total === 24 && vodStatus({ vod_play_url: 'a$x.m3u8', vod_total: 0 }).total === null && vodStatus({}).total === null, 'vodStatus 带 total(0 = 不知道)');
+    ok(pickTotal(30, null, 12) === 30 && pickTotal(40, 30, 12) === 40, 'pickTotal:可信新值(> 当前集数,含改大)');
+    // 第三轮 S3:有的站 vod_total 永远 = 当前集数(maotaizy 家庭关系证明书 57/57「第57集」)→ 相等的新值不算数,只沿用以前见过的
+    ok(pickTotal(12, null, 12) === null && pickTotal(13, null, 13) === null, 'S3 pickTotal:新值 = 当前集数、以前没见过比集数大的 → 不存(连载中这只是"跟着集数走"的站)');
+    ok(pickTotal(12, 12, 12) === 12 && pickTotal(11, 11, 11) === 11, 'S3 pickTotal:以前见过 12 > 集数、现在集数追上了 → 照认(10/11 → 11/11 季终)');
+    ok(pickTotal(30, null, 30, 1) === 30 && pickTotal(30, null, 30, 0) === null, 'S3 pickTotal:备注写了完结 → 相等的也认(全30集 30/30)');
+    ok(pickTotal(0, 30, 12) === 30 && pickTotal('abc', 30, 12) === 30 && pickTotal(undefined, 30, 12) === 30, 'pickTotal:新值 0/垃圾 → 沿用上次');
+    ok(pickTotal(5, 30, 12) === 30 && pickTotal(5, null, 12) === null, 'pickTotal:比当前集数小的新值不认');
+    ok(pickTotal(0, 30, 31) === null && pickTotal(20, 30, 31) === null, 'pickTotal:集数已超过上次的总集数 → 上次的作废');
+
+    // ---- 追更日历:inferCadence(2026-10-08 是周四;now = 北京时间周四 12:00)----
+    const CN = bj(2026, 10, 8, 12);
+    const at = (...xs) => xs.map(([mo, d, h, mi], i) => ({ t: bj(2026, mo, d, h, mi || 0), ep: i + 1 }));
+    ok(isoWeekday(Math.floor((CN + 8 * HOUR) / DAYMS)) === 4 && isoWeekday(Math.floor((bj(2026, 10, 4, 12) + 8 * HOUR) / DAYMS)) === 7 && isoWeekday(Math.floor((bj(2026, 10, 5, 12) + 8 * HOUR) / DAYMS)) === 1, 'isoWeekday:周四=4、周日=7、周一=1');
+    // 周三周四更新 4 周 + 一次周六补更 + 同一晚两次涨集
+    let c = inferCadence(at([9, 16, 21], [9, 17, 21], [9, 23, 21], [9, 23, 23], [9, 24, 21], [9, 26, 22], [9, 30, 21], [10, 1, 21], [10, 7, 21]), CN, false);
+    ok(c && c.daily === false && c.days.join() === '3,4' && c.n === 8 && c.last_t === bj(2026, 10, 7, 21), '周三周四:days=[3,4];只出现一次的周六补更不算;同一晚两次涨集算一天', c);
+    // 日更
+    c = inferCadence(Array.from({ length: 13 }, (_, i) => ({ t: bj(2026, 9, 25 + i, 20), ep: i + 1 })), CN, false);
+    ok(c && c.daily === true && c.days.join() === '1,2,3,4,5,6,7' && c.n === 13, '每天 20:00 → 日更', c);
+    c = inferCadence(at([9, 28, 20], [9, 29, 20], [9, 30, 20], [10, 1, 20], [10, 2, 20], [10, 5, 20], [10, 6, 20], [10, 7, 20]), CN, false);
+    ok(c && c.daily === true && c.days.join() === '1,2,3,4,5', '周一到周五 → 日更,days=[1..5](前端可说"工作日更新")', c);
+    // 太少 → null
+    ok(inferCadence(at([9, 30, 21], [10, 7, 21]), CN, false) === null, '只有 2 次 → null');
+    ok(inferCadence(at([9, 30, 21], [10, 7, 20, 30], [10, 7, 22, 30], [10, 8, 1, 30]), CN, false) === null, '同一晚 3 次涨集 = 1 个更新日 → 一共 2 天 → null');
+    ok(inferCadence([], CN, false) === null && inferCadence(null, CN, false) === null && inferCadence('x', CN, false) === null && inferCadence(at([9, 30, 21], [10, 1, 21], [10, 7, 21]), NaN, false) === null, '空/非数组/now 非法 → null');
+    // 35 天以前的不算
+    ok(inferCadence(at([8, 24, 21], [8, 26, 21], [8, 31, 21], [9, 2, 21], [9, 30, 21], [10, 7, 21]), CN, false) === null, '35 天以前的 4 次不算 → 窗口里只有 2 次 → null');
+    c = inferCadence(at([8, 24, 21], [8, 31, 21], [9, 9, 21], [9, 16, 21], [9, 23, 21], [9, 30, 21], [10, 7, 21]), CN, false);
+    ok(c && c.days.join() === '3' && c.n === 5, '35 天以前的周一不算 → 只剩周三', c);
+    // 时区/检测延迟:每笔带上一次查到的时刻 p,新集在 (p, t] 里上的(北京时间)。没带 p 的老格式当上一次查在 4h 前
+    c = inferCadence(at([10, 1, 1, 30], [10, 5, 21], [10, 8, 1, 30]), CN, false);
+    ok(c && c.days.join() === '1,3', '周四 01:30 查到(没带 p:当 4h 前查过)= 周三晚上的更新(历史不满 14 天:见过的都算)', c);
+    c = inferCadence(at([9, 24, 1, 59], [10, 1, 1, 59], [10, 8, 1, 59]), CN, false);
+    ok(c && c.days.join() === '3', '周四 01:59 → 周三', c);
+    // atp:[月, 日, 时, 分, 上一次查到距这次几分钟]
+    const atp = (...xs) => xs.map(([mo, d, h, mi, back], i) => { const t = bj(2026, mo, d, h, mi || 0); return { t, ep: i + 1, p: t - back * 60e3 }; });
+    c = inferCadence(atp([9, 24, 2, 30, 80], [10, 1, 2, 30, 80], [10, 8, 2, 30, 80]), CN, false);
+    ok(c && c.days.join() === '4' && c.clock === 70, '上次周四 01:10 查过还没有、02:30 查到 → 周四(clock 01:10)', c);
+    c = inferCadence(atp([9, 24, 1, 20, 60], [10, 1, 1, 20, 60], [10, 8, 1, 20, 60]), CN, false);
+    ok(c && c.days.join() === '3' && c.clock === 1440 + 20, '零点后 1 小时内上新(00:20~01:20)→ 算周三晚上(clock = 24:20)', c);
+    c = inferCadence(atp([9, 24, 7, 0, 120], [10, 1, 7, 0, 120], [10, 8, 7, 0, 120]), CN, false);
+    ok(c && c.days.join() === '4', '北京周四 05:00~07:00(UTC 还是周三)→ 周四:按北京时间不按 UTC', c);
+    c = inferCadence(atp([9, 23, 23, 50, 120], [9, 30, 23, 50, 120], [10, 7, 23, 50, 120]), CN, false);
+    ok(c && c.days.join() === '3' && c.clock === 21 * 60 + 50, '北京周三 21:50~23:50(UTC 15:50)→ 周三', c);
+    c = inferCadence(atp([9, 23, 23, 50, 600], [9, 30, 23, 50, 600], [10, 7, 23, 50, 120]), CN, false);
+    ok(c && c.days.join() === '3' && c.clock === 21 * 60 + 50, 'p 比 t 早 10h(> 8h,不可信)→ 当 4h 前查过', c);
+    // 完结 / 停更 / 不规律 → null
+    const weekly = at([9, 16, 21], [9, 23, 21], [9, 30, 21], [10, 7, 21]);
+    ok(inferCadence(weekly, CN, false) && inferCadence(weekly, CN, true) === null, '完结 → null');
+    ok(inferCadence(at([9, 9, 21], [9, 16, 21], [9, 23, 21]), CN, false) === null, '最后一次更新已过 14 天 → null(停更/完结没写)');
+    ok(!!inferCadence(at([9, 16, 21], [9, 23, 21], [9, 30, 21]), CN, false), '最后一次 8 天前 → 还算(周更漏一周也不丢)');
+    ok(inferCadence(at([9, 14, 21], [9, 23, 21], [10, 2, 21]), CN, false) === null, '跨 18 天、每个星期几都只出现一次 → 不规律 → null');
+    // 脏数据 / 未来时间
+    c = inferCadence([null, 'x', {}, { t: 'abc' }, { t: -5 }, { t: CN + 3 * HOUR }, ...weekly], CN, false);
+    ok(c && c.days.join() === '3' && c.n === 4 && c.last_t === bj(2026, 10, 7, 21), '脏条目/未来时间忽略', c);
+
+    // ---- 第一轮审查修复(回归):每部剧按自己的检测时刻切日 / 只出现一次的星期几不算 / 刚开始跟踪不报 ----
+    // R1 周三 22:00 更新,检测落在 0~4h 之后:这周 00:06 查到、下周 02:06 查到(t−2h 一半周三一半周四)→ 只能是周三
+    c = inferCadence(at([9, 17, 0, 6], [9, 24, 2, 6], [10, 1, 0, 6], [10, 8, 2, 6]), CN, false);
+    ok(c && c.days.join() === '3' && c.n === 4, 'R1 周三 22:00 的更新 00:06/02:06 交替查到 → 只算周三(不报"周三、四")', c);
+    // R2 周四 00:00 整点更新,检测在 00:20~03:50:不管标成周三还是周四,只能是一天
+    c = inferCadence(at([9, 17, 0, 20], [9, 24, 3, 50], [10, 1, 1, 40], [10, 8, 3, 10]), CN, false);
+    ok(c && c.days.length === 1 && c.n === 4, 'R2 午夜整点更新的周更剧 → 只有一个更新日', c);
+    // R3 周一到周四 21:30 更新(4 周)+ 一次周四的更新拖到周五 02:30 才查到 → 还是周一到周四,不变成日更
+    const mt = [];
+    for (const d0 of [14, 21, 28]) for (let k = 0; k < 4; k++) mt.push([9, d0 + k, 21, 30]);
+    mt.push([10, 5, 21, 30], [10, 6, 21, 30], [10, 7, 21, 30]);
+    c = inferCadence(at(...mt), CN, false);
+    ok(c && c.daily === false && c.days.join() === '1,2,3,4', 'R3 周一至四(基准)', c);
+    c = inferCadence(at(...mt.concat([[10, 2, 2, 30]])), CN, false);
+    ok(c && c.daily === false && c.days.join() === '1,2,3,4', 'R3 周四的更新拖到周五 02:30 才查到 → 仍是周一至四(不报"周一至五")', c);
+    // R4 一次真的周五补更(15:00)也只出现一次 → 日更集合里不算它
+    c = inferCadence(at(...mt.concat([[10, 2, 15]])), CN, false);
+    ok(c && c.daily === false && c.days.join() === '1,2,3,4', 'R4 只出现一次的周五补更 → 不算(日更集合也要 ≥2 次)', c);
+    // R5 刚开始跟踪(第一次涨集到现在不满 7 天):连着几天更新分不清"日更"还是"每周这几天" → 先不报
+    c = inferCadence(at([10, 4, 22], [10, 5, 22], [10, 6, 22], [10, 7, 22]), CN, false);
+    ok(c === null, 'R5 日更剧才跟踪 4 天 → 不报(以前报"通常每周一至三、日")', c);
+    c = inferCadence(Array.from({ length: 8 }, (_, i) => ({ t: bj(2026, 9, 30 + i, 22), ep: i + 1 })), CN, false);
+    ok(c && c.daily === true && c.days.join() === '1,2,3,4,5,6,7', 'R5 跟踪满 7 天的日更剧 → 每天', c);
+    // R6 vod_total 占位/综艺:按期数/日期编号的不认总集数;888/999 这种占位数不认
+    ok([888, 999, 9999, '888', 111].every(x => parseTotal(x) === null) && parseTotal(100) === 100 && parseTotal(200) === 200 && parseTotal(24) === 24, 'R6 parseTotal:重复数字占位(888/999/9999)不认');
+    const vs = (eps, rem, tot) => vodStatus({ vod_play_url: eps.map((e, i) => e + '$u' + i + '.m3u8').join('#'), vod_remarks: rem, vod_total: tot });
+    ok(vs(['20221104期', '20261007期'], '更新至第20261007期', 200).total === null && vs(['20221104期', '20261007'], '更新至20261007', 200).total === null
+        && vs(['240103', '261007'], '更新至261007', 24).total === null && vs(['第475期', '第646期'], '第646期', 1).total === null, 'R6 综艺(期数/日期编号)的 vod_total 不认(超人回来了 183/200、刘在街头 165/888)');
+    ok(vs(['第01集', '第21集'], '更新至第21集', 888).total === null && vs(['第01集', '第17集'], '更新至第17集', 30).total === 30, 'R6 剧集:888 占位不认,正常的 30 照认');
+
+    // ---- 第二轮审查回归(纯函数)----
+    // F6 周五 22:00 的周更、资源站 22:30~23:30 才有;检查相位每次后移 10 分钟 → 连着几周在周六 01:23 / 02:13 / 03:03 才查到
+    //    (上一次查到都在 4h10m 前)。旧算法取 t − 2h 的平均 → 平均值滑过零点 → 整部报"通常每周六更新";按 (p, t] 对齐 → 周五
+    c = inferCadence(atp([9, 19, 1, 23, 250], [9, 26, 2, 13, 250], [10, 3, 3, 3, 250]), CN, false);
+    ok(c && c.daily === false && c.days.join() === '5' && c.clock === 22 * 60 + 53, 'F6 周五 22:00 的周更在周六 01:23/02:13/03:03 查到 → 周五(不是周六),clock 22:53', c);
+    // F6 周三、周四 22:00 两集,都在次日凌晨 01:23~03:28 查到 → 周三、四(旧:周四、五)
+    c = inferCadence(atp([9, 17, 1, 23, 250], [9, 18, 1, 48, 250], [9, 24, 2, 13, 250], [9, 25, 2, 38, 250], [10, 1, 3, 3, 250], [10, 2, 3, 28, 250]), CN, false);
+    ok(c && c.daily === false && c.days.join() === '3,4', 'F6 周三四 22:00 的两集都在次日凌晨查到 → 周三、四(不是周四、五)', c);
+    // F8 clock:不对齐(什么钟点都有)时不给
+    c = inferCadence(atp([9, 14, 3, 0, 240], [9, 21, 11, 0, 240], [9, 28, 19, 0, 240], [10, 5, 15, 0, 240]), CN, false);
+    ok(c && c.days.join() === '1' && !('clock' in c), 'F8 每次钟点都不一样 → 有规律(周一)但不给 clock', c);
+
+    // ---- 第三轮审查回归(纯函数)----
+    // S4 周五 23:00 的周更、资源站晚 30~150 分钟(真检查路径 seed 3 的 chg_log):一周是 01:27 查过还没有、05:37 才查到,
+    //    把"被最多笔盖住"的锚点拖到 01:27(过了零点后 1h)→ 旧:整部报周六;可 11-13 那周 23:47 就查到了 = 周五晚上的更新
+    const bjt = (mo, d, h, mi) => bj(2026, mo, d, h, mi || 0);
+    const late = [
+        { p: bjt(10, 24, 1, 27), t: bjt(10, 24, 5, 37), ep: 2 }, { p: bjt(10, 30, 22, 7), t: bjt(10, 31, 2, 17), ep: 3 },
+        { p: bjt(11, 6, 22, 57), t: bjt(11, 7, 3, 7), ep: 4 }, { p: bjt(11, 13, 19, 37), t: bjt(11, 13, 23, 47), ep: 5 },
+        { p: bjt(11, 21, 0, 37), t: bjt(11, 21, 4, 47), ep: 6 }];
+    c = inferCadence(late, bjt(11, 22, 12), false);
+    ok(c && !c.daily && c.days.join() === '5' && c.clock === 1440 + 87, 'S4 周五 23:00 的周更、有一周 23:47 就查到了 → 周五(旧:周六 01:27),clock = 25:27', c);
+    // S4 对照:每一笔都是过了 01:00 才可能有(窗口全在零点后)→ 还是周六(真是周六凌晨更新的不能被挪到周五)
+    c = inferCadence(late.map(e => ({ p: e.p + 3 * HOUR, t: e.t + 3 * HOUR, ep: e.ep })).map(e => (e.ep === 5 ? { p: bjt(11, 14, 1, 37), t: bjt(11, 14, 5, 47), ep: 5 } : e)), bjt(11, 22, 12), false);
+    ok(c && c.days.join() === '6', 'S4 对照:窗口都在零点后 1h 以后 → 周六不变', c);
+    // S4 并列取钟点早的,不按 chg_log 顺序:周一至四 20:00、资源站晚 3~7h(真检查路径 seed 197)。旧:11-11 起老笔滑出窗口,
+    //    并列的锚点从 00:46 换成 01:46 → 连着 6 天报"周二至五",之后又变回"周一至四"
+    const s197 = [[10, 20, 1, 36], [10, 21, 4, 46], [10, 22, 3, 46], [10, 23, 2, 46], [10, 27, 0, 36], [10, 28, 3, 46], [10, 29, 2, 46], [10, 30, 5, 56], [11, 3, 3, 46], [11, 4, 2, 46],
+        [11, 5, 1, 46], [11, 6, 4, 56], [11, 10, 2, 46], [11, 11, 5, 56], [11, 12, 4, 56], [11, 13, 3, 56], [11, 17, 1, 46], [11, 18, 4, 56], [11, 18, 23, 46], [11, 20, 2, 56]]
+        .map(([mo, d, h, mi], i) => { const t = bjt(mo, d, h, mi); return { t, p: t - 250 * 60e3, ep: i + 2 }; });
+    const lab197 = [];
+    for (let k = 0; k < 28; k++) { const T = bjt(10, 27, 12) + k * DAYMS; const r = inferCadence(s197.filter(e => e.t <= T), T, false); lab197.push(r ? (r.daily ? 'D' : '') + r.days.join('') : '-'); }
+    ok(lab197.every(x => x === '1234'), 'S4 周一至四 20:00 晚 3~7h:10-27 起 28 天每天都报周一至四(旧:11-11~11-16 报周二至五)', lab197.join(' '));
+    const shuffled = s197.slice(0, 16).reverse();
+    ok(JSON.stringify(inferCadence(shuffled, bjt(11, 14, 12), false)) === JSON.stringify(inferCadence(s197.slice(0, 16), bjt(11, 14, 12), false)), 'S4 chg_log 顺序不影响结果(锚点并列按钟点取)');
+    // S6 不规律:随便哪几天更的,不该凑出"每周几"
+    //    隔天更 9 天(周一三五日二)→ 旧:5 个星期几 = "日更"
+    c = inferCadence(at([9, 28, 20], [9, 30, 20], [10, 2, 20], [10, 4, 20], [10, 6, 20]), CN, false);
+    ok(c === null, 'S6 跟踪不满 14 天、隔天更(一三五日二)→ null(旧:报日更)', c);
+    //    才更了周一、四、六,之后一个多星期没动静 → 周一已经错过一次了
+    c = inferCadence(at([9, 28, 20], [10, 1, 20], [10, 3, 20]), bjt(10, 8, 12), false);
+    ok(c === null, 'S6 周一四六各一次、之后周一没更 → null(旧:"每周一、四、六")', c);
+    //    5 周里随机 12 天(审查 run7 seed 100 那种)→ 旧:每周一、二、五至日 / 五、六 …
+    const rnd = at([9, 7, 20], [9, 8, 20], [9, 11, 20], [9, 12, 20], [9, 13, 20], [9, 17, 20], [9, 19, 20], [9, 22, 20], [9, 26, 20], [9, 27, 20], [10, 2, 20], [10, 3, 20], [10, 6, 20]);
+    const labR = [];
+    for (let k = 0; k < 7; k++) { const T = bjt(10, 8, 12) - k * DAYMS; const r = inferCadence(rnd.filter(e => e.t <= T), T, false); labR.push(r ? (r.daily ? 'D' : '') + r.days.join('') : '-'); }
+    ok(labR.every(x => x === '-'), 'S6 5 周里随机 13 天 → 一周里每天都 null', labR.join(' '));
+    //    周更 5 周只更了 3 周 → 不稳(旧:每周三)
+    c = inferCadence(at([9, 9, 21], [9, 23, 21], [10, 7, 21]), CN, false);
+    ok(c === null, 'S6 周三 5 周里只更了 3 周 → null', c);
+    //    对照:周更漏一周(5 周更了 4 周)、周三四外加一次周六补更 → 照报
+    c = inferCadence(at([9, 9, 21], [9, 16, 21], [9, 30, 21], [10, 7, 21]), CN, false);
+    ok(c && c.days.join() === '3', 'S6 对照:周三 5 周漏 1 周 → 还是周三', c);
+
+    // ---- 第四轮审查回归(纯函数)----
+    // T3 断档:资源站某晚 21:00~03:00 挂了(或服务器停机),下一次查成功已过 8h → 不知道那天更没更。
+    //    以前根本不记 → 那天被当成"没更":周一至四的剧周二 2/3 < 75% 被丢掉,一错一个多星期(「通常每周一、三、四更新」)。
+    //    现在记一笔断档 {p, t, ep, u:1}:它盖住的日子不算漏更、不拿它定更新日
+    const mt4 = (skip) => {   // 周一至四 21:00 更新、20:00 查过还没有、21:00 查到;9-21 起 3 周;skip = 不更的那天(月, 日)
+        const a = [];
+        for (const d0 of [21, 28, 35]) for (let k = 0; k < 4; k++) {
+            const mo = d0 + k > 30 ? 10 : 9, d = d0 + k > 30 ? d0 + k - 30 : d0 + k;
+            if (skip && skip[0] === mo && skip[1] === d) continue;
+            const t = bj(2026, mo, d, 21, 0);
+            a.push({ p: t - HOUR, t, ep: a.length + 2 });
+        }
+        return a;
+    };
+    const tue29 = mt4([9, 29]);   // 9-29(周二)那晚断档:没有正常的那笔
+    c = inferCadence(tue29, CN, false);
+    ok(c && c.days.join() === '1,3,4', 'T3 对照:9-29 周二那天没有记录(旧算法同样)→ 周二只更了 2/3 → 丢掉周二', c);
+    const gap = { p: bj(2026, 9, 29, 17, 30), t: bj(2026, 9, 30, 4, 30), ep: 99, u: 1 };   // 周二 17:30 查过,周三 04:30 才再查成功
+    c = inferCadence(tue29.concat([gap]).sort((x, y) => x.t - y.t), CN, false);
+    ok(c && !c.daily && c.days.join() === '1,2,3,4' && c.n === 10, 'T3 断档盖住 9-29 周二 → 周二不算漏更,仍是周一至四;断档那笔不算更新日(n = 10)', c);
+    ok(c && c.clock === 20 * 60, 'T3 断档不参与定钟点(clock 仍是 20:00)', c);
+    //    断档跨 3 天(服务器停机)的日更剧:那 3 天都不知道 → 仍是每天
+    const dly = [];
+    for (let k = 0; k < 18; k++) { const t = bj(2026, 9, 20, 21) + k * DAYMS; if (k < 9 || k > 11) dly.push({ p: t - HOUR, t, ep: k + 2 }); }
+    dly.push({ p: bj(2026, 9, 28, 22), t: bj(2026, 10, 2, 9), ep: 30, u: 1 });
+    dly.sort((x, y) => x.t - y.t);
+    c = inferCadence(dly, bj(2026, 10, 8, 12), false);
+    ok(c && c.daily && c.days.join() === '1,2,3,4,5,6,7', 'T3 日更剧服务器停机 3 天(断档 9-28 22:00 ~ 10-02 09:00)→ 仍报每天', c);
+    //    最近 14 天里某个星期几次次都在断档里(一次都没看到)→ 日更照算它(以前报 D134567)
+    const dly2 = [];
+    for (let k = 0; k < 18; k++) { const t = bj(2026, 9, 21, 21) + k * DAYMS; if (k !== 8 && k !== 15) dly2.push({ p: t - HOUR, t, ep: k + 2 }); }   // 9-29、10-06(周二)都没记到
+    dly2.push({ p: bj(2026, 9, 29, 17), t: bj(2026, 9, 30, 5), ep: 40, u: 1 }, { p: bj(2026, 10, 6, 17), t: bj(2026, 10, 7, 5), ep: 41, u: 1 });
+    dly2.sort((x, y) => x.t - y.t);
+    c = inferCadence(dly2, bj(2026, 10, 9, 12), false);
+    ok(c && c.daily && c.days.join() === '1,2,3,4,5,6,7', 'T3 日更剧最近两个周二都在断档里 → 仍报每天(不是"每周一、三至日")', c);
+    //    对照:真不更的那个星期几(看得到、没涨)照样不算
+    c = inferCadence(dly2.filter(e => !e.u), bj(2026, 10, 9, 12), false);
+    ok(c && c.daily && c.days.join() === '1,3,4,5,6,7', 'T3 对照:周二看得到却没更(没有断档)→ 每周一、三至日', c);
+    //    seen = 最后一次查成功:资源站这会儿正挂着(周二 17:30 起查不成功,现在周四中午),周二、周三还不知道 → 不算漏更
+    const down = mt4().filter(e => e.t < bj(2026, 10, 6, 0));
+    c = inferCadence(down, CN, false);
+    ok(!c || c.days.join() !== '1,2,3,4', 'T3 对照:不给 seen = 把挂着的那两晚当没更 → 不再是周一至四', c);
+    c = inferCadence(down, CN, false, bj(2026, 10, 6, 17, 30));
+    ok(c && c.days.join() === '1,2,3,4', 'T3 seen(最后一次查成功)之后的日子不算漏更 → 周一至四', c);
+    ok(JSON.stringify(inferCadence(mt4(), CN, false, CN - HOUR)) === JSON.stringify(inferCadence(mt4(), CN, false)), 'T3 seen 刚刚(正常在查)→ 结果不变');
 }
 
 // ---------------- ② lib/favorites 单元 ----------------
@@ -941,12 +1146,399 @@ try {
         dbm2.prepare("INSERT INTO fav_watch (site_key, vod_id, next_check, last_wanted, max_ep) VALUES ('s1', 'q1', 0, ?, 7)").run(NOW);
         ok(mkFav(dbm2).fav._ensureSchema() && mkFav(dbm2).fav._ensureSchema() && W(dbm2, 's1', 'q1').miss === 0 && W(dbm2, 's1', 'q1').max_ep === 7, '有 max_ep 没 miss 的表 → 幂等补 miss', W(dbm2, 's1', 'q1'));
         ok(W(dbm, 's1', 'm1').src === 'anon' && W(dbm2, 's1', 'q1').src === 'anon', '老表补 src 列,老行一律当 anon(不会被当孤行直接删/挤)', [W(dbm, 's1', 'm1').src, W(dbm2, 's1', 'q1').src]);
+        ok(['total', 'chg_log'].every(c => dbm.prepare('PRAGMA table_info(fav_watch)').all().some(x => x.name === c) && dbm2.prepare('PRAGMA table_info(fav_watch)').all().some(x => x.name === c))
+            && W(dbm, 's1', 'm1').total === null && W(dbm, 's1', 'm1').chg_log === null, '最老的表也一路补到 total/chg_log(老行 = NULL)', W(dbm, 's1', 'm1'));
         dbm2.close();
+        // 上一版建的表(有 max_ep/miss/src,没有 total/chg_log)且已有数据 → 只补这两列,原数据一个不动;重复迁移不报错
+        const dbm3 = new Database(':memory:');
+        dbm3.exec(`CREATE TABLE fav_watch (site_key TEXT NOT NULL, vod_id TEXT NOT NULL, ep_count INTEGER, latest_ep TEXT, remarks TEXT, finished INTEGER,
+            checked_at INTEGER, changed_at INTEGER, next_check INTEGER, last_wanted INTEGER, fails INTEGER NOT NULL DEFAULT 0,
+            max_ep INTEGER, miss INTEGER NOT NULL DEFAULT 0, src TEXT NOT NULL DEFAULT 'anon', PRIMARY KEY (site_key, vod_id))`);
+        dbm3.prepare("INSERT INTO fav_watch (site_key, vod_id, ep_count, latest_ep, remarks, finished, checked_at, next_check, last_wanted, max_ep, miss, src) VALUES ('s1', 'v3', 8, '第8集', '更新至8集', 0, 5, 6, 7, 9, 1, 'fav')").run();
+        ok(mkFav(dbm3).fav._ensureSchema() && mkFav(dbm3).fav._ensureSchema(), '上一版的表:迁移两次不报错');
+        const v3 = W(dbm3, 's1', 'v3');
+        ok(v3.total === null && v3.chg_log === null && v3.ep_count === 8 && v3.latest_ep === '第8集' && v3.checked_at === 5 && v3.next_check === 6 && v3.last_wanted === 7 && v3.max_ep === 9 && v3.miss === 1 && v3.src === 'fav',
+            '上一版的表补 total/chg_log,原有数据不动', v3);
+        ok(dbm3.prepare('PRAGMA table_info(fav_watch)').all().filter(x => x.name === 'total' || x.name === 'chg_log').length === 2, '不会重复加列');
+        dbm3.close();
         await call(m1.app, 'POST', '/api/favorites/add', { body: { token: TK.a, item: item('老剧', 's1', 'm1', { addedEpCount: 10 }) } });
         eps = 11; await m1.fav.runRound();
         eps = 12; NOW += 5 * HOUR; await m1.fav.runRound();
         ok(got.length === 0 && W(dbm, 's1', 'm1').max_ep === 12, '老行 12→11→12 不推(以老 ep_count 为已通知最高)', got);
         dbm.close();
+    }
+    // ---- 追更日历(服务器部分):total 只存可信的 vod_total;chg_log 只在真涨过 max_ep 时记(来回跳/第一次基线不记),最多 12 条 ----
+    {
+        const dbk = new Database(':memory:');
+        const mkUrl = (n) => Array.from({ length: n }, (_, i) => `第${i + 1}集$https://x/${i}.m3u8`).join('#');
+        let eps = 10, tot = 30, rem = '';
+        const got = [];
+        const fk = mkFav(dbk, {
+            fetchJson: async () => ({ list: [{ vod_id: 'k1', vod_play_url: mkUrl(eps), vod_remarks: rem || ('更新至' + eps + '集'), vod_total: tot }] }),
+            push: async (t, p) => { got.push(p.body); return { sent: 1 }; }, sleep: async () => { }, opts: { siteGapMs: 0 }
+        });
+        const row = () => W(dbk, 's1', 'k1');
+        const logOf = () => JSON.parse(row().chg_log || '[]');
+        // 下一次检查:集数 e、vod_total t(不给 = 不变)、距上次检查 dt(默认 5h,< 8h)
+        const step = async (e, t, dt) => { eps = e; if (t !== undefined) tot = t; NOW += dt || 5 * HOUR; dbk.prepare('UPDATE fav_watch SET next_check = 0').run(); return fk.fav.runRound(); };
+        await call(fk.app, 'POST', '/api/favorites/add', { body: { token: TK.a, item: item('追更剧', 's1', 'k1', { addedEpCount: 10 }) } });
+        await fk.fav.runRound();
+        ok(row().ep_count === 10 && row().total === 30 && row().chg_log === null, '第一次检查(基线):存 total=30、不记 chg_log', row());
+        await step(10, 0);
+        ok(row().total === 30, 'vod_total 回 0 → 沿用 30(0 绝不当总集数)', row().total);
+        await step(10, '共30集');
+        ok(row().total === 30, 'vod_total 垃圾 → 沿用', row().total);
+        await step(10, 5);
+        ok(row().total === 30, 'vod_total 比当前集数小 → 不认,沿用', row().total);
+        await step(10, '40');
+        ok(row().total === 40, 'vod_total 改成 "40"(字符串)→ 40', row().total);
+        ok(row().chg_log === null, '集数没变 → chg_log 一直不记', row().chg_log);
+        let t11 = NOW + 5 * HOUR;
+        await step(11, 0);
+        ok(logOf().length === 1 && logOf()[0].t === t11 && logOf()[0].ep === 11 && row().total === 40, '10→11 真涨 → 记一笔 {t, ep:11}', row());
+        // 一天一次更新:隔 5h 查一次(< 8h),涨集之间隔 25h(不同天)
+        const nextDay = async (e) => { for (let k = 0; k < 4; k++) await step(eps); return step(e); };
+        await nextDay(12);
+        await step(11);
+        await step(12);
+        await step(11);
+        await step(12);
+        ok(logOf().length === 2 && logOf().map(x => x.ep).join() === '11,12' && row().max_ep === 12, '12→11→12→11→12 来回跳:只有第一次到 12 记一笔', logOf());
+        // 同一次更新分两次涨(2h 后又多一集 / 同一个北京日里又涨):并成一笔(t 留最早那次、ep 更新成最新)
+        const tFirst = NOW + 25 * HOUR;   // nextDay = 4 次没变化的检查(各 5h)+ 涨集那次
+        await nextDay(13);
+        await step(14, undefined, 2 * HOUR);
+        ok(logOf().length === 3 && logOf()[2].t === tFirst && logOf()[2].ep === 14, '同一次更新的第二次涨集 → 并进上一笔(t 留最早、ep=14)', logOf());
+        // 失败退避/停机后才看到涨集(距上次查到 > 8h):不知道是哪天更新的 → 记成断档 {u:1}(第四轮 T3;以前干脆不记 = 那几天被当成"没更");
+        //   照常推送、max_ep 照涨;断档之后 6h 内又涨的并进断档那笔(还是断档)
+        got.length = 0;
+        await step(eps, undefined, 25 * HOUR);   // 一天后才查到(没涨集),再隔 9h 看到涨集
+        const pGap = NOW;
+        await step(15, undefined, 9 * HOUR);
+        const lgGap = logOf();
+        ok(lgGap.length === 4 && lgGap[3].u === 1 && lgGap[3].p === pGap && lgGap[3].t === NOW && lgGap[3].ep === 15 && row().max_ep === 15 && got.join() === '更新至 第15集',
+            'T3 距上次查到 9h 才看到涨集 → 记一笔断档 {t, ep, p:上次查到, u:1}(推送照发)', [lgGap, got]);
+        await step(16, undefined, 2 * HOUR);
+        ok(logOf().length === 4 && logOf()[3].u === 1 && logOf()[3].ep === 16, 'T3 断档后 2h 又涨 → 并进断档那笔', logOf());
+        ok(lgGap.slice(0, 3).every(x => !('u' in x)), 'T3 正常的笔不带 u', lgGap);
+        // 一天一笔:日更 30 天 → 30 笔都在(以前最多 12 次检测 = 6 天,日更剧永远报不出"每天")
+        for (let e = 17; e < 46; e++) await nextDay(e);
+        ok(logOf().length >= 30 && logOf().length <= DEF.chgLogMax, 'chg_log 按更新日记:日更 30 天都留着(以前最多 12 笔)', logOf().length);
+        ok(logOf().every((x, i, a) => !i || x.t > a[i - 1].t) && logOf()[logOf().length - 1].ep === 45, 'chg_log 按时间排、最后一笔是最新的', logOf().slice(-2));
+        // 35 天窗口外的丢掉;最多 DEF.chgLogMax 笔
+        for (let e = 46; e < 66; e++) await nextDay(e);
+        const lg50 = logOf();
+        ok(lg50.length <= DEF.chgLogMax && lg50[0].t >= NOW - 36 * DAYMS && lg50[lg50.length - 1].ep === 65, 'chg_log 只留最近 35 天、最多 ' + DEF.chgLogMax + ' 笔', [lg50.length, (NOW - lg50[0].t) / DAYMS]);
+        // 集数涨过了上次的总集数 → 总集数作废(不能再说"共 40 集")
+        await step(41, 0);
+        ok(row().total === null && row().ep_count === 41, '集数 41 > 上次的 total 40、新值 0 → total 作废', row());
+        await step(41, 45);
+        ok(row().total === 45, '之后给了可信的 45 → 45', row().total);
+        dbk.close();
+    }
+    // ---- 追更日历:真实节奏走真检查路径 → 列表与匿名 status 都带 total / cadence;不知道的不带键 ----
+    {
+        const dbw = new Database(':memory:');
+        const mkUrl = (n) => Array.from({ length: n }, (_, i) => `第${i + 1}集$https://x/${i}.m3u8`).join('#');
+        let ew = 1, rem = '';
+        const fw = mkFav(dbw, {
+            fetchJson: async (url) => {
+                const ids = decodeURIComponent(url.split('ids=')[1]).split(',');
+                return { list: ids.map(id => id === 'w1' ? { vod_id: 'w1', vod_play_url: mkUrl(ew), vod_remarks: rem || ('更新至' + ew + '集'), vod_total: 24 } : { vod_id: id, vod_play_url: mkUrl(3), vod_total: 0 }) };
+            },
+            push: async () => ({ sent: 0 }), sleep: async () => { }, opts: { siteGapMs: 0 }
+        });
+        // NOW 挪到下一个北京时间周三 18:00(只往后挪,不影响别的测试)
+        let d0 = Math.floor((NOW + 8 * HOUR) / DAYMS) + 1;
+        while (isoWeekday(d0) !== 3) d0++;
+        NOW = d0 * DAYMS - 8 * HOUR + 18 * HOUR;
+        await call(fw.app, 'POST', '/api/favorites/add', { body: { token: TK.b, item: item('周更剧', 's1', 'w1', { addedEpCount: 1 }) } });
+        await call(fw.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'w1' }, { site_key: 's1', vod_id: 'z9' }] } });
+        await fw.fav.runRound();   // 基线 1 集
+        // 每周三、四北京时间 20:00 各更 1 集,连续 3 周;检查器在更新前 2h 查一次(没变化 → 4h 后再查)、更新后 2h 看到涨集
+        for (let wk = 0; wk < 3; wk++) for (const off of [0, 1]) {
+            const upd = (d0 + wk * 7 + off) * DAYMS - 8 * HOUR + 20 * HOUR;
+            NOW = upd - 2 * HOUR;
+            // 本机收藏 z9 的用户每天都来(不然 14 天没人问的没人收藏行会被清掉)
+            await call(fw.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'z9' }] } });
+            await fw.fav.runRound();
+            ew++;
+            NOW = upd + 2 * HOUR; await fw.fav.runRound();
+        }
+        const lg = JSON.parse(W(dbw, 's1', 'w1').chg_log || '[]');
+        ok(lg.length === 6 && lg.map(x => x.ep).join() === '2,3,4,5,6,7', '3 周 6 次更新都记进 chg_log', lg);
+        let r = await call(fw.app, 'GET', '/api/favorites', { query: { token: TK.b } });
+        let st = r.body.items[0].status;
+        ok(st && st.total === 24 && st.cadence && st.cadence.daily === false && st.cadence.days.join() === '3,4' && st.cadence.n === 6 && st.cadence.last_t === NOW,
+            '同步列表 items[].status 带 total=24、cadence 周三周四', st);
+        ok(Object.keys(st.cadence).sort().join() === 'clock,daily,days,last_t,n', 'cadence 只有 5 个字段(回包小)', st.cadence);
+        // 20:00 更新、18:00 查过还没有、22:00 查到 → 上新在 (18:00, 22:00],最早那端 = 18:00
+        ok(st.cadence.clock === 18 * 60 && lg.every(x => x.p === x.t - 4 * HOUR), '第二轮:每笔带上一次查到的时刻 p;clock = 窗口对齐后的上新钟点(分钟)', [st.cadence, lg.slice(0, 2)]);
+        r = await call(fw.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'w1' }, { site_key: 's1', vod_id: 'z9' }] } });
+        const aw = r.body.status['s1|w1'], az = r.body.status['s1|z9'];
+        ok(aw && aw.total === 24 && aw.cadence && aw.cadence.days.join() === '3,4' && !('checked_at' in aw), '匿名 status 也带 total/cadence', aw);
+        ok(az && az.ep_count === 3 && !('total' in az) && !('cadence' in az), 'vod_total=0、没有更新记录 → 不带 total/cadence 键', az);
+        // 完结 → 不报规律(chg_log 还在)
+        rem = '已完结'; ew = 8;
+        NOW += 2 * HOUR; dbw.prepare('UPDATE fav_watch SET next_check = 0').run(); await fw.fav.runRound();
+        r = await call(fw.app, 'GET', '/api/favorites', { query: { token: TK.b } });
+        st = r.body.items[0].status;
+        const lgF = JSON.parse(W(dbw, 's1', 'w1').chg_log);
+        ok(st.finished === true && st.total === 24 && !('cadence' in st) && lgF.length === 6 && lgF[5].ep === 8, '完结 → 不带 cadence(2h 后又涨的那集并进同一天那笔)', [st, lgF]);
+        // 没完结但停更 15 天 → 不带 cadence
+        rem = ''; NOW += 15 * DAYMS; dbw.prepare('UPDATE fav_watch SET next_check = 0').run(); await fw.fav.runRound();
+        r = await call(fw.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'w1' }] } });
+        ok(r.body.status['s1|w1'] && r.body.status['s1|w1'].finished === false && !('cadence' in r.body.status['s1|w1']), '停更 15 天 → 不带 cadence', r.body.status['s1|w1']);
+        dbw.close();
+    }
+    // ---- 追更日历(第一轮审查回归):真实调度走真检查路径 ----
+    //   每 10 分钟一轮(相位随机)、到期才查(有变化 2h / 没变化 4h 后再查)、每次详情请求耗时 3s(检查时刻读的是请求回来之后的时钟)、
+    //   资源站比官方晚 delay 分钟才有新集。多个随机种子都要推对:
+    //   周三 22:00 / 20:00 的周更(以前一半种子报"周三、四")、周四 00:00 整点(只能一天)、日更每天两集分两次上站(以前 12 次检测只够 6 天 → 永远缺一天)、周一至四
+    {
+        const saved = NOW;
+        const mkUrl = (n) => Array.from({ length: n }, (_, i) => `第${i + 1}集$https://x/${i}.m3u8`).join('#');
+        const D0 = Math.floor((NOW + 8 * HOUR) / DAYMS) + 7;   // 下周起(北京日序号)
+        let dMon = D0; while (isoWeekday(dMon) !== 1) dMon++;
+        const at0 = (day, h, mi) => day * DAYMS - 8 * HOUR + h * HOUR + (mi || 0) * 60e3;   // 北京时间某天 h:mi → ms
+        // failing = [[from, to]]:这段时间资源站请求失败(回一页 HTML = 按失败退避)
+        async function sim(releases, delay, seed, days, failing) {
+            const dbs = new Database(':memory:');
+            let rs = seed >>> 0;
+            const rand = () => ((rs = (Math.imul(rs, 1103515245) + 12345) >>> 0) / 4294967296);
+            const avail = releases.map(t => t + (delay[0] + rand() * (delay[1] - delay[0])) * 60e3).sort((a, b) => a - b);
+            const f = mkFav(dbs, {
+                fetchJson: async () => {
+                    NOW += 3000;
+                    if ((failing || []).some(([a, b]) => NOW >= a && NOW < b)) return '<html>502</html>';
+                    const n = 1 + avail.filter(t => t <= NOW).length;
+                    return { list: [{ vod_id: 'c1', vod_play_url: mkUrl(n), vod_remarks: '更新至' + n + '集' }] };
+                },
+                push: async () => ({ sent: 0 }), sleep: async () => { }, opts: { siteGapMs: 0 }
+            });
+            NOW = at0(dMon - 1, 12);
+            await call(f.app, 'POST', '/api/favorites/add', { body: { token: TK.c, item: item('规律剧', 's1', 'c1', { addedEpCount: 1 }) } });
+            const phase = Math.floor(rand() * 600e3), end = at0(dMon + days, 12);
+            const snaps = [];   // 每轮之后的 chg_log:按当时的记录看当时会报什么(第二轮:逐天检查,不只看最后)
+            while (NOW < end) {
+                const nc = W(dbs, 's1', 'c1').next_check || 0;
+                NOW = Math.ceil((Math.max(nc, NOW + 1) - phase) / 600e3) * 600e3 + phase;
+                await f.fav.runRound();
+                snaps.push([NOW, W(dbs, 's1', 'c1').chg_log, W(dbs, 's1', 'c1').checked_at]);
+            }
+            const lg = JSON.parse(W(dbs, 's1', 'c1').chg_log || '[]');
+            dbs.close();
+            // 第 7 天起每天 03:00 / 12:00 / 21:00 各看一次
+            const labels = [];
+            for (let d = 7; d <= days; d++) for (const h of [3, 12, 21]) {
+                const T = at0(dMon + d, h);
+                if (T > NOW) continue;
+                let s = null, ck;
+                for (const x of snaps) { if (x[0] <= T) { s = x[1]; ck = x[2]; } else break; }
+                labels.push({ T, cad: inferCadence(JSON.parse(s || '[]'), T, false, ck) });   // 同 statusOf:带最后一次查成功的时刻
+            }
+            return { cad: inferCadence(lg, NOW, false), n: lg.length, labels };
+        }
+        const weekly = (wd, h, mi, weeks) => Array.from({ length: weeks }, (_, k) => at0(dMon + (wd - 1) + 7 * k, h, mi));
+        const SEEDS = [1, 7, 42, 99, 123, 2026, 31337, 65537];
+        const runAll = async (label, rel, delay, days, check) => {
+            const bad = [];
+            for (const sd of SEEDS) { const r = await sim(rel, delay, sd, days); if (process.env.SIMDBG) console.log('   ', label.slice(5, 30), sd, JSON.stringify(r.cad), r.n); if (!check(r.cad)) bad.push([sd, r.cad && (r.cad.daily ? 'D' : '') + r.cad.days.join(''), r.n]); }
+            ok(!bad.length, label + '(' + SEEDS.length + ' 个种子)', bad);
+        };
+        await runAll('真实调度:周三 22:00 更新、资源站晚 30~120 分钟 → 周三', weekly(3, 22, 0, 5), [30, 120], 35, c => c && !c.daily && c.days.join() === '3');
+        await runAll('真实调度:周三 20:00 更新、资源站晚 60~180 分钟 → 周三', weekly(3, 20, 0, 5), [60, 180], 35, c => c && !c.daily && c.days.join() === '3');
+        await runAll('真实调度:周四 00:00 整点更新 → 只有一个更新日', weekly(4, 0, 0, 5), [0, 60], 35, c => c && !c.daily && c.days.length === 1);
+        const two = [];
+        for (let k = 0; k < 24; k++) { two.push(at0(dMon + k, 12)); two.push(at0(dMon + k, 12) + (4 + (k * 37 % 5)) * HOUR); }   // 每天两集:12:00 一集,晚 4~8h 再上一集(同一天两次涨集)
+        await runAll('真实调度:日更、每天两集分两次涨 → 每天(7 天都有)', two, [30, 120], 24, c => c && c.daily && c.days.join() === '1,2,3,4,5,6,7');
+        const mth = [];
+        for (let w = 0; w < 4; w++) for (let k = 0; k < 4; k++) mth.push(at0(dMon + 7 * w + k, 20));
+        await runAll('真实调度:周一至四 20:00、资源站晚 30~150 分钟 → 周一至四', mth, [30, 150], 28, c => c && !c.daily && c.days.join() === '1,2,3,4');
+        // ---- 第二轮审查回归:每一天报出来的都得对(第一轮只看跑完 5 周后的最后结果)----
+        //   F4 晚上 21:00~00:00 日更、资源站晚 0~2h:检测落在 02:00 前后来回(一次 02:46、下一次 01:46),旧 chg_log 把相隔 23h 的两次更新
+        //      按"同一个北京日"并成一笔 → 日更剧每周丢一两天,报成"每周一至四、六、日"。
+        //   F6 周更/隔天更 21:00~23:00、资源站晚 30~120 分钟:检查相位后移让检测一连几周偏晚,t − 2h 的平均滑过零点 → 报成第二天
+        const runDays = async (label, rel, delay, days, check, failing) => {
+            const bad = [];
+            let seen = 0;
+            for (const sd of SEEDS) {
+                const r = await sim(rel, delay, sd, days, typeof failing === 'function' ? failing(sd) : failing);
+                for (const x of r.labels) if (x.cad) { seen++; if (!check(x.cad)) bad.push([sd, new Date(x.T + 8 * HOUR).toISOString().slice(5, 13), (x.cad.daily ? 'D' : '') + x.cad.days.join('')]); }
+            }
+            ok(!bad.length && seen > SEEDS.length * 20, label + '(' + SEEDS.length + ' 个种子 × 每天 3 次,' + seen + ' 次有结论)', bad.slice(0, 6).concat([bad.length]));
+        };
+        const daily7 = c => c.daily && c.days.join() === '1,2,3,4,5,6,7';
+        const every = (wds, h, mi, weeks) => { const a = []; for (let w = 0; w < weeks; w++) for (const wd of wds) a.push(at0(dMon + 7 * w + wd - 1, h, mi)); return a; };
+        await runDays('F4 真实调度逐天:日更 23:00、资源站晚 0~60 分钟 → 每天都报"每天"', every([1, 2, 3, 4, 5, 6, 7], 23, 0, 5), [0, 60], 35, daily7);
+        await runDays('F4 真实调度逐天:日更 22:00、资源站晚 30~120 分钟 → 每天都报"每天"', every([1, 2, 3, 4, 5, 6, 7], 22, 0, 5), [30, 120], 35, daily7);
+        await runDays('F4 真实调度逐天:日更 00:00、资源站晚 0~60 分钟 → 每天都报"每天"', every([1, 2, 3, 4, 5, 6, 7], 0, 0, 5), [0, 60], 35, daily7);
+        await runDays('F6 真实调度逐天:周五 22:00、资源站晚 30~90 分钟 → 一直是周五', every([5], 22, 0, 5), [30, 90], 35, c => !c.daily && c.days.join() === '5');
+        await runDays('F6 真实调度逐天:周三四 22:00、资源站晚 30~120 分钟 → 一直是周三、四', every([3, 4], 22, 0, 5), [30, 120], 35, c => !c.daily && c.days.join() === '3,4');
+        await runDays('F6 真实调度逐天:周一至三 22:00、资源站晚 30~90 分钟 → 一直是周一至三', every([1, 2, 3], 22, 0, 5), [30, 90], 35, c => !c.daily && c.days.join() === '1,2,3');
+        await runDays('F8 真实调度逐天:周六 10:00 的动画、资源站晚 0~60 分钟 → 周六,clock 在上午', every([6], 10, 0, 5), [0, 60], 35, c => !c.daily && c.days.join() === '6' && c.clock >= 6 * 60 && c.clock <= 11 * 60);
+        // ---- 第三轮审查回归 ----
+        //   S4 资源站晚得多的晚间剧:锚点被一次凌晨才查过的笔拖过 01:00 → 旧:周三 20:00 报周四(种子 1)、周一至四 20:00 报周二至五(种子 7/31337)。
+        //      种子 42 不进逐天检查:它抽到的延迟每周都过了 01:00(周三那个 5 周全是周四 01:41~03:06 才上站),查到的窗口也全在 01:00 以后,
+        //      数据上就是"周四凌晨更新",报周四是对的;它只检查跑完 5 周后的最终结论
+        const runDays42 = async (label, rel, delay, check) => {
+            const keep = SEEDS.splice(SEEDS.indexOf(42), 1);
+            try { await runDays(label, rel, delay, 35, check); } finally { SEEDS.splice(2, 0, ...keep); }
+        };
+        await runDays42('S4 真实调度逐天:周三 20:00、资源站晚 0~8 小时 → 一直是周三', every([3], 20, 0, 5), [0, 480], c => !c.daily && c.days.join() === '3');
+        await runDays42('S4 真实调度逐天:周一至四 20:00、资源站晚 3~7 小时 → 一直是周一至四', every([1, 2, 3, 4], 20, 0, 5), [180, 420], c => !c.daily && c.days.join() === '1,2,3,4');
+        const r42 = await sim(every([1, 2, 3, 4], 20, 0, 5), [180, 420], 42, 35);
+        ok(r42.cad && r42.cad.days.join() === '1,2,3,4', 'S4 种子 42(前两周每次都 01:00 后才查到):有一周 00:49 就查到了之后 → 周一至四(旧:一直周二至五)', r42.cad);
+        //   S6 不规律:每天以 40% 的概率更新(随机哪几天)→ 几乎总该推不出(旧:9 成以上的天报出"每周几",还几天一变)
+        {
+            let rep = 0, all = 0;
+            for (const sd of SEEDS) {
+                let rs = (sd * 2654435761) >>> 0;
+                const rr = () => ((rs = (Math.imul(rs, 1103515245) + 12345) >>> 0) / 4294967296);
+                const rel = [];
+                for (let k = 0; k < 35; k++) if (rr() < 0.4) rel.push(at0(dMon + k, 20));
+                const r = await sim(rel, [30, 90], sd, 35);
+                for (const x of r.labels) { all++; if (x.cad) rep++; }
+            }
+            ok(all > 600 && rep <= all * 0.15, 'S6 真实调度逐天:随机日更新(p=0.4)→ 报出规律的天 ≤ 15%(' + rep + '/' + all + ')', [rep, all]);
+        }
+        // ---- 第四轮审查回归 T3:资源站某个上新夜 21:00~03:00 请求失败(重试 1h 也失败 → 6h 后才查成功,距上次查到 > 8h)----
+        //   旧:那晚不记 = 当成"没更" → 周二 2/3 < 75% 被丢,接下来一个多星期报「每周一、三、四」(审查 s5/s6:错 364/1892)
+        const night = (wk, wd) => [[at0(dMon + 7 * wk + wd - 1, 21), at0(dMon + 7 * wk + wd, 3)]];
+        await runDays('T3 真实调度逐天:周一至四 20:00、第 2 周周二晚资源站挂 6 小时 → 一直是周一至四', every([1, 2, 3, 4], 20, 0, 5), [30, 90], 35,
+            c => !c.daily && c.days.join() === '1,2,3,4', night(1, 2));
+        await runDays('T3 真实调度逐天:周一至四 20:00、第 2~4 周随机一个上新夜资源站挂 6 小时 → 一直是周一至四', every([1, 2, 3, 4], 20, 0, 5), [30, 90], 35,
+            c => !c.daily && c.days.join() === '1,2,3,4', sd => night(1 + sd % 3, 1 + sd % 4));
+        await runDays('T3 真实调度逐天:周三四 20:00、第 3 周周四晚资源站挂 6 小时 → 一直是周三、四', every([3, 4], 20, 0, 5), [30, 90], 35,
+            c => !c.daily && c.days.join() === '3,4', night(2, 4));
+        //   日更剧资源站挂 3 天(失败退避 1h → 6h → 24h):旧:那 3 天都算"没更",跟踪头两周里一大半的天推不出 / 报成缺几天的"日更"
+        {
+            let nul = 0, all = 0;
+            const bad = [];
+            const down = [[at0(dMon + 8, 10), at0(dMon + 11, 10)]];
+            for (const sd of SEEDS) {
+                const r = await sim(every([1, 2, 3, 4, 5, 6, 7], 20, 0, 5), [30, 90], sd, 35, down);
+                for (const x of r.labels) { all++; if (!x.cad) nul++; else if (!daily7(x.cad)) bad.push([sd, new Date(x.T + 8 * HOUR).toISOString().slice(5, 13), (x.cad.daily ? 'D' : '') + x.cad.days.join('')]); }
+            }
+            ok(!bad.length && nul <= all * 0.05, 'T3 真实调度逐天:日更 20:00、第 2 周资源站挂 3 天 → 每天都报"每天"、推不出的天 ≤ 5%(' + nul + '/' + all + ')', bad.slice(0, 6).concat([bad.length, nul]));
+        }
+        NOW = saved;
+    }
+    // ---- 第四轮审查回归 T3(接口):statusOf 把"最后一次查成功"交给 inferCadence —— 资源站正挂着时,挂着的那几晚不算"没更" ----
+    {
+        const saved = NOW;
+        const dbo = new Database(':memory:');
+        const fo = mkFav(dbo, { fetchJson: async () => ({ list: [{ vod_id: 'o1', vod_play_url: '第1集$https://x/1.m3u8', vod_remarks: '更新至1集' }] }), push: async () => ({ sent: 0 }), sleep: async () => { }, opts: { siteGapMs: 0 } });
+        NOW = bj(2026, 10, 8, 12);
+        await call(fo.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'o1' }] } });
+        await fo.fav.runRound();
+        // 周一至四 21:00 更新、9-21 起 3 周,10-06(周二)17:30 后一直查不成功
+        const lg = [];
+        for (const d of [bj(2026, 9, 21, 0), bj(2026, 9, 28, 0), bj(2026, 10, 5, 0)]) for (let k = 0; k < 4; k++) { const t = d + k * DAYMS + 21 * HOUR; if (t < bj(2026, 10, 6, 0)) lg.push({ t, ep: lg.length + 2, p: t - HOUR }); }
+        dbo.prepare('UPDATE fav_watch SET chg_log = ?, checked_at = ?, ep_count = ? WHERE vod_id = ?').run(JSON.stringify(lg), bj(2026, 10, 6, 17, 30), lg.length + 1, 'o1');
+        const r = await call(fo.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'o1' }] } });
+        const st = r.body.status['s1|o1'];
+        ok(st && st.cadence && st.cadence.days.join() === '1,2,3,4', 'T3 匿名 status:资源站从周二 17:30 起查不成功 → 周二、周三还不算没更,仍是周一至四', st);
+        dbo.close();
+        NOW = saved;
+    }
+    // ---- 第二轮审查回归 F4(检查路径):相隔 23h 的两次涨集是两次更新,不能因为"同一个北京日(t − 2h)"并成一笔;6h 内的照并 ----
+    {
+        const saved = NOW;
+        const dbq = new Database(':memory:');
+        const mkUrl = (n) => Array.from({ length: n }, (_, i) => `第${i + 1}集$https://x/${i}.m3u8`).join('#');
+        let eq = 5;
+        const fq = mkFav(dbq, { fetchJson: async () => ({ list: [{ vod_id: 'q1', vod_play_url: mkUrl(eq), vod_remarks: '更新至' + eq + '集' }] }), push: async () => ({ sent: 0 }), sleep: async () => { }, opts: { siteGapMs: 0 } });
+        let dq = Math.floor((NOW + 8 * HOUR) / DAYMS) + 7;
+        while (isoWeekday(dq) !== 4) dq++;   // 下下周的周四(北京)
+        const at0 = (day, h, mi) => day * DAYMS - 8 * HOUR + h * HOUR + (mi || 0) * 60e3;
+        const chk = async (t, e) => { NOW = t; eq = e; dbq.prepare('UPDATE fav_watch SET next_check = 0').run(); await fq.fav.runRound(); };
+        NOW = at0(dq, 22, 0);
+        await call(fq.app, 'POST', '/api/favorites/add', { body: { token: TK.c, item: item('凌晨剧', 's1', 'q1', { addedEpCount: 5 }) } });
+        await chk(at0(dq, 22, 36), 5);        // 周四 22:36 基线
+        await chk(at0(dq + 1, 2, 46), 6);     // 周五 02:46 查到第 6 集(周四晚上的更新)
+        await chk(at0(dq + 1, 21, 36), 6);    // 周五 21:36 没变
+        await chk(at0(dq + 2, 1, 46), 7);     // 周六 01:46 查到第 7 集(周五晚上的更新,离上一笔 23h)
+        await chk(at0(dq + 2, 3, 46), 8);     // 2h 后又一集 → 同一次更新
+        const lq = JSON.parse(W(dbq, 's1', 'q1').chg_log || '[]');
+        ok(lq.length === 2 && lq[0].t === at0(dq + 1, 2, 46) && lq[0].p === at0(dq, 22, 36) && lq[0].ep === 6
+            && lq[1].t === at0(dq + 2, 1, 46) && lq[1].p === at0(dq + 1, 21, 36) && lq[1].ep === 8,
+            'F4 周五 02:46 与周六 01:46 两次更新各记一笔(带 p);2h 后又涨的并进第二笔', lq);
+        dbq.close();
+        NOW = saved;
+    }
+    // ---- 第二轮审查回归 F7:完结后备注还是「第11集」(finished 认不出)、vod_total = 11 → 11/11 后不再报规律 ----
+    {
+        const saved = NOW;
+        const dbf = new Database(':memory:');
+        const mkUrl = (n) => Array.from({ length: n }, (_, i) => `第${i + 1}集$https://x/${i}.m3u8`).join('#');
+        let ef = 6;
+        const ff = mkFav(dbf, { fetchJson: async () => ({ list: [{ vod_id: 'f1', vod_play_url: mkUrl(ef), vod_remarks: '第' + ef + '集', vod_total: 11 }] }), push: async () => ({ sent: 0 }), sleep: async () => { }, opts: { siteGapMs: 0 } });
+        let d0 = Math.floor((NOW + 8 * HOUR) / DAYMS) + 7;
+        while (isoWeekday(d0) !== 4) d0++;
+        const at0 = (day, h, mi) => day * DAYMS - 8 * HOUR + h * HOUR + (mi || 0) * 60e3;
+        const chk = async (t, e) => { NOW = t; if (e) ef = e; dbf.prepare('UPDATE fav_watch SET next_check = 0').run(); await ff.fav.runRound(); };
+        NOW = at0(d0 - 1, 12);
+        await call(ff.app, 'POST', '/api/favorites/add', { body: { token: TK.c, item: item('季终剧', 's1', 'f1', { addedEpCount: 6 }) } });
+        await chk(at0(d0 - 1, 13));   // 基线 6 集
+        // 每周四 20:00 一集:18:00 查(没有)、22:00 查(有),第 7~10 集
+        for (let w = 0; w < 4; w++) { await chk(at0(d0 + 7 * w, 18)); await chk(at0(d0 + 7 * w, 22), 7 + w); }
+        const st = async () => (await call(ff.app, 'GET', '/api/favorites', { query: { token: TK.c } })).body.items.find(x => x.data.name === '季终剧').status;
+        let s = await st();
+        ok(s && s.total === 11 && s.ep_count === 10 && s.cadence && s.cadence.days.join() === '4', 'F7 对照:10/11 时照常报"每周四"', s);
+        await chk(at0(d0 + 28, 18)); await chk(at0(d0 + 28, 22), 11);   // 第 11 集 = 季终,备注「第11集」
+        const fin = [];
+        for (const dd of [1, 6, 13]) { await chk(at0(d0 + 28 + dd, 12)); s = await st(); fin.push(s); }
+        ok(fin.every(x => x && x.total === 11 && x.ep_count === 11 && x.finished === false && !('cadence' in x)), 'F7 11/11(备注没写完结)→ 季终后 1/6/13 天都不带 cadence(旧:一直报"通常每周四更新")', fin);
+        const an = (await call(ff.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'f1' }] } })).body.status['s1|f1'];
+        ok(an && an.total === 11 && !('cadence' in an), 'F7 匿名 status 同样不带', an);
+        dbf.close();
+        NOW = saved;
+    }
+    // ---- 第三轮审查回归 S3:vod_total 永远 = 当前集数的站(maotaizy:家庭关系证明书 57/57「第57集」,别的站同一部「更新至第58集」)----
+    //   旧:每次都存 total = 集数 → "已到总集数" → 连载中永远不带 cadence,卡片「更新至 25/25 集」像播完了
+    {
+        const saved = NOW;
+        const dbn = new Database(':memory:');
+        const mkUrl = (n) => Array.from({ length: n }, (_, i) => `第${i + 1}集$https://x/${i}.m3u8`).join('#');
+        let en = 10;
+        const fn = mkFav(dbn, { fetchJson: async () => ({ list: [{ vod_id: 'n1', vod_play_url: mkUrl(en), vod_remarks: '第' + en + '集', vod_total: en }] }), push: async () => ({ sent: 0 }), sleep: async () => { }, opts: { siteGapMs: 0 } });
+        let dM = Math.floor((NOW + 8 * HOUR) / DAYMS) + 7;
+        while (isoWeekday(dM) !== 1) dM++;
+        const at0 = (day, h, mi) => day * DAYMS - 8 * HOUR + h * HOUR + (mi || 0) * 60e3;
+        const chk = async (t) => { NOW = t; dbn.prepare('UPDATE fav_watch SET next_check = 0').run(); await fn.fav.runRound(); };
+        NOW = at0(dM - 1, 12);
+        await call(fn.app, 'POST', '/api/favorites/add', { body: { token: TK.c, item: item('跟着集数走', 's1', 'n1', { addedEpCount: 10 }) } });
+        await chk(at0(dM - 1, 13));
+        ok(W(dbn, 's1', 'n1').total === null, 'S3 基线 10 集、vod_total = 10 → 不存 total', W(dbn, 's1', 'n1'));
+        // 周一至五 19:30 一集:18:00 查(没有)、22:00 查(有),3 周
+        for (let w = 0; w < 3; w++) for (let d = 0; d < 5; d++) { const day = dM + 7 * w + d; await chk(at0(day, 18)); en++; await chk(at0(day, 22)); }
+        NOW = at0(dM + 19, 12);
+        const s = (await call(fn.app, 'GET', '/api/favorites', { query: { token: TK.c } })).body.items.find(x => x.data.name === '跟着集数走').status;
+        ok(s && s.ep_count === 25 && !('total' in s) && s.cadence && s.cadence.daily === true && s.cadence.days.join() === '1,2,3,4,5', 'S3 连载 25 集、vod_total 一直 = 集数 → 不带 total,照报"周一至五"(旧:total 25 → 不带 cadence)', s);
+        const an = (await call(fn.app, 'POST', '/api/favorites/status', { body: { items: [{ site_key: 's1', vod_id: 'n1' }] } })).body.status['s1|n1'];
+        ok(an && !('total' in an) && an.cadence && an.cadence.days.join() === '1,2,3,4,5', 'S3 匿名 status 同样', an);
+        dbn.close();
+        NOW = saved;
+    }
+    // ---- R6 综艺(按期数/日期编号):vod_total 是占位(200),检查不存、库里旧值不沿用、列表不带 ----
+    {
+        const dbv = new Database(':memory:');
+        const eps = ['20261001期', '20261003期'];
+        const fv = mkFav(dbv, {
+            fetchJson: async () => ({ list: [{ vod_id: 'v1', vod_play_url: eps.map((e, i) => e + '$u' + i + '.m3u8').join('#'), vod_remarks: '更新至' + eps[eps.length - 1], vod_total: 200 }] }),
+            push: async () => ({ sent: 0 }), sleep: async () => { }, opts: { siteGapMs: 0 }
+        });
+        await call(fv.app, 'POST', '/api/favorites/add', { body: { token: TK.b, item: item('综艺', 's1', 'v1', { addedEpCount: 2 }) } });
+        await fv.fav.runRound();
+        ok(W(dbv, 's1', 'v1').total === null && W(dbv, 's1', 'v1').ep_count === 2, 'R6 综艺第一次检查:vod_total=200 不存', W(dbv, 's1', 'v1'));
+        dbv.prepare('UPDATE fav_watch SET total = 200').run();   // 修复前的版本存下的
+        let r = await call(fv.app, 'GET', '/api/favorites', { query: { token: TK.b } });
+        ok(r.body.items[0].status && !('total' in r.body.items[0].status), 'R6 库里旧的 200 → 列表不带 total(不显示"2/200")', r.body.items[0].status);
+        eps.push('20261005期');
+        NOW += 5 * HOUR; dbv.prepare('UPDATE fav_watch SET next_check = 0').run(); await fv.fav.runRound();
+        ok(W(dbv, 's1', 'v1').total === null && W(dbv, 's1', 'v1').ep_count === 3, 'R6 下一次检查:旧值也不沿用', W(dbv, 's1', 'v1'));
+        dbv.close();
     }
     // ---- 站点列表没加载到:整轮跳过,一行都不碰;加载到但站不在了才推迟(S6) ----
     {
@@ -1234,10 +1826,10 @@ const E = { main: sha('mainpw'), alice: sha('alice'), bob: sha('bob') };
 const dbFile = path.join(tmp, 'cache.db');
 
 try {
-    M.set('mock1', '1001', 5, '更新至5集', '端到端剧A');
+    M.set('mock1', '1001', 5, '更新至5集', '端到端剧A', 30);
     M.set('mock1', '1002', 5, '更新至5集', '端到端剧B');
     M.set('mock1', '1003', 2);
-    M.set('mock2', '2001', 30, '全30集');
+    M.set('mock2', '2001', 30, '全30集', undefined, '30');   // 有的站 vod_total 是字符串
     M.reset();
     await startServer();
     let r = await api('GET', '/api/config?token=' + E.alice);
@@ -1267,6 +1859,7 @@ try {
     r = await api('GET', '/api/favorites?token=' + E.alice);
     let A = r.j.items[0];
     ok(A.status && A.status.ep_count === 5 && A.status.latest_ep === '第05集' && A.has_update === true && A.seen_count === 3, 'alice:5 集 > 已看 3 → 红点', A);
+    ok(A.status.total === 30 && !('cadence' in A.status), '追更日历:列表带 total=30;还没有更新记录 → 不带 cadence', A.status);
     r = await api('POST', '/api/favorites/seen', { json: { token: E.alice, fav_id: '端到端剧A', count: 5 } });
     ok(r.j && r.j.ok && r.j.seen_count === 5, 'seen', r.j);
     r = await api('GET', '/api/favorites?token=' + E.alice);
@@ -1275,6 +1868,7 @@ try {
     ok(r.j.items[0].has_update === false && r.j.items[0].seen_count === 5, 'bob:基线不误报', r.j.items[0]);
     r = await api('POST', '/api/favorites/status', { json: { token: E.main, items: [{ site_key: 'mock1', vod_id: '1003' }, { site_key: 'mock2', vod_id: '2001' }] } });
     ok(r.j.status['mock1|1003'] && r.j.status['mock1|1003'].ep_count === 2 && r.j.status['mock2|2001'].finished === true, '匿名 status 返回状态', r.j.status);
+    ok(r.j.status['mock2|2001'].total === 30 && !('total' in r.j.status['mock1|1003']) && !('cadence' in r.j.status['mock2|2001']), '追更日历:匿名 status 带 total(字符串 "30" → 30;vod_total=0 的不带)', r.j.status);
     // 更新:改假站集数 + 让它到期 → 手动跑一轮
     M.set('mock1', '1002', 6, '更新至6集', '端到端剧B');
     // 推送钩子探针:给 bob/alice 各塞一条非法地址的订阅 —— 推送一触发,发前校验就删掉它(全程不碰外网)
@@ -1298,6 +1892,23 @@ try {
     }
     r = await api('GET', '/api/favorites?token=' + E.bob);
     ok(r.j.items[0].has_update === true && r.j.items[0].status.ep_count === 6 && r.j.items[0].status.changed_at > 0, 'bob 看到更新', r.j.items[0]);
+    // 追更日历:真涨集记进 chg_log(第一次基线、没变化的不记);再塞 3 周同一星期几的记录 → 列表/匿名 status 带 cadence
+    {
+        const dbc = new Database(dbFile);
+        const lg = (v) => JSON.parse(dbc.prepare("SELECT chg_log FROM fav_watch WHERE site_key = 'mock1' AND vod_id = ?").get(v).chg_log || '[]');
+        const l2 = lg('1002');
+        ok(l2.length === 1 && l2[0].ep === 6 && Math.abs(l2[0].t - Date.now()) < 60e3 && lg('1001').length === 0 && lg('1003').length === 0, '端到端:只有真涨集的 1002 记了一笔 chg_log', [l2, lg('1001')]);
+        const t0 = Date.now() - HOUR;
+        dbc.prepare("UPDATE fav_watch SET chg_log = ? WHERE site_key = 'mock1' AND vod_id = '1001'").run(JSON.stringify([2, 1, 0].map((k, i) => ({ t: t0 - k * 7 * DAYMS, ep: 3 + i }))));
+        dbc.close();
+        const wd = isoWeekday(Math.floor((t0 + 6 * HOUR) / DAYMS));
+        r = await api('GET', '/api/favorites?token=' + E.alice);
+        const s = r.j.items.find(x => x.fav_id === '端到端剧A').status;
+        ok(s.total === 30 && s.cadence && s.cadence.daily === false && s.cadence.days.join() === String(wd) && s.cadence.n === 3 && s.cadence.last_t === t0, '端到端:GET /api/favorites 的 status 带 total + cadence', s);
+        r = await api('POST', '/api/favorites/status', { json: { token: E.main, items: [{ site_key: 'mock1', vod_id: '1001' }] } });
+        const a = r.j.status['mock1|1001'];
+        ok(a && a.total === 30 && a.cadence && a.cadence.days.join() === String(wd) && !('checked_at' in a), '端到端:匿名 POST /api/favorites/status 也带 total + cadence', a);
+    }
     {
         const dbr = new Database(dbFile, { readonly: true });
         const row = dbr.prepare("SELECT next_check, checked_at FROM fav_watch WHERE site_key = 'mock1' AND vod_id = '1002'").get();
@@ -1321,8 +1932,8 @@ try {
     ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '大家剧' && Object.keys(r.j.items[0]).sort().join() === 'kind,title', '/api/popular:除调用者外 ≥2 人(每人 ≥120s)才上榜,只给片名(bob 看两人剧只剩 alice 一个别人)', r.j);
     r = await api('GET', '/api/popular?window=1d&token=' + E.main);
     ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '两人剧,大家剧', '/api/popular?window=1d → 只有 7 天;主密码没看过两人剧 → alice+bob 两个别人,上榜', r.j);
-    // 匿名 status 每 IP 30 次/分(前面已用 3 次,含一次 401)
-    let got429 = false, okCount = 3;
+    // 匿名 status 每 IP 30 次/分(前面已用 4 次,含一次 401、一次追更日历)
+    let got429 = false, okCount = 4;
     for (let i = 0; i < 31 && !got429; i++) {
         const x = await api('POST', '/api/favorites/status', { json: { token: E.main, items: [] } });
         if (x.status === 429) got429 = true; else okCount++;
@@ -1441,6 +2052,21 @@ try {
     const vsrc = fs.readFileSync(path.join(ROOT, 'api/index.js'), 'utf8');
     ok(/favorites_enabled:\s*false/.test(vsrc) && /push_enabled:\s*false/.test(vsrc), 'api/index.js /api/config 关收藏/推送');
     ok(/app\.get\('\/api\/favorites'/.test(vsrc) && /'\/api\/favorites\/status'/.test(vsrc) && /app\.get\('\/api\/popular'/.test(vsrc) && /app\.get\('\/api\/push\/key'/.test(vsrc), 'api/index.js 有收藏/推送/popular 桩');
+}
+// 静态(第一轮审查回归):/api/tmdb-proxy 的 /tv/{id}(追更日历读 next_episode_to_air)服务器只缓存 1 小时 ——
+//   前端自己还缓存 6 小时,服务器缓存 10 小时会让"下一集"最长旧 16 小时(播出日过了还报"今天更新")。别的路径照旧 10 小时
+{
+    const ssrc = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8').split('\r\n').join('\n');
+    const m = /\nfunction tmdbCacheTtl\(p, params\) \{[\s\S]*?\n\}\n/.exec(ssrc);
+    ok(!!m, 'server.js 有 tmdbCacheTtl(按路径定 TMDB 代理缓存时长)');
+    if (m) {
+        const ttl = new Function('TMDB_CACHE_TTL', m[0] + '\nreturn tmdbCacheTtl;')(36000);
+        ok(ttl('/tv/106449', { language: 'zh-CN' }) === 3600 && ttl('/tv/1', {}) === 3600, '/tv/{id} → 1 小时');
+        ok(ttl('/tv/290699/season/1', { language: 'zh-CN' }) === 3600 && ttl('/tv/1/season/2', {}) === 3600, '第二轮:/tv/{id}/season/{n}(下一集停在昨天时查集表)→ 1 小时');
+        ok(ttl('/tv/290699/season/1/episode/18', { language: 'zh-CN' }) === 3600 && ttl('/tv/1/season/2/episode/3', {}) === 3600, '第四轮 T6:/tv/{id}/season/{n}/episode/{e}(下一集停在昨天时按集往后查,不再拉整季集表)→ 1 小时');
+        ok(ttl('/tv/106449', { append_to_response: 'credits' }) === 36000 && ttl('/search/tv', { query: 'x' }) === 36000 && ttl('/tv/1/season/2/episode/3/images', {}) === 36000 && ttl('/tv/1/season/x', {}) === 36000 && ttl('/tv/1/season/2/episode/x', {}) === 36000 && ttl('/movie/5', {}) === 36000 && ttl('/trending/all/week', {}) === 36000, '其它路径 / 带 append_to_response → 照旧 10 小时');
+    }
+    ok(/cacheManager\.set\('detail', cacheKey, response\.data, tmdbCacheTtl\(tmdbPath, params\)\)/.test(ssrc), '/api/tmdb-proxy 写缓存用 tmdbCacheTtl');
 }
 
 console.log(fail ? `\nFAILED: ${pass} passed, ${fail} failed` : `\nALL PASSED: ${pass} passed, 0 failed`);

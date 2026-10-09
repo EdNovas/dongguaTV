@@ -220,6 +220,9 @@ console.log('② lib/user-stats 存储与后台查询(内存库 + 假时钟)');
     const link2 = db.prepare("SELECT * FROM share_links WHERE code = 'Code0002'").get();
     const link3 = db.prepare("SELECT * FROM share_links WHERE code = 'Code0003'").get();
     ok(link2.kind === 'live' && link2.episode === '' && link2.t === null && link3.channel === 'other', '直播 episode 为空/负时间丢弃/未知渠道归 other', [link2, link3]);
+    // 📸 截帧分享卡片(前端 _shareTrack('frame'))单独成一个渠道,不混进 other(第一轮审查回归)
+    ok((await SH(tk.alice, 'Code0004', { channel: 'frame' })).body.ok === true && db.prepare("SELECT channel FROM share_links WHERE code = 'Code0004'").get().channel === 'frame', '截帧卡片分享 → 渠道 frame(不归 other)');
+    db.prepare("DELETE FROM share_links WHERE code = 'Code0004'").run();   // 下面的概览/分布断言按原来 3 条算
 
     // 打开/预览
     const open = (code, ua, ip, opts, ref) => st.recordShareOpen({ query: { s: code }, headers: Object.assign({ 'user-agent': ua, 'x-ip': ip, host: 'my.site' }, ref ? { referer: ref } : {}) }, opts || {});
@@ -1009,6 +1012,11 @@ try {
     const vsrc = fs.readFileSync(path.join(ROOT, 'api/index.js'), 'utf8');
     ok(!/LIMIT 200000/.test(src) && !/app\.get\('\/api\/admin\/users'/.test(src), 'server.js 里旧的 /api/admin/users 已删除');
     ok(/watch_stats:\s*false/.test(vsrc) && /\/api\/stats\/watch/.test(vsrc) && /\/api\/stats\/share-open/.test(vsrc), 'api/index.js 有 watch_stats:false 与 204 桩');
+    // 后台的渠道表认得 frame(概览分布/分享列表筛选显示"截帧卡片",不是裸的 frame)
+    const asrc = fs.readFileSync(path.join(ROOT, 'public/admin.html'), 'utf8');
+    const chm = /const CHANNELS = (\[\[[^\n]*\]\]);/.exec(asrc);
+    const chs = chm ? new Function('return ' + chm[1])() : [];
+    ok(chs.some(c => c[0] === 'frame' && /截帧|卡片/.test(c[1])) && chs.findIndex(c => c[0] === 'frame') < chs.findIndex(c => c[0] === 'other'), 'admin.html 渠道表有 frame(截帧卡片),排在"其它"前');
 }
 
 console.log(fail ? `\nFAILED: ${pass} passed, ${fail} failed` : `\nALL PASSED: ${pass} passed, 0 failed`);

@@ -138,6 +138,49 @@
         .share-soc:hover { color:#fff; }
         .share-soc-row { display:flex; gap:14px; overflow-x:auto; padding:4px 2px 16px; -webkit-overflow-scrolling:touch; }
         .share-soc-row::-webkit-scrollbar { height:0; }
+        /* 📸 截帧分享:分享面板里的入口 + 卡片弹窗(层级在分享面板之上、mini toast 之下) */
+        .fshare-entry { width:100%; display:flex; align-items:center; gap:12px; background:#262628; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:12px 14px; margin:0 0 14px; color:#fff; cursor:pointer; text-align:left; font-size:14px; font-weight:bold; }
+        .fshare-entry:hover { background:#2e2e31; }
+        .fshare-entry > .fa-camera { width:36px; height:36px; border-radius:50%; background:#e50914; display:flex; align-items:center; justify-content:center; font-size:16px; flex:none; }
+        .fshare-entry-t { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+        .fshare-entry-t small { font-weight:normal; color:#999; font-size:12px; }
+        .fshare-entry-arrow { color:#666; font-size:12px; }
+        /* 弹窗 teleport 到 body 下:高于播放页 .detail-overlay(9999,网页全屏的播放器在它里面)、低于 showMiniToast(2147483600,"已复制"要压在弹窗上) */
+        .fshare-mask { position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:2147483550; display:flex; align-items:center; justify-content:center; padding:16px; }
+        .fshare-box { background:#1c1c1e; border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:16px; width:100%; max-width:440px; max-height:100%; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.6); color:#fff; outline:none; }
+        /* 打开时焦点落在弹窗框本身(tabindex=-1,不是能按的东西):全站 TV 焦点规则 [tabindex]:focus 的红框 + 红光晕(!important)会把它整个框住、
+           顶掉阴影 → 这里同样 !important、选择器多一层(0,3,0 高过 0,2,0,不受先后顺序影响)压回去;框里的按钮照常有焦点红框 */
+        .fshare-mask .fshare-box:focus { outline:none !important; box-shadow:0 20px 60px rgba(0,0,0,.6) !important; }
+        .fshare-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex:none; }
+        .fshare-ttl { font-size:16px; font-weight:bold; }
+        .fshare-ttl .fa-camera { color:#e50914; margin-right:6px; }
+        .fshare-x { background:none; border:none; color:#888; font-size:24px; line-height:1; cursor:pointer; padding:0 4px; }
+        .fshare-stage { flex:1 1 auto; min-height:120px; display:flex; align-items:center; justify-content:center; background:#111; border-radius:10px; overflow:hidden; }
+        /* body 关了 -webkit-touch-callout(防长按选中),卡片图片要打开:iOS / 微信里长按才有"保存图片 / 发送给朋友" */
+        .fshare-img { display:block; max-width:100%; max-height:calc(100vh - 230px); max-height:calc(100dvh - 230px); width:auto; height:auto; -webkit-touch-callout:default !important; -webkit-user-select:auto; user-select:auto; pointer-events:auto; }
+        .fshare-wait { color:#aaa; font-size:14px; padding:40px 16px; text-align:center; }
+        .fshare-note { color:#f5c26b; font-size:12px; margin-top:10px; flex:none; }
+        .fshare-tip { color:#888; font-size:12px; margin-top:8px; text-align:center; flex:none; }
+        .fshare-btns { display:flex; gap:8px; margin-top:12px; flex:none; }
+        .fshare-btns button { flex:1; min-width:0; background:#2a2a2a; border:1px solid #3a3a3a; color:#eee; border-radius:10px; padding:11px 6px; font-size:13px; font-weight:bold; cursor:pointer; white-space:nowrap; }
+        .fshare-btns button.pri { background:linear-gradient(135deg,#e50914,#b00610); border-color:transparent; color:#fff; }
+        .fshare-btns button:disabled { opacity:.45; cursor:default; }
+        /* 手机横屏(从全屏点进来,地址栏+状态栏一占只剩 ~280px 高):图在左、标题/提示/按钮在右,按钮不再被挤出屏幕;再放不下就在框里滚 */
+        @media (max-height: 420px) and (orientation: landscape) {
+            .fshare-mask { padding:8px 16px; }
+            .fshare-box { max-width:780px; padding:12px; display:grid; grid-template-columns:minmax(0, 1fr) 240px; grid-template-rows:auto auto auto 1fr; column-gap:14px; }
+            .fshare-head { grid-column:2; grid-row:1; margin-bottom:4px; }
+            .fshare-stage { grid-column:1; grid-row:1 / 5; min-height:0; }
+            .fshare-img { max-height:calc(100vh - 44px); max-height:calc(100dvh - 44px); }
+            .fshare-wait { padding:16px; }
+            .fshare-note { grid-column:2; margin-top:4px; }
+            .fshare-tip { grid-column:2; margin-top:4px; text-align:left; }
+            .fshare-btns { grid-column:2; grid-row:4; align-self:end; flex-direction:column; gap:6px; margin-top:8px; }
+            .fshare-btns button { flex:none; padding:8px 6px; }
+        }
+        /* 直播 / 未登录预览:截帧分享入口(桌面相机图标、手机齿轮菜单那一行)整个藏掉 */
+        .player-box.dg-no-frame #dplayer .dplayer-frame-icon,
+        .player-box.dg-no-frame #dplayer .dg-mob-row[data-dg="frame"] { display:none !important; }
 
         :root {
             --bg-color: #141414;
@@ -570,6 +613,7 @@
             #dplayer .dplayer-icons .dplayer-comment,
             #dplayer .dplayer-icons .dplayer-dmset-icon,
             #dplayer .dplayer-icons .dplayer-pip-icon,
+            #dplayer .dplayer-icons .dplayer-frame-icon,
             #dplayer .dplayer-controller .dplayer-icons .dplayer-full .dplayer-full-in-icon {
                 display: none !important;
             }
@@ -839,6 +883,32 @@
         .ban-lock-box .fa-ban { font-size: 64px; color: #ef4444; margin-bottom: 18px; }
         .ban-lock-box h2 { color: #fff; font-size: 1.6rem; margin-bottom: 12px; }
         .ban-lock-box p { color: #aaa; font-size: 14px; line-height: 1.7; }
+
+        /* 🔔 「开启更新提醒？」小卡片:不加遮罩。桌面在右下角 ⚙ 按钮左边;手机贴底、右边给 ⚙ / 返回顶部按钮让出一列。
+           z-index 高于播放页(9999)和 TV 控制条,低于分享面板(2147483500)/ 截帧弹窗 / toast */
+        .pask { position: fixed; right: 104px; bottom: 40px; z-index: 2147483400; width: 340px; max-width: calc(100vw - 32px); box-sizing: border-box;
+            display: flex; gap: 12px; align-items: flex-start; background: #1c1c1e; border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
+            padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.55); color: #fff; animation: paskIn .22s ease-out; }
+        @keyframes paskIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+        .pask-ico { flex: none; width: 34px; height: 34px; border-radius: 50%; background: rgba(229,9,20,.15); color: #e50914; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+        .pask-main { flex: 1; min-width: 0; }
+        .pask-t { font-size: 14px; line-height: 1.5; color: #eee; word-break: break-word; }
+        .pask-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+        .pask-btns button { border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: bold; cursor: pointer; border: 1px solid #3a3a3a; background: #2a2a2a; color: #ddd; white-space: nowrap; }
+        .pask-btns button.pri { background: #e50914; border-color: #e50914; color: #fff; }
+        .pask-btns button.busy { opacity: .7; cursor: default; }
+        /* 全站焦点规则是红框:红色按钮上看不出来 → 「开启」的焦点框改白色(TV 遥控器要看得见焦点在哪) */
+        .pask .pask-btns button.pri:focus { outline-color: #fff !important; }
+        @media (min-width: 769px) {
+            body.tv-mode .pask { width: 440px; }
+            body.tv-mode .pask-t { font-size: 18px; }
+            body.tv-mode .pask-btns button { font-size: 16px; padding: 9px 22px; }
+        }
+        @media (max-width: 768px) {
+            .pask { left: 16px; right: 72px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); width: auto; max-width: none; }
+        }
+        @media (max-width: 360px) { .pask-ico { display: none; } }
+        @media (prefers-reduced-motion: reduce) { .pask { animation: none; } }
 
         /* 设置：封面/文字大小分段选择 */
         .scale-seg { display: flex; gap: 8px; }
@@ -1866,6 +1936,34 @@
             box-shadow: 0 15px 30px rgba(229, 9, 20, 0.5);
         }
 
+        /* ⚙️ 右下角常驻"偏好设置"按钮(以前只在页脚,太难找);返回顶部按钮叠在它上面 */
+        .btn-top { bottom: 104px; }
+        .btn-settings {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            width: 50px;
+            height: 50px;
+            background: rgba(40, 40, 40, 0.92);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            cursor: pointer;
+            z-index: 1000;
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.2s;
+        }
+        .btn-settings:hover { transform: rotate(45deg) scale(1.08); background: #e50914; }
+        .btn-settings:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.6); outline-offset: 2px; }
+        @media (max-width: 768px) {
+            .btn-settings { right: 16px; bottom: 20px; width: 44px; height: 44px; font-size: 18px; }
+            .btn-top { right: 16px; bottom: 76px; width: 44px; height: 44px; font-size: 18px; }
+        }
+
 
 
         .search-box-wrapper:focus-within {
@@ -2566,6 +2664,76 @@
             border-radius: 50%;
             background: #fff;
         }
+        /* 📅 追更日历:卡片名下的「周五更新」那一行(永远一行,放不下省略号) */
+        .fav-sched {
+            font-size: calc(11px * var(--ui-scale, 1));
+            line-height: 1.45;
+            min-height: 1.45em;
+            margin-top: 1px;
+            color: #e3a857;
+            text-align: center;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        /* 「本周更新」条:固定高度一行、横向滑动(手机手指滑;桌面有细滚动条)。z-index 与标题同级:
+           下面 .hot-row 的 margin-top:-24px 会往上盖,不抬高点不到 */
+        .fav-week {
+            position: relative;
+            z-index: 20;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            height: 36px;
+            margin: -12px 0 22px;
+            padding: 0 10px;
+            overflow-x: auto;
+            overflow-y: hidden;
+            white-space: nowrap;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior-x: contain;
+            scrollbar-width: none;
+        }
+        .fav-week::-webkit-scrollbar { height: 0; }
+        @media (hover: hover) and (pointer: fine) {
+            .fav-week { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }
+            .fav-week::-webkit-scrollbar { height: 4px; }
+            .fav-week::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); border-radius: 2px; }
+        }
+        .fav-week-title { flex: none; color: #888; font-size: 12px; }
+        .fav-week-title i { margin-right: 2px; }
+        .fav-week-day {
+            flex: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            height: 28px;
+            padding: 0 3px 0 10px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, .05);
+            border: 1px solid rgba(255, 255, 255, .08);
+        }
+        .fav-week-day.empty { padding-right: 10px; opacity: .45; }
+        .fav-week-day.today { background: rgba(229, 9, 20, .14); border-color: rgba(229, 9, 20, .55); }
+        .fav-week-lbl { font-size: 12px; font-weight: 600; color: #aaa; margin-right: 2px; }
+        .fav-week-day.today .fav-week-lbl { color: #ff6b6b; }
+        .fav-week-show {
+            display: inline-block;
+            max-width: 9em;
+            height: 22px;
+            line-height: 22px;
+            padding: 0 8px;
+            border: 0;
+            border-radius: 11px;
+            background: rgba(255, 255, 255, .1);
+            color: #e6e6e6;
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+        }
+        .fav-week-show:hover, .fav-week-show:focus-visible { background: rgba(255, 255, 255, .2); color: #fff; outline: none; }
         /* 详情页标题旁的 ♥ 收藏按钮 */
         .video-title-row { display: flex; align-items: center; gap: 12px; }
         .fav-heart {
@@ -4205,6 +4373,10 @@
         <button class="btn-top" @click="scrollToTop">
             <i class="fas fa-arrow-up"></i>
         </button>
+        <!-- ⚙️ 偏好设置(右下角常驻,返回顶部按钮在它上面);TV 模式开关与退出登录也在设置里 -->
+        <button class="btn-settings" @click="showSettingsModal = true" title="偏好设置" aria-label="偏好设置">
+            <i class="fas fa-cog"></i>
+        </button>
 
         <!-- 1. Hero Carousel -->
         <div id="heroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-interval="6000"
@@ -4322,6 +4494,15 @@
                     <span v-if="favUpdateCount > 0" style="margin-left: 12px; color: #ff6b6b; font-size: 12px;">{{ favUpdateCount }} 部有更新</span>
                     <span style="margin-left: auto; color: #777; font-size: 12px;">{{ favList.length }} / {{ favLimit }}</span>
                 </div>
+                <!-- 📅 本周更新:今天起 7 天,每天列出预计更新的收藏(TMDB 下一集日期 / 服务器推出的更新规律);一部都没有时整条隐藏。
+                     固定一行高、横向滑动:内容变了不挤动下面的收藏行 -->
+                <div class="fav-week" v-if="favSched.week" aria-label="本周更新">
+                    <span class="fav-week-title"><i class="fas fa-calendar-week" aria-hidden="true"></i> 本周更新</span>
+                    <div class="fav-week-day" v-for="d in favSched.week" :key="d.date" :class="{ today: d.today, empty: !d.items.length }" :title="d.md">
+                        <span class="fav-week-lbl">{{ d.label }}</span>
+                        <button type="button" class="fav-week-show" v-for="e in d.items" :key="d.date + '|' + e.id" @click="openFavorite(e.item)">{{ e.name }}</button>
+                    </div>
+                </div>
                 <div class="scroll-container">
                     <button class="scroll-btn left" v-show="favCanScrollLeft" @click="scrollRowBy('favRow', -1)"
                         aria-label="向左滚动收藏"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
@@ -4342,6 +4523,8 @@
                             </div>
                             <div class="movie-name" @click="openFavorite(item)">{{ item.data && item.data.name }}</div>
                             <div class="movie-date" style="font-size: 11px;">{{ favSubText(item) }}</div>
+                            <!-- 📅 下一集:有一张卡有这一行时每张卡都占一行高(空着也占),卡片高度一致 -->
+                            <div v-if="favSched.any" class="fav-sched" @click="openFavorite(item)">{{ favSched.line[item.fav_id] || '' }}</div>
                         </div>
                     </div>
                     <button class="scroll-btn right" v-show="favCanScrollRight" @click="scrollRowBy('favRow', 1)"
@@ -4823,6 +5006,28 @@
                         <div v-if="pushMsg" style="color: #fbbf24; font-size: 12px; margin-top: 8px;">{{ pushMsg }}</div>
                     </div>
 
+                    <!-- 📺 TV 模式(以前只在页脚) -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                        <div>
+                            <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-tv" style="margin-right: 8px; color: #e50914;"></i>TV 模式</div>
+                            <div style="color: #888; font-size: 12px; margin-top: 4px;">电视 / 遥控器用：方向键导航，焦点放大</div>
+                        </div>
+                        <label class="settings-switch">
+                            <input type="checkbox" :checked="isTVMode" @change="showSettingsModal = false; toggleTVMode()">
+                            <span class="settings-slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- 🚪 退出登录(以前只在页脚) -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer;"
+                        @click="showSettingsModal = false; confirmLogout()">
+                        <div>
+                            <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-sign-out-alt" style="margin-right: 8px; color: #e50914;"></i>退出登录</div>
+                            <div style="color: #888; font-size: 12px; margin-top: 4px;">切换账号；本机观看历史会一并清除</div>
+                        </div>
+                        <i class="fas fa-chevron-right" style="color: #666;"></i>
+                    </div>
+
                     <!-- 提示信息 -->
                     <div
                         style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
@@ -4898,6 +5103,25 @@
             </div>
         </div>
 
+        <!-- 🔔 「开启更新提醒？」小卡片(站内软提示,不是浏览器权限框):本页第一次 ♥ 成功 / 求片提交成功后,等 toast 和别的弹窗都没了才出来。
+             不加遮罩、不挡页面;之后有弹窗盖上来就先藏起来(v-show)。teleport 到 body:播放页网页全屏(TV 模式)时也在上面,
+             但低于分享面板 / 截帧弹窗 / toast。点「开启」才在这次点击里要浏览器权限 -->
+        <teleport to="body">
+            <div v-if="pushAsk.show" v-show="!pushAskCovered" class="pask" ref="pushAskBox" role="dialog" aria-label="开启更新提醒">
+                <div class="pask-ico"><i class="fas fa-bell"></i></div>
+                <div class="pask-main">
+                    <div class="pask-t">{{ pushAsk.msg || (pushAsk.kind === 'req' ? '求片有结果时通知你？' : '开启更新提醒？新集一出就通知你') }}</div>
+                    <div class="pask-btns">
+                        <template v-if="!pushAsk.msg">
+                            <button type="button" @click="pushAskLater()">以后再说</button>
+                            <button type="button" class="pri" :class="{ busy: pushBusy }" @click="pushAskEnable()">{{ pushBusy ? '开启中…' : '开启' }}</button>
+                        </template>
+                        <button v-else type="button" class="pri" @click="closePushAsk()">知道了</button>
+                    </div>
+                </div>
+            </div>
+        </teleport>
+
         <!-- 🚫 被封禁锁屏：服务端 /api/config 返回 banned 时挡住整站 -->
         <div v-if="userBanned" class="ban-lock">
             <div class="ban-lock-box">
@@ -4967,6 +5191,13 @@
                         <button class="share-soc" @click="shareTo('native')"><span class="ico" style="background:#444;"><i class="fas fa-ellipsis-h"></i></span><div>更多 App</div></button>
                     </div>
 
+                    <!-- 📸 分享当前画面:截这一帧做成带二维码的卡片(直播没有"这一秒",不显示) -->
+                    <button v-if="currentGroup && !currentGroup._isLive" class="fshare-entry" @click="shareFrame">
+                        <i class="fas fa-camera"></i>
+                        <span class="fshare-entry-t">分享当前画面<small>截下这一帧 + 二维码卡片，发微信群更容易被点开</small></span>
+                        <i class="fas fa-chevron-right fshare-entry-arrow"></i>
+                    </button>
+
                     <!-- 复制链接 -->
                     <div style="display:flex; gap:8px; margin-bottom:14px;">
                         <input readonly :value="shareUrl" onclick="this.select()" @copy="onShareInputCopy"
@@ -4981,6 +5212,31 @@
                     </label>
                 </div>
             </div>
+
+            <!-- 📸 截帧分享卡片:卡片用 <img>(dataURL)显示 —— 微信/QQ 内置浏览器不支持网页分享文件,只能长按图片保存/发送给朋友。
+                 teleport 到 body 下:留在 .detail-overlay 里会被网页全屏的播放器(.dplayer-fulled z-index 2147483647,TV 模式一直网页全屏)整个盖住 -->
+            <teleport to="body">
+                <div v-if="frameShare.show" class="fshare-mask" @click.self="closeFrameShare()" role="dialog" aria-modal="true" aria-label="分享当前画面">
+                    <div class="fshare-box" ref="fshareBox" tabindex="-1">
+                        <div class="fshare-head">
+                            <div class="fshare-ttl"><i class="fas fa-camera"></i> 分享当前画面</div>
+                            <button class="fshare-x" @click="closeFrameShare()" aria-label="关闭">&times;</button>
+                        </div>
+                        <div class="fshare-stage">
+                            <img v-if="frameShare.img" :src="frameShare.img" class="fshare-img" :alt="frameShare.title">
+                            <div v-else-if="frameShare.busy" class="fshare-wait"><i class="fas fa-spinner fa-spin"></i> 正在生成卡片…</div>
+                            <div v-else class="fshare-wait">{{ frameShare.err }}</div>
+                        </div>
+                        <div v-if="frameShare.note" class="fshare-note"><i class="fas fa-info-circle"></i> {{ frameShare.note }}</div>
+                        <div v-if="frameShare.img && frameShare.tip" class="fshare-tip">{{ frameShare.tip }}</div>
+                        <div class="fshare-btns">
+                            <button :disabled="!frameShare.img" @click="frameShareSave"><i class="fas fa-download"></i> 保存图片</button>
+                            <button :disabled="!frameShare.link" @click="frameShareCopy"><i class="fas fa-link"></i> 复制链接</button>
+                            <button v-if="frameShare.canFiles" class="pri" @click="frameShareNative"><i class="fas fa-share-alt"></i> 分享…</button>
+                        </div>
+                    </div>
+                </div>
+            </teleport>
 
             <div class="player-layout" v-if="currentGroup">
 
@@ -5013,7 +5269,7 @@
                 </div>
 
                 <!-- 2. 中部：超大播放器 -->
-                <div class="player-box" style="position: relative;"
+                <div class="player-box" style="position: relative;" :class="{ 'dg-no-frame': previewLocked || currentGroup._isLive }"
                     :style="previewLocked && currentGroup && currentGroup.pic ? { backgroundImage: 'url(' + currentGroup.pic + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
                     <!-- ⏭️ 跳过按钮由 JS 注入进 #dplayer 容器内(而非此处兄弟节点)——否则全屏时(#dplayer 独占 top layer)按钮不可见 -->
@@ -5833,6 +6089,7 @@
                 localStorage.removeItem('donggua_push_on');
                 localStorage.removeItem('donggua_popular_cache3');
                 localStorage.removeItem('donggua_popular_cache2');
+                localStorage.removeItem('donggua_fav_tmdb');   // 📅 追更日历的片名 → TMDB 表(键就是收藏的片名)
             } catch (e) { }
             return (async () => {
                 try {
@@ -6005,6 +6262,238 @@
             const t = setTimeout(() => ctl.abort(), timeoutMs || 8000);
             return fetch(url, { ...(options || {}), signal: ctl.signal }).finally(() => clearTimeout(t));
         }
+
+        // ========== 📸 截一帧分享(分享当前画面)的纯函数核心 ==========
+        //   scripts/frame-share-test.mjs 按 <dg-frame-share-core> 这对标记把整段抽出来在 node 里跑 —— 段内只用参数,不碰页面里的其它变量/DOM。
+        //   drawCard 只往传进来的 canvas 上画(测试用假 ctx 记录调用);截图/取剧照/加载二维码库在 Vue 方法 shareFrame 那一组。
+        // <dg-frame-share-core>
+        const DgFrameShare = (() => {
+            // 只用系统字体(不下载任何字体文件)
+            const FONT = '-apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", system-ui, sans-serif';
+            // 与 DPlayer 进度条同一格式(DPlayer utils.secondToTime):不足 1 小时 mm:ss,否则 hh:mm:ss,每段补零
+            //   → 卡片上的时间 = 用户在进度条上看到的(剪掉插播后的时间轴);链接里的 &t= 另按原时间轴算(见 shareFrame)
+            function timeLabel(sec) {
+                sec = sec || 0;
+                if (sec === 0 || sec === Infinity || String(sec) === 'NaN') return '00:00';
+                const h = Math.floor(sec / 3600), m = Math.floor((sec - 3600 * h) / 60), s = Math.floor(sec - 3600 * h - 60 * m);
+                return (h > 0 ? [h, m, s] : [m, s]).map(x => (x < 10 ? '0' + x : '' + x)).join(':');
+            }
+            // 分享链接的唯一拼法(分享面板 shareUrl 与截帧分享共用):?play=剧名 &ep=集名 &w=作品签名 &t=原时间轴秒数 &s=分享码;直播 ?live=频道名
+            function link(p) {
+                p = p || {};
+                const o = p.origin || '', sc = p.code ? '&s=' + p.code : '';
+                if (!p.name) return o + '/';
+                if (p.live) return o + '/?live=' + encodeURIComponent(p.name) + sc;
+                let u = o + '/?play=' + encodeURIComponent(p.name);
+                if (p.ep) u += '&ep=' + encodeURIComponent(p.ep);
+                if (p.work) u += '&w=' + encodeURIComponent(p.work);
+                if (p.t > 0) u += '&t=' + Math.floor(p.t);
+                return u + sc;
+            }
+            // 卡片上的集名 = 选集列表里显示的;只有一集(电影/单集)不写;纯数字("01")补成"第01集",否则卡片上只剩个孤零零的数字
+            function epLabel(name, multi) {
+                const n = String(name || '').trim();
+                if (!multi || !n) return '';
+                return /^\d{1,4}$/.test(n) ? '第' + n + '集' : n;
+            }
+            // 「剧名 · 第N集 · 12:34」里片名后面那截(片名过长时只截片名,这截保持完整)
+            function tail(ep, time) { return (ep ? ' · ' + ep : '') + (time ? ' · ' + time : ''); }
+            // 截图尺寸:按视频原始尺寸,长边封顶 cap(4K 片源不必画 800 万像素)
+            function captureSize(vw, vh, cap) {
+                cap = cap || 1280;
+                if (!(vw > 0 && vh > 0)) return { w: 0, h: 0 };
+                const k = Math.min(1, cap / Math.max(vw, vh));
+                return { w: Math.max(1, Math.round(vw * k)), h: Math.max(1, Math.round(vh * k)) };
+            }
+            // 剧照兜底取回来的字节是不是真的位图(JPEG/PNG/WebP/GIF/AVIF),按文件头认、不看 Content-Type(Vercel 版 /api/tmdb-image 转发时不带它)。
+            //   取图失败时 sw.js 回的是 200 的「加载失败」SVG 占位(给页面 <img> 用的):以前被当成剧照画进卡片、还记一整个会话(审查实锤)
+            function isRaster(b) {
+                b = b || [];
+                const at = (i, s) => { for (let k = 0; k < s.length; k++) if (b[i + k] !== s.charCodeAt(k)) return false; return true; };
+                if (!(b.length >= 12)) return false;
+                if (b[0] === 0xFF && b[1] === 0xD8 && b[2] === 0xFF) return true;
+                if (b[0] === 0x89 && at(1, 'PNG')) return true;
+                if (at(0, 'RIFF') && at(8, 'WEBP')) return true;
+                if (at(0, 'GIF8')) return true;
+                return at(4, 'ftyp') && (at(8, 'avif') || at(8, 'avis'));
+            }
+            // 截到的画面能不能用 → { use: 'frame' | 'poster', why }。没尺寸/还没解码出画面 → 剧照;
+            //   画布被跨域污染(原生 HLS / 跨域 MP4 读像素抛 SecurityError)→ 剧照;Safari 原生 HLS 有时不抛错但画出来全透明 → 也算没截到
+            function frameDecision(r) {
+                r = r || {};
+                if (r.tainted) return { use: 'poster', why: 'tainted' };
+                if (r.error) return { use: 'poster', why: 'error' };
+                if (!(r.w > 0 && r.h > 0) || !(r.readyState >= 2)) return { use: 'poster', why: 'notready' };
+                if (r.blank) return { use: 'poster', why: 'blank' };
+                return { use: 'frame', why: '' };
+            }
+            // 弹窗里告诉用户为什么卡片上不是这一帧(hasArt = 找到了剧照顶上)
+            const POSTER_NOTE = { tainted: '当前线路不支持截取画面', blank: '当前线路不支持截取画面', notready: '画面还没加载出来', error: '截取画面失败' };
+            function posterNote(why, hasArt) { return (POSTER_NOTE[why] || POSTER_NOTE.error) + (hasArt ? '，卡片里换成了剧照' : '，卡片里只放了片名'); }
+            // 卡片画面区高度:按画面比例,夹在 21:9 ~ 4:5 之间(竖屏短剧/超宽银幕都不至于把卡片拉得离谱),超出部分居中裁掉
+            function imageBox(W, sw, sh) {
+                const r = (sw > 0 && sh > 0) ? sh / sw : 9 / 16;
+                return Math.round(W * Math.min(1.25, Math.max(9 / 21, r)));
+            }
+            // object-fit: cover 的源矩形(居中裁切)
+            function coverRect(sw, sh, dw, dh) {
+                const s = Math.max(dw / sw, dh / sh), w = dw / s, h = dh / s;
+                return { sx: (sw - w) / 2, sy: (sh - h) / 2, sw: w, sh: h };
+            }
+            // 按宽度折行。中文没有空格,逐字断;西文单词不从中间断(当前行有空格时退到最后一个空格处折);行首行尾不留空格。measure(text) → 像素宽
+            function wrap(measure, text, maxW) {
+                const lines = [];
+                let cur = '';
+                for (const ch of Array.from(String(text || ''))) {
+                    if (!cur && /\s/.test(ch)) continue;
+                    if (cur && measure(cur + ch) > maxW) {
+                        const sp = cur.lastIndexOf(' ');
+                        if (sp > 0 && /[A-Za-z0-9]/.test(ch) && /[A-Za-z0-9]$/.test(cur)) { lines.push(cur.slice(0, sp).trimEnd()); cur = cur.slice(sp + 1) + ch; }
+                        else { lines.push(cur.trimEnd()); cur = /\s/.test(ch) ? '' : ch; }
+                        continue;
+                    }
+                    cur += ch;
+                }
+                if (cur.trim()) lines.push(cur.trimEnd());
+                return lines;
+            }
+            // 一行放不下就从尾部截掉、末尾加"…"
+            function ellipsize(measure, text, maxW) {
+                text = String(text || '');
+                if (measure(text) <= maxW) return text;
+                const cs = Array.from(text);
+                while (cs.length && measure(cs.join('') + '…') > maxW) cs.pop();
+                return cs.join('').trimEnd() + '…';
+            }
+            // 超过 maxLines 行:截到 maxLines 行,最后一行末尾放得下"…"为止(最后一行本来放得下也要加 …,表示后面还有)
+            function clampLines(measure, lines, maxW, maxLines) {
+                if (lines.length <= maxLines) return lines;
+                const out = lines.slice(0, maxLines), last = Array.from(out[maxLines - 1]);
+                while (last.length && measure(last.join('') + '…') > maxW) last.pop();
+                out[maxLines - 1] = last.join('').trimEnd() + '…';
+                return out;
+            }
+            // 标题排版:「剧名 · 第N集 · 12:34」最多 maxLines 行;放不下时只截短片名(加 …),集名和时间保持完整;
+            //   连只留一个字的片名都放不下(集名本身超长)→ 整串折行后最后一行截断加 …
+            function layoutTitle(measure, name, tl, maxW, maxLines) {
+                name = String(name || ''); tl = String(tl || '');
+                const full = wrap(measure, name + tl, maxW);
+                if (full.length <= maxLines) return full;
+                const chars = Array.from(name);
+                for (let k = chars.length - 1; k >= 1; k--) {
+                    const ls = wrap(measure, chars.slice(0, k).join('').trimEnd() + '…' + tl, maxW);
+                    if (ls.length <= maxLines) return ls;
+                }
+                return clampLines(measure, full, maxW, maxLines);
+            }
+            // 「保存图片」在这台设备上怎么存:
+            //   press   微信/QQ 内置浏览器:不支持下载,只能长按图片(它们自己有长按菜单;安卓微信 UA 也带 "; wv)",先认它)
+            //   app     自家安卓 App(Capacitor WebView):<a download href=blob:> 被直接丢掉、也没有长按存图菜单 → 提示截屏 / 复制链接
+            //   webview 别的安卓内嵌网页(UA 带 "; wv)",微博/钉钉/抖音之类):有的宿主接了下载有的没接 → 照样试下载,同时提示长按/截屏
+            //   download 其余浏览器:正常下载
+            function saveMode(ua, nativeApp) {
+                ua = String(ua || '');
+                if (/MicroMessenger|QQ\/|MQQBrowser/i.test(ua)) return 'press';
+                if (nativeApp) return 'app';
+                if (/; wv\)/.test(ua)) return 'webview';
+                return 'download';
+            }
+            const SAVE_TIP = {
+                press: '长按图片可保存或直接发送给朋友',
+                app: 'App 里不能直接保存图片：可以截屏保存这张卡片，或复制链接分享',
+                webview: '没开始下载的话，可以长按或截屏保存这张卡片',
+                download: '手机上长按图片可保存或直接发送给朋友'
+            };
+            function saveTip(mode) { return SAVE_TIP[mode] || SAVE_TIP.download; }
+            // 保存的文件名:剧名_第N集_12-34.jpg(去掉文件名里不能有的字符)
+            function fileName(name, ep, time) {
+                const s = [name, ep, String(time || '').replace(/:/g, '-')].filter(Boolean).join('_').replace(/[\\/:*?"<>|\s_]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 80);
+                return (s || 'frame') + '.jpg';
+            }
+            // 圆角矩形路径(ctx.roundRect 在 Safari 16 以前没有)
+            function rr(ctx, x, y, w, h, r) {
+                ctx.beginPath();
+                ctx.moveTo(x + r, y);
+                ctx.arcTo(x + w, y, x + w, y + h, r);
+                ctx.arcTo(x + w, y + h, x, y + h, r);
+                ctx.arcTo(x, y + h, x, y, r);
+                ctx.arcTo(x, y, x + w, y, r);
+                ctx.closePath();
+            }
+            // 画卡片:上面画面(或剧照),下面左边「剧名 · 第N集 · 12:34」+ 提示语 + 站点,右边二维码。
+            //   o = { W, img: { src, sw, sh } | null, poster(不是那一秒的画面), name, tail, sub, brand, host, qr: { count, isDark(r, c) }, icon }
+            //   返回 { W, H, imgH, lines(标题各行), qrCell(每个码元的像素), qrBox: [x, y, 边长] }
+            function drawCard(canvas, o) {
+                const W = o.W || 1080, PAD = 56, QR = 264, GAP = 40, TOP = 44, LH = 60;
+                const imgH = imageBox(W, o.img && o.img.sw, o.img && o.img.sh);
+                const textW = W - PAD * 2 - QR - GAP;
+                let ctx = canvas.getContext('2d');
+                ctx.font = 'bold 46px ' + FONT;
+                const lines = layoutTitle(t => ctx.measureText(t).width, o.name, o.tail, textW, 2);
+                const bodyH = Math.max(QR, lines.length * LH + 14 + 36 + 28 + 48);   // 标题 + 提示语 + 间距 + 站点行
+                const H = imgH + TOP + bodyH + TOP;
+                canvas.width = W; canvas.height = H;   // 改尺寸会清空 ctx 状态,字体等下面重设
+                ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#121212'; ctx.fillRect(0, 0, W, H);
+                // ① 画面 / 剧照(cover 裁切);连剧照都没有 → 暗红渐变 + 大字片名
+                if (o.img && o.img.src) {
+                    const c = coverRect(o.img.sw, o.img.sh, W, imgH);
+                    ctx.drawImage(o.img.src, c.sx, c.sy, c.sw, c.sh, 0, 0, W, imgH);
+                } else {
+                    const gr = ctx.createLinearGradient(0, 0, W, imgH);
+                    gr.addColorStop(0, '#3a0a10'); gr.addColorStop(1, '#141414');
+                    ctx.fillStyle = gr; ctx.fillRect(0, 0, W, imgH);
+                    ctx.font = 'bold 72px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = 'rgba(255,255,255,.92)';
+                    const m = t => ctx.measureText(t).width, big = clampLines(m, wrap(m, o.name, W - 160), W - 160, 2);
+                    big.forEach((ln, i) => ctx.fillText(ln, W / 2, imgH / 2 + (i - (big.length - 1) / 2) * 92));
+                    ctx.textAlign = 'left';
+                }
+                ctx.fillStyle = '#e50914'; ctx.fillRect(0, imgH - 4, W, 4);   // 站点主色细线,分开画面和文字区
+                // ② 剧照角标:告诉看的人这不是那一秒的画面
+                if (o.poster) {
+                    ctx.font = '26px ' + FONT; ctx.textBaseline = 'middle';
+                    const label = '剧照 · 非当前画面', lw = ctx.measureText(label).width + 36;
+                    ctx.fillStyle = 'rgba(0,0,0,.62)'; rr(ctx, 24, 24, lw, 48, 24); ctx.fill();
+                    ctx.fillStyle = '#fff'; ctx.fillText(label, 42, 49);
+                }
+                // ③ 标题(最多两行,超长只截片名)+ 提示语
+                ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                const y0 = imgH + TOP;
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 46px ' + FONT;
+                lines.forEach((ln, i) => ctx.fillText(ln, PAD, y0 + i * LH + 4));
+                ctx.fillStyle = '#b3b3b3'; ctx.font = '30px ' + FONT;
+                ctx.fillText(o.sub || '', PAD, y0 + lines.length * LH + 14);
+                // ④ 站点:图标 + 名字 + 域名,贴底(与二维码区下沿对齐)
+                const by = y0 + bodyH - 48;
+                let bx = PAD;
+                if (o.icon) {
+                    try { ctx.save(); rr(ctx, bx, by, 48, 48, 10); ctx.clip(); ctx.drawImage(o.icon, bx, by, 48, 48); ctx.restore(); bx += 60; } catch (e) { }
+                }
+                ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 32px ' + FONT;
+                ctx.fillText(o.brand || '', bx, by + 25);
+                bx += ctx.measureText(o.brand || '').width + 14;
+                if (o.host) {
+                    ctx.fillStyle = '#8c8c8c'; ctx.font = '24px ' + FONT;
+                    const hw = PAD + textW - bx, hm = t => ctx.measureText(t).width;
+                    if (hw > 40) ctx.fillText(ellipsize(hm, String(o.host), hw), bx, by + 27);
+                }
+                // ⑤ 二维码:白底圆角,码元取整像素(不糊),四周至少 3 个码元的留白
+                const qx = W - PAD - QR, qy = y0 + Math.round((bodyH - QR) / 2);
+                ctx.fillStyle = '#fff'; rr(ctx, qx, qy, QR, QR, 16); ctx.fill();
+                let cell = 0;
+                if (o.qr && o.qr.count > 0) {
+                    const n = o.qr.count;
+                    cell = Math.max(1, Math.floor(QR / (n + 6)));
+                    const off = Math.round((QR - cell * n) / 2);
+                    ctx.fillStyle = '#000';
+                    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (o.qr.isDark(r, c)) ctx.fillRect(qx + off + c * cell, qy + off + r * cell, cell, cell);
+                }
+                return { W, H, imgH, lines, qrCell: cell, qrBox: [qx, qy, QR] };
+            }
+            return { FONT, timeLabel, link, epLabel, tail, captureSize, isRaster, frameDecision, posterNote, imageBox, coverRect, wrap, ellipsize, clampLines, layoutTitle, saveMode, saveTip, fileName, drawCard };
+        })();
+        // </dg-frame-share-core>
 
         // 页面加载时获取公网 IP（后台执行，不阻塞）
         fetchClientPublicIP();
@@ -7347,6 +7836,417 @@
         //    只影响 checkEarlyReturn 的"首个代理就绪即播";3s 的 MAX_WAIT_TIME 兜底不变,绝不因偏好干净线路而拉长
         const EARLY_SETTLE_MS = 1200;
 
+        // ========== 📅 追更日历(收藏卡片「周五更新」那一行 + 「本周更新」条)的纯函数核心 ==========
+        //   scripts/favorites-client-test.mjs 按 <dg-fav-sched-core> 这对标记把整段抽出来在 node 里跑 —— 段内只用参数,不碰页面变量/DOM/时钟。
+        //   两路数据:① TMDB 的 next_episode_to_air(在播国产真人剧只有约 1/3 有,动画/综艺约 8 成)
+        //            ② 服务器按自己看到的涨集时间推出的规律 status.cadence(北京时间星期几,见 lib/favorites inferCadence)
+        //   TMDB 有日期用 TMDB,没有用规律。两样都是北京日历(国产剧 TMDB 的 air_date 是播出国日期;规律是北京时间星期几)→
+        //   按"大概几点上新"(cadence.clock,没有就当晚上 8 点)换成用户本地日历再说今天/明天/周几:北京周六 10:00 上新,
+        //   在美西是周五晚上 7 点,得说"周五"(审查实锤:以前直接拿北京日期比本地今天,美洲用户看到的晚一天)。国内用户换算前后一样。
+        // <dg-fav-sched-core>
+        const DgFavSched = (() => {
+            const DAY = 86400000;
+            const CN = ['', '一', '二', '三', '四', '五', '六', '日'];
+            const T = {
+                lookups: 30,                 // 额度:每 6 小时(tvTtl)最多查几部(缓存最旧的先查);用完到点补满
+                newPerRun: 3,                // 额度用完后,从没查过的(刚收藏的)每轮还能查几部
+                idTtl: 30 * DAY,             // 片名 → TMDB 剧集 id:认出来的 30 天内不再搜
+                nullTtl: 7 * DAY,            //   没认出来的 7 天后再试
+                tvTtl: 6 * 3600000,          // /tv/{id} 的下一集:6 小时
+                pastTtl: 3600000,            //   下一集日期已经过去了(TMDB 还没翻到下一集、这季也没排出下一集):1 小时后再查
+                showMax: 3 * DAY,            // 查不到新的时旧的下一集日期最多再用 3 天(已经过去的日期本来就不显示)
+                lineMax: 12,                 // 卡片那一行的宽度预算(汉字 1、ASCII 0.55;封面最窄 150px、11px 字 ≈ 13 个汉字)
+                defClock: 20 * 60,           // 不知道几点上新时当北京时间 20:00(国产剧最常见的档)
+                labelLag: 60,                // 与服务器 CAD.labelLagMs 同口径:零点后 1 小时内上新的算前一天晚上的更新(cadence.clock 可到 24:xx)
+                growDays: 21,                // 不带季号的收藏认 TMDB 第 2 季以后的下一集:站上这条最近这么多天里得真涨过集(见 nextFits)
+                eps: 3,                      // 下一集日期已过、TMDB 还没翻篇:按集查 /tv/{id}/season/{s}/episode/{e+k} 最多几集(见 seasonNext)
+            };
+            const own = (o, k) => !!o && Object.prototype.hasOwnProperty.call(o, k);
+            const pad = n => (n < 10 ? '0' : '') + n;
+            // 时间戳还新鲜:比现在早不到 ttl(远在将来的 = 改过系统时钟,当过期)
+            const fresh = (ts, ttl, now) => ts <= now + DAY && now - ts < ttl;
+            // 本地日历的今天(用户看到的"今天/明天/周五"按本地日历)
+            function localDay(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+            // 'YYYY-MM-DD' → 1970-01-01 起的日序号(按 UTC 整天算,不受夏令时影响);不合法(含 2月30日)→ NaN
+            function dayNum(s) {
+                const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof s === 'string' ? s : '');
+                if (!m) return NaN;
+                const y = +m[1], mo = +m[2], d = +m[3], t = Date.UTC(y, mo - 1, d), c = new Date(t);
+                return (c.getUTCFullYear() === y && c.getUTCMonth() === mo - 1 && c.getUTCDate() === d) ? Math.round(t / DAY) : NaN;
+            }
+            function dayStr(n) { const c = new Date(n * DAY); return c.getUTCFullYear() + '-' + pad(c.getUTCMonth() + 1) + '-' + pad(c.getUTCDate()); }
+            // ISO 星期几(1=周一 … 7=周日),与服务器 isoWeekday 同式;1970-01-01 是周四
+            const isoWd = n => ((n % 7) + 10) % 7 + 1;
+            // 北京时间的今天(国产剧 TMDB air_date 是北京日历:判断"下一集是不是已经播过了"按它)
+            const bjToday = now => dayStr(Math.floor((now + 8 * 3600000) / DAY));
+            // 北京日期 s 的零点 + min 分钟,再往前挪 lag 分钟 → 那一刻落在用户本地日历的哪天('' = 日期不合法)
+            function bjToLocal(s, min, lag) {
+                const n = dayNum(s);
+                return isNaN(n) ? '' : localDay(new Date(n * DAY - 8 * 3600000 + ((min | 0) - (lag | 0)) * 60000));
+            }
+            // cadence.clock:相对北京"更新日"零点的分钟(过了零点的 > 1440);不合法 → -1
+            const clockOf = c => (c && Number.isInteger(c.clock) && c.clock >= 0 && c.clock < 2880 ? c.clock : -1);
+            // 规律的"更新日"里的那一刻(分钟,相对这天北京零点):clock − labelLag(资源站一般比官方晚),夹在这一天里 ——
+            //   服务器已经把它算成这天的更新了。clock 可到 30:00(周五 23:00 的剧资源站凌晨才有,服务器仍算周五,clock 25:27),
+            //   不夹的话北京用户也会被挪到周六
+            const dayMin = m => Math.min(1439, Math.max(0, m - T.labelLag));
+            // 北京时间的规律 → 本地日历:星期几整体挪 δ 天(δ = 北京某个更新日 + dayMin(clock) 落到本地的哪天;国内 δ = 0)
+            function localCad(c, today) {
+                if (!c || !c.days.length) return c;
+                const k = dayNum(today), ck = clockOf(c);
+                const sh = isNaN(k) ? 0 : dayNum(bjToLocal(dayStr(k), dayMin(ck >= 0 ? ck : T.defClock), 0)) - k;
+                if (!sh) return c;
+                return Object.assign({}, c, { days: c.days.map(w => ((w - 1 + sh) % 7 + 7) % 7 + 1).sort((a, b) => a - b) });
+            }
+            // TMDB 日期 d(北京日历的官方播出日)对上服务器规律里的哪个"更新日":s = 更新日 − d(−1/0/+1),
+            //   m = 上新那一刻相对 d 北京零点的分钟(夹在 d 这一天里:TMDB 日期就是播出那天;不减 labelLag —— 模拟里减了反而错得多,
+            //   clock 取的是窗口起点,本来就可能早于官方时刻)。服务器那边:零点后才有的算前一天晚上(clock ≥ 24:00),
+            //   晚间剧资源站凌晨才有的有时算第二天(clock 01:xx~05:xx)。所以按规律的星期几看 d 是哪种:
+            //   d 本身在规律里(s=0)/ d 的前一天在(s=−1:官方零点更新,服务器算前一天晚上)/ d 的后一天在(s=+1:服务器把晚间剧算到第二天)。
+            //   几种都说得通(日更、连着几天)按钟点挑:≥ 24:00 → 就是 d 那天的深夜(审查实锤:日更 23:00 的剧以前被算成 d 的 00:xx,
+            //   美国/欧洲早一天);01:00~06:00 → 多半是 d 那天晚上的、资源站凌晨才有(国产剧官方凌晨更新很少);其余 → d 当天。
+            //   规律里压根没有这几天(规律不准/特别篇)→ 同样按钟点挑,sure = false(不拿它挪规律的星期几,见 schedule)
+            function alignAir(d, c) {
+                const ck = clockOf(c), n = dayNum(d);
+                if (ck < 0 || isNaN(n)) return { s: 0, m: T.defClock, sure: false };
+                const days = Array.isArray(c.days) ? c.days : [];
+                const set = new Set(c.daily === true && !days.length ? [1, 2, 3, 4, 5, 6, 7] : days);
+                const order = ck >= 1440 ? [0, -1, 1] : ck >= 60 && ck < 360 ? [1, 0, -1] : [0, 1, -1];
+                const ok = order.filter(s => set.has(isoWd(n + s)));
+                const s = ok.length ? ok[0] : order[0];
+                return { s, m: Math.min(1439, Math.max(0, ck + 1440 * s)), sure: ok.length > 0 };
+            }
+            // TMDB 下一集日期 → 本地日历。bj = 这部剧的日期按北京日历(国产/港台/没写出品国);外国剧(美剧/日韩)保持原样。
+            //   钟点用规律的(没有就 20:00),按 alignAir 换成 d 那天里的一刻。
+            //   以前直接 clock % 1440:周四 00:00 的剧服务器算周三、clock 23:28(1408)→ 加到 TMDB 的周四上 = 周四 23:28,
+            //   美国/欧洲用户整整晚一天(审查实锤);服务器把周五 23:00 的剧标成周六 01:28 → 加到 TMDB 的周五上 = 周五 01:28 → 美西周四
+            function airLocal(d, bj, c) {
+                if (!d || !bj) return d || '';
+                return bjToLocal(d, alignAir(d, c).m, 0) || d;
+            }
+            // 下一集日期 → 卡片文字:今天/明天/周五(一周内)/10月20日(再远;跨年带年份);过去的日期 → ''
+            function relDayLabel(air, today) {
+                const a = dayNum(air), diff = a - dayNum(today);
+                if (!(diff >= 0)) return '';
+                if (diff === 0) return '今天更新';
+                if (diff === 1) return '明天更新';
+                if (diff <= 6) return '周' + CN[isoWd(a)] + '更新';
+                const p = air.split('-');
+                return (p[0] !== today.slice(0, 4) ? p[0] + '年' : '') + (+p[1]) + '月' + (+p[2]) + '日更新';
+            }
+            // status.cadence → { daily, days:[1..7 升序去重], clock? };不认识/推不出 → null
+            function normCad(c) {
+                if (!c || typeof c !== 'object') return null;
+                const days = Array.from(new Set(Array.isArray(c.days) ? c.days.filter(w => Number.isInteger(w) && w >= 1 && w <= 7) : [])).sort((a, b) => a - b);
+                const o = c.daily === true ? { daily: true, days } : (days.length ? { daily: false, days } : null);
+                if (o && clockOf(c) >= 0) o.clock = c.clock;
+                return o;
+            }
+            // 规律 → 一周里的哪几天(日更又没说哪几天 = 7 天)
+            function cadSet(c) { return c ? new Set(c.daily && !c.days.length ? [1, 2, 3, 4, 5, 6, 7] : c.days) : null; }
+            // [1,2,3,5] → '一至三、五'(连着 3 天以上写"至")
+            function fmtDays(days) {
+                const out = [];
+                for (let i = 0; i < days.length;) {
+                    let j = i;
+                    while (j + 1 < days.length && days[j + 1] === days[j] + 1) j++;
+                    if (j - i >= 2) out.push(CN[days[i]] + '至' + CN[days[j]]);
+                    else for (let k = i; k <= j; k++) out.push(CN[days[k]]);
+                    i = j + 1;
+                }
+                return out.join('、');
+            }
+            // 规律 → [完整, 短, 更短](和集数拼成一行放不下时逐档缩)。推出来的规律不是官方排期 → 完整版带"通常"
+            function cadenceLabels(cad) {
+                const c = normCad(cad);
+                if (!c) return [];
+                const s = cadSet(c);
+                if (s.size === 7) return ['每天更新'];
+                const f = fmtDays(Array.from(s).sort((a, b) => a - b));
+                return ['通常每周' + f + '更新', '每周' + f + '更新', '周' + f + '更新'];
+            }
+            // 显示宽度:汉字 1,ASCII 0.55,空格 0.3
+            function textW(s) {
+                let w = 0;
+                for (const ch of String(s || '')) w += ch === ' ' ? 0.3 : (ch.charCodeAt(0) < 0x2e80 ? 0.55 : 1);
+                return w;
+            }
+            // 卡片那一行(只一行):更新日(TMDB 日期优先,过去的不算,否则规律)+ 集数进度(知道总集数时)。
+            //   两样都有拼成「17/30 · 周五更新」,放不下逐档缩短,最后只留更新日;只有进度 →「更新至 17/30 集」
+            //   o = { ep, total, air:'YYYY-MM-DD'|'', cad, today, max }
+            function composeLine(o) {
+                o = o || {};
+                const ep = o.ep | 0, total = o.total | 0;
+                const p = ep > 0 && total >= ep ? ep + '/' + total : '';
+                const r = o.air ? relDayLabel(o.air, String(o.today || '')) : '';
+                const S = r ? [r] : cadenceLabels(o.cad);
+                let c;
+                if (p && S.length) c = S.map(s => p + ' · ' + s).concat([S[S.length - 1]]);
+                else if (S.length) c = S;
+                else if (p) c = ['更新至 ' + p + ' 集', p + ' 集'];
+                else return '';
+                const max = o.max > 0 ? o.max : T.lineMax;
+                for (const s of c) if (textW(s) <= max) return s;
+                return c[c.length - 1];
+            }
+            // 只给"在连载的剧集"查/显示:有检查线路(只有番剧 kz_* 线路的收藏查不了)、没完结、
+            //   不是电影样(同名拆卡签名 y2025m,或集数/总集数都不到 2)
+            function eligible(x) {
+                const d = x && x.data;
+                if (!d || !d.name || !d.checkSource) return false;
+                const st = (x.status && typeof x.status === 'object') ? x.status : null;
+                if (st && st.finished) return false;
+                if (/^y\d*m/.test(String(d.workSig || ''))) return false;
+                return Math.max((st && st.ep_count) | 0, d.addedEpCount | 0) >= 2 || ((st && st.total) | 0) >= 2;
+            }
+            // 搜 TMDB 用的片名:与大家都在看/海报回退同一套清洗(去 第N季/Season N/清晰度后缀),再去掉末尾"汉字+单个数字"的季号(大王饶命3)
+            function cleanName(n) {
+                n = String(n || '').trim();
+                const c = n.replace(/第[0-9一二三四五六七八九十]+[季部]/g, '').replace(/Season\s*\d+/ig, '').replace(/\s*(HD|BD|1080P|720P|4K)\s*$/i, '').trim();
+                return c.replace(/([一-龥])\s*[2-9]$/, '$1') || n;
+            }
+            // 片名里的季号:第N季/第N部/Season N/末尾"汉字+单个数字"(大王饶命3、庆余年2);没有 → 0
+            const CN_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+            function cnInt(s) {
+                if (/^\d+$/.test(s)) return +s;
+                const m = /^([一二三四五六七八九]?)(十?)([一二三四五六七八九]?)$/.exec(s || '');
+                if (!m || !s) return 0;
+                if (!m[2]) return m[3] ? 0 : CN_NUM[m[1]];
+                return (m[1] ? CN_NUM[m[1]] : 1) * 10 + (m[3] ? CN_NUM[m[3]] : 0);
+            }
+            function seasonOf(n) {
+                n = String(n || '').trim();
+                let m = /第([0-9一二三四五六七八九十]+)[季部]/.exec(n);
+                if (m) return cnInt(m[1]);
+                m = /Season\s*(\d+)/i.exec(n);
+                if (m) return +m[1];
+                m = /[一-龥]\s*([2-9])$/.exec(n);
+                return m ? +m[1] : 0;
+            }
+            // 比较用的键:去空白/标点、小写(TMDB 中文名常差个全角冒号、间隔号)
+            const KEY_RE = /[\s·・:：,，.。、!！?？'"“”‘’\-—–_~～()（）《》〈〉【】\[\]「」『』…]+/g;
+            const nkey = s => String(s || '').toLowerCase().replace(KEY_RE, '');
+            // 收藏 → 搜索参数。年份只来自同名拆卡签名(y2023s);片名带季号时不带年份(资源站的年份是这一季的,TMDB 首播年是第一季的)
+            function queryOf(x) {
+                const d = (x && x.data) || {};
+                const name = String(d.name || '').trim(), q = cleanName(name);
+                const m = /^y(\d{4})/.exec(String(d.workSig || ''));
+                const y = m && q === name ? +m[1] : 0;
+                return { name, q, year: y >= 1900 ? y : 0 };
+            }
+            // /search/tv 的结果 → 同名候选 { ids:[TMDB 剧集 id…], b }。只认片名(或原名)完全一致的,宁缺毋滥 —— 认错一部就会报错的更新日:
+            //   先比完整片名,没有再比去掉季号的(b = true:认出的是整部剧的条目,下一集要对季号,见 nextFits);
+            //   知道年份时首播年差 ≤1 才算(同名的另一部不认);不知道年份:按 TMDB 原顺序(相关度;还没开播的排除,都没开播才用)
+            //   —— 以前取"最近开播的",凡人修仙传/武神主宰/遮天这类在播动画全被同名的完结翻拍剧顶掉(审查实锤)。
+            //   好几部时 _favSchedRun 再按详情挑在播的(排第一的完结了才看后面的)
+            function matchList(results, qo, today) {
+                qo = qo || {};
+                const rs = (Array.isArray(results) ? results : []).filter(r => r && Number.isInteger(r.id) && r.id > 0 && !r.adult);
+                const hit = k => (k ? rs.filter(r => nkey(r.name) === k || nkey(r.original_name) === k) : []);
+                const kn = nkey(qo.name), kq = nkey(qo.q);
+                let ex = hit(kn), b = false;
+                if (!ex.length && kq !== kn) { ex = hit(kq); b = ex.length > 0; }
+                if (!ex.length) return { ids: [], b: false };
+                const fy = r => parseInt(String(r.first_air_date || '').slice(0, 4), 10) || 0;
+                if (qo.year) {
+                    const near = ex.filter(r => fy(r) && Math.abs(fy(r) - qo.year) <= 1);
+                    near.sort((x, y) => Math.abs(fy(x) - qo.year) - Math.abs(fy(y) - qo.year));   // 同样近的保持 TMDB 顺序
+                    return { ids: near.map(r => r.id), b };
+                }
+                const lim = dayNum(today) + 7;
+                const aired = ex.filter(r => dayNum(r.first_air_date) <= lim);
+                return { ids: (aired.length ? aired : ex).map(r => r.id), b };
+            }
+            const pickMatch = (results, qo, today) => matchList(results, qo, today).ids[0] || 0;
+            // /tv/{id} → { d:下一集播出日 | '', e:本季集号, s:季号, c:累计集号(前几季集数 + e,特别篇第 0 季不算), l:在播 1/0,
+            //   bj:日期按北京日历 1/0(出品国是中国大陆/港澳台/新马或没写 → 1;日韩欧美的剧日期是它们本国的,不换算) }
+            const BJ_ORIGIN = /^(CN|HK|TW|MO|SG|MY)$/;
+            function tvNext(t) {
+                const n = t && t.next_episode_to_air;
+                const d = n && !isNaN(dayNum(n.air_date)) ? n.air_date : '';
+                const e = d && Number.isInteger(n.episode_number) && n.episode_number > 0 ? n.episode_number : 0;
+                const s = d && Number.isInteger(n.season_number) && n.season_number >= 0 ? n.season_number : 0;
+                let c = 0;
+                if (e && s >= 1) {
+                    c = e;
+                    for (const x of (t && Array.isArray(t.seasons) ? t.seasons : [])) if (x && Number.isInteger(x.season_number) && x.season_number >= 1 && x.season_number < s && x.episode_count > 0) c += x.episode_count | 0;
+                }
+                const l = (n || /^(Returning Series|In Production|Planned|Pilot)$/.test(String((t && t.status) || ''))) ? 1 : 0;
+                const oc = (t && Array.isArray(t.origin_country) ? t.origin_country : []).filter(x => typeof x === 'string' && x);
+                const bj = !oc.length || oc.some(x => BJ_ORIGIN.test(x)) ? 1 : 0;
+                return { d, e, s, c, l, bj };
+            }
+            // 这部剧"今天"按哪本日历:北京日历的按北京今天,外国剧按本地今天
+            const homeToday = (bj, now, today) => (bj || !today ? bjToday(now) : today);
+            // TMDB 的 next_episode_to_air 按美国时间翻篇:北京早上它还说"下一集是昨天那集"(审查实锤:上午 9 点在播剧 27/44 是昨天)
+            //   → 拿这一季后面几集({episodes:[…]},_favSchedRun 按集查 /tv/{id}/season/{s}/episode/{e+k})换成第一集 ≥ 今天的。
+            //   没有更晚的 → 原样(过去的日期 schedule 不显示,pastTtl 后再查)
+            function seasonNext(n, season, today) {
+                if (!n || !n.d || !(dayNum(n.d) < dayNum(today))) return n;
+                const eps = season && Array.isArray(season.episodes) ? season.episodes : [];
+                let pick = null;
+                for (const x of eps) {
+                    if (!x || !Number.isInteger(x.episode_number) || x.episode_number <= n.e || !(dayNum(x.air_date) >= dayNum(today))) continue;
+                    if (!pick || x.episode_number < pick.episode_number) pick = x;
+                }
+                if (!pick) return n;
+                return Object.assign({}, n, { d: pick.air_date, e: pick.episode_number, c: n.c ? n.c + (pick.episode_number - n.e) : 0, l: 1 });
+            }
+            // 下一集日期已经过去了(按这部剧的日历)
+            const isPast = (tc, now, today) => !!(tc && tc.d) && dayNum(tc.d) < dayNum(homeToday(tc.bj, now, today));
+            // TMDB 的"下一集"是不是这部收藏在等的那一季 —— 审查实锤:收藏的是早播完的第一季/第四季,TMDB 同一个条目在播第三/六季
+            //   → 卡片报「12/12 · 周六更新」、点进去是播完的那季。片名带季号:去掉季号认出的条目(b)季号要对上;全名认出的条目本身就是那一季,不比。
+            //   不带季号:下一集得是第 1 季,或按 TMDB 各季集数累计的集号 ≈ 站上集数 + 1(柯南/海贼王这种站上连着编号的)
+            //   集数已到总集数(12/12)的不带季号收藏:这季播完了,TMDB 的第 2 季第 1 集累计集号恰好 ≈ 12 + 1 也不认
+            //   (资源站把下一季另列一条"X第二季";审查实锤:完结的第一季报「12/12 · 周六更新」)
+            //   站上不给总集数(vod_total=0,最常见)时同样的事:第一季 12 集几个月前就停了、备注没写完结,TMDB 第 2 季开播 → c = 13..16
+            //   都在容差里,卡片和条上报第二季的日期(审查实锤)。所以不带季号、TMDB 在播第 2 季以后的,还要站上这条最近 growDays 天
+            //   真涨过集(status.changed_at;柯南这种站上连着编号的,新一季开播几天内就会涨,涨了就重新认);
+            //   集数不多(容差就是 3)时站上也不能比 TMDB 已播的少 2 集以上(新一季播了几集、站上这条没跟)。
+            //   长剧(容差 5%)不卡这条:TMDB 分季累计和站上编号本来就可能差几十集
+            function nextFits(x, ai, today) {
+                if (!ai || !ai.d) return false;
+                const fs = seasonOf(x && x.data && x.data.name);
+                if (fs) return ai.b ? ai.s === fs : true;
+                if (ai.s === 1) return true;
+                const st = x && x.status;
+                const ep = ((st && st.ep_count) | 0) || ((x && x.data && x.data.addedEpCount) | 0);
+                const total = (st && st.total) | 0;
+                if (total > 0 && ep >= total) return false;
+                const ch = st ? Number(st.changed_at) : 0, td = dayNum(today);
+                if (!(ch > 0) || (!isNaN(td) && td - Math.floor(ch / DAY) > T.growDays)) return false;
+                const tol = Math.max(3, Math.round(ai.c * 0.05)), diff = ai.c - (ep + 1);
+                return ai.c > 0 && ep > 0 && diff >= -tol && diff <= (tol > 3 ? tol : 1);
+            }
+            // 截帧分享的剧照兜底:/search/multi 的结果里挑这部 —— 与认片同一套"宁缺毋滥":片名(或原名)去标点后完全一致才认
+            //   (先比完整片名,再比去掉季号的),类型也要对(剧集只认剧集、单集只认电影:同名的电影/剧往往是两部作品),
+            //   知道年份时首播/上映年差 ≤1;按 TMDB 顺序取第一个。用它的横版剧照,没有就用它的海报;
+            //   对不上 → null(卡片只放片名,绝不拿别的剧的图标成"剧照":以前 海贼王 → 海贼王女)
+            function pickArt(results, o) {
+                o = o || {};
+                const want = o.tv ? 'tv' : 'movie';
+                const rs = (Array.isArray(results) ? results : []).filter(r => r && !r.adult && (!r.media_type || r.media_type === want) && (r.backdrop_path || r.poster_path));
+                const hit = k => (k ? rs.filter(r => [r.name, r.original_name, r.title, r.original_title].some(v => v && nkey(v) === k)) : []);
+                const kn = nkey(o.name), kq = nkey(cleanName(o.name));
+                let ex = hit(kn);
+                if (!ex.length && kq !== kn) ex = hit(kq);
+                const yr = r => parseInt(String(r.first_air_date || r.release_date || '').slice(0, 4), 10) || 0;
+                if (o.year) ex = ex.filter(r => yr(r) && Math.abs(yr(r) - o.year) <= 1);
+                if (!ex.length) return null;
+                const r = ex[0];
+                return r.backdrop_path ? { path: r.backdrop_path, size: 'w780' } : { path: r.poster_path, size: 'w500' };
+            }
+            // 本地缓存 donggua_fav_tmdb = { ids:{ fav_id:{id,ts,b?} }, tv:{ id:{d,e,s,c,l,bj,ts} } }(id 0 = 没认出)。fav_id 是片名 → 无原型对象当表
+            function cacheParse(s) {
+                const c = { ids: Object.create(null), tv: Object.create(null) };
+                let o = null;
+                try { o = typeof s === 'string' ? JSON.parse(s) : s; } catch (e) { }
+                if (!o || typeof o !== 'object') return c;
+                const num = v => typeof v === 'number' && isFinite(v);
+                const nn = v => (Number.isInteger(v) && v > 0 ? v : 0);
+                if (o.ids && typeof o.ids === 'object') Object.keys(o.ids).forEach(k => {
+                    const v = o.ids[k];
+                    if (v && Number.isInteger(v.id) && v.id >= 0 && num(v.ts)) c.ids[k] = v.b === 1 ? { id: v.id, ts: v.ts, b: 1 } : { id: v.id, ts: v.ts };
+                });
+                if (o.tv && typeof o.tv === 'object') Object.keys(o.tv).forEach(k => {
+                    const v = o.tv[k];
+                    if (v && /^[1-9]\d{0,9}$/.test(k) && num(v.ts)) c.tv[k] = { d: isNaN(dayNum(v.d)) ? '' : v.d, e: nn(v.e), s: nn(v.s), c: nn(v.c), l: v.l === 1 ? 1 : 0, bj: v.bj === 0 ? 0 : 1, ts: v.ts };
+                });
+                return c;
+            }
+            // 只留还在收藏里的 fav_id;没人用了或旧到用不上(showMax)的剧集详情丢掉
+            function cachePrune(c, list, now) {
+                const keep = new Set((list || []).map(x => x && x.fav_id).filter(Boolean));
+                Object.keys(c.ids).forEach(k => { if (!keep.has(k)) delete c.ids[k]; });
+                const used = new Set(Object.keys(c.ids).map(k => String(c.ids[k].id)));
+                Object.keys(c.tv).forEach(k => { if (!used.has(k) || !fresh(c.tv[k].ts, T.showMax, now)) delete c.tv[k]; });
+                return c;
+            }
+            // 这次要查哪些(按缓存时间最旧的先):id 没认过/过期 → 搜索(认出来再查详情);id 有了、下一集过期 → 只查详情
+            //   (下一集日期已经过去的 1 小时就过期:TMDB 翻到下一集 / 集表排出下一集后尽快换上,不留着过期日期 6 小时)
+            function plan(list, c, now, today) {
+                const out = [], seen = new Set();
+                for (const x of list || []) {
+                    if (!eligible(x) || seen.has(x.fav_id)) continue;
+                    seen.add(x.fav_id);
+                    const ic = own(c.ids, x.fav_id) ? c.ids[x.fav_id] : null;
+                    if (!ic || !fresh(ic.ts, ic.id ? T.idTtl : T.nullTtl, now)) {
+                        out.push(Object.assign({ fav_id: x.fav_id, id: 0, search: true, age: ic ? ic.ts : 0 }, queryOf(x)));
+                        continue;
+                    }
+                    if (!ic.id) continue;   // 认过、没对上:nullTtl 内不再搜
+                    const tc = own(c.tv, String(ic.id)) ? c.tv[String(ic.id)] : null;
+                    if (!tc || !fresh(tc.ts, isPast(tc, now, today) ? T.pastTtl : T.tvTtl, now)) out.push(Object.assign({ fav_id: x.fav_id, id: ic.id, search: false, age: tc ? tc.ts : 0 }, queryOf(x)));
+                }
+                return out.sort((a, b) => a.age - b.age);
+            }
+            // 缓存 → { fav_id:{d,e,s,c,b} }(只放有下一集日期的;季号对不对在 schedule 里按收藏判)。冻结后整个换给 Vue:不逐键做响应式,只在结果真变了时写一次
+            function airMap(c, now) {
+                const out = Object.create(null);
+                Object.keys(c.ids).forEach(k => {
+                    const ic = c.ids[k], id = ic.id, tc = id && own(c.tv, String(id)) ? c.tv[String(id)] : null;
+                    if (tc && tc.d && fresh(tc.ts, T.showMax, now)) out[k] = Object.freeze({ d: tc.d, e: tc.e, s: tc.s | 0, c: tc.c | 0, b: ic.b ? 1 : 0, bj: tc.bj === 0 ? 0 : 1 });
+                });
+                return Object.freeze(out);
+            }
+            function sameAir(a, b) {
+                const ka = Object.keys(a || {}), kb = Object.keys(b || {});
+                return ka.length === kb.length && ka.every(k => own(b, k) && ['d', 'e', 's', 'c', 'b', 'bj'].every(f => b[k][f] === a[k][f]));
+            }
+            // 「本周更新」:今天起 7 天,每天放预计那天更新的收藏。有 TMDB 日期:那天 + 规律里排在它之后的星期几
+            //   (TMDB 说下一集在哪天,在那之前就不会有);没有就按规律。一部都没有 → null(整条隐藏)
+            //   rows = [{ id, name, item, air:'YYYY-MM-DD'|'', cad }],按收藏行的顺序
+            function week(rows, today) {
+                const t = dayNum(today);
+                if (isNaN(t)) return null;
+                const days = [];
+                for (let i = 0; i < 7; i++) {
+                    const s = dayStr(t + i), wd = isoWd(t + i);
+                    days.push({ date: s, n: t + i, wd, label: i === 0 ? '今天' : i === 1 ? '明天' : '周' + CN[wd], md: (+s.slice(5, 7)) + '月' + (+s.slice(8)) + '日', today: i === 0, items: [] });
+                }
+                let any = false;
+                for (const r of rows || []) {
+                    if (!r) continue;
+                    const a = dayNum(r.air), set = cadSet(normCad(r.cad));
+                    for (const d of days) {
+                        const hit = a >= t ? (d.n === a || (!!set && d.n > a && set.has(d.wd))) : (!!set && set.has(d.wd));
+                        if (hit) { d.items.push({ id: r.id, name: r.name, item: r.item }); any = true; }
+                    }
+                }
+                return any ? days : null;
+            }
+            // 规律整体挪到 TMDB(官方)日历:更新日 = TMDB 日期 + s(alignAir)→ 星期几 −s,clock +1440·s(相对新的那天)
+            function shiftCad(c, s) {
+                const ck = clockOf(c);
+                const o = Object.assign({}, c, { days: c.days.map(w => ((w - 1 - s) % 7 + 7) % 7 + 1).sort((a, b) => a - b) });
+                if (ck >= 0) o.clock = Math.min(2879, Math.max(0, ck + 1440 * s));
+                return o;
+            }
+            // 收藏行(已排好序)+ TMDB 下一集 + 今天(本地日历)→ { line:{fav_id:卡片那一行}, any:有没有哪张卡有这一行, week }。Vue computed 一次算完。
+            //   TMDB 日期、规律的星期几都先换成本地日历(airLocal / localCad),之后全按本地日历比。
+            //   有这部剧的 TMDB 日期(国产剧)时,规律先按它对齐到官方日历(alignAir 认得出是哪天才挪):周日 00:00 的剧服务器算"周六晚上",
+            //   TMDB 说周日 → 以前条上「今天(周日)」之后又排「周六」、下一集其实是下周日(审查实锤)
+            function schedule(list, air, today) {
+                const line = Object.create(null), rows = [];
+                let any = false;
+                for (const x of list || []) {
+                    if (!eligible(x)) continue;
+                    const st = x.status || {}, ai = own(air, x.fav_id) ? air[x.fav_id] : null;
+                    const fit = !!ai && nextFits(x, ai, today);
+                    const bc0 = normCad(st.cadence), al = fit && ai.bj !== 0 && bc0 ? alignAir(ai.d, bc0) : null;
+                    const bc = al && al.sure && al.s ? shiftCad(bc0, al.s) : bc0, cad = localCad(bc, today);
+                    const la = ai ? airLocal(ai.d, ai.bj !== 0, bc0) : '';
+                    const a = ai && dayNum(la) >= dayNum(today) && fit ? la : '';   // 过去的日期、别的季的下一集都不算
+                    const l = composeLine({ ep: st.ep_count, total: st.total, air: a, cad, today });
+                    if (l) { line[x.fav_id] = l; any = true; }
+                    rows.push({ id: x.fav_id, name: String(x.data.name), item: x, air: a, cad });
+                }
+                return { line, any, week: week(rows, today) };
+            }
+            return { T, localDay, dayNum, isoWd, bjToday, bjToLocal, localCad, alignAir, shiftCad, airLocal, relDayLabel, normCad, cadenceLabels, textW, composeLine, eligible, cleanName, seasonOf, queryOf, matchList, pickMatch, tvNext, homeToday, seasonNext, isPast, nextFits, pickArt, cacheParse, cachePrune, plan, airMap, sameAir, week, schedule };
+        })();
+        // </dg-fav-sched-core>
+
         // 🚦 并发池：逐批执行 worker，限制同时进行的请求数。
         //    用于测速——测"全部"资源站以保留完整可用列表，但同时最多 limit 个，避免一次性几十个请求打满连接。
         async function runWithConcurrency(items, limit, worker) {
@@ -7574,7 +8474,9 @@
                     shareIncludeTime: false, // 是否带"从当前进度开始"
                     shareSeconds: 0,         // 当前播放秒数（用于带时间分享）
                     shareCode: '',           // 📊 分享码(链接里的 &s=):开面板/每次分享动作后换新码 → 每个码 = 一次分享 + 一个渠道,站长后台按码统计带来的打开/登录
-                    previewLocked: false,    // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
+                    // 📸 截帧分享弹窗:img = 卡片 dataURL(<img> 显示,微信/QQ 里长按可存/转发);整份对象一次性替换,不做逐帧写
+                    frameShare: { show: false, busy: false, img: '', note: '', link: '', title: '', canFiles: false, err: '', tip: '' },
+                    previewLocked: false,   // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
                     deepLinkLoading: false,  // ⏳ 已登录深链：立即显示播放页框架(加载态)，搜索/测速在后台进行，避免先闪搜索结果页
                     deepLinkSourceCount: 0,  // ⏳ 深链加载帧里展示"已找到 N 个线路"的动态计数
                     srcRev: 0,  // 🏷️ 线路分级的非响应式输入(广告过滤开关/绕开去广告记账/hls.js 与去插播核心加载)变了就 +1,让分组和徽章一起重算(不能以 _ 开头:Vue 3 不代理)
@@ -7620,6 +8522,9 @@
                     favBusy: false,                 // ♥ 请求中(防连点)
                     favCanScrollLeft: false,
                     favCanScrollRight: false,
+                    // 📅 追更日历:fav_id → TMDB 下一集 {d:'YYYY-MM-DD', e:集号}。冻结对象整个替换(不逐键响应式);开页先用本地缓存 → 首屏就有
+                    favAir: (function () { try { return DgFavSched.airMap(DgFavSched.cacheParse(localStorage.getItem('donggua_fav_tmdb')), Date.now()); } catch (e) { return Object.freeze(Object.create(null)); } })(),
+                    favToday: DgFavSched.localDay(new Date()),   // 本地日历的今天('YYYY-MM-DD',过零点由 _favDayTick 改)
                     // 👥 大家都在看(/api/popular + TMDB 补海报)
                     popularList: [],
                     popularCanScrollLeft: false,
@@ -7629,6 +8534,8 @@
                     pushSubscribed: false,          // 本浏览器当前是否已订阅(打开偏好设置时按 pushManager 实况刷新)
                     pushBusy: false,
                     pushMsg: '',
+                    // 🔔 「开启更新提醒？」小卡片(软提示,不是浏览器权限框);kind: fav(♥ 后)/ req(求片后);msg 非空 = 结果提示(被拒绝等)。整个对象替换
+                    pushAsk: { show: false, kind: '', msg: '' },
                     // 📺 直播(IPTV)
                     liveEnabled: false,             // 来自 /api/config(live_enabled)
                     liveChannels: [],               // 全部直播频道(来自 /api/live/channels)
@@ -7864,6 +8771,7 @@
                 //    抢在 DPlayer 之前处理:既保证一定生效,又避免与其 hotkey 叠加导致双触发相互抵消。输入框(弹幕/搜索)内不拦。
                 document.addEventListener('keydown', function (e) {
                     if (!self.showDetail || self.isTVMode) return;
+                    if (self.frameShare && self.frameShare.show) return;   // 📸 截帧分享弹窗开着:空格按的是弹窗里有焦点的按钮,不动背后的视频
                     if (e.key !== ' ' && e.code !== 'Space' && e.keyCode !== 32) return;
                     const ae = document.activeElement;
                     const tag = ae && ae.tagName ? ae.tagName.toLowerCase() : '';
@@ -7876,6 +8784,26 @@
                     try { dp.notice(dp.video.paused ? '⏸ 已暂停' : '▶ 播放中'); } catch (_) { }
                 }, true);
                 window.addEventListener('keydown', function (e) {
+                    // 📸 截帧分享弹窗开着(它是最上面一层):TV 返回键只关弹窗;别的键交给弹窗(方向键在弹窗按钮间移动),不碰播放器/顶栏按钮。
+                    //   这个监听挂载时就注册了,比弹窗自己的 Esc 监听先跑 —— 以前直接 closeDetail 把整个播放页关了
+                    if (self.frameShare && self.frameShare.show) {
+                        if (self.isTVMode && (e.key === 'Escape' || e.key === 'Backspace' || e.key === 'GoBack' || e.key === 'BrowserBack')) {
+                            e.preventDefault();
+                            e.stopImmediatePropagation();
+                            self.closeFrameShare();
+                        }
+                        return;
+                    }
+                    // 🔔 「开启更新提醒？」小卡片开着(没被别的弹窗盖住):TV 返回键先关它(= 以后再说),不关播放页、不退回首页。
+                    //   这个监听比卡片自己的按键监听先跑,所以要在这里截;正在输入框里删字的 Backspace 不算返回
+                    if (self.isTVMode && self.pushAsk && self.pushAsk.show && !self._pushAskCoveredNow()
+                        && (e.key === 'Escape' || e.key === 'Esc' || e.key === 'GoBack' || e.key === 'BrowserBack'
+                            || (e.key === 'Backspace' && !(e.target && (/^(input|textarea)$/i.test(e.target.tagName || '') || e.target.isContentEditable))))) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        self.pushAskLater();
+                        return;
+                    }
                     // TV 模式全局返回键处理
                     if (self.isTVMode && (e.key === 'Escape' || e.key === 'Backspace')) {
                         // 检查是否有弹窗
@@ -8013,6 +8941,8 @@
                     }
                 }, true);  // 捕获阶段
 
+                this._histBoot();   // 🔙 截帧弹窗留下的历史 + 常驻 popstate
+
                 // Store reference to app instance for external access
                 window.vueApp = this;
 
@@ -8038,6 +8968,9 @@
                     });
                 },
                 favUpdateCount() { return (this.favList || []).filter(x => this.favHasUpdate(x)).length; },
+                // 📅 追更日历:每张卡的「周五更新 / 17/30 · 通常每周三、四更新」那一行 + 「本周更新」条。
+                //   只依赖收藏列表 / TMDB 结果(favAir,一次加载最多写两次)/ 今天(一天一次):滚动、播放都不会触发重算
+                favSched() { return DgFavSched.schedule(this.favSorted, this.favAir, this.favToday); },
                 // 🔔 偏好设置里推送那一行显示什么:hidden / ios-hint(iOS 没添加到主屏幕) / need-sync(没登录同步账号) / ok
                 pushUi() {
                     if (!this.pushEnabled || this.isNativeApp) return 'hidden';   // 安卓 App(Capacitor 壳)内没有 Web Push
@@ -8046,6 +8979,8 @@
                     if (sup !== 'ok') return 'hidden';
                     return (this.syncEnabled && this.syncToken) ? 'ok' : 'need-sync';
                 },
+                // 🔔 小卡片开着时有别的弹窗盖上来 → 先藏起来(v-show),弹窗关了再露出来:不和别的弹窗叠在一起
+                pushAskCovered() { return this._pushAskCoveredNow(); },
                 // 📺 直播分类 tab(全部 + 服务器给的、当前语言下实际存在的分类)
                 liveGroups() {
                     const inLang = this.liveLangFilter === '全部'
@@ -8085,18 +9020,9 @@
                         .slice(0, 120);
                 },
                 // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
+                //   拼法在 DgFrameShare.link(截帧分享卡片的二维码用同一个),各段取自 _shareLinkParts
                 shareUrl() {
-                    if (!this.currentGroup || !this.currentGroup.name) return location.origin + '/';
-                    // 📊 分享码(统计开启 + 已登录才有,见 _shareCanTrack):收到的人打开/登录按码归到这次分享
-                    const sc = (this.watchStatsEnabled && this.shareCode) ? '&s=' + this.shareCode : '';
-                    if (this.currentGroup._isLive) return location.origin + '/?live=' + encodeURIComponent(this.currentGroup.name) + sc;  // 📺 直播分享链
-                    let u = location.origin + '/?play=' + encodeURIComponent(this.currentGroup.name);
-                    const cur = (this.episodeList && this.episodeList.length > 1)
-                        ? this.episodeList.find(e => e.url === this.currentUrl) : null;
-                    if (cur && cur.name) u += '&ep=' + encodeURIComponent(cur.name);
-                    if (this.currentGroup._workLabel && this.currentGroup._workSig) u += '&w=' + encodeURIComponent(this.currentGroup._workSig);   // 🧩 同名多部:分享出去也开这一部
-                    if (this.shareIncludeTime && this.shareSeconds > 0) u += '&t=' + this.shareSeconds;
-                    return u + sc;
+                    return DgFrameShare.link(this._shareLinkParts((this.shareIncludeTime && this.shareSeconds > 0) ? this.shareSeconds : 0));
                 },
                 canNativeShare() { return typeof navigator !== 'undefined' && !!navigator.share; },
                 groupedList() {
@@ -10173,8 +11099,9 @@
                     while (s.length < 10) s += A[Math.floor(Math.random() * A.length)];
                     return s;
                 },
-                // 分享动作【之前】调:确保有码并登记(fire-and-forget,失败不影响分享本身)。channel = wechat|qq|…|native|copy
-                _shareTrack(channel) {
+                // 分享动作【之前】调:确保有码并登记(fire-and-forget,失败不影响分享本身)。channel = wechat|qq|…|native|copy|frame
+                //   tAt:截帧分享自带时间点(原时间轴秒数),不看面板上的"开始时间"勾选
+                _shareTrack(channel, tAt) {
                     try {
                         if (!this._shareCanTrack()) return;
                         if (!this.shareCode) this.shareCode = this._shareNewCode();
@@ -10183,7 +11110,7 @@
                         const body = {
                             token: localStorage.getItem('emax_auth_hash') || '', code: this.shareCode, channel,
                             kind: live ? 'live' : 'vod', title: g.name || '', episode: window.watchMeter ? window.watchMeter.epLabel(cur && cur.name) : ((cur && cur.name) || ''),   // 集名与观看统计同一套归一
-                            t: (!live && this.shareIncludeTime && this.shareSeconds > 0) ? this.shareSeconds : 0
+                            t: live ? 0 : (tAt != null ? (tAt > 0 ? Math.floor(tAt) : 0) : ((this.shareIncludeTime && this.shareSeconds > 0) ? this.shareSeconds : 0))
                         };
                         fetch('/api/stats/share', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), keepalive: true }).catch(() => { });
                     } catch (e) { }
@@ -10209,8 +11136,8 @@
                 },
                 // 执行分享：移动端调系统分享面板，桌面端复制链接
                 // 纯复制分享链接到剪贴板（返回是否成功；不弹任何 UI）
-                async copyShareLink() {
-                    const url = this.shareUrl;
+                async copyShareLink(u) {
+                    const url = (typeof u === 'string' && u) || this.shareUrl;   // 截帧分享传自己那条(带时间点与它登记的码)
                     try { await navigator.clipboard.writeText(url); return true; } catch (e) { }
                     try {
                         const ta = document.createElement('textarea');
@@ -10272,6 +11199,373 @@
                         case 'x': openWin(`https://twitter.com/intent/tweet?url=${u}&text=${t}`); return;
                     }
                 },
+                // 🔗 分享链接的各段(分享面板 shareUrl 与截帧分享都交给 DgFrameShare.link 拼)。t = 原时间轴秒数(0 = 不带)
+                _shareLinkParts(t) {
+                    const g = this.currentGroup || {};
+                    const cur = (!g._isLive && this.episodeList && this.episodeList.length > 1) ? this.episodeList.find(e => e.url === this.currentUrl) : null;
+                    return {
+                        origin: location.origin, name: g.name || '', live: !!g._isLive,
+                        ep: (cur && cur.name) || '',
+                        work: (g._workLabel && g._workSig) ? g._workSig : '',   // 🧩 同名多部:分享出去也开这一部
+                        t: t > 0 ? t : 0,
+                        code: (this.watchStatsEnabled && this.shareCode) ? this.shareCode : ''   // 📊 分享码(统计开启 + 已登录才有,见 _shareCanTrack)
+                    };
+                },
+                // ========== 📸 截一帧分享(分享当前画面):截下这一帧 → 画成「剧名 · 第N集 · 12:34」+ 二维码的卡片 ==========
+                //   入口:分享面板「分享当前画面」/ 桌面播放器控制栏相机图标 / 手机齿轮菜单里一行(手机控制栏不加按钮)。直播、未登录预览没有入口。
+                //   链接 = 分享面板同一个拼法,&t= 是原时间轴秒数(_cutToBase,与面板"开始时间"同口径,收到的人按自己的剪段换算);
+                //   卡片上的时间 = 进度条上显示的(剪后时间轴)。分享统计按渠道 'frame' 登记一个码(生成卡片就算一次分享:之后长按转发我们看不到)。
+                //   截图只读 <video> 当前帧,不暂停、不碰播放器;读不了(画布被跨域污染)就换 TMDB 剧照并在卡片上标明。纯函数在 DgFrameShare。
+                async shareFrame() {
+                    const g = this.currentGroup;
+                    if (this.frameShare.show || !g || !g.name || g._isLive || this._liveActive || this.previewLocked) return;
+                    if (this._frameShareBack && Date.now() - this._frameShareBack < 1500) return;   // 上一张刚关、退历史那一下还没落地
+                    if (this._pushAskBack && Date.now() - this._pushAskBack < 1500) return;   // 🔔 开启提醒小卡片刚关、它退历史那一下还没落地(落地会退掉这张弹窗的那条)
+                    const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                    if (!v) { this.showMiniToast('播放器还没准备好，稍后再试'); return; }
+                    // 真全屏时 #dplayer 在 top layer,什么都盖不上去 → 先退出。网页全屏(TV 模式一直是)不退:弹窗 teleport 到 body 下,
+                    //   层级在整个播放页之上;记下来,关弹窗时如果被别的路径(App 返回键先退网页全屏)退掉了就恢复
+                    let webFs = false;
+                    try {
+                        if (dp.fullScreen && dp.fullScreen.isFullScreen('browser')) dp.fullScreen.cancel('browser');
+                        webFs = !!(dp.fullScreen && dp.fullScreen.isFullScreen('web'));
+                    } catch (e) { }
+                    // 先同步截下这一帧,再做任何 await(之后画面还在走)
+                    const playT = Number.isFinite(v.currentTime) ? v.currentTime : 0;
+                    const shot = this._frameCapture(v);
+                    const baseT = Math.floor(this._cutToBase(playT)) || 0;
+                    const multi = !!(this.episodeList && this.episodeList.length > 1);
+                    const cur = multi ? this.episodeList.find(e => e.url === this.currentUrl) : null;
+                    const ep = DgFrameShare.epLabel(cur && cur.name, multi), time = DgFrameShare.timeLabel(playT), tl = DgFrameShare.tail(ep, time);
+                    // 📊 先登记码再拼链接(链接里带的就是它),拼完换新码 —— 与分享面板各按钮同一套
+                    this._shareTrack('frame', baseT);
+                    const link = DgFrameShare.link(this._shareLinkParts(baseT));
+                    this._shareRotate();
+                    this.showSharePanel = false;
+                    this._frameShareFree();
+                    const mode = DgFrameShare.saveMode(navigator.userAgent, this.isNativeApp);
+                    this.frameShare = { show: true, busy: true, img: '', note: '', link, title: g.name + tl, canFiles: false, err: '', tip: DgFrameShare.saveTip(mode) };
+                    this._frameShareWebFs = webFs;
+                    this._frameShareHistPush();
+                    // 焦点进弹窗(键盘 Tab / TV 遥控方向键从弹窗里开始),关掉时还给原来的元素
+                    try { this._frameShareFocus = document.activeElement || null; } catch (e) { this._frameShareFocus = null; }
+                    if (this.$nextTick) this.$nextTick(() => this._frameShareFocusIn());
+                    const tok = (this._frameShareTok = (this._frameShareTok || 0) + 1);
+                    const still = () => tok === this._frameShareTok && this.frameShare.show;   // 用户关掉了/又生成了一张 → 这次的结果作废
+                    // 剧照兜底按"剧集还是电影 + 同名拆卡的年份"认(与追更日历认片同一套,不认模糊结果)
+                    const sig = (g._workLabel && g._workSig) ? g._workSig : '';
+                    const artHint = { tv: multi, year: DgFavSched.queryOf({ data: { name: g.name, workSig: sig } }).year };
+                    try {
+                        const [qrLib, art, icon] = await Promise.all([
+                            this._loadQrLib(),
+                            shot.canvas ? null : this._frameBackdrop(g.name, artHint),
+                            this._frameIcon()
+                        ]);
+                        if (!still()) return;
+                        const qr = qrLib(0, 'M');
+                        qr.addData(link); qr.make();
+                        const base = {
+                            W: 1080, name: g.name, tail: tl, sub: baseT > 0 ? '扫码从这一秒开始看' : '扫码立即观看', brand: 'E视界', host: location.host, icon,
+                            qr: { count: qr.getModuleCount(), isDark: (r, c) => qr.isDark(r, c) }
+                        };
+                        const img = shot.canvas ? { src: shot.canvas, sw: shot.canvas.width, sh: shot.canvas.height } : (art ? { src: art, sw: art.naturalWidth, sh: art.naturalHeight } : null);
+                        let canvas = document.createElement('canvas'), out = null, why = shot.why, hasArt = !!art;
+                        DgFrameShare.drawCard(canvas, { ...base, img, poster: !shot.canvas && !!art });
+                        try { out = await this._frameEncode(canvas); }
+                        catch (e) {
+                            // 理论上到不了(画面已验过没被污染、剧照带 CORS 读),万一导出被拦就去掉图片重画,链接和二维码照样能用
+                            console.warn('[截帧分享] 导出失败,去掉图片重画:', e && e.message);
+                            canvas = document.createElement('canvas'); why = shot.canvas ? 'error' : why; hasArt = false;
+                            DgFrameShare.drawCard(canvas, { ...base, img: null, poster: false });
+                            out = await this._frameEncode(canvas);
+                        }
+                        if (!still()) return;
+                        const fname = DgFrameShare.fileName(g.name, ep, time);
+                        let file = null, canFiles = false;
+                        try {
+                            file = new File([out.blob], fname, { type: 'image/jpeg' });
+                            canFiles = !!(navigator.share && navigator.canShare && navigator.canShare({ files: [file] }));   // 只有 Android Chrome / iOS Safari 这类能分享文件
+                        } catch (e) { }
+                        this._frameShareRes = { blob: out.blob, url: URL.createObjectURL(out.blob), file, name: fname };
+                        const usedFrame = !!shot.canvas && why === shot.why;
+                        this.frameShare = { ...this.frameShare, busy: false, img: out.dataUrl, note: usedFrame ? '' : DgFrameShare.posterNote(why, hasArt), canFiles };
+                    } catch (e) {
+                        if (!still()) return;
+                        console.warn('[截帧分享] 生成卡片失败:', e && e.message);
+                        this.frameShare = { ...this.frameShare, busy: false, err: '卡片生成失败，可以先复制链接分享' };
+                    }
+                    // TV 模式打开时一个能按的都没有(焦点只能放在框上)→ 生成完了按钮能按了,焦点挪过去
+                    if (this.isTVMode && this.$nextTick) this.$nextTick(() => { const b = this.$refs && this.$refs.fshareBox; try { if (b && document.activeElement === b) this._frameShareFocusIn(); } catch (e) { } });
+                },
+                // 同步截当前帧到画布(长边封顶 1280)。hls.js/MSE(blob:)的画面能读;原生 HLS(iOS/Safari)、跨域 MP4(番剧 kz_*)会污染画布
+                //   → 读像素抛 SecurityError → use:'poster'。只读不写:不暂停、不 seek,任何异常都吞掉,绝不影响播放
+                _frameCapture(v) {
+                    const r = { w: 0, h: 0, readyState: v ? v.readyState : 0 };
+                    let canvas = null;
+                    try {
+                        const sz = DgFrameShare.captureSize(v.videoWidth, v.videoHeight, 1280);
+                        r.w = sz.w; r.h = sz.h;
+                        if (sz.w && r.readyState >= 2) {
+                            canvas = document.createElement('canvas');
+                            canvas.width = sz.w; canvas.height = sz.h;
+                            canvas.getContext('2d').drawImage(v, 0, 0, sz.w, sz.h);
+                            // 污染检测 + 全透明检测:缩成 8×8 再读像素(整张 getImageData 太贵);被污染的画布画到哪都带着污染,这里读就抛错
+                            const probe = document.createElement('canvas');
+                            probe.width = 8; probe.height = 8;
+                            const pc = probe.getContext('2d');
+                            pc.drawImage(canvas, 0, 0, 8, 8);
+                            const d = pc.getImageData(0, 0, 8, 8).data;
+                            let alpha = 0;
+                            for (let i = 3; i < d.length; i += 4) alpha += d[i];
+                            r.blank = alpha === 0;
+                        }
+                    } catch (e) {
+                        if (e && (e.name === 'SecurityError' || /taint|insecure|cross-origin/i.test(e.message || ''))) r.tainted = true;
+                        else r.error = true;
+                    }
+                    const dec = DgFrameShare.frameDecision(r);
+                    return { use: dec.use, why: dec.why, canvas: dec.use === 'frame' ? canvas : null };
+                },
+                // 剧照兜底:TMDB 按片名搜,只认完全同名的那部(DgFavSched.pickArt,与追更日历认片同一套;知道年份时首播年差 ≤1)——
+                //   以前取搜索结果里第一个有图的:海贼王 → 《海贼王女》、老师 → 《老练律师》,还标着"剧照"。优先横版剧照,没有就它的海报;
+                //   对不上 → null(卡片只放片名)。图片走现有的 TMDB 图片地址(同源代理 / 官方 CDN)带 crossOrigin 读;读不了就不画图,绝不污染卡片画布
+                async _frameBackdrop(name, hint) {
+                    hint = hint || {};
+                    const memo = this._frameArtMemo || (this._frameArtMemo = new Map());
+                    const mk = name + '|' + (hint.tv ? 't' : 'm') + (hint.year || '');
+                    if (memo.has(mk)) return memo.get(mk);
+                    const q = DgFavSched.cleanName(name);
+                    let pick = null;
+                    try {
+                        const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 6000);
+                        try {
+                            const r = await tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent('/search/multi')}&query=${encodeURIComponent(q)}&language=zh-CN`, { signal: ctl.signal });
+                            pick = DgFavSched.pickArt(((await r.json()) || {}).results, { name, year: hint.year || 0, tv: !!hint.tv });
+                        } finally { clearTimeout(tm); }
+                    } catch (e) { }
+                    if (!pick) return null;
+                    const bases = [...new Set([this.TMDB_BACKDROP_URL, TMDB_BACKDROP_URL].filter(Boolean).map(b => String(b).replace(/\/original$/, '/' + pick.size)).concat('/api/tmdb-image/' + pick.size))];
+                    for (const b of bases) {
+                        const img = await this._frameFetchArt(b + pick.path);
+                        if (img) { memo.set(mk, img); return img; }   // 只记真取到的剧照(占位图/失败不记,下次还会再试)
+                    }
+                    return null;
+                },
+                // 取一张剧照:先拿字节、按文件头确认是真图(DgFrameShare.isRaster)再解码 —— 官方图床连不上(大陆/断网)时 sw.js 回 200 的
+                //   「加载失败」SVG,<img crossOrigin> 照样 onload,以前就被当剧照画进卡片、也不再试同源 /api/tmdb-image。
+                //   解码用 blob: 地址(同源)→ 画布不会被污染;null = 这个地址不行,换下一个
+                async _frameFetchArt(src) {
+                    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 8000);
+                    try {
+                        const r = await fetch(src, { signal: ctl.signal, credentials: 'omit' });
+                        if (!r.ok) return null;
+                        const blob = await r.blob();
+                        if (!DgFrameShare.isRaster(new Uint8Array(await new Response(blob.slice(0, 16)).arrayBuffer()))) return null;   // 老 WebView 没有 Blob.arrayBuffer
+                        const u = URL.createObjectURL(blob);
+                        try { return await this._frameLoadImg(u); } finally { URL.revokeObjectURL(u); }
+                    } catch (e) { return null; } finally { clearTimeout(tm); }
+                },
+                _frameLoadImg(src) {
+                    return new Promise(res => {
+                        const im = new Image();
+                        let done = false, t = 0;
+                        const fin = (x) => { if (!done) { done = true; clearTimeout(t); res(x); } };
+                        t = setTimeout(() => fin(null), 8000);
+                        im.crossOrigin = 'anonymous';
+                        im.onload = () => fin(im.naturalWidth > 0 ? im : null);
+                        im.onerror = () => fin(null);
+                        im.src = src;
+                    });
+                },
+                _frameIcon() {
+                    if (!this._frameIconP) this._frameIconP = this._frameLoadImg('icon.png').then(im => { if (!im) this._frameIconP = null; return im; });
+                    return this._frameIconP;
+                },
+                // 二维码库按需加载(首次点"分享当前画面"才拉,不进首屏);?v= 与 sw.js 预缓存一致
+                _loadQrLib() {
+                    if (typeof window.qrcode === 'function') return Promise.resolve(window.qrcode);
+                    if (!this._qrLibP) {
+                        this._qrLibP = new Promise((res, rej) => {
+                            const s = document.createElement('script');
+                            s.src = 'libs/js/qrcode-generator.min.js?v=2.0.4';
+                            s.async = true;
+                            s.onload = () => (typeof window.qrcode === 'function' ? res(window.qrcode) : rej(new Error('qrcode 库没有就绪')));
+                            s.onerror = () => rej(new Error('qrcode 库加载失败'));
+                            document.head.appendChild(s);
+                        }).catch(e => { this._qrLibP = null; throw e; });
+                    }
+                    return this._qrLibP;
+                },
+                // 导出 JPEG(照片画面用 PNG 动辄 1~2MB),超过 ~400KB 逐档降质量;dataURL 给 <img>(微信里长按 blob: 地址存不了图)
+                async _frameEncode(canvas) {
+                    const toBlob = (q) => new Promise((res, rej) => {
+                        try { canvas.toBlob(b => (b ? res(b) : rej(new Error('toBlob 返回空'))), 'image/jpeg', q); } catch (e) { rej(e); }
+                    });
+                    let blob = null;
+                    for (const q of [0.9, 0.82, 0.72, 0.6]) { blob = await toBlob(q); if (blob.size <= 400 * 1024) break; }
+                    const dataUrl = await new Promise((res, rej) => { const fr = new FileReader(); fr.onload = () => res(fr.result); fr.onerror = () => rej(fr.error); fr.readAsDataURL(blob); });
+                    return { blob, dataUrl };
+                },
+                closeFrameShare(fromPop) {
+                    if (!this.frameShare.show) return;
+                    this._frameShareTok = (this._frameShareTok || 0) + 1;   // 还在生成的那张作废
+                    this.frameShare = { show: false, busy: false, img: '', note: '', link: '', title: '', canFiles: false, err: '', tip: '' };
+                    this._frameShareFree();
+                    this._frameShareHistPop(fromPop === true);
+                    // 打开时在网页全屏(TV 模式)、关的路上被退掉了(App 返回键那段 JS 先 cancel('web') 再 closeDetail)→ 恢复
+                    try { if (this._frameShareWebFs && this.showDetail && dp && dp.fullScreen && !dp.fullScreen.isFullScreen('web')) dp.fullScreen.request('web'); } catch (e) { }
+                    this._frameShareWebFs = false;
+                    const f = this._frameShareFocus;
+                    this._frameShareFocus = null;
+                    try { if (f && f.focus && f.isConnected !== false) f.focus({ preventScroll: true }); } catch (e) { }
+                },
+                _frameShareFree() {
+                    const r = this._frameShareRes;
+                    this._frameShareRes = null;
+                    if (r && r.url) { try { URL.revokeObjectURL(r.url); } catch (e) { } }
+                },
+                // 返回键 / Esc 关弹窗:打开时压一条同地址的历史记录(手机返回键、iOS 侧滑返回弹出它 → popstate 里关,见 _onHistPop);
+                //   点按钮关时自己 history.back() 退掉这条,退回那一下也会发 popstate,由 _frameShareBack 认领
+                _frameShareHistPush() {
+                    if (!this._frameShareOnKey) {
+                        // window 捕获阶段:Esc 关弹窗;别的键截住不往下传 —— 弹窗是模态的,DPlayer 热键(空格/←→↑↓)和页面空格播放
+                        //   不能隔着弹窗动背后的视频。焦点在弹窗里时不 preventDefault:空格/回车照常按下焦点按钮。
+                        //   焦点困在弹窗里(aria-modal):Tab/Shift+Tab 在弹窗的按钮间循环 —— 以前从「复制链接」再 Tab 两下就到了背后的 ♥,
+                        //   回车直接取消收藏(审查实锤);焦点万一在弹窗外,回车/空格一律不让它按下背后的按钮(keyup 也拦:按钮在 keyup 时响应空格)
+                        this._frameShareOnKey = (e) => {
+                            if (!this.frameShare.show) return;
+                            if (e.type === 'keyup') { if ((e.key === ' ' || e.key === 'Enter') && !this._frameShareInBox(e.target)) e.preventDefault(); return; }
+                            if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); e.stopImmediatePropagation(); this.closeFrameShare(); return; }
+                            e.stopImmediatePropagation();
+                            if (e.key === 'Tab') {
+                                const box = this.$refs && this.$refs.fshareBox, f = this._frameShareFocusables();
+                                const i = f.indexOf(document.activeElement);
+                                const to = !f.length ? box : e.shiftKey ? (i <= 0 ? f[f.length - 1] : null) : (i < 0 || i === f.length - 1 ? f[0] : null);
+                                if (to) { e.preventDefault(); try { to.focus({ preventScroll: true }); } catch (x) { } }
+                                return;
+                            }
+                            if ((e.key === ' ' || e.key === 'Enter') && !this._frameShareInBox(e.target)) e.preventDefault();
+                        };
+                    }
+                    window.addEventListener('keydown', this._frameShareOnKey, true);
+                    window.addEventListener('keyup', this._frameShareOnKey, true);
+                    this._frameShareBack = 0;
+                    this._frameShareHist = false;
+                    try { history.pushState(Object.assign({}, history.state || {}, { dgFrameShare: 1 }), ''); this._frameShareHist = true; } catch (e) { }
+                },
+                _frameShareHistPop(fromPop) {
+                    window.removeEventListener('keydown', this._frameShareOnKey, true);
+                    window.removeEventListener('keyup', this._frameShareOnKey, true);
+                    const mine = this._frameShareHist;
+                    this._frameShareHist = false;
+                    if (!fromPop && mine) {
+                        try { if (history.state && history.state.dgFrameShare) { this._frameShareBack = Date.now(); history.back(); return; } } catch (e) { }
+                    }
+                    this._frameShareBack = 0;
+                },
+                // 打开时焦点放哪:TV 模式(遥控器)放第一个能按的按钮(生成中「保存图片」还是灰的 → 「复制链接」)——
+                //   放在弹窗框上看不出焦点在哪、OK 键按了没反应,第一下"下"就到了 ×,再 OK 就关了(审查实锤;开启提醒小卡片同样聚焦「开启」)。
+                //   键盘/鼠标照旧放弹窗框本身(全站 button:focus 是红框,鼠标点开时不该一打开就框住一个按钮),Tab 从框里开始
+                _frameShareFocusIn() {
+                    const box = this.$refs && this.$refs.fshareBox;
+                    if (!box) return;
+                    let to = box;
+                    if (this.isTVMode) { try { to = box.querySelector('.fshare-btns button:not([disabled])') || box; } catch (e) { } }
+                    try { if (to.focus) to.focus({ preventScroll: true }); } catch (e) { }
+                },
+                _frameShareInBox(el) {
+                    const box = this.$refs && this.$refs.fshareBox;
+                    try { return !!(box && el && (el === box || box.contains(el))); } catch (e) { return false; }
+                },
+                // 弹窗里能按的(看得见、没禁用的按钮/链接),按文档顺序
+                _frameShareFocusables() {
+                    const box = this.$refs && this.$refs.fshareBox;
+                    if (!box || !box.querySelectorAll) return [];
+                    return Array.from(box.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')).filter(x => x.offsetParent !== null || (x.getClientRects && x.getClientRects().length));
+                },
+                // 启动(mounted)一次:截帧弹窗压的那条历史在弹窗开着时刷新/标签页被回收(去微信发卡片时常见)会留下来 → 去掉它的标记
+                //   (之后再开弹窗、点关闭时不会把它当成自己压的那条去 history.back());进退到它由常驻的 _onHistPop 把地址栏对齐
+                _histBoot() {
+                    try {
+                        if (history.state && history.state.dgFrameShare) {
+                            const s = Object.assign({}, history.state);
+                            delete s.dgFrameShare;
+                            history.replaceState(Object.keys(s).length ? s : null, '');
+                        }
+                        // 🔔 小卡片开着时刷新:它那条历史的滚动恢复还是 manual(见 _pushAskShow)→ 改回 auto
+                        if (history.state && history.state.dgPushAsk && history.scrollRestoration === 'manual') history.scrollRestoration = 'auto';
+                    } catch (e) { }
+                    window.addEventListener('popstate', () => this._onHistPop());
+                },
+                // 常驻 popstate(_histBoot 注册一次;页面别处不压历史,这里只会收到截帧弹窗那条前后的进退):
+                //   ① 自己退掉的那条(_frameShareBack):弹窗开着时自动换了集 → 落到的旧集地址补写成当前集;播放页已关 → 清成首页地址
+                //   ② 弹窗开着、用户按返回/侧滑:关弹窗;落到的是打开前那条 —— 中途自动换了集的话还是旧集,补写(审查实锤:以前只有 ①
+                //      补写,手机返回键关掉后地址栏停在上一集,刷新/收藏/复制地址都回到上一集)
+                //   ③ 弹窗没开:上次弹窗开着时刷新/标签页被回收,留下那条历史(启动时已去掉标记);退回/前进到它 → 页面不动,只把地址栏
+                //      对齐:播放页开着写当前集,没开着清掉 ?play=/?live=(以前首页顶着上一部的深链,刷新又打开它)
+                _onHistPop() {
+                    if (this._frameShareBack) {
+                        this._frameShareBack = 0;
+                        if (this.showDetail && !this.frameShare.show) this.syncShareUrl();
+                        else if (!this.showDetail) { try { history.replaceState(history.state, '', location.pathname); } catch (e) { } }
+                        this._pushAskScrollBack();
+                        return;
+                    }
+                    // 🔔「开启更新提醒？」小卡片点按钮关时自己退掉的那条(1.5s 内):同 ① 只把地址栏对齐(卡片开着时可能换了集 / 关了播放页)
+                    if (this._pushAskBack) {
+                        const mine = Date.now() - this._pushAskBack < 1500;
+                        this._pushAskBack = 0;
+                        if (mine) {
+                            if (this.showDetail && !this.frameShare.show) this.syncShareUrl();
+                            else if (!this.showDetail && /[?&](play|live)=/.test(location.search)) { try { history.replaceState(history.state, '', location.pathname); } catch (e) { } }
+                            this._pushAskScrollBack();
+                            return;
+                        }
+                    }
+                    if (this.frameShare.show) this.closeFrameShare(true);
+                    // 🔔 小卡片开着、退到了它那条下面(手机返回键 / 侧滑返回)→ 关卡片(= 以后再说)。截帧弹窗叠在它上面时,
+                    //   这一下退掉的是弹窗那条、落在卡片自己那条上(id 对得上)→ 卡片不动。
+                    //   卡片被分享面板/偏好设置/求片/简介盖着(看不见,v-show)时:这下返回是冲着看得见的那个弹窗去的 →
+                    //   关那个弹窗、卡片留着(露出来),把它那条历史压回去(下次返回照样关卡片)。以前关掉的是看不见的卡片、弹窗不动,
+                    //   这一下返回像没反应,再按一下就离开了网站(审查实锤)
+                    if (this.pushAsk && this.pushAsk.show && !(history.state && history.state.dgPushAsk === this._pushAskHistId)) {
+                        if (this._pushAskCoveredNow() && !this.frameShare.show && !this.userBanned) {
+                            this.showSharePanel = false; this.showSettingsModal = false; this.showRequestModal = false; this.showInfoModal = false;
+                            this._pushAskHist = false;
+                            try { history.pushState(Object.assign({}, history.state || {}, { dgPushAsk: this._pushAskHistId }), ''); this._pushAskHist = true; } catch (e) { }
+                        } else this.pushAskLater(true);
+                    }
+                    if (this.showDetail) this.syncShareUrl();
+                    else if (/[?&](play|live)=/.test(location.search)) { try { history.replaceState(history.state, '', location.pathname); } catch (e) { } }
+                    this._pushAskScrollBack();
+                },
+                // 「保存图片」:blob 地址 + <a download>;按设备分档(DgFrameShare.saveMode):微信/QQ → 提示长按;
+                //   自家安卓 App(WebView 把下载直接丢掉、也没有长按存图)→ 不点死链,提示截屏/复制链接;别的安卓内嵌网页 → 照样试下载 + 提示
+                frameShareSave() {
+                    const r = this._frameShareRes;
+                    if (!r) return;
+                    const mode = DgFrameShare.saveMode(navigator.userAgent, this.isNativeApp);
+                    if (mode === 'press') { this.showMiniToast('请长按上面的图片保存或发送给朋友'); return; }
+                    if (mode === 'app') { this.showMiniToast('App 里不能直接保存图片：请截屏保存，或点「复制链接」分享'); return; }
+                    try {
+                        const a = document.createElement('a');
+                        a.href = r.url; a.download = r.name; a.rel = 'noopener';
+                        document.body.appendChild(a); a.click(); a.remove();
+                    } catch (e) { this.showMiniToast('保存失败，可以长按/右键图片另存'); return; }
+                    if (mode === 'webview') this.showMiniToast('如果没有开始下载：长按或截屏保存这张卡片');
+                },
+                async frameShareCopy() {
+                    const url = this.frameShare.link;
+                    if (!url) return;
+                    if (await this.copyShareLink(url)) this.showMiniToast('🔗 链接已复制（打开就从这一秒开始）');
+                    else window.prompt('复制此链接分享：', url);
+                },
+                // 「分享…」:系统分享面板带图片文件(只在 navigator.canShare({files}) 为真时显示)
+                frameShareNative() {
+                    const r = this._frameShareRes;
+                    if (!r || !r.file || !navigator.share) return;
+                    navigator.share({ files: [r.file], title: this.frameShare.title, text: this.frameShare.title + ' ' + this.frameShare.link }).catch(() => { });
+                },
                 // 把当前剧/集写进地址栏（便于收藏/分享），用 replaceState 不污染历史
                 syncShareUrl() {
                     try {
@@ -10289,6 +11583,7 @@
                 showMiniToast(msg) {
                     try {
                         const t = document.createElement('div');
+                        t.className = 'dg-mini-toast';   // 🔔 开启提醒小卡片等 toast 消失再出来(_pushAskBlocked 认这个类)
                         t.textContent = msg;
                         t.style.cssText = 'position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:rgba(0,0,0,0.88);color:#fff;padding:12px 22px;border-radius:24px;z-index:2147483600;font-size:14px;box-shadow:0 6px 24px rgba(0,0,0,.4);border:1px solid rgba(229,9,20,.4);';
                         document.body.appendChild(t);
@@ -11131,6 +12426,7 @@
                         this.$nextTick(() => this.onFavPopRowScroll('favRow', 'fav'));
                         // 推送点进来直接开播(?play=)时开播先于收藏加载完 → 那时 _favOnPlay 什么都没做;列表到了再补一次清红点
                         this._favOnPlay();
+                        this._favSchedKick();   // 📅 追更日历:列表到了,稍后后台查 TMDB 下一集
                     }
                 },
                 // 本机收藏查更新:去重后一次最多 100 条(服务器每 IP 30 次/分钟,这里最多 10 分钟一次 + 每次新收藏一次)
@@ -11161,6 +12457,7 @@
                 },
                 _favRefreshMaybe() {
                     this.$nextTick(() => { this.onFavPopRowScroll('favRow', 'fav'); this.onFavPopRowScroll('popularRow', 'popular'); });   // 首页刚显示:箭头按真实宽度校正
+                    this._favSchedKick();   // 📅 回首页:详情页里新收藏的 / 过期的下一集补查(有缓存的不发请求)
                     if (!this._favBooted) { this._favRetryBoot(false); return; }   // 只做过"只显示"启动:再确认一次同步状态
                     if (!this.favoritesEnabled) return;
                     if (Date.now() - (this._favLoadedAt || 0) < 10 * 60 * 1000) return;
@@ -11207,7 +12504,12 @@
                         try { on = !!localStorage.getItem('donggua_push_on'); } catch (e) { }
                         // 只有番剧 kz_* 线路(查不了更新):照样收藏成书签,但别承诺更新提醒
                         if (!data.checkSource) this.showMiniToast('❤️ 已收藏（该线路不支持更新提醒）');
-                        else this.showMiniToast(this.pushUi === 'ok' && !on ? '❤️ 已收藏（偏好设置里可开启更新推送）' : '❤️ 已收藏，有更新会在首页「我的收藏」提醒');
+                        else {
+                            // 🔔 本页第一次 ♥ 成功:够条件就在这条 toast 消失后弹「开启更新提醒？」小卡片(那样 toast 就不用再说"去偏好设置开")
+                            let ask = false;
+                            try { ask = this._pushAskQueue('fav'); } catch (e) { }
+                            this.showMiniToast(this.pushUi === 'ok' && !on && !ask ? '❤️ 已收藏（偏好设置里可开启更新推送）' : '❤️ 已收藏，有更新会在首页「我的收藏」提醒');
+                        }
                         this.$nextTick(() => this.onFavPopRowScroll('favRow', 'fav'));
                     } catch (e) {
                         this.showMiniToast('收藏失败，请稍后再试');
@@ -11274,6 +12576,112 @@
                         const list = this._favLocalLoad();
                         const x = list.find(y => y.fav_id === f.fav_id);
                         if (x) { x.seen_count = Math.max(x.seen_count | 0, n); this._favLocalSave(list); }
+                    }
+                },
+
+                // ========== 📅 追更日历(TMDB 下一集播出日) ==========
+                // 收藏行出来之后再查(加载完 / 回首页):延迟一会儿,不和首屏抢;进了详情/搜索不查(回首页 _favRefreshMaybe 会再踢)
+                _favSchedKick(delay) {
+                    this._favDayTick();
+                    if (this.favoritesEnabled && !(this.favList || []).length) {
+                        // 收藏清空了(删光/换人登录、对方没收藏):片名 → TMDB 表也清掉,不留上一个人收藏过的片名
+                        try { localStorage.removeItem('donggua_fav_tmdb'); } catch (e) { }
+                        if (Object.keys(this.favAir || {}).length) this.favAir = Object.freeze(Object.create(null));
+                    }
+                    if (!this.favoritesEnabled || !(this.favList || []).length) return;
+                    clearTimeout(this._favSchedTimer);
+                    this._favSchedTimer = setTimeout(() => this._favSchedRun(), delay == null ? 1500 : delay);
+                },
+                // 过零点"今天/明天/周X"跟着变:定时到下一个本地零点(最长 6 小时醒一次,休眠/改时区后自己校正)
+                _favDayTick() {
+                    const t = DgFavSched.localDay(new Date());
+                    if (this.favToday !== t) this.favToday = t;
+                    clearTimeout(this._favDayTimer);
+                    const n = new Date(), next = new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1, 0, 0, 5);
+                    this._favDayTimer = setTimeout(() => this._favDayTick(), Math.max(60000, Math.min(next - n, 6 * 3600000)));
+                },
+                // 在连载的收藏 → TMDB:/search/tv 认 id(每部一次,缓存 30 天;没认出 7 天后再试)→ /tv/{id} 的 next_episode_to_air(6 小时)。
+                //   同时最多 3 个请求;额度每 6 小时 30 部(缓存最旧的先;到点补满 —— 以前是每页一次、用完就再也不查,TV/App/PWA 常开几天,
+                //   下一集日期过期后全没了),额度用完后从没查过的(详情页里刚收藏的)每轮还能查 3 部;请求失败/超时不写缓存(下次再查)。
+                //   全部走 tmdbFetch → /api/tmdb-proxy;结果只在真变了时整个换掉 favAir(一次)
+                async _favSchedRun() {
+                    if (this._favSchedBusy) { this._favSchedAgain = true; return; }
+                    if (!this.favoritesEnabled || this.showDetail || this.searched || !(this.favList || []).length) return;
+                    this._favSchedBusy = true;
+                    const S = DgFavSched, KEY = 'donggua_fav_tmdb', now = Date.now(), today = this.favToday;
+                    try {
+                        let raw = null;
+                        try { raw = localStorage.getItem(KEY); } catch (e) { }
+                        const c = S.cacheParse(raw);
+                        if (this._favTmdbLeft == null || !(now - (this._favTmdbAt || 0) < S.T.tvTtl)) { this._favTmdbLeft = S.T.lookups; this._favTmdbAt = now; }
+                        const all = S.plan(this.favList, c, now, today);
+                        let todo;
+                        if (this._favTmdbLeft > 0) { todo = all.slice(0, this._favTmdbLeft); this._favTmdbLeft -= todo.length; }
+                        else todo = all.filter(t => t.search && !t.age).slice(0, S.T.newPerRun);   // 额度用完:只查从没查过的(刚收藏的)
+                        const get = async (path, qs) => {
+                            const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+                            try {
+                                const r = await tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent(path)}${qs}&language=zh-CN`, { signal: ctl.signal });
+                                if (r.status === 404) return null;   // 剧集被 TMDB 删了之类:当"没有下一集"
+                                if (!r.ok) throw new Error('HTTP ' + r.status);
+                                return await r.json();
+                            } finally { clearTimeout(timer); }
+                        };
+                        const detail = new Map();   // 两部收藏对上同一个 TMDB id:详情只查一次
+                        // 详情说的"下一集"已经播过了(TMDB 按美国时间翻篇,北京早上还是昨天那集)→ 按集往后查(E+1、还在过去再 E+2…最多 T.eps 集),
+                        //   换成 ≥ 今天的第一集。不拉整季集表:长番一季的集表 25~115 KB,日期过了的每小时重查一次(审查实锤),一集只有 ~250 B。
+                        //   查失败 / 404(这季没更后面的了)/ 没排期就停,先存详情的(过去的日期不显示,pastTtl 后再查),不因为这一步丢掉整条
+                        const load = (id) => {
+                            const k = String(id);
+                            if (!detail.has(k)) detail.set(k, get('/tv/' + id, '').then(async d => {
+                                let n = S.tvNext(d);
+                                const ht = S.homeToday(n.bj, now, today);
+                                if (n.d && n.s >= 1 && n.e >= 1 && S.dayNum(n.d) < S.dayNum(ht)) {
+                                    const eps = [];
+                                    for (let j = 1; j <= S.T.eps; j++) {
+                                        let x = null;
+                                        try { x = await get('/tv/' + id + '/season/' + n.s + '/episode/' + (n.e + j), ''); } catch (e) { break; }
+                                        if (!x || !(S.dayNum(x.air_date) < S.dayNum(ht))) { if (x) eps.push(x); break; }
+                                        eps.push(x);
+                                    }
+                                    n = S.seasonNext(n, { episodes: eps }, ht);
+                                }
+                                c.tv[k] = Object.assign(n, { ts: now });
+                            }));
+                            return detail.get(k);
+                        };
+                        const freshTv = (id) => { const tc = c.tv[String(id)]; return !!tc && now - tc.ts < (S.isPast(tc, now, today) ? S.T.pastTtl : S.T.tvTtl) && tc.ts <= now; };
+                        await runWithConcurrency(todo, 3, async (t) => {
+                            let id = t.id;
+                            if (t.search) {
+                                const q = '&query=' + encodeURIComponent(t.q);
+                                let d = await get('/search/tv', q + (t.year ? '&first_air_date_year=' + t.year : ''));
+                                let m = S.matchList(d && d.results, t, today);
+                                // 首播年过滤是精确年:资源站年份差一年(跨年开播)就搜不到 → 不带年份再搜一次,首播年差 ≤1 的才认
+                                if (!m.ids.length && t.year) { d = await get('/search/tv', q); m = S.matchList(d && d.results, t, today); }
+                                id = m.ids[0] || 0;
+                                // 同名好几部:排第一的完结/停播又没有下一集 → 往后看(最多 3 部),在播的优先;都不在播就用排第一的。
+                                //   看到在播的就停:常见情况(排第一的就在播)不多花请求。详情失败抛出 → 这部这次不记 id,下次再认
+                                if (m.ids.length > 1) {
+                                    for (const k of m.ids.slice(0, 3)) {
+                                        if (!freshTv(k)) await load(k);
+                                        if (c.tv[String(k)] && c.tv[String(k)].l) { id = k; break; }
+                                    }
+                                }
+                                c.ids[t.fav_id] = m.b ? { id, ts: now, b: 1 } : { id, ts: now };
+                                if (!id || freshTv(id)) return;
+                            }
+                            await load(id);
+                        });
+                        S.cachePrune(c, this.favList, now);
+                        try { localStorage.setItem(KEY, JSON.stringify(c)); } catch (e) { }
+                        const air = S.airMap(c, now);
+                        if (!S.sameAir(air, this.favAir)) this.favAir = air;
+                    } catch (e) {
+                        console.warn('[追更日历] 查询失败:', e);
+                    } finally {
+                        this._favSchedBusy = false;
+                        if (this._favSchedAgain) { this._favSchedAgain = false; this._favSchedKick(); }
                     }
                 },
 
@@ -11416,6 +12824,8 @@
                 // 🔔 启动时(同步状态确认后)跑一次:浏览器里已有订阅 →
                 //   同步用户 + 已授权 + 服务器开着推送:幂等补报给服务器(服务器可能因连续发送失败删过它,或浏览器轮换了订阅);
                 //   不是同步用户 / 服务器关了推送:这条订阅不该留着 → 浏览器退订 + 尽量通知服务器删掉
+                //   🔔 默认打开:这台设备上没有(属于这个账号的)订阅、浏览器早已允许本站通知 → _pushAutoOn 不打扰地直接订阅
+                //      (重新登录、换号登录、服务器换了推送密钥后都会走到这里)
                 async _pushStartupSync(serverPush) {
                     if (this._pushStartupDone) return;
                     this._pushStartupDone = true;
@@ -11430,9 +12840,16 @@
                         }
                         const reg = await this._swReady(5000);
                         const sub = (reg && reg.pushManager) ? await reg.pushManager.getSubscription() : null;
-                        if (!sub) return;
+                        if (serverPush && this._favIsSync()) this._pushMigrate(!!sub);
+                        if (!sub) {
+                            if (serverPush && this._favIsSync()) await this._pushAutoOn();
+                            return;
+                        }
                         if (serverPush && this._favIsSync()) {
-                            if (Notification.permission === 'granted') await this._pushRefreshState();
+                            if (Notification.permission === 'granted') {
+                                await this._pushRefreshState();
+                                if (!this.pushSubscribed) await this._pushAutoOn();   // 上个账号的 / 旧密钥的订阅刚被退掉
+                            }
                             return;
                         }
                         try { localStorage.removeItem('donggua_push_on'); } catch (e) { }
@@ -11443,7 +12860,9 @@
                     } catch (e) { }
                 },
                 async _pushRefreshState() {
-                    if (this.pushUi !== 'ok') return;
+                    // 正在订阅/退订(开关、小卡片「开启」、启动静默那次):它走完会自己写好最终状态。这时去看,刚订上、还没等服务器回话
+                    //   (donggua_push_on 还没写)的订阅会被当成"别的账号的"退掉,开关却显示开着、服务器存的是死订阅(审查实锤:订阅途中点开偏好设置)
+                    if (this.pushUi !== 'ok' || this.pushBusy || this._pushAutoBusy) return;
                     this.pushMsg = '';
                     try {
                         const reg = await this._swReady(3000);
@@ -11476,49 +12895,80 @@
                     const want = !!(e && e.target && e.target.checked);
                     if (want) await this.pushSubscribe(); else await this.pushUnsubscribe();
                     try { if (e && e.target) e.target.checked = this.pushSubscribed; } catch (x) { }
+                    // 🔔 在偏好设置里动过开关(开成了、浏览器拒了、权限框被关掉都算):藏在弹窗后面的「开启更新提醒？」卡片问的就是这件事,
+                    //   不再露出来 —— 以前只在开成功时关,刚拒绝完关掉偏好设置,卡片又冒出来再问一遍(审查实锤)
+                    if (this.pushAsk && this.pushAsk.show) this.closePushAsk();
                 },
-                async pushSubscribe() {
-                    if (this.pushBusy || this.pushUi !== 'ok') return;
-                    this.pushBusy = true;
-                    this.pushMsg = '';
+                // opts.silent:启动时的"默认打开"(_pushAutoOn)—— 只在浏览器已经允许通知时走,绝不弹权限框;不弹 toast、失败也不往开关下面写字。
+                //   静默那次不占 pushBusy(用 _pushAutoBusy):推送服务连不上(国内没开代理连不到 FCM)时 subscribe() 可能一直不返回,
+                //   以前开关/测试整个会话都是灰的、一天的退避也记不上,每次打开页面再卡一遍(审查实锤)。subscribe() 另有时限(静默 15s、手动 30s)。
+                //   用户自己开/关(_pushGen 加一)→ 还没走完的静默那次作废:不改开关状态、不清"关掉过"(关掉了还在途的那条订阅退掉)
+                async pushSubscribe(opts) {
+                    const silent = !!(opts && opts.silent);
+                    if (this.pushUi !== 'ok' || this.pushBusy || (silent && this._pushAutoBusy)) return;
+                    const gen = silent ? (this._pushGen || 0) : (this._pushGen = (this._pushGen || 0) + 1);
+                    const stale = () => silent && gen !== (this._pushGen || 0);
+                    if (silent) this._pushAutoBusy = true; else this.pushBusy = true;
+                    if (!silent) this.pushMsg = '';
+                    const fail = (m) => { if (!silent) this.pushMsg = m; };
+                    let sub = null;
                     try {
                         // 先要权限,而且必须在这次点击的同一调用栈里发起(Safari 要求;先 await 网络会被当成非用户操作拒掉)
                         let perm = Notification.permission;
                         if (perm !== 'granted') {
+                            if (silent) return;
                             perm = await new Promise(res => { const p = Notification.requestPermission(res); if (p && p.then) p.then(res, () => res('default')); });
+                            // 浏览器回答了"拒绝"(再问浏览器也不会弹框了):以后不再弹「开启更新提醒？」小卡片
+                            if (perm === 'denied') this._pushAskSave(s => { s.d = 1; });
                         }
                         if (perm !== 'granted') {
-                            this.pushMsg = perm === 'denied' ? '通知权限已被拒绝：请在浏览器或系统设置里允许本站通知后再打开' : '没有获得通知权限';
+                            fail(perm === 'denied' ? '通知权限已被拒绝：请在浏览器或系统设置里允许本站通知后再打开' : '没有获得通知权限');
                             return;
                         }
                         const key = await this._pushKey();
-                        if (!key) { this.pushMsg = '服务器暂未开启推送'; return; }
+                        if (!key) { fail('服务器暂未开启推送'); return; }
                         const reg = await this._swReady(8000);
-                        if (!reg || !reg.pushManager) { this.pushMsg = '后台服务(Service Worker)未就绪，请刷新页面后再试'; return; }
-                        let sub = await reg.pushManager.getSubscription();
+                        if (!reg || !reg.pushManager) { fail('后台服务(Service Worker)未就绪，请刷新页面后再试'); return; }
+                        if (stale()) return;
+                        sub = await reg.pushManager.getSubscription();
                         if (sub && !this._pushSameKey(sub, key)) { try { await sub.unsubscribe(); } catch (x) { } sub = null; }
-                        if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: this._b64uToU8(key) });
+                        if (!sub) {
+                            // 推送服务(FCM 等)连不上时 subscribe() 可能一直不返回:静默 15s、手动 30s 就算失败(静默的记一天退避,见 _pushAutoOn)
+                            let tm = 0;
+                            try {
+                                sub = await Promise.race([reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: this._b64uToU8(key) }),
+                                    new Promise((_, rej) => { tm = setTimeout(() => rej(new Error('推送服务连接超时，请检查网络后再试')), silent ? 15000 : 30000); })]);
+                            } finally { clearTimeout(tm); }
+                        }
+                        if (stale()) { if (this._pushOptedOut()) { try { await sub.unsubscribe(); } catch (x) { } } return; }
                         const res = await this._pushPost('/api/push/subscribe', { token: this.syncToken, subscription: sub.toJSON() });
+                        if (stale()) { if (this._pushOptedOut()) { try { await sub.unsubscribe(); } catch (x) { } } return; }
                         if (!res.ok) {
                             try { await sub.unsubscribe(); } catch (x) { }   // 服务器没收下 → 浏览器这边也撤掉,两边一致
-                            this.pushMsg = this._pushErrText(res);
+                            fail(this._pushErrText(res));
                             return;
                         }
                         this.pushSubscribed = true;
                         this._pushResynced = true;
+                        this.pushMsg = '';
                         try { localStorage.setItem('donggua_push_on', this._pushOwnerTag()); } catch (x) { }   // 记下是哪个账号开的
-                        this.showMiniToast('🔔 已开启更新提醒推送');
+                        this._pushSetOptOut(false);   // 自己打开了 → 不再算"关掉过"
+                        if (!silent) this.showMiniToast('🔔 已开启更新提醒推送');
                     } catch (e) {
-                        this.pushMsg = '开启失败：' + ((e && e.message) || e);
+                        fail('开启失败：' + ((e && e.message) || e));
                     } finally {
-                        this.pushBusy = false;
+                        if (silent) this._pushAutoBusy = false; else this.pushBusy = false;
                     }
                 },
                 async pushUnsubscribe() {
                     if (this.pushBusy) return;
                     this.pushBusy = true;
+                    this._pushGen = (this._pushGen || 0) + 1;   // 还在途的静默订阅作废(见 pushSubscribe)
                     this.pushMsg = '';
                     try {
+                        // 在偏好设置里亲手关掉 = 这个账号在这台设备上明确不要:以后启动不再自动打开、也不再弹小卡片问(再打开开关才清掉)。
+                        //   退出登录走的是 _pushUnsubscribeAll,不记这个
+                        this._pushSetOptOut(true);
                         await this._pushUnsubscribeAll(this.syncToken);
                         this.pushSubscribed = false;
                         this.showMiniToast('已关闭更新提醒推送');
@@ -11552,6 +13002,246 @@
                     } finally {
                         this.pushBusy = false;
                     }
+                },
+
+                // ========== 🔔 推送默认打开 + 「开启更新提醒？」小卡片 ==========
+                // 浏览器规矩:通知权限只能在用户点击里要(页面一打开就要,Chrome 会降级成静默提示,而"拒绝"是永久的)。所以:
+                //   ① 已经允许过(以前开过 / 系统设置里允许了):启动时 _pushAutoOn 直接订阅,不打扰;
+                //   ② 还没问过(default):本页第一次 ♥ 收藏成功 / 求片提交成功后,弹一张站内小卡片问一句,点「开启」才在这次点击里要权限。
+                // 本机记录按账号键(_pushAcct)分:donggua_push_off = 在偏好设置里亲手关掉过的账号;donggua_push_ask = 软提示次数/冷却/拒绝。
+                // 账号键 = 同步 token 的 16 位哈希(4 个十六进制字):这两个键退出登录也留着(同一个人重新登录,"关掉过"仍然作数),
+                //   所以不存 token 原文前缀(donggua_push_on 存前缀,但它退出登录时会清)
+                _pushAcct() {
+                    const t = String(this.syncToken || '');
+                    if (!t) return '';
+                    let h = 0x811c9dc5;
+                    for (let i = 0; i < t.length; i++) { h ^= t.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+                    return ('000' + ((h ^ (h >>> 16)) & 0xffff).toString(16)).slice(-4);
+                },
+                _pushOffList() {
+                    let v = '';
+                    try { v = localStorage.getItem('donggua_push_off') || ''; } catch (e) { }
+                    return v.split(',').filter(x => /^[0-9a-f]{4}$/.test(x));
+                },
+                _pushOptedOut() { const k = this._pushAcct(); return !!k && this._pushOffList().includes(k); },
+                // 一次性迁移(每台设备一次,donggua_push_mig):这版以前在偏好设置里关掉推送只退订、不记"关掉过"。
+                //   升级后第一次启动:浏览器允许通知、却没有订阅、也没有 donggua_push_on —— 以前只有开关会要通知权限,这多半就是关掉过的人
+                //   (或主动退出过的)→ 记成这个账号关掉过,不默认打开;要的话自己打开开关(会清掉这条)。以前直接悄悄订回去(审查实锤)。
+                //   要有登录账号才知道记给谁:没登录的这次不迁移、下次登录后再看
+                _pushMigrate(hasSub) {
+                    try {
+                        if (localStorage.getItem('donggua_push_mig') || !this._pushAcct()) return;
+                        let perm = '';
+                        try { perm = Notification.permission; } catch (e) { }
+                        if (!hasSub && perm === 'granted' && !localStorage.getItem('donggua_push_on')) this._pushSetOptOut(true);
+                        localStorage.setItem('donggua_push_mig', '1');
+                    } catch (e) { }
+                },
+                _pushSetOptOut(on) {
+                    const k = this._pushAcct();
+                    if (!k) return;
+                    const l = this._pushOffList().filter(x => x !== k);
+                    if (on) l.push(k);
+                    try { if (l.length) localStorage.setItem('donggua_push_off', l.slice(-8).join(',')); else localStorage.removeItem('donggua_push_off'); } catch (e) { }
+                },
+                // donggua_push_ask = { d:1 浏览器回答过"拒绝", a:{ 账号键:{ n 已弹次数, u 冷却到(ms), f 上次自动开启失败(ms) } } }。账号表用无原型对象(键来自存储)
+                _pushAskLoad() {
+                    let s = null;
+                    try { s = JSON.parse(localStorage.getItem('donggua_push_ask') || 'null'); } catch (e) { }
+                    const a = Object.create(null);
+                    if (s && s.a && typeof s.a === 'object') {
+                        for (const k of Object.keys(s.a)) {
+                            const v = s.a[k];
+                            if (/^[0-9a-f]{4}$/.test(k) && v && typeof v === 'object') a[k] = { n: +v.n || 0, u: +v.u || 0, f: +v.f || 0 };
+                        }
+                    }
+                    return { d: s && s.d ? 1 : 0, a };
+                },
+                _pushAskSave(fn) {
+                    const s = this._pushAskLoad();
+                    try { fn(s); } catch (e) { }
+                    const ks = Object.keys(s.a), last = k => Math.max(s.a[k].u, s.a[k].f);
+                    if (ks.length > 8) ks.sort((x, y) => last(x) - last(y)).slice(0, ks.length - 8).forEach(k => { delete s.a[k]; });
+                    try { localStorage.setItem('donggua_push_ask', JSON.stringify(s)); } catch (e) { }
+                },
+                _pushAskAcct(s) { const k = this._pushAcct() || '0000'; return s.a[k] || (s.a[k] = { n: 0, u: 0, f: 0 }); },
+                // ① 默认打开:同步账号 + 服务器开着推送 + 浏览器已允许通知 + 这台设备没有订阅 + 这个账号没亲手关过 → 走开关同一条订阅流程(静默)。
+                //   失败(服务器拒收 / 推送服务订阅不了)一天内不再试,免得每次打开页面都去订阅一遍
+                async _pushAutoOn() {
+                    if (this.pushUi !== 'ok' || this.pushSubscribed || this.pushBusy || this._pushAutoBusy) return false;
+                    let perm = '';
+                    try { perm = Notification.permission; } catch (e) { }
+                    if (perm !== 'granted' || this._pushOptedOut()) return false;
+                    const a = this._pushAskLoad().a[this._pushAcct()];
+                    if (a && a.f && Math.abs(Date.now() - a.f) < 864e5) return false;
+                    await this.pushSubscribe({ silent: true });
+                    if (!this.pushSubscribed) this._pushAskSave(s => { this._pushAskAcct(s).f = Date.now(); });
+                    return this.pushSubscribed;
+                },
+                // ② 能不能软提示(不看此刻有没有东西挡着):推送可用的同步账号(iOS 没装到主屏幕 / 非同步 / 安卓 App 都不行)+ 还没问过权限 +
+                //   没订阅 + 没亲手关过 + 浏览器没拒绝过 + 这个账号弹过不到 3 次 + 不在 14 天冷却里
+                _pushAskEligible() {
+                    if (this.pushUi !== 'ok' || this.isNativeApp || this.pushSubscribed || (this.pushAsk && this.pushAsk.show)) return false;
+                    let perm = '';
+                    try { perm = Notification.permission; } catch (e) { }
+                    if (perm !== 'default' || this._pushOptedOut()) return false;
+                    const s = this._pushAskLoad(), a = s.a[this._pushAcct()];
+                    return !s.d && !(a && (a.n >= 3 || a.u > Date.now()));
+                },
+                // 此刻有别的弹窗开着(Vue 状态)。只算真盖在页面上的浮层;离线缓存面板是选集区里的一块(position:static),
+                //   不挡卡片 —— 以前也算它:点开离线缓存卡片就消失、Esc 不管用、返回键去收起一个看不见的面板(审查实锤)
+                _pushAskCoveredNow() {
+                    return !!((this.frameShare && this.frameShare.show) || this.showRequestModal || this.showSettingsModal || this.showInfoModal
+                        || this.showSharePanel || this.userBanned);
+                },
+                // 此刻弹出来会叠在别的东西上:弹窗、toast、登录浮层、TV 选集框;浏览器真全屏(body 上的卡片看不见)、标签页在后台、正在开关推送也等
+                _pushAskBlocked() {
+                    if (this.pushBusy || this.previewLocked || this._pushAskCoveredNow()) return true;
+                    try {
+                        if (document.hidden || document.fullscreenElement || document.webkitFullscreenElement) return true;
+                        if (document.querySelector('.dg-mini-toast, .v2b-unreach-note, #tv-episode-popup')) return true;
+                        const ps = document.getElementById('password-screen');
+                        if (ps && ps.style.display !== 'none' && !ps.classList.contains('hidden')) return true;
+                    } catch (e) { }
+                    return false;
+                },
+                // ♥ / 求片成功后排队:能问就等挡着的东西(toast、求片弹窗……)都没了再弹;一直挡着超过时限就这次不问(不记次数)。
+                //   每页每种最多排一次。返回 true = 排上了(♥ 的 toast 据此不再提"去偏好设置开")
+                _pushAskQueue(kind) {
+                    const did = this._pushAskDid || (this._pushAskDid = {});
+                    if (did[kind] || this._pushAskWait || !this._pushAskEligible()) return false;
+                    did[kind] = 1;
+                    this._pushAskWait = kind;
+                    const t0 = Date.now(), max = kind === 'req' ? 10 * 60000 : 3 * 60000;
+                    const tick = () => {
+                        this._pushAskWaitT = null;
+                        if (this._pushAskWait !== kind) return;
+                        if (!this._pushAskEligible()) { this._pushAskWait = ''; return; }
+                        if (this._pushAskBlocked()) {
+                            if (Date.now() - t0 > max) { this._pushAskWait = ''; return; }
+                            this._pushAskWaitT = setTimeout(tick, 700);
+                            return;
+                        }
+                        this._pushAskWait = '';
+                        this._pushAskShow(kind);
+                    };
+                    this._pushAskWaitT = setTimeout(tick, 400);
+                    return true;
+                },
+                _pushAskShow(kind) {
+                    // 弹出就算一次,并先记 14 天冷却:不理它、刷新页面也不会马上再问(点「以后再说」同样是 14 天)
+                    this._pushAskSave(s => { const a = this._pushAskAcct(s); a.n += 1; a.u = Date.now() + 14 * 864e5; });
+                    this.pushAsk = { show: true, kind: kind === 'req' ? 'req' : 'fav', msg: '' };
+                    if (!this._pushAskOnKey) this._pushAskOnKey = (e) => this._pushAskKey(e);
+                    window.addEventListener('keydown', this._pushAskOnKey, true);
+                    // 手机返回键 / 侧滑返回:压一条同地址、带这张卡片 id 的历史 → 退回时 _onHistPop 关卡片(id 对不上的旧记录、刷新留下的都不算)
+                    this._pushAskHistId = Date.now();
+                    this._pushAskHist = false;
+                    // 压之前把当前这条的滚动恢复改成手动(新压的那条照抄):卡片不挡页面,首页/搜索结果整页滚动,用户看着卡片接着往下翻,
+                    //   关卡片(按钮/Esc/自动收起/返回键)退回这条时浏览器会把页面滚回卡片弹出时的位置(审查实锤 2000 → 300)。
+                    //   退回到卡片下面那条后由 _pushAskScrollBack 改回原样(刷新、跨页面前进后退照旧恢复滚动);全局一直设 manual 会连这些一起改掉
+                    try { if (this._pushAskSR == null) this._pushAskSR = history.scrollRestoration || 'auto'; history.scrollRestoration = 'manual'; } catch (e) { }
+                    try { history.pushState(Object.assign({}, history.state || {}, { dgPushAsk: this._pushAskHistId }), ''); this._pushAskHist = true; } catch (e) { }
+                    // TV 遥控器:焦点直接给「开启」(不然遥控器够不着这张卡片);别的设备不抢焦点(卡片不挡页面)
+                    this._pushAskFocus = null;
+                    if (this.isTVMode) {
+                        try { this._pushAskFocus = document.activeElement || null; } catch (e) { }
+                        this.$nextTick(() => this._pushAskFocusBtn());
+                    }
+                    this._pushAskArm(25000);
+                },
+                // 落到了卡片那条下面(卡片那条不在顶上了)→ 滚动恢复改回压历史前的样子(见 _pushAskShow)
+                _pushAskScrollBack() {
+                    if (this._pushAskSR == null) return;
+                    try {
+                        const s = history.state;
+                        if (s && s.dgPushAsk === this._pushAskHistId) return;
+                        history.scrollRestoration = this._pushAskSR;
+                    } catch (e) { }
+                    this._pushAskSR = null;
+                },
+                _pushAskFocusBtn() {
+                    const box = this.$refs && this.$refs.pushAskBox;
+                    try {
+                        const b = box && box.querySelector ? (box.querySelector('button.pri') || box.querySelector('button')) : null;
+                        if (b && b.focus) b.focus({ preventScroll: true });
+                    } catch (e) { }
+                },
+                // 过一会儿自动收起(= 以后再说,不一直占着屏幕);正在走开启流程 / 被别的弹窗盖着就晚点再收
+                _pushAskArm(ms) {
+                    clearTimeout(this._pushAskHideT);
+                    this._pushAskHideT = null;
+                    if (!ms) return;
+                    this._pushAskHideT = setTimeout(() => {
+                        this._pushAskHideT = null;
+                        if (!this.pushAsk || !this.pushAsk.show) return;
+                        if (this.pushBusy || this._pushAskCoveredNow()) { this._pushAskArm(5000); return; }
+                        this.pushAskLater();
+                    }, ms);
+                },
+                // window 捕获阶段(卡片开着才挂):Esc = 以后再说(TV 返回键在 TV 监听里先截)。焦点在卡片按钮上时按键只给按钮 ——
+                //   空格/回车别被页面的"空格暂停"、DPlayer 热键当成控制视频;←/→ 在两个按钮间移动(遥控器)。焦点不在卡片上:按键照常给页面
+                _pushAskKey(e) {
+                    if (!this.pushAsk || !this.pushAsk.show || this._pushAskCoveredNow()) return;
+                    if (e.key === 'Escape' || e.key === 'Esc') { e.preventDefault(); e.stopImmediatePropagation(); this.pushAskLater(); return; }
+                    const box = this.$refs && this.$refs.pushAskBox;
+                    let ae = null;
+                    try { ae = document.activeElement; } catch (x) { }
+                    if (!box || !ae || !box.contains(ae)) return;
+                    e.stopImmediatePropagation();
+                    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                        const bs = Array.from(box.querySelectorAll('button'));
+                        const to = bs[bs.indexOf(ae) + (e.key === 'ArrowLeft' ? -1 : 1)];
+                        e.preventDefault();
+                        try { if (to) to.focus({ preventScroll: true }); } catch (x) { }
+                    }
+                },
+                // 「开启」:直接进开关那条订阅流程 —— 权限请求必须在这次点击的同一调用栈里发起(Safari/Firefox 要求),之前不能有 await
+                pushAskEnable() {
+                    if (!this.pushAsk || !this.pushAsk.show || this.pushBusy) return Promise.resolve();
+                    const p = this.pushSubscribe();
+                    this._pushAskArm(0);
+                    return Promise.resolve(p).then(() => {
+                        if (!this.pushAsk.show) return;
+                        if (this.pushSubscribed) { this.closePushAsk(); return; }
+                        let perm = '';
+                        try { perm = Notification.permission; } catch (e) { }
+                        if (perm === 'denied' || (perm === 'granted' && this.pushMsg)) {
+                            // 浏览器回答"拒绝"(pushSubscribe 已记下,以后不再问)/ 授权了但没订上:把开关下面那句提示留在卡片上,只这一次
+                            this.pushAsk = { show: true, kind: this.pushAsk.kind, msg: this.pushMsg || '没有获得通知权限' };
+                            this._pushAskArm(12000);
+                            if (this.isTVMode) this.$nextTick(() => this._pushAskFocusBtn());
+                            return;
+                        }
+                        this.closePushAsk();   // 权限框被直接关掉(仍是 default):弹出时已记过 14 天冷却
+                    });
+                },
+                // 「以后再说」/ Esc / 返回键 / 自动收起
+                pushAskLater(fromPop) {
+                    if (!this.pushAsk || !this.pushAsk.show) return;
+                    if (!this.pushAsk.msg) this._pushAskSave(s => { this._pushAskAcct(s).u = Date.now() + 14 * 864e5; });
+                    this.closePushAsk(fromPop);
+                },
+                closePushAsk(fromPop) {
+                    if (!this.pushAsk || !this.pushAsk.show) return;
+                    this._pushAskArm(0);
+                    const box = this.$refs && this.$refs.pushAskBox;
+                    let inBox = false;
+                    try { inBox = !!(box && document.activeElement && box.contains(document.activeElement)); } catch (e) { }
+                    this.pushAsk = { show: false, kind: '', msg: '' };
+                    if (this._pushAskOnKey) window.removeEventListener('keydown', this._pushAskOnKey, true);
+                    // 点按钮/Esc 关:自己退掉压的那条历史(退回那一下的 popstate 由 _pushAskBack 认领);截帧弹窗叠在上面时不退(会退掉弹窗那条)
+                    const mine = this._pushAskHist;
+                    this._pushAskHist = false;
+                    if (fromPop !== true && mine) {
+                        try {
+                            const s = history.state;
+                            if (s && s.dgPushAsk === this._pushAskHistId && !s.dgFrameShare) { this._pushAskBack = Date.now(); history.back(); }
+                        } catch (e) { }
+                    }
+                    const f = this._pushAskFocus;
+                    this._pushAskFocus = null;
+                    if (inBox) { try { if (f && f.focus && f.isConnected !== false) f.focus({ preventScroll: true }); } catch (e) { } }
                 },
 
                 // 📮 求片
@@ -11599,6 +13289,8 @@
                             this.reqForm = { name: '', aka: '', year: '', cast: '', note: '' };
                             await this.loadMyRequests();
                             if (this.showMiniToast) this.showMiniToast('✅ 求片已提交，处理后会在「我的求片」给出结果');
+                            // 🔔 「求片有结果时通知你？」:等求片弹窗关掉、toast 消失后再弹(不叠在弹窗上)
+                            try { this._pushAskQueue('req'); } catch (e) { }
                         } else { alert('提交失败: ' + (r.error || '')); }
                     } catch (e) { alert('提交失败，请重试'); }
                     this.reqSubmitting = false;
@@ -12131,6 +13823,10 @@
                     }
                 },
                 closeDetail() {
+                    // 📸 截帧分享弹窗开着:"关闭/返回"先只关弹窗,播放页不动 —— 调 closeDetail 的全是返回类操作(TV 遥控 Esc/Backspace、
+                    //   安卓 App 返回键注入的 JS、#tv-back、关闭按钮被弹窗盖着点不到)。以前连播放页一起关,而且弹窗退历史的 back()
+                    //   是异步的、下面 replaceState(pathname) 是同步的 → 退回落在打开弹窗前那条 ?play= 上,首页地址栏留着深链,刷新又把剧打开
+                    if (this.frameShare && this.frameShare.show) { this.closeFrameShare(); return; }
                     this.showDetail = false;
                     this._liveActive = false;       // 📺 退出直播模式(否则下一部 VOD 会被当直播、丢进度)
                     this._liveOpenSeq++;            // 作废在飞的直播测速循环
@@ -15123,6 +16819,25 @@
                                 // 挂载"弹幕设置"按钮+滑块面板(控件此时已就绪)
                                 if (window.danmakuStyle) window.danmakuStyle.mount();
 
+                                // 📸 分享当前画面(桌面):相机图标插在设置(齿轮)左边。手机端 CSS 把它收起,入口在齿轮菜单里(.dg-mob-row[data-dg=frame]);
+                                //    直播/未登录预览由 .player-box.dg-no-frame 藏掉
+                                {
+                                    const iconsRight = dplayerContainer.querySelector('.dplayer-icons-right');
+                                    if (iconsRight && !iconsRight.querySelector('.dplayer-frame-icon')) {
+                                        const camHtml = `
+                                            <div class="dplayer-icon dplayer-frame-icon" data-balloon="分享当前画面" data-balloon-pos="up">
+                                                <span class="dplayer-icon-content" style="display:flex;align-items:center;justify-content:center;width:100%;height:100%;">
+                                                    <i class="fas fa-camera" aria-hidden="true" style="font-size:17px;"></i>
+                                                </span>
+                                            </div>`;
+                                        const setEl = iconsRight.querySelector('.dplayer-setting');
+                                        if (setEl) setEl.insertAdjacentHTML('beforebegin', camHtml);
+                                        else iconsRight.insertAdjacentHTML('beforeend', camHtml);
+                                        const camBtn = iconsRight.querySelector('.dplayer-frame-icon');
+                                        if (camBtn) camBtn.addEventListener('click', (e) => { e.stopPropagation(); this.shareFrame(); });
+                                    }
+                                }
+
                                 // 📱 手机端"大按钮"控制栏:被 CSS 收起的按钮(发弹幕/弹幕样式/画中画/网页全屏 + 弹幕开关)
                                 //    在齿轮菜单里以整行菜单项的形式提供(.dg-mob-row,桌面端 CSS 隐藏)。
                                 //    每行都是"代为点击原按钮/调原 API",不复制任何业务逻辑,原按钮的行为改了这里自动跟着变。
@@ -15160,6 +16875,7 @@
                                         }
                                         if (pipBtn) html += row('pip', '画中画', '<span class="dg-mob-arrow">›</span>');
                                         html += row('webfull', '网页全屏', '<span class="dg-mob-arrow dg-webfull-label">›</span>');
+                                        html += row('frame', '分享当前画面', '<span class="dg-mob-arrow">›</span>');   // 📸 直播/未登录预览由 .player-box.dg-no-frame 藏掉
                                         settingPanel.insertAdjacentHTML('beforeend', html);
 
                                         const setDmKnob = (on) => { const k = settingPanel.querySelector('.dg-mob-row[data-dg="dmshow"] .dg-mob-toggle'); if (k) k.classList.toggle('on', !!on); };
@@ -15204,6 +16920,8 @@
                                                         else dp.fullScreen.request('web');
                                                     }
                                                     setTimeout(setWebFullLabel, 50);
+                                                } else if (key === 'frame') {
+                                                    this.shareFrame();
                                                 }
                                             } catch (err) { console.warn('[播放器] 手机设置项执行失败:', key, err && err.message); }
                                         }));
@@ -16404,10 +18122,13 @@
                                     playBtn.setAttribute('tabindex', '200');
                                 }
 
-                                // 4. 聚焦到暂停/播放按钮
+                                // 4. 聚焦到暂停/播放按钮。截帧分享弹窗开着(弹窗不暂停视频:播完自动下一集 / 跳片尾 / 出错切线路都会走到这)
+                                //    不抢焦点 —— 抢到被遮罩盖住的按钮上,弹窗的按钮都没焦点、遥控器 OK 键被弹窗拦掉没反应(审查实锤);
+                                //    记成弹窗关掉后焦点回去的地方(原来那个元素可能已经被换掉了)
                                 const playPauseBtn = document.getElementById('tv-play-pause');
                                 if (playPauseBtn) {
-                                    playPauseBtn.focus();
+                                    if (this.frameShare && this.frameShare.show) this._frameShareFocus = playPauseBtn;
+                                    else playPauseBtn.focus();
                                 }
                             } catch (e) {
                                 console.log('[TV 模式] 设置失败:', e);
