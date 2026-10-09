@@ -1,3 +1,7 @@
+
+
+https://github.com/user-attachments/assets/8100fd07-46cd-4f16-9228-90a09075ac54
+
 # E视界 (DongguaTV Enhanced Edition)
 
 现代流媒体聚合播放器：用 TMDb 做影视资料、聚合多个 Maccms 采集站做播放源，基于 Node.js + Express + Vue 3。原版项目：[Minerchu/dongguaTV](https://github.com/Minerchu/dongguaTV)
