@@ -2142,6 +2142,12 @@ app.get('/api/admin/user-history', (req, res) => {
 
 // TMDB 通用代理与缓存 API
 const TMDB_CACHE_TTL = 3600 * 10; // 缓存 10 小时
+// /tv/{id}(不带 append_to_response)= 追更日历读 next_episode_to_air:只缓存 1 小时 ——
+//   前端自己还缓存 6 小时,这里缓存 10 小时会让"下一集"最长旧 16 小时(播出日过了还报"今天更新"、延播了还报原来那天)。
+//   /tv/{id}/season/{n}(/episode/{e})同理:只在 next_episode_to_air 还停在昨天那集时才查(按集往后找 ≥ 今天的那集),排期也会改
+function tmdbCacheTtl(p, params) {
+    return /^\/tv\/\d+(\/season\/\d+(\/episode\/\d+)?)?$/.test(String(p || '')) && !(params && params.append_to_response) ? 3600 : TMDB_CACHE_TTL;
+}
 app.get('/api/tmdb-proxy', async (req, res) => {
     const { path: tmdbPath, ...params } = req.query;
 
@@ -2187,7 +2193,7 @@ app.get('/api/tmdb-proxy', async (req, res) => {
         });
 
         // 缓存结果
-        cacheManager.set('detail', cacheKey, response.data, TMDB_CACHE_TTL);
+        cacheManager.set('detail', cacheKey, response.data, tmdbCacheTtl(tmdbPath, params));
         res.json(response.data);
     } catch (error) {
         console.error(`[TMDB Proxy Error] ${tmdbPath}:`, error.message);

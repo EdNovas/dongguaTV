@@ -3,3 +3,6 @@ npm-debug.log
 .git
 .env
 .DS_Store
+
+# 宣传片工程(HyperFrames)不进镜像
+promo

@@ -997,7 +997,7 @@
             const TYPE_LABEL = { independent: '独立密码', primary: '主密码', airport: '机场用户', unknown: '未知' };
             const STATUS_LABEL = { pending: '待处理', need_info: '需补充', fulfilled: '已提供', rejected: '无法提供' };
             const STATUS_ICON = { pending: '⏳', need_info: '❓', fulfilled: '✓', rejected: '✕' };
-            const CHANNELS = [['wechat', '微信'], ['qq', 'QQ'], ['copy', '复制链接'], ['telegram', 'Telegram'], ['whatsapp', 'WhatsApp'], ['facebook', 'Facebook'], ['x', 'X'], ['instagram', 'Instagram'], ['native', '系统分享'], ['other', '其它']];
+            const CHANNELS = [['wechat', '微信'], ['qq', 'QQ'], ['copy', '复制链接'], ['telegram', 'Telegram'], ['whatsapp', 'WhatsApp'], ['facebook', 'Facebook'], ['x', 'X'], ['instagram', 'Instagram'], ['native', '系统分享'], ['frame', '截帧卡片'], ['other', '其它']];
             const CH_LABEL = Object.fromEntries(CHANNELS);
             const SOURCE_PRESET = ['微信', '企业微信', 'QQ', 'QQ浏览器', '微博', '钉钉', '飞书', '抖音/TikTok', '小红书', '百度App', 'Telegram', 'Facebook', 'Instagram', 'LINE', 'X', 'Google', '百度', 'Bing', '直接打开'];
             const K = Object.freeze({
@@ -1924,12 +1924,13 @@
                 const NAMES = ['zhang', 'wang', 'li', 'liu', 'chen', 'yang', 'huang', 'zhao', 'wu', 'zhou', 'xu', 'sun', 'ma', 'zhu', 'hu', 'guo', 'he', 'lin', 'luo', 'gao', 'tang', 'song', 'xie', 'han', 'deng', 'feng', 'cao', 'peng', 'zeng', 'xiao'];
                 const MAILS = ['gmail.com', 'qq.com', '163.com', 'outlook.com', 'icloud.com', 'foxmail.com', '126.com', 'hotmail.com'];
                 const DEVICES = [['iPhone · Safari', 26], ['Android · Chrome', 18], ['Windows · Chrome', 16], ['Mac · Safari', 8], ['iPad', 7], ['Android App', 9], ['Windows · Edge', 6], ['电视', 4], ['Mac · Chrome', 4], ['Linux', 1], ['其它', 1]];
-                const CH_W = [['wechat', 34], ['qq', 20], ['copy', 15], ['telegram', 10], ['native', 8], ['whatsapp', 4], ['x', 4], ['facebook', 3], ['instagram', 2]];
+                const CH_W = [['wechat', 34], ['qq', 20], ['copy', 15], ['telegram', 10], ['native', 8], ['whatsapp', 4], ['x', 4], ['facebook', 3], ['instagram', 2], ['frame', 6]];
                 const SRC_BY_CH = {
                     wechat: [['微信', 80], ['企业微信', 6], ['直接打开', 10], ['QQ浏览器', 4]], qq: [['QQ', 75], ['QQ浏览器', 15], ['直接打开', 10]],
                     telegram: [['Telegram', 85], ['直接打开', 15]], whatsapp: [['直接打开', 70], ['Google', 30]], x: [['X', 80], ['直接打开', 20]],
                     facebook: [['Facebook', 85], ['直接打开', 15]], instagram: [['Instagram', 80], ['直接打开', 20]],
-                    copy: [['直接打开', 40], ['微信', 25], ['QQ', 12], ['钉钉', 6], ['微博', 6], ['飞书', 5], ['小红书', 6]], native: [['直接打开', 50], ['微信', 20], ['LINE', 10], ['抖音/TikTok', 10], ['百度App', 10]]
+                    copy: [['直接打开', 40], ['微信', 25], ['QQ', 12], ['钉钉', 6], ['微博', 6], ['飞书', 5], ['小红书', 6]], native: [['直接打开', 50], ['微信', 20], ['LINE', 10], ['抖音/TikTok', 10], ['百度App', 10]],
+                    frame: [['微信', 60], ['QQ', 15], ['直接打开', 25]]
                 };
                 const PV_BY_CH = { telegram: 'Telegram', whatsapp: 'WhatsApp', x: 'X', facebook: 'Facebook' };
 
