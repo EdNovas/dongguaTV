@@ -1160,7 +1160,7 @@ await T(async () => {
             showDetail: false, currentGroup: null, currentSource: null, episodeList: [], currentUrl: '', previewLocked: false, deepLinkLoading: false,
             isTestingSources: false, deepLinkSourceCount: 0, offlineList: [], groupedList: [], introBtn: { show: false }, _liveOpenSeq: 0,
             watchHistory: [], searched: false, keyword: '', rawList: [], loading: false, isTVMode: false, refreshingEpisodes: false, showOfflinePanel: false,
-            liveChannelId: null, liveTesting: false, _liveActive: false,
+            liveChannelId: null, liveTesting: false, _liveActive: false, browse: { open: false },
             $nextTick(f) { if (f) f(); return Promise.resolve(); },
             handleImgError() { }, _introRenderBtn() { }, _openOfflineContext() { }, releaseWakeLock() { }, syncShareUrl() { },
         };

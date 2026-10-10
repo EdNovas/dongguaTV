@@ -73,7 +73,7 @@ const mkData = (n, tag) => Array.from({ length: n }, (_, i) => [i * 0.5, 0, 1677
 
 // ---------------- ② 端到端 ----------------
 console.log('② server.js 端到端');
-const mock = { search: 0, comment: 0, byId: 0, round: 1, empty: false, delay: 0, idMixup: false, noUrl: false };
+const mock = { search: 0, comment: 0, byId: 0, round: 1, empty: false, delay: 0, idMixup: false, noUrl: false, noEpUrl: false };
 const upstream = http.createServer(async (req, res) => {
     const u = new URL(req.url, 'http://x');
     if (mock.delay) await sleep(mock.delay);
@@ -84,7 +84,8 @@ const upstream = http.createServer(async (req, res) => {
         if (mock.empty || anime === '不存在的剧') return res.end(JSON.stringify({ animes: [] }));
         // "沾边剧" 只给一个名字包含它的条目 → 包含档 = 低置信
         const animeTitle = anime === '沾边剧' ? '沾边剧风云再起 from qiyi' : anime + ' from qiyi';
-        return res.end(JSON.stringify({ animes: [{ animeTitle, episodes: [1, 2, 3].map(n => ({ episodeId: 1000 + n, episodeTitle: '第' + n + '集', url: 'https://v.qq.com/x/cover/' + encodeURIComponent(anime) + '/' + n + '.html' })) }] }));
+        // noEpUrl:v1.20.10 之前的 danmu_api,集里没有 url 字段
+        return res.end(JSON.stringify({ animes: [{ animeTitle, episodes: [1, 2, 3].map(n => Object.assign({ episodeId: 1000 + n, episodeTitle: '第' + n + '集' }, mock.noEpUrl ? {} : { url: 'https://v.qq.com/x/cover/' + encodeURIComponent(anime) + '/' + n + '.html' })) }] }));
     }
     // 按视频地址取(无状态);老版本 danmu_api 不认 ?url= → 400
     if (u.pathname === '/tk/api/v2/comment') {
@@ -117,7 +118,7 @@ fs.mkdirSync(path.join(tmp, 'public'), { recursive: true });
 fs.copyFileSync(path.join(ROOT, 'public/index.html'), path.join(tmp, 'public/index.html'));
 
 const NODE_PATH = [path.join(ROOT, 'node_modules'), process.env.NODE_PATH || ''].filter(Boolean).join(path.delimiter);
-let srv = null, port = 0;
+let srv = null, port = 0, log = '';
 async function startServer(extraEnv) {
     port = 20000 + Math.floor(Math.random() * 20000);
     srv = spawn(process.execPath, ['server.js'], {
@@ -125,7 +126,7 @@ async function startServer(extraEnv) {
         env: Object.assign({}, process.env, { NODE_PATH, PORT: String(port), CACHE_TYPE: 'sqlite', DANMU_API_URL: 'http://127.0.0.1:' + upPort, DANMU_API_TOKEN: 'tk', ACCESS_PASSWORD: '', ADMIN_TOKEN: '', LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '' }, extraEnv || {}),
         stdio: ['ignore', 'pipe', 'pipe'],
     });
-    let log = '';
+    log = '';
     srv.stdout.on('data', d => { log += d; });
     srv.stderr.on('data', d => { log += d; });
     for (let i = 0; i < 100; i++) {
@@ -193,7 +194,20 @@ try {
     const byIdBefore429 = mock.byId;
     const r429 = await get('限流测试|第1集|v5|k:tv|y:2025|n:30');
     ok(r429.n === 0 && mock.byId === byIdBefore429 && /no-store/.test(r429.cc), '按地址取 429 时不退回按 id(宁可这次没弹幕)');
+    await sleep(100);
+    const warns429 = (log.match(/取弹幕返回 429 限流/g) || []).length;
+    ok(/没设 RATE_LIMIT_MAX_REQUESTS=0/.test(log), '429 时日志提示给 danmu_api 设 RATE_LIMIT_MAX_REQUESTS=0');
+    ok(warns429 === 1, '一次请求两轮都 429 也只提醒一次(实际 ' + warns429 + ' 次)');
     mock.urlFail = 0;
+    // 搜索结果不带 url 的旧版 danmu_api(线上 CF Workers 上的 v1.19.10):多实例上不退回按 id,日志提示升级
+    mock.noEpUrl = true;
+    const cOld = mock.comment;
+    const old = await get('旧版无地址|第1集|v5|k:tv|y:2025|n:30');
+    await sleep(100);
+    const warnsOld = (log.match(/danmu_api 太旧/g) || []).length;
+    ok(old.n === 0 && mock.comment === cOld && /no-store/.test(old.cc), '搜索结果不带 url 时多实例上不按 id 取(宁可没弹幕也不串剧)');
+    ok(warnsOld === 1 && /升级到最新版/.test(log), '搜索结果不带 url 时日志提示升级 danmu_api,两轮也只提醒一次(实际 ' + warnsOld + ' 次)');
+    mock.noEpUrl = false;
     // 老版本 danmu_api 不认 ?url= → 退回按 id,但结果只当低置信(no-store、不落盘)
     mock.noUrl = true;
     const legacy = await get('老版本测试|第1集|v5|t:国产剧|y:2025|n:30');

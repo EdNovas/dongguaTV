@@ -1988,58 +1988,405 @@
             outline: none;
         }
 
-        /* 分类导航栏 */
-        .category-nav-container {
-            display: flex;
-            overflow-x: auto;
-            padding: 20px 4%;
-            gap: 20px;
-            scrollbar-width: none;
-            /* Firefox */
-            -ms-overflow-style: none;
-            /* IE/Edge */
+        /* 🗂️ 首页分类栏:大类标签 + 选中大类的地区/题材小标签 */
+        .catnav {
+            position: relative;
+            margin: 0 5% 44px;
+            padding: 16px 18px 10px;
+            border-radius: 18px;
+            background:
+                radial-gradient(120% 160% at 0% 0%, rgba(229, 9, 20, 0.11) 0%, transparent 46%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
         }
-
-        .category-nav-container::-webkit-scrollbar {
-            display: none;
-            /* Chrome/Safari */
-        }
-
-        .category-item {
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
+        .catnav-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        /* 不设 overflow:滚动容器会把焦点框(遥控器)和选中标签的光晕上下裁掉;只在小屏横滑(见 ≤480) */
+        .cat-tabs { display: flex; flex-wrap: wrap; gap: 8px; }
+        .cat-tab {
+            flex: none;
+            display: inline-flex;
             align-items: center;
             gap: 8px;
+            height: 40px;
+            padding: 0 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.04);
+            color: #bbb;
+            font-size: 15px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
             cursor: pointer;
-            width: 70px;
-            transition: transform 0.2s;
+            transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
         }
-
-        .category-item:hover {
-            transform: translateY(-5px);
-        }
-
-        .category-item span {
-            font-size: 12px;
-            color: #aaa;
-            font-weight: 500;
-        }
-
-        .category-item:hover span {
+        .cat-tab i { font-size: 14px; opacity: 0.8; }
+        .cat-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
+        .cat-tab:active { transform: scale(0.96); }
+        .cat-tab.active {
             color: #fff;
+            border-color: transparent;
+            background: linear-gradient(135deg, #e50914 0%, #ff4d5a 100%);
+            filter: drop-shadow(0 6px 14px rgba(229, 9, 20, 0.35));
+        }
+        .cat-tab.active i { opacity: 1; }
+        .catnav-quick { display: flex; gap: 8px; margin-left: auto; }
+        .catnav-q {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            height: 34px;
+            padding: 0 14px;
+            border-radius: 17px;
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            background: transparent;
+            color: #aaa;
+            font-size: 13px;
+            cursor: pointer;
+            transition: color 0.2s, border-color 0.2s, background 0.2s;
+        }
+        .catnav-q.is-random i { color: #f5af19; }
+        .catnav-q.is-rec i { color: #c084fc; }
+        .catnav-q:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.05); }
+        .catnav-body { margin-top: 14px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+        .catnav-row { display: flex; align-items: flex-start; gap: 14px; padding: 7px 0; }
+        .catnav-label { flex: none; width: 2.6em; line-height: 30px; color: #999; font-size: 13px; letter-spacing: 1px; }
+        .catnav-chips { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+        .cat-chip {
+            height: 30px;
+            padding: 0 14px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.07);
+            background: rgba(255, 255, 255, 0.05);
+            color: #d0d0d0;
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.18s;
+        }
+        .cat-chip:hover { color: #fff; background: rgba(229, 9, 20, 0.16); border-color: rgba(229, 9, 20, 0.55); }
+        @media (hover: hover) { .cat-chip:hover { transform: translateY(-1px); } }
+        .cat-chip:active { transform: scale(0.96); }
+        .catnav-foot { display: flex; justify-content: flex-end; }
+        .catnav-all {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: 0;
+            background: none;
+            padding: 6px 2px;
+            color: #ddd;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .catnav-all-sub { color: #8a8a8a; font-weight: 400; }
+        .catnav-all i { color: var(--accent); transition: transform 0.2s; }
+        .catnav-all:hover { color: #fff; }
+        .catnav-all:hover i { transform: translateX(3px); }
+        /* 榜单标题旁的「全部」与「展开」并排靠右 */
+        .row-all + .expand-toggle { margin-left: 8px; }
+        /* 鼠标点过的按钮不留全站 TV 焦点红框(遥控器 / 键盘焦点 :focus-visible 照常有) */
+        .cat-tab:focus:not(:focus-visible), .cat-chip:focus:not(:focus-visible), .catnav-q:focus:not(:focus-visible),
+        .catnav-all:focus:not(:focus-visible), .row-all:focus:not(:focus-visible), .browse-fopt:focus:not(:focus-visible),
+        .browse-btn:focus:not(:focus-visible), .browse-link:focus:not(:focus-visible), .browse-back:focus:not(:focus-visible),
+        .browse-sticky button:focus:not(:focus-visible) { outline: none !important; box-shadow: none !important; }
+        /* 遥控器焦点落在选中(红底)的标签上:红框看不出来,换成白框(老 WebView 不认 :focus-visible 就退回全站红框) */
+        body.tv-mode .cat-tab.active:focus-visible, body.tv-mode .browse-fopt.active:focus-visible {
+            outline-color: #fff !important;
+            box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.25) !important;
+        }
+        body.tv-mode .catnav-label, body.tv-mode .browse-flabel { font-size: 14px; color: #aaa; }
+        @media (max-width: 768px) {
+            .catnav { margin: 0 4% 34px; padding: 12px 12px 6px; border-radius: 14px; }
+            .catnav-head { gap: 10px; }
+            .cat-tabs { width: 100%; gap: 6px; }
+            .cat-tab { height: 36px; padding: 0 14px; font-size: 14px; gap: 6px; }
+            .catnav-quick { margin-left: 0; }
+            .catnav-q { height: 30px; padding: 0 12px; font-size: 12px; }
+            .catnav-body { margin-top: 10px; }
+            .catnav-row { gap: 10px; padding: 5px 0; align-items: center; }
+            .catnav-label { width: 2.4em; line-height: 30px; font-size: 12px; }
+            /* 手机:标签一行横滑。右边 24px 渐隐提示还能往右滑;末尾留同样宽的空白,滑到头时最后一个标签不在渐隐里 */
+            .catnav-chips {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                scrollbar-width: none;
+                -webkit-overflow-scrolling: touch;
+                -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+                mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+            }
+            .catnav-chips::-webkit-scrollbar { display: none; }
+            .catnav-chips::after { content: ''; flex: 0 0 16px; }
+            .cat-chip { flex: none; height: 30px; padding: 0 12px; }
+            .catnav-all-sub { display: none; }
+            /* 榜单标题 +「全部」「展开」挤一行:按钮收紧,标题放不下时省略结尾的装饰词(「·星际穿越」) */
+            .row-all, .row-all + .expand-toggle { padding: 5px 10px; }
+            .row-all i { display: none; }
+            .row-all + .expand-toggle { margin-left: 6px; }
+            .section-header > .section-title { min-width: 0; }
+            .section-title-text { min-width: 0; line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        }
+        @media (max-width: 480px) {
+            /* 5 个大类在 360px 宽也放得下;再窄就横滑(上下留出焦点框的位置) */
+            .cat-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 6px 2px; margin: -6px -2px; }
+            .cat-tabs::-webkit-scrollbar { display: none; }
+            .cat-tab, .browse-types .cat-tab { padding: 0 10px; }
+            .cat-tab i { display: none; }
+            /* NEW / HOT 角标让给标题(图标颜色已经区分最新/热门);有「全部」的行收起「展开」——「全部」进的浏览页就是更好的网格,
+               标题才放得下(360px 宽时两个按钮并排,「全球震感·电影榜」只剩「全球震感·…」) */
+            .section-title .sort-indicator { display: none; }
+            .row-all + .expand-toggle { display: none; }
+            .row-all i { display: inline-block; }
         }
 
-        .cat-icon {
-            width: 50px;
-            height: 50px;
-            border-radius: 12px;
+        /* 🗂️ 分类浏览页 */
+        .browse-page { padding: 0 5% 20px; min-height: 60vh; }
+        /* 标题栏按内容宽度排:放得下就和大类标签一行,标题长(动漫 · 日本 · 动画电影)就把标签挤到下一行,标题不被截断 */
+        .browse-top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin: 4px 0 16px; }
+        .browse-titlebar { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 16px; }
+        .browse-types .cat-tab { height: 36px; padding: 0 14px; font-size: 14px; gap: 7px; }
+        .browse-back { flex: none; color: #fff !important; border-color: rgba(255, 255, 255, 0.3) !important; }
+        .browse-title {
+            margin: 0;
+            min-width: 0;
+            font-size: 1.6rem;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .browse-count { flex: none; margin-left: auto; color: #888; font-size: 13px; }
+        .browse-filters {
+            padding: 6px 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+        .browse-frow { display: flex; align-items: flex-start; gap: 14px; padding: 8px 0; }
+        .browse-frow + .browse-frow { border-top: 1px dashed rgba(255, 255, 255, 0.06); }
+        .browse-flabel { flex: none; width: 2.6em; line-height: 30px; color: #999; font-size: 13px; letter-spacing: 1px; }
+        .browse-fopts { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
+        .browse-fopt {
+            height: 30px;
+            padding: 0 12px;
+            border-radius: 15px;
+            border: 1px solid transparent;
+            background: none;
+            color: #bbb;
+            font-size: 13px;
+            white-space: nowrap;
+            cursor: pointer;
+            transition: color 0.15s, background 0.15s, border-color 0.15s;
+        }
+        .browse-fopt:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+        .browse-fopt.active { color: #fff; font-weight: 600; background: rgba(229, 9, 20, 0.2); border-color: rgba(229, 9, 20, 0.6); }
+        .browse-kwhint { margin-top: 10px; color: #999; font-size: 12px; }
+        .browse-link {
+            border: 0;
+            background: none;
+            padding: 8px 4px;
+            margin: -8px -2px;
+            color: #ff6b6b;
+            font-size: 12px;
+            text-decoration: underline;
+            text-underline-offset: 3px;
+            cursor: pointer;
+        }
+        .browse-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(var(--card-w, 150px), 1fr));
+            gap: 26px 16px;
+            margin-top: 26px;
+        }
+        /* scroll-margin-top:遥控器把焦点卡片滚进视野时,别停在顶上摘要条下面 */
+        .browse-card { min-width: 0; cursor: pointer; scroll-margin-top: 72px; transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1); }
+        @media (hover: hover) {
+            .browse-card:hover { transform: translateY(-6px); }
+            .browse-card:hover .poster-wrap { box-shadow: 0 14px 32px rgba(0, 0, 0, 0.7), 0 0 0 2px var(--accent), 0 0 22px 3px rgba(229, 9, 20, 0.5); }
+        }
+        /* 卡片只在 TV 模式可聚焦:焦点画在海报上,不要全站 [tabindex] 红框框住整张卡。
+           用 :focus 不用 :focus-visible —— 老 WebView(Chromium < 86,不少电视盒子)不认,整条规则会被丢掉,焦点就完全看不见了 */
+        .browse-card:focus { outline: none !important; box-shadow: none !important; transform: translateY(-6px); }
+        .browse-card:focus .poster-wrap { box-shadow: 0 14px 32px rgba(0, 0, 0, 0.7), 0 0 0 3px #fff, 0 0 22px 3px rgba(229, 9, 20, 0.6); }
+        .browse-card.is-skel { cursor: default; pointer-events: none; }
+        .browse-card .skel-line { width: 80%; height: 12px; margin: 12px auto 0; border-radius: 6px; background: #222; }
+        .browse-card .skel-line.short { width: 40%; height: 10px; margin-top: 8px; }
+        .browse-foot { min-height: 80px; display: flex; align-items: center; justify-content: center; padding: 30px 0 10px; }
+        .browse-state { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; color: #aaa; font-size: 14px; }
+        .browse-state.muted { color: #888; font-size: 13px; }
+        .browse-btn {
+            height: 36px;
+            padding: 0 20px;
+            border-radius: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            background: rgba(255, 255, 255, 0.06);
+            color: #eee;
+            font-size: 13px;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+        }
+        .browse-btn:hover { color: #fff; background: rgba(229, 9, 20, 0.18); border-color: rgba(229, 9, 20, 0.6); }
+        .browse-empty { padding: 30px 0; text-align: center; color: #888; }
+        .browse-empty > i { margin-bottom: 16px; font-size: 44px; color: #333; }
+        .browse-empty-t { margin-bottom: 6px; color: #bbb; font-size: 16px; }
+        .browse-empty-s { margin-bottom: 18px; font-size: 13px; }
+        .browse-empty-btns { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; }
+        /* 筛选区滚出屏幕后顶上的摘要条 */
+        .browse-sticky {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1002;
             display: flex;
             align-items: center;
-            justify-content: center;
+            gap: 12px;
+            padding: 10px 5%;
+            padding-top: calc(10px + env(safe-area-inset-top, 0px));
+            background: rgba(20, 20, 20, 0.96);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+            animation: browse-sticky-in 0.22s ease-out;
+        }
+        @keyframes browse-sticky-in { from { transform: translateY(-100%); } to { transform: none; } }
+        .browse-sticky-back {
+            flex: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.05);
             color: #fff;
-            font-size: 20px;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+        }
+        .browse-sticky-main {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 0;
+            border: 0;
+            background: none;
+            color: #fff;
+            text-align: left;
+            cursor: pointer;
+        }
+        .browse-sticky-text { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .browse-sticky-edit { flex: none; color: #ff6b6b; font-size: 13px; }
+        /* 电视(1080p 盒子多按 960×540 排版):筛选区收紧,首屏能露出第一排海报 */
+        body.tv-mode .browse-top { margin-bottom: 12px; }
+        body.tv-mode .browse-frow { padding: 4px 0; }
+        body.tv-mode .browse-grid { margin-top: 18px; }
+        @media (max-width: 768px) {
+            .browse-page { padding: 0 4% 20px; }
+            .browse-top { gap: 12px; margin-bottom: 14px; }
+            .browse-titlebar { flex-basis: 100%; gap: 12px; }
+            .browse-title { font-size: 1.25rem; }
+            .browse-filters { padding: 4px 10px; border-radius: 12px; }
+            .browse-frow { gap: 8px; padding: 6px 0; align-items: center; }
+            .browse-flabel { width: 2.4em; line-height: 30px; font-size: 12px; }
+            .browse-fopts {
+                flex-wrap: nowrap;
+                overflow-x: auto;
+                scrollbar-width: none;
+                -webkit-overflow-scrolling: touch;
+                -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+                mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+            }
+            .browse-fopts::-webkit-scrollbar { display: none; }
+            .browse-fopts::after { content: ''; flex: 0 0 18px; }
+            .browse-fopt { flex: none; height: 30px; padding: 0 10px; }
+            /* 平板竖屏一排 4~5 张;手机 3 张(和常见视频 App 一样),特大字号时 2 张 */
+            .browse-grid { gap: 18px 10px; margin-top: 18px; grid-template-columns: repeat(auto-fill, minmax(calc(130px * var(--ui-scale, 1)), 1fr)); }
+        }
+        @media (max-width: 480px) {
+            .browse-grid { grid-template-columns: repeat(auto-fill, minmax(calc(100px * var(--ui-scale, 1)), 1fr)); }
+        }
+
+        /* 🗂️「全部分类」入口 + 分类大全页 */
+        .cat-tab.cat-tab-all { color: #fff; border-color: rgba(229, 9, 20, 0.55); background: rgba(229, 9, 20, 0.12); }
+        .cat-tab.cat-tab-all:hover { background: rgba(229, 9, 20, 0.22); }
+        /* 手机:6 个按钮一行放下(360px 宽):「全部分类」只留图标,其余收紧 */
+        @media (max-width: 480px) {
+            .cat-tab.cat-tab-all { padding: 0 11px; }
+            .cat-tab.cat-tab-all i { display: inline-block; font-size: 14px; opacity: 1; }
+            .cat-tab-all-l { display: none; }
+        }
+        @media (max-width: 400px) {
+            .cat-tabs { gap: 4px; }
+            .cat-tab, .browse-types .cat-tab { padding: 0 8px; font-size: 13px; }
+        }
+        .catdir-page { padding: 0 5% 30px; min-height: 60vh; }
+        .catdir-head { display: flex; align-items: center; gap: 16px; margin: 4px 0 22px; }
+        .catdir-heading { min-width: 0; }
+        .catdir-sub { margin-top: 6px; color: #999; font-size: 13px; }
+        .catdir-section { margin-bottom: 22px; }
+        .catdir-section-title { margin-bottom: 12px; color: #ddd; font-size: 15px; font-weight: 700; }
+        .catdir-section-title i { margin-right: 6px; color: #ff6b35; }
+        /* 16 个入口:宽屏 8 列 / 窄一些 4 列,都正好排满(自动列数会剩最后一行孤零零一个) */
+        .catdir-hot { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px; }
+        @media (max-width: 1280px) { .catdir-hot { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        .catdir-tile {
+            position: relative;
+            overflow: hidden;
+            height: 72px;
+            padding: 0 16px;
+            border: 0;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-align: left;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+        }
+        .catdir-tile-l { position: relative; line-height: 1.25; }
+        .catdir-tile i { position: absolute; right: -4px; bottom: -10px; font-size: 54px; opacity: 0.22; transform: rotate(-12deg); }
+        @media (hover: hover) {
+            .catdir-tile:hover { transform: translateY(-3px); box-shadow: 0 12px 26px rgba(0, 0, 0, 0.5); filter: brightness(1.08); }
+        }
+        .catdir-tile:focus:not(:focus-visible) { outline: none !important; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35) !important; }
+        .catdir-card {
+            margin-bottom: 16px;
+            padding: 14px 18px 8px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.07);
+        }
+        .catdir-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+        .catdir-card-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #e50914, #ff4d5a);
+            color: #fff;
+            font-size: 14px;
+        }
+        .catdir-card-title { color: #fff; font-size: 17px; font-weight: 700; }
+        .catdir-card-head .catnav-all { margin-left: auto; }
+        .catdir-card .catnav-row { align-items: flex-start; }
+        .catdir-chips { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+        @media (max-width: 768px) {
+            .catdir-page { padding: 0 4% 24px; }
+            .catdir-head { gap: 12px; margin-bottom: 16px; }
+            .catdir-hot { gap: 8px; }
+            .catdir-tile { height: 54px; padding: 0 10px; border-radius: 12px; font-size: 13px; letter-spacing: 0; }
+            .catdir-tile i { font-size: 36px; }
+            .catdir-card { padding: 12px 12px 6px; border-radius: 14px; }
+            .catdir-chips { gap: 6px; }
+            .catdir-chips .cat-chip { height: 30px; padding: 0 11px; }
         }
 
         /* 列表通用 */
@@ -2050,6 +2397,11 @@
             /* 使用 isolation 创建独立的层叠上下文 */
             isolation: isolate;
         }
+
+        /* 🧩 首页板块顺序可调:间距不能再按"上面是谁"写死。特殊板块统一上 48 / 下 44,和分类栏(下 44)、
+           榜单行(下 40)怎么挨着,外边距合并后都是 40~48;排第一的块离搜索框 60 */
+        .home-flow > .home-sec { margin-top: 48px; margin-bottom: 44px; }
+        .home-flow > .home-first { margin-top: 60px; }
 
         /* 分类标题与排序切换 */
         .section-title i.sort-toggle-icon {
@@ -3614,6 +3966,71 @@
             background: rgba(255, 255, 255, 0.2);
         }
 
+        /* ⚙️ 偏好设置弹窗:最高到屏幕高度,标题栏固定,内容区在弹窗里滚动。
+           (以前整个弹窗按内容撑高再居中,矮屏笔记本上上下都顶出屏幕,标题和最后几项够不着也滚不到) */
+        .settings-modal {
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 40px);
+            max-height: calc(100dvh - 40px);
+        }
+        .settings-head { flex: none; padding: 20px 64px 14px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+        .settings-h { margin: 0; color: #fff; font-size: 1.35rem; font-weight: 600; line-height: 1.3; }
+        .settings-h i { margin-right: 10px; color: #e50914; }
+        .settings-modal .info-modal-close { top: 13px; right: 14px; }
+        .settings-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 24px 20px; }
+        .set-row {
+            display: flex; justify-content: space-between; align-items: center; gap: 16px;
+            padding: 14px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        button.set-row { width: 100%; background: none; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); color: inherit; font: inherit; text-align: left; }
+        .set-row.is-link { cursor: pointer; }
+        .set-block { padding: 14px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+        .set-title { display: block; color: #fff; font-size: 15px; font-weight: 500; }
+        .set-title i { margin-right: 8px; color: #e50914; }
+        .set-desc { display: block; color: #888; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+        .set-tip {
+            margin-top: 18px; padding: 12px 14px; border-radius: 10px; color: #ff6b6b; font-size: 13px;
+            background: rgba(229, 9, 20, 0.1); border: 1px solid rgba(229, 9, 20, 0.2);
+        }
+        .set-tip i { margin-right: 8px; }
+        /* 🧩 首页板块:每行 图标 名称 ↑ ↓ 开关 */
+        .home-layout { list-style: none; margin: 10px 0 0; padding: 0; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; overflow: hidden; }
+        .home-layout-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; background: rgba(255, 255, 255, 0.03); }
+        .home-layout-item + .home-layout-item { border-top: 1px solid rgba(255, 255, 255, 0.06); }
+        .home-layout-ic { width: 18px; text-align: center; color: #e50914; font-size: 13px; }
+        .home-layout-name { flex: 1; min-width: 0; color: #eee; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .home-layout-item.off .home-layout-ic, .home-layout-item.off .home-layout-name { opacity: 0.4; }
+        .home-layout-mv {
+            flex: none; width: 32px; height: 32px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12);
+            background: rgba(255, 255, 255, 0.05); color: #ccc; font-size: 12px; cursor: pointer;
+            display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s;
+        }
+        .home-layout-mv:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: #fff; }
+        .home-layout-mv:disabled { opacity: 0.3; cursor: default; }
+        .home-layout-item .settings-switch { margin-left: 6px; }
+        .home-layout-reset {
+            margin-top: 10px; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14);
+            background: transparent; color: #bbb; font-size: 12px; cursor: pointer;
+        }
+        .home-layout-reset:hover:not(:disabled) { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+        .home-layout-reset:disabled { opacity: 0.4; cursor: default; }
+        body.tv-mode .home-layout-mv { width: 40px; height: 40px; font-size: 14px; }
+        /* 矮屏(小屏笔记本、横屏手机):标题栏和行距收紧,一屏多放几项 */
+        @media (max-height: 760px) {
+            .settings-head { padding: 13px 56px 10px 20px; }
+            .settings-h { font-size: 1.2rem; }
+            .settings-modal .info-modal-close { top: 8px; right: 10px; }
+            .settings-body { padding: 2px 20px 14px; }
+            .set-row, .set-block { padding: 10px 0; }
+            .home-layout-item { padding-top: 4px; padding-bottom: 4px; }
+        }
+        @media (max-width: 480px) {
+            .settings-head { padding: 16px 56px 12px 18px; }
+            .settings-body { padding: 2px 18px 16px; }
+        }
+
         .info-modal-backdrop {
             position: absolute;
             top: 0;
@@ -4363,7 +4780,7 @@
 
     <div id="app" v-cloak>
 
-        <nav class="navbar-custom" v-show="!searched">
+        <nav class="navbar-custom" v-show="!offHome">
             <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
                     src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">视界 <span
                     style="font-size:12px; color:#666; font-weight:normal; margin-left: 2px;">MAX</span></div>
@@ -4380,7 +4797,7 @@
 
         <!-- 1. Hero Carousel -->
         <div id="heroCarousel" class="carousel slide carousel-fade" data-bs-ride="carousel" data-bs-interval="6000"
-            v-if="!searched">
+            v-if="!searched" v-show="!browse.open && !catDirOpen">
             <div class="carousel-inner" v-if="heroList.length > 0">
                 <div class="carousel-item" v-for="(item, index) in heroList" :key="index"
                     :class="{ active: index === 0 }">
@@ -4411,19 +4828,22 @@
 
         <!-- 2. Search -->
         <div class="search-section"
-            :style="{ marginTop: searched ? '60px' : '-35px', position: searched ? 'relative' : 'sticky' }">
-            <div class="search-box-wrapper" :class="{ 'compact': !searched && pastCompactThreshold }">
-                <i class="fas fa-search search-icon" @click="doSearch"></i>
-                <input type="text" v-model="keyword" @keyup.enter="doSearch" @input="debouncedSearch"
-                    class="search-input" placeholder="输入片名或剧集名称...">
+            :style="{ marginTop: offHome ? (isTVMode ? '20px' : '60px') : '-35px', position: offHome ? 'relative' : 'sticky' }">
+            <div class="search-box-wrapper" :class="{ 'compact': !offHome && pastCompactThreshold }">
+                <i class="fas fa-search search-icon" @click="submitSearch(true)"></i>
+                <input type="text" v-model="keyword" @keyup.enter="submitSearch(true)" @input="debouncedSearch"
+                    class="search-input" placeholder="输入片名或分类（如 泰剧、韩综）">
             </div>
         </div>
 
         <!-- 首页内容区：用 v-show 而非 v-if，进出搜索只切换 display，避免每次销毁/重建 ~400 张海报卡导致卡顿 -->
-        <div v-show="!searched">
-            <!-- 🕐 观看历史 (最上方) -->
-            <div class="section-container animate__animated animate__fadeInUp" v-if="watchHistory.length > 0"
-                style="margin-top: 60px; margin-bottom: 10px;">
+        <div v-show="!offHome" class="home-flow">
+            <!-- 🧩 首页各板块按偏好设置里的顺序 / 开关排(homeBlocks:开着且有内容的板块,后面接其余分类榜单)。
+                 第一个块上边距大一些(home-first);板块里的 ref 在 v-for 里是数组,取用处都要先取 [0] -->
+            <template v-for="({ id, k, key, config }, bi) in homeBlocks" :key="id">
+            <!-- 🕐 观看历史 -->
+            <div v-if="k === 'history'" class="section-container home-sec animate__animated animate__fadeInUp"
+                :class="{ 'home-first': bi === 0 }">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #667eea, #764ba2);"></div>
                     <div class="section-title"><i class="fas fa-history"></i> 继续观看</div>
@@ -4486,8 +4906,8 @@
             </div>
 
             <!-- ⭐ 我的收藏(追剧 + 更新提醒):服务器没开收藏(无 sqlite / Vercel)或一部都没收藏时整段隐藏 -->
-            <div class="section-container animate__animated animate__fadeInUp" v-if="favoritesEnabled && favList.length > 0"
-                :style="{ marginTop: watchHistory.length ? '48px' : '60px', marginBottom: '10px' }">
+            <div v-else-if="k === 'fav'" class="section-container home-sec animate__animated animate__fadeInUp"
+                :class="{ 'home-first': bi === 0 }">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #ff4b6e, #e50914);"></div>
                     <div class="section-title"><i class="fas fa-heart"></i> 我的收藏</div>
@@ -4533,8 +4953,8 @@
             </div>
 
             <!-- ✨ 为你推荐：基于观看历史的 TMDB 推荐(无历史/无结果时整段隐藏) -->
-            <div class="section-container animate__animated animate__fadeInUp" v-if="recommendList.length > 0"
-                style="margin-top: 48px; margin-bottom: 44px;">
+            <div v-else-if="k === 'recommend'" class="section-container home-sec animate__animated animate__fadeInUp"
+                :class="{ 'home-first': bi === 0 }" ref="recommendSection">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #f5af19, #f12711);"></div>
                     <div class="section-title"><i class="fas fa-magic"></i> 为你推荐</div>
@@ -4595,8 +5015,8 @@
             </div>
 
             <!-- 👥 大家都在看：站内实测观看统计(≥2 个不同用户看过才上榜,只给汇总);不足 4 部整段隐藏 -->
-            <div class="section-container animate__animated animate__fadeInUp" v-if="popularList.length >= 4"
-                style="margin-top: 48px; margin-bottom: 44px;">
+            <div v-else-if="k === 'popular'" class="section-container home-sec animate__animated animate__fadeInUp"
+                :class="{ 'home-first': bi === 0 }">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #00c6ff, #0072ff);"></div>
                     <div class="section-title"><i class="fas fa-users"></i> 大家都在看</div>
@@ -4622,8 +5042,8 @@
             </div>
 
             <!-- 📺 直播频道：主页一行(干净，无副标题/筛选；分类+全部频道在播放页 grid)。关闭/无数据时隐藏 -->
-            <div class="section-container animate__animated animate__fadeInUp" v-if="liveEnabled && liveChannels.length > 0"
-                style="margin-top: 48px; margin-bottom: 44px;">
+            <div v-else-if="k === 'live'" class="section-container home-sec animate__animated animate__fadeInUp"
+                :class="{ 'home-first': bi === 0 }">
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #e50914, #ff6a00);"></div>
                     <div class="section-title"><i class="fas fa-tower-broadcast"></i> 直播频道</div>
@@ -4672,19 +5092,42 @@
                 </div>
             </div>
 
-            <!-- 分类导航栏 -->
-            <div class="category-nav-container animate__animated animate__fadeInUp" style="margin-bottom: 40px;">
-                <div class="category-item" v-for="item in categories" :key="item.name" @click="handleCatClick(item)">
-                    <div class="cat-icon" :style="{ background: item.color }">
-                        <i :class="['fas', item.icon]"></i>
+            <!-- 🗂️ 分类栏:上面一行切大类(只换下面的标签)+ 随机盲盒 / 猜你想看两个快捷入口;下面是选中大类的地区、题材,点了进分类浏览页 -->
+            <section v-else-if="k === 'catnav'" class="catnav animate__animated animate__fadeInUp" :class="{ 'home-first': bi === 0 }" aria-label="分类">
+                <div class="catnav-head">
+                    <div class="cat-tabs" role="group" aria-label="大类">
+                        <!-- 「全部分类」进分类大全(所有大类的地区 / 题材 / 语言 / 年份一页看全);手机上只留图标 -->
+                        <button type="button" class="cat-tab cat-tab-all" @click="openCatDir()" aria-label="全部分类" title="全部分类">
+                            <i class="fas fa-table-cells-large" aria-hidden="true"></i><span class="cat-tab-all-l">全部分类</span></button>
+                        <button v-for="t in catTypes" :key="t.k" type="button" class="cat-tab"
+                            :class="{ active: catNavType === t.k }" :aria-pressed="catNavType === t.k ? 'true' : 'false'"
+                            @click="catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}</button>
                     </div>
-                    <span>{{ item.name }}</span>
+                    <div class="catnav-quick">
+                        <button v-if="!hideRandomRow" type="button" class="catnav-q is-random" @click="catNavJump('random')">
+                            <i class="fas fa-dice" aria-hidden="true"></i>随机盲盒</button>
+                        <button v-if="recommendList.length > 0 && homeOn.recommend" type="button" class="catnav-q is-rec" @click="catNavJump('recommend')">
+                            <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>猜你想看</button>
+                    </div>
                 </div>
-            </div>
-            <!-- 动态生成的榜单 Rows -->
-            <div class="section-container animate__animated animate__fadeInUp"
-                v-for="(config, key, index) in rowConfigs" :key="key" :ref="key + '-section'" :data-row-key="key"
-                v-show="!(key === 'randomRow' && hideRandomRow)">
+                <div class="catnav-body" role="group" :aria-label="catNavLabel">
+                    <div class="catnav-row" v-for="row in catNavRows" :key="catNavType + '-' + row.l">
+                        <span class="catnav-label">{{ row.l }}</span>
+                        <div class="catnav-chips">
+                            <button v-for="it in row.items" :key="it.l" type="button" class="cat-chip"
+                                @click="openBrowse({ type: catNavType, sel: it.sel })">{{ it.l }}</button>
+                        </div>
+                    </div>
+                    <div class="catnav-foot">
+                        <button type="button" class="catnav-all" @click="openBrowse({ type: catNavType, sel: {} })">
+                            全部{{ catNavLabel }}<span class="catnav-all-sub">按年份、评分筛选</span><i class="fas fa-arrow-right" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+            <!-- 动态生成的榜单 Rows(随机盲盒在设置里排的位置,其余分类榜单排在最后) -->
+            <div v-else class="section-container animate__animated animate__fadeInUp" :class="{ 'home-first': bi === 0 }"
+                :ref="key + '-section'" :data-row-key="key">
                 <!-- 标题区（始终显示，用于懒加载触发） -->
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line"></div>
@@ -4694,20 +5137,23 @@
                             @click.stop="config.sortMode ? toggleSortMode(key) : null"
                             :style="{ cursor: config.sortMode ? 'pointer' : 'default' }"
                             :title="config.sortMode ? '点击切换排序 (当前: ' + (config.sortMode === 'newest' ? '最新' : '热门') + ')' : ''"></i>
-                        {{ config.title }}
+                        <span class="section-title-text">{{ config.title }}</span>
                         <!-- 仅对 discover 分类显示排序角标 -->
                         <span v-if="config.sortMode && config.path.includes('/discover/')" class="sort-indicator">
                             {{ config.sortMode === 'newest' ? 'NEW' : 'HOT' }}
                         </span>
                     </div>
+                    <!-- 加载中提示 -->
+                    <span v-if="!rowLists[key]" style="margin-left: 15px; color: #666; font-size: 12px; white-space: nowrap;">
+                        <i class="fas fa-spinner fa-spin"></i> 加载中...
+                    </span>
+                    <!-- 🗂️ 进分类浏览页看这一类的全部(可再按地区/年份/评分筛) -->
+                    <button v-if="key !== 'randomRow'" type="button" class="expand-toggle row-all" @click="rowBrowse(key)"
+                        :aria-label="'查看全部：' + config.title">全部 <i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                     <span class="expand-toggle" :class="{ expanded: expandedRows[key] }" @click="toggleRowExpand(key)"
                         v-show="rowLists[key] && rowLists[key].length > 0">
                         {{ expandedRows[key] ? '收起' : '展开' }}
                         <i class="fas fa-chevron-down"></i>
-                    </span>
-                    <!-- 加载中提示 -->
-                    <span v-if="!rowLists[key]" style="margin-left: 15px; color: #666; font-size: 12px;">
-                        <i class="fas fa-spinner fa-spin"></i> 加载中...
                     </span>
                 </div>
                 <!-- 内容区（有数据时显示） -->
@@ -4766,6 +5212,131 @@
                     </div>
                 </template>
             </div>
+            </template>
+        </div>
+
+        <!-- 🗂️ 分类大全(首页「全部分类」进来):热门入口 + 每个大类的地区 / 题材 / 语言 / 年份,点哪个都进分类浏览页;
+             从浏览页返回回到这里原位置 -->
+        <div class="catdir-page" v-if="catDirOpen" v-show="!browse.open && !searched">
+            <div class="catdir-head">
+                <button type="button" ref="catDirBack" class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2 browse-back"
+                    @click="closeCatDir()" aria-label="返回首页">
+                    <i class="fas fa-arrow-left me-0 me-md-2" aria-hidden="true"></i><span class="d-none d-md-inline">返回首页</span>
+                </button>
+                <div class="catdir-heading">
+                    <h2 class="browse-title">分类大全</h2>
+                    <div class="catdir-sub">按类型、地区、题材、语言、年份找片</div>
+                </div>
+            </div>
+            <section class="catdir-section" aria-label="热门分类">
+                <div class="catdir-section-title"><i class="fas fa-fire" aria-hidden="true"></i>热门分类</div>
+                <div class="catdir-hot">
+                    <button v-for="h in catDir.hot" :key="h.l" type="button" class="catdir-tile" :style="{ background: h.bg }"
+                        @click="openBrowse({ type: h.type, sel: h.sel })">
+                        <span class="catdir-tile-l">{{ h.l }}</span><i :class="['fas', h.icon]" aria-hidden="true"></i>
+                    </button>
+                </div>
+            </section>
+            <section class="catdir-card" v-for="t in catDir.types" :key="t.k" :aria-label="t.l">
+                <div class="catdir-card-head">
+                    <span class="catdir-card-icon"><i :class="['fas', t.icon]" aria-hidden="true"></i></span>
+                    <span class="catdir-card-title">{{ t.l }}</span>
+                    <button type="button" class="catnav-all" @click="openBrowse({ type: t.k, sel: {} })">全部{{ t.l }}<i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+                </div>
+                <div class="catnav-row" v-for="row in t.rows" :key="t.k + '-' + row.l">
+                    <span class="catnav-label">{{ row.l }}</span>
+                    <div class="catdir-chips">
+                        <button v-for="it in row.items" :key="it.l" type="button" class="cat-chip" @click="openBrowse({ type: t.k, sel: it.sel })">{{ it.l }}</button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- 🗂️ 分类浏览页(分类栏标签 / 榜单「全部」/ 搜「泰剧」这类分类词 / 分类大全进来)。从这里点海报去搜索时只是藏起来:
+             返回时筛选、已加载的片单和滚动位置都还在 -->
+        <div class="browse-page" v-if="browse.open" v-show="!searched">
+            <div class="browse-head" ref="browseHead">
+                <!-- 宽屏:标题和大类标签并成一行(电视 960×540 首屏才露得出海报);窄屏分两行 -->
+                <div class="browse-top">
+                    <div class="browse-titlebar">
+                        <button type="button" ref="browseBack" class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2 browse-back"
+                            @click="closeBrowse()" :aria-label="browse.fromDir ? '返回分类大全' : '返回首页'">
+                            <i class="fas fa-arrow-left me-0 me-md-2" aria-hidden="true"></i><span class="d-none d-md-inline">{{ browse.fromDir ? '返回分类大全' : '返回首页' }}</span>
+                        </button>
+                        <h2 class="browse-title">{{ browseTitle }}</h2>
+                        <span class="browse-count" v-if="browse.total > 0">约 {{ browseCountLabel(browse.total) }} 部</span>
+                    </div>
+                    <div class="cat-tabs browse-types" role="group" aria-label="大类">
+                        <button v-for="t in catTypes" :key="t.k" type="button" class="cat-tab"
+                            :class="{ active: browse.type === t.k }" :aria-pressed="browse.type === t.k ? 'true' : 'false'"
+                            @click="setBrowseType(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}</button>
+                    </div>
+                </div>
+                <div class="browse-filters">
+                    <div class="browse-frow" v-for="g in browseGroups" :key="browse.type + '-' + g.k" role="group" :aria-label="g.l">
+                        <span class="browse-flabel">{{ g.l }}</span>
+                        <div class="browse-fopts">
+                            <button v-for="op in g.opts" :key="op.k" type="button" class="browse-fopt"
+                                :class="{ active: browse.sel[g.k] === op.k }" :aria-pressed="browse.sel[g.k] === op.k ? 'true' : 'false'"
+                                @click="setBrowseFilter(g.k, op.k)">{{ op.l }}</button>
+                        </div>
+                    </div>
+                </div>
+                <div v-if="browse.keyword" class="browse-kwhint">
+                    已按分类「{{ browse.keyword }}」显示，要找叫这个名字的片？
+                    <button type="button" class="browse-link" @click="browseSearchKeyword">按片名搜索</button>
+                </div>
+            </div>
+
+            <div class="browse-grid">
+                <div class="browse-card" v-for="item in browse.items" :key="'b-' + item.id" :data-bid="item.id"
+                    :tabindex="isTVMode ? 0 : null" @click="browsePick(item)" @keydown.enter.prevent="browsePick(item)">
+                    <div class="poster-wrap">
+                        <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" alt=""
+                            @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
+                        <div class="rating-badge" v-if="item.vote_average"><i class="fas fa-star text-warning"></i> {{
+                            item.vote_average.toFixed(1) }}</div>
+                    </div>
+                    <div class="movie-name">{{ item.title || item.name }}</div>
+                    <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0] }}</div>
+                </div>
+                <template v-if="browse.loading && !browse.items.length">
+                    <div class="browse-card is-skel" v-for="n in 12" :key="'sk' + n" aria-hidden="true">
+                        <div class="poster-wrap"></div>
+                        <div class="skel-line"></div>
+                        <div class="skel-line short"></div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="browse-foot" ref="browseFoot" aria-live="polite">
+                <div v-if="browse.loading && browse.items.length" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载更多…</div>
+                <div v-else-if="browse.error" class="browse-state">
+                    加载失败，可能是网络不稳定
+                    <button type="button" class="browse-btn" @click="browseRetry"><i class="fas fa-rotate-right" aria-hidden="true"></i> 重试</button>
+                </div>
+                <div v-else-if="browse.done && !browse.items.length" class="browse-empty">
+                    <i class="fas fa-film" aria-hidden="true"></i>
+                    <div class="browse-empty-t">没有符合条件的作品</div>
+                    <div class="browse-empty-s">换个年份或排序试试，或者放宽筛选条件</div>
+                    <div class="browse-empty-btns">
+                        <button type="button" class="browse-btn" @click="browseClearFilters">清除筛选</button>
+                        <button v-if="browse.keyword" type="button" class="browse-btn" @click="browseSearchKeyword">按片名搜索「{{ browse.keyword }}」</button>
+                    </div>
+                </div>
+                <div v-else-if="browse.done" class="browse-state muted">已经到底了 · 共 {{ browse.items.length }} 部</div>
+                <button v-else-if="!browse.loading" type="button" class="browse-btn" @click="browseMore(true)">加载更多</button>
+            </div>
+        </div>
+
+        <!-- 🗂️ 浏览页往下翻、筛选区滚出屏幕后顶上这条:当前筛选一览,点一下回到顶部改筛选 -->
+        <!--   遥控器不进这条(tabindex -1):它压在第一排海报上面,按「上」会先跳进它;遥控器用返回键退出、往上走回筛选区 -->
+        <div class="browse-sticky" v-if="browse.open && !searched && browseStuck">
+            <button type="button" class="browse-sticky-back" :tabindex="isTVMode ? -1 : null" @click="closeBrowse()" :aria-label="browse.fromDir ? '返回分类大全' : '返回首页'"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
+            <button type="button" class="browse-sticky-main" :tabindex="isTVMode ? -1 : null" @click="browseToTop">
+                <span class="browse-sticky-text">{{ browseSummary }}</span>
+                <span class="browse-sticky-edit"><i class="fas fa-sliders" aria-hidden="true"></i> 筛选</span>
+            </button>
         </div>
 
         <!-- Search Results -->
@@ -4773,7 +5344,7 @@
             <div class="d-flex align-items-center gap-2 mb-5 mt-2">
                 <button class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2" @click="goHome"
                     style="color: #fff; border-color: rgba(255,255,255,0.3);">
-                    <i class="fas fa-arrow-left me-0 me-md-2"></i><span class="d-none d-md-inline">返回首页</span>
+                    <i class="fas fa-arrow-left me-0 me-md-2"></i><span class="d-none d-md-inline">{{ browse.open || catDirOpen ? '返回分类' : '返回首页' }}</span>
                 </button>
                 <div class="section-header mb-0 ms-3 ms-md-4">
                     <div class="section-line"></div>
@@ -4871,15 +5442,15 @@
             </div>
         </div>
 
-        <!-- 设置弹窗 -->
+        <!-- 设置弹窗:限高,标题栏固定,内容在弹窗里滚动(矮屏笔记本上以前整个弹窗上下顶出屏幕) -->
         <div class="info-modal-overlay" v-if="showSettingsModal" @click.self="showSettingsModal = false">
-            <div class="info-modal" style="max-width: 450px;">
-                <button class="info-modal-close" @click="showSettingsModal = false"><i
-                        class="fas fa-times"></i></button>
-                <div style="padding: 30px;">
-                    <h2 style="color: #fff; margin-bottom: 25px; font-size: 1.5rem;">
-                        <i class="fas fa-cog" style="margin-right: 10px; color: #e50914;"></i>偏好设置
-                    </h2>
+            <div class="info-modal settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+                <div class="settings-head">
+                    <h2 id="settings-title" class="settings-h"><i class="fas fa-cog" aria-hidden="true"></i>偏好设置</h2>
+                    <button class="info-modal-close" @click="showSettingsModal = false" aria-label="关闭"><i
+                            class="fas fa-times" aria-hidden="true"></i></button>
+                </div>
+                <div class="settings-body">
 
                     <!-- V2Board 账户信息 -->
                     <div v-if="v2boardAccount"
@@ -4911,25 +5482,34 @@
                         </div>
                     </div>
 
-                    <!-- 随机盲盒开关 -->
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">隐藏随机盲盒</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">关闭首页的随机推荐板块</div>
-                        </div>
-                        <label class="settings-switch">
-                            <input type="checkbox" v-model="hideRandomRow" @change="saveSettings('hideRandomRow')">
-                            <span class="settings-slider"></span>
-                        </label>
+                    <!-- 🧩 首页板块:顺序(上移 / 下移)+ 显示开关,跨设备同步;站长没开的直播 / 收藏不列 -->
+                    <div class="set-block">
+                        <div class="set-title" id="home-layout-title">首页板块</div>
+                        <div class="set-desc">用箭头调整顺序，关掉的板块不在首页显示；没有内容的板块会自动隐藏</div>
+                        <ul class="home-layout" aria-labelledby="home-layout-title">
+                            <li v-for="(s, i) in homeLayoutView" :key="s.k" class="home-layout-item" :class="{ off: !s.on }">
+                                <i :class="['fas', s.icon, 'home-layout-ic']" aria-hidden="true"></i>
+                                <span class="home-layout-name">{{ s.l }}</span>
+                                <button type="button" class="home-layout-mv" :data-home-mv="s.k + ':-1'" :disabled="i === 0"
+                                    @click="moveHomeSection(s.k, -1)" :aria-label="'上移' + s.l" title="上移"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>
+                                <button type="button" class="home-layout-mv" :data-home-mv="s.k + ':1'" :disabled="i === homeLayoutView.length - 1"
+                                    @click="moveHomeSection(s.k, 1)" :aria-label="'下移' + s.l" title="下移"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                                <label class="settings-switch" :title="s.on ? '显示中' : '已隐藏'">
+                                    <input type="checkbox" :checked="s.on" @change="toggleHomeSection(s.k, $event.target.checked)" :aria-label="'在首页显示' + s.l">
+                                    <span class="settings-slider"></span>
+                                </label>
+                            </li>
+                        </ul>
+                        <button type="button" class="home-layout-reset" :disabled="homeLayoutIsDefault" @click="resetHomeLayout">
+                            <i class="fas fa-rotate-left" aria-hidden="true"></i> 恢复默认</button>
+                        <div class="visually-hidden" aria-live="polite">{{ homeLayoutMsg }}</div>
                     </div>
 
                     <!-- NSFW 过滤开关 -->
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="set-row">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">过滤成人内容</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">过滤随机盲盒中的不适宜内容</div>
+                            <div class="set-title">过滤成人内容</div>
+                            <div class="set-desc">过滤随机盲盒和分类浏览中的不适宜内容</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="filterNsfw" @change="saveSettings('filterNsfw')">
@@ -4938,22 +5518,20 @@
                     </div>
 
                     <!-- ⏭️ 跳过片头/片尾 -->
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="set-row">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">跳过按钮</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">播到片头/片尾时弹出跳过按钮（本地自动学习 + 全站共享标记）</div>
+                            <div class="set-title">跳过按钮</div>
+                            <div class="set-desc">播到片头/片尾时弹出跳过按钮（本地自动学习 + 全站共享标记）</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="introSkipShow" @change="saveSettings('introSkipShow')">
                             <span class="settings-slider"></span>
                         </label>
                     </div>
-                    <div
-                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="set-row">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;">自动跳过片头/片尾</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">不弹按钮，识别到片头直接跳过；识别到片尾直接切下一集</div>
+                            <div class="set-title">自动跳过片头/片尾</div>
+                            <div class="set-desc">不弹按钮，识别到片头直接跳过；识别到片尾直接切下一集</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="introSkipAuto" @change="saveSettings('introSkipAuto')">
@@ -4962,9 +5540,9 @@
                     </div>
 
                     <!-- 📐 封面/文字大小（等比缩放，几档，跨设备保存）-->
-                    <div style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                        <div style="color: #fff; font-size: 15px; font-weight: 500;">封面 / 文字大小</div>
-                        <div style="color: #888; font-size: 12px; margin: 4px 0 10px;">等比放大缩小封面图和文字，跨设备同步</div>
+                    <div class="set-block">
+                        <div class="set-title">封面 / 文字大小</div>
+                        <div class="set-desc" style="margin-bottom: 10px;">等比放大缩小封面图和文字，跨设备同步</div>
                         <div class="scale-seg">
                             <button v-for="lv in coverScaleLevels" :key="lv.v"
                                 :class="{ active: Math.abs(coverScale - lv.v) < 0.001 }" @click="setCoverScale(lv.v)">{{ lv.label }}</button>
@@ -4972,22 +5550,21 @@
                     </div>
 
                     <!-- 求片入口（站长配了 ADMIN_TOKEN 才显示）-->
-                    <div v-if="requestsEnabled"
-                        style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer;"
+                    <button v-if="requestsEnabled" type="button" class="set-row is-link"
                         @click="showSettingsModal = false; openRequestModal('')">
-                        <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-paper-plane" style="margin-right: 8px; color: #e50914;"></i>求片 / 我的求片</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">站内没有想看的剧？提交求片，站长会贴链接</div>
-                        </div>
-                        <i class="fas fa-chevron-right" style="color: #666;"></i>
-                    </div>
+                        <span>
+                            <span class="set-title"><i class="fas fa-paper-plane" aria-hidden="true"></i>求片 / 我的求片</span>
+                            <span class="set-desc">站内没有想看的剧？提交求片，站长会贴链接</span>
+                        </span>
+                        <i class="fas fa-chevron-right" style="color: #666;" aria-hidden="true"></i>
+                    </button>
 
                     <!-- 🔔 更新提醒推送(服务器开了 push 且浏览器支持才显示;iOS 只有"添加到主屏幕"后的 PWA 才有推送) -->
-                    <div v-if="pushUi !== 'hidden'" style="padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div v-if="pushUi !== 'hidden'" class="set-block">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-bell" style="margin-right: 8px; color: #e50914;"></i>更新提醒推送</div>
-                                <div style="color: #888; font-size: 12px; margin-top: 4px;">收藏的剧更新、求片有结果时发系统通知</div>
+                                <div class="set-title"><i class="fas fa-bell"></i>更新提醒推送</div>
+                                <div class="set-desc">收藏的剧更新、求片有结果时发系统通知</div>
                             </div>
                             <label v-if="pushUi === 'ok'" class="settings-switch">
                                 <input type="checkbox" :checked="pushSubscribed" :disabled="pushBusy" @change="togglePush($event)">
@@ -5007,10 +5584,10 @@
                     </div>
 
                     <!-- 📺 TV 模式(以前只在页脚) -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <div class="set-row">
                         <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-tv" style="margin-right: 8px; color: #e50914;"></i>TV 模式</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">电视 / 遥控器用：方向键导航，焦点放大</div>
+                            <div class="set-title"><i class="fas fa-tv"></i>TV 模式</div>
+                            <div class="set-desc">电视 / 遥控器用：方向键导航，焦点放大</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" :checked="isTVMode" @change="showSettingsModal = false; toggleTVMode()">
@@ -5019,22 +5596,18 @@
                     </div>
 
                     <!-- 🚪 退出登录(以前只在页脚) -->
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.1); cursor: pointer;"
+                    <button type="button" class="set-row is-link"
                         @click="showSettingsModal = false; confirmLogout()">
-                        <div>
-                            <div style="color: #fff; font-size: 15px; font-weight: 500;"><i class="fas fa-sign-out-alt" style="margin-right: 8px; color: #e50914;"></i>退出登录</div>
-                            <div style="color: #888; font-size: 12px; margin-top: 4px;">切换账号；本机观看历史会一并清除</div>
-                        </div>
-                        <i class="fas fa-chevron-right" style="color: #666;"></i>
-                    </div>
+                        <span>
+                            <span class="set-title"><i class="fas fa-sign-out-alt" aria-hidden="true"></i>退出登录</span>
+                            <span class="set-desc">切换账号；本机观看历史会一并清除</span>
+                        </span>
+                        <i class="fas fa-chevron-right" style="color: #666;" aria-hidden="true"></i>
+                    </button>
 
                     <!-- 提示信息 -->
-                    <div
-                        style="margin-top: 20px; padding: 15px; background: rgba(229, 9, 20, 0.1); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.2);">
-                        <div style="color: #ff6b6b; font-size: 13px;">
-                            <i class="fas fa-info-circle" style="margin-right: 8px;"></i>
-                            设置会自动保存，刷新页面后生效完整的过滤效果
-                        </div>
+                    <div class="set-tip">
+                        <i class="fas fa-info-circle" aria-hidden="true"></i>设置会自动保存，刷新页面后生效完整的过滤效果
                     </div>
                 </div>
             </div>
@@ -8247,6 +8820,482 @@
         })();
         // </dg-fav-sched-core>
 
+        // ========== 🗂️ 分类浏览(首页分类栏 / 分类浏览页 / 搜「泰剧」直达)的纯函数核心 ==========
+        //   scripts/catalog-test.mjs 按 <dg-catalog-core> 这对标记把整段抽出来在 node 里跑 —— 段内只用参数,不碰页面变量/DOM/网络。
+        //   片单全来自 TMDB /discover(经 /api/tmdb-proxy,语言固定 zh-CN),点海报照旧按片名去资源站搜。标签按真实数据定:
+        //   · 只做中文译名够多的地区:印度/菲律宾/越南剧热门前 60 部只有 6/8/3 部有中文名(资源站按中文名上架,搜不到);
+        //     泰剧热门前 60 部 57 部有中文名,抽 12 部去资源站搜到 10 部
+        //   · TMDB 剧集没有爱情/古装/仙侠/武侠/谍战这些类型 → 用关键词(KW)。古装、谍战的关键词各国通用,不选地区时只看华语(dq),
+        //     否则排在前面的是唐顿庄园、国土安全
+        //   · 票数门槛 vc:电影热门里几十票以下的欧美片混着不少情色片(TMDB 没标成人、也没打关键词),全局 ≥50 票;华语/日韩泰正经新片
+        //     只有 10~40 票,这几个地区放到 10。剧集新剧 0~1 票照样有中文名(国产剧开播当天 0 票),门槛 1。「高分」按评分倒排,门槛低了
+        //     会被几票的 10 分冷门霸榜;港剧、国产纪录片这类票数普遍少的,选项自带更低的门槛
+        //   · 成人过滤只排除 softcore / erotic movie / pink film / hentai / sexploitation 这几个关键词:adult animation、pornography、
+        //     ecchi、erotic 也打在《辛普森一家》《出租车司机》《无职转生》这些正经作品上
+        // <dg-catalog-core>
+        const DgCatalog = (() => {
+            const NSFW_KW = '155477|190370|159551|198385|10053';
+            // 片名黑名单只管 200 票以下的(擦边片都是几票到几十票;《性爱自修室》八千多票)
+            const NSFW_TITLE = /玉蒲团|蜜桃成熟|色欲|淫|情色|艳情|春宫|三级片|性爱|乱伦|走肾|裸体|恋欲|小姨子|嫂子的|继母的|姐姐的朋友|妈妈的朋友|朋友的(妈妈|母亲|姐姐|妹妹|妻子|老婆)|(年轻|漂亮|性感)的(妈妈|母亲|妻子|嫂子|阿姨|姐姐|妹妹)|拷问部/;
+            const NSFW_TITLE_MAX_VOTES = 200;
+            const TV_EX = '16,10764,10767,99,10763,10762';   // 剧集里去掉 动画 / 真人秀 / 脱口秀 / 纪录 / 新闻 / 儿童(各归各的大类)
+            const ZH = 'CN|HK|TW';
+            const EU = 'FR|DE|ES|IT|SE|DK|NO|BE|NL|PL|IE|PT|FI|AT|CH';
+            const ASIA_VC = { hot: 10, new: 3, top: 50 };   // 华语 / 日韩电影的票数门槛
+            // 末尾几个 3xxxxx 是 TMDB 上的中文关键词(谍战剧 / 古装剧 / 仙侠剧 / 穿越…),国产剧不少只打了这些
+            const KW = {
+                romance: '9840', costume: '195013|295029|15060|319304|379597|384651|192772|347945|379699', xianxia: '234890|384653|347944',
+                wuxia: '184656|384653|379597|384651|366002|366003', spy: '5265|470|220915|335028|309130|318771|364102', youth: '10683|6270|293194',
+                timeTravel: '4379|334003', medical: '208788', legal: '222517', school: '6270', isekai: '237451', mecha: '10046', disaster: '10617',
+                dating: '215119', cooking: '1918|10637|227635', travel: '9935|310315', music: '6383|8290|262705|251523',
+                nature: '18330|221355|9902', history: '282633|378429', food: '10637|307690|1918', science: '287067|325892|9882',
+                trueCrime: '33722|307587', biography: '5565',
+            };
+            const o = (k, l, q, extra) => Object.assign({ k, l, q: q || null }, extra || {});
+            const C = (code) => ({ with_origin_country: code });
+            const L = (code) => ({ with_original_language: code });   // TMDB 语言码:zh = 国语,cn = 粤语
+            // 大类:media = 默认接口;base = 固定参数;vc = 各排序的最低票数;sort = 默认排序(不写 = 最热)。
+            //   筛选组:k 进 sel、l 显示;all:false = 没有「全部」,第一个选项(k 为空)是默认。
+            //   选项:q = 默认接口的参数,m = 换到电影接口时的参数(动漫/纪录片选「电影」形式;不写就用 q);media = 选了它换接口;
+            //        dq = 别的选项没设这个键时才补上;vc = 自带的票数门槛,只降(各选项取最小),vcUp 只升(降完再取最大);
+            //        hidden = 只在被选中时出现(首页「日韩」那一行的「全部」)
+            //   nav = 首页分类栏这个大类下面的几行:g = 列出某组的全部选项,items = 自定的快捷标签 [显示名, sel]
+            const TYPES = [
+                {
+                    k: 'movie', l: '电影', icon: 'fa-film', media: 'movie', base: {}, vc: { hot: 50, new: 10, top: 100 },
+                    groups: [
+                        { k: 'region', l: '地区', opts: [
+                            o('cn', '华语', C(ZH), { vc: ASIA_VC }), o('mainland', '内地', C('CN'), { vc: ASIA_VC }),
+                            o('hk', '香港', C('HK'), { vc: ASIA_VC }), o('tw', '台湾', C('TW'), { vc: ASIA_VC }),
+                            o('us', '美国', C('US')), o('kr', '韩国', C('KR'), { vc: ASIA_VC }), o('jp', '日本', C('JP'), { vc: ASIA_VC }),
+                            o('th', '泰国', C('TH'), { vc: { hot: 10, new: 3, top: 30 } }),
+                            o('gb', '英国', C('GB')), o('fr', '法国', C('FR')), o('eu', '欧洲', C(EU)), o('in', '印度', C('IN')),
+                        ] },
+                        { k: 'genre', l: '题材', opts: [
+                            o('action', '动作', { with_genres: '28' }), o('comedy', '喜剧', { with_genres: '35' }),
+                            o('romance', '爱情', { with_genres: '10749' }), o('scifi', '科幻', { with_genres: '878' }),
+                            o('fantasy', '奇幻', { with_genres: '14' }), o('mystery', '悬疑', { with_genres: '9648' }),
+                            o('thriller', '惊悚', { with_genres: '53' }), o('horror', '恐怖', { with_genres: '27' }),
+                            o('crime', '犯罪', { with_genres: '80' }), o('drama', '剧情', { with_genres: '18' }),
+                            o('war', '战争', { with_genres: '10752' }), o('history', '历史', { with_genres: '36' }),
+                            o('wuxia', '武侠', { with_keywords: KW.wuxia }, { vc: { hot: 10, top: 20 } }), o('animation', '动画', { with_genres: '16' }),
+                            o('family', '家庭', { with_genres: '10751' }), o('adventure', '冒险', { with_genres: '12' }),
+                            o('disaster', '灾难', { with_keywords: KW.disaster }), o('music', '音乐', { with_genres: '10402' }),
+                        ] },
+                        // 电影各语种中文译名都够(热门前 40 部 34~40 部有中文名);粤语片有一千多部(少林足球、花样年华、重庆森林…)
+                        { k: 'lang', l: '语言', opts: [
+                            o('zh', '国语', L('zh'), { vc: ASIA_VC }), o('cn', '粤语', L('cn'), { vc: ASIA_VC }), o('en', '英语', L('en')),
+                            o('ko', '韩语', L('ko'), { vc: ASIA_VC }), o('ja', '日语', L('ja'), { vc: ASIA_VC }),
+                            o('th', '泰语', L('th'), { vc: { hot: 10, new: 3, top: 30 } }), o('fr', '法语', L('fr')), o('es', '西班牙语', L('es')),
+                            o('hi', '印地语', L('hi')), o('de', '德语', L('de')),
+                        ] },
+                    ],
+                    nav: [{ l: '地区', g: 'region' }, { l: '题材', g: 'genre' }],
+                },
+                {
+                    k: 'tv', l: '剧集', icon: 'fa-tv', media: 'tv', base: { without_genres: TV_EX }, vc: { hot: 1, new: 1, top: 15 },
+                    groups: [
+                        { k: 'region', l: '地区', opts: [
+                            o('cn', '国产', C('CN')), o('hk', '港剧', C('HK'), { vc: { top: 5 } }), o('tw', '台剧', C('TW')),
+                            o('kr', '韩剧', C('KR')), o('jp', '日剧', C('JP')), o('th', '泰剧', C('TH')),
+                            o('us', '美剧', C('US')), o('gb', '英剧', C('GB')), o('eu', '欧洲', C(EU)),
+                            o('krjp', '日韩', C('KR|JP'), { hidden: true }),
+                        ] },
+                        { k: 'genre', l: '题材', opts: [
+                            o('mystery', '悬疑', { with_genres: '9648' }), o('crime', '犯罪', { with_genres: '80' }),
+                            o('romance', '爱情', { with_keywords: KW.romance }), o('comedy', '喜剧', { with_genres: '35' }),
+                            o('costume', '古装', { with_keywords: KW.costume }, { dq: C(ZH), vc: { top: 8 } }),
+                            o('xianxia', '仙侠', { with_keywords: KW.xianxia }, { vc: { top: 5 } }),
+                            o('wuxia', '武侠', { with_keywords: KW.wuxia }, { vc: { top: 5 } }),
+                            o('spy', '谍战', { with_keywords: KW.spy }, { dq: C(ZH), vc: { top: 3 } }),
+                            o('youth', '青春', { with_keywords: KW.youth }, { dq: C(ZH) }), o('scifi', '科幻', { with_genres: '10765' }),
+                            o('action', '动作', { with_genres: '10759' }), o('timetravel', '穿越', { with_keywords: KW.timeTravel }),
+                            o('war', '战争', { with_genres: '10768' }), o('family', '家庭', { with_genres: '10751' }),
+                            o('medical', '医疗', { with_keywords: KW.medical }), o('legal', '律政', { with_keywords: KW.legal }),
+                        ] },
+                        // 剧集只放中文译名够的语种:法语/德语/俄语/印地语剧热门前 40 部只有 6~16 部有中文名
+                        { k: 'lang', l: '语言', opts: [
+                            o('zh', '国语', L('zh')), o('cn', '粤语', L('cn'), { vc: { top: 5 } }), o('en', '英语', L('en')),
+                            o('ko', '韩语', L('ko')), o('ja', '日语', L('ja')), o('th', '泰语', L('th')),
+                        ] },
+                    ],
+                    nav: [{ l: '地区', g: 'region' }, { l: '题材', g: 'genre' }],
+                },
+                {
+                    k: 'anime', l: '动漫', icon: 'fa-dragon', media: 'tv', base: { with_genres: '16' }, vc: { hot: 1, new: 1, top: 20 },
+                    groups: [
+                        { k: 'region', l: '地区', opts: [
+                            o('jp', '日本', C('JP')), o('cn', '国产', C('CN'), { vc: { top: 10 } }),
+                            o('west', '欧美', C('US|GB|FR|CA')), o('kr', '韩国', C('KR'), { vc: { top: 5 } }),
+                        ] },
+                        { k: 'form', l: '形式', all: false, opts: [o('', 'TV动画'), o('movie', '动画电影', null, { media: 'movie' })] },
+                        { k: 'genre', l: '题材', opts: [
+                            o('action', '热血', { with_genres: '10759' }, { m: { with_genres: '28' } }),
+                            o('fantasy', '奇幻', { with_genres: '10765' }, { m: { with_genres: '14' } }),
+                            o('comedy', '搞笑', { with_genres: '35' }),
+                            o('romance', '恋爱', { with_keywords: KW.romance }, { m: { with_genres: '10749' } }),
+                            o('school', '校园', { with_keywords: KW.school }), o('isekai', '异世界', { with_keywords: KW.isekai }),
+                            o('mystery', '悬疑', { with_genres: '9648' }), o('mecha', '机甲', { with_keywords: KW.mecha }),
+                            o('kids', '亲子', { with_genres: '10762' }, { m: { with_genres: '10751' } }),
+                        ] },
+                    ],
+                    nav: [
+                        { l: '分类', items: [['日本番剧', { region: 'jp' }], ['国漫', { region: 'cn' }], ['欧美动画', { region: 'west' }], ['动画电影', { form: 'movie' }]] },
+                        { l: '题材', g: 'genre' },
+                    ],
+                },
+                {
+                    k: 'variety', l: '综艺', icon: 'fa-microphone-lines', media: 'tv', base: { with_genres: '10764|10767' }, vc: { hot: 0, new: 0, top: 5 },
+                    groups: [
+                        { k: 'region', l: '地区', opts: [
+                            o('cn', '内地', C('CN'), { vc: { top: 3 } }), o('kr', '韩综', C('KR')), o('jp', '日综', C('JP'), { vc: { top: 2 } }),
+                            o('tw', '台综', C('TW'), { vc: { top: 2 } }), o('west', '欧美', C('US|GB')),
+                        ] },
+                        { k: 'genre', l: '类型', opts: [
+                            o('reality', '真人秀', { '!with_genres': '10764' }), o('talk', '脱口秀', { '!with_genres': '10767' }),
+                            o('dating', '恋爱', { with_keywords: KW.dating }), o('cooking', '美食', { with_keywords: KW.cooking }),
+                            o('travel', '旅行', { with_keywords: KW.travel }), o('music', '音乐', { with_keywords: KW.music }),
+                        ] },
+                    ],
+                    nav: [{ l: '地区', g: 'region' }, { l: '类型', g: 'genre' }],
+                },
+                {
+                    // 纪录片默认看「高分」:按热度排前面是《20/20》《前线》这类欧美新闻杂志,高分才是《地球脉动》《蓝色星球》
+                    k: 'doc', l: '纪录片', icon: 'fa-earth-asia', media: 'tv', base: { with_genres: '99' }, vc: { hot: 10, new: 3, top: 20 }, sort: 'top',
+                    groups: [
+                        { k: 'form', l: '形式', all: false, opts: [o('', '系列'), o('movie', '电影', null, { media: 'movie', m: { without_genres: '10402' }, vcUp: { top: 20 } })] },
+                        { k: 'region', l: '地区', opts: [
+                            o('cn', '国产', C(ZH), { vc: { hot: 1, new: 0, top: 3 } }), o('gb', '英国', C('GB')),
+                            o('us', '美国', C('US')), o('jp', '日本', C('JP'), { vc: { hot: 1, new: 0, top: 3 } }),
+                        ] },
+                        { k: 'genre', l: '题材', opts: [
+                            o('nature', '自然', { with_keywords: KW.nature }), o('history', '历史', { with_keywords: KW.history }, { m: { with_genres: '36' } }),
+                            o('food', '美食', { with_keywords: KW.food }, { vc: { top: 5 } }), o('science', '科学', { with_keywords: KW.science }),
+                            o('crime', '罪案', { with_keywords: KW.trueCrime }), o('people', '人物', { with_keywords: KW.biography }),
+                        ] },
+                    ],
+                    nav: [
+                        { l: '分类', items: [['国产', { region: 'cn' }], ['BBC · 英国', { region: 'gb' }], ['美国', { region: 'us' }], ['日本', { region: 'jp' }], ['纪录电影', { form: 'movie' }]] },
+                        { l: '题材', g: 'genre' },
+                    ],
+                },
+            ];
+            const SORTS = [{ k: 'hot', l: '最热' }, { k: 'new', l: '最新' }, { k: 'top', l: '高分' }];
+            const typeOf = (k) => TYPES.find(t => t.k === k) || null;
+            const optOf = (g, k) => g.opts.find(x => x.k === k) || null;
+            const asDate = (now) => (now instanceof Date ? now : new Date(now == null ? Date.now() : now));
+            const isoDay = (now) => { const d = asDate(now); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+
+            // 年份:今年起往前 7 年逐年,再往前按年代(年代接在逐年的前一年为止),1990 年以前算「更早」
+            function yearOpts(now) {
+                const y = asDate(now).getFullYear(), out = [];
+                for (let i = 0; i < 7; i++) out.push({ k: String(y - i), l: String(y - i) });
+                for (let d = Math.floor((y - 7) / 10) * 10; d >= 1990; d -= 10) out.push({ k: d + 's', l: (d === 1990 ? '90' : d) + '年代' });
+                out.push({ k: 'old', l: '更早' });
+                return out;
+            }
+            function yearKeyOf(y, now) {
+                const cur = asDate(now).getFullYear();
+                if (y > cur) return null;
+                if (y > cur - 7) return String(y);
+                if (y < 1990) return 'old';
+                return Math.floor(y / 10) * 10 + 's';
+            }
+            function yearRange(k, now) {
+                if (/^\d{4}$/.test(k || '')) return { gte: k + '-01-01', lte: k + '-12-31' };
+                const m = /^(\d{4})s$/.exec(k || '');
+                if (m) return { gte: m[1] + '-01-01', lte: Math.min(+m[1] + 9, asDate(now).getFullYear() - 7) + '-12-31' };
+                if (k === 'old') return { lte: '1989-12-31' };
+                return null;
+            }
+            // 补齐成完整的 sel(每组一个键 + year + sort),认不得的值归「全部」/默认
+            function normSel(tk, sel, now) {
+                const T = typeOf(tk) || TYPES[1], s = sel || {}, out = {};
+                for (const g of T.groups) {
+                    const v = s[g.k] == null ? '' : String(s[g.k]);
+                    out[g.k] = (v === '' || optOf(g, v)) ? v : '';
+                }
+                const y = s.year == null ? '' : String(s.year);
+                out.year = y && yearOpts(now).some(x => x.k === y) ? y : '';
+                out.sort = SORTS.some(x => x.k === s.sort) ? s.sort : (T.sort || 'hot');
+                return out;
+            }
+            function mediaOf(T, s) {
+                for (const g of T.groups) { const x = optOf(g, s[g.k]); if (x && x.media) return x.media; }
+                return T.media;
+            }
+            // with_genres / with_keywords / without_genres 与已有值是"且"(逗号),without_keywords 是"或"(竖线);键名前带 ! = 覆盖
+            const JOIN = { with_genres: ',', with_keywords: ',', without_genres: ',', without_keywords: '|' };
+            function mergeQ(dst, src) {
+                for (const key of Object.keys(src || {})) {
+                    const v = src[key];
+                    if (key[0] === '!') { dst[key.slice(1)] = v; continue; }
+                    dst[key] = (dst[key] != null && dst[key] !== '' && JOIN[key]) ? dst[key] + JOIN[key] + v : v;
+                }
+                return dst;
+            }
+            // → { path: '/discover/tv', media, params }(params 直接拼进 /api/tmdb-proxy 的查询串)
+            function buildQuery(tk, sel, page, opt) {
+                const op = opt || {}, T = typeOf(tk) || TYPES[1];
+                const s = normSel(T.k, sel, op.now), media = mediaOf(T, s);
+                const q = mergeQ({}, T.base), dq = {}, vc = Object.assign({}, T.vc), up = {};
+                for (const g of T.groups) {
+                    const x = optOf(g, s[g.k]);
+                    if (!x) continue;
+                    mergeQ(q, (media !== T.media && x.m) ? x.m : x.q);
+                    Object.assign(dq, x.dq);
+                    for (const k of Object.keys(x.vc || {})) vc[k] = Math.min(vc[k], x.vc[k]);
+                    for (const k of Object.keys(x.vcUp || {})) up[k] = Math.max(up[k] || 0, x.vcUp[k]);
+                }
+                for (const k of Object.keys(up)) vc[k] = Math.max(vc[k], up[k]);
+                for (const k of Object.keys(dq)) if (q[k] == null) q[k] = dq[k];
+                const dk = media === 'movie' ? 'primary_release_date' : 'first_air_date';
+                const yr = yearRange(s.year, op.now);
+                if (yr && yr.gte) q[dk + '.gte'] = yr.gte;
+                if (yr && yr.lte) q[dk + '.lte'] = yr.lte;
+                if (s.sort === 'new') {
+                    const today = isoDay(op.now);   // 「最新」不要还没播的(资源站不会有)
+                    if (!q[dk + '.lte'] || q[dk + '.lte'] > today) q[dk + '.lte'] = today;
+                    q.sort_by = dk + '.desc';
+                } else q.sort_by = s.sort === 'top' ? 'vote_average.desc' : 'popularity.desc';
+                if (vc[s.sort] > 0) q['vote_count.gte'] = vc[s.sort];
+                if (op.nsfw) { q.include_adult = 'false'; mergeQ(q, { without_keywords: NSFW_KW }); }
+                q.page = Math.max(1, Math.min(500, parseInt(page, 10) || 1));
+                return { path: '/discover/' + media, media, params: q };
+            }
+            const HAN = /[\u3400-\u4dbf\u4e00-\u9fff]/;
+            // 西里尔 / 希伯来 / 阿拉伯 / 印度诸文字 / 泰文 / 谚文 / 假名(不含 ・ ー:中文译名里也用,如「哈利・波特」)
+            const OTHER_SCRIPT = /[\u0400-\u04ff\u0590-\u05ff\u0600-\u06ff\u0900-\u0dff\u0e00-\u0e7f\u1100-\u11ff\u3040-\u30fa\u30fd-\u30ff\u31f0-\u31ff\uac00-\ud7af]/;
+            // 浏览页里显示不显示:没海报的不显示;名字是泰文/韩文/假名…(TMDB 没有中文译名)或非英语的外文原名 → 资源站按中文名上架,点了也搜不到
+            function visible(it, nsfw) {
+                if (!it || !it.poster_path) return false;
+                const name = String(it.title || it.name || '').trim();
+                if (!name || OTHER_SCRIPT.test(name)) return false;
+                if (!HAN.test(name) && it.original_language !== 'en' && name === String(it.original_title || it.original_name || '').trim()) return false;
+                return !(nsfw && (it.vote_count || 0) < NSFW_TITLE_MAX_VOTES && NSFW_TITLE.test(name));
+            }
+            // 浏览页的筛选行(每组前面加「全部」,再加年份、排序)
+            function groupsOf(tk, sel, now) {
+                const T = typeOf(tk);
+                if (!T) return [];
+                const s = normSel(tk, sel, now);
+                const rows = T.groups.map(g => ({
+                    k: g.k, l: g.l,
+                    opts: (g.all === false ? [] : [{ k: '', l: '全部' }]).concat(g.opts.filter(x => !x.hidden || x.k === s[g.k]).map(x => ({ k: x.k, l: x.l }))),
+                }));
+                rows.push({ k: 'year', l: '年份', opts: [{ k: '', l: '全部' }].concat(yearOpts(now)) });
+                rows.push({ k: 'sort', l: '排序', opts: SORTS.slice() });
+                return rows;
+            }
+            // 首页分类栏:选中大类下面那几行快捷标签 [{ l, items: [{ l, sel }] }]
+            function navRows(tk) {
+                const T = typeOf(tk);
+                if (!T) return [];
+                return T.nav.map(n => ({
+                    l: n.l,
+                    items: n.items
+                        ? n.items.map(([l, sel]) => ({ l, sel }))
+                        : ((T.groups.find(g => g.k === n.g) || { opts: [] }).opts.filter(x => !x.hidden).map(x => ({ l: x.l, sel: { [n.g]: x.k } }))),
+                }));
+            }
+            function title(tk, sel) {
+                const T = typeOf(tk);
+                if (!T) return '';
+                const s = normSel(tk, sel), parts = [T.l];
+                for (const g of T.groups) { const x = optOf(g, s[g.k]); if (x && x.k) parts.push(x.l); }
+                return parts.join(' · ');
+            }
+            // 浏览页滚下去后顶上那条:标题 + 年份 + 排序
+            function summary(tk, sel, now) {
+                const T = typeOf(tk);
+                if (!T) return '';
+                const s = normSel(tk, sel, now), parts = [title(tk, s)];
+                const y = yearOpts(now).find(x => x.k === s.year);
+                if (y) parts.push(y.l);
+                parts.push(SORTS.find(x => x.k === s.sort).l);
+                return parts.join(' · ');
+            }
+            const countLabel = (n) => (n >= 10000 ? Math.floor(n / 10000) + '万+' : String(n || 0));
+
+            // 「分类大全」页(首页「全部分类」进来):热门入口大色块 + 每个大类一张卡片(各筛选组 + 年份),每一项都是一个浏览页预设
+            const HOT = [
+                ['国产剧', 'tv', { region: 'cn' }, 'fa-dragon', '#e52d27', '#9b1b30'],
+                ['韩剧', 'tv', { region: 'kr' }, 'fa-heart', '#d6457a', '#7b2ff7'],
+                ['泰剧', 'tv', { region: 'th' }, 'fa-sun', '#f7971e', '#c2410c'],
+                ['美剧', 'tv', { region: 'us' }, 'fa-flag-usa', '#2b5cff', '#1e3a8a'],
+                ['日剧', 'tv', { region: 'jp' }, 'fa-torii-gate', '#8e54e9', '#4776e6'],
+                ['港剧', 'tv', { region: 'hk' }, 'fa-city', '#c2306a', '#6d214f'],
+                ['台剧', 'tv', { region: 'tw' }, 'fa-mug-hot', '#11998e', '#185a9d'],
+                ['英剧', 'tv', { region: 'gb' }, 'fa-crown', '#5f72bd', '#4a2c7a'],
+                ['日本番剧', 'anime', { region: 'jp' }, 'fa-ghost', '#ee5a9e', '#9b2fae'],
+                ['国漫', 'anime', { region: 'cn' }, 'fa-yin-yang', '#e67e22', '#a0402a'],
+                ['华语电影', 'movie', { region: 'cn' }, 'fa-film', '#b31217', '#5c0a0f'],
+                ['好莱坞大片', 'movie', { region: 'us' }, 'fa-star', '#1d6fa5', '#163a6b'],
+                ['粤语经典', 'movie', { lang: 'cn', sort: 'top' }, 'fa-landmark', '#a8763e', '#5b3a29'],
+                ['韩综', 'variety', { region: 'kr' }, 'fa-microphone-lines', '#e0437c', '#8e2a62'],
+                ['内地综艺', 'variety', { region: 'cn' }, 'fa-masks-theater', '#f0592a', '#a3301b'],
+                ['BBC纪录片', 'doc', { region: 'gb' }, 'fa-earth-asia', '#178a6b', '#0f4c45'],
+            ];
+            function directory(now) {
+                return {
+                    hot: HOT.map(([l, type, sel, icon, c1, c2]) => ({ l, type, sel, icon, bg: 'linear-gradient(135deg, ' + c1 + ', ' + c2 + ')' })),
+                    types: TYPES.map(T => ({
+                        k: T.k, l: T.l, icon: T.icon,
+                        rows: T.groups.map(g => ({ l: g.l, items: g.opts.filter(x => !x.hidden).map(x => ({ l: x.l, sel: { [g.k]: x.k } })) }))
+                            .concat([{ l: '年份', items: yearOpts(now).map(y => ({ l: y.l, sel: { year: y.k } })) }]),
+                    })),
+                };
+            }
+
+            // 搜索框里的分类词 → 浏览页预设。整词匹配(忽略空格、大小写),可带「2024(年)」「最新/热门/高分」前缀和「推荐/大全/排行榜」后缀。
+            //   有正经作品正好叫这个名字的词不收(好莱坞 / 真人秀 / 影片);剩下的同名作品都是零票冷门,浏览页上有「按片名搜索」
+            const ALIAS = {};
+            const add = (words, type, sel) => words.split(' ').forEach(w => { ALIAS[w] = { type, sel: sel || {} }; });
+            add('电视剧 剧集 连续剧', 'tv');
+            add('国产剧 国剧 大陆剧 内地剧 华语剧 国产电视剧', 'tv', { region: 'cn' });
+            add('港剧 香港剧 香港电视剧 tvb tvb剧', 'tv', { region: 'hk' });
+            add('台剧 台湾剧 台湾电视剧', 'tv', { region: 'tw' });
+            add('韩剧 韩国剧 韩国电视剧', 'tv', { region: 'kr' });
+            add('日剧 日本剧 日本电视剧', 'tv', { region: 'jp' });
+            add('泰剧 泰国剧 泰国电视剧', 'tv', { region: 'th' });
+            add('美剧 美国剧 美国电视剧', 'tv', { region: 'us' });
+            add('英剧 英国剧 英国电视剧', 'tv', { region: 'gb' });
+            add('欧洲剧 欧剧', 'tv', { region: 'eu' });
+            add('日韩剧', 'tv', { region: 'krjp' });
+            add('悬疑剧', 'tv', { genre: 'mystery' }); add('犯罪剧 刑侦剧', 'tv', { genre: 'crime' });
+            add('爱情剧 言情剧', 'tv', { genre: 'romance' }); add('轻喜剧', 'tv', { genre: 'comedy' });
+            add('古装 古装剧', 'tv', { genre: 'costume' }); add('仙侠 仙侠剧', 'tv', { genre: 'xianxia' });
+            add('武侠剧', 'tv', { genre: 'wuxia' }); add('谍战 谍战剧', 'tv', { genre: 'spy' });
+            add('青春剧 校园剧', 'tv', { genre: 'youth' }); add('科幻剧', 'tv', { genre: 'scifi' });
+            add('穿越剧', 'tv', { genre: 'timetravel' }); add('战争剧 军旅剧', 'tv', { genre: 'war' });
+            add('家庭剧', 'tv', { genre: 'family' }); add('医疗剧 医务剧', 'tv', { genre: 'medical' }); add('律政剧', 'tv', { genre: 'legal' });
+            add('电影', 'movie');
+            add('华语电影 国产电影 中国电影', 'movie', { region: 'cn' }); add('内地电影 大陆电影', 'movie', { region: 'mainland' });
+            add('港片 香港电影', 'movie', { region: 'hk' }); add('台湾电影', 'movie', { region: 'tw' });
+            add('美国电影 好莱坞电影 美国大片 欧美电影 欧美大片', 'movie', { region: 'us' });
+            add('韩国电影 韩影', 'movie', { region: 'kr' }); add('日本电影 日影', 'movie', { region: 'jp' });
+            add('泰国电影 泰影', 'movie', { region: 'th' }); add('英国电影', 'movie', { region: 'gb' }); add('法国电影', 'movie', { region: 'fr' });
+            add('欧洲电影', 'movie', { region: 'eu' }); add('印度电影 宝莱坞', 'movie', { region: 'in' });
+            add('粤语片 粤语电影', 'movie', { lang: 'cn' }); add('粤语剧 粤语电视剧', 'tv', { lang: 'cn' });
+            add('动作片 动作电影', 'movie', { genre: 'action' }); add('喜剧片 喜剧电影', 'movie', { genre: 'comedy' });
+            add('爱情片 爱情电影', 'movie', { genre: 'romance' }); add('科幻片 科幻电影', 'movie', { genre: 'scifi' });
+            add('奇幻片 魔幻片 奇幻电影', 'movie', { genre: 'fantasy' }); add('悬疑片 悬疑电影', 'movie', { genre: 'mystery' });
+            add('惊悚片 惊悚电影', 'movie', { genre: 'thriller' }); add('恐怖片 恐怖电影 鬼片', 'movie', { genre: 'horror' });
+            add('犯罪片 犯罪电影', 'movie', { genre: 'crime' }); add('剧情片 文艺片', 'movie', { genre: 'drama' });
+            add('战争片 战争电影', 'movie', { genre: 'war' }); add('历史片', 'movie', { genre: 'history' });
+            add('武侠片 武侠电影', 'movie', { genre: 'wuxia' }); add('家庭片', 'movie', { genre: 'family' }); add('冒险片', 'movie', { genre: 'adventure' });
+            add('灾难片', 'movie', { genre: 'disaster' }); add('音乐片 歌舞片', 'movie', { genre: 'music' });
+            add('动漫 动画 番剧 新番 二次元 动画片', 'anime');
+            add('日漫 日本动漫 日本动画 日番 日本番剧', 'anime', { region: 'jp' });
+            add('国漫 国产动漫 国产动画 中国动漫 中国动画 国创', 'anime', { region: 'cn' });
+            add('美漫 欧美动漫 欧美动画 美国动画', 'anime', { region: 'west' });
+            add('动画电影 动漫电影 剧场版', 'anime', { form: 'movie' });
+            add('异世界 异世界番', 'anime', { genre: 'isekai' }); add('热血动漫 热血番', 'anime', { genre: 'action' }); add('机甲动画 机甲番', 'anime', { genre: 'mecha' });
+            add('综艺 综艺节目', 'variety');
+            add('国内综艺 内地综艺 大陆综艺 国产综艺 国综', 'variety', { region: 'cn' });
+            add('韩综 韩国综艺', 'variety', { region: 'kr' }); add('日综 日本综艺', 'variety', { region: 'jp' });
+            add('台综 台湾综艺', 'variety', { region: 'tw' }); add('欧美综艺 美国综艺 美综', 'variety', { region: 'west' });
+            add('真人秀节目', 'variety', { genre: 'reality' }); add('脱口秀', 'variety', { genre: 'talk' });
+            add('恋综 恋爱综艺 恋爱真人秀', 'variety', { genre: 'dating' }); add('美食综艺', 'variety', { genre: 'cooking' });
+            add('旅行综艺 旅游综艺', 'variety', { genre: 'travel' }); add('音乐综艺 选秀 选秀节目', 'variety', { genre: 'music' });
+            add('纪录片 记录片 纪实', 'doc');
+            add('国产纪录片 中国纪录片', 'doc', { region: 'cn' }); add('bbc bbc纪录片 英国纪录片', 'doc', { region: 'gb' });
+            add('美国纪录片', 'doc', { region: 'us' }); add('日本纪录片', 'doc', { region: 'jp' }); add('纪录电影', 'doc', { form: 'movie' });
+            add('自然纪录片', 'doc', { genre: 'nature' }); add('历史纪录片', 'doc', { genre: 'history' }); add('美食纪录片', 'doc', { genre: 'food' });
+            add('科学纪录片 科普纪录片', 'doc', { genre: 'science' }); add('罪案纪录片', 'doc', { genre: 'crime' });
+            const PRE = [[/^(最新|新上线的?|新)/, 'new'], [/^(热门|最热|好看的?|火爆)/, 'hot'], [/^(高分|经典|必看的?)/, 'top']];
+            const SUF = /(推荐|大全|排行榜?|榜单?|合集|列表|片单|在线看|在线观看|免费看|全集)$/;
+            function coreOf(t) {
+                if (ALIAS[t]) return t;
+                const m = SUF.exec(t);
+                return (m && ALIAS[t.slice(0, m.index)]) ? t.slice(0, m.index) : null;
+            }
+            // → { type, sel } 或 null(就按片名搜)
+            function fromSearch(kw, now) {
+                let s = String(kw || '').toLowerCase().replace(/[\s·・]+/g, '');
+                if (!s || s.length > 20) return null;
+                const sel = {};
+                const ym = /^((?:19|20)\d\d)年?的?/.exec(s);
+                if (ym && s.length > ym[0].length) {
+                    const yk = yearKeyOf(+ym[1], now);
+                    if (!yk) return null;
+                    sel.year = yk;
+                    s = s.slice(ym[0].length);
+                }
+                let core = coreOf(s);
+                if (!core) {
+                    for (const [re, sort] of PRE) {
+                        const m = re.exec(s);
+                        const c = m && coreOf(s.slice(m[0].length));
+                        if (c) { core = c; sel.sort = sort; break; }
+                    }
+                }
+                if (!core) return null;
+                const hit = ALIAS[core];
+                return { type: hit.type, sel: Object.assign({}, hit.sel, sel) };
+            }
+            // 首页各榜单标题旁的「全部」→ 浏览页预设(随机盲盒没有)
+            const ROWS = {
+                movieRow: ['movie', {}], tvRow: ['tv', {}], cnRow: ['tv', { region: 'cn' }], usRow: ['tv', { region: 'us' }], krjpRow: ['tv', { region: 'krjp' }],
+                animeRow: ['anime', {}], scifiRow: ['movie', { genre: 'scifi' }], actionRow: ['movie', { genre: 'action' }], comedyRow: ['movie', { genre: 'comedy' }],
+                crimeRow: ['movie', { genre: 'crime' }], romanceRow: ['movie', { genre: 'romance' }], familyRow: ['movie', { genre: 'family' }],
+                docRow: ['doc', { form: 'movie' }], warRow: ['movie', { genre: 'war' }], horrorRow: ['movie', { genre: 'horror' }],
+                mysteryRow: ['movie', { genre: 'mystery' }], fantasyRow: ['movie', { genre: 'fantasy' }], varietyRow: ['variety', {}], historyRow: ['movie', { genre: 'history' }],
+            };
+            function rowPreset(key, sortMode) {
+                const r = ROWS[key];
+                return r ? { type: r[0], sel: Object.assign({ sort: sortMode === 'newest' ? 'new' : 'hot' }, r[1]) } : null;
+            }
+            return { TYPES, SORTS, NSFW_KW, typeOf, yearOpts, yearRange, normSel, buildQuery, visible, groupsOf, navRows, title, summary, countLabel, directory, fromSearch, rowPreset };
+        })();
+        // </dg-catalog-core>
+
+        // <dg-home-core>
+        // 🧩 首页板块的顺序与开关(偏好设置里调,跨设备同步)。布局 = 全部板块按显示顺序的 [{ k, on }]。
+        //   本机 / 服务器存的值可能来自旧版本或别的设备,用之前一律过 normalize。scripts/home-layout-test.mjs 直接测这一段。
+        const DgHome = (() => {
+            const SECTIONS = [
+                { k: 'history', l: '继续观看', icon: 'fa-history' },
+                { k: 'fav', l: '我的收藏', icon: 'fa-heart' },
+                { k: 'recommend', l: '为你推荐', icon: 'fa-magic' },
+                { k: 'popular', l: '大家都在看', icon: 'fa-users' },
+                { k: 'live', l: '直播频道', icon: 'fa-tower-broadcast' },
+                { k: 'catnav', l: '分类栏', icon: 'fa-table-cells-large' },
+                { k: 'random', l: '随机盲盒', icon: 'fa-dice' },
+            ];
+            const BY_K = {};
+            for (const s of SECTIONS) BY_K[s.k] = s;
+            // 认得的板块按给定顺序留下(去重),没给到的按默认顺序补在后面、默认显示
+            function normalize(v) {
+                const out = [], seen = new Set();
+                for (const x of Array.isArray(v) ? v : []) {
+                    const k = typeof x === 'string' ? x : (x && x.k);
+                    if (!BY_K[k] || seen.has(k)) continue;
+                    seen.add(k);
+                    out.push({ k, on: typeof x === 'string' || x.on !== false });
+                }
+                for (const s of SECTIONS) if (!seen.has(s.k)) out.push({ k: s.k, on: true });
+                return out;
+            }
+            // 没存过布局:默认顺序;老版本的「隐藏随机盲盒」(donggua_hide_random)= 随机盲盒关
+            function initial(saved, legacyHideRandom) {
+                if (saved) { try { const v = JSON.parse(saved); if (Array.isArray(v)) return normalize(v); } catch (e) { } }
+                return SECTIONS.map(s => ({ k: s.k, on: !(s.k === 'random' && legacyHideRandom) }));
+            }
+            function swap(layout, a, b) {
+                const i = layout.findIndex(s => s.k === a), j = layout.findIndex(s => s.k === b);
+                if (i < 0 || j < 0 || i === j) return layout;
+                const out = layout.slice();
+                out[i] = layout[j]; out[j] = layout[i];
+                return out;
+            }
+            function isDefault(layout) {
+                return layout.length === SECTIONS.length && layout.every((s, i) => s.k === SECTIONS[i].k && s.on);
+            }
+            return { SECTIONS, info: k => BY_K[k] || null, normalize, initial, swap, isDefault };
+        })();
+        // </dg-home-core>
+
         // 🚦 并发池：逐批执行 worker，限制同时进行的请求数。
         //    用于测速——测"全部"资源站以保留完整可用列表，但同时最多 limit 个，避免一次性几十个请求打满连接。
         async function runWithConcurrency(items, limit, worker) {
@@ -8568,7 +9617,9 @@
 
                     // 🎛️ 用户偏好设置
                     showSettingsModal: false,  // 设置弹窗显示状态
-                    hideRandomRow: (function () { try { return localStorage.getItem('donggua_hide_random') === 'true'; } catch (e) { return false; } })(),  // 隐藏随机盲盒
+                    // 🧩 首页板块顺序与开关(DgHome);老的「隐藏随机盲盒」并进来了,hideRandomRow 由它算出
+                    homeLayout: (function () { try { return DgHome.initial(localStorage.getItem('donggua_home_layout'), localStorage.getItem('donggua_hide_random') === 'true'); } catch (e) { return DgHome.normalize(null); } })(),
+                    homeLayoutMsg: '',   // 读屏器播报:上移 / 下移到第几位
                     filterNsfw: (function () { try { return localStorage.getItem('donggua_filter_nsfw') !== 'false'; } catch (e) { return true; } })(),  // 过滤 NSFW 内容（默认开启）
                     // ⏭️ 跳过片头/片尾：按钮显示开关(默认开) / 自动跳过(默认关,开了不弹按钮直接跳/切下一集)
                     introSkipShow: (function () { try { return localStorage.getItem('donggua_intro_show') !== 'false'; } catch (e) { return true; } })(),
@@ -8675,28 +9726,14 @@
 
                     movieList: [], tvList: [], list_cn: [], list_krjp: [],
                     list_scifi: [], list_action: [], list_comedy: [], list_horror: [],
-                    categories: [
-                        // 按 rowConfigs 顺序排列（randomRow 不在分类中）
-                        { name: '电影', icon: 'fa-film', action: 'scroll', value: 'movieRow', color: 'linear-gradient(135deg, #FF512F 0%, #DD2476 100%)' },
-                        { name: '剧集', icon: 'fa-tv', action: 'scroll', value: 'tvRow', color: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' },
-                        { name: '国产', icon: 'fa-dragon', action: 'scroll', value: 'cnRow', color: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' },
-                        { name: '美剧', icon: 'fa-flag-usa', action: 'scroll', value: 'usRow', color: 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)' },
-                        { name: '日韩', icon: 'fa-mask', action: 'scroll', value: 'krjpRow', color: 'linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%)' },
-                        { name: '动漫', icon: 'fa-ghost', action: 'scroll', value: 'animeRow', color: 'linear-gradient(135deg, #a1c4fd 0%, #c2e9fb 100%)' },
-                        { name: '科幻', icon: 'fa-rocket', action: 'scroll', value: 'scifiRow', color: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)' },
-                        { name: '动作', icon: 'fa-bomb', action: 'scroll', value: 'actionRow', color: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)' },
-                        { name: '喜剧', icon: 'fa-laugh-squint', action: 'scroll', value: 'comedyRow', color: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)' },
-                        { name: '犯罪', icon: 'fa-user-secret', action: 'scroll', value: 'crimeRow', color: 'linear-gradient(135deg, #89f7fe 0%, #66a6ff 100%)' },
-                        { name: '爱情', icon: 'fa-heart', action: 'scroll', value: 'romanceRow', color: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)' },
-                        { name: '家庭', icon: 'fa-home', action: 'scroll', value: 'familyRow', color: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)' },
-                        { name: '纪录', icon: 'fa-video', action: 'scroll', value: 'docRow', color: 'linear-gradient(135deg, #fff1eb 0%, #ace0f9 100%)' },
-                        { name: '战争', icon: 'fa-fighter-jet', action: 'scroll', value: 'warRow', color: 'linear-gradient(135deg, #ff0844 0%, #ffb199 100%)' },
-                        { name: '恐怖', icon: 'fa-skull', action: 'scroll', value: 'horrorRow', color: 'linear-gradient(135deg, #434343 0%, #000000 100%)' },
-                        { name: '悬疑', icon: 'fa-search', action: 'scroll', value: 'mysteryRow', color: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
-                        { name: '奇幻', icon: 'fa-hat-wizard', action: 'scroll', value: 'fantasyRow', color: 'linear-gradient(135deg, #fccb90 0%, #d57eeb 100%)' },
-                        { name: '综艺', icon: 'fa-microphone-alt', action: 'scroll', value: 'varietyRow', color: 'linear-gradient(135deg, #d299c2 0%, #fef9d7 100%)' },
-                        { name: '历史', icon: 'fa-landmark', action: 'scroll', value: 'historyRow', color: 'linear-gradient(135deg, #accbee 0%, #e7f0fd 100%)' }
-                    ]
+                    // 🗂️ 首页分类栏选中的大类(记住上次) + 分类浏览页
+                    catNavType: (function () { try { const v = localStorage.getItem('donggua_catnav_type'); return DgCatalog.typeOf(v) ? v : 'tv'; } catch (e) { return 'tv'; } })(),
+                    //   keyword = 从搜索框搜分类词进来的那个词;auto = 输入停顿时自动打开的(还没动过);seq = 筛选每变一次 +1(晚到的旧页丢掉);
+                    //   idle = 连着几页留下不到 4 张
+                    //   fromDir = 从「分类大全」点进来的(返回时回到大全)
+                    browse: { open: false, type: 'tv', sel: {}, items: [], page: 0, totalPages: 0, total: 0, loading: false, error: false, done: false, idle: 0, seq: 0, keyword: '', auto: false, fromDir: false },
+                    browseStuck: false,   // 浏览页筛选区滚出屏幕 → 顶上露出摘要条
+                    catDirOpen: false,    // 「分类大全」整页目录
                 }
             },
             async mounted() {
@@ -8804,6 +9841,8 @@
                         self.pushAskLater();
                         return;
                     }
+                    // 在输入框里删字的 Backspace 不算返回(TV 模式下用键盘在搜索框 / 弹幕框打字,以前一按退格就退出了这一页)
+                    if (e.key === 'Backspace' && e.target && (/^(input|textarea)$/i.test(e.target.tagName || '') || e.target.isContentEditable)) return;
                     // TV 模式全局返回键处理
                     if (self.isTVMode && (e.key === 'Escape' || e.key === 'Backspace')) {
                         // 检查是否有弹窗
@@ -8823,10 +9862,24 @@
                             return false;
                         }
 
-                        // 如果在搜索页面，返回首页
+                        // 如果在搜索页面，返回首页(从分类浏览页点进来的搜索 → 退回浏览页)
                         if (self.searched) {
                             e.preventDefault();
                             self.goHome();
+                            return false;
+                        }
+
+                        // 🗂️ 在分类浏览页：返回首页(从分类大全进来的回大全)
+                        if (self.browse && self.browse.open) {
+                            e.preventDefault();
+                            self.closeBrowse();
+                            return false;
+                        }
+
+                        // 🗂️ 在分类大全：返回首页
+                        if (self.catDirOpen) {
+                            e.preventDefault();
+                            self.closeCatDir();
                             return false;
                         }
 
@@ -8944,7 +9997,11 @@
                 this._histBoot();   // 🔙 截帧弹窗留下的历史 + 常驻 popstate
 
                 // Store reference to app instance for external access
-                window.vueApp = this;
+                // 🗂️ 安卓 App 的返回键(MainActivity.onBackPressed 注入的 JS,装好的 App 改不了)只认 showDetail / searched 两种状态:
+                //    分类浏览页 / 分类大全开着时对它说 searched = true → 它调 goHome() 退一层;否则在这两页按返回直接退出 App
+                window.vueApp = new Proxy(this, {
+                    get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen) : Reflect.get(t, k)),
+                });
 
                 // 定义 startApp 函数供密码验证成功后调用
                 window.startApp = () => {
@@ -8954,6 +10011,45 @@
                 };
             },
             computed: {
+                // 🗂️ 不在首页(搜索结果页 / 分类浏览页):导航栏、轮播、首页各行收起,搜索框不吸顶
+                offHome() { return this.searched || this.browse.open || this.catDirOpen; },
+                // 🧩 首页板块
+                homeOn() { const o = {}; for (const s of this.homeLayout) o[s.k] = s.on; return o; },
+                hideRandomRow() { return !this.homeOn.random; },
+                // 首页按顺序渲染的块:开着且有内容的板块(随机盲盒就是 randomRow 那一行榜单),后面接其余分类榜单(不参与排序)
+                homeBlocks() {
+                    const has = {
+                        history: this.watchHistory.length > 0,
+                        fav: this.favoritesEnabled && this.favList.length > 0,
+                        recommend: this.recommendList.length > 0,
+                        popular: this.popularList.length >= 4,
+                        live: this.liveEnabled && this.liveChannels.length > 0,
+                        catnav: true,
+                    };
+                    const row = key => ({ id: 'row:' + key, k: 'row', key, config: this.rowConfigs[key] });
+                    const out = [];
+                    for (const s of this.homeLayout) {
+                        if (!s.on) continue;
+                        if (s.k === 'random') out.push(row('randomRow'));
+                        else if (has[s.k]) out.push({ id: s.k, k: s.k });
+                    }
+                    for (const key of Object.keys(this.rowConfigs)) if (key !== 'randomRow') out.push(row(key));
+                    return out;
+                },
+                // 偏好设置里列出的板块:站长没开的(直播 / 收藏)不列
+                homeLayoutView() {
+                    return this.homeLayout
+                        .filter(s => !(s.k === 'live' && !this.liveEnabled) && !(s.k === 'fav' && !this.favoritesEnabled))
+                        .map(s => Object.assign({}, DgHome.info(s.k), { on: s.on }));
+                },
+                homeLayoutIsDefault() { return DgHome.isDefault(this.homeLayout); },
+                catTypes() { return DgCatalog.TYPES; },
+                catDir() { return DgCatalog.directory(); },
+                catNavRows() { return DgCatalog.navRows(this.catNavType); },
+                catNavLabel() { const t = DgCatalog.typeOf(this.catNavType); return t ? t.l : ''; },
+                browseGroups() { return DgCatalog.groupsOf(this.browse.type, this.browse.sel); },
+                browseTitle() { return DgCatalog.title(this.browse.type, this.browse.sel); },
+                browseSummary() { return DgCatalog.summary(this.browse.type, this.browse.sel); },
                 // ⭐ 详情页这部是否已收藏(♥ 实心)。只依赖 favList 与 currentGroup 的名字/签名,播放中不会反复重算
                 curFav() {
                     return (this.favoritesEnabled && this.currentGroup) ? this._favFind(this.currentGroup) : null;
@@ -9142,7 +10238,10 @@
                 showDetail(v) { if (!v) this._favRefreshMaybe(); },
                 searched(v) { if (!v) this._favRefreshMaybe(); },
                 // 🔔 打开偏好设置时按浏览器实况刷新推送开关(用户可能在系统设置里关了通知权限)
-                showSettingsModal(v) { if (v) this._pushRefreshState(); }
+                showSettingsModal(v) {
+                    if (v) this._pushRefreshState();
+                    else if (this._homePushT) this._pushHomeLayout();   // 🧩 关弹窗时还没推的首页板块改动立刻推
+                }
             },
             methods: {
                 // ========== 📺 直播(IPTV) ==========
@@ -9688,6 +10787,11 @@
                             try { localStorage.setItem('donggua_cover_scale', String(this.coverScale)); } catch (e) { }
                             this.applyCoverScale();
                             console.log('[同步] 已应用封面缩放偏好:', this.coverScale);
+                        }
+                        // 🧩 首页板块顺序 / 开关跨设备同步(本机刚改、还没推上去的不被服务器旧值盖掉)
+                        if (Array.isArray(data.settings.homeLayout) && !this._homePushT) {
+                            this.homeLayout = DgHome.normalize(data.settings.homeLayout);
+                            try { localStorage.setItem('donggua_home_layout', JSON.stringify(this.homeLayout)); } catch (e) { }
                         }
                         // 📺 最近观看频道(跨设备)。服务器版是精简版(无 sources)；与本地按 id 合并、取较新 at，
                         //    并保留本地已有的 sources(本机看过的不丢源)，避免整表覆盖丢失本地源/本机新条目。
@@ -10298,13 +11402,57 @@
                     }, 800);
                 },
 
+                // 🧩 首页板块:上移 / 下移(在设置里列出的板块之间换位)、显示开关、恢复默认
+                moveHomeSection(k, dir) {
+                    const view = this.homeLayoutView.map(s => s.k);
+                    const i = view.indexOf(k), j = i + dir;
+                    if (i < 0 || j < 0 || j >= view.length) return;
+                    this.homeLayout = DgHome.swap(this.homeLayout, k, view[j]);
+                    this._saveHomeLayout();
+                    this.homeLayoutMsg = DgHome.info(k).l + ' 已移到第 ' + (j + 1) + ' 位';
+                    // 移到头 / 尾时这个方向的按钮会变灰:焦点换到另一个按钮,键盘 / 遥控器可以接着按
+                    const keep = (j === 0 && dir < 0) || (j === view.length - 1 && dir > 0) ? -dir : dir;
+                    this.$nextTick(() => {
+                        const b = document.querySelector('[data-home-mv="' + k + ':' + keep + '"]');
+                        if (b) b.focus();
+                    });
+                },
+                toggleHomeSection(k, on) {
+                    this.homeLayout = this.homeLayout.map(s => s.k === k ? { k, on: !!on } : s);
+                    this._saveHomeLayout();
+                },
+                resetHomeLayout() {
+                    this.homeLayout = DgHome.normalize(null);
+                    this._saveHomeLayout();
+                    this.homeLayoutMsg = '已恢复默认顺序';
+                    // 「恢复默认」点完就变灰,焦点会掉回页面最前面:挪到列表里第一个能按的按钮
+                    this.$nextTick(() => {
+                        const b = document.querySelector('[data-home-mv]:not([disabled])');
+                        if (b) b.focus();
+                    });
+                },
+                // 存本机;登录了同步账号的推到服务器(并入 user_settings)。连点上移 / 下移时只推最后一次:
+                //   每次都推,几个请求到服务器的先后可能乱,最后存下的是中间某一步
+                _saveHomeLayout() {
+                    try { localStorage.setItem('donggua_home_layout', JSON.stringify(this.homeLayout)); } catch (e) { }
+                    if (!(this.syncEnabled && this.syncToken)) return;
+                    clearTimeout(this._homePushT);
+                    this._homePushT = setTimeout(() => this._pushHomeLayout(), 600);
+                },
+                _pushHomeLayout() {
+                    clearTimeout(this._homePushT);
+                    this._homePushT = 0;
+                    if (!(this.syncEnabled && this.syncToken)) return;
+                    fetch('/api/settings/push', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: this.syncToken, settings: { homeLayout: this.homeLayout } })
+                    }).catch(() => { });
+                },
+
                 // 保存用户偏好设置
                 saveSettings(key) {
                     try {
-                        if (key === 'hideRandomRow') {
-                            localStorage.setItem('donggua_hide_random', this.hideRandomRow ? 'true' : 'false');
-                            console.log('[设置] 隐藏随机盲盒:', this.hideRandomRow);
-                        } else if (key === 'filterNsfw') {
+                        if (key === 'filterNsfw') {
                             localStorage.setItem('donggua_filter_nsfw', this.filterNsfw ? 'true' : 'false');
                             console.log('[设置] 过滤成人内容:', this.filterNsfw);
                             // 如果开启了过滤，清空当前的随机列表让它重新加载
@@ -10312,6 +11460,7 @@
                                 this.rowLists.randomRow = null;
                                 this.fetchRandomMixed();
                             }
+                            if (this.browse.open) this._browseFetch(true);   // 🗂️ 分类浏览页同样按新设置重拉
                         } else if (key === 'introSkipShow') {
                             localStorage.setItem('donggua_intro_show', this.introSkipShow ? 'true' : 'false');
                             if (!this.introSkipShow) this.introBtn.show = false, this._introRenderBtn();
@@ -10719,12 +11868,325 @@
                     }
                 },
 
-                // 处理分类点击
-                handleCatClick(item) {
-                    if (item.action === 'scroll') {
-                        this.scrollToSection(item.value);
-                    } else if (item.action === 'search') {
-                        this.autoSearch(item.value);
+                // ========== 🗂️ 分类栏 / 分类浏览页(纯函数在 DgCatalog) ==========
+                // 首页分类栏:切大类只换下面那几行标签,不跳页;记住上次选的
+                catNavSelect(k) {
+                    if (!DgCatalog.typeOf(k) || this.catNavType === k) return;
+                    this.catNavType = k;
+                    try { localStorage.setItem('donggua_catnav_type', k); } catch (e) { }
+                },
+                // 「随机盲盒」「猜你想看」两个快捷入口:跳到首页那一行
+                catNavJump(which) {
+                    if (which === 'random') { this.scrollToSection('randomRow'); return; }
+                    let el = this.$refs.recommendSection;
+                    if (Array.isArray(el)) el = el[0];
+                    if (el) window.scrollTo({ top: Math.max(0, el.getBoundingClientRect().top + window.scrollY - 120), behavior: 'smooth' });
+                },
+                rowBrowse(key) {
+                    const c = this.rowConfigs[key];
+                    const p = DgCatalog.rowPreset(key, c && c.sortMode);
+                    if (p) this.openBrowse(p);
+                },
+                // 程序滚动一律瞬间到位:全站 html{scroll-behavior:smooth} 会把 scrollTo 拖成一路滑过整个首页的动画(沿途还触发各行懒加载)
+                _jumpTo(y) {
+                    const st = document.documentElement.style, prev = st.scrollBehavior;
+                    st.scrollBehavior = 'auto';
+                    window.scrollTo(0, y);
+                    st.scrollBehavior = prev;
+                },
+                _browseFocus(el) {
+                    if (el && el.focus && el.isConnected !== false) { try { el.focus({ preventScroll: true }); } catch (e) { } }
+                },
+                // 打开分类浏览页。preset = { type, sel };from.keyword = 从搜索框搜分类词进来的(退回首页时把那个词从搜索框里清掉);
+                //   from.auto = 输入停顿时自动打开的(用户可能还在打字:焦点留在搜索框,接着打成片名就把这页收掉,见 submitSearch)
+                openBrowse(preset, from) {
+                    const T = preset && DgCatalog.typeOf(preset.type);
+                    if (!T) return;
+                    const b = this.browse, f = from || {};
+                    clearTimeout(this.searchTimer);
+                    if (!b.open) {
+                        if (this.catDirOpen) {
+                            // 从分类大全进来:记住大全滚到哪(首页位置在打开大全时记过了);在大全里搜过片名的,位置 doSearch 已经记了
+                            if (!this.searched) this._dirScrollY = window.scrollY || 0;
+                        } else {
+                            // 从首页进来:记住首页滚到哪(返回时还原);从搜索结果页进来的,首页位置早就丢了
+                            this._homeScrollY = this.searched ? 0 : (window.scrollY || 0);
+                        }
+                        this._browseOpener = this.searched ? null : document.activeElement;   // 焦点在哪(遥控器返回时还原)
+                    }
+                    if (this.searched) this._leaveSearch();
+                    b.open = true;
+                    b.type = T.k;
+                    b.sel = DgCatalog.normSel(T.k, preset.sel);
+                    b.keyword = f.keyword || '';
+                    b.auto = !!f.auto;
+                    b.fromDir = this.catDirOpen;
+                    this._browsePickId = null;
+                    this.catNavSelect(T.k);
+                    this.browseStuck = false;
+                    this._jumpTo(0);
+                    this._browseFetch(true);
+                    this.$nextTick(() => {
+                        this._browseObserve();
+                        this._browseRevealActive();
+                        if (this.isTVMode && !f.auto) this._browseFocus(this.$refs.browseBack);
+                    });
+                },
+                // 手机上筛选行是横滑的:把选中的选项滑到看得见的地方(从「泰剧」进来,它在地区那行第 6 个)
+                _browseRevealActive() {
+                    this.$nextTick(() => {
+                        try {
+                            document.querySelectorAll('.browse-fopts').forEach(row => {
+                                const a = row.scrollWidth > row.clientWidth && row.querySelector('.browse-fopt.active');
+                                if (a) row.scrollLeft += a.getBoundingClientRect().left - row.getBoundingClientRect().left - (row.clientWidth - a.offsetWidth) / 2;
+                            });
+                        } catch (e) { }
+                    });
+                },
+                // 浏览页 → 首页 / 分类大全(从哪进来回哪,回到进来前的位置);quiet = 接下来直接去搜索结果页,不还原位置和焦点
+                closeBrowse(quiet) {
+                    const b = this.browse;
+                    if (!b.open) return;
+                    clearTimeout(this.searchTimer);   // 在浏览页打了字还没到停顿自动搜:别回到首页又冒出搜索结果
+                    this._browseAbort();
+                    b.seq++;
+                    b.open = false;
+                    b.items = [];
+                    if (b.keyword && this.keyword === b.keyword) this.keyword = '';
+                    b.keyword = '';
+                    b.auto = false;
+                    const toDir = b.fromDir && this.catDirOpen;
+                    b.fromDir = false;
+                    this._browsePickId = null;
+                    this.browseStuck = false;
+                    if (this._browseIO) { this._browseIO.disconnect(); this._browseIO = null; }
+                    const y = (toDir ? this._dirScrollY : this._homeScrollY) || 0, opener = this._browseOpener;
+                    this._browseOpener = null;
+                    if (quiet) return;
+                    this.$nextTick(() => {
+                        this._jumpTo(y);
+                        // 遥控器:焦点回到点进来的那个标签;它已经不在了(在浏览页里换过大类,首页那几行标签重建了)或是搜索框
+                        //   (聚焦会弹出键盘)就落在选中的大类 / 大全的返回按钮上
+                        if (!this.isTVMode) return;
+                        const back = opener && opener.isConnected && !/^(input|textarea)$/i.test(opener.tagName || '');
+                        this._browseFocus(back ? opener : (toDir ? this.$refs.catDirBack : document.querySelector('.catnav .cat-tab.active')));
+                    });
+                },
+                // ========== 🗂️ 分类大全(首页「全部分类」进来的整页目录) ==========
+                openCatDir() {
+                    if (this.catDirOpen) return;
+                    clearTimeout(this.searchTimer);
+                    if (this.browse.open) this.closeBrowse(true);
+                    this._homeScrollY = this.searched ? 0 : (window.scrollY || 0);
+                    this._catDirOpener = this.searched ? null : document.activeElement;
+                    if (this.searched) this._leaveSearch();
+                    this.catDirOpen = true;
+                    this._jumpTo(0);
+                    if (this.isTVMode) this.$nextTick(() => this._browseFocus(this.$refs.catDirBack));
+                },
+                closeCatDir() {
+                    if (!this.catDirOpen) return;
+                    clearTimeout(this.searchTimer);
+                    this.catDirOpen = false;
+                    const y = this._homeScrollY || 0, opener = this._catDirOpener;
+                    this._catDirOpener = null;
+                    this.$nextTick(() => {
+                        this._jumpTo(y);
+                        if (this.isTVMode && opener && opener.isConnected) this._browseFocus(opener);
+                    });
+                },
+                // 在大全的搜索框里搜了片名 → 退回大全原位置
+                _dirFromSearch() {
+                    this._leaveSearch();
+                    const y = this._dirScrollY || 0;
+                    this.$nextTick(() => {
+                        this._jumpTo(y);
+                        if (this.isTVMode) this._browseFocus(this.$refs.catDirBack);
+                    });
+                },
+                // 收掉搜索结果(不动浏览页)
+                _leaveSearch() {
+                    clearTimeout(this.searchTimer);
+                    this._cancelDeepLink(true);
+                    if (this._evtSource) { this._evtSource.close(); this._evtSource = null; }
+                    this.loading = false;
+                    this.searched = false;
+                    this.rawList = [];
+                    this._originalTitle = '';
+                },
+                // 搜索结果是从浏览页进去的 → 退回浏览页:筛选、已加载的片单、滚动位置都还在。
+                //   cleared = 用户把搜索框清空了回来的(别再把分类词填回去)
+                _browseFromSearch(cleared) {
+                    this._leaveSearch();
+                    if (!cleared) this.keyword = this.browse.keyword || '';
+                    const y = this._browseScrollY || 0, pick = this._browsePickId;
+                    this.$nextTick(() => {
+                        this._jumpTo(y);
+                        this._browseObserve();
+                        if (this.isTVMode) this._browseFocus((pick != null && document.querySelector('.browse-card[data-bid="' + pick + '"]')) || this.$refs.browseBack);
+                    });
+                },
+                // 在浏览页里改了大类/筛选:片单已经不是搜的那个分类词了 → 搜索框里的词和「按片名搜索」提示一起去掉
+                _browseDropKeyword() {
+                    const b = this.browse;
+                    b.auto = false;   // 动过筛选 = 用户就是来逛这个分类的
+                    if (!b.keyword) return;
+                    if (this.keyword === b.keyword) this.keyword = '';
+                    b.keyword = '';
+                },
+                setBrowseType(k) {
+                    const b = this.browse;
+                    if (!DgCatalog.typeOf(k) || b.type === k) return;
+                    this._browseDropKeyword();
+                    // 年份、排序跨大类保留(纪录片默认「高分」:从别的大类切过来也按它自己的默认)
+                    const keepSort = b.sel.sort !== ((DgCatalog.typeOf(b.type) || {}).sort || 'hot');
+                    b.type = k;
+                    b.sel = DgCatalog.normSel(k, { year: b.sel.year, sort: keepSort ? b.sel.sort : undefined });
+                    this.catNavSelect(k);
+                    this._browseFetch(true);
+                    this._browseRevealActive();
+                },
+                setBrowseFilter(group, val) {
+                    const b = this.browse;
+                    if (b.sel[group] === val) return;
+                    this._browseDropKeyword();
+                    b.sel = DgCatalog.normSel(b.type, Object.assign({}, b.sel, { [group]: val }));
+                    this._browseFetch(true);
+                },
+                // 空结果时「清除筛选」:只留大类
+                browseClearFilters() {
+                    this._browseDropKeyword();
+                    this.browse.sel = DgCatalog.normSel(this.browse.type, {});
+                    this._browseFetch(true);
+                    this._browseRevealActive();
+                },
+                browseRetry() {
+                    this.browse.error = false;
+                    if (this.browse.items.length) this.browseMore(true); else this._browseFetch(true);
+                },
+                // 滚到底(IntersectionObserver)或点「加载更多」(manual)
+                browseMore(manual) {
+                    const b = this.browse;
+                    if (!b.open || this.searched || b.loading || b.done || b.error) return;
+                    if (manual) b.idle = 0;
+                    // 连着几页大半被滤掉(没中文名/没海报),或已经上了 600 张(电视盒子扛不住无限多卡片):不再自己往下翻,露出「加载更多」
+                    else if (b.idle >= 4 || b.items.length >= 600) return;
+                    this._browseFetch(false);
+                },
+                _browseAbort() {
+                    if (this._browseCtl) { try { this._browseCtl.abort(); } catch (e) { } this._browseCtl = null; }
+                },
+                // reset = 换了筛选:作废在飞的请求、清空片单,从第 1 页拉
+                async _browseFetch(reset) {
+                    const b = this.browse;
+                    if (reset) {
+                        this._browseAbort();
+                        b.seq++;
+                        b.items = []; b.page = 0; b.totalPages = 0; b.total = 0;
+                        b.done = false; b.error = false; b.idle = 0; b.loading = false;
+                        this._browseSeen = new Set();
+                        this._browsePickId = null;
+                    }
+                    if (b.loading) return;
+                    const seq = b.seq, page = b.page + 1;
+                    const q = DgCatalog.buildQuery(b.type, b.sel, page, { nsfw: this.filterNsfw });
+                    const qs = Object.keys(q.params).map(k => encodeURIComponent(k) + '=' + encodeURIComponent(q.params[k])).join('&');
+                    const ctl = new AbortController();
+                    this._browseCtl = ctl;
+                    const timer = setTimeout(() => ctl.abort(), 15000);
+                    b.loading = true;
+                    try {
+                        const r = await tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent(q.path)}&${qs}`, { signal: ctl.signal });
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        const d = await r.json();
+                        if (seq !== b.seq) return;
+                        const seen = this._browseSeen || (this._browseSeen = new Set()), nsfw = this.filterNsfw;
+                        const fresh = (d.results || []).filter(it => {
+                            if (!it || seen.has(it.id) || !DgCatalog.visible(it, nsfw)) return false;
+                            seen.add(it.id);
+                            return true;
+                        }).map(it => Object.freeze(it));   // 只读展示:不做深层响应式(一页 20 张,翻多了上千个对象)
+                        if (fresh.length) b.items.push(...fresh);
+                        b.page = page;
+                        b.totalPages = Math.min(d.total_pages || 0, 500);
+                        b.total = d.total_results || 0;
+                        b.done = page >= b.totalPages;
+                        b.idle = fresh.length >= 4 ? 0 : b.idle + 1;   // 一页 20 条留下不到 4 条算"稀"(宽屏上撑不起底部,会一页接一页地自动拉)
+                    } catch (e) {
+                        if (seq === b.seq) b.error = true;
+                    } finally {
+                        clearTimeout(timer);
+                        if (this._browseCtl === ctl) this._browseCtl = null;
+                        if (seq === b.seq) b.loading = false;
+                    }
+                    if (seq === b.seq && !b.error && !b.done) this.$nextTick(() => this._browseFill());
+                },
+                // 拉完一页底部还在视野里(这页大多被滤掉 / 屏幕很高):IntersectionObserver 不会再触发,自己接着拉
+                _browseFill() {
+                    const el = this.$refs.browseFoot;
+                    if (!el || !this.browse.open || this.searched) return;
+                    if (el.getBoundingClientRect().top < window.innerHeight + 600) this.browseMore(false);
+                },
+                // 底部提前 600px 开始拉下一页;筛选区滚出屏幕 → 顶上露出摘要条
+                _browseObserve() {
+                    if (typeof IntersectionObserver === 'undefined') return;
+                    if (this._browseIO) this._browseIO.disconnect();
+                    const foot = this.$refs.browseFoot, head = this.$refs.browseHead;
+                    if (!foot && !head) return;
+                    this._browseIO = new IntersectionObserver((entries) => {
+                        for (const en of entries) {
+                            if (en.target === foot) { if (en.isIntersecting) this.browseMore(false); }
+                            else if (en.target === head) {
+                                const stuck = !en.isIntersecting && en.boundingClientRect.bottom < 0;
+                                if (this.browseStuck !== stuck) this.browseStuck = stuck;
+                            }
+                        }
+                    }, { rootMargin: '0px 0px 600px 0px' });
+                    if (foot) this._browseIO.observe(foot);
+                    if (head) this._browseIO.observe(head);
+                },
+                browseToTop() {
+                    const ae = document.activeElement;
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                    // 摘要条随即收起:用键盘按的「筛选」→ 焦点放到筛选区,别掉到 body 上
+                    if (ae && ae.closest && ae.closest('.browse-sticky')) this._browseFocus(document.querySelector('.browse-fopt.active'));
+                },
+                // 点海报:和首页一样按片名搜资源站;从搜索结果返回时回到这里(位置在 doSearch 里记)
+                browsePick(item) {
+                    this.browse.auto = false;
+                    this._browsePickId = item.id;
+                    this.autoSearch(item.title || item.name, item.original_title || item.original_name);
+                },
+                // 搜的分类词万一真是片名:照常按片名搜
+                browseSearchKeyword() {
+                    const kw = this.browse.keyword;
+                    if (!kw) return;
+                    this.keyword = kw;
+                    this.doSearch();
+                },
+                browseCountLabel(n) { return DgCatalog.countLabel(n); },
+                // 搜索框提交(回车 / 放大镜 = explicit;输入停顿自动搜):「泰剧」「韩综」「国漫」这类分类词直接打开对应分类 ——
+                //   片名里没有这些词,当片名搜只会搜出一堆不相干的
+                submitSearch(explicit) {
+                    if (explicit) clearTimeout(this.searchTimer);   // 回车之后,停顿自动搜别再跑一遍
+                    const b = this.browse;
+                    const p = DgCatalog.fromSearch(this.keyword);
+                    if (!p) {
+                        // 停顿时按分类词自动打开的浏览页、用户其实在打片名(谍战 → 谍战深海之惊蛰):先收掉,返回时直接回首页
+                        if (b.open && b.auto && !this.searched) this.closeBrowse(true);
+                        this._browsePickId = null;
+                        this.doSearch();
+                        return;
+                    }
+                    const sel = DgCatalog.normSel(p.type, p.sel);
+                    // 停顿时已经自动打开了同一个分类,再按回车:不重拉
+                    const same = b.open && !this.searched && b.type === p.type && JSON.stringify(b.sel) === JSON.stringify(sel);
+                    if (!same) this.openBrowse(p, { keyword: this.keyword, auto: !explicit });
+                    else if (explicit) b.auto = false;
+                    if (explicit) {
+                        // 手机:收起键盘,别挡住片单;遥控器:焦点进浏览页(停顿自动打开时用户可能还在打字,两样都不动)
+                        try { const ae = document.activeElement; if (ae && ae.blur && /^input$/i.test(ae.tagName)) ae.blur(); } catch (e) { }
+                        if (this.isTVMode) this.$nextTick(() => this._browseFocus(this.$refs.browseBack));
                     }
                 },
 
@@ -10744,13 +12206,17 @@
                     if (!this.keyword || this.keyword.length < 2) {
                         // 关键词太短时不搜索，清除结果
                         if (!this.keyword) {
-                            this.searched = false;
-                            this.rawList = [];
+                            if (this.searched && this.browse.open) this._browseFromSearch(true);   // 🗂️ 从浏览页进的搜索:清空 = 回浏览页原位置
+                            else if (this.searched && this.catDirOpen) this._dirFromSearch();
+                            else {
+                                this.searched = false;
+                                this.rawList = [];
+                            }
                         }
                         return;
                     }
                     this.searchTimer = setTimeout(() => {
-                        this.doSearch();
+                        this.submitSearch();
                     }, 500);  // 500ms 防抖延迟
                 },
 
@@ -11953,6 +13419,20 @@
                 scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); },
 
                 goHome() {
+                    // 🗂️ 分类浏览页开着:一次退一层 —— 搜索结果 → 浏览页(筛选和位置都在),浏览页 → 首页。
+                    //    搜索结果页的返回按钮、TV 遥控返回键、安卓 App 返回键(MainActivity 注入的 JS)都走这里
+                    if (this.browse.open && !this.showDetail) {
+                        if (this.searched) this._browseFromSearch();
+                        else this.closeBrowse();   // 从分类大全进来的回大全
+                        return;
+                    }
+                    if (this.catDirOpen && !this.showDetail) {
+                        if (this.searched) this._dirFromSearch();
+                        else this.closeCatDir();
+                        return;
+                    }
+                    if (this.browse.open) this.closeBrowse(true);
+                    this.catDirOpen = false;
                     // TV 模式：直接刷新页面，确保完全重置状态
                     if (this.isTVMode) {
                         window.location.href = '/';
@@ -12186,11 +13666,13 @@
 
                 // ✨ 为你推荐：专用横向滚动(不触发 fetchRow，推荐是定长列表)
                 scrollRecommendRow(direction) {
-                    const row = this.$refs.recommendRow;
+                    let row = this.$refs.recommendRow;
+                    if (Array.isArray(row)) row = row[0];
                     if (row) row.scrollBy({ left: direction * row.clientWidth * 0.8, behavior: 'smooth' });
                 },
                 onRecommendScroll() {
-                    const row = this.$refs.recommendRow;
+                    let row = this.$refs.recommendRow;
+                    if (Array.isArray(row)) row = row[0];
                     if (!row) return;
                     const left = row.scrollLeft > 10;
                     const right = row.scrollLeft + row.clientWidth < row.scrollWidth - 10;
@@ -12201,11 +13683,13 @@
                 //   ⚠️ 不能叫 onRowScroll:分类榜单已有 onRowScroll(key)(左箭头 + 手机滑到底加载更多),对象字面量同名键后者静默覆盖前者
                 //      (scripts/index-methods-test.mjs 守着 methods 里不许有重复键)
                 scrollRowBy(ref, dir) {
-                    const row = this.$refs[ref];
+                    let row = this.$refs[ref];
+                    if (Array.isArray(row)) row = row[0];   // 首页板块在 v-for 里(可调顺序),ref 是数组
                     if (row) row.scrollBy({ left: dir * row.clientWidth * 0.8, behavior: 'smooth' });
                 },
                 onFavPopRowScroll(ref, key) {
-                    const row = this.$refs[ref];
+                    let row = this.$refs[ref];
+                    if (Array.isArray(row)) row = row[0];
                     if (!row) return;
                     const l = row.scrollLeft > 10, r = row.scrollLeft + row.clientWidth < row.scrollWidth - 10;
                     if (this[key + 'CanScrollLeft'] !== l) this[key + 'CanScrollLeft'] = l;
@@ -13422,6 +14906,9 @@
                         this._evtSource = null;
                     }
 
+                    // 🗂️ 从浏览页 / 分类大全进搜索:返回时回到这里
+                    if (this.browse.open && !this.searched) this._browseScrollY = window.scrollY || 0;
+                    else if (this.catDirOpen && !this.searched) this._dirScrollY = window.scrollY || 0;
                     this.loading = true;
                     this.searched = true;
                     this.rawList = [];

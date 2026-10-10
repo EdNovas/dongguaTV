@@ -849,8 +849,24 @@ class CacheManager {
         return out;
     }
 
-    // 定期清理过期缓存 (SQLite)
+    // 定期清理过期缓存。json / memory 模式以前从不删过期条目(get 只是不认),桶只增不减 —— 分类浏览每翻一页就是一条新的
+    //   TMDB 缓存,json 还要在每次写入时把整个文件重写一遍;这里删掉过期的,json 有删才落一次盘
     cleanup() {
+        if (this.type === 'memory' || this.type === 'json') {
+            const now = Date.now();
+            for (const cat of ['search', 'detail', 'intro', 'introenv']) {
+                const bucket = this._bucket(cat);
+                let removed = 0;
+                for (const k of Object.keys(bucket)) {
+                    const d = bucket[k];
+                    if (!d || !(d.expire > now)) { delete bucket[k]; removed++; }
+                }
+                if (removed && this.type === 'json') {
+                    try { this.saveDisk(cat); } catch (e) { console.error('[Cache] Save after cleanup failed:', e.message); }
+                }
+            }
+            return;
+        }
         if (this.type === 'sqlite' && this.db) {
             try {
                 const result = this.db.prepare('DELETE FROM cache WHERE expire < ?').run(Date.now());
@@ -865,6 +881,7 @@ class CacheManager {
 }
 
 const cacheManager = new CacheManager(CACHE_TYPE);
+cacheManager.cleanup();   // json 模式:启动时先把上次留在文件里的过期条目清掉
 
 // 定期清理过期缓存 (每小时执行一次)
 setInterval(() => {
@@ -2431,6 +2448,23 @@ function danmakuBudgetOk() { // 全站每分钟最多 300 次上游弹幕查询�
     danmakuWinCount++;
     return true;
 }
+// danmu_api 这边的配置问题(版本太旧、开着限流)在前台只表现为"没弹幕":每类每实例 10 分钟在日志里提醒一次怎么改
+const danmakuWarnedAt = new Map();
+function danmakuWarnOnce(key, msg) {
+    if (Date.now() - (danmakuWarnedAt.get(key) || 0) < 600e3) return;
+    danmakuWarnedAt.set(key, Date.now());
+    console.warn(msg);
+}
+// danmu_api 自带按来源 IP 的取弹幕限流(RATE_LIMIT_MAX_REQUESTS,默认每分钟 3 次),本站替所有观众去取,在它看来只有一个 IP
+function danmakuWarnRateLimited(base) {
+    danmakuWarnOnce('429|' + base, `⚠️ [弹幕] ${base} 取弹幕返回 429 限流:多半是 danmu_api 没设 RATE_LIMIT_MAX_REQUESTS=0(它默认每个来源 IP 每分钟只放 3 次,本站替所有观众去取,在它看来只有一个 IP)。` +
+        `给 danmu_api 设上这个环境变量再重启即可(Docker 要带 -e 重建容器,见 README「弹幕服务 danmu_api」)`);
+}
+// danmu_api v1.20.10 起搜索结果才带视频地址(url);更老的版本在多实例部署上按地址取不了、按 id 又会串剧
+function danmakuWarnNoUrl(base) {
+    danmakuWarnOnce('nourl|' + base, `⚠️ [弹幕] ${base} 的 danmu_api 太旧:搜索结果不带视频地址(url 字段 v1.20.10 起才有),本站按视频地址取弹幕,从这个实例一条都取不到。` +
+        `请把 danmu_api 升级到最新版(自己服务器上只跑一个实例的,也可以设 DANMU_API_SINGLE_INSTANCE=1 改按 id 取)`);
+}
 function dandanToDplayer(comments) {
     // dandanplay: { p:"秒,模式,颜色,uid", m:"文本" } → DPlayer: [时间, 类型(0滚/1顶/2底), 颜色, 作者, 文本]
     const modeMap = { '1': 0, '6': 0, '5': 1, '4': 2 };
@@ -2968,6 +3002,8 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
             danmakuSearchCache.set(skey, { animes, expiry: Date.now() + DANMAKU_SEARCH_TTL });
         }
     }
+    const singleInstance = /^(1|true|yes|on)$/i.test(String(process.env.DANMU_API_SINGLE_INSTANCE || '').trim());
+    if (!singleInstance && animes.some(a => (a.episodes || []).length) && !animes.some(a => (a.episodes || []).some(e => e && e.url !== undefined))) danmakuWarnNoUrl(base);
     // 🏅 候选排序见 danmakuRankCandidates(分档 + 类型 + 年份 + 季号 + 平台)
     const { pool, bestTier, why } = danmakuRankCandidates(animes, title, hints);
     if (!pool.length) { console.log(`[弹幕诊断] "${title}" @${base}: ${animes.length} 个候选里没有可用的(${why})`); return []; }
@@ -3003,19 +3039,23 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
                 //   429/5xx/超时/网络错 是这一次失败 —— 跳过这个候选,绝不退回按 id(按 id 正是多实例串剧的那条路,审查实锤)
                 const body = e.response && e.response.data;
                 if (st === 404 || (st === 400 && /missing|commentid|url/i.test(JSON.stringify(body || '')))) danmakuUrlMode.set(base, Date.now());
+                if (st === 429) danmakuWarnRateLimited(base);
                 console.warn(`[弹幕诊断] comment?url 失败: ${e.code || ''} ${st ? 'HTTP' + st : e.message} (${Date.now() - _c0}ms)`);
                 if (!urlUnsupported()) continue;
             }
         }
         // 按 id:只在 ①这个 danmu_api 不支持按地址取,或 ②这一集没有可按地址取的地址 且 站长声明 danmu_api 是单实例(DANMU_API_SINGLE_INSTANCE=1)时才用。
         //   多实例上按 id 会串到别的剧,所以按 id 的结果一律低置信、不缓存(见端点 viaId)。
-        const idAllowed = urlUnsupported() || (!url && /^(1|true|yes|on)$/i.test(String(process.env.DANMU_API_SINGLE_INSTANCE || '').trim()));
+        const idAllowed = urlUnsupported() || (!url && singleInstance);
         if (d === null && episode.episodeId && idAllowed) {
             try {
                 const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 12000 });
                 d = dandanToDplayer((cr.data && cr.data.comments) || []);
                 via = 'id';
-            } catch (e) { console.warn(`[弹幕诊断] comment/${episode.episodeId} 失败: ${e.code || ''} ${e.response ? 'HTTP' + e.response.status : e.message} (${Date.now() - _c0}ms)`); }
+            } catch (e) {
+                if (e.response && e.response.status === 429) danmakuWarnRateLimited(base);
+                console.warn(`[弹幕诊断] comment/${episode.episodeId} 失败: ${e.code || ''} ${e.response ? 'HTTP' + e.response.status : e.message} (${Date.now() - _c0}ms)`);
+            }
         }
         if (d === null) continue;
         console.log(`[弹幕诊断] comment(${via}) ${via === 'url' ? url : episode.episodeId} (${platOf(pool[tries].animeTitle) || '?'}) 《${pool[tries].animeTitle}》 ${why} → ${d.length} 条 (${Date.now() - _c0}ms)`);
