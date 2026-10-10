@@ -3387,6 +3387,20 @@
             font-size: 14px;
         }
 
+        /* 🎟️ 分享链接试看:剩余时间 + 登录;时间到了的遮罩要盖过播放器暂停时的大播放键(.desktop-play-overlay z-index 1000)和控制栏 */
+        .preview-lock-overlay.trial-end { z-index: 2000; }
+        .player-box.trial-ended .desktop-play-overlay { display: none; }
+        .trial-bar {
+            display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;
+            padding: 6px 8px 6px 12px; border-radius: 999px; font-size: 13px; color: #f3c969;
+            background: rgba(243, 201, 105, 0.1); border: 1px solid rgba(243, 201, 105, 0.3);
+        }
+        .trial-bar b { color: #fff; font-variant-numeric: tabular-nums; }
+        .trial-login {
+            border: none; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: #fff; cursor: pointer;
+            background: linear-gradient(135deg, #e50914, #b00610);
+        }
+
         /* 投屏按钮 */
         .btn-cast {
             padding: 10px 20px;
@@ -5818,8 +5832,8 @@
                     <div>
                         <div class="video-title-row">
                             <h1 class="video-title">{{ currentGroup.name }}</h1>
-                            <!-- ⭐ 收藏(追剧):直播/离线缓存/未登录预览/深链加载中(还没有线路)不显示 -->
-                            <button v-if="favoritesEnabled && !previewLocked && !currentGroup._isLive && !currentGroup._offlineCtx && currentGroup.sources && currentGroup.sources.length"
+                            <!-- ⭐ 收藏(追剧):直播/离线缓存/未登录预览或试看/深链加载中(还没有线路)不显示 -->
+                            <button v-if="favoritesEnabled && !previewLocked && !trial.on && !currentGroup._isLive && !currentGroup._offlineCtx && currentGroup.sources && currentGroup.sources.length"
                                 class="fav-heart" :class="{ on: !!curFav }" tabindex="2" :disabled="favBusy"
                                 @click="toggleFavorite" :title="curFav ? '取消收藏' : '收藏(追剧,有更新会提醒)'" :aria-label="curFav ? '取消收藏' : '收藏'">
                                 <i :class="curFav ? 'fas fa-heart' : 'far fa-heart'"></i>
@@ -5830,8 +5844,16 @@
                             <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
                             <template v-else><i class="fas fa-spinner fa-spin"></i> 正在加载…</template>
                         </div>
+                        <!-- 🎟️ 分享链接试看(没登录):剩余时间 + 登录入口 -->
+                        <div v-if="trial.on" class="trial-bar">
+                            <i class="fas fa-hourglass-half" aria-hidden="true"></i>
+                            <span v-if="!trial.ended">未登录可试看 {{ trialLimitText }} · 剩余 <b>{{ trialLeftText }}</b></span>
+                            <span v-else>试看已结束</span>
+                            <button type="button" class="trial-login" @click="promptLogin">登录看完整版</button>
+                        </div>
                     </div>
-                    <div v-if="!previewLocked" style="display: flex; gap: 10px; align-items: center;">
+                    <!-- 分享 / 投屏:未登录预览与试看时不显示(投屏到电视上播不计试看时长) -->
+                    <div v-if="!previewLocked && !trial.on" style="display: flex; gap: 10px; align-items: center;">
                         <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="分享">
                             <i class="fas fa-share-alt"></i> 分享
                         </button>
@@ -5842,7 +5864,7 @@
                 </div>
 
                 <!-- 2. 中部：超大播放器 -->
-                <div class="player-box" style="position: relative;" :class="{ 'dg-no-frame': previewLocked || currentGroup._isLive }"
+                <div class="player-box" style="position: relative;" :class="{ 'dg-no-frame': previewLocked || trial.on || currentGroup._isLive, 'trial-ended': trial.on && trial.ended }"
                     :style="previewLocked && currentGroup && currentGroup.pic ? { backgroundImage: 'url(' + currentGroup.pic + ')', backgroundSize: 'cover', backgroundPosition: 'center' } : {}">
                     <div id="dplayer" style="width: 100%; height: 100%;"></div>
                     <!-- ⏭️ 跳过按钮由 JS 注入进 #dplayer 容器内(而非此处兄弟节点)——否则全屏时(#dplayer 独占 top layer)按钮不可见 -->
@@ -5861,6 +5883,15 @@
                             <i class="fas fa-lock"></i>
                             <div class="preview-lock-title">登录后即可观看</div>
                             <div class="preview-lock-sub">机场套餐用户专属影视福利 · 有效期内全站免费畅看</div>
+                            <button class="preview-lock-btn" @click="promptLogin">立即登录</button>
+                        </div>
+                    </div>
+                    <!-- 🎟️ 试看时间到:盖住播放器(暂停的画面透出来),登录后接着播 -->
+                    <div v-if="trial.on && trial.ended" class="preview-lock-overlay trial-end">
+                        <div class="preview-lock-card">
+                            <i class="fas fa-lock" aria-hidden="true"></i>
+                            <div class="preview-lock-title">试看结束</div>
+                            <div class="preview-lock-sub">登录后从这里接着看</div>
                             <button class="preview-lock-btn" @click="promptLogin">立即登录</button>
                         </div>
                     </div>
@@ -5952,14 +5983,14 @@
                     <div>
                         <div class="panel-title" style="display: flex; align-items: center;">
                             选集播放
-                            <span v-if="!previewLocked" @click="toggleOfflinePanel" class="offline-entry-btn"
+                            <span v-if="!previewLocked && !trial.on" @click="toggleOfflinePanel" class="offline-entry-btn"
                                 :class="{ active: showOfflinePanel }" style="margin-left: auto;">
                                 <i class="fas fa-download" style="margin-right: 4px;"></i>
                                 离线缓存<span v-if="offlineList.length"> ({{ offlineList.length }})</span>
                             </span>
                             <span v-if="!previewLocked" @click="refreshEpisodes"
                                 style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
-                                :style="{ opacity: refreshingEpisodes ? 0.5 : 1, pointerEvents: refreshingEpisodes ? 'none' : 'auto' }"
+                                :style="{ opacity: refreshingEpisodes ? 0.5 : 1, pointerEvents: refreshingEpisodes ? 'none' : 'auto', marginLeft: trial.on ? 'auto' : null }"
                                 @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
                                 @mouseleave="$event.target.style.color='#888'; $event.target.style.borderColor='#444'">
                                 <i :class="['fas', refreshingEpisodes ? 'fa-spinner fa-spin' : 'fa-sync-alt']"
@@ -6135,6 +6166,7 @@
         const V2B_EXPIRES_KEY = 'emax_v2board_expires';       // v2board 套餐到期时间 (ms)
         const V2B_CHECK_INTERVAL = 5 * 24 * 60 * 60 * 1000;  // 每5天验证一次套餐
         let v2boardExpiryTimer = null;
+        let SHARE_TRIAL_SEC = 0;   // 🎟️ 分享链接没登录可试看的秒数(/api/auth/check 的 shareTrial;0 = 不试看)
 
         // 🔗 分享落地:链接带 ?s=<分享码> → 趁地址栏还没被改写(syncShareUrl / closeDetail 会去掉它)先存进 sessionStorage。
         //    没登录的访客要先过登录墙,登录后 startApp → initApp 才报 /api/stats/share-open(记"这次分享带来了登录")再删。
@@ -6504,6 +6536,7 @@
                 const data = await res.json();
                 // 记住"本站需要登录"——弱网超时 fail-open 时,无凭据的访客不该被放进来(见下方 catch)
                 try { localStorage.setItem('donggua_auth_required', data.requirePassword ? '1' : '0'); } catch (e) { }
+                SHARE_TRIAL_SEC = Math.max(0, Number(data.shareTrial) || 0);
 
                 if (!data.requirePassword) {
                     window.startApp && window.startApp();
@@ -6700,6 +6733,14 @@
             //    登录框改半透明浮层(透出背景框架)，且全程不加载任何资源站。否则显示常规不透明登录墙。
             let playName = '';
             try { playName = new URLSearchParams(location.search).get('play') || ''; } catch (e) { }
+            // 🎟️ 先试看:这部剧在本机还有试看时间 → 不出登录框,直接按深链播放(到点由播放页暂停再要登录);
+            //    站长关了试看 / 这部剧的试看时间用完了 → 照旧锁定框架 + 登录
+            if (playName && tryStartTrial(playName)) {
+                screen.classList.remove('deeplink-mode');
+                screen.classList.add('hidden');
+                screen.style.display = 'none';
+                return;
+            }
             if (playName) {
                 renderDeepLinkPreview(playName);
                 screen.classList.add('deeplink-mode');
@@ -6712,6 +6753,14 @@
 
             // 默认显示 v2board 模式
             switchLoginMode('v2board');
+        }
+
+        function tryStartTrial(name) {
+            if (!(SHARE_TRIAL_SEC > 0) || typeof DgTrial === 'undefined' || typeof window.startTrial !== 'function') return false;
+            let used = 0;
+            try { used = DgTrial.used(DgTrial.read(localStorage.getItem(DgTrial.KEY), Date.now()), name); } catch (e) { }
+            if (DgTrial.left(SHARE_TRIAL_SEC, used) <= 0) return false;
+            return window.startTrial(name, SHARE_TRIAL_SEC) === true;
         }
 
         // 🔒 渲染未登录深链"锁定框架"：先用最小信息(仅剧名)立即出框架，再异步用 TMDB(/api/preview) 补全简介/海报。
@@ -8032,7 +8081,8 @@
                         try { why2 = ((await r.json()) || {}).why || ''; } catch (e) { }
                         console.warn('[去插播] 剪后清单交付失败 HTTP ' + r.status + (why2 ? ' ' + why2 : '') + ' → 换回原地址');
                         const perEpisode = r.status === 413 || /^(too_long|too_many_segments|too_large)$/.test(why2);
-                        if (r.status !== 429 && r.status < 500 && !perEpisode) this._markNativeBad(job.site);   // 服务器明确拒收这种清单(不是一时忙/单集超限)→ 3 天内不再接管
+                        // 服务器明确拒收这种清单(不是一时忙/单集超限)→ 3 天内不再接管;401/403 是登录状态的事,不是这个站剪不了
+                        if (r.status !== 429 && r.status !== 401 && r.status !== 403 && r.status < 500 && !perEpisode) this._markNativeBad(job.site);
                     } catch (e) { console.warn('[去插播] 剪后清单交付失败 → 换回原地址'); }
                     if (v._activeCut && v._activeCut.src === job.cutUrl) v._activeCut = null;
                 } else {
@@ -9296,6 +9346,40 @@
         })();
         // </dg-home-core>
 
+        // <dg-trial-core>
+        // 🎟️ 分享链接试看(没登录):每部剧在本机累计试看了多少秒,7 天内有效、最多记 50 部(刷新页面不重新计时)。
+        //   登录门(试看还是直接锁定)和播放页计时共用。存的值可能被手改 / 是旧格式,读的时候只认 { 剧名: { s, at } }。
+        //   scripts/share-trial-test.mjs 直接测这一段
+        const DgTrial = (() => {
+            const KEY = 'donggua_trial', KEEP_MS = 7 * 86400e3, MAX = 50;
+            const keyOf = name => String(name || '').trim().toLowerCase();
+            function read(raw, now) {
+                const out = Object.create(null);
+                let m = null;
+                try { m = JSON.parse(raw || '{}'); } catch (e) { }
+                if (!m || typeof m !== 'object' || Array.isArray(m)) return out;
+                for (const k of Object.keys(m)) {
+                    const v = m[k];
+                    if (v && Number.isFinite(v.s) && v.s >= 0 && Number.isFinite(v.at) && now - v.at < KEEP_MS && v.at <= now + 60e3) out[k] = { s: v.s, at: v.at };
+                }
+                return out;
+            }
+            const used = (map, name) => { const v = map[keyOf(name)]; return v ? v.s : 0; };
+            // 只增不减(两个标签页同时试看同一部,取多的那个),按最近更新留 MAX 部
+            function put(map, name, s, now) {
+                const out = Object.create(null), k = keyOf(name);
+                for (const x of Object.keys(map)) out[x] = map[x];
+                out[k] = { s: Math.max(+s || 0, used(map, name)), at: now };
+                const keys = Object.keys(out).sort((a, b) => out[b].at - out[a].at);
+                for (const x of keys.slice(MAX)) delete out[x];
+                return out;
+            }
+            const left = (limit, s) => Math.max(0, Math.round(limit - s));
+            const fmt = sec => { sec = Math.max(0, Math.round(sec)); return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0'); };
+            return { KEY, keyOf, read, used, put, left, fmt };
+        })();
+        // </dg-trial-core>
+
         // 🚦 并发池：逐批执行 worker，限制同时进行的请求数。
         //    用于测速——测"全部"资源站以保留完整可用列表，但同时最多 limit 个，避免一次性几十个请求打满连接。
         async function runWithConcurrency(items, limit, worker) {
@@ -9526,6 +9610,8 @@
                     // 📸 截帧分享弹窗:img = 卡片 dataURL(<img> 显示,微信/QQ 里长按可存/转发);整份对象一次性替换,不做逐帧写
                     frameShare: { show: false, busy: false, img: '', note: '', link: '', title: '', canFiles: false, err: '', tip: '' },
                     previewLocked: false,   // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
+                    // 🎟️ 分享链接试看(没登录):on = 试看中;ended = 时间到了(暂停着等登录);used / limit 秒(DgTrial 按剧名记在本机)
+                    trial: { on: false, ended: false, name: '', used: 0, limit: 0 },
                     deepLinkLoading: false,  // ⏳ 已登录深链：立即显示播放页框架(加载态)，搜索/测速在后台进行，避免先闪搜索结果页
                     deepLinkSourceCount: 0,  // ⏳ 深链加载帧里展示"已找到 N 个线路"的动态计数
                     srcRev: 0,  // 🏷️ 线路分级的非响应式输入(广告过滤开关/绕开去广告记账/hls.js 与去插播核心加载)变了就 +1,让分组和徽章一起重算(不能以 _ 开头:Vue 3 不代理)
@@ -10005,10 +10091,14 @@
 
                 // 定义 startApp 函数供密码验证成功后调用
                 window.startApp = () => {
+                    // 🎟️ 试看中登录了:不重新初始化、不滚回顶部 —— 接着播,补上试看时跳过的首页内容和账号相关
+                    if (this._trialBoot) return this._trialFinish();
                     // 确保页面滚动到顶部
                     window.scrollTo(0, 0);
                     return this.initApp();
                 };
+                // 🎟️ 登录门(showLoginScreen)在没登录 + 分享链接 + 这部剧还有试看时间时调;返回 true = 已开始试看
+                window.startTrial = (name, limit) => this.startTrial(name, limit);
             },
             computed: {
                 // 🗂️ 不在首页(搜索结果页 / 分类浏览页):导航栏、轮播、首页各行收起,搜索框不吸顶
@@ -10043,6 +10133,8 @@
                         .map(s => Object.assign({}, DgHome.info(s.k), { on: s.on }));
                 },
                 homeLayoutIsDefault() { return DgHome.isDefault(this.homeLayout); },
+                trialLeftText() { return DgTrial.fmt(DgTrial.left(this.trial.limit, this.trial.used)); },
+                trialLimitText() { const s = this.trial.limit; return s % 60 ? DgTrial.fmt(s) : (s / 60) + ' 分钟'; },
                 catTypes() { return DgCatalog.TYPES; },
                 catDir() { return DgCatalog.directory(); },
                 catNavRows() { return DgCatalog.navRows(this.catNavType); },
@@ -10235,7 +10327,11 @@
                 // ⭐ 开始播放/换集时清掉这部收藏的"有更新"红点(seen)。currentUrl 只在起播/换集时变,低频
                 currentUrl(v) { if (v) this._favOnPlay(); },
                 // ⭐ 回到首页(关详情页/退出搜索)时刷新收藏状态,最多每 10 分钟一次
-                showDetail(v) { if (!v) this._favRefreshMaybe(); },
+                showDetail(v) {
+                    if (v) return;
+                    this._favRefreshMaybe();
+                    if (this.trial.on) this._trialLeave();   // 🎟️ 试看中离开播放页 → 出登录页(首页要登录才能看)
+                },
                 searched(v) { if (!v) this._favRefreshMaybe(); },
                 // 🔔 打开偏好设置时按浏览器实况刷新推送开关(用户可能在系统设置里关了通知权限)
                 showSettingsModal(v) {
@@ -10417,7 +10513,10 @@
                         });
                     } catch (e) { }
                 },
-                async initApp() {
+                // opts.trial:分享链接试看(没登录)只初始化播放要用的(配置 / 站点 / 深链);首页内容、观看历史(连带云同步、收藏、推送)
+                //   登录后由 _trialFinish → _trialRunDeferred 补上
+                async initApp(opts) {
+                    const trial = !!(opts && opts.trial);
                     // 防止重复初始化
                     if (this._appInitialized) return;
                     this._appInitialized = true;
@@ -10463,7 +10562,9 @@
                         this.danmakuEnabled = !!config.danmaku_enabled;
                         if (this.danmakuEnabled) console.log('[Config] 弹幕已开启');
                         // ✂️ 服务器能托管剪后的清单(Safari 原生 HLS 播放前剪插播要它;Vercel 无状态 → false,原生通道退回播放中静默跳过)
-                        this.hlsCutEnabled = config.hls_cut === true;
+                        this._cfgHlsCut = config.hls_cut === true;
+                        //    试看(没登录)时不交:那个接口要令牌
+                        this.hlsCutEnabled = this._cfgHlsCut && !this.trial.on;
                         // 📮 求片开关（服务端配置了 ADMIN_TOKEN 才开启；否则整个功能隐藏）
                         this.requestsEnabled = !!config.requests_enabled;
                         // ⏱️ 实测观看时长 + 分享统计(服务器 sqlite 且没设 STATS_DISABLE 才开;离线用缓存配置时照常累计,联网补发)
@@ -10498,8 +10599,8 @@
                         updateStatus('⚠️ 服务器连接失败');
                     }
 
-                    // 2. 如果获取到了 Key，加载数据
-                    if (TMDB_API_KEY) {
+                    // 2. 如果获取到了 Key，加载数据(试看时首页被播放页盖着,登录后再加载)
+                    if (TMDB_API_KEY && !trial) {
                         updateStatus('正在加载首页内容...');
                         try {
                             // ⏱️ 最多等 6s:弱网时 Hero 慢到/拉不回来就先放行进应用(它完成后仍会自行填充),
@@ -10513,7 +10614,7 @@
                         } catch (e) {
                             console.error('[InitApp] Lists 加载失败:', e);
                         }
-                    } else {
+                    } else if (!TMDB_API_KEY) {
                         console.warn('TMDB_API_KEY 未配置');
                         updateStatus('⚠️ API 未配置');
                     }
@@ -10527,7 +10628,7 @@
 
                     // 4. 加载观看历史(先于 /api/sites——历史/离线列表纯本地,不能被网络请求挂起拖住:
                     //    弱网时"继续观看"行与 offlineList 必须先就位,它们是断网/弱网播缓存的入口)
-                    this.loadWatchHistory();
+                    if (!trial) this.loadWatchHistory();
 
                     // 5. 加载站点信息（用于客户端测速;⏱️ 8s 超时防弱网挂起阻断后续深链处理）
                     try {
@@ -10558,6 +10659,11 @@
                     window.addEventListener('offline', () => {
                         try { this._offSwitchToCacheIfAvailable(); } catch (e) { }
                     });
+
+                    if (trial) {
+                        if (this._trialBoot === 'upgrade') this._trialRunDeferred();   // 初始化还没跑完就已经登录了
+                        else this._trialBoot = 'done';
+                    }
                 },
 
                 // ========== 📺 观看历史功能 ==========
@@ -11131,6 +11237,8 @@
 
                 // 添加到观看历史（包含 groupData 用于直接播放）
                 addToWatchHistory(name, poster, episode, progress, duration, groupData) {
+                    // 🎟️ 试看(没登录)不记:没加载本机历史,这时写进去会把这台设备原有的历史整个盖掉
+                    if (this.trial.on) return;
                     // 重新观看 → 作废该剧的删除墓碑(否则同步时会被压制成"已删")
                     if (name) { const t = this._loadTombstones(); if (t[name] != null) { delete t[name]; this._saveTombstones(t); } }
                     // 查找是否已存在
@@ -13223,6 +13331,94 @@
                 promptLogin() {
                     if (typeof window.showLoginForDeepLink === 'function') window.showLoginForDeepLink();
                     else if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
+                },
+                // 🎟️ 分享链接试看(没登录;登录门 showLoginScreen → window.startTrial 调):不弹登录,按深链搜索并播放,
+                //   实际播放满 limit 秒(DgTrial 按剧名在本机累计)就暂停、要求登录;登录后 startApp → _trialFinish 接着播。返回 true = 已开始
+                startTrial(name, limit) {
+                    if (this._trialBoot || this._appInitialized || !name || !(limit > 0)) return false;
+                    let used = 0;
+                    try { used = DgTrial.used(DgTrial.read(localStorage.getItem(DgTrial.KEY), Date.now()), name); } catch (e) { }
+                    this.trial = { on: true, ended: false, name, used, limit };
+                    this._trialBoot = 'running';
+                    this._trialAt = Date.now(); this._trialCt = -1; this._trialSavedAt = Date.now();
+                    this._trialTimer = setInterval(() => this._trialTick(), 1000);
+                    window.addEventListener('pagehide', () => { if (this.trial.on) this._trialSave(); });
+                    // 先出播放页的加载帧:配置 / 站点还没回来 loader 就退了,不然会先露出一个空首页
+                    this.currentGroup = { name, pic: '', sources: [] };
+                    this.deepLinkLoading = true;
+                    this.isTestingSources = true;
+                    this.showDetail = true;
+                    document.body.classList.add('detail-open');
+                    this.initApp({ trial: true });
+                    return true;
+                },
+                // 每秒一次:按画面实际往前走的时长计(暂停 / 缓冲 / 网络差时一卡一卡的都不白扣);一拍最多算"流逝时间 × 倍速",
+                //   拖进度条跳过去的不算看过。后台标签页的定时器可能一分钟才跑一次,流逝时间按真实的算,最多 70 秒
+                _trialTick() {
+                    const t = this.trial;
+                    if (!t.on) return;
+                    const now = Date.now(), dt = Math.min(Math.max(now - this._trialAt, 0), 70000);
+                    this._trialAt = now;
+                    const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                    const ct = v ? (+v.currentTime || 0) : -1, adv = (ct >= 0 && this._trialCt >= 0) ? ct - this._trialCt : 0;   // 播放器刚出来那一拍只记起点
+                    this._trialCt = ct;
+                    const playing = !!(v && !v.paused && !v.ended && v.readyState >= 2);
+                    if (t.ended) { if (playing) { try { dp.pause(); } catch (e) { } } return; }   // 时间到了又被播起来(空格 / 媒体键)→ 按住
+                    if (!playing || !(adv > 0)) return;
+                    t.used = Math.min(t.limit, t.used + Math.min(adv, dt / 1000 * Math.max(1, +v.playbackRate || 1) + 0.2));
+                    if (t.used >= t.limit) { this._trialEnd(); return; }
+                    if (now - this._trialSavedAt > 5000) this._trialSave();
+                },
+                _trialSave() {
+                    const t = this.trial;
+                    if (!t.name || !(t.limit > 0)) return;
+                    this._trialSavedAt = Date.now();
+                    try {
+                        const map = DgTrial.read(localStorage.getItem(DgTrial.KEY), Date.now());
+                        localStorage.setItem(DgTrial.KEY, JSON.stringify(DgTrial.put(map, t.name, t.used, Date.now())));
+                    } catch (e) { }
+                },
+                // 试看时间到:暂停,退出全屏 / 网页全屏 / 画中画(那里面看不到遮罩和登录框),出登录浮层(透出暂停的画面)
+                _trialEnd() {
+                    const t = this.trial;
+                    if (!t.on || t.ended) return;
+                    t.ended = true;
+                    this._trialSave();
+                    try { if (dp) dp.pause(); } catch (e) { }
+                    try { if (dp && dp.fullScreen) { dp.fullScreen.cancel('browser'); dp.fullScreen.cancel('web'); } } catch (e) { }
+                    try { if (document.fullscreenElement) document.exitFullscreen().catch(() => { }); } catch (e) { }
+                    try { if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => { }); } catch (e) { }
+                    this.promptLogin();
+                },
+                _trialStop() {
+                    if (this._trialTimer) { clearInterval(this._trialTimer); this._trialTimer = null; }
+                    if (this.trial.on) this._trialSave();
+                    this.trial = Object.assign({}, this.trial, { on: false, ended: false });
+                },
+                // 登录成功(startApp)时:试看转正 —— 停止计时,时间到了被暂停的接着播,补上试看时跳过的初始化
+                _trialFinish() {
+                    const resume = this.trial.on && this.trial.ended && this.showDetail;
+                    this._trialStop();
+                    this.hlsCutEnabled = !!this._cfgHlsCut;
+                    if (this._trialBoot === 'done') this._trialRunDeferred();
+                    else this._trialBoot = 'upgrade';   // initApp 还没跑完:由它收尾时补
+                    if (resume) { try { if (dp) dp.play(); } catch (e) { } }
+                },
+                _trialRunDeferred() {
+                    this._trialBoot = null;
+                    if (TMDB_API_KEY) {
+                        try { const p = this.fetchHero(); if (p && p.catch) p.catch(() => { }); } catch (e) { }
+                        try { this.fetchAllLists(); } catch (e) { }
+                    }
+                    this.loadWatchHistory();
+                    if (this.watchStatsEnabled) this._shareOpenReport();   // 没登录时它不报;现在有令牌了,记下这次分享带来了登录
+                },
+                // 试看中离开播放页(关掉 / 回首页 / 深链没搜到):首页要登录才能看 → 停止试看,出常规登录页
+                //   (先去掉地址栏的 ?play=,否则登录门又把它当成分享链接)
+                _trialLeave() {
+                    this._trialStop();
+                    try { if (/[?&]play=/.test(location.search)) history.replaceState(history.state, '', location.pathname); } catch (e) { }
+                    if (typeof window.showLoginScreen === 'function') window.showLoginScreen();
                 },
                 // 是否正在投屏(AirPlay/远程)：接管 MSE 流时本地 <video> 会发伪 ended/error，据此停手不自动跳集/切线路
                 _isCasting() {

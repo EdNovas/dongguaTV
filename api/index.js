@@ -51,6 +51,12 @@ const REMOTE_DB_URL = process.env['REMOTE_DB_URL'] || '';
 const TMDB_API_KEY = process.env.TMDB_API_KEY || ''; // Keep Required
 const TMDB_PROXY_URL = process.env['TMDB_PROXY_URL'] || '';
 const ACCESS_PASSWORDS = (process.env['ACCESS_PASSWORD'] || '').split(',').map(p => p.trim()).filter(Boolean);
+// 🎟️ 分享链接试看时长(秒),与 server.js 同一口径:SHARE_TRIAL_MINUTES 默认 5,0 = 关
+const SHARE_TRIAL_SEC = (() => {
+    const raw = process.env.SHARE_TRIAL_MINUTES;
+    const m = (raw === undefined || String(raw).trim() === '') ? 5 : Number(raw);
+    return Number.isFinite(m) && m > 0 ? Math.round(Math.min(m, 120) * 60) : 0;
+})();
 
 // 新增：直接嵌入站点配置 JSON（优先于 REMOTE_DB_URL）
 // 格式：SITES_JSON = '{"sites":[{"key":"xxx","name":"xxx","api":"https://..."}]}'
@@ -1100,7 +1106,8 @@ app.get('/api/debug', (req, res) => {
 app.get('/api/auth/check', (req, res) => {
     res.json({
         requirePassword: ACCESS_PASSWORDS.length > 0,
-        multiUserMode: ACCESS_PASSWORDS.length > 1
+        multiUserMode: ACCESS_PASSWORDS.length > 1,
+        shareTrial: SHARE_TRIAL_SEC
     });
 });
 
