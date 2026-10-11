@@ -436,6 +436,17 @@
         #dplayer .dplayer-danmaku .dplayer-danmaku-item.dplayer-danmaku-move {
             animation-duration: var(--dm-dur, 8s) !important;
         }
+        /* 🗨️ dmPixelStart 改过的滚动弹幕:从 left:100%(屏幕外)起步,动画只有像素位移(iOS / iPadOS 新弹幕不再先在右边闪一下) */
+        #dplayer .dplayer-danmaku .dplayer-danmaku-right[data-dgpx] {
+            right: auto;
+            left: 100%;
+        }
+        #dplayer .dplayer-danmaku .dplayer-danmaku-right.dplayer-danmaku-move[data-dgpx] {
+            animation-name: dg-danmaku !important;
+        }
+        @keyframes dg-danmaku {
+            from { transform: translateX(0); }
+        }
         /* 🗨️ 独立的弹幕设置滑块面板 */
         #dplayer .dm-settings-panel {
             position: absolute;
@@ -7146,6 +7157,34 @@
                     .catch(e => { console.error(e); if (o.error) o.error(); });
             }
         };
+        // 🗨️ iOS / iPadOS Safari 上每条新弹幕先在右边闪一下:DPlayer 的滚动弹幕用 right:0 定位,靠 CSS 动画从 translateX(100%)
+        //    滚到行内的 translateX(-容器宽px)。Safari 给刚插进来的元素起动画时,头一两帧可能还是 transform:none,弹幕就贴着右边
+        //    完整画出来,下一帧才跳回屏幕外开始滚。DPlayer 每画一批,把这批滚动弹幕改成 left:100% 起步、终点
+        //    translateX(-(容器宽 + 弹幕宽)px)(样式见 [data-dgpx]):路线、时长和原来一样,而没套上动画的那一帧不管是
+        //    transform:none 还是停在终点,都在屏幕外
+        // <dg-dm-px-core>
+        const dmPixelStart = (player) => {
+            const dm = player && player.danmaku;
+            if (!dm || dm._dgPx || typeof dm.draw !== 'function') return false;
+            const draw = dm.draw;
+            dm.draw = function () {
+                const box = this.container, last = box ? box.lastElementChild : null;
+                const ret = draw.apply(this, arguments);
+                try {
+                    for (let it = last ? last.nextElementSibling : box.firstElementChild; it; it = it.nextElementSibling) {
+                        if (!it.classList.contains('dplayer-danmaku-right') || !it.classList.contains('dplayer-danmaku-move')) continue;
+                        const m = /translateX\(\s*-([\d.]+)px\s*\)/.exec(it.style.transform), w = parseFloat(it.style.width);
+                        if (!m || !(+m[1] > 0) || !(w > 0)) continue;
+                        it.style.transform = 'translateX(-' + (+m[1] + w) + 'px)';
+                        it.setAttribute('data-dgpx', '');
+                    }
+                } catch (e) { }
+                return ret;
+            };
+            dm._dgPx = true;
+            return true;
+        };
+        // </dg-dm-px-core>
         // 🛡️ 安全跳转：媒体在换源/代理回退重载时 currentTime 会是 NaN，相对跳转会把 NaN 写进 currentTime →
         //    DPlayer 抛 "non-finite" TypeError、可能打断换源。所有跳转统一走守卫，非有限值直接跳过。
         const safeSeek = (t) => { if (dp && Number.isFinite(t) && t >= 0) { try { dp.seek(t); } catch (e) { } } };
@@ -17154,6 +17193,7 @@
                             };
                             dp.danmaku._sendPatched = true;
                         }
+                        dmPixelStart(dp);   // 🗨️ iOS / iPadOS 新弹幕先在右边闪一下
 
                         // ========== 🔧 设置菜单修复 ==========
                         setTimeout(() => {
