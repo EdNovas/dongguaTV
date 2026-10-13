@@ -3690,13 +3690,33 @@ function cleanCacheIfNeeded() {
     }, 100);
 }
 
+// 📱 扫码登录(见 lib/qr-login):电视出二维码,已登录的手机扫码确认后把本机登录凭据交给电视(取走即删,5 分钟过期)。
+//    只在配了访问密码(有登录墙)时开。交过来的凭据只收配置里的访问密码(且没被封禁),其余不收
+function qrLoginAuth(a) {
+    if (!a || typeof a !== 'object' || a.type !== 'password') return null;
+    const h = typeof a.hash === 'string' ? a.hash : '';
+    const info = /^[a-f0-9]{64}$/.test(h) ? PASSWORD_HASH_MAP[h] : undefined;
+    if (!info || !(info.index >= 0) || isBanned(h)) return null;
+    return { type: 'password', hash: h };
+}
+let qrLogin = null;
+try {
+    qrLogin = require('./lib/qr-login').createQrLogin({
+        enabled: () => ACCESS_PASSWORDS.length > 0,
+        checkAuth: qrLoginAuth,
+        limiter: (max) => rateLimit({ windowMs: 60 * 1000, max, keyGenerator: ipKey, message: { ok: false, message: '请求过于频繁，请稍后再试' } })
+    });
+    qrLogin.registerRoutes(app);
+} catch (e) { console.warn('[QrLogin] 模块加载失败,扫码登录已禁用:', e.message); qrLogin = null; }
+
 // 5. 认证检查 API
 app.get('/api/auth/check', (req, res) => {
     // 检查是否需要密码
     res.json({
         requirePassword: ACCESS_PASSWORDS.length > 0,
         multiUserMode: ACCESS_PASSWORDS.length > 1,
-        shareTrial: SHARE_TRIAL_SEC
+        shareTrial: SHARE_TRIAL_SEC,
+        qrLogin: !!qrLogin && ACCESS_PASSWORDS.length > 0
     });
 });
 
