@@ -4432,6 +4432,66 @@
         .login-mode-switch {
             margin-top: 20px;
             text-align: center;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        /* 📱 扫码登录(见 qrLoginStart):白底留静区,像素放大不糊,电视上隔几米也扫得出 */
+        .qr-login {
+            text-align: center;
+        }
+
+        .qr-login-code {
+            display: inline-block;
+            width: 232px;
+            height: 232px;
+            padding: 12px;
+            background: #fff;
+            border-radius: 16px;
+            box-sizing: content-box;
+        }
+
+        .qr-login-code img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        .qr-login-code img:not([src]) {
+            visibility: hidden;
+        }
+
+        .qr-login-tip {
+            margin: 14px 0 6px;
+            color: rgba(255, 255, 255, 0.75);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .qr-login-tip.err {
+            color: #ff6b6b;
+        }
+
+        /* 手机上确认"让电视登录"的弹窗(外壳复用求片弹窗的 .req-body / .req-h / .req-sub) */
+        .tvl-modal {
+            max-width: 440px;
+            width: 92%;
+        }
+
+        .tvl-warn {
+            color: #fbbf24;
+            font-size: 13px;
+            line-height: 1.6;
+            margin: 0 0 18px;
+        }
+
+        .tvl-btns {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
         }
 
         .mode-switch-btn {
@@ -4719,7 +4779,7 @@
                     <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;">视界 <span
                         style="font-size:1rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span>
                 </div>
-                <div class="password-logo-subtitle"><i class="fas fa-shield-alt"></i> 请登录以继续</div>
+                <div class="password-logo-subtitle"><i class="fas fa-shield-alt"></i> <span id="login-subtitle-text">请登录以继续</span></div>
             </div>
 
             <div id="password-error" class="password-error" style="display: none;">
@@ -4775,6 +4835,16 @@
                 </button>
             </form>
 
+            <!-- 📱 扫码登录:电视等不方便打字的设备默认显示;已登录的手机扫码、确认后这里自动登录 -->
+            <div id="qr-login" class="qr-login" style="display: none;">
+                <div class="qr-login-code"><img id="qr-login-img" alt="扫码登录二维码"></div>
+                <div id="qr-login-tip" class="qr-login-tip">正在生成二维码…</div>
+                <button type="button" id="qr-login-again" class="mode-switch-btn" style="display: none;" onclick="qrLoginStart(true)">
+                    <i class="fas fa-redo"></i>
+                    <span>重新生成二维码</span>
+                </button>
+            </div>
+
             <!-- 模式切换按钮 -->
             <div class="login-mode-switch">
                 <button type="button" id="switch-to-password" class="mode-switch-btn"
@@ -4786,6 +4856,11 @@
                     onclick="switchLoginMode('v2board')">
                     <i class="fas fa-user-circle"></i>
                     <span>使用机场账户登录</span>
+                </button>
+                <button type="button" id="switch-to-qr" class="mode-switch-btn" style="display: none;"
+                    onclick="switchLoginMode('qr')">
+                    <i class="fas fa-qrcode"></i>
+                    <span>手机扫码登录</span>
                 </button>
             </div>
 
@@ -5701,6 +5776,33 @@
             </div>
         </div>
 
+        <!-- 📱 扫码登录(手机这一侧):核对是哪台设备在请求,确认后把本机登录交给它 -->
+        <div class="info-modal-overlay" v-if="tvLogin.show" @click.self="tvLoginCancel">
+            <div class="info-modal tvl-modal" role="dialog" aria-modal="true" aria-labelledby="tvl-title">
+                <button type="button" class="info-modal-close" @click="tvLoginCancel" aria-label="关闭"><i class="fas fa-times"></i></button>
+                <div class="req-body">
+                    <h3 class="req-h" id="tvl-title"><i class="fas fa-tv"></i> 在其他设备上登录</h3>
+                    <p v-if="tvLogin.state === 'loading'" class="req-sub">正在读取二维码…</p>
+                    <template v-else-if="tvLogin.state === 'confirm' || tvLogin.state === 'sending'">
+                        <p class="req-sub">一台<b>{{ tvLogin.device }}</b>正在请求用你的账号登录。确认后它就能直接观看，不用再输密码。</p>
+                        <p class="tvl-warn"><i class="fas fa-shield-alt"></i> 只在你自己的设备上确认。别人发来的二维码不要扫：确认后对方就能用你的账号。</p>
+                        <div class="tvl-btns">
+                            <button type="button" class="btn btn-outline-secondary" @click="tvLoginCancel">取消</button>
+                            <button type="button" class="btn btn-danger" :disabled="tvLogin.state === 'sending'" @click="tvLoginApprove">{{ tvLogin.state === 'sending' ? '正在确认…' : '确认登录' }}</button>
+                        </div>
+                    </template>
+                    <template v-else-if="tvLogin.state === 'done'">
+                        <p class="req-sub"><i class="fas fa-circle-check" style="color: #46d369;"></i> 已确认，那台设备马上就会登录。</p>
+                        <div class="tvl-btns"><button type="button" class="btn btn-danger" @click="tvLoginCancel">好的</button></div>
+                    </template>
+                    <template v-else>
+                        <p class="req-sub" style="color: #f87171;">{{ tvLogin.msg }}</p>
+                        <div class="tvl-btns"><button type="button" class="btn btn-outline-secondary" @click="tvLoginCancel">关闭</button></div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
         <!-- 🔔 「开启更新提醒？」小卡片(站内软提示,不是浏览器权限框):本页第一次 ♥ 成功 / 求片提交成功后,等 toast 和别的弹窗都没了才出来。
              不加遮罩、不挡页面;之后有弹窗盖上来就先藏起来(v-show)。teleport 到 body:播放页网页全屏(TV 模式)时也在上面,
              但低于分享面板 / 截帧弹窗 / toast。点「开启」才在这次点击里要浏览器权限 -->
@@ -6178,6 +6280,7 @@
         const V2B_CHECK_INTERVAL = 5 * 24 * 60 * 60 * 1000;  // 每5天验证一次套餐
         let v2boardExpiryTimer = null;
         let SHARE_TRIAL_SEC = 0;   // 🎟️ 分享链接没登录可试看的秒数(/api/auth/check 的 shareTrial;0 = 不试看)
+        let QR_LOGIN = false;      // 📱 本站开了扫码登录(/api/auth/check 的 qrLogin:server.js 部署 + 配了访问密码;Vercel 没有)
 
         // 🔗 分享落地:链接带 ?s=<分享码> → 趁地址栏还没被改写(syncShareUrl / closeDetail 会去掉它)先存进 sessionStorage。
         //    没登录的访客要先过登录墙,登录后 startApp → initApp 才报 /api/stats/share-open(记"这次分享带来了登录")再删。
@@ -6295,33 +6398,183 @@
             }
         }
 
-        // Switch between login modes
+        // 切换登录方式:v2board(机场账户)/ password(独立密码)/ qr(手机扫码,本站开了才有;手机上不给"手机扫码登录"入口)
         function switchLoginMode(mode) {
-            const v2boardForm = document.getElementById('v2board-form');
-            const passwordForm = document.getElementById('password-form');
-            const switchToPassword = document.getElementById('switch-to-password');
-            const switchToV2board = document.getElementById('switch-to-v2board');
-            const registerLink = document.getElementById('register-link');
-            const errorDiv = document.getElementById('password-error');
+            if (mode === 'qr' && !QR_LOGIN) mode = 'v2board';
+            const show = (id, on, how) => { document.getElementById(id).style.display = on ? (how || 'block') : 'none'; };
+            show('password-error', false);
+            show('v2board-form', mode === 'v2board');
+            show('password-form', mode === 'password');
+            show('qr-login', mode === 'qr');
+            show('switch-to-v2board', mode !== 'v2board', 'inline-flex');
+            show('switch-to-password', mode !== 'password', 'inline-flex');
+            show('switch-to-qr', mode !== 'qr' && QR_LOGIN && !isPhoneUA(), 'inline-flex');
+            show('register-link', mode !== 'password');
+            if (mode === 'qr') qrLoginStart(true);
+            else qrLoginStop();
+            if (mode === 'password') setTimeout(() => document.getElementById('password-input').focus(), 100);
+            else if (mode === 'v2board') setTimeout(() => document.getElementById('v2board-email').focus(), 100);
+        }
 
-            // Hide error
-            errorDiv.style.display = 'none';
-
-            if (mode === 'password') {
-                v2boardForm.style.display = 'none';
-                passwordForm.style.display = 'block';
-                switchToPassword.style.display = 'none';
-                switchToV2board.style.display = 'inline-flex';
-                registerLink.style.display = 'none';
-                setTimeout(() => document.getElementById('password-input').focus(), 100);
-            } else {
-                v2boardForm.style.display = 'block';
-                passwordForm.style.display = 'none';
-                switchToPassword.style.display = 'inline-flex';
-                switchToV2board.style.display = 'none';
-                registerLink.style.display = 'block';
-                setTimeout(() => document.getElementById('v2board-email').focus(), 100);
+        // 📺 电视 / 遥控器设备(播放页的 TV 模式、登录框默认出二维码共用):?tv=1 / ?tv=0 手动指定(会记住)> 本机记住的开关
+        //    > 原生 App 默认开 > 电视浏览器 UA
+        function detectTVMode() {
+            const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('tv') === '1') {
+                try { localStorage.setItem('force_tv_mode', '1'); } catch (e) { }
+                return true;
             }
+            if (urlParams.get('tv') === '0') {
+                try { localStorage.setItem('force_tv_mode', '0'); } catch (e) { }
+                return false;
+            }
+            try {
+                const saved = localStorage.getItem('force_tv_mode');
+                if (saved === '1') return true;
+                if (saved === '0') return false;
+            } catch (e) { }
+            if (isNative) {
+                console.log('[TV 检测] ✅ 原生 App，默认开启 TV 模式');
+                return true;
+            }
+            const ua = navigator.userAgent.toLowerCase();
+            const tvKeywords = [
+                'android tv', 'googletv',           // Android TV / Google TV
+                'aftt', 'aftm', 'aftb', 'firetv',   // Amazon Fire TV
+                'chromecast', 'sabrina', 'boreal',  // Chromecast with Google TV
+                'roku',                              // Roku
+                'smarttv', 'smart-tv',               // 通用 Smart TV
+                'tizen',                             // Samsung TV
+                'webos', 'web0s',                    // LG TV
+                'leanback'                           // Android TV Leanback
+            ];
+            const isTVUA = tvKeywords.some(k => ua.includes(k));
+            if (isTVUA) console.log('[TV 检测] ✅ 检测到智能 TV 浏览器:', ua.substring(0, 100));
+            return isTVUA;
+        }
+        function isPhoneUA() { return /iphone|ipod|android.*mobile|windows phone/i.test(navigator.userAgent || ''); }
+        // 登录框默认的方式:电视上直接出二维码(拿遥控器敲邮箱密码太难),其它设备先给机场账户表单
+        function loginDefaultMode() { return QR_LOGIN && detectTVMode() ? 'qr' : 'v2board'; }
+
+        // ========== 📱 扫码登录(电视这一侧;手机那一侧见 Vue 的 _tvLoginOpen,服务器见 lib/qr-login) ==========
+        //   /api/auth/qr/new 拿 code + secret → 二维码 = 本站/?tvlogin=<code> → 每 2 秒 /poll(code + secret);
+        //   手机确认后拿到它的登录凭据,按原来的登录 / 续期接口核实一遍再登录。二维码 5 分钟过期自动换新,
+        //   连换 3 次(≈20 分钟没人扫)就停下,等点"重新生成"(没人看的电视不一直轮询)
+        const qrl = { run: 0, code: '', secret: '', exp: 0, timer: null, renew: 0 };
+        let qrLibP = null;
+        function loadQrLib() {
+            if (typeof window.qrcode === 'function') return Promise.resolve(window.qrcode);
+            if (!qrLibP) {
+                qrLibP = new Promise((res, rej) => {
+                    const s = document.createElement('script');
+                    s.src = 'libs/js/qrcode-generator.min.js?v=2.0.4';   // 与截帧分享卡片、sw.js 预缓存同一个文件
+                    s.async = true;
+                    s.onload = () => (typeof window.qrcode === 'function' ? res(window.qrcode) : rej(new Error('二维码组件没有就绪')));
+                    s.onerror = () => rej(new Error('二维码组件加载失败，请检查网络'));
+                    document.head.appendChild(s);
+                }).catch(e => { qrLibP = null; throw e; });
+            }
+            return qrLibP;
+        }
+        function qrTip(text, err) {
+            const tip = document.getElementById('qr-login-tip');
+            tip.textContent = text;
+            tip.classList.toggle('err', !!err);
+            document.getElementById('qr-login-again').style.display = err ? 'inline-flex' : 'none';
+        }
+        function qrLoginStop() {
+            qrl.run++;
+            if (qrl.timer) { clearTimeout(qrl.timer); qrl.timer = null; }
+        }
+        async function qrLoginStart(manual) {
+            qrLoginStop();
+            if (manual) qrl.renew = 0;
+            const run = qrl.run;
+            const img = document.getElementById('qr-login-img');
+            img.removeAttribute('src');
+            qrTip('正在生成二维码…');
+            try {
+                const [lib, r] = await Promise.all([
+                    loadQrLib(),
+                    fetchT('/api/auth/qr/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }, 8000)
+                ]);
+                const d = await r.json();
+                if (run !== qrl.run) return;
+                if (!d || !d.ok) throw new Error((d && d.message) || '');
+                const qr = lib(0, 'M');
+                qr.addData(location.origin + '/?tvlogin=' + d.code);
+                qr.make();
+                img.src = qr.createDataURL(8, 0);
+                Object.assign(qrl, { code: d.code, secret: d.secret, exp: Date.now() + (Number(d.ttl) || 300) * 1000 });
+                qrTip('用已登录的手机扫码，在手机上确认后这里自动登录');
+                qrl.timer = setTimeout(qrPoll, 2000);
+            } catch (e) {
+                if (run === qrl.run) qrTip(e.message || '二维码生成失败，请检查网络', true);
+            }
+        }
+        async function qrPoll() {
+            const run = qrl.run;
+            qrl.timer = null;
+            if (Date.now() > qrl.exp) return qrRenew();
+            let d = null;
+            if (!document.hidden) {
+                try {
+                    const r = await fetchT('/api/auth/qr/poll', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code: qrl.code, secret: qrl.secret })
+                    }, 8000);
+                    d = await r.json();
+                } catch (e) { }
+                if (run !== qrl.run) return;
+            }
+            const st = d && d.status;
+            if (st === 'approved') return qrApply(d.auth, run);
+            if (st === 'denied') return qrTip('已在手机上取消', true);
+            if (st === 'expired') return qrRenew();
+            if (st === 'scanned') qrTip('已扫码，请在手机上确认');
+            qrl.timer = setTimeout(qrPoll, 2000);
+        }
+        function qrRenew() {
+            if (qrl.renew++ < 3) return qrLoginStart(false);
+            qrTip('二维码已过期', true);
+        }
+        async function qrApply(auth, run) {
+            qrTip('正在登录…');
+            try {
+                await qrLoginApply(auth);
+            } catch (e) {
+                if (run === qrl.run) qrTip(e.message || '登录失败，请重新扫码', true);
+            }
+        }
+        // 手机交过来的凭据按原来的接口核实一遍,再存成本机登录(记住 1 年:电视是自己的设备)
+        async function qrLoginApply(auth) {
+            if (!auth || (auth.type !== 'password' && auth.type !== 'v2board')) throw new Error('登录信息不完整，请重新扫码');
+            if (auth.type === 'password') {
+                const r = await fetchT('/api/auth/verify', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ passwordHash: auth.hash })
+                }, 8000);
+                const d = await r.json();
+                if (!d.success) throw new Error('这个密码已经失效，请在手机上重新登录后再扫');
+                localStorage.setItem(AUTH_STORAGE_KEY, d.passwordHash);
+                localStorage.setItem(AUTH_TYPE_KEY, 'password');
+            } else {
+                // 机场账户:拿手机的面板令牌跟面板核实(和老用户每 5 天一次的免密验证同一个接口,成功时写好本站令牌和套餐)。
+                //   它在断网、限流时也回 true(不打断老用户),所以以"拿到了本站令牌"为准
+                clearAuthState();
+                localStorage.setItem(AUTH_TYPE_KEY, 'v2board');
+                localStorage.setItem(V2B_TOKEN_KEY, auth.v2boardToken);
+                if (auth.email) localStorage.setItem(V2B_EMAIL_KEY, auth.email);
+                const ok = await revalidateV2boardSession();
+                if (ok !== true || !localStorage.getItem(AUTH_STORAGE_KEY)) {
+                    clearAuthState();
+                    throw new Error((ok && ok.message) || '暂时连不上机场面板，请稍后再扫');
+                }
+            }
+            localStorage.setItem(AUTH_EXPIRY_KEY, String(Date.now() + 365 * 24 * 60 * 60 * 1000));
+            if (window.startApp) await window.startApp();
+            hideLoginScreen();
         }
 
         // Show error message
@@ -6334,6 +6587,7 @@
 
         // Hide login screen with animation
         function hideLoginScreen() {
+            qrLoginStop();
             const screen = document.getElementById('password-screen');
             if (screen._dismissTimer) { clearTimeout(screen._dismissTimer); screen._dismissTimer = null; }
             screen.classList.add('hidden');
@@ -6548,6 +6802,7 @@
                 // 记住"本站需要登录"——弱网超时 fail-open 时,无凭据的访客不该被放进来(见下方 catch)
                 try { localStorage.setItem('donggua_auth_required', data.requirePassword ? '1' : '0'); } catch (e) { }
                 SHARE_TRIAL_SEC = Math.max(0, Number(data.shareTrial) || 0);
+                QR_LOGIN = data.qrLogin === true;
 
                 if (!data.requirePassword) {
                     window.startApp && window.startApp();
@@ -6759,11 +7014,15 @@
                 screen.classList.remove('deeplink-mode');
             }
 
+            // 📱 手机扫了电视上的二维码、但这台手机还没登录:先登录,登录后再确认(见 Vue 的 _tvLoginOpen)
+            let tvLoginLink = false;
+            try { tvLoginLink = !!new URLSearchParams(location.search).get('tvlogin'); } catch (e) { }
+            document.getElementById('login-subtitle-text').textContent = tvLoginLink ? '先登录，再确认让电视登录' : '请登录以继续';
+
             screen.classList.remove('hidden');
             screen.style.display = 'flex';
 
-            // 默认显示 v2board 模式
-            switchLoginMode('v2board');
+            switchLoginMode(loginDefaultMode());
         }
 
         function tryStartTrial(name) {
@@ -6808,13 +7067,14 @@
             screen.classList.add('deeplink-mode');
             screen.classList.remove('hidden');
             screen.style.display = 'flex';
-            switchLoginMode('v2board');
+            switchLoginMode(loginDefaultMode());
         };
 
         // 🔗 关闭深链登录浮层(回看背景框架；仅隐藏浮层，不改变登录状态)
         window.dismissDeepLinkLogin = function () {
             const screen = document.getElementById('password-screen');
             if (!screen) return;
+            qrLoginStop();
             screen.classList.add('hidden');
             if (screen._dismissTimer) clearTimeout(screen._dismissTimer);
             screen._dismissTimer = setTimeout(() => {
@@ -9651,6 +9911,8 @@
                     previewLocked: false,   // 🔒 未登录深链预览态：只渲染框架(标题+简介+黑屏)，不加载任何资源站
                     // 🎟️ 分享链接试看(没登录):on = 试看中;ended = 时间到了(暂停着等登录);used / limit 秒(DgTrial 按剧名记在本机)
                     trial: { on: false, ended: false, name: '', used: 0, limit: 0 },
+                    // 📱 扫码登录(手机这一侧):state = loading | confirm | sending | done | error
+                    tvLogin: { show: false, state: '', code: '', device: '', msg: '' },
                     deepLinkLoading: false,  // ⏳ 已登录深链：立即显示播放页框架(加载态)，搜索/测速在后台进行，避免先闪搜索结果页
                     deepLinkSourceCount: 0,  // ⏳ 深链加载帧里展示"已找到 N 个线路"的动态计数
                     srcRev: 0,  // 🏷️ 线路分级的非响应式输入(广告过滤开关/绕开去广告记账/hls.js 与去插播核心加载)变了就 +1,让分组和徽章一起重算(不能以 _ 开头:Vue 3 不代理)
@@ -9756,54 +10018,8 @@
                     // 📱 原生 App 检测 (Capacitor)
                     isNativeApp: !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()),
 
-                    // 📺 TV 模式检测
-                    // 原生 App 默认开启，网页端智能检测
-                    isTVMode: (function () {
-                        const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-
-                        // 1. 检查 URL 参数 ?tv=1 或 ?tv=0 手动控制
-                        const urlParams = new URLSearchParams(window.location.search);
-                        if (urlParams.get('tv') === '1') {
-                            try { localStorage.setItem('force_tv_mode', '1'); } catch (e) { }
-                            return true;
-                        }
-                        if (urlParams.get('tv') === '0') {
-                            try { localStorage.setItem('force_tv_mode', '0'); } catch (e) { }
-                            return false;
-                        }
-
-                        // 2. 检查 localStorage 记忆（用户手动设置）
-                        try {
-                            const saved = localStorage.getItem('force_tv_mode');
-                            if (saved === '1') return true;
-                            if (saved === '0') return false;
-                        } catch (e) { }
-
-                        // 3. 原生 App 默认开启 TV 模式
-                        if (isNative) {
-                            console.log('[TV 检测] ✅ 原生 App，默认开启 TV 模式');
-                            return true;
-                        }
-
-                        // 4. 网页端：智能 TV 浏览器 UA 检测
-                        const ua = navigator.userAgent.toLowerCase();
-                        const tvKeywords = [
-                            'android tv', 'googletv',           // Android TV / Google TV
-                            'aftt', 'aftm', 'aftb', 'firetv',   // Amazon Fire TV
-                            'chromecast', 'sabrina', 'boreal',  // Chromecast with Google TV
-                            'roku',                              // Roku
-                            'smarttv', 'smart-tv',               // 通用 Smart TV
-                            'tizen',                             // Samsung TV
-                            'webos', 'web0s',                    // LG TV
-                            'leanback'                           // Android TV Leanback
-                        ];
-                        const isTVUA = tvKeywords.some(k => ua.includes(k));
-
-                        if (isTVUA) {
-                            console.log('[TV 检测] ✅ 检测到智能 TV 浏览器:', ua.substring(0, 100));
-                        }
-                        return isTVUA;
-                    })(),
+                    // 📺 TV 模式检测(原生 App 默认开启，网页端智能检测;登录框也用它决定默认出不出二维码)
+                    isTVMode: detectTVMode(),
                     historyExpanded: false,  // 观看历史展开状态
                     historyCanScrollLeft: false,  // 可以向左滚动
                     historyCanScrollRight: false,  // 可以向右滚动
@@ -13221,6 +13437,8 @@
                         const p = new URLSearchParams(location.search);
                         // 📮 ?requests=1:求片结果的推送通知点进来 → 打开"我的求片"(求片关着就忽略)
                         if (p.get('requests') === '1') this._openRequestsDeepLink();
+                        // 📱 ?tvlogin=:扫了电视上的登录二维码 → 核对是哪台设备,确认后让它登录
+                        if (p.get('tvlogin')) { this._tvLoginOpen(p.get('tvlogin')); return; }
                         const liveName = p.get('live');
                         if (liveName) { this._resolveLiveDeepLink(decodeURIComponent(liveName)); return; }  // 📺 ?live=频道名
                         const playName = p.get('play');
@@ -13232,6 +13450,65 @@
                     // 参数用完就从地址栏去掉:刷新页面不该再弹一次
                     try { const u = new URL(location.href); u.searchParams.delete('requests'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } catch (e) { }
                     if (this.requestsEnabled) this.openRequestModal('');
+                },
+                // 📱 扫码登录(手机这一侧;电视那一侧见登录门的 qrLoginStart,服务器见 lib/qr-login):
+                //   打开 /?tvlogin=<code> → /scan 拿到是哪台设备在请求 → 用户核对、确认 → /approve 交出本机登录凭据(电视拿去核实后登录)
+                _tvLoginOpen(code) {
+                    try { const u = new URL(location.href); u.searchParams.delete('tvlogin'); history.replaceState(history.state, '', u.pathname + u.search + u.hash); } catch (e) { }
+                    if (!/^[A-Za-z0-9_-]{16}$/.test(code)) return;
+                    this.tvLogin = { show: true, state: 'loading', code, device: '', msg: '' };
+                    this._tvLoginPost('scan', { code }).then(d => {
+                        if (!this.tvLogin.show || this.tvLogin.code !== code) return;
+                        if (d && d.ok) this.tvLogin = Object.assign({}, this.tvLogin, { state: 'confirm', device: this._tvDeviceLabel(d.ua) });
+                        else this._tvLoginFail(d);
+                    });
+                },
+                async tvLoginApprove() {
+                    const t = this.tvLogin;
+                    if (t.state !== 'confirm') return;
+                    this.tvLogin = Object.assign({}, t, { state: 'sending' });
+                    const d = await this._tvLoginPost('approve', { code: t.code, auth: this._tvLoginAuth() });
+                    if (!this.tvLogin.show || this.tvLogin.code !== t.code) return;
+                    if (d && d.ok) this.tvLogin = Object.assign({}, this.tvLogin, { state: 'done' });
+                    else this._tvLoginFail(d);
+                },
+                // 关掉弹窗:还没确认的就告诉电视"取消了"(电视上停在"已在手机上取消",可以重新生成)
+                tvLoginCancel() {
+                    const t = this.tvLogin;
+                    if (t.state === 'loading' || t.state === 'confirm') this._tvLoginPost('deny', { code: t.code });
+                    this.tvLogin = Object.assign({}, t, { show: false });
+                },
+                // 交给电视的是本机现在的登录凭据:机场账户 = 面板令牌(电视拿它跟面板核实)+ 邮箱;独立密码 = 密码哈希
+                _tvLoginAuth() {
+                    if (localStorage.getItem(AUTH_TYPE_KEY) === 'v2board') {
+                        return { type: 'v2board', v2boardToken: localStorage.getItem(V2B_TOKEN_KEY) || '', email: localStorage.getItem(V2B_EMAIL_KEY) || '' };
+                    }
+                    return { type: 'password', hash: localStorage.getItem(AUTH_STORAGE_KEY) || '' };
+                },
+                _tvLoginFail(d) {
+                    const msg = !d ? '网络不太好，请稍后再试'
+                        : d.expired ? '这个二维码已经过期或用过了，请在电视上重新生成后再扫'
+                        : d.invalid ? '这台手机的登录信息没法转交，请在手机上退出后重新登录一次，再扫码'
+                        : (d.message || '没有成功，请重试');
+                    this.tvLogin = Object.assign({}, this.tvLogin, { state: 'error', msg });
+                },
+                async _tvLoginPost(what, body) {
+                    try {
+                        const r = await fetchT('/api/auth/qr/' + what, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, 10000);
+                        return await r.json();
+                    } catch (e) { return null; }
+                },
+                // 请求登录的是哪类设备:只按 UA 粗分给用户核对。UA 可以伪造,所以弹窗里还要提醒只在自己的设备上确认
+                _tvDeviceLabel(ua) {
+                    const s = String(ua || '').toLowerCase();
+                    if (/android tv|googletv|leanback|aft[a-z]|firetv|chromecast|sabrina|boreal|smart-?tv|tizen|webos|web0s|roku|bravia/.test(s)) return '电视';
+                    if (/ipad/.test(s)) return 'iPad';
+                    if (/iphone|ipod/.test(s)) return 'iPhone';
+                    if (/android/.test(s)) return /mobile/.test(s) ? '安卓手机' : '安卓平板或电视盒子';
+                    if (/windows/.test(s)) return 'Windows 电脑';
+                    if (/macintosh|mac os x/.test(s)) return 'Mac 电脑';
+                    if (/linux|cros/.test(s)) return '电脑';
+                    return '设备';
                 },
                 // 按片名(+同名多部的作品签名)搜索并打开一部剧:分享深链 ?play= 与"我的收藏"(没有观看历史时)共用。
                 //   搜索流式到达后由 tryOpenDeepLink 选中对应的卡再 openDetail,期间显示播放页加载帧

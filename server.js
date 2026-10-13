@@ -4156,6 +4156,35 @@ app.post('/api/auth/v2board/check', async (req, res) => {
     res.json({ success: false, unreachable: true, message: '暂时连不上机场面板，请稍后再试' });
 });
 
+// 📱 扫码登录(见 lib/qr-login):电视出二维码,已登录的手机扫码确认后把本机登录凭据交给电视(取走即删,5 分钟过期)。
+//    只在配了访问密码(有登录墙)时开。交过来的凭据只收两种,其余不收:
+//    独立密码:必须是配置里的密码(v2board 动态登记的令牌不算)且没被封禁;
+//    机场账户:面板令牌 + 邮箱(电视拿到后走 /api/auth/v2board/check 跟面板核实,核实不过登不上;身份以面板返回的邮箱为准)
+function qrLoginAuth(a) {
+    if (!a || typeof a !== 'object') return null;
+    if (a.type === 'password') {
+        const h = typeof a.hash === 'string' ? a.hash : '';
+        const info = /^[a-f0-9]{64}$/.test(h) ? PASSWORD_HASH_MAP[h] : undefined;
+        if (!info || !(info.index >= 0) || isBanned(h)) return null;
+        return { type: 'password', hash: h };
+    }
+    if (a.type === 'v2board') {
+        const t = typeof a.v2boardToken === 'string' ? a.v2boardToken.trim() : '';
+        if (t.length < 8 || t.length > 2048) return null;
+        return { type: 'v2board', v2boardToken: t, email: typeof a.email === 'string' ? a.email.trim().slice(0, 254) : '' };
+    }
+    return null;
+}
+let qrLogin = null;
+try {
+    qrLogin = require('./lib/qr-login').createQrLogin({
+        enabled: () => ACCESS_PASSWORDS.length > 0,
+        checkAuth: qrLoginAuth,
+        limiter: (max) => rateLimit({ windowMs: 60 * 1000, max, keyGenerator: ipKey, message: { ok: false, message: '请求过于频繁，请稍后再试' } })
+    });
+    qrLogin.registerRoutes(app);
+} catch (e) { console.warn('[QrLogin] 模块加载失败,扫码登录已禁用:', e.message); qrLogin = null; }
+
 // ========== 认证 API ==========
 
 // 5. 认证检查 API
@@ -4165,7 +4194,8 @@ app.get('/api/auth/check', (req, res) => {
         requirePassword: ACCESS_PASSWORDS.length > 0,
         multiUserMode: ACCESS_PASSWORDS.length > 1,
         v2boardEnabled: true,  // 支持 v2board 机场登录
-        shareTrial: SHARE_TRIAL_SEC
+        shareTrial: SHARE_TRIAL_SEC,
+        qrLogin: !!qrLogin && ACCESS_PASSWORDS.length > 0
     });
 });
 
