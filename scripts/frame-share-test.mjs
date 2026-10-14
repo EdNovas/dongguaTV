@@ -9,7 +9,7 @@
 //  ④ Vue 方法(从 index.html 抽出,假 dp/画布/历史):shareFrame 的时间轴口径(卡片时间 = 进度条上的剪后时间,&t= = _cutToBase 的原时间轴秒数)、
 //     分享统计渠道 'frame' + 码与链接一致 + 之后换码、画布被污染/全透明/没解码 → 换剧照并标明、直播/未登录预览不出卡片、
 //     画在卡片上的二维码(从假 canvas 的 fillRect 还原)解码 == 弹窗里的链接、关闭时回收 blob 地址并退掉压的历史、返回键/Esc 关闭
-//  ⑤ 静态:入口(分享面板按钮 / 桌面相机图标,触屏收起)与直播/预览隐藏、二维码库按需加载不进首屏、sw.js 预缓存同一个 ?v=
+//  ⑤ 静态:入口(分享面板按钮 / 齿轮菜单行 / 桌面相机图标)与直播/预览隐藏、二维码库按需加载不进首屏、sw.js 预缓存同一个 ?v=
 //  ④b 第一轮审查回归:剧照只认完全同名(海贼王≠海贼王女)、弹窗 teleport 到 body(网页全屏/TV 模式下看得见)、TV 遥控 Esc/Backspace 与
 //     App 返回键(MainActivity 注入的 JS)只关弹窗且恢复网页全屏、退历史落地时播放页已关 → 地址栏清成首页、空格/方向键不隔着弹窗动视频、
 //     焦点进出弹窗、安卓 App / 内嵌网页的保存方式与提示、横屏矮屏布局
@@ -1052,10 +1052,11 @@ console.log('④c 第二轮审查回归:SW 占位图不当剧照 / 返回键关�
 console.log('⑤ 静态接线');
 {
     ok(/<button v-if="currentGroup && !currentGroup\._isLive" class="fshare-entry" @click="shareFrame">/.test(HTML), '分享面板里有「分享当前画面」入口,直播不显示');
+    ok(/row\('frame', '分享当前画面'/.test(HTML) && /key === 'frame'\) \{\s*this\.shareFrame\(\);/.test(HTML), '手机齿轮菜单有「分享当前画面」行');
     ok(/class="dplayer-icon dplayer-frame-icon"/.test(HTML) && /camBtn\.addEventListener\('click', \(e\) => \{ e\.stopPropagation\(\); this\.shareFrame\(\); \}\)/.test(HTML), '桌面控制栏相机图标');
-    ok(/@media \(pointer: coarse\), \(max-width: 768px\) \{\s*#dplayer \.dplayer-icons \.dplayer-frame-icon \{ display: none !important; \}/.test(HTML), '触屏/窄屏控制栏收起相机图标(入口在分享面板)');
+    ok(/#dplayer \.dplayer-icons \.dplayer-frame-icon,/.test(HTML), '手机端控制栏不显示相机图标(只留 4 个大按钮)');
     ok(/class="player-box"[^>]*:class="\{ 'dg-no-frame': previewLocked \|\| trial\.on \|\| currentGroup\._isLive(?:, [^"]*)? \}"/.test(HTML), '直播 / 未登录预览 / 分享试看给 player-box 打 dg-no-frame');
-    ok(/\.player-box\.dg-no-frame #dplayer \.dplayer-frame-icon \{ display:none !important; \}/.test(HTML), 'dg-no-frame 把相机图标藏掉');
+    ok(/\.player-box\.dg-no-frame #dplayer \.dplayer-frame-icon,\s*\n\s*\.player-box\.dg-no-frame #dplayer \.dg-mob-row\[data-dg="frame"\] \{ display:none !important; \}/.test(HTML), 'dg-no-frame 把两个入口都藏掉(!important 压过手机行的 display:flex !important)');
     ok(!/<script[^>]+qrcode-generator/.test(HTML), '二维码库不在首屏 <script> 里(按需加载)');
     ok(/-webkit-touch-callout:default !important/.test(HTML.slice(HTML.indexOf('.fshare-img'), HTML.indexOf('.fshare-img') + 400)), '卡片图片打开长按菜单(body 全局关了 touch-callout)');
     ok(/v-if="frameShare\.canFiles"/.test(HTML), '「分享…」只在能分享文件时显示');
