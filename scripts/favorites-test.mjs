@@ -16,8 +16,9 @@
 //     报出的星期几要稳(随机日/隔天更/周更 5 周只更 3 周 → null,S6);
 //     第四轮(T3):隔了 >8h 才看到涨集记成断档 {u:1},断档盖住的日子不算漏更(资源站夜里挂几小时/服务器停机不再丢星期几),
 //     statusOf 把最后一次查成功的时刻交给 inferCadence(资源站正挂着的那几晚不算没更);/season/{n}/episode/{e} 也只缓存 1 小时(T6)
-//  ③ lib/popular 单元:除调用者外 ≥2 个不同用户才上榜(匿名按"他也看过"算)、每人 <120s 不算、封禁用户不算、只算 vod、
-//     只有 7 天窗口、按扣掉调用者后的人数/时长排序、上限 20、全站一份候选缓存、探测复现(review2/srvfix/pop-probe.js)
+//  ③ lib/popular 单元:默认除调用者外 ≥1 个别人就上榜;机制按 minUsers:2 测 —— 除调用者外凑够门槛才上榜(匿名按"他也看过"算)、
+//     每人 <120s 不算、封禁用户不算、只算 vod、只有 7 天窗口、按扣掉调用者后的人数/时长排序、上限 20、全站一份候选缓存、
+//     门槛 2 时的探测复现(review2/srvfix/pop-probe.js)
 //  ④ 端到端:临时目录起真正的 server.js(CACHE_TYPE=sqlite),db.json 指向本地假 maccms 站,走真实 HTTP
 import { createRequire } from 'module';
 import path from 'path';
@@ -1632,7 +1633,7 @@ try {
     const T0 = Date.UTC(2026, 9, 8, 4, 0, 0);
     let PN = T0;
     let on = true;
-    const pop = createPopular({ db: () => dbp, enabled: () => on, now: () => PN });
+    const pop = createPopular({ db: () => dbp, enabled: () => on, now: () => PN, opts: { minUsers: 2 } });
     const ins = dbp.prepare('INSERT INTO watch_stats (user_token, kind, title, episode, seconds, completed, first_at, last_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
     const w = (u, title, ep, s, ago, kind, c) => ins.run(u, kind || 'vod', title, ep, s, c || 0, T0 - (ago || 0), T0 - (ago || 0));
     const titles = (r) => r.items.map(x => x.title).join();
@@ -1662,6 +1663,13 @@ try {
     ok(titles(pop.get('u2')) === '' && titles(pop.get('u3')) === '剧D,剧A,剧F', 'u2 同理;u3 只看过不到 120s 的剧C → 照常看到 3 部', [titles(pop.get('u2')), titles(pop.get('u3'))]);
     // 认不出调用者(公开站不带令牌):当他也看过 → 2 人的剧不上榜(不然上报完观看再不带令牌来看,自己那票又算回去)
     ok(pop.get('').items.length === 0 && pop.get(undefined).items.length === 0 && pop.get(null).items.length === 0 && pop.get(['u9']).items.length === 0, '匿名调用者少算 1 人 → 2 人的剧不上榜');
+    // 默认门槛 1(不传 minUsers):除调用者外有 1 个别人看过 ≥120s 就上榜,仍按人数、再按时长排
+    {
+        const p1 = createPopular({ db: () => dbp, now: () => PN });
+        ok(titles(p1.get('u9')) === '剧D,剧A,剧F,剧B,某敏感片,剧E', '默认门槛 1:只有 1 个人看过的剧B/某敏感片/剧E 也上榜,排在 2 人的后面;<120s / 封禁 / 直播 / 7 天外照旧不算', p1.get('u9').items);
+        ok(titles(p1.get('u1')) === '某敏感片,剧D,剧A,剧F', '默认门槛:调用者自己的观看照旧不算(只有 u1 看过的剧B/剧E 对他不上榜)', p1.get('u1').items);
+        ok(titles(p1.get('')) === '剧D,剧A,剧F', '默认门槛:匿名当他也看过 → 至少 2 人', p1.get('').items);
+    }
     // 审查探测(review2/srvfix/pop-probe.js):攻击者给"受害人看过的"和"没人看的"各报 120s
     w('attacker', '某敏感片', 'x', 120, 0); w('attacker', '没人看的片', 'x', 120, 0);
     pop.invalidate();
@@ -1706,9 +1714,9 @@ try {
         for (const u of ['b1', 'b2', 'b3', 'b4', 'b5']) wq(u, '大剧', 200);
         for (const u of ['c1', 'c2', 'c3']) wq(u, '中剧', 300);
         wq('c1', '小剧', 500); wq('c2', '小剧', 500);
-        const q1 = createPopular({ db: () => dbq, now: () => PN, opts: { candidates: 2, maxTrack: 3 } });
+        const q1 = createPopular({ db: () => dbq, now: () => PN, opts: { minUsers: 2, candidates: 2, maxTrack: 3 } });
         ok(titles(q1.get('zz')) === '大剧,中剧' && titles(q1.get('b1')) === '大剧,中剧' && titles(q1.get('c1')) === '大剧,中剧', '候选只取前 2 部;5 人的大剧不记名单照常上榜;c1 看中剧还剩 2 人', [titles(q1.get('zz')), titles(q1.get('c1'))]);
-        const q2 = createPopular({ db: () => dbq, now: () => PN, opts: { maxTrack: 1 } });
+        const q2 = createPopular({ db: () => dbq, now: () => PN, opts: { minUsers: 2, maxTrack: 1 } });
         ok(has(q2.get('zz'), '小剧') && !has(q2.get('c1'), '小剧') && has(q2.get('c1'), '中剧'), 'maxTrack 太小也按下限 3 记名单:2 人剧对旁观者照常上榜、对看过的人不上', [titles(q2.get('zz')), titles(q2.get('c1'))]);
         dbq.close();
     }
@@ -1726,7 +1734,7 @@ try {
     ok(has(rr.body, '某敏感片') && !has(rr.body, '剧A'), '公开站不带令牌 = 匿名:3 人的剧上榜,2 人的不上', rr.body.items);
     // 私密站:要有效令牌;封禁 403;没看过的调用者看到同一份,看过的扣掉自己
     const okTk = new Set(['tk1', 'tk2', 'tkb', 'u1']);
-    const priv = createPopular({ db: () => dbp, now: () => PN, authRequired: () => true, tokenOk: (t) => okTk.has(t), isBanned: (t) => t === 'tkb' });
+    const priv = createPopular({ db: () => dbp, now: () => PN, authRequired: () => true, tokenOk: (t) => okTk.has(t), isBanned: (t) => t === 'tkb', opts: { minUsers: 2 } });
     const app2 = mkApp();
     priv.registerRoutes(app2);
     let pr = await call(app2, 'GET', '/api/popular', { query: {} });
@@ -1749,7 +1757,7 @@ try {
         ix2.run('attacker', 'vod', '某敏感片', 'x', 120, PN, PN);
         ix2.run('attacker', 'vod', '没人看的片', 'x', 120, PN, PN);
         const valid = new Set(['attacker', 'victim', 'other1']);
-        const pp = createPopular({ db: () => dbx, now: () => PN, authRequired: () => true, tokenOk: (t) => valid.has(t), isBanned: () => false });
+        const pp = createPopular({ db: () => dbx, now: () => PN, authRequired: () => true, tokenOk: (t) => valid.has(t), isBanned: () => false, opts: { minUsers: 2 } });
         const appx = mkApp();
         pp.registerRoutes(appx);
         let x = await call(appx, 'GET', '/api/popular', { query: { window: '1d', token: 'attacker' } });
@@ -1929,9 +1937,9 @@ try {
     r = await api('GET', '/api/popular');
     ok(r.status === 401 && r.j && r.j.error === 'auth', '私密站:/api/popular 不带令牌 → 401', r.j);
     r = await api('GET', '/api/popular?token=' + E.bob);
-    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '大家剧' && Object.keys(r.j.items[0]).sort().join() === 'kind,title', '/api/popular:除调用者外 ≥2 人(每人 ≥120s)才上榜,只给片名(bob 看两人剧只剩 alice 一个别人)', r.j);
+    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '大家剧,探测剧,独看剧,两人剧' && Object.keys(r.j.items[0]).sort().join() === 'kind,title', '/api/popular:除调用者外有 1 个别人(每人 ≥120s)就上榜,只给片名;bob 自己那票不算(两人剧只剩 alice,按别人的人数/时长排)', r.j);
     r = await api('GET', '/api/popular?window=1d&token=' + E.main);
-    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '两人剧,大家剧', '/api/popular?window=1d → 只有 7 天;主密码没看过两人剧 → alice+bob 两个别人,上榜', r.j);
+    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '两人剧,大家剧,探测剧,独看剧', '/api/popular?window=1d → 只有 7 天;主密码只看过大家剧 → 两人剧(2 个别人、600s)排在大家剧(2 个别人、350s)前面', r.j);
     // 匿名 status 每 IP 30 次/分(前面已用 4 次,含一次 401、一次追更日历)
     let got429 = false, okCount = 4;
     for (let i = 0; i < 31 && !got429; i++) {

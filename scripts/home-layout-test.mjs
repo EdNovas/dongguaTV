@@ -222,6 +222,18 @@ const ids = app => app.homeBlocks.map(b => b.id).join(',');
         '设置里不列站长没开的收藏 / 直播', e.homeLayoutView.map(s => s.k));
 }
 {
+    // 大家都在看:自己历史记录里已有的剧不显示(站内片名 / TMDB 显示名都比,忽略空格和大小写);滤完不足 4 部整行不出
+    const P = (title, name) => ({ title, name: name || title, poster_path: '/p.jpg', year: '' });
+    const list = [P('繁花'), P('狂飙'), P('庆余年 第二季'), P('漫长的季节'), P('三体(2023)', '三体'), P('The Bear')];
+    const has = app => ids(app).split(',').includes('popular');
+    const a = makeApp({ popularList: list, watchHistory: [{ name: '庆余年第二季' }, { name: '三体' }, { name: 'the bear' }] });
+    ok(a.popularShown.map(x => x.title).join() === '繁花,狂飙,漫长的季节', '历史里有的剧不显示:空格/大小写不同、只有 TMDB 显示名对得上的也算', a.popularShown.map(x => x.title));
+    ok(!has(a), '滤完只剩 3 部 → 整行不出', ids(a));
+    const b = makeApp({ popularList: list, watchHistory: [{ name: '庆余年第二季' }, 1, null, { name: '' }] });
+    ok(b.popularShown.length === 5 && has(b), '只滤掉 1 部、剩 5 部照常显示;历史里的空名/坏条目不误伤', b.popularShown.map(x => x.title));
+    ok(makeApp({ popularList: list }).popularShown.length === 6 && has(makeApp({ popularList: list })), '没有历史:全部显示');
+}
+{
     // 上移 / 下移:只在设置里列出的板块之间换;到头不动;焦点留在被移动的那一项上
     const a = makeApp({ liveEnabled: false });
     focused.length = 0;

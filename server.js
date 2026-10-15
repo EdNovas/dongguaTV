@@ -1038,7 +1038,7 @@ try {
     });
     userStats.registerRoutes(app);
 } catch (e) { console.warn('[UserStats] 模块加载失败,观看/分享统计与新版站长接口已禁用:', e.message); userStats = null; }
-// 🔥 大家都在看(见 lib/popular):watch_stats 近 7 天,除调用者自己以外至少 2 个不同用户(每人 ≥120s)看过才上榜,只给片名(不给人数/时长);
+// 🔥 大家都在看(见 lib/popular):watch_stats 近 7 天,除调用者自己以外至少 1 个其他用户(每人 ≥120s)看过就上榜,只给片名(不给人数/时长);
 //    10 分钟全站候选缓存(贡献者令牌只在内存),每个请求扣掉调用者再筛。配了访问密码要有效令牌(?token=)。需 sqlite + 统计开启
 let popular = null;
 try {
