@@ -5032,7 +5032,7 @@
                 </div>
             </div>
 
-            <!-- 👥 大家都在看：站内实测观看统计(≥2 个不同用户看过才上榜,只给汇总);不足 4 部整段隐藏 -->
+            <!-- 👥 大家都在看：站内实测观看统计(除自己外有人看过 2 分钟就上榜,只给片名;自己历史记录里有的不显示);不足 4 部整段隐藏 -->
             <div v-else-if="k === 'popular'" class="section-container home-sec animate__animated animate__fadeInUp"
                 :class="{ 'home-first': bi === 0 }">
                 <div class="section-header" style="display: flex; align-items: center;">
@@ -5044,7 +5044,7 @@
                     <button class="scroll-btn left" v-show="popularCanScrollLeft" @click="scrollRowBy('popularRow', -1)"
                         aria-label="向左滚动大家都在看"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                     <div class="hot-row" ref="popularRow" @scroll="onFavPopRowScroll('popularRow', 'popular')">
-                        <div class="hot-card" v-for="item in popularList" :key="'pop-' + item.title"
+                        <div class="hot-card" v-for="item in popularShown" :key="'pop-' + item.title"
                             @click="autoSearch(item.name)">
                             <div class="poster-wrap">
                                 <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
@@ -9917,13 +9917,20 @@
                 // 🧩 首页板块
                 homeOn() { const o = {}; for (const s of this.homeLayout) o[s.k] = s.on; return o; },
                 hideRandomRow() { return !this.homeOn.random; },
+                // 👥 大家都在看里不放自己历史记录里已有的剧(继续观看里就有);站内片名和 TMDB 显示名都比,忽略空格/大小写
+                popularShown() {
+                    const k = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+                    const mine = new Set();
+                    for (const h of this.watchHistory) { const n = k(h && h.name); if (n) mine.add(n); }
+                    return this.popularList.filter(x => !mine.has(k(x && x.title)) && !mine.has(k(x && x.name)));
+                },
                 // 首页按顺序渲染的块:开着且有内容的板块(随机盲盒就是 randomRow 那一行榜单),后面接其余分类榜单(不参与排序)
                 homeBlocks() {
                     const has = {
                         history: this.watchHistory.length > 0,
                         fav: this.favoritesEnabled && this.favList.length > 0,
                         recommend: this.recommendList.length > 0,
-                        popular: this.popularList.length >= 4,
+                        popular: this.popularShown.length >= 4,
                         live: this.liveEnabled && this.liveChannels.length > 0,
                         catnav: true,
                     };
@@ -14123,7 +14130,8 @@
                 },
 
                 // ========== 👥 大家都在看 ==========
-                // /api/popular(站内汇总,≥2 个不同用户看过才上榜)→ TMDB 按片名补海报/年份。列表缓存 30 分钟,片名→海报缓存 7 天
+                // /api/popular(站内汇总,除自己外有人看过就上榜)→ TMDB 按片名补海报/年份。列表缓存 30 分钟,片名→海报缓存 7 天;
+                //   自己历史记录里有的剧在显示时才滤掉(popularShown),新看的剧不用等缓存过期就从这一行消失
                 //   ⚠️ 片名是各用户端上报的自由文本:只上 TMDB 认得出(有海报)的片,认不出的整条丢掉;不是精确同名的,显示 TMDB 的片名 ——
                 //      任意文字(广告/骚扰)刷进统计也到不了每个人的首页。只用 title(人数/时长/集数不读,也不显示)
                 async fetchPopular() {
