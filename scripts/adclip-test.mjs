@@ -655,9 +655,16 @@ console.log('[5] 接线');
 
 // ============ 6) 原生 HLS 扫描器端到端(从 index.html 抽出 window.adClipSkip,桩 video/dp/fetch) ============
 console.log('[6] 原生 HLS 扫描器端到端');
+// <dg-resume-core>(dgNetShaped 等纯函数)定义在 adClipSkip 前面的同一个脚本里:抽出来拼在前面一起求值
+const RESUME_CORE = (() => {
+    const h = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
+    const m = /\/\/ <dg-resume-core>\n([\s\S]*?)\n\s*\/\/ <\/dg-resume-core>/.exec(h);
+    return m ? m[1] : '';
+})();
+ok(/function dgNetShaped\(e\)/.test(RESUME_CORE), 'index.html 有 <dg-resume-core> 段(dgNetShaped)');
 {
     const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
-    const body = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
+    const body = RESUME_CORE + '\n' + html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
     const TS = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/ts-heads.json'), 'utf8')).samples;
     const DY = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/dytt.json'), 'utf8')).episodes;
     // 真实分片头(PAT/PMT/SPS)+ 改写首个视频 PES 的 PTS
@@ -697,9 +704,19 @@ console.log('[6] 原生 HLS 扫描器端到端');
         const total = t;
         const MASTER = 'https://vip.example/ep/index.m3u8', MEDIA = 'https://cdn.example/hls/mixed.m3u8';
         const reqs = [];
+        const docStub = { hidden: !!opts.hidden }, navStub = { onLine: opts.offline ? false : true };
+        let plFails = 0, segFails = 0;
         const fetchStub = async (url, o) => {
             reqs.push([url, o && o.headers && o.headers.Range]);
             if (opts.failPlaylist && !/\.ts/.test(url)) throw new TypeError('Failed to fetch');
+            // iPad 从后台回来:第一次拉清单 Wi-Fi 还没连上(Safari 报 TypeError 'Load failed'),之后正常
+            if (opts.failPlaylistOnce && !/\.ts/.test(url) && plFails++ < 1) throw new TypeError('Load failed');
+            if (opts.plFailHidden && !/\.ts/.test(url) && docStub.hidden) throw new TypeError('Load failed');
+            if (opts.segFailOffline && /\.ts/.test(url) && navStub.onLine === false) throw new TypeError('Load failed');
+            // 页面在后台时分片头读不到:'net' = 网络形状(TypeError),'503' = 真回应(segFailMax 给了就只失败这么多次)
+            if (opts.segFailHidden && /\.ts/.test(url) && docStub.hidden && !(opts.segFailMax != null && segFails >= opts.segFailMax)) { segFails++; if (opts.segFailHidden === '503') return { ok: false, status: 503 }; throw new TypeError('Load failed'); }
+            // 刚从后台回来那几秒:页面可见、onLine 也是 true,Wi-Fi 却还没真通
+            if (opts.segFailUntil != null && /\.ts/.test(url) && video.currentTime < opts.segFailUntil) throw new TypeError('Load failed');
             if (opts.rejectRange && o && o.headers && o.headers.Range) throw new TypeError('Preflight response is not successful');   // Safari ≤15:Range 要预检,CDN 预检不放行
             if (url === MASTER) return { ok: true, status: 200, url: MASTER, text: async () => '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=800000,RESOLUTION=1920x1080\nhttps://cdn.example/hls/mixed.m3u8\n' };
             if (url === MEDIA) return { ok: true, status: 200, url: MEDIA, text: async () => m3u };
@@ -714,31 +731,51 @@ console.log('[6] 原生 HLS 扫描器端到端');
         let clock = 0;
         const seeks = [], notices = [], dpSeeks = [];
         // 播放器之外的 currentTime 赋值 = adClipSkip 的静默 seek(循环推进时间走 _t)
-        const video = { src: MASTER, _t: opts.startAt || 0, get currentTime() { return this._t; }, set currentTime(x) { seeks.push([+this._t.toFixed(2), +x.toFixed(2)]); this._t = x; }, paused: false, seeking: false, ended: false, readyState: 4, duration: total, playbackRate: 1, _adClipSeekHooked: false, addEventListener() { } };
+        // pauseHidden:页面在后台时视频是暂停的(iOS 切走 App 的常态);不设 = 后台里还在播(画中画 / Mac Safari 后台标签页)
+        const video = { src: MASTER, _t: opts.startAt || 0, get currentTime() { return this._t; }, set currentTime(x) { seeks.push([+this._t.toFixed(2), +x.toFixed(2)]); this._t = x; }, get paused() { return !!opts.pauseHidden && docStub.hidden; }, seeking: false, ended: false, readyState: 4, duration: total, playbackRate: 1, _adClipSeekHooked: false, addEventListener() { } };
         const dpStub = { video, plugins: {}, container: null, seek(x) { dpSeeks.push(x); video.currentTime = x; }, notice(m) { notices.push(m); }, events: { trigger() { } }, bar: { set() { } }, danmaku: { seek() { } } };
         const win = { AdClipCore: C, AdFilter: { isEnabled: () => true }, fetch: fetchStub };
+        // resumedAt(模拟秒):vue._onPageResume 记的 _dgResumeAt 按模拟时钟走(_justResumed 用真 Date.now() 减它)
+        if (opts.resumedAt != null) Object.defineProperty(win, '_dgResumeAt', { get: () => Date.now() - (clock - opts.resumedAt * 1000) });
         const store = new Map();
         const ls = { getItem: k => (k === 'donggua_adclip_off' && opts.off) ? '1' : null };
         const ss = { getItem: k => store.get(k) || null, setItem: (k, v) => store.set(k, v) };
-        const make = new Function('window', 'AdClipCore', 'dp', 'localStorage', 'sessionStorage', 'performance', 'fetch', '_navSeq', 'URL', 'AbortController', 'console',
+        // 定时器跟着模拟时钟走(重试间隔、请求超时):真实时间里 5ms 的工夫,模拟播放早跑出去几百秒了
+        const timers = []; let tid = 0;
+        const fakeST = (fn, ms) => { const id = ++tid; timers.push({ id, at: clock + (ms || 0), fn }); return id; };
+        const fakeCT = (id) => { const i = timers.findIndex(x => x.id === id); if (i >= 0) timers.splice(i, 1); };
+        const runTimers = () => { for (; ;) { const i = timers.findIndex(x => x.at <= clock); if (i < 0) break; const x = timers.splice(i, 1)[0]; try { x.fn(); } catch (e) { } } };
+        const make = new Function('window', 'AdClipCore', 'dp', 'localStorage', 'sessionStorage', 'performance', 'fetch', '_navSeq', 'URL', 'AbortController', 'console', 'document', 'navigator', 'setTimeout', 'clearTimeout',
             body + '\nreturn window.adClipSkip;');
         const quiet = { log() { }, warn() { } };
-        const skip = make(win, C, dpStub, ls, ss, { now: () => clock }, fetchStub, 1, URL, AbortController, quiet);
+        const skip = make(win, C, dpStub, ls, ss, { now: () => clock }, fetchStub, 1, URL, AbortController, quiet, docStub, navStub, fakeST, fakeCT);
+        skip.NATIVE_RETRY = opts.retry || [5, 5, 5];   // 真实 2s/5s/12s,测试里缩成 5ms
         const marks = [];
         skip.vue = { _playToken: 1, _activePlaySeq: 1, _liveActive: false, _activeKz: null, _isCasting: () => false, _outroSkipped: false, currentSource: { site_key: 'dyttzy' }, _clipNativeSet: (k, bad) => marks.push([k, bad]) };
         const tick = () => new Promise(r => setImmediate(r));
         skip.attachNative(video, { events: { on() { } } });
         for (let k = 0; k < 6; k++) await tick();
-        let watchedAd = 0, maxRun = 0;
+        let watchedAd = 0, maxRun = 0, pre = null, revived = null;
         const adAt = x => { let s = 0; for (const g of ep.g) { if (x >= s && x < s + g[0]) return !!g[3]; s += g[0]; } return false; };
         while (video.currentTime < total - 0.3) {
+            // 后台时段(模拟秒,[起, 止)):进出后台都不调 revive —— 离开不到 60s 的回来、画中画里一直隐藏,真实页面上都没人叫它
+            if (opts.hiddenWindows) docStub.hidden = opts.hiddenWindows.some(([a, b]) => video.currentTime >= a && video.currentTime < b);
+            if (opts.visibleAt != null && video.currentTime >= opts.visibleAt) docStub.hidden = false;
+            if (opts.reviveAt != null && pre === null && video.currentTime >= opts.reviveAt) {
+                // 回到前台 / 联网:先记下叫醒前的状态,再像 vue._onPageResume 那样 revive()
+                const s0 = video._adClipNative;
+                pre = s0 ? { netWait: !!s0.netWait, failed: !!s0.failed, ready: !!s0.ready, loadTimer: !!s0.loadTimer, aborts: s0.aborts.size, tries: Object.assign({}, s0.tries), probeFails: s0.probeFails, marks: marks.slice() } : {};
+                docStub.hidden = false; navStub.onLine = true;
+                revived = skip.revive(opts.reviveReason || 'visible');
+            }
             skip.check(video.currentTime);
             for (let k = 0; k < 3; k++) await tick();
             if (adAt(video.currentTime)) { watchedAd += 0.25; maxRun = Math.max(maxRun, watchedAd); } else watchedAd = 0;
             video._t += 0.25; clock += 250;
+            runTimers();
         }
         const st = video._adClipNative;
-        return { seeks, notices, dpSeeks, reqs, st, maxRun, marks, status: skip.status && (dpStub.video = video, skip.status()) };
+        return { seeks, notices, dpSeeks, reqs, st, maxRun, marks, pre, revived, timers: timers.length, status: skip.status && (dpStub.video = video, skip.status()) };
     }
     const lx = DY.find(e => e.key === 'dytt_lxrg_0');   // 1080p 剧集:同分辨率,只能靠时间戳(P 模式跨两组)
     let r = await runNative(lx);
@@ -760,7 +797,53 @@ console.log('[6] 原生 HLS 扫描器端到端');
     ok(r.seeks.length >= 1 && Math.abs(r.seeks[0][0] - second) < 1 && r.maxRun <= 1, '原生:续看落在插播第二组中间 → 立即跳到段尾', { seeks: r.seeks.slice(0, 2), second });
     // 清单跨域拿不到 / 分片读不到 / 用户关掉 → 不跳、不抛
     r = await runNative(lx, { failPlaylist: true });
-    ok(r.seeks.length === 0 && r.st && r.st.failed, '原生:清单拿不到 → 本集不跳', { seeks: r.seeks.length, failed: r.st && r.st.failed });
+    ok(r.seeks.length === 0 && r.st && r.st.failed, '原生:清单一直拿不到(重试用尽)→ 本集不跳', { seeks: r.seeks.length, failed: r.st && r.st.failed });
+    ok(r.reqs.filter(x => !/\.ts/.test(x[0])).length === 4 && r.st && r.st.netFail === true, '原生:清单网络失败 → 重试 3 次(共 4 次)才认定', r.reqs.filter(x => !/\.ts/.test(x[0])).length);
+    // 🌙 iPad 从后台回来:第一次拉清单 Wi-Fi 还没连上 → 重试后照样全跳,不记"本站跑不起来"的账
+    r = await runNative(lx, { failPlaylistOnce: true });
+    ok(r.seeks.length === adStarts.length && r.maxRun <= 0.5, '原生:第一次拉清单失败(网络没就绪)→ 重试后两段插播照样全跳', { seeks: r.seeks, maxRun: r.maxRun, adStarts });
+    ok(r.marks.length === 1 && r.marks[0][0] === 'dyttzy' && r.marks[0][1] === false, '原生:一次网络失败不记账(只有扫描成功的消账)', r.marks);
+    // 页面在后台时拉清单失败 → 挂起等叫醒(不设重试定时器、不记账);回到前台 revive('visible') → 接着扫、照样全跳
+    r = await runNative(lx, { hidden: true, pauseHidden: true, plFailHidden: true, reviveAt: 1 });
+    ok(r.pre && r.pre.netWait === true && r.pre.failed === false && r.pre.loadTimer === false && r.pre.aborts === 0 && r.pre.marks.length === 0, '原生:后台时清单失败 → netWait,没有重试定时器、没记账', r.pre);
+    ok(r.revived === true && r.seeks.length === adStarts.length && r.maxRun <= 0.5 && !r.marks.some(m => m[1] === true), '原生:回到前台 revive → 两段插播照样全跳', { revived: r.revived, seeks: r.seeks, marks: r.marks });
+    // 🌙 同样后台时清单失败,但回来时没人调 revive(离开不到 60s:_onPageResume 不重建)→ timeupdate 里 _nativePump 自己重拉,照样全跳
+    r = await runNative(lx, { hidden: true, pauseHidden: true, plFailHidden: true, visibleAt: 20 });
+    ok(r.seeks.length === adStarts.length && r.maxRun <= 0.5 && r.st && !r.st.netWait && !r.st.failed && !r.marks.some(m => m[1] === true), '原生:后台时清单失败、回来没有 revive → 网络回来后自己重拉,两段插播照样全跳', { seeks: r.seeks, marks: r.marks, status: r.status && r.status.channel });
+    // 🌙 后台(暂停)时段里分片头网络失败,回来不调 revive(两段各 30s)→ 不消耗尝试、不停扫,后面的插播照样全跳(以前这样会整集停扫)
+    r = await runNative(lx, { hiddenWindows: [[0.5, 30], [200, 230], [1400, 1430]], pauseHidden: true, segFailHidden: 'net' });
+    ok(r.seeks.length === adStarts.length && r.maxRun <= 0.5 && r.st && !r.st.netWait && !r.st.failed, '原生:后台时分片头失败、回来没有 revive → 自己接着探,两段插播全跳', { seeks: r.seeks, maxRun: r.maxRun, status: r.status && r.status.channel });
+    // 后台时段里一次分片头 503:是真回应、网络是通的 → 照常记一次失败(和以前一样),不挂起;后面照样全跳(暂停的后台 / 画中画都一样)
+    r = await runNative(lx, { hiddenWindows: [[0.5, 30], [200, 230]], pauseHidden: true, segFailHidden: '503', segFailMax: 1 });
+    ok(r.seeks.length === adStarts.length && r.maxRun <= 0.5 && r.st && !r.st.netWait, '原生:后台时一次分片头 503 → 不挂起,两段插播全跳', { seeks: r.seeks, maxRun: r.maxRun });
+    r = await runNative(lx, { hiddenWindows: [[0.5, 30], [200, 230]], segFailHidden: '503', segFailMax: 1 });
+    ok(r.seeks.length === adStarts.length && r.maxRun <= 0.5 && r.st && !r.st.netWait, '原生:画中画(后台在播)时分片头 503 → 不挂起,两段插播全跳', { seeks: r.seeks, maxRun: r.maxRun });
+    // 画中画里网络形状的失败也不挂起(在播 = 网络是通的):照以前那样记失败(第一段插播的两组探测落在这 25s 里,两次都失败就放弃 ——
+    //   与改动前一致),但扫描不停,后面那段照跳。以前这里会挂起等一个永远不来的 revive,整集停扫
+    r = await runNative(lx, { hiddenWindows: [[215, 240]], segFailHidden: 'net' });
+    ok(r.st && !r.st.netWait && !r.st.failed && r.seeks.some(x => Math.abs(x[0] - adStarts[1]) < 0.5), '原生:画中画里分片头 TypeError → 照常记失败、不挂起,后面的插播照跳', { seeks: r.seeks, status: r.status && r.status.channel });
+    // 🌙 刚从后台回来(页面可见、onLine=true,Wi-Fi 还没真通):前 8s 分片头全是 TypeError → 退还尝试、2s 后再探;不判失败、照样全跳
+    r = await runNative(lx, { resumedAt: 0, segFailUntil: 8 });
+    ok(r.seeks.length === adStarts.length && r.maxRun <= 0.5 && r.st && !r.st.failed && r.st.probeFails === 0, '原生:回来后头几秒分片头读不到 → 不烧尝试次数,网络通了照样全跳', { seeks: r.seeks, failed: r.st && r.st.failed, probeFails: r.st && r.st.probeFails });
+    {
+        // 对照:不是刚回来(没有 _dgResumeAt)时同样的失败 → 照旧记失败、整集停扫(真·跨域的语义不变)
+        const r0 = await runNative(lx, { segFailUntil: 8 });
+        ok(r0.st && r0.st.failed && r0.seeks.length === 0, '原生:对照 —— 不是刚回来时开头分片头全失败 → 照旧停扫', { failed: r0.st && r0.st.failed, seeks: r0.seeks.length });
+        // 刚回来、但分片头一直读不到(真·跨域):30s 窗口过后照常记失败 → 停扫;请求数有上限
+        const r1 = await runNative(lx, { resumedAt: 0, failSegs: true });
+        const n1 = r1.reqs.filter(x => /\.ts/.test(x[0])).length;
+        ok(r1.st && r1.st.failed && n1 <= 100, '原生:刚回来但分片头一直读不到 → 窗口(30s)过后照常停扫,不会无限重试', { failed: r1.st && r1.st.failed, segReqs: n1 });
+    }
+    // 断网时分片头读不到 → 不消耗尝试次数、不判失败、不记账;联网 revive('online') → 全跳
+    r = await runNative(lx, { offline: true, segFailOffline: true, reviveAt: 3, reviveReason: 'online' });
+    ok(r.pre && r.pre.ready && r.pre.netWait === true && r.pre.failed === false && Object.values(r.pre.tries).every(x => x === 0) && r.pre.probeFails === 0 && r.pre.marks.length === 0,
+        '原生:断网时分片头失败 → tries 不消耗、不判失败、不记账', r.pre);
+    ok(r.revived === true && r.seeks.length === adStarts.length && r.maxRun <= 0.5, '原生:联网 revive → 两段插播全跳', { seeks: r.seeks, maxRun: r.maxRun });
+    {
+        // revive 只叫醒"因网络停下"的状态:真·失败(在线、前台时分片头一直读不到)不复活
+        const r2 = await runNative(lx, { failSegs: true, reviveAt: 2000 });
+        ok(r2.revived === false, '原生:分片头一直读不到(在线、前台)→ revive 不复活', r2.revived);
+    }
     r = await runNative(lx, { failSegs: true });
     ok(r.seeks.length === 0 && r.st && r.st.failed, '原生:分片头读不到 → 连续失败后停探、不跳', { seeks: r.seeks.length, failed: r.st && r.st.failed });
     ok(r.reqs.filter(x => /\.ts/.test(x[0])).length <= 14, '原生:分片头读不到时不会无限重试', r.reqs.filter(x => /\.ts/.test(x[0])).length);
@@ -784,7 +867,7 @@ console.log('[6] 原生 HLS 扫描器端到端');
 console.log('[6b] 播放前剪清单端到端');
 {
     const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
-    const body = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
+    const body = RESUME_CORE + '\n' + html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
     const ctSrc = html.slice(html.indexOf('window._dgHlsCustomType = function'), html.indexOf('// 🛡️ 去插播:按"分辨率突变"跳过藏在正片里的插播广告'));
     const TS = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/ts-heads.json'), 'utf8')).samples;
     const DY = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/dytt.json'), 'utf8')).episodes;
@@ -818,13 +901,15 @@ console.log('[6b] 播放前剪清单端到端');
     const mkEnv = (opts = {}) => {
         const reqs = [], posts = [], lsMap = new Map(opts.ls || []);
         const fetchStub = async (url, o) => {
-            reqs.push([url, o && o.headers && o.headers.Range, o && o.method]);
+            reqs.push([url, o && o.headers && o.headers.Range, o && o.method, !!(o && o.signal)]);
             if (o && o.method === 'POST') {
                 posts.push(JSON.parse(o.body));
-                if (opts.postFail) return { ok: false, status: 503, json: async () => ({}) };
+                if (opts.postFail || (opts.postFailAfter != null && posts.length > opts.postFailAfter)) return { ok: false, status: 503, json: async () => ({}) };
+                if (opts.postNet) throw new TypeError('Load failed');
+                if (opts.postSlow) await new Promise(res => setTimeout(res, opts.postSlow));
                 return { ok: true, status: 200, json: async () => ({ id: 'x', url: '/api/hls/cut/x.m3u8' }) };
             }
-            if (url === MEDIA) { if (opts.playlistFail) throw new TypeError('Failed to fetch'); if (opts.playlist503) return { ok: false, status: 503 }; return { ok: true, status: 200, url: MEDIA, text: async () => RAW }; }
+            if (url === MEDIA) { if (opts.playlistFail) throw new TypeError('Failed to fetch'); if (opts.playlist503) return { ok: false, status: 503 }; if (opts.playlist400) return { ok: false, status: 400 }; return { ok: true, status: 200, url: MEDIA, text: async () => RAW }; }
             const s = segData.get(url);
             if (!s) throw new TypeError('Failed to fetch');
             if (opts.rangeBlip > 0 && o && o.headers && o.headers.Range) { opts.rangeBlip--; throw new TypeError('network blip'); }
@@ -837,8 +922,11 @@ console.log('[6b] 播放前剪清单端到端');
         };
         const win = { AdClipCore: C, AdFilter: { isEnabled: () => true }, fetch: fetchStub };
         const ls = { getItem: k => lsMap.has(k) ? lsMap.get(k) : null, setItem: (k, v) => lsMap.set(k, String(v)) };
-        let clock = 0;
-        const make = new Function('window', 'AdClipCore', 'dp', 'localStorage', 'sessionStorage', 'performance', 'fetch', '_navSeq', 'URL', 'AbortController', 'console', 'Hls', 'crypto', 'location', 'btoa',
+        let clock = 0, wallOff = 0;
+        // 墙上时钟(Date.now)= 真时间 + 模拟偏移:advance 两个时钟一起走;advanceWall 只走墙上时钟(iOS 睡眠时 performance.now() 不走)
+        class FakeDate extends Date { static now() { return Date.now() + wallOff; } }
+        const nav = { onLine: true };
+        const make = new Function('window', 'AdClipCore', 'dp', 'localStorage', 'sessionStorage', 'performance', 'fetch', '_navSeq', 'URL', 'AbortController', 'console', 'Hls', 'crypto', 'location', 'btoa', 'document', 'navigator', 'Date',
             body + '\nreturn window;');
         const quiet = process.env.ADCUT_DEBUG ? console : { log() { }, warn() { } };
         const cut = [];
@@ -848,11 +936,15 @@ console.log('[6b] 播放前剪清单端到端');
             _setActiveCut(st) { cut.push(st); this._activeCut = st; }
         };
         const Hls = { Events: { LEVEL_LOADED: 'l', DESTROYING: 'd' } };
-        const cryptoStub = { getRandomValues: (b) => { for (let i = 0; i < b.length; i++) b[i] = (i * 37 + 11) & 255; return b; } };
+        let seed = 0;
+        const cryptoStub = { getRandomValues: (b) => { seed++; for (let i = 0; i < b.length; i++) b[i] = (i * 37 + 11 + seed * 101) & 255; return b; } };
         win.crypto = cryptoStub; win.AbortController = AbortController;
-        const w = make(win, C, null, ls, ls, { now: () => (clock += 3) }, fetchStub, 1, URL, AbortController, quiet, Hls, cryptoStub, { origin: 'https://tv.example' }, (s) => Buffer.from(s, 'binary').toString('base64'));
+        const w = make(win, C, null, ls, ls, { now: () => (clock += 3) }, fetchStub, 1, URL, AbortController, quiet, Hls, cryptoStub, { origin: 'https://tv.example' }, (s) => Buffer.from(s, 'binary').toString('base64'), { hidden: false }, nav, FakeDate);
         w.adClipSkip.vue = vue;
-        return { adCut: w.adCut, adClipSkip: w.adClipSkip, reqs, posts, lsMap, vue, cut, fetchStub, win, opts };
+        w.adCut.NET_RETRY_MS = 30;            // 真实 1.5s
+        w.adCut.RELOAD_META_MS = 300;         // 真实 20s:重载 / 重新接上后等元数据的期限(到点换回原地址)
+        w.adClipSkip.NATIVE_RETRY = [5, 5, 5];   // 换回原地址后重挂的静默跳过拉不到占位地址时别留几秒的定时器
+        return { adCut: w.adCut, adClipSkip: w.adClipSkip, reqs, posts, lsMap, vue, cut, fetchStub, win, opts, nav, wallNow: () => FakeDate.now(), advance: (ms) => { clock += ms; wallOff += ms; }, advanceWall: (ms) => { wallOff += ms; } };
     };
     // 1) 全扫描 → 剪两段;第二次同清单 → 会话缓存,不再发请求;换一个页面(新实例)带着本机缓存 → 不发任何分片请求
     let E = mkEnv();
@@ -1013,6 +1105,16 @@ console.log('[6b] 播放前剪清单端到端');
         E.adCut.attachNative(v3, {});
         for (let k = 0; k < 60 && v3.src !== MEDIA; k++) await new Promise(res => setTimeout(res, 20));
         ok(v3.src === MEDIA && !v3.played && E.posts.length === 0, '原清单读不到 → 换回原地址(没在播就不自动播)');
+        ok(E.reqs.filter(x => x[0] === MEDIA && !x[3]).length === 2, '原清单网络形状的失败(TypeError)→ 等一下再拉一次(只一次)', E.reqs.filter(x => x[0] === MEDIA && !x[3]).length);
+        ok(!E.lsMap.has('donggua_adcut_nativebad') && v3._adCutLost && v3._adCutLost.why === 'net', '网络形状的失败不记"本站剪不了";记下 lost(net),回到前台再接上', v3._adCutLost);
+        {
+            // 原清单 400(源站明确拒绝)照旧记账
+            const E400 = mkEnv({ playlist400: true });
+            const v400 = vid({ src: MEDIA, paused: true, play() { return Promise.resolve(); } });
+            E400.adCut.attachNative(v400, {});
+            for (let k = 0; k < 60 && v400.src !== MEDIA; k++) await new Promise(res => setTimeout(res, 20));
+            ok(v400.src === MEDIA && E400.lsMap.has('donggua_adcut_nativebad') && !v400._adCutLost, '原清单 400 → 换回原地址、照旧记"本站剪不了"');
+        }
         // 剪后清单在原生播放器上出错(交付成功之后)→ 换回原地址继续播、吞掉同一错误的第二次事件、本站不再接管
         E = mkEnv();
         const v5 = vid({ src: MEDIA, paused: false, error: null, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
@@ -1061,12 +1163,326 @@ console.log('[6b] 播放前剪清单端到端');
             v7.emit('loadedmetadata');
             v7.currentTime = 600;
             v7.error = { code: 2 };
-            ok(E6.adCut.onNativeError(v7, 'dp') === true && v7.src === MEDIA, '播起来之后出错 → 换回原地址');
+            const nPost = E6.posts.length;
+            ok(E6.adCut.onNativeError(v7, 'dp') === true && v7.src === cutSrc, '播起来之后出错 → 先不换地址(用同一个 id 重交剪后清单)');
+            for (let k = 0; k < 40 && E6.posts.length === nPost; k++) await new Promise(res => setTimeout(res, 10));
+            await new Promise(res => setTimeout(res, 10));
+            ok(E6.posts.length === nPost + 1 && E6.posts[nPost].id === E6.posts[0].id && E6.posts[nPost].m3u8 === E6.posts[0].m3u8, '…重交的是同一个 id、同一份正文', E6.posts.length);
+            v7.error = null;
+            v7.emit('loadedmetadata');
+            ok(v7.src === cutSrc && Math.abs(v7.currentTime - 600) < 0.01 && E6.vue._activeCut && E6.vue._activeCut.src === cutSrc, '…同一个地址重载、跳回原位置(剪后 600s),剪段还在', v7.currentTime);
+            v7.error = { code: 2 };
+            ok(E6.adCut.onNativeError(v7, 'dp') === true && v7.src === MEDIA && E6.posts.length === nPost + 1, '5 分钟内再出错 → 直接换回原地址(不循环重交)');
             v7.error = null;
             v7.emit('loadedmetadata');
             ok(Math.abs(v7.currentTime - (600 + 19.066)) < 0.01, '原位续播:剪后 600s → 原时间轴 619.07s', v7.currentTime);
             const v8 = vid({ src: MEDIA });
             ok(E6.adCut.attachNative(v8, {}) === true, '播起来之后的错误不记"本站剪不了"(下次照样剪)');
+        }
+        // 🌙 iPad 长时间后台回来(lib/hls-cut 条目已过期 / 服务器重启过):WebKit 对同一个 src 重新 load()
+        {
+            const sleep = (ms) => new Promise(res => setTimeout(res, ms));
+            // src 带 setter:看得出"同一个地址重设一遍"(= 重新加载);和真浏览器一样,设 src 会清空 video.error(媒体元素的加载算法)
+            const vidS = (o) => { const x = vid(o); let s = x.src; delete x.src; x.srcSets = []; Object.defineProperty(x, 'src', { get: () => s, set: (u) => { s = u; x.srcSets.push(u); x.error = null; }, enumerable: true, configurable: true }); return x; };
+            const microtasks = async (n) => { for (let k = 0; k < (n || 5); k++) await Promise.resolve(); };
+            const deliver = async (Ex, vx) => { Ex.adCut.attachNative(vx, {}); for (let k = 0; k < 60 && !Ex.posts.length; k++) await sleep(20); await sleep(20); };
+            // (1) 交付、播到 600s、用户暂停很久;WebKit 回收 GPU 进程后重载:currentTime 清零、paused、发 emptied → 同一个 id 重交同一份正文,src 不变
+            const E12 = mkEnv();
+            const v12 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+            await deliver(E12, v12);
+            const cut12 = v12.src, id12 = /cut\/([^.]+)\.m3u8/.exec(cut12)[1], job12 = v12._adCutNative;
+            v12.emit('loadedmetadata');
+            v12.readyState = 4; v12.currentTime = 600; v12.emit('timeupdate');
+            v12.paused = true; E12.advance(3600e3);   // 暂停了一小时
+            v12.currentTime = 0; v12.readyState = 0; v12.emit('emptied');
+            await sleep(20);
+            ok(E12.posts.length === 2 && E12.posts[1].id === id12 && E12.posts[1].m3u8 === E12.posts[0].m3u8 && v12.src === cut12, 'WebKit 重载(emptied)→ 用同一个 id 重交同一份剪后清单,src 不变', E12.posts.length);
+            // (2) 重载的 GET 仍然失败(比如重交那一下网络还没通)→ 出错:先重交 + 原地址重载 + 跳回 lastPlay;同一错误的第二次触发吞掉。
+            //   真浏览器在两个监听(DPlayer 的 / <video> 自己的)之间会跑微任务:这里复用的是 emptied 时已经成功的那次重交(promise 已落定)
+            //   → 第一个监听的 .then 在第二个监听之前就重设了 src、清掉了 retrying —— 第二个监听也必须吞掉,不能当成"重载后又出错"换回原地址
+            v12.error = { code: 4 };
+            const sets0 = v12.srcSets.length;
+            const first12 = E12.adCut.onNativeError(v12, 'video');
+            await microtasks();
+            ok(first12 === true && v12.srcSets.length === sets0 + 1 && E12.adCut.onNativeError(v12, 'dp') === true && v12.src === cut12 && !v12._adCutLost, '重载后出错 → 接管;两个监听之间跑过微任务(src 已重设)同一错误的第二次触发也吞掉', v12.srcSets.slice(sets0));
+            await sleep(20);
+            ok(v12.srcSets.length === sets0 + 1 && v12.src === cut12 && E12.vue._activeCut && E12.vue._activeCut.src === cut12, '重交成功 → 同一个地址重设一遍(重载),剪段还在(不清 _activeCut)', v12.srcSets.slice(sets0));
+            v12.error = null; v12.emit('loadedmetadata');
+            ok(Math.abs(v12.currentTime - 600) < 0.01, '重载后跳回出错前的位置(WebKit 已清零 → 用最后一次正常播放的 600s)', v12.currentTime);
+            ok(!v12.played, '暂停中出错 → 重载后不自动播放');
+            ok(E12.posts.length === 2, '15s 内的重交复用刚才那次(不重复 POST)', E12.posts.length);
+            // (6) 回到前台:delivered 的任务 → 重交一次续期;15s 内再回来不重复
+            E12.advance(20e3);
+            ok(E12.adCut.revive(v12, 'visible') === '重交' && E12.posts.length === 3, '回到前台 revive → 重交一次(续期/服务器重启后重建)', E12.posts.length);
+            ok(E12.adCut.revive(v12, 'pageshow') === '重交' && E12.posts.length === 3, '15s 内再 revive 不重复 POST');
+            // (8) 新的一集挂上来 → 旧任务作废、正文释放
+            v12.src = MEDIA;
+            E12.adCut.attachNative(v12, {});
+            ok(job12.dead === true && job12.body === null, '换集(新 attach)→ 旧任务作废、剪后正文释放(不攥上 MB 的字符串)');
+            // (3) 第一次交付成功,之后的重交都失败(服务器还没起来)→ 换回原地址,从 lastPlay(剪后 600s → 原 619.07s)续播,记下 lost
+            const E13 = mkEnv({ postFailAfter: 1 });
+            const v13 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+            await deliver(E13, v13);
+            const cut13 = v13.src, job13 = v13._adCutNative;
+            v13.emit('loadedmetadata');
+            v13.readyState = 4; v13.currentTime = 600; v13.emit('timeupdate');
+            v13.paused = true; E13.advance(3600e3);
+            v13.currentTime = 0; v13.readyState = 0; v13.emit('emptied');
+            await sleep(20);
+            v13.error = { code: 4 };
+            ok(E13.adCut.onNativeError(v13, 'video') === true, '重交失败的场景:出错照样接管');
+            for (let k = 0; k < 40 && v13.src !== MEDIA; k++) await sleep(10);
+            ok(v13.src === MEDIA && E13.posts.length === 3, '重交(emptied 一次 + 出错一次)都失败 → 换回原地址', { src: v13.src, posts: E13.posts.length });
+            v13.error = null; v13.emit('loadedmetadata');
+            ok(Math.abs(v13.currentTime - 619.066) < 0.01, '续播点用最后一次正常播放的位置(剪后 600s → 原时间轴 619.07s),不是 0', v13.currentTime);
+            ok(v13._adCutLost && v13._adCutLost.why === 'error' && v13._adCutLost.tok === 1 && !E13.lsMap.has('donggua_adcut_nativebad'), '记下"剪后清单丢了"(不记本站剪不了)', v13._adCutLost);
+            ok(job13.dead === true && job13.body === null && !E13.vue._activeCut, '换回原地址:任务作废、正文释放、剪段清掉');
+            ok(!v13.played, '换回原地址时没在播 → 不自动播放');
+            // (7) 回到前台(暂停中)→ reattach:新的 id、新的占位地址、同一份剪后正文;就位后跳到原时间轴 619.07s 对应的剪后 600s
+            E13.opts.postFailAfter = null;
+            const nP = E13.posts.length;
+            ok(E13.adCut.revive(v13, 'visible') === '重接', 'revive:剪后清单丢了 → 重新接上');
+            const cut13b = v13.src;
+            ok(/\/api\/hls\/cut\/[A-Za-z0-9_-]{24}\.m3u8$/.test(cut13b) && cut13b !== cut13 && !v13._adCutLost, '…换成新的占位地址(新 id)', cut13b);
+            for (let k = 0; k < 60 && E13.posts.length === nP; k++) await sleep(20);
+            await sleep(20);
+            ok(E13.posts.length === nP + 1 && E13.posts[nP].id === /cut\/([^.]+)\.m3u8/.exec(cut13b)[1] && E13.posts[nP].m3u8 === E13.posts[0].m3u8, '…交付同一份剪后清单(会话缓存,零扫描)', E13.posts.length);
+            v13.emit('loadedmetadata');
+            ok(Math.abs(v13.currentTime - 600) < 0.01 && v13._adCutNative && v13._adCutNative.loaded && E13.vue._activeCut && E13.vue._activeCut.src === cut13b, '…就位后跳回剪后时间轴 600s(= 原时间轴 619.07s),剪段重新生效', v13.currentTime);
+            ok(!v13.played, '…不自动播放');
+            // 每次播放最多重接 2 次;换了播放令牌 / 正在播放 → 不重接
+            const vc = vidS({ src: MEDIA, paused: true, currentTime: 100 });
+            vc._adCutLost = { tok: 1, at: 0, why: 'error' }; vc._adCutReattach = { tok: 1, n: 2 };
+            ok(E13.adCut.revive(vc, 'visible') === '丢失' && vc.src === MEDIA, '同一次播放已重接 2 次 → 不再重接');
+            vc._adCutReattach = null; vc._adCutLost = { tok: 0, at: 0, why: 'error' };
+            ok(E13.adCut.reattach(vc) === false && vc.src === MEDIA, '播放令牌对不上(换过集)→ 不重接');
+            vc._adCutLost = { tok: 1, at: 0, why: 'error' }; vc.paused = false;
+            ok(E13.adCut.reattach(vc) === false && vc.src === MEDIA, '正在播放 → 不重接(换 src 会打断播放)');
+            // (7b) 换回原地址后、原地址的元数据还没到(网络还没通 / iOS 没给暂停中的元素加载:currentTime 还是 0)就 revive('online')
+            //   → reattach 用丢失时记下的续播点(原 619.07s),不能拿 0;新剪后清单就位后跳到剪后 600s
+            {
+                const E18 = mkEnv({ postFailAfter: 1 });
+                const v18 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+                await deliver(E18, v18);
+                v18.emit('loadedmetadata');
+                v18.readyState = 4; v18.currentTime = 600; v18.emit('timeupdate');
+                v18.paused = true; E18.advance(3600e3);
+                v18.currentTime = 0; v18.readyState = 0; v18.emit('emptied');
+                await sleep(20);
+                v18.error = { code: 4 };
+                E18.adCut.onNativeError(v18, 'video');
+                for (let k = 0; k < 40 && v18.src !== MEDIA; k++) await sleep(10);
+                ok(v18.src === MEDIA && v18._adCutLost && Math.abs(v18._adCutLost.resume - 619.066) < 0.01, '换回原地址:lost 记下原时间轴续播点 619.07s', v18._adCutLost);
+                E18.opts.postFailAfter = null;
+                ok(v18.readyState === 0 && v18.currentTime === 0 && E18.adCut.revive(v18, 'online') === '重接', '原地址元数据还没到(currentTime 0)时联网 → 重新接上');
+                for (let k = 0; k < 60 && !(v18._adCutNative && v18._adCutNative.delivered); k++) await sleep(20);
+                v18.emit('loadedmetadata');
+                ok(Math.abs(v18.currentTime - 600) < 0.01, '…续播点用 lost.resume(剪后 600s),不是 0', v18.currentTime);
+            }
+            // (2b) 播放中出错 → 重交要等 POST;这期间用户点了暂停 → 重载后不自动播(以前拿出错那一刻的"在播"顶掉了用户的暂停)
+            {
+                const E16 = mkEnv();
+                const v16 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; this.emit('pause'); } });
+                await deliver(E16, v16);
+                v16.emit('loadedmetadata');
+                v16.readyState = 4; v16.currentTime = 300; v16.emit('timeupdate');
+                E16.opts.postSlow = 80;
+                v16.error = { code: 2 };
+                ok(E16.adCut.onNativeError(v16, 'dp') === true, '播放中出错 → 接管(重交)');
+                v16.pause();
+                for (let k = 0; k < 40 && v16.srcSets.filter(u => u === v16.src).length < 2; k++) await sleep(10);
+                await sleep(10);
+                ok(v16.src.includes('/api/hls/cut/') && v16.srcSets.length >= 2 && !v16.played, '…重交途中用户暂停了 → 重载后不自动播放', { played: v16.played, sets: v16.srcSets.length });
+                v16.error = null; v16.emit('loadedmetadata');   // 重载拿到元数据:期限作废(不留定时器)
+                await sleep(E16.adCut.RELOAD_META_MS + 50);
+                ok(v16.src.includes('/api/hls/cut/') && Math.abs(v16.currentTime - 300) < 0.01, '…元数据到了 → 期限作废,留在剪后清单、回到 300s', { src: v16.src, t: v16.currentTime });
+                // 对照:没人暂停 → 重载后接着播
+                const E17 = mkEnv();
+                const v17 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; this.paused = false; return Promise.resolve(); } });
+                await deliver(E17, v17);
+                v17.emit('loadedmetadata');
+                v17.readyState = 4; v17.currentTime = 300; v17.emit('timeupdate');
+                E17.opts.postSlow = 30;
+                v17.error = { code: 2 };
+                E17.adCut.onNativeError(v17, 'dp');
+                for (let k = 0; k < 40 && !v17.played; k++) await sleep(10);
+                ok(v17.played === 1, '…对照:没暂停 → 重载后接着播', v17.played);
+                v17.error = null; v17.emit('loadedmetadata');
+            }
+            // (2c) 出错前一刻用户自己点了暂停(离最后一次走动不到 1.5s)→ 重载后也不自动播;对照:WebKit 重载式的"暂停"(readyState 已清零,
+            //   不是用户)照旧算在播
+            {
+                const E22 = mkEnv();
+                const v22 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; this.paused = false; return Promise.resolve(); }, pause() { this.paused = true; this.emit('pause'); } });
+                await deliver(E22, v22);
+                v22.emit('loadedmetadata');
+                v22.readyState = 4; v22.currentTime = 300; v22.emit('timeupdate');
+                v22.pause();
+                v22.error = { code: 2 };
+                ok(E22.adCut.onNativeError(v22, 'dp') === true, '用户刚暂停就出错 → 接管(重交)');
+                for (let k = 0; k < 40 && v22.srcSets.length < 2; k++) await sleep(10);
+                await sleep(10);
+                ok(v22.srcSets.length === 2 && v22.src.includes('/api/hls/cut/') && !v22.played, '…出错前用户自己暂停了(1.5s 内)→ 重载后不自动播放', { played: v22.played, sets: v22.srcSets.length });
+                v22.error = null; v22.emit('loadedmetadata');
+                const E23 = mkEnv();
+                const v23 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; this.paused = false; return Promise.resolve(); } });
+                await deliver(E23, v23);
+                v23.emit('loadedmetadata');
+                v23.readyState = 4; v23.currentTime = 300; v23.emit('timeupdate');
+                v23.paused = true; v23.readyState = 0; v23.currentTime = 0; v23.emit('pause');   // WebKit 重载:先清零再置暂停
+                v23.error = { code: 2 };
+                E23.adCut.onNativeError(v23, 'dp');
+                for (let k = 0; k < 40 && !v23.played; k++) await sleep(10);
+                ok(v23.played === 1, '…对照:WebKit 重载置的暂停(readyState 已清零)不算用户暂停 → 重载后接着播', v23.played);
+                v23.error = null; v23.emit('loadedmetadata');
+                ok(Math.abs(v23.currentTime - 300) < 0.01, '…并跳回 300s', v23.currentTime);
+            }
+            // (1b) WebKit 重载(emptied)、重交成功、没有出错:出错路径的"跳回原位置"不会跑 → 元数据回来时还在 0 就跳回 lastPlay(剪后 600s)。
+            //   重载途中 currentTime 0 的 timeupdate 不盖掉 lastPlay;多次 emptied 只挂一个监听;元数据到时已不在 0(WebKit 自己恢复了)→ 不动
+            {
+                const E19 = mkEnv();
+                const v19 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+                await deliver(E19, v19);
+                const cut19 = v19.src, job19 = v19._adCutNative;
+                v19.emit('loadedmetadata');
+                v19.readyState = 4; v19.currentTime = 600; v19.emit('timeupdate');
+                v19.paused = true; E19.advance(3600e3);
+                const nL = (v19._l.loadedmetadata || []).length;
+                v19.currentTime = 0; v19.readyState = 0; v19.emit('emptied');
+                v19.emit('emptied');
+                await sleep(20);
+                ok(E19.posts.length === 2 && v19.src === cut19, 'emptied → 重交(重复的 emptied 15s 内复用同一次)', E19.posts.length);
+                ok((v19._l.loadedmetadata || []).length === nL + 1, '…两次 emptied 只挂一个"跳回"监听', (v19._l.loadedmetadata || []).length - nL);
+                v19.readyState = 2; v19.emit('timeupdate');
+                ok(job19.lastPlay === 600, '…重载途中 currentTime 0 的 timeupdate 不盖掉 lastPlay', job19.lastPlay);
+                v19.readyState = 1; v19.emit('loadedmetadata');
+                ok(Math.abs(v19.currentTime - 600) < 0.01 && v19.src === cut19 && !v19.played, '…重交成功、没出错:元数据回来跳回剪后 600s,不自动播放', v19.currentTime);
+                ok((v19._l.loadedmetadata || []).length === nL, '…监听用完即撤');
+                v19.readyState = 4; v19.currentTime = 610; v19.emit('timeupdate');
+                ok(job19.lastPlay === 610, '…跳回之后照常记位置', job19.lastPlay);
+                v19.currentTime = 0; v19.readyState = 0; v19.emit('emptied');
+                v19.currentTime = 605; v19.readyState = 1; v19.emit('loadedmetadata');
+                ok(Math.abs(v19.currentTime - 605) < 0.01, '元数据到时已不在 0(WebKit 自己恢复了位置)→ 不动', v19.currentTime);
+                // 换集之后旧任务的监听:不碰新的一集
+                v19.currentTime = 0; v19.readyState = 0; v19.emit('emptied');
+                v19.src = MEDIA; E19.adCut.attachNative(v19, {});
+                v19.currentTime = 0; v19.emit('loadedmetadata');
+                ok(v19.currentTime === 0, '…emptied 后换了集 → 旧任务的"跳回"不作用到新的一集', v19.currentTime);
+            }
+            // (2d) 出错后重交成功、重载却一直拿不到元数据 → 到期限只换回原地址一次(原时间轴 619.07s 续播、记 lost、不记账);之后再出错交给错误处理链
+            {
+                const E20 = mkEnv();
+                const v20 = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+                await deliver(E20, v20);
+                v20.emit('loadedmetadata');
+                v20.readyState = 4; v20.currentTime = 600; v20.emit('timeupdate');
+                v20.paused = true; E20.advance(3600e3);
+                v20.error = { code: 2 };
+                ok(E20.adCut.onNativeError(v20, 'dp') === true, '重载拿不到元数据的场景:出错接管');
+                for (let k = 0; k < 40 && v20.srcSets.length < 2; k++) await sleep(10);
+                ok(v20.srcSets.length === 2 && v20.src.includes('/api/hls/cut/'), '…重交成功 → 原地址重载', v20.srcSets.length);
+                v20.currentTime = 0; v20.readyState = 0;
+                await sleep(E20.adCut.RELOAD_META_MS + 80);
+                const toMedia = () => v20.srcSets.filter(u => u === MEDIA).length;
+                ok(v20.src === MEDIA && toMedia() === 1 && v20._adCutLost && Math.abs(v20._adCutLost.resume - 619.066) < 0.01 && !E20.lsMap.has('donggua_adcut_nativebad') && !v20.played,
+                    '…期限到 → 换回原地址一次,lost 记原时间轴 619.07s,不记"本站剪不了",没在播不自动播', { src: v20.src, n: toMedia(), lost: v20._adCutLost });
+                v20.error = null; v20.readyState = 1; v20.emit('loadedmetadata');
+                ok(Math.abs(v20.currentTime - 619.066) < 0.01, '…原地址元数据到 → 从 619.07s 续播', v20.currentTime);
+                v20.error = { code: 2 };
+                ok(E20.adCut.onNativeError(v20, 'dp') === false, '…之后再出错(原地址)→ 交给错误处理链');
+                await sleep(E20.adCut.RELOAD_META_MS + 50);
+                ok(toMedia() === 1, '…不会再换一次地址', toMedia());
+            }
+            // (7c) 重新接上后一直拿不到元数据 → 到期限换回原地址(原时间轴续播),不新记 lost(不循环重接);
+            //   (7d) 重新接上的任务在元数据前出 MEDIA_ERR_NETWORK(Wi-Fi 还没真通)→ 不记"本站剪不了"
+            {
+                const E21 = mkEnv();
+                const v21 = vidS({ src: MEDIA, paused: true, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+                await deliver(E21, v21);
+                v21.emit('loadedmetadata');
+                v21.readyState = 4; v21.currentTime = 600; v21.emit('timeupdate');
+                E21.advance(3600e3);
+                E21.adCut._revertNative(v21, v21._adCutNative, 600, false, 'error');
+                v21.currentTime = 0; v21.readyState = 0;
+                ok(v21.src === MEDIA && v21._adCutLost && Math.abs(v21._adCutLost.resume - 619.066) < 0.01, '(7c) 前提:换回原地址、记下 lost', v21._adCutLost);
+                ok(E21.adCut.reattach(v21) === true, '…回到前台 → 重新接上');
+                const job21 = v21._adCutNative;
+                for (let k = 0; k < 60 && !job21.delivered; k++) await sleep(10);
+                ok(job21.delivered && v21.src === job21.cutUrl, '…交付了新的占位地址');
+                await sleep(E21.adCut.RELOAD_META_MS + 80);
+                ok(v21.src === MEDIA && job21.dead && !v21._adCutNative && !v21._adCutLost && !v21.played, '…期限到还没元数据 → 换回原地址,不新记 lost、不自动播', { src: v21.src, lost: v21._adCutLost });
+                v21.readyState = 1; v21.emit('loadedmetadata');
+                ok(Math.abs(v21.currentTime - 619.066) < 0.01, '…原地址从 619.07s 续播', v21.currentTime);
+                // (7d) 第二次重接(每次播放最多 2 次)→ 元数据前 MEDIA_ERR_NETWORK
+                v21._adCutLost = { tok: 1, at: 0, why: 'error', resume: 619.066 };
+                v21.currentTime = 0; v21.readyState = 0;
+                ok(E21.adCut.reattach(v21) === true, '(7d) 第二次重新接上');
+                const job21b = v21._adCutNative;
+                for (let k = 0; k < 60 && !job21b.delivered; k++) await sleep(10);
+                v21.error = { code: 2 };
+                ok(E21.adCut.onNativeError(v21, 'video') === true && v21.src === MEDIA, '…元数据前出网络错误 → 换回原地址');
+                ok(!E21.lsMap.has('donggua_adcut_nativebad'), '…重新接上的任务出 MEDIA_ERR_NETWORK 不记"本站剪不了"(醒来时的网络抖动)');
+                ok(v21._adCutLost && v21._adCutLost.why === 'net' && Math.abs(v21._adCutLost.resume - 619.066) < 0.01, '…记 lost(net),续播点不变', v21._adCutLost);
+                v21.error = null; v21.paused = true;
+                ok(E21.adCut.reattach(v21) === false, '…这次播放已重接 2 次 → 不再重接(不循环)');
+            }
+            // (7e) 网络形状的"交付后播不起来":刚从后台回来 30s 内的 MEDIA_ERR_NETWORK / 断网 → 不记账;平时的照旧记(对照)
+            {
+                const run = async (setup, code) => {
+                    const Ex = mkEnv();
+                    const vx = vidS({ src: MEDIA, paused: false, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+                    await deliver(Ex, vx);
+                    setup(Ex);
+                    vx.error = { code };
+                    Ex.adCut.onNativeError(vx, 'video');
+                    return { bad: Ex.lsMap.has('donggua_adcut_nativebad'), src: vx.src, lost: vx._adCutLost };
+                };
+                const a = await run((Ex) => { Ex.win._dgResumeAt = Ex.wallNow() - 5e3; }, 2);
+                ok(!a.bad && a.src === MEDIA && a.lost && a.lost.why === 'net', '刚从后台回来 5s:交付后元数据前 MEDIA_ERR_NETWORK → 换回原地址、不记账、记 lost(net)', a);
+                const b = await run((Ex) => { Ex.nav.onLine = false; }, 4);
+                ok(!b.bad && b.src === MEDIA, '断网(onLine=false)时的出错 → 不记账', b);
+                const c = await run(() => { }, 2);
+                ok(c.bad && !c.lost, '对照:平时(在线、没刚回来)交付后播不起来 → 照旧记"本站剪不了"', c);
+                const d = await run((Ex) => { Ex.win._dgResumeAt = Ex.wallNow() - 5e3; }, 4);
+                ok(d.bad, '对照:刚回来但是解码 / 格式错误(code 4)→ 照旧记账', d);
+            }
+            // (6c) iOS 睡眠:performance.now() 不走、墙上时钟走了一夜 → 回来照样重交(15s 节流按墙上时钟);出错后的"5 分钟只救一次"同理
+            {
+                const E25 = mkEnv();
+                const v25 = vidS({ src: MEDIA, paused: true, error: null, readyState: 0, seeking: false, play() { this.played = (this.played || 0) + 1; return Promise.resolve(); } });
+                await deliver(E25, v25);
+                v25.emit('loadedmetadata');
+                v25.readyState = 4; v25.currentTime = 600; v25.emit('timeupdate');
+                ok(E25.adCut.revive(v25, 'visible') === '重交' && E25.posts.length === 2, '回到前台 → 重交');
+                await sleep(10);
+                E25.advanceWall(12 * 3600e3);
+                ok(E25.adCut.revive(v25, 'visible') === '重交' && E25.posts.length === 3, '…锁屏睡了一夜(performance.now 没走、墙上时钟走了 12h)→ 照样重交,不被当成"15s 内"', E25.posts.length);
+                await sleep(10);
+                v25.error = { code: 2 };
+                E25.adCut.onNativeError(v25, 'dp');
+                for (let k = 0; k < 40 && v25.srcSets.length < 2; k++) await sleep(10);
+                v25.error = null; v25.emit('loadedmetadata');
+                ok(v25.srcSets.length === 2 && v25.src.includes('/api/hls/cut/'), '出错 → 重交 + 重载(第一次救)', v25.srcSets.length);
+                E25.advanceWall(6 * 60e3);
+                await sleep(10);
+                v25.error = { code: 2 };
+                E25.adCut.onNativeError(v25, 'dp');
+                for (let k = 0; k < 40 && v25.srcSets.length < 3; k++) await sleep(10);
+                ok(v25.srcSets.length === 3 && v25.src.includes('/api/hls/cut/'), '…墙上时钟过了 6 分钟(睡眠也算)再出错 → 还能再救一次(不直接换回原地址)', v25.srcSets);
+                v25.error = null; v25.emit('loadedmetadata');
+            }
+            // (6b) 还在扫描(没交付)的任务 → revive 不 POST
+            const E14 = mkEnv({ slow: 200 });
+            const v14 = vidS({ src: MEDIA, paused: false });
+            E14.adCut.attachNative(v14, {});
+            await sleep(30);
+            ok(E14.adCut.revive(v14, 'visible') === '扫描中' && E14.posts.length === 0, '还在扫描的任务 → revive 不 POST');
+            // 交付时网络没就绪(POST 抛 TypeError)→ 换回原地址,记 lost(net)
+            const E15 = mkEnv({ postNet: true });
+            const v15 = vidS({ src: MEDIA, paused: true, play() { return Promise.resolve(); } });
+            E15.adCut.attachNative(v15, {});
+            for (let k = 0; k < 60 && v15.src !== MEDIA; k++) await sleep(20);
+            ok(v15.src === MEDIA && v15._adCutLost && v15._adCutLost.why === 'net' && !E15.lsMap.has('donggua_adcut_nativebad'), '交付时网络没就绪 → 换回原地址、记 lost(net)、不记账', v15._adCutLost);
         }
         // 服务器不支持(Vercel)/ 没开 → 不接管
         E = mkEnv({ hlsCut: false });
