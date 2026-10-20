@@ -30,7 +30,9 @@
 // v37: Web Push 更新提醒(push / notificationclick);收藏 /api/favorites* 与推送 /api/push/* 一律直达不缓存。
 // v38: pushsubscriptionchange(浏览器轮换/作废订阅时用原来的选项重新订阅,并通知已打开的页面立刻把新地址报给服务器)。
 // v39: 预缓存 libs/js/qrcode-generator.min.js?v=2.0.4(截帧分享卡片的二维码库;页面首次用到才按需加载,预缓存让它走 SWR、断网也能生成)。
-const CACHE_VERSION = 'v39';
+// v40: 升版只为让 install 重新预缓存 './' 与 './index.html'(v39 之后 index.html 改过多次没升版;总在 ?play= 深链上刷新的 iPad 一直启动旧外壳)。
+//      这一版页面:iOS 长时间后台回来的恢复(剪后清单重交/重接、原生扫描网络重试、覆盖层重排 + 首页隐藏)、播放页开着时新 SW 推迟刷新。
+const CACHE_VERSION = 'v40';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)

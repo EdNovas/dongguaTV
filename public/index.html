@@ -3143,21 +3143,57 @@
         }
 
         /* ★★★ 播放页重构：影院模式 ★★★ */
+        /* 🌙 四边都钉住(不只靠 top:0 + height:100%):iPad 后台里转屏/分屏改了窗口,回来时 WebKit 可能还用旧的 fixed 包含块尺寸,
+           以前覆盖层就只盖住上面 2/3、露出底下能滚动的首页。dvh 下限按真实窗口算;没有 100vh 兜底(会钻到 Safari 工具栏下面)。
+           四个长写属性而不是 inset(iPadOS < 14.5 不认)。滚动不串到底层页面:只管纵向(横向留给浏览器的左右滑动返回) */
         .detail-overlay {
             position: fixed;
             top: 0;
+            right: 0;
+            bottom: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: auto;
+            height: auto;
             background: #141414;
             z-index: 9999;
             display: none;
             overflow-y: auto;
+            overscroll-behavior-y: contain;
         }
 
-        /* 播放页打开时禁止底层页面滚动，避免双滚动条 */
+        @supports (height: 100dvh) {
+            .detail-overlay {
+                min-height: 100dvh;
+            }
+        }
+
+        /* 播放页打开时禁止底层页面滚动，避免双滚动条。html 也锁:iOS 主屏 App / 工具栏收起时只锁 body 挡不住触摸滚动 */
+        html.detail-open,
         body.detail-open {
             overflow: hidden !important;
+            overscroll-behavior-y: none;
+        }
+
+        /* html 锁住后它的 overflow 交给视口,body 自己的 overflow:hidden 就不再传上去、而是把 body 变成一个滚不动的滚动容器 ——
+           首页吸顶的搜索栏(position:sticky)会改吸在 body 上、上滑动画那 0.4s 里跳出视口。html 锁着时 body 放开(视口照样是锁的) */
+        html.detail-open body {
+            overflow: visible !important;
+        }
+
+        /* 🌙 播放页开场动画放完后(showDetail 侦听器加 detail-covered),#app 下的首页各层一律 visibility:hidden:保留布局(不重建 ~600 张卡)、
+           不再绘制、点不到也滚不动 —— 覆盖层哪怕没盖满,露出来的也只是同色背景。只列首页层:覆盖层/弹窗/封禁锁/TV 悬浮钮/teleport 的都不在这里 */
+        body.detail-covered #app > .navbar-custom,
+        body.detail-covered #app > .btn-top,
+        body.detail-covered #app > .btn-settings,
+        body.detail-covered #app > #heroCarousel,
+        body.detail-covered #app > .search-section,
+        body.detail-covered #app > .home-flow,
+        body.detail-covered #app > .catdir-page,
+        body.detail-covered #app > .browse-page,
+        body.detail-covered #app > .browse-sticky,
+        body.detail-covered #app > #search-result-anchor,
+        body.detail-covered #app > .footer {
+            visibility: hidden !important;
         }
 
         .detail-overlay.active {
@@ -7080,6 +7116,22 @@
                 }));
             }
         };
+        // <dg-resume-core>
+        // 🌙 iOS/iPadOS 长时间后台后回来(页面被冻结又恢复)要用的几个纯函数。scripts/resume-layout-test.mjs 按这对标记抽出来在 node 里测,
+        //   scripts/adclip-test.mjs 把它拼在 adClipSkip/adCut 前面一起求值 —— 段内只用参数,不碰页面变量/DOM/网络。
+        // 网络形状的失败(Wi-Fi 刚醒还没连上 / 超时中止):fetch 抛 TypeError('Load failed' / 'Failed to fetch'),中止是 AbortError。
+        //   HTTP 4xx、清单格式不对、'multi-variant' 这类是真结论,不算
+        function dgNetShaped(e) { return !!e && (e.name === 'TypeError' || e.name === 'AbortError'); }
+        // 覆盖层的盒子是否盖满整个视口(留 1px 余量);rect = getBoundingClientRect()
+        function dgCovers(rect, vw, vh) { return !!rect && rect.top <= 1 && rect.left <= 1 && rect.bottom >= vh - 1 && rect.right >= vw - 1; }
+        // 回来之后做什么:播放页开着就重排覆盖层;wake = 叫醒因"网络没就绪"停下的静默跳过扫描(每次回来都做,没停下就是空操作);
+        //   revive = 重建剪后清单(重交上 MB 的正文 / 重新接上),只在离开够久(≥60s)/ 从往返缓存恢复 / 网络刚回来时做。直播都不做
+        function dgResumePlan(o) {
+            o = o || {};
+            const show = !!o.showDetail, wake = !!(show && o.hasDp && !o.live);
+            return { relayout: show, wake, revive: !!(wake && ((o.awayMs || 0) >= 60e3 || o.reason === 'pageshow' || o.reason === 'online')) };
+        }
+        // </dg-resume-core>
         // URL 归一化：代理形式(https://代理域/?url=ENC)与直连视为同一资源——下载后切换去广告/代理开关仍能命中缓存。
         // ⚠️ 锚定整串且要求值以编码的 http 开头：避免把"自带 url= 查询参数的直连地址"误剥壳(那会让缓存键错位永远 miss)
         function offlineKey(u) {
@@ -7244,6 +7296,8 @@
         window.adClipSkip = {
             vue: null, OPT: null, COOLDOWN: 1500, MAX_ACTIONS: 30, MAX_ATTEMPTS: 2, BIG_BUFFER: 75,
             NATIVE_LOOK: 75, NATIVE_BEHIND: 2, NATIVE_CONC: 2, NATIVE_HEAD: 16384,
+            // 原生通道拉清单遇到网络形状的失败(iPad 从后台回来 Wi-Fi 还在重连)→ 按这个间隔重试几次,都不行才认定"本集拿不到"(测试可改小)
+            NATIVE_RETRY: [2000, 5000, 12000],
             enabled() {
                 try {
                     return !!(window.AdClipCore && window.AdFilter && window.AdFilter.isEnabled()) &&
@@ -7336,9 +7390,23 @@
                 try {
                     const v = this.vue;
                     if (!st.site || !v || !v._clipNativeSet) return;
-                    if (!ok && (st.dead || (typeof navigator !== 'undefined' && navigator.onLine === false))) return;   // 断网/换集中止不算站点的问题
+                    if (!ok && (st.dead || this._netNotReady(st))) return;   // 断网/页面在后台/换集中止不算站点的问题
                     v._clipNativeSet(st.site, !ok);
                 } catch (e) { }
+            },
+            // 网络此刻根本不可用:断网,或页面在后台且没在播(iOS 挂起/刚醒时请求会直接失败)。这时网络形状的失败不记账、不消耗重试次数,
+            //   先停下(st.netWait),网络回来后 _nativePump 自己接着跑(timeupdate 每次都调它),revive() 只是叫得更早。
+            //   后台里还在播(画中画 / Mac Safari 后台标签页)网络是通的 → 照常算
+            _netNotReady(st) {
+                if (typeof navigator !== 'undefined' && navigator.onLine === false) return true;
+                if (typeof document === 'undefined' || !document.hidden) return false;
+                const v = st && st.video;
+                return !v || !!v.paused;
+            },
+            // 刚从后台回来(vue._onPageResume 记的 _dgResumeAt,30s 内):iPad 醒来页面已可见、onLine 也是 true,Wi-Fi 却还要几秒才真通 →
+            //   这段时间里网络形状的探测失败也先停一下(带退避)再探,不烧掉每组仅有的 2 次尝试 / 6 次失败额度
+            _justResumed() {
+                try { return !!(window._dgResumeAt && Date.now() - window._dgResumeAt < 30e3); } catch (e) { return false; }
             },
             // 单个请求:10s 超时;换集/换源(_nativeKill)时一并中止。n 给了就只读前 n 字节(Range + 读够即断,服务器不认 Range 也不多拉)。
             //   Safari ≤15 的 Range 不在 CORS 免预检名单里,而如意/电影天堂的 CDN 预检都不放行 Range → 跨域失败时去掉 Range 再试一次
@@ -7385,6 +7453,8 @@
                 } finally { clearTimeout(timer); st.aborts.delete(kill); }
             },
             async _nativeLoad(st) {
+                if (!st || st.dead || st.loading) return;
+                st.loading = true;
                 try {
                     let r = await this._nativeFetch(st, st.src);
                     if (st.dead) return;
@@ -7423,12 +7493,40 @@
                     console.log('[去插播] 原生 HLS:清单 ' + frags.length + ' 片 / ' + st.groups.length + ' 组,边播边探每组首片');
                     this._nativePump(st);
                 } catch (e) {
-                    if (!st.dead) { st.failed = true; this._nativeReport(st, false); console.log('[去插播] 原生 HLS 拿不到清单(多为跨域),本集不跳插播:', e && e.message); }
-                }
+                    if (st.dead) return;
+                    // 🌙 网络形状的失败(TypeError/超时中止/5xx/429):iPad 从后台回来那一下 Wi-Fi 还没连上,以前一次就判"本集不跳"还记 3 天账
+                    const net = dgNetShaped(e) || /^HTTP (5\d\d|429)$/.test((e && e.message) || '');
+                    if (dgNetShaped(e) && this._netNotReady(st)) {
+                        // 后台没在播 / 断网:不设定时器;网络回来后 _nativePump(timeupdate)自己重拉,回到前台 / 联网时 revive() 叫得更早
+                        st.netWait = true; st.netWaitUntil = 0;
+                        console.log('[去插播] 原生 HLS 清单:网络未就绪,恢复后重试');
+                        return;
+                    }
+                    if (net && (st.loadTries = (st.loadTries || 0) + 1) <= this.NATIVE_RETRY.length) {
+                        const ms = this.NATIVE_RETRY[st.loadTries - 1];
+                        let tm = 0;
+                        const cancel = () => { clearTimeout(tm); if (st.loadTimer === cancel) st.loadTimer = null; };
+                        tm = setTimeout(() => { st.aborts.delete(cancel); if (st.loadTimer === cancel) st.loadTimer = null; if (!st.dead) this._nativeLoad(st); }, ms);
+                        st.loadTimer = cancel; st.aborts.add(cancel);   // 换集/换源(_nativeKill)时一并取消
+                        console.log('[去插播] 原生 HLS 清单暂时拿不到(' + ((e && e.message) || e) + '),' + (ms / 1000) + 's 后重试');
+                        return;
+                    }
+                    st.failed = true; st.netFail = net;
+                    this._nativeReport(st, false);
+                    console.log('[去插播] 原生 HLS 拿不到清单(' + (net ? '重试几次仍不通,多为跨域' : '多为跨域') + '),本集不跳插播:', e && e.message);
+                } finally { st.loading = false; }
             },
             // 只探"往回两组 ~ 往前 75s"里还没探过的组,同时最多 2 个;只在真的开始播了以后才探(不和起播抢带宽)
             _nativePump(st) {
-                if (!st || st.dead || !st.ready || st.failed) return;
+                if (!st || st.dead || st.failed) return;
+                // 🌙 因"网络没就绪"停下的:网络回来了(可见或在播、在线、过了退避时间)就自己接着跑 —— 不必等 revive()
+                //   (离开不到 60s 就回来、画中画里一直隐藏,都没人叫它;以前这样就整集停扫)
+                if (st.netWait) {
+                    if (this._netNotReady(st) || performance.now() < (st.netWaitUntil || 0)) return;
+                    st.netWait = false;
+                    if (!st.ready) { this._nativeLoad(st); return; }
+                }
+                if (!st.ready) return;
                 const v = st.video;
                 if (!v || v.src !== st.src || v.readyState < 2) return;
                 if (v.ended) return;
@@ -7472,6 +7570,13 @@
                     if (!st.reportedOk) { st.reportedOk = true; this._nativeReport(st, true); }
                 } catch (e) {
                     if (st.dead) return;
+                    // 🌙 网络形状的失败(TypeError / 超时中止),且页面在后台没在播 / 断网 / 刚从后台回来 30s 内:这次不算
+                    //   (退还尝试次数、不记失败),停 2s 再探(_nativePump 到点自己接着跑)。HTTP 4xx/5xx 是真回应,照常记
+                    if (dgNetShaped(e) && (this._netNotReady(st) || this._justResumed())) {
+                        st.tries[cc] = Math.max(0, (st.tries[cc] || 1) - 1);
+                        st.netWait = true; st.netWaitUntil = performance.now() + 2000;
+                        return;
+                    }
                     st.probeFails++;
                     // 连续失败(分片跨域不给读 / 网络断了)→ 本集停探,宁可不跳
                     if (st.probeFails >= 6 && !Object.keys(st.off).length) { st.failed = true; this._nativeReport(st, false); console.log('[去插播] 原生 HLS 分片头读不到(多为跨域),本集不跳插播'); }
@@ -7619,13 +7724,33 @@
                 } catch (e) { }
                 return false;
             },
+            // 🌙 页面从后台回来 / 网络恢复(vue._onPageResume 每次回来都调,便宜):原生通道因为"网络没就绪"停下的扫描马上接着跑
+            //   (不等退避、不等下一次 timeupdate),清单重试用尽的(netFail)也再给一轮。没停下的、真·跨域失败(非网络形状的错误)
+            //   一律不动。只动原生状态;hls.js 通道不碰。返回 true = 叫醒了
+            revive(reason) {
+                const st = this._cur();
+                if (!st || !st.native || st.dead || st.unsupported || st.multi || st.live) return false;
+                const woke = !!(st.netWait || (st.failed && st.netFail));
+                if (!woke) return false;
+                st.netWait = false; st.netWaitUntil = 0; st.failed = false; st.netFail = false; st.loadTries = 0;
+                if (!st.ready) {
+                    if (st.loadTimer) { const c = st.loadTimer; st.aborts.delete(c); c(); }   // 还在等重试定时器 → 现在就拉
+                    this._nativeLoad(st);   // 正在拉(loading)时内部直接返回
+                } else {
+                    for (const g of st.groups) if (!st.done[g.cc]) delete st.tries[g.cc];
+                    if (!Object.keys(st.off).length) st.probeFails = 0;
+                    this._nativePump(st);
+                }
+                console.log('[去插播] 原生 HLS:' + (reason || '恢复') + ' → 网络没就绪时停下的扫描接着跑');
+                return true;
+            },
             status() {
                 const st = this._cur();
                 if (!st) return '无活动 hls 实例';
                 const by = {};
                 st.groups.forEach(g => { const r = st.res[g.cc] || '?'; by[r] = (by[r] || 0) + Math.round(g.dur); });
                 return {
-                    channel: st.native ? ('原生 HLS' + (st.failed ? '(读不到清单/分片)' : st.unsupported ? '(加密/fMP4,不支持)' : '') + ' 已探 ' + Object.keys(st.done).length + ' 组') : 'hls.js',
+                    channel: st.native ? ('原生 HLS' + (st.failed ? '(读不到清单/分片)' : st.unsupported ? '(加密/fMP4,不支持)' : st.netWait ? '(网络未就绪,等恢复)' : '') + ' 已探 ' + Object.keys(st.done).length + ' 组') : 'hls.js',
                     enabled: this.enabled(), live: st.live, multi: st.multi, groups: st.groups.length, resByDur: by, mainRes: st.mainRes,
                     ptsKnown: Object.keys(st.off).length, actions: st.actions, overrides: Object.keys(st.overrides), lastWhy: st.lastWhy,
                     freshStart: !!st.startFromZero && !st.userSeeked, bufRaised: st.bufRaised
@@ -7647,7 +7772,8 @@
         //     与没剪的设备、离线副本、服务器共享标记保持一致(不重蹈"跳片头多跳 20 秒"的时间轴错位)。
         //   控制台 adCut.status() 看本次播放剪了什么;localStorage donggua_adclip_off=1 连同播放中跳过一起关掉。
         window.adCut = {
-            BUDGET: 3500, VERIFY_MS: 1500, CONC: 6, HEAD: 16384, NATIVE_DEADLINE: 8000, PREFETCH_BUDGET: 15000, POST_MS: 5000,
+            BUDGET: 3500, VERIFY_MS: 1500, CONC: 6, HEAD: 16384, NATIVE_DEADLINE: 8000, PREFETCH_BUDGET: 15000, POST_MS: 5000, NET_RETRY_MS: 1500,
+            RELOAD_META_MS: 20000,   // 原生通道重载 / 重新接上剪后清单后等元数据的期限:等不到就换回原地址(防重载循环)
             PLAN_TTL: 30 * 86400e3, PLAN_MAX: 300, LEARN_TTL: 30 * 86400e3, LEARN_MAX: 300,
             _busy: 0, _graceUntil: 0, _sess: new Map(), _blocked: Object.create(null), _noRangeHost: Object.create(null), _noRangeHits: Object.create(null), _last: null,
             vue() { return window.adClipSkip && window.adClipSkip.vue; },
@@ -7877,9 +8003,14 @@
                 hls.on(Hls.Events.DESTROYING, () => { sess.dead = true; });
             },
             // ---- 原生 HLS(Safari/iOS):占位地址 + 扫描 + 交付(见 lib/hls-cut)。返回 true = 已接管 src ----
+            //   🌙 iPad 长时间后台回来:服务器上的剪后清单只在内存里(空闲 12h/最长 24h 过期、重启即没),而 WebKit 回收 GPU 进程后会对同一个 src
+            //   重新 load()(先发 'emptied',currentTime 清零)→ Safari 再来拉占位地址。以前这时只能 404 → 换回原地址 → 广告回到进度条、续播点丢成 0,
+            //   只有刷新页面才好。现在:任务留着交付过的剪后文本(job.body),在 'emptied' / 出错 / 回到前台时用同一个 id 重交(服务器幂等续期或重建,
+            //   正在等的 GET 立刻拿到);实在救不回来才换回原地址,并记下 video._adCutLost,回到前台/联网时 reattach() 再接上(不刷新、不自动播放)
             attachNative(video, player) {
                 try {
-                    if (video && video._adCutNative) video._adCutNative.dead = true;   // 上一集/上一条线路的交付作废
+                    if (video && video._adCutNative) { video._adCutNative.dead = true; video._adCutNative.body = null; }   // 上一集/上一条线路的交付作废(剪后文本可能上 MB,别让死任务攥着)
+                    if (video) video._adCutLost = null;   // 换了新地址:上一次"剪后清单丢了"的记录作废
                     const v = this.vue();
                     if (!video || !video.src || !v || !v.hlsCutEnabled || !(window.crypto && crypto.getRandomValues)) return false;
                     const w = this.want();
@@ -7890,8 +8021,10 @@
                     const b = new Uint8Array(18);
                     crypto.getRandomValues(b);
                     const id = btoa(String.fromCharCode.apply(null, Array.from(b))).replace(/\+/g, '-').replace(/\//g, '_');
-                    const job = { id, base, cutUrl: location.origin + '/api/hls/cut/' + id + '.m3u8', site: w.site, player, dead: false, loaded: false, delivered: false };
+                    const job = { id, base, cutUrl: location.origin + '/api/hls/cut/' + id + '.m3u8', site: w.site, player, dead: false, loaded: false, delivered: false, body: null, cuts: null, lastPlay: 0, lastTuAt: 0, redeliveries: 0 };
                     video._adCutNative = job;
+                    if (player) video._adCutPlayer = player;   // reattach 要用同一个播放器重挂静默跳过
+                    this._hookLife(video);
                     video.src = job.cutUrl;   // 与 DPlayer 设 src 同一个任务里换掉:Safari 只会去拉占位地址
                     // 剪后清单真的播起来了(拿到元数据):之后的播放错误多半是分片/网络问题,不是剪清单的锅(见 onNativeError)
                     try {
@@ -7902,6 +8035,81 @@
                     return true;
                 } catch (e) { return false; }
             },
+            // 🌙 每个 <video> 只挂一套(switchVideo 复用同一个元素;处理函数在事件发生时才读 video._adCutNative,不攥旧任务)
+            //   · timeupdate:记下剪后清单上最后一次正常播放的位置(WebKit 重载时 currentTime 会被清零,出错时靠它续播)
+            //   · pause:记下用户自己暂停的时刻(出错时判断"刚才是不是在播"不能顶掉用户的暂停)。WebKit 重载把 paused 置真时
+            //     readyState 已经清零 → 不算
+            //   · emptied:WebKit 后台回来重载媒体(load() 同一个 src)的第一个事件 → 立刻重交,赶在 Safari 的 GET 等满 16s 之前;
+            //     重交成功就不会出错,出错路径里的"跳回原位置"不会跑 → 这里自己挂一次:元数据回来时还在 0 就跳回 lastPlay
+            //     (WebKit 已清零;不跳的话用户一点播放整集从头来,进度保存还会把"继续观看"写回 0)
+            _hookLife(video) {
+                if (!video || video._adCutLife || !video.addEventListener) return;
+                video._adCutLife = true;
+                video.addEventListener('timeupdate', () => {
+                    try {
+                        const job = video._adCutNative;
+                        if (!job || job.dead || video.src !== job.cutUrl || !(video.readyState >= 2) || video.seeking) return;
+                        if (job.seekBack > 1 && (video.currentTime || 0) < 0.5) return;   // 重载后还没跳回去:别拿 0 盖掉要跳回的位置
+                        job.lastPlay = video.currentTime || 0;
+                        if (!video.paused) job.lastTuAt = Date.now();
+                    } catch (e) { }
+                });
+                video.addEventListener('pause', () => {
+                    try {
+                        const job = video._adCutNative;
+                        if (job && !job.dead && video.readyState >= 1 && !video.error) job.pauseAt = Date.now();
+                    } catch (e) { }
+                });
+                video.addEventListener('emptied', () => {
+                    try {
+                        const job = video._adCutNative;
+                        if (job && !job.dead && job.loaded && job.delivered && video.src === job.cutUrl) {
+                            const t = job.lastPlay || 0;
+                            this._redeliver(job, 'emptied');
+                            if (t > 1) this._seekBackOnMeta(video, job, t);
+                        }
+                    } catch (e) { }
+                });
+            },
+            // 重载后元数据一到就跳回 t(剪后时间轴)。每个任务只挂一个监听(多次 emptied 只更新位置);元数据到时已经不在 0
+            //   (出错路径的重载自己跳过了 / WebKit 自己恢复了位置)、换集换线了 → 什么都不做
+            _seekBackOnMeta(video, job, t) {
+                job.seekBack = t;
+                if (job._sbOn) return;
+                job._sbOn = true;
+                const f = () => {
+                    video.removeEventListener('loadedmetadata', f);
+                    const tt = job.seekBack;
+                    job._sbOn = false; job.seekBack = 0;
+                    if (job.dead || video._adCutNative !== job || video.src !== job.cutUrl) return;
+                    if (tt > 1 && (video.currentTime || 0) < 0.5) { try { video.currentTime = tt; } catch (e) { } }
+                };
+                video.addEventListener('loadedmetadata', f);
+            },
+            // 用同一个 id 重交剪后清单:条目还活着 → 服务器幂等续期(同一内容,出口 IP 变了也算);过期/服务器重启过 → 重建,并叫醒 Safari
+            //   正在等的那个 GET。409 = 这个 id 上现在是别的内容(过期后被别人占了)→ 算失败(绝不让 Safari 去播别人的清单)。
+            //   每个任务 15s 内最多发一次(在途/成功的直接复用,失败的可以再试)。用墙上时钟:iOS 睡眠时 performance.now() 不走,
+            //   锁屏前刚重交过、睡一夜醒来(服务器条目早过期)还会被当成"15s 内"而不发
+            _redeliver(job, why) {
+                if (!job || job.dead || !job.body) return Promise.resolve(false);
+                const now = Date.now(), d = now - (job._rdAt || 0);
+                if (job._rdP && d >= 0 && d < 15e3 && job._rdOk !== false) return job._rdP;
+                job._rdAt = now; job._rdOk = null;
+                job.redeliveries = (job.redeliveries || 0) + 1; job.lastRedeliverAt = Date.now();
+                console.log('[去插播] 重交剪后清单(' + why + ')');
+                const p = this._post({ id: job.id, m3u8: job.body, token: localStorage.getItem('emax_auth_hash') || '' })
+                    .then(r => !!(r && r.ok), () => false)
+                    .then(ok => { job._rdOk = ok; if (!ok) console.warn('[去插播] 重交剪后清单失败(' + why + ')'); return ok; });
+                job._rdP = p;
+                return p;
+            },
+            // 剪后 ↔ 原时间轴(用任务自己的剪段,不依赖 dp/vue 当前状态;没剪段 = 原样转绝对地址的清单,两条时间轴相同)
+            _toBase(job, t) {
+                if (job && job.cuts && job.cuts.length) return AdClipCore.fromCutTime(t, job.cuts);
+                const v = this.vue();
+                return (v && v._cutToBase) ? v._cutToBase(t) : t;
+            },
+            _toPlay(job, t) { return (job && job.cuts && job.cuts.length) ? AdClipCore.toCutTime(t, job.cuts) : t; },
             async _post(body) {
                 const ac = new AbortController(), to = setTimeout(() => ac.abort(), this.POST_MS);
                 try {
@@ -7912,16 +8120,29 @@
                 const v = this.vue();
                 const alive = () => !job.dead && video._adCutNative === job && video.src === job.cutUrl;
                 let text = null, url = job.base, res = null, why = 'deadline';
+                const t0 = performance.now();
+                let netRetried = false;
+                // 🌙 网络形状的失败(iPad 刚从后台回来 Wi-Fi 还没连上:TypeError 'Load failed')→ 期限内还剩 ≥3s 就等一下再拉一次(只一次)
+                const get = async (u) => {
+                    try { return await fetch(u, { credentials: 'omit' }); }
+                    catch (e) {
+                        if (netRetried || job.dead || !dgNetShaped(e) || this.NATIVE_DEADLINE - (performance.now() - t0) < 3000) throw e;
+                        netRetried = true;
+                        await new Promise(r => setTimeout(r, this.NET_RETRY_MS));
+                        if (job.dead) throw e;
+                        return await fetch(u, { credentials: 'omit' });
+                    }
+                };
                 const work = (async () => {
                     const httpErr = (st) => Object.assign(new Error('HTTP ' + st), { transient: st >= 500 || st === 429 });
-                    let r = await fetch(job.base, { credentials: 'omit' });
+                    let r = await get(job.base);
                     if (!r.ok) throw httpErr(r.status);
                     text = await r.text(); url = r.url || job.base;
                     const p0 = AdClipCore.parseMedia(text, url);
                     if (p0.master) {
                         // 多码率 / 独立音轨字幕:剪不了也不能只剪一路 → 不交付,换回原地址
                         if (p0.master.variants.length !== 1 || this._altRenditions(text)) { text = null; throw new Error('multi-variant'); }
-                        r = await fetch(p0.master.variants[0], { credentials: 'omit' });
+                        r = await get(p0.master.variants[0]);
                         if (!r.ok) throw httpErr(r.status);
                         text = await r.text(); url = r.url || p0.master.variants[0];
                     }
@@ -7935,8 +8156,10 @@
                 let body = res && res.text;
                 const cutOk = !!body;
                 if (!body && text) { const c = AdClipCore.cutPlaylist(text, url, []); body = c && c.text; }   // 原样(只转绝对地址)
+                const lostNet = () => { if (alive()) { try { video._adCutLost = { tok: v._playToken, at: Date.now(), why: 'net', resume: job.resumeBase || 0 }; } catch (e) { } } };
                 if (body) {
-                    if (cutOk) v._setActiveCut({ owner: 'native', src: job.cutUrl, cuts: res.cuts });   // 先就位:canplay 之前进度恢复就要用
+                    if (cutOk) { job.cuts = res.cuts; v._setActiveCut({ owner: 'native', src: job.cutUrl, cuts: res.cuts }); }   // 先就位:canplay 之前进度恢复就要用
+                    job.body = body;   // 留着:Safari 重载/条目过期时用同一个 id 重交(两种正文都要留,Safari 的 src 都是占位地址)
                     try {
                         const r = await this._post({ id: job.id, m3u8: body, token: localStorage.getItem('emax_auth_hash') || '' });
                         if (r.ok) { job.delivered = true; return; }
@@ -7946,40 +8169,108 @@
                         const perEpisode = r.status === 413 || /^(too_long|too_many_segments|too_large)$/.test(why2);
                         // 服务器明确拒收这种清单(不是一时忙/单集超限)→ 3 天内不再接管;401/403 是登录状态的事,不是这个站剪不了
                         if (r.status !== 429 && r.status !== 401 && r.status !== 403 && r.status < 500 && !perEpisode) this._markNativeBad(job.site);
-                    } catch (e) { console.warn('[去插播] 剪后清单交付失败 → 换回原地址'); }
+                    } catch (e) {
+                        console.warn('[去插播] 剪后清单交付失败 → 换回原地址');
+                        if (dgNetShaped(e)) lostNet();   // 网络没就绪:回到前台/联网时再接上
+                    }
                     if (v._activeCut && v._activeCut.src === job.cutUrl) v._activeCut = null;
                 } else {
-                    // 读不到原清单:多码率 / 跨域 / 源站错误才记账;只是超时或断网(一时的)不记,下次再试
-                    const real = why && why !== 'deadline' && !why.transient && !(typeof navigator !== 'undefined' && navigator.onLine === false);
+                    // 读不到原清单:多码率 / 源站明确拒绝才记账;只是超时、断网、网络形状的失败(一时的,也可能是跨域 —— 那由 adClipSkip
+                    //   重试几次后自己的记账兜住,attachNative 也看它)不记,下次再试
+                    const net = dgNetShaped(why);
+                    const real = why && why !== 'deadline' && !why.transient && !net && !(typeof navigator !== 'undefined' && navigator.onLine === false);
                     console.warn('[去插播] 原生 HLS 拿不到可剪的原清单(' + (why && why.message ? why.message : why) + ')→ 换回原地址' + (real ? ',本站 3 天内不再接管' : ''));
                     if (real) this._markNativeBad(job.site);
+                    if (net) lostNet();
                 }
-                if (alive()) this._restoreNative(video, job, 0);
+                if (alive()) this._restoreNative(video, job, job.resumeBase || 0);
             },
-            // 播放器报错时(handleError 最前面调,source = 错误来源):错误来自剪后清单地址 → 同一线路换回原地址继续播,返回 true(调用方不再分诊/换线路)。
+            // 播放器报错时(handleError 最前面调,source = 错误来源):错误来自剪后清单地址 → 自己处理,返回 true(调用方不再分诊/换线路)。
             //   · 起播看门狗的 startTimeout 不接管(静默卡死要走原来的换线路链,换回原地址后没人再给它装看门狗);投屏中不接管。
-            //   · 剪后清单已经播起来(拿到过元数据)之后的错误多半是分片/网络:接着原位置续播,不记"本站剪不了"
+            //   · 剪后清单已经播起来(拿到过元数据)之后出错:多半是条目过期/服务器重启(WebKit 后台回来重载)或网络 → 先用同一个 id 重交、
+            //     原地址重载、跳回原位置(每个任务 5 分钟内只救一次,防循环);救不回来才换回原地址续播,不记"本站剪不了"
             onNativeError(video, source) {
                 if (!video || source === 'startTimeout') return false;
                 const job = video._adCutNative;
                 if (job && !job.dead && video.src === job.cutUrl) {
                     const v = this.vue();
                     if (v && v._isCasting && v._isCasting()) return false;
-                    let resume = 0;
-                    try { if (job.loaded && v && v._cutToBase) resume = v._cutToBase(video.currentTime || 0); } catch (e) { }
-                    console.warn('[去插播] 剪后清单在本机原生播放器上出错 → 换回原地址' + (resume > 1 ? '从 ' + resume.toFixed(0) + 's 续播' : '继续播') + ((!job.loaded && job.delivered) ? '(本站 3 天内不再播放前剪)' : ''));
-                    if (!job.loaded && job.delivered) this._markNativeBad(job.site);   // 交付了却播不起来才算本站剪不了;交付前的错误是服务器忙/超时
-                    try { if (v && v._activeCut && v._activeCut.src === job.cutUrl) v._activeCut = null; } catch (e) { }
-                    this._restoreNative(video, job, resume);
+                    const now = performance.now();
+                    // 同一个错误事件的第二次(DPlayer + <video> 各一次)/ 重交途中 → 吞掉。浏览器在两个监听之间会跑微任务:重交复用的是
+                    //   已经成功的那次 POST 时,.then 可能已经重设了 src、清掉了 retrying —— 重设 src 会清空 video.error,
+                    //   所以"刚重载(3s 内)且没有新错误"的也是同一个错误,不能当成"重载后又出错"去换回原地址
+                    if (job.retrying || (job.reloadAt && now - job.reloadAt < 3000 && !video.error)) return true;
+                    // WebKit 重载媒体时 currentTime 已被清零 → 用最后一次正常播放的位置(剪后时间轴)
+                    const tPlay = (video.currentTime || 0) > 0.5 ? video.currentTime : (job.lastPlay || 0);
+                    // "刚才在播":没暂停,或 1.5s 内还在走(WebKit 重载会把 paused 置真)—— 但最后一次走动之后用户自己点过暂停的不算
+                    const wall = Date.now(), tu = job.lastTuAt || 0;
+                    const wasPlaying = !video.paused || (tu > 0 && wall - tu >= 0 && wall - tu < 1500 && !(job.pauseAt >= tu));
+                    // 每个任务 5 分钟内只救一次。墙上时钟(iOS 睡眠时 performance.now() 不走,睡一夜也还像"刚救过")
+                    const sinceRetry = wall - (job.retryAt || 0);
+                    if (job.loaded && job.delivered && job.body && !(job.retryAt && sinceRetry >= 0 && sinceRetry <= 5 * 60e3)) {
+                        job.retrying = true; job.retryAt = wall;
+                        video._adCutRestoredAt = now;
+                        // 重交要等 POST(最多 5s):这期间用户点了暂停 → 重载后别再自动播(不能拿出错那一刻的 wasPlaying 顶掉用户的暂停)
+                        let userPaused = false;
+                        const onPause = () => { userPaused = true; };
+                        video.addEventListener('pause', onPause);
+                        console.warn('[去插播] 剪后清单在本机原生播放器上出错 → 重交同一份剪后清单、原位重载' + (tPlay > 1 ? '(' + tPlay.toFixed(0) + 's)' : ''));
+                        this._redeliver(job, 'error').then(ok => {
+                            video.removeEventListener('pause', onPause);
+                            const playNow = wasPlaying && !userPaused;
+                            if (job.dead || video._adCutNative !== job || video.src !== job.cutUrl) return;   // 期间换集/换线了
+                            if (!ok) { this._revertNative(video, job, tPlay, playNow, 'error'); return; }
+                            let done = false, dl = 0;
+                            const om = () => {
+                                video.removeEventListener('loadedmetadata', om); done = true; clearTimeout(dl);
+                                if (video._adCutNative !== job || video.src !== job.cutUrl) return;
+                                if (tPlay > 1) { try { video.currentTime = tPlay; } catch (e) { } }
+                            };
+                            video.addEventListener('loadedmetadata', om);
+                            dl = setTimeout(() => {
+                                video.removeEventListener('loadedmetadata', om);
+                                if (done || job.dead || video._adCutNative !== job || video.src !== job.cutUrl) return;
+                                console.warn('[去插播] 重载剪后清单 ' + Math.round(this.RELOAD_META_MS / 1000) + 's 没拿到元数据 → 换回原地址');
+                                this._revertNative(video, job, tPlay, !video.paused, 'error');   // 此刻的状态(下面 play() 过 / 用户又暂停了)
+                            }, this.RELOAD_META_MS);
+                            job.reloadAt = performance.now();
+                            video.src = job.cutUrl;   // 同一个地址重设一遍 = 重新加载(服务器上的条目刚重交过)
+                            if (playNow) { try { const p = video.play(); if (p && p.catch) p.catch(() => { }); } catch (e) { } }
+                        }).finally(() => { job.retrying = false; });
+                        return true;
+                    }
+                    this._revertNative(video, job, tPlay, wasPlaying, 'error');
                     return true;
                 }
                 return !!(video._adCutRestoredAt && performance.now() - video._adCutRestoredAt < 3000 && !video.error);
             },
+            // 放弃剪后清单、换回原地址续播(tPlay = 剪后时间轴上的位置)。播起来过的记下 video._adCutLost:回到前台/联网时 reattach() 再接上
+            _revertNative(video, job, tPlay, wasPlaying, why) {
+                const v = this.vue();
+                let resume = job.resumeBase || 0;
+                try { if (job.loaded) resume = this._toBase(job, tPlay || 0); } catch (e) { }
+                // 交付了却播不起来才算本站剪不了;交付前的错误是服务器忙/超时。网络形状的(断网;或 MEDIA_ERR_NETWORK 且是回到前台/联网时
+                //   重新接上的任务、刚从后台回来 30s 内 —— Wi-Fi 还没真通,分片拉不到)也不算:一次醒来的抖动不能让这个站 3 天不剪
+                let blip = false;
+                try {
+                    const netErr = !!(video.error && video.error.code === 2);
+                    blip = (typeof navigator !== 'undefined' && navigator.onLine === false)
+                        || (netErr && (job.resumeBase != null || !!(window.adClipSkip && window.adClipSkip._justResumed && window.adClipSkip._justResumed())));
+                } catch (e) { }
+                const bad = !job.loaded && job.delivered && !blip;
+                console.warn('[去插播] 剪后清单在本机原生播放器上出错 → 换回原地址' + (resume > 1 ? '从 ' + resume.toFixed(0) + 's 续播' : '继续播') + (bad ? '(本站 3 天内不再播放前剪)' : ''));
+                if (bad) this._markNativeBad(job.site);
+                try { if (v && v._activeCut && v._activeCut.src === job.cutUrl) v._activeCut = null; } catch (e) { }
+                // resume 一并记下:原地址的元数据到之前 currentTime 还是 0,这时 reattach 要从这里续(不能拿 0)。网络抖动丢的也记(net):
+                //   下次回到前台/联网再接上(每次播放最多重接 2 次,不会循环)
+                if (job.loaded || blip) { try { video._adCutLost = { tok: v ? v._playToken : null, at: Date.now(), why: job.loaded ? (why || 'error') : 'net', resume }; } catch (e) { } }
+                this._restoreNative(video, job, resume, wasPlaying);
+            },
             // 换 src 的路径(交付失败 / 剪后地址出错):换回原地址;之前已经在播(paused=false,哪怕还在等数据)就继续播;resume = 原时间轴续播点;
             //   并重挂播放中静默跳过
-            _restoreNative(video, job, resume) {
-                const wasPlaying = !video.paused;
-                job.dead = true; video._adCutNative = null;
+            _restoreNative(video, job, resume, wasPlaying) {
+                if (wasPlaying === undefined) wasPlaying = !video.paused;
+                job.dead = true; job.body = null; video._adCutNative = null;
                 video._adCutRestoredAt = performance.now();
                 if (resume > 1) {
                     const f = () => { video.removeEventListener('loadedmetadata', f); if (video.src === job.base && !video._adCutNative) { try { video.currentTime = resume; } catch (e) { } } };
@@ -7988,6 +8279,56 @@
                 video.src = job.base;
                 try { if (window.adClipSkip) window.adClipSkip.attachNative(video, job.player); } catch (e) { }
                 if (wasPlaying) { try { const p = video.play(); if (p && p.catch) p.catch(() => { }); } catch (e) { } }
+            },
+            // 🌙 剪后清单丢了(播起来后出错被换回原地址 / 起播时网络没就绪)→ 回到前台/联网时在同一集上重新接上:同一个 _playToken、
+            //   暂停中才做(换 src 会让 iOS 重置播放状态:绝不在播放途中换,也不自动播放),每次播放最多 2 次。剪后清单就位后跳回原来的位置
+            reattach(video) {
+                try {
+                    const v = this.vue();
+                    const lost = video && video._adCutLost;
+                    if (!v || !lost || video._adCutNative || lost.tok !== v._playToken || !video.paused) return false;
+                    const n = (video._adCutReattach && video._adCutReattach.tok === v._playToken) ? video._adCutReattach.n : 0;
+                    if (n >= 2 || !this.want()) return false;
+                    // 现在播的是原地址:原时间轴。原地址的元数据还没到(换回后网络还没通、iOS 没给暂停中的元素加载)时 currentTime 是 0,
+                    //   真正的续播点还挂在 _restoreNative 的 loadedmetadata 上 → 用丢失时记下的 lost.resume
+                    const resumeBase = (video.readyState >= 1 && (video.currentTime || 0) > 0.5) ? video.currentTime : (lost.resume || 0);
+                    video._adCutLost = null;
+                    video._adCutReattach = { tok: v._playToken, n: n + 1 };
+                    const player = video._adCutPlayer || null;
+                    if (!this.attachNative(video, player)) return false;
+                    const job = video._adCutNative;
+                    job.resumeBase = resumeBase;   // 交付失败换回原地址时也回到这里
+                    let done = false, dl = 0;
+                    const om = () => {
+                        video.removeEventListener('loadedmetadata', om); done = true; clearTimeout(dl);
+                        if (video._adCutNative !== job || video.src !== job.cutUrl) return;
+                        if (resumeBase > 1) { try { video.currentTime = this._toPlay(job, resumeBase); } catch (e) { } }
+                    };
+                    video.addEventListener('loadedmetadata', om);
+                    dl = setTimeout(() => {
+                        video.removeEventListener('loadedmetadata', om);
+                        if (done || job.dead || video._adCutNative !== job || video.src !== job.cutUrl) return;
+                        console.warn('[去插播] 重新接上剪后清单 ' + Math.round(this.RELOAD_META_MS / 1000) + 's 没拿到元数据 → 换回原地址');
+                        this._restoreNative(video, job, resumeBase);
+                    }, this.RELOAD_META_MS);
+                    try { if (window.adClipSkip) window.adClipSkip.attachNative(video, player); } catch (e) { }   // 与 _dgHlsCustomType 同一顺序:先换占位地址,再挂静默跳过
+                    console.log('[去插播] 重新接上剪后清单(原时间轴 ' + resumeBase.toFixed(0) + 's)');
+                    return true;
+                } catch (e) { return false; }
+            },
+            // 🌙 页面从后台回来 / 联网(vue._onPageResume 调):剪后清单还在用 → 重交一次(续期;服务器重启过就重建,赶在 Safari 再来拉之前);
+            //   已经丢了 → reattach()。返回给诊断日志看的一小段文字
+            revive(video, reason) {
+                try {
+                    if (!video) return '';
+                    const job = video._adCutNative;
+                    if (job && !job.dead && video.src === job.cutUrl) {
+                        if (job.delivered && job.body) { this._redeliver(job, reason || 'resume'); return '重交'; }
+                        return job.delivered ? '在用' : '扫描中';
+                    }
+                    if (video._adCutLost) return this.reattach(video) ? '重接' : '丢失';
+                    return '';
+                } catch (e) { return ''; }
             },
             // 投屏(Chromecast):接收端自己拉地址 → 原生通道直接用占位地址;hls.js 通道把剪后的文本交给服务器换一个地址(每次投屏现交,
             //   不复用旧地址:服务器重启/条目淘汰后旧地址会 404)
@@ -8028,7 +8369,13 @@
             },
             status() {
                 const v = this.vue(), c = v && v._cutValid && v._cutValid();
-                return { ready: this.ready(), want: this.want(), active: !!c, cuts: c ? c.cuts.map(x => [+x.start.toFixed(1), +x.dur.toFixed(1)]) : [], last: this._last, busy: this._busy };
+                const video = (typeof dp !== 'undefined' && dp && dp.video) || null, job = video && video._adCutNative;
+                return {
+                    ready: this.ready(), want: this.want(), active: !!c, cuts: c ? c.cuts.map(x => [+x.start.toFixed(1), +x.dur.toFixed(1)]) : [], last: this._last, busy: this._busy,
+                    // 🌙 原生占位任务:重交次数 / 最后一次重交 / 最后正常播放位置(剪后时间轴);lost = 剪后清单丢了、等回到前台重新接上
+                    native: job ? { delivered: job.delivered, loaded: job.loaded, redeliveries: job.redeliveries || 0, lastRedeliverAt: job.lastRedeliverAt || 0, lastPlay: +(job.lastPlay || 0).toFixed(1) } : null,
+                    lost: (video && video._adCutLost) || null
+                };
             }
         };
         // ⏱️ 实测观看时长(站长后台的观看时长/集数/看过的剧都以它为准,取代旧的"按进度估算")。每秒看一眼播放器,只有【真在看】才计:
@@ -9683,8 +10030,36 @@
                         this.updateHistoryScrollNeeded();
                         this.onFavPopRowScroll('favRow', 'fav');            // ⭐ 收藏 / 👥 大家都在看 两行的左右箭头
                         this.onFavPopRowScroll('popularRow', 'popular');
+                        if (this.showDetail) this._relayoutDetail(false);   // 🌙 播放页开着:转屏/分屏/台前调度改了窗口 → 覆盖层还盖不盖得满
                     }, 150);
                 }, { passive: true });
+
+                // 🌙 后台回来(iOS/iPadOS 长时间挂起后恢复):以前页面没有任何恢复步骤,冻结期间变旧的状态(覆盖层几何、剪后清单、原生扫描)
+                //   一直坏到手动刷新。这里把各种"回来了"的信号收拢到 _onPageResume(只做刷新会做的那几件事,不动播放状态、不自动播放)。
+                //   计时放在 window._dgLife(不是 Vue 响应式数据,不触发重渲染);只挂一次
+                if (!this._lifeHooked) {
+                    this._lifeHooked = true;
+                    const L = window._dgLife = window._dgLife || { hiddenAt: 0, tick: Date.now(), lastAt: 0 };
+                    document.addEventListener('visibilitychange', () => {
+                        if (document.visibilityState === 'hidden') { L.hiddenAt = Date.now(); return; }
+                        this._onPageResume('visible', L.hiddenAt ? Date.now() - L.hiddenAt : 0);
+                    });
+                    window.addEventListener('pagehide', () => { L.hiddenAt = Date.now(); });
+                    window.addEventListener('pageshow', (e) => { if (e && e.persisted) this._onPageResume('pageshow', L.hiddenAt ? Date.now() - L.hiddenAt : 0); });
+                    window.addEventListener('online', () => this._onPageResume('online', 0));
+                    // 冻结期间计时器不走:15s 一跳,两跳之间隔了 2 分钟以上 = 页面被挂起过(有的恢复路径不发 visibilitychange)
+                    setInterval(() => {
+                        const now = Date.now(), gap = now - L.tick;
+                        L.tick = now;
+                        if (gap > 120e3 && !document.hidden) this._onPageResume('gap', gap);
+                    }, 15000);
+                    let relayT = 0;
+                    const relayout = () => { clearTimeout(relayT); relayT = setTimeout(() => { if (this.showDetail) this._relayoutDetail(false); }, 120); };
+                    window.addEventListener('orientationchange', relayout);
+                    try { if (window.visualViewport) window.visualViewport.addEventListener('resize', relayout, { passive: true }); } catch (e) { }
+                    document.addEventListener('fullscreenchange', relayout);
+                    document.addEventListener('webkitfullscreenchange', relayout);
+                }
 
                 // 修复：点击任意地方关闭 DPlayer 右键菜单（仅在播放器打开时才查询 DOM，避免首页/搜索每次点击都跑 querySelector）
                 document.addEventListener('click', (e) => {
@@ -10113,6 +10488,23 @@
                 currentUrl(v) { if (v) this._favOnPlay(); },
                 // ⭐ 回到首页(关详情页/退出搜索)时刷新收藏状态,最多每 10 分钟一次
                 showDetail(v) {
+                    // 🌙 播放页开/关的页面锁统一在这里(以前 11 处手动 add/remove,goHome 漏了 remove;那些手动的留着,重复无害):
+                    //   html + body 都加 detail-open;开场动画放完(450ms)再加 detail-covered 把底下的首页各层藏起来;关掉时全部撤掉,
+                    //   并清掉 _relayoutDetail 写的行内样式(不清的话以后打开就没有上滑动画了)
+                    try {
+                        const o = document.querySelector('.detail-overlay');
+                        document.documentElement.classList.toggle('detail-open', !!v);
+                        document.body.classList.toggle('detail-open', !!v);
+                        clearTimeout(this._coverT);
+                        if (v) {
+                            this._detailOpenAt = performance.now();
+                            if (o && document.visibilityState !== 'visible') o.style.animation = 'none';   // 后台里打开(深链重载等):不要会被冻在半路的上滑动画
+                            this._coverT = setTimeout(() => { if (this.showDetail) document.body.classList.add('detail-covered'); }, 450);
+                        } else {
+                            document.body.classList.remove('detail-covered');
+                            if (o) { o.style.animation = ''; o.style.position = ''; }
+                        }
+                    } catch (e) { }
                     if (v) return;
                     this._favRefreshMaybe();
                     if (this.trial.on) this._trialLeave();   // 🎟️ 试看中离开播放页 → 出登录页(首页要登录才能看)
@@ -13411,6 +13803,7 @@
                     this.keyword = '';
                     this.rawList = [];
                     window.scrollTo(0, 0);
+                    this._swReloadIfPending();   // 🌙 播放页开着时就绪的 SW 新版本:用户回首页 → 现在刷
                 },
 
                 // 加载单个榜单数据
@@ -15270,6 +15663,92 @@
                         }
                     }
                 },
+                // 🌙 播放页覆盖层重新排版(回到前台 / 转屏 / 分屏改尺寸 / 退出全屏):取消可能卡在半路的上滑动画;盒子没盖满视口(或 force)
+                //   就切一下 position 逼 WebKit 重算 fixed 的包含块(WebKit 221261 的绕法,覆盖层自己的滚动位置保留)。全屏/画中画中不动(会被踢出全屏)。
+                //   下一帧还没盖满 → console.warn 一行几何数据(下次 iPad 上复现时看是"尺寸旧了"还是"动画卡住")
+                _relayoutDetail(force) {
+                    try {
+                        if (!this.showDetail) return;
+                        // 刚打开、上滑动画还在正常播(尺寸变化多半是打开时页面滚动条消失 → visualViewport 变宽):别把动画掐掉。回到前台(force)不等
+                        if (!force && performance.now() - (this._detailOpenAt || 0) < 700) return;
+                        const o = document.querySelector('.detail-overlay');
+                        if (!o) return;
+                        o.style.animation = 'none';
+                        document.documentElement.classList.add('detail-open');
+                        document.body.classList.add('detail-open');
+                        document.body.classList.add('detail-covered');
+                        const vh = () => (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+                        const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
+                        if (document.fullscreenElement || document.webkitFullscreenElement || document.pictureInPictureElement
+                            || (v && (v.webkitDisplayingFullscreen || v.webkitPresentationMode === 'picture-in-picture'))) return;   // 画中画判定与 watchMeter 一致(iPad 原生控件进的 PiP 标准 API 看不到)
+                        if (force || !dgCovers(o.getBoundingClientRect(), window.innerWidth, vh())) {
+                            const st = o.scrollTop;
+                            o.style.position = 'absolute';
+                            void o.offsetHeight;
+                            o.style.position = '';
+                            o.scrollTop = st;
+                        }
+                        requestAnimationFrame(() => {
+                            try {
+                                if (!this.showDetail) return;
+                                const r = o.getBoundingClientRect();
+                                if (dgCovers(r, window.innerWidth, vh())) return;
+                                console.warn('[播放页] 覆盖层没盖满', { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), vh: Math.round(vh()), innerHeight: window.innerHeight, innerWidth: window.innerWidth, transform: getComputedStyle(o).transform, why: force ? 'resume' : 'resize' });
+                            } catch (e) { }
+                        });
+                    } catch (e) { }
+                },
+                // 🌙 页面从后台回来 / 往返缓存恢复 / 网络恢复 / 计时器断档(mounted 里统一挂),补上手动刷新才会做的几件事:
+                //   ① 播放页开着:覆盖层重新排版盖满;② 每次回来:叫醒因"网络没就绪"停下的静默跳过扫描(没停下就是空操作);
+                //   离开够久 / 往返缓存 / 网络刚回来:原生通道(iPad)剪后清单重交或重新接上(dgResumePlan 决定;hls.js 通道两个 revive 都是空操作);
+                //   ③ 投屏标志以 <video> 实况为准(冻结时错过"断开"事件会让去插播一直以为在投屏)。不动播放状态、不自动播放。
+                //   页面还在后台时收到的(iOS 醒来时排队的 online 可能先于 visibilitychange 到)什么都不做、也不占 3s 去重窗口,回到前台那一下做全套;
+                //   3s 内重复的信号只算一次(联网、以及"上一次没重建这次要重建"的除外)。SW 待刷新不在这里刷(只在用户关播放页 / 回首页时,
+                //   见 _swReloadIfPending)。诊断写一行 console + sessionStorage donggua_resume_diag(下次 iPad 上复现时直接看)
+                _onPageResume(reason, awayMs) {
+                    try {
+                        if (document.hidden) return;
+                        const L = window._dgLife || (window._dgLife = { hiddenAt: 0, tick: Date.now(), lastAt: 0 });
+                        const now = Date.now();
+                        awayMs = awayMs || 0;
+                        const video = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
+                        const plan = dgResumePlan({ reason, awayMs, showDetail: this.showDetail, hasDp: !!video, live: !!this._liveActive });
+                        if (reason !== 'online' && now - (L.lastAt || 0) < 3000 && !(plan.revive && !L.lastRevive)) return;
+                        L.lastAt = now; L.lastRevive = plan.revive;
+                        // 分诊 / 原生扫描据此判断"网络可能还没连上"(30s 内网络形状的失败先等等再试):只记真可能断过网的恢复,桌面上切个标签页不算
+                        if (awayMs >= 60e3 || reason !== 'visible') window._dgResumeAt = now;
+                        if (plan.relayout) this._relayoutDetail(awayMs >= 60e3);
+                        if (video && window._castWireless && !video.webkitCurrentPlaybackTargetIsWireless) window._castWireless = false;
+                        let cut = '-', skip = '-';
+                        if (plan.wake) { try { if (window.adClipSkip) skip = window.adClipSkip.revive(reason) ? '接着扫' : '-'; } catch (e) { } }
+                        if (plan.revive) { try { if (window.adCut) cut = window.adCut.revive(video, reason) || '-'; } catch (e) { } }
+                        if (this.showDetail || awayMs >= 60e3) {
+                            const src = video ? String(video.currentSrc || video.src || '').slice(0, 60) : '-';
+                            let rect = null;
+                            try { const o = this.showDetail && document.querySelector('.detail-overlay'); if (o) { const r = o.getBoundingClientRect(); rect = [Math.round(r.top), Math.round(r.bottom)]; } } catch (e) { }
+                            console.log('[后台恢复] ' + reason + ' 离开 ' + Math.round(awayMs / 60000) + ' 分钟 · src=' + src + ' · adCut=' + cut + ' · 跳过=' + skip);
+                            try {
+                                sessionStorage.setItem('donggua_resume_diag', JSON.stringify({
+                                    at: now, reason, awayMs, src, cut, skip, detail: !!this.showDetail, rect, inner: [window.innerWidth, window.innerHeight],
+                                    vv: window.visualViewport ? [Math.round(window.visualViewport.width), Math.round(window.visualViewport.height)] : null
+                                }));
+                            } catch (e) { }
+                        }
+                    } catch (e) { }
+                },
+                // SW 新版本已接管、但当时播放页开着(controllerchange 推迟了刷新)→ 用户自己关播放页 / 回首页(closeDetail、goHome 末尾调)且页面可见时再刷。
+                //   只在这两处:搜索打断深链加载帧、深链没搜到这类"程序关掉播放页"的路径不刷(会把用户刚输入的搜索刷没)。
+                //   先去掉地址栏里的深链(goHome 不清它),否则刷新又把刚关掉的剧打开
+                _swReloadIfPending() {
+                    try {
+                        if (!window._dgSwReloadPending || this.showDetail || document.visibilityState !== 'visible') return false;
+                        window._dgSwReloadPending = false;
+                        try { if (/[?&](play|live)=/.test(location.search)) history.replaceState(history.state, '', location.pathname); } catch (e) { }
+                        console.log('[SW] 新版本已就绪,已回到首页 → 刷新');
+                        window.location.reload();
+                        return true;
+                    } catch (e) { return false; }
+                },
                 closeDetail() {
                     // 📸 截帧分享弹窗开着:"关闭/返回"先只关弹窗,播放页不动 —— 调 closeDetail 的全是返回类操作(TV 遥控 Esc/Backspace、
                     //   安卓 App 返回键注入的 JS、#tv-back、关闭按钮被弹窗盖着点不到)。以前连播放页一起关,而且弹窗退历史的 back()
@@ -15294,6 +15773,8 @@
                     if (this._cancelDeepLink(true) && _dlSearching) this.clearSearch();
                     this._clearDeepLinkTimers();
                     document.body.classList.remove('detail-open');
+                    document.body.classList.remove('detail-covered');   // 🌙 同步撤掉(侦听器要等下一次刷新):紧接着的 TV 焦点代码要能聚焦首页元素
+                    document.documentElement.classList.remove('detail-open');
                     if (dp) dp.pause();
 
                     // 🧭 关闭详情：自增导航令牌，作废上一部剧残留的刷新/测速/回退定时器，
@@ -15329,6 +15810,7 @@
                     window.scrollTo(0, 0);
                     document.body.style.overflow = '';
                     document.documentElement.style.overflow = '';
+                    this._swReloadIfPending();   // 🌙 播放页开着时就绪的 SW 新版本:用户关掉播放页 → 现在刷
                 },
                 async switchSource(source) {
                     this.currentSource = source;
@@ -16569,6 +17051,8 @@
                                 (async () => {
                                   try {
                                     let cls = 'workerdown';   // 默认按"临时故障"处理(最保守:不记账)
+                                    // 每次 await 之后令牌对不上(换集/换源/关播放页)就直接 return、不碰 _proxyRetrying:新的 play() 已经把它复位了,
+                                    //   这里再清会把【新一次播放】正在分诊的闸门清掉(断网时等联网那一下可长达 ~14s,用户常在这时点别的集)
                                     // 拉一份清单并数分片:探测必须看到【子清单里的 EXTINF】才算"正常"——只看 master 的 #EXTM3U 会被
                                     //   "去广告把整集清空"骗过(worker 返回语法合法但 0 分片的子清单,hls.js 静默,见 stripped 分支)。
                                     //   整条链(master→子清单)共用一个 6s 预算;读 body 中途超时/失败一律往外抛(=worker 侧不可达→'workerdown'),
@@ -16583,14 +17067,32 @@
                                         }
                                         return { status: pr.status, ok: pr.ok, txt };
                                     };
+                                    const classify = (pr) => {
+                                        if (pr.status >= 500 || pr.status === 429) return 'workerdown';
+                                        if (pr.status === 403 || pr.status === 404 || pr.status === 451) return 'siteblock';
+                                        if (pr.ok) return !/#EXTM3U/.test(pr.txt) ? 'siteblock' : (/#EXTINF:/.test(pr.txt) ? 'ok' : 'stripped');
+                                        return 'siteblock';
+                                    };
                                     try {
-                                        const pr = await probeM3u8(wrapped);
-                                        if (pr.status >= 500 || pr.status === 429) cls = 'workerdown';
-                                        else if (pr.status === 403 || pr.status === 404 || pr.status === 451) cls = 'siteblock';
-                                        else if (pr.ok) cls = !/#EXTM3U/.test(pr.txt) ? 'siteblock' : (/#EXTINF:/.test(pr.txt) ? 'ok' : 'stripped');
-                                        else cls = 'siteblock';
-                                    } catch (e) { cls = 'workerdown'; }   // 超时/网络失败 = worker 侧不可达 → 临时故障
-                                    if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) { this._proxyRetrying = false; return; }
+                                        cls = classify(await probeM3u8(wrapped));
+                                    } catch (e) {
+                                        cls = 'workerdown';   // 超时/网络失败 = worker 侧不可达 → 临时故障
+                                        // 🌙 断网 / 刚从后台回来(30s 内):探测失败多半只是网络还没连上(iPad 醒来 Wi-Fi 要重连几秒),不是 worker 挂了 ——
+                                        //   以前这一下就把整集换成不过滤的直连、本集再也回不来。先等联网(最多 8s;已在线就等 2.5s)再探一次,还不行才走备用代理/直连兜底
+                                        if (navigator.onLine === false || (window._dgResumeAt && Date.now() - window._dgResumeAt < 30000)) {
+                                            armGuard(30000);   // 闸门罩住等待 + 重探(+ 后面可能的备用代理探测)
+                                            await new Promise(res => {
+                                                let t = 0;
+                                                const done = () => { clearTimeout(t); window.removeEventListener('online', done); res(); };
+                                                window.addEventListener('online', done);
+                                                t = setTimeout(done, navigator.onLine === false ? 8000 : 2500);
+                                            });
+                                            if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) return;
+                                            try { cls = classify(await probeM3u8(wrapped)); } catch (e2) { cls = 'workerdown'; }
+                                            console.log('[播放器] 🛡️ 网络未就绪时探测失败 → 等网络后重探过滤代理:' + cls);
+                                        }
+                                    }
+                                    if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) return;
                                     if (source === 'emptyPlaylist' && cls === 'ok') cls = 'stripped';   // hls 亲眼看到 0 分片,探测却"正常"=worker 边缘节点不一致,一样按清空处理
                                     if (cls === 'ok') {
                                         console.log('[播放器] 🛡️ 过滤代理探测正常(worker+源站均通)，原错误疑似偶发，重试过滤播放');
@@ -16608,7 +17110,7 @@
                                         // 无过滤通道也是空(老 worker 不认参数 / 源站本身就是空清单):直连可达就直接探一眼原站,
                                         //   原站有分片才值得切过去等 8s;原站也空=这源本来就死,立刻换线路(别再白等)
                                         if (!nfOk && directOK) { try { const p3 = await probeM3u8(fb); directHas = !!(p3.ok && /#EXTINF:/.test(p3.txt)); } catch (e) { } }
-                                        if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) { this._proxyRetrying = false; return; }
+                                        if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) return;
                                         console.warn('[播放器] 🛡️ 广告过滤把本集清单清空(源站均匀切块,过滤规则不适用) → ' + (nfOk ? '走无过滤代理通道' : (directHas ? '原站直连' : '原站也无分片,换线路')) + '(不记账)');
                                         try { dp.notice('本集广告过滤不可用，已按原片播放', 3000); } catch (e) { }
                                         if (nfOk) { switchTo(nofilterUrl, '过滤清空→无过滤代理'); return; }
@@ -16631,7 +17133,7 @@
                                                 if (pr.ok) { let tx = ''; try { tx = await pr.text(); } catch (e) { } if (/#EXTM3U/.test(tx)) { backup = p; break; } }
                                             } catch (e) { }
                                         }
-                                        if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) { this._proxyRetrying = false; return; }
+                                        if (this._activePlaySeq !== _navSeq || this._playToken !== playToken) return;
                                         if (backup) {
                                             this.corsProxyUrl = backup;   // 本会话主代理轮换到健康备用
                                             console.log('[播放器] 🛡️ 主过滤代理临时故障，已切换到备用过滤代理:', backup);
@@ -19813,6 +20315,9 @@
                 //    当前集有完整离线缓存、现在播的又不是它 → 立即切到缓存副本并续在当前进度,不用走换线路分诊。
                 //    返回 true=已切换(调用方不必再处理)。
                 _offSwitchToCacheIfAvailable() {
+                    // 🌙 原生 HLS 通道(iOS/iPadOS/Safari)读不到 IndexedDB(只有 hls.js 的 OfflineLoader 会读):切过去只会播原始网络地址、
+                    //   丢掉 worker 过滤和剪清单,却提示"已切换到离线缓存"。iPad 从后台回来时排队的 offline 事件就会走到这里
+                    if (window._dgPreferNativeHls) return false;
                     try {
                         if (this._liveActive || !this.currentGroup || !this.currentGroup.name) return false;
                         const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
@@ -20530,11 +21035,21 @@
                 // 当新 SW 激活时自动刷新页面（防止无限循环）:用户刷新一次 → 旧 SW 发现新版 sw.js → 新 SW 接管 → 这里再自动刷新一次,
                 //   新 SW 网络优先给新页面(sw.js v33)。不刷的两种情况:① 第一次装 SW(之前没有控制者)—— 本页就是刚从网络拿的,刷了白刷;
                 //   ② 正在播放 —— 每日定时检查更新时不能把正在看的视频刷掉,下次打开/刷新自然是新版本
+                //   🌙 ③ 播放页开着(哪怕暂停着):iPad 从后台回来时过期的 reg.update() 一跑,以前会在任意时刻把暂停中的播放页刷掉,
+                //   深链重开、去插播在网络还没连上时重来一遍。改为记下 _dgSwReloadPending,用户自己关播放页 / 回首页时再刷(_swReloadIfPending)。
+                //   后台里的首页照旧当场刷(用户看不见;推迟到切回来再刷反而当着面闪一下、丢掉首页的滚动/搜索)
                 let swRefreshing = false;
                 const hadController = !!navigator.serviceWorker.controller;
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
                     if (swRefreshing || !hadController) return;
                     try { if (typeof dp !== 'undefined' && dp && dp.video && !dp.video.paused && !dp.video.ended) { console.log('[SW] 新版本已就绪,正在播放 → 下次刷新生效'); return; } } catch (e) { }
+                    try {
+                        if (window.vueApp && window.vueApp.showDetail) {
+                            window._dgSwReloadPending = true;
+                            console.log('[SW] 新版本已就绪,播放页开着 → 关掉播放页 / 回首页时再刷新');
+                            return;
+                        }
+                    } catch (e) { }
                     swRefreshing = true;
                     window.location.reload();
                 });

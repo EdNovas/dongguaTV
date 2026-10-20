@@ -330,7 +330,7 @@ console.log('② 推送辅助');
 console.log('③ sw.js');
 {
     const src = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
-    ok(/const CACHE_VERSION = 'v39'/.test(src), 'CACHE_VERSION v39');
+    ok(/const CACHE_VERSION = 'v40'/.test(src), 'CACHE_VERSION v40');
     const handlers = {};
     const shown = [];
     const wins = [];
@@ -1014,7 +1014,7 @@ await T(async () => {
             $nextTick(f) { if (f) f(); return Promise.resolve(); },
             handleImgError() { }, _introRenderBtn() { }, _openOfflineContext() { }, releaseWakeLock() { }, syncShareUrl() { },
         };
-        for (const k of ['openFavorite', '_openWorkByName', 'closeDetail', 'tryOpenDeepLink', '_clearDeepLinkTimers', '_cancelDeepLink', 'doSearch', 'autoSearch', 'clearSearch', 'playFromHistory']) self[k] = M[k];
+        for (const k of ['openFavorite', '_openWorkByName', 'closeDetail', 'tryOpenDeepLink', '_clearDeepLinkTimers', '_cancelDeepLink', 'doSearch', 'autoSearch', 'clearSearch', 'playFromHistory', '_swReloadIfPending']) self[k] = M[k];   // closeDetail/goHome 收尾调 _swReloadIfPending
         // 真的 openDetail 跑一遍(它第一句就是作废深链),其余依赖整个 App 的部分不管;再把"已打开"状态补上
         self.openDetail = function (g) {
             try { const p = M.openDetail.call(this, g); if (p && p.catch) p.catch(() => { }); } catch (e) { }

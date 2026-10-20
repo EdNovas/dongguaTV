@@ -89,6 +89,45 @@ console.log('[2] 存储');
         s2.put('g'.repeat(24), 'x', 'x'.repeat(10)); s2.put('h'.repeat(24), 'y', 'y'.repeat(10));
         ok(s2.stats().bytes <= 60, '按压缩后字节淘汰', s2.stats());
         s2._close();
+        // 硬过期后(10 分钟清扫之前)同一来源同一内容重交 → 必须重建成活条目(以前回 ok 但条目仍是死的)
+        const s3 = H.createStore({ hardMs: 100, idleMs: 1e9 });
+        const k3 = 'k'.repeat(24);
+        ok(s3.put(k3, 'ip:1', 'K').ok, '硬过期用例:首次交付');
+        t += 200;
+        const rp = s3.put(k3, 'ip:1', 'K');
+        ok(rp.ok && !!s3.get(k3), '硬过期后同来源重交 → 新建活条目(get 能拿到)', rp);
+        const s5 = H.createStore({ hardMs: 100, idleMs: 1e9 });
+        s5.put(k3, 'ip:A', 'K'); t += 200;
+        ok(s5.put(k3, 'ip:B', 'K2').ok && !!s5.get(k3), '别的来源的过期条目不再回 taken(过期 = 不存在)');
+        s5._close();
+        // 空闲过期后重交也重建(at/seen 重新算)
+        const s4 = H.createStore({ idleMs: 100, hardMs: 1e9 });
+        s4.put(k3, 'ip:1', 'K'); t += 150;
+        ok(s4.put(k3, 'ip:1', 'K').ok && !!s4.get(k3), '空闲过期后同来源重交 → 活条目');
+        s3._close(); s4._close();
+        // 同一内容的重交 = 幂等续期:来源变了(前端换了出口 IP)也算,不新建(created:false);内容不同的才回 taken
+        const s6 = H.createStore({ idleMs: 1e9, hardMs: 1e9 });
+        const k6 = 'm'.repeat(24);
+        const c6 = s6.put(k6, 'ip:A', 'M');
+        ok(c6.ok && c6.created === true, '首次交付 created:true', c6);
+        const r6 = s6.put(k6, 'ip:A', 'M');
+        ok(r6.ok && r6.created === false, '同来源同内容重交 → created:false(不算新建)', r6);
+        const r6b = s6.put(k6, 'ip:B', 'M');
+        ok(r6b.ok && r6b.created === false && !!s6.get(k6), '换了来源(出口 IP 变了)同内容重交 → 续期,不回 taken', r6b);
+        ok(s6.put(k6, 'ip:B', 'OTHER').why === 'taken', '换了来源、内容不同 → taken(不许覆盖别人的)');
+        ok(s6.put(k6, 'ip:A', 'NEW', { canCreate: false }).why === 'busy' && s6.put(k6, 'ip:A', 'M', { canCreate: false }).ok, '预算用完:同内容续期照样 ok,要替换/新建的回 busy');
+        ok(s6.has(k6) && !s6.has('n'.repeat(24)), 'has():活条目才算');
+        s6._close();
+        // 续期也续到 LRU 队尾:重交过的条目不该第一个被挤掉
+        const s7 = H.createStore({ maxEntries: 2, idleMs: 1e9, hardMs: 1e9, maxPerOwner: 10 });
+        const ka = 'p'.repeat(24), kb = 'q'.repeat(24), kc = 'r'.repeat(24);
+        s7.put(ka, 'o', 'A'); s7.put(kb, 'o', 'B');
+        s7.put(ka, 'o', 'A');   // 重交 A(续期)
+        s7.put(kc, 'o', 'C');   // 满了 → 挤掉最久没用的 —— 应是 B,不是刚重交的 A
+        ok(s7.has(ka) && !s7.has(kb) && s7.has(kc), '重交续到 LRU 队尾:满了先挤没人续的', [s7.has(ka), s7.has(kb), s7.has(kc)]);
+        s7._close();
+        // 默认空闲期:Safari 对 VOD 清单只拉一次,空闲从开播算起 → 至少 12h(一晚上暂停)
+        ok(H.DEF.idleMs >= 12 * 3600e3 && H.DEF.hardMs === 24 * 3600e3, '默认空闲过期 ≥12h,最长存活 24h', [H.DEF.idleMs, H.DEF.hardMs]);
     } finally { Date.now = realNow; }
 }
 
@@ -163,6 +202,62 @@ try {
         const a1 = await post({ m3u8: cutText }, s2), a2 = await post({ m3u8: absText }, s2), a3 = await post({ m3u8: cutText.replace('#EXT-X-VERSION:3', '#EXT-X-VERSION:4') }, s2);
         ok(a1.status === 200 && a2.status === 200 && a3.status === 429, '预算只数成功创建(坏请求不消耗),用完了才 429', [a1.status, a2.status, a3.status]);
         s2.close(); st2._close();
+    }
+    // 重交(同一个 id 同一份内容:前端后台回来 / emptied / 出错时续期)不占创建预算,预算用完了也照样续得上;新建的照样受预算约束
+    {
+        const app4 = express(); app4.use(bodyParser.json({ limit: '5mb' }));
+        const st4 = H.registerRoutes(app4, { globalPerMin: 2, ipOf: () => '8.8.8.8' });
+        const s4 = await listen(app4);
+        const idA = ID(), idB = ID(), idC = ID();
+        const c1 = await post({ id: idA, m3u8: cutText }, s4);
+        const rr = [];
+        for (let k = 0; k < 3; k++) rr.push((await post({ id: idA, m3u8: cutText }, s4)).status);
+        const c2 = await post({ id: idB, m3u8: absText }, s4);
+        ok(c1.status === 200 && rr.every(x => x === 200) && c2.status === 200, '同一 id 重交 3 次不占预算:第二位观众的首次交付照样 200', [c1.status, rr, c2.status]);
+        const c3 = await post({ id: idC, m3u8: cutText }, s4);
+        const rA = await post({ id: idA, m3u8: cutText }, s4);
+        const rAx = await post({ id: idA, m3u8: absText }, s4);
+        ok(c3.status === 429 && rA.status === 200 && rAx.status === 429, '预算用完:新建 429,同内容续期 200,换内容(替换)429', [c3.status, rA.status, rAx.status]);
+        s4.close(); st4._close();
+    }
+    // 硬过期后(GET 之前)前端重交同一个 id → 必须建成活条目,Safari 随后的 GET 立刻 200(以前回 ok 但条目仍是死的 → GET 挂满 waitMs 再 404)
+    {
+        const app5 = express(); app5.use(bodyParser.json({ limit: '5mb' }));
+        const st5 = H.registerRoutes(app5, { storeOpts: { hardMs: 300, idleMs: 1e9 }, waitMs: 3000, ipOf: () => '7.7.7.7' });
+        const s5 = await listen(app5);
+        const id5 = ID();
+        const p1 = await post({ id: id5, m3u8: cutText }, s5);
+        await new Promise(res => setTimeout(res, 450));   // 过了 hardMs,没有 GET
+        const p2 = await post({ id: id5, m3u8: cutText }, s5);
+        const t5 = Date.now();
+        const g5 = await fetch(U('/api/hls/cut/' + id5 + '.m3u8', s5), { headers: { 'accept-encoding': 'identity' } });
+        const ms5 = Date.now() - t5;
+        ok(p1.status === 200 && p2.status === 200 && g5.status === 200 && ms5 < 1500, '硬过期后重交 → Safari 的 GET 立刻 200(不挂满 waitMs)', [p1.status, p2.status, g5.status, ms5]);
+        s5.close(); st5._close();
+    }
+    // 条目过期(或服务器重启)后 Safari 重拉:前端在 GET 挂起期间用同一个 id 重交 → GET 立刻拿到同一份清单;不重交 → 约 waitMs 后 404
+    {
+        const app3 = express(); app3.use(bodyParser.json({ limit: '5mb' }));
+        // 时间窗留足余量(慢机器上也不抖):首次 GET 要在 idleMs 内落地;等待中的 GET 被叫醒要远快于 waitMs
+        const st3 = H.registerRoutes(app3, { storeOpts: { idleMs: 600 }, waitMs: 3000, ipOf: () => '9.9.9.9' });
+        const s3 = await listen(app3);
+        const id3 = ID();
+        const r1 = await post({ id: id3, m3u8: cutText }, s3);
+        const g1 = await fetch(U('/api/hls/cut/' + id3 + '.m3u8', s3), { headers: { 'accept-encoding': 'identity' } });
+        const b1 = await g1.text();
+        ok(r1.status === 200 && g1.status === 200, '重交用例:首次交付 + GET 200', [r1.status, g1.status]);
+        await new Promise(res => setTimeout(res, 900));   // 空闲过期
+        const t3 = Date.now();
+        const pend3 = fetch(U('/api/hls/cut/' + id3 + '.m3u8', s3), { headers: { 'accept-encoding': 'identity' } }).then(async x => [x.status, await x.text(), Date.now() - t3]);
+        await new Promise(res => setTimeout(res, 200));
+        const r2 = await post({ id: id3, m3u8: cutText }, s3);
+        const [gs, gb, gms] = await pend3;
+        ok(r2.status === 200 && gs === 200 && gb === b1 && gms < 1500, '过期后挂起的 GET 在同 id 重交后立刻拿到同一份清单(远早于 waitMs)', [r2.status, gs, gms]);
+        await new Promise(res => setTimeout(res, 900));   // 再次过期,这回不重交
+        const t4 = Date.now();
+        const g4 = await fetch(U('/api/hls/cut/' + id3 + '.m3u8', s3));
+        ok(g4.status === 404 && Date.now() - t4 >= 2900, '过期且没人重交 → 等满 waitMs 后 404', [g4.status, Date.now() - t4]);
+        s3.close(); st3._close();
     }
     // 501 桩
     r = await post({ m3u8: cutText }, stub);

@@ -1062,7 +1062,7 @@ console.log('⑤ 静态接线');
     ok(/v-if="frameShare\.canFiles"/.test(HTML), '「分享…」只在能分享文件时显示');
     ok(/if \(this\.frameShare && this\.frameShare\.show\) \{ this\.closeFrameShare\(\); return; \}/.test(methodSrc('closeDetail').body), '关播放页(返回键)时弹窗开着:先只关弹窗');
     const sw = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
-    ok(/const CACHE_VERSION = 'v39'/.test(sw), 'sw.js 升到 v39');
+    ok(/const CACHE_VERSION = 'v40'/.test(sw), 'sw.js 升到 v40(v39 起预缓存二维码库)');
     ok(sw.includes("'./libs/js/qrcode-generator.min.js?v=2.0.4'"), 'sw.js 预缓存二维码库(与页面同一个 ?v=)');
     ok(/s\.src = 'libs\/js\/qrcode-generator\.min\.js\?v=2\.0\.4'/.test(HTML), '页面按需加载的 ?v= 与预缓存一致');
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));

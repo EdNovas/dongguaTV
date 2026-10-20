@@ -947,7 +947,7 @@ app.use('/api/search', searchLimiter);
 // 🎌 Kazumi 规则源的播放端点:/api/kz/ep(解析成 {type,url})、/api/kz/m3u8(同源清单)、/api/kz/mp4(302 签名直链)
 if (kazumi) { try { kazumi.registerRoutes(app); } catch (e) { console.warn('[Kazumi] 路由注册失败:', e.message); } }
 // ✂️ 剪掉插播后的清单托管(Safari 原生 HLS / AirPlay / 投屏用,见 lib/hls-cut):服务器只存客户端交上来的清单,自己不拉任何 m3u8。
-//    POST 不强制登录(内容只是规范化后的公网分片清单,6h 空闲过期),靠每 IP 限流 + 全站预算防滥用;被封禁的令牌拒绝。
+//    POST 不强制登录(内容只是规范化后的公网分片清单,12h 空闲过期;Safari 只拉一次占位清单,续期/重建靠客户端回到前台、emptied 或报错时用同一 id 重新 POST),靠每 IP 限流 + 全站预算防滥用;被封禁的令牌拒绝。
 //    HLS_CUT_DISABLE=1 关闭(前端据 /api/config 的 hls_cut 退回"播放中静默跳过")。
 const HLS_CUT_ENABLED = !envFlag('HLS_CUT_DISABLE');
 let hlsCut = null;
