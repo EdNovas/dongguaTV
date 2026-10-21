@@ -62,21 +62,22 @@ install_nodejs() {
     
     if command -v node &> /dev/null; then
         NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
-        if [ "$NODE_VERSION" -ge 18 ]; then
+        # 18/20 已停止维护(EOL),不再有安全修复;better-sqlite3 也不支持 18
+        if [ "$NODE_VERSION" -ge 22 ]; then
             print_success "Node.js $(node -v) 已安装"
             return
         else
-            print_warning "Node.js 版本过低，需要 v18+，正在升级..."
+            print_warning "Node.js $(node -v) 已停止维护，需要 v22+，正在升级..."
         fi
     fi
-    
-    print_info "正在安装 Node.js v18..."
-    
+
+    print_info "正在安装 Node.js v22..."
+
     if [ "$OS" = "debian" ]; then
-        curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+        curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
         sudo apt-get install -y nodejs
     else
-        curl -fsSL https://rpm.nodesource.com/setup_18.x | sudo bash -
+        curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
         sudo yum install -y nodejs
     fi
     
