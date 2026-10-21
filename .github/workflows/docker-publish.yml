@@ -6,6 +6,8 @@ on:
     tags: [ 'v*.*.*' ]
   pull_request:
     branches: [ "main" ]
+  # 手动重建 latest:Node 基础镜像出安全补丁时不必等发版
+  workflow_dispatch:
 
 env:
   GHCR_REGISTRY: ghcr.io
