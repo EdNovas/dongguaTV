@@ -2,6 +2,9 @@
   "name": "node-video-proxy",
   "version": "1.0.2",
   "main": "server.js",
+  "engines": {
+    "node": "22.x || 24.x"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"

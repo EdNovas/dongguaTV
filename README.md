@@ -73,7 +73,7 @@ https://github.com/user-attachments/assets/8100fd07-46cd-4f16-9228-90a09075ac54
 
 ### 2. 部署
 
-需要 **Node.js 20 或更新**（推荐 22；`better-sqlite3` 已不支持 18）。要用多用户同步、求片、站长后台、观看统计，请设 **`CACHE_TYPE=sqlite`**。
+需要 **Node.js 22 或 24**，并保持在最新补丁版（18、20 已停止维护、不再有安全修复；`better-sqlite3` 也不支持 18）。要用多用户同步、求片、站长后台、观看统计，请设 **`CACHE_TYPE=sqlite`**。
 
 #### Docker（推荐）
 
@@ -122,6 +122,8 @@ services:
 
 > SQLite 用 WAL 模式，最近的写入可能还在旁边的 `cache.db-wal` 里；上面只挂载了 `cache.db` 本身，**重建容器前请先 `docker stop`**，备份方法见[数据与备份](#数据与备份)。
 
+更新镜像（含 Node 安全补丁）：`docker pull ednovas/dongguatv:latest`，然后 `docker stop donggua-tv && docker rm donggua-tv`，再用上面的命令重新创建（Compose：`docker compose pull && docker compose up -d`）。
+
 #### 一键脚本 / 手动 / PM2
 
 ```bash
@@ -139,7 +141,7 @@ cp .env.example .env && nano .env    # 至少填 TMDB_API_KEY
 node server.js                       # 或 pm2 start server.js --name donggua-tv && pm2 save && pm2 startup
 ```
 
-宝塔面板：软件商店装 Node.js 版本管理器（20+）→ 网站 → Node 项目 → 添加，启动文件 `server.js`、端口 `3000` → 配好 `.env` 后重启。
+宝塔面板：软件商店装 Node.js 版本管理器（22 或 24）→ 网站 → Node 项目 → 添加，启动文件 `server.js`、端口 `3000` → 配好 `.env` 后重启。
 
 #### Vercel
 
