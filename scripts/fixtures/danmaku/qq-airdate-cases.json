@@ -1,0 +1,603 @@
+{
+ "note": "2026-10-21 抓取:danmu_api(tencent 源)候选 + 腾讯选集接口原始页(只留 vid/title/publish_date/is_trailer/page_context)。资源站(非凡影视)集名见 ours。",
+ "animeTitle": "现在就出发 第四季(2026)【综艺】from tencent",
+ "episodes": [
+  {
+   "episodeId": 10002,
+   "episodeTitle": "【qq】 先导片上：沈腾沙滩十八滚“追杀”黄景瑜",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/v4102k0g66u.html"
+  },
+  {
+   "episodeId": 10003,
+   "episodeTitle": "【qq】 先导片下：贾冰爆炒！沈腾这一口很疯狂",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/m41021vikm3.html"
+  },
+  {
+   "episodeId": 10004,
+   "episodeTitle": "【qq】 第1期上：出发团变落汤鸡，沈腾被迫洗头",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/r4102opm7x3.html"
+  },
+  {
+   "episodeId": 10005,
+   "episodeTitle": "【qq】 第1期下：目击狼人杀升级，小白安宇猜词再共脑",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/z41023tinp7.html"
+  },
+  {
+   "episodeId": 10006,
+   "episodeTitle": "【qq】 第1期加更：王楚然猜词变造词“气疯”沈腾",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/r4102w56q2o.html"
+  },
+  {
+   "episodeId": 10007,
+   "episodeTitle": "【qq】 第1期还有加更：王安宇脑力下线白敬亭直跺脚",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/i4102b29cfo.html"
+  },
+  {
+   "episodeId": 10008,
+   "episodeTitle": "【qq】 第2期上：“腾腾公主”飙戏，黄景瑜倒拔王安宇",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/v4102k3exsm.html"
+  },
+  {
+   "episodeId": 10009,
+   "episodeTitle": "【qq】 第2期下：编瞎话大赏爆笑来袭，沈腾变泡面头",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/f4102coahzq.html"
+  },
+  {
+   "episodeId": 10010,
+   "episodeTitle": "【qq】 第2期加更：沈腾胡先煦范丞丞“戏耍”黄景瑜",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/d4102shyn8y.html"
+  },
+  {
+   "episodeId": 10011,
+   "episodeTitle": "【qq】 第2期还有加更：沈腾陷入跳舞循环累到瘫倒",
+   "url": "https://v.qq.com/x/cover/mzc002001bk7moh/b41029z8gfb.html"
+  }
+ ],
+ "qqPage": {
+  "data": {
+   "module_list_datas": [
+    {
+     "module_datas": [
+      {
+       "module_params": {
+        "has_next": "false",
+        "next_page_context": ""
+       },
+       "item_data_lists": {
+        "item_datas": [
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "2873",
+           "vid": "v4102k0g66u",
+           "publish_date": "2026-10-01 00:00:00",
+           "title": "先导片上：沈腾沙滩十八滚“追杀”黄景瑜",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "vid": "m41021vikm3",
+           "publish_date": "2026-10-01 00:00:00",
+           "is_trailer": "0",
+           "title": "先导片下：贾冰爆炒！沈腾这一口很疯狂",
+           "duration": "2195"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "title": "第1期上：出发团变落汤鸡，沈腾被迫洗头",
+           "vid": "r4102opm7x3",
+           "is_trailer": "0",
+           "duration": "5417",
+           "publish_date": "2026-10-10 00:00:00"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "6665",
+           "vid": "z41023tinp7",
+           "publish_date": "2026-10-11 00:00:00",
+           "is_trailer": "0",
+           "title": "第1期下：目击狼人杀升级，小白安宇猜词再共脑"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2026-10-12 00:00:00",
+           "vid": "r4102w56q2o",
+           "is_trailer": "0",
+           "title": "第1期加更：王楚然猜词变造词“气疯”沈腾",
+           "duration": "2191"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "title": "第1期还有加更：王安宇脑力下线白敬亭直跺脚",
+           "publish_date": "2026-10-13 00:00:00",
+           "duration": "1720",
+           "vid": "i4102b29cfo",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "4649",
+           "title": "第2期上：“腾腾公主”飙戏，黄景瑜倒拔王安宇",
+           "is_trailer": "0",
+           "publish_date": "2026-10-17 00:00:00",
+           "vid": "v4102k3exsm"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "4003",
+           "vid": "f4102coahzq",
+           "publish_date": "2026-10-18 00:00:00",
+           "title": "第2期下：编瞎话大赏爆笑来袭，沈腾变泡面头",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "1254",
+           "publish_date": "2026-10-19 00:00:00",
+           "vid": "d4102shyn8y",
+           "is_trailer": "0",
+           "title": "第2期加更：沈腾胡先煦范丞丞“戏耍”黄景瑜"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "vid": "b41029z8gfb",
+           "is_trailer": "0",
+           "duration": "1598",
+           "title": "第2期还有加更：沈腾陷入跳舞循环累到瘫倒",
+           "publish_date": "2026-10-20 00:00:00"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2026-10-24 00:00:00",
+           "duration": "87",
+           "title": "预告：边掰苞米边刀人，笨蛋杀手来袭",
+           "is_trailer": "1",
+           "vid": "r4102w4hwke"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "cid=mzc00200ap8s2p3&detail_page_type=1&id_type=1&is_skp_style=false&lid=90767&mvl_strategy_id=&order=&req_from=web_vsite",
+           "title": "第1季"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "cid=mzc00200y41tzil&detail_page_type=1&id_type=1&is_skp_style=false&lid=90973&mvl_strategy_id=&order=&req_from=web_vsite",
+           "title": "第2季"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "第3季",
+           "page_context": "cid=mzc00200znyfa5u&detail_page_type=1&id_type=1&is_skp_style=false&lid=91603&mvl_strategy_id=&order=&req_from=web_vsite"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "cid=mzc002001bk7moh&detail_page_type=1&id_type=1&is_skp_style=false&lid=91673&mvl_strategy_id=&order=&req_from=web_vsite",
+           "title": "第4季"
+          }
+         },
+         {
+          "item_type": "60",
+          "item_params": {
+           "title": "正片",
+           "page_context": "chapter_name=正片&cid=mzc002001bk7moh&detail_page_type=1&have_positive_chapter_tab=true&id_type=1&is_skp_style=false&lid=&"
+          }
+         },
+         {
+          "item_type": "60",
+          "item_params": {
+           "title": "纯享",
+           "page_context": "chapter_name=纯享&cid=mzc002001bk7moh&detail_page_type=1&have_positive_chapter_tab=true&id_type=1&is_skp_style=false&lid=&"
+          }
+         },
+         {
+          "item_type": "60",
+          "item_params": {
+           "page_context": "chapter_name=特辑&cid=mzc002001bk7moh&detail_page_type=1&have_positive_chapter_tab=true&id_type=1&is_skp_style=false&lid=&",
+           "title": "特辑"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "qqPageLongShowBase": {
+  "data": {
+   "module_list_datas": [
+    {
+     "module_datas": [
+      {
+       "module_params": {
+        "has_next": "false",
+        "next_page_context": ""
+       },
+       "item_data_lists": {
+        "item_datas": [
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "2278",
+           "publish_date": "2021-10-31 00:00:00",
+           "is_trailer": "0",
+           "vid": "v0040x8o42q",
+           "title": "特辑：李雪琴毛不易脑洞大开邀请嘉宾"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "vid": "y0040vgh12b",
+           "publish_date": "2021-11-01 00:00:00",
+           "duration": "1777",
+           "title": "第1期：廖俊涛到访，毛不易李雪琴聊北漂",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "2219",
+           "is_trailer": "0",
+           "title": "第2期：杨迪带搞怪搬家礼，传授省钱绝招",
+           "publish_date": "2021-11-08 00:00:00",
+           "vid": "u00417xs7yu"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "title": "第3期：马頔变大厨投喂李雪琴毛不易",
+           "duration": "2215",
+           "is_trailer": "0",
+           "vid": "l0041rj6lja",
+           "publish_date": "2021-11-15 00:00:00"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "1288",
+           "vid": "t0041ys39ly",
+           "title": "第3期加更：李雪琴回应被拍到跟周九良“牵手”",
+           "publish_date": "2021-11-16 00:00:00",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2021-11-22 00:00:00",
+           "title": "第4期：赵晓卉李雪琴脱口秀姐妹重聚",
+           "duration": "1878",
+           "vid": "n0041b0y1vv",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "1130",
+           "is_trailer": "0",
+           "vid": "p0041ycuvvg",
+           "publish_date": "2021-11-23 00:00:00",
+           "title": "第4期加更：李雪琴毛不易支招赵晓卉恋爱"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "2637",
+           "vid": "p0041c9pmqa",
+           "is_trailer": "0",
+           "publish_date": "2021-11-29 00:00:00",
+           "title": "第5期：孟鹤堂尚九熙来访！聊德云社趣事"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2021-11-30 00:00:00",
+           "is_trailer": "0",
+           "vid": "f0041vpsmb8",
+           "title": "第5期加更：李雪琴聊跟杨九郎孟鹤堂“结婚”？",
+           "duration": "1255"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "is_trailer": "0",
+           "duration": "2544",
+           "title": "第6期：阿雅空降！带毛不易李雪琴爆笑跳舞",
+           "publish_date": "2021-12-06 00:00:00",
+           "vid": "j00410a5l5y"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "vid": "t0041q6dcep",
+           "title": "第6期加更：毛不易李雪琴直面网络恶评",
+           "is_trailer": "0",
+           "duration": "1723",
+           "publish_date": "2021-12-07 00:00:00"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2021-12-13 00:00:00",
+           "duration": "2136",
+           "title": "第7期：毛不易李雪琴《明日》老友重聚",
+           "is_trailer": "0",
+           "vid": "f0041cd1ra6"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "1383",
+           "vid": "q0041c0j6m7",
+           "publish_date": "2021-12-14 00:00:00",
+           "title": "第7期加更：毛不易曝钟易轩另类家庭氛围？",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "is_trailer": "0",
+           "publish_date": "2021-12-20 00:00:00",
+           "vid": "e0041m2ijwj",
+           "duration": "2608",
+           "title": "第8期：蔡国庆带毛不易李雪琴包饺子过冬至"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "is_trailer": "0",
+           "duration": "1346",
+           "vid": "g0041la2jx2",
+           "title": "第8期加更：毛不易蔡国庆恋爱观大分享",
+           "publish_date": "2021-12-21 00:00:00"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2021-12-27 00:00:00",
+           "is_trailer": "0",
+           "title": "第9期：宋祖儿社牛式送礼！共聊社交难题",
+           "vid": "v0041jrfgqn",
+           "duration": "2622"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2021-12-28 00:00:00",
+           "is_trailer": "0",
+           "title": "第9期加更：李雪琴自曝特别择偶标准",
+           "duration": "1549",
+           "vid": "z0041kgzopo"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "publish_date": "2022-01-03 00:00:00",
+           "duration": "2839",
+           "vid": "r0041p8aplq",
+           "is_trailer": "0",
+           "title": "第10期：老友齐聚过新年！毛不易爆笑开唱"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "is_trailer": "0",
+           "duration": "1555",
+           "publish_date": "2022-01-04 00:00:00",
+           "vid": "s0041rscc48",
+           "title": "第10期加更：毛不易李雪琴温情合唱"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "944",
+           "title": "特辑第1期：毛不易李雪琴爆笑“砸”盲盒",
+           "publish_date": "2022-01-10 00:00:00",
+           "vid": "f00419sb86p",
+           "is_trailer": "0"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "vid": "k0041j2j0y1",
+           "is_trailer": "0",
+           "title": "特辑第2期：毛不易李雪琴看古早台偶上头",
+           "publish_date": "2022-01-17 00:00:00",
+           "duration": "882"
+          }
+         },
+         {
+          "item_type": "1",
+          "item_params": {
+           "duration": "637",
+           "is_trailer": "0",
+           "publish_date": "2022-01-24 00:00:00",
+           "title": "特辑第3期：毛不易李雪琴探班年夜FAN",
+           "vid": "n0041di7rn8"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "chapter_name=2021冬&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l",
+           "title": "2021冬"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "chapter_name=2022春&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l",
+           "title": "2022春"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "chapter_name=2022夏&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l",
+           "title": "2022夏"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2022秋",
+           "page_context": "chapter_name=2022秋&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "chapter_name=2023春&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l",
+           "title": "2023春"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2023夏",
+           "page_context": "chapter_name=2023夏&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2023秋",
+           "page_context": "chapter_name=2023秋&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "page_context": "chapter_name=2023冬&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l",
+           "title": "2023冬"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2024春",
+           "page_context": "chapter_name=2024春&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2024夏",
+           "page_context": "chapter_name=2024夏&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2024秋",
+           "page_context": "chapter_name=2024秋&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2025春",
+           "page_context": "chapter_name=2025春&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2025夏",
+           "page_context": "chapter_name=2025夏&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2025秋",
+           "page_context": "chapter_name=2025秋&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2026春",
+           "page_context": "chapter_name=2026春&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         },
+         {
+          "item_type": "28",
+          "item_params": {
+           "title": "2026秋",
+           "page_context": "chapter_name=2026秋&cid=mzc00200xkb43kw&detail_page_type=1&have_positive_chapter_tab=false&id_type=1&is_skp_style=false&l"
+          }
+         }
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "ours": [
+  "第20261010期",
+  "第20261010期纯享",
+  "第20261010期捣蛋",
+  "第20261011期",
+  "第20261011期纯享",
+  "第20261012期",
+  "第20261013期",
+  "第20261015期",
+  "第20261017期",
+  "第20261017期纯享上",
+  "第20261017期纯享下",
+  "第20261018期",
+  "第20261019期",
+  "第20261020期"
+ ]
+}
