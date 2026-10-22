@@ -6996,19 +6996,52 @@
         //    播放器全站复用一个实例,弹幕请求是异步的(第三方匹配常要好几秒)——上一部剧/上一集的请求晚到时,
         //    DPlayer 会照单写进当前弹幕列表。want = 当前播放要的弹幕 id(直播/未开弹幕 = null);
         //    回来的不是 want → 直接丢弃、不回调(DPlayer 什么都不改,也不弹"弹幕加载失败")。
+        // 日期式集名(综艺按播出日期命名):要等视频时长才请求弹幕(见 _dmBackend.read)。须覆盖服务器 danmakuMarkers 认作日期的所有写法
+        //   (scripts/danmaku-match-test.mjs 用真实集名校验);多认几个只是晚一两秒发请求,不碍事。
+        const _dmDatedRe = /(?:^|\D)(?:19|20)\d{6}(?!\d)|\d{4}\s*[-./年]\s*\d{1,2}|(?:^|\D)\d{6}(?!\d)|(?:^|\D)\d{4}\s*期|\d{1,2}\s*月\s*\d{1,2}/;
         const _dmBackend = {
             want: null,
+            seq: 0,       // 每次 read 递增,只有最新的那次可以在等时长
+            key: '',      // 当前弹幕对应的 _danmakuKey(play() 设)
+            sent: null,   // 日期式集名最近一次发出去的 { id, d:时长, key }
             read(o) {
                 const m = /[?&]id=([^&]*)/.exec(o.url || '');
                 const id = m ? m[1] : '';
-                fetch(o.url, { credentials: 'same-origin' })
+                const seq = ++_dmBackend.seq;
+                // 已换剧/换集/进直播(want 变了),或之后又重载过弹幕(有更新的一次 read)→ 晚到的旧弹幕不要
+                const stale = () => id !== _dmBackend.want || seq !== _dmBackend.seq;
+                const go = url => fetch(url, { credentials: 'same-origin' })
                     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
                     .then(d => {
-                        if (id !== _dmBackend.want) return;   // 已换剧/换集/进直播 → 晚到的旧弹幕不要
-                        if (d && d.code === 0) { if (o.success) o.success((d.data || []).map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] }))); }
+                        if (stale()) return;
+                        if (d && d.code === 0) {
+                            if (o.success) o.success((d.data || []).map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] })));
+                            // 列表晚到时 DPlayer 的读指针还在 0:下一帧会把"当前时间之前"的弹幕一口气全画出来(实测开海量一帧 8 秒)→ 对到当前时间
+                            try { if (typeof dp !== 'undefined' && dp && dp.danmaku && dp.video && (dp.video.currentTime || 0) > 1) dp.danmaku.seek(); } catch (e) { }
+                        }
                         else if (o.error) o.error(d && d.msg);
                     })
-                    .catch(e => { if (id !== _dmBackend.want) return; console.error(e); if (o.error) o.error(); });
+                    .catch(e => { if (stale()) return; console.error(e); if (o.error) o.error(); });
+                // 📅 综艺日期式集名(第20261010期):等拿到视频时长再请求,id 后面带上 d:秒——服务器在腾讯那一天的全部条目里按
+                //    "时长对得上 + 类别相容"认出是哪一条(server.js danmakuAirDatePick);别的集名照旧马上请求。want 比对用原 id(时长只拼在请求地址上)。
+                //    每秒看一次当前 #dplayer video 的时长(播放器重建、换源换了 <video> 也跟得上);换了剧/集(want 变了)就不发了。
+                //    一直拿不到时长(一小时)就当没有弹幕——不退回不带时长的请求(那条路对日期式综艺常配错)。
+                //    DPlayer 换片源时先改 src 再重载弹幕,此刻 duration 已是 NaN,拿不到上一集的时长。正则别用后行断言(旧 iOS Safari 整段脚本会解析失败)。
+                //    每次 read 领一个序号(seq),只有最新的那次在等(同一集反复开/快速来回切不会叠出好几个等待、发好几遍)。
+                //    发出去时记下 {id, d, key}:同键换源/换集时播放页拿新视频的时长跟它比,差得多就重载(见 _dmRecheckDuration)。
+                let ep = '';
+                try { ep = decodeURIComponent(id).split('|')[1] || ''; } catch (e) { }
+                if (!_dmDatedRe.test(ep)) return go(o.url);
+                const t0 = Date.now(), key = _dmBackend.key;
+                const tick = () => {
+                    if (stale()) return;
+                    const v = document.querySelector('#dplayer video');
+                    const d = (v && isFinite(v.duration) && v.duration >= 30) ? Math.round(v.duration) : 0;
+                    if (d) { _dmBackend.sent = { id, d, key }; return go(o.url.replace(/([?&]id=[^&]*)/, '$1' + encodeURIComponent('|d:' + d))); }
+                    if (Date.now() - t0 > 3600e3) { if (o.success) o.success([]); return; }   // 一小时还没时长:收起"弹幕加载中"
+                    setTimeout(tick, 1000);
+                };
+                setTimeout(tick, 200);
             },
             send(o) {
                 fetch(o.url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o.data) })
@@ -16248,11 +16281,33 @@
                         unlimited: false
                     };
                 },
+                // 📅 同键换源/换集(没重载弹幕)时:日期式集名的弹幕是服务器按"那天腾讯条目里时长对得上"认的(server.js danmakuAirDatePick),
+                //    同名的另一条剪辑(资源站同一天两条同名、或换到别的站)时长不同就该是别的弹幕。拿到新视频时长后与上次请求用的时长比,
+                //    差出 3%(至少 30s,不同站同一条片源差几十秒以内)就按新时长重载;还在等时长的那次请求会自己用新视频的时长,不用管。
+                //    只认发起它的那次播放:换集/换剧/进直播(play() 的重载、丢弃分支会作废它)后不再动弹幕(对抗审查:曾把上一集的弹幕重载回新视频)。
+                _dmRecheckDuration(opt, key) {
+                    const s = _dmBackend.sent;
+                    if (!opt || !s || s.key !== key || s.id !== _dmBackend.want) return;
+                    const tok = this._dmRecheckTok = (this._dmRecheckTok || 0) + 1, pt = this._playToken, t0 = Date.now();
+                    const tick = () => {
+                        if (tok !== this._dmRecheckTok || this._playToken !== pt || _dmBackend.sent !== s || _dmBackend.want !== s.id || _dmBackend.key !== key
+                            || typeof dp === 'undefined' || !dp || !dp.danmaku) return;
+                        const v = document.querySelector('#dplayer video');
+                        const d = (v && isFinite(v.duration) && v.duration >= 30) ? Math.round(v.duration) : 0;
+                        if (!d) { if (Date.now() - t0 < 120000) setTimeout(tick, 1000); return; }
+                        if (Math.abs(d - s.d) <= Math.max(30, s.d * 0.03)) return;
+                        _dmBackend.want = opt.id;
+                        _dmBackend.key = key;
+                        try { dp.danmaku.reload({ id: opt.id, address: opt.api, user: opt.user }); } catch (e) { }
+                    };
+                    setTimeout(tick, 200);
+                },
                 // 🗨️ 本次播放不带弹幕(直播/未开弹幕):把复用播放器里上一部剧的弹幕【整份】丢掉。
                 //    DPlayer 的 danmaku.clear() 只清屏、不清列表(dan),还把读指针归零 → 旧列表按新视频的时间从头重放
                 //    (实测:看完《兰香如故》进 CCTV9 直播,满屏兰香如故的弹幕)。在飞的旧请求由 _dmBackend.want=null 作废。
                 _danmakuDrop() {
                     _dmBackend.want = null;
+                    this._dmRecheckTok = (this._dmRecheckTok || 0) + 1;   // 作废还在等时长的同键重查(见 _dmRecheckDuration)
                     this._lastDanmakuKey = null;   // 列表已丢:回到原来那集要重新拉
                     try {
                         if (typeof dp === 'undefined' || !dp || !dp.danmaku) return;
@@ -16305,7 +16360,18 @@
                     if (!this.currentGroup || !this.currentGroup.name) return '';
                     const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
                     const epName = ((cur && cur.name) || '').trim();
-                    const m = epName.match(/第\s*(\d+)\s*[集话話期]/) || epName.match(/\bep\.?\s*(\d+)/i) || epName.match(/^(\d+)$/);
+                    // 📅 日期式集名(综艺):键 = 日期 + 日期之外的全部文字(去分隔符、数字去前导零)。同一天常有 正片/捣蛋/纯享/上下半/加更 好几条,
+                    //    以前只认期号 + 白名单后缀,"第20261010期"和"第20261010期捣蛋"同键 → 切过去不重拉弹幕(对抗审查实锤);
+                    //    写法不同的同一条(第20261010期 / 20261010 / 2026-10-10)仍同键。
+                    let dm = epName.match(/(?:^|\D)((?:19|20)\d{6})(?!\d)/), dkey = '', dtxt = '';
+                    if (dm) { dkey = dm[1]; dtxt = dm[1]; }
+                    else if ((dm = epName.match(/((?:19|20)\d{2})\s*[-./年]\s*(\d{1,2})\s*[-./月]\s*(\d{1,2})\s*日?/))) { dkey = dm[1] + dm[2].padStart(2, '0') + dm[3].padStart(2, '0'); dtxt = dm[0]; }
+                    if (dkey) {
+                        const rest = epName.replace(dtxt, '\u0000').replace(/第?\s*\u0000\s*期?/, '')
+                            .replace(/[\s()（）\[\]【】·:：\-—_~～、.。]+/g, '').replace(/\d+/g, x => String(parseInt(x, 10))).toLowerCase();
+                        return this.currentGroup.name + '|' + dkey + '|' + rest;
+                    }
+                    const m =epName.match(/第\s*(\d+)\s*[集话話期]/) || epName.match(/\bep\.?\s*(\d+)/i) || epName.match(/^(\d+)$/);
                     // 数字归一:一般剥前导零(第06集=第6集=06=6);但 ≥4位且0开头的是【日期式】(0624=6月24日),保留原样——
                     // 否则'第0624期'(日期)与'第624期'(期号)塌缩同键,换源切到碰撞集时不重拉,旧期弹幕铺完全不同的一期(对抗审查实锤)。
                     const num = m ? ((m[1].length >= 4 && m[1][0] === '0') ? m[1] : String(parseInt(m[1], 10))) : null;
@@ -17247,7 +17313,9 @@
                     if (danmakuOpt) this._lastDanmakuKey = danmakuKey;
                     // 本次播放不带弹幕(直播/未开弹幕)→ 上一部的弹幕整份丢掉;要加载新弹幕(新建播放器/换集)→ 只收这一份
                     if (!danmakuOpt) this._danmakuDrop();
-                    else if (!dp || danmakuReload) _dmBackend.want = danmakuOpt.id;
+                    else if (!dp || danmakuReload) { _dmBackend.want = danmakuOpt.id; _dmBackend.key = danmakuKey; this._dmRecheckTok = (this._dmRecheckTok || 0) + 1; }
+                    // 📅 同键(不重载)但可能是另一条剪辑:日期式集名的弹幕是按视频时长认的,拿到新视频时长后跟上次请求用的比,差得多就重载
+                    else if (dp && dp.danmaku) this._dmRecheckDuration(danmakuOpt, danmakuKey);
 
                     if (!dp) {
                         console.log('[播放器] 创建新的 DPlayer 实例');
