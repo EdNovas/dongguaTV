@@ -16,7 +16,7 @@
 //     报出的星期几要稳(随机日/隔天更/周更 5 周只更 3 周 → null,S6);
 //     第四轮(T3):隔了 >8h 才看到涨集记成断档 {u:1},断档盖住的日子不算漏更(资源站夜里挂几小时/服务器停机不再丢星期几),
 //     statusOf 把最后一次查成功的时刻交给 inferCadence(资源站正挂着的那几晚不算没更);/season/{n}/episode/{e} 也只缓存 1 小时(T6)
-//  ③ lib/popular 单元:默认除调用者外 ≥1 个别人就上榜;机制按 minUsers:2 测 —— 除调用者外凑够门槛才上榜(匿名按"他也看过"算)、
+//  ③ lib/popular 单元:默认除调用者外 ≥2 个别人才上榜(DEF.minUsers=2);机制按 minUsers:2 测,另测调回 1 —— 除调用者外凑够门槛才上榜(匿名按"他也看过"算)、
 //     每人 <120s 不算、封禁用户不算、只算 vod、只有 7 天窗口、按扣掉调用者后的人数/时长排序、上限 20、全站一份候选缓存、
 //     门槛 2 时的探测复现(review2/srvfix/pop-probe.js)
 //  ④ 端到端:临时目录起真正的 server.js(CACHE_TYPE=sqlite),db.json 指向本地假 maccms 站,走真实 HTTP
@@ -34,7 +34,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dep = (m) => { try { return require(path.join(ROOT, 'node_modules', m)); } catch (e) { return require(m); } };   // worktree 没有 node_modules 时走 NODE_PATH
 const Database = dep('better-sqlite3');
 const { createFavorites, parsePlayUrl, vodStatus, parseDetail, normItem, favIdOf, parseTotal, pickTotal, inferCadence, isoWeekday, DEF } = require(path.join(ROOT, 'lib/favorites'));
-const { createPopular } = require(path.join(ROOT, 'lib/popular'));
+const { createPopular, DEF: POP_DEF } = require(path.join(ROOT, 'lib/popular'));
 const { createUserStats } = require(path.join(ROOT, 'lib/user-stats'));
 
 let pass = 0, fail = 0;
@@ -1663,12 +1663,19 @@ try {
     ok(titles(pop.get('u2')) === '' && titles(pop.get('u3')) === '剧D,剧A,剧F', 'u2 同理;u3 只看过不到 120s 的剧C → 照常看到 3 部', [titles(pop.get('u2')), titles(pop.get('u3'))]);
     // 认不出调用者(公开站不带令牌):当他也看过 → 2 人的剧不上榜(不然上报完观看再不带令牌来看,自己那票又算回去)
     ok(pop.get('').items.length === 0 && pop.get(undefined).items.length === 0 && pop.get(null).items.length === 0 && pop.get(['u9']).items.length === 0, '匿名调用者少算 1 人 → 2 人的剧不上榜');
-    // 默认门槛 1(不传 minUsers):除调用者外有 1 个别人看过 ≥120s 就上榜,仍按人数、再按时长排
+    // 默认门槛 2(不传 minUsers):与上面显式 minUsers:2 结果一致
     {
-        const p1 = createPopular({ db: () => dbp, now: () => PN });
-        ok(titles(p1.get('u9')) === '剧D,剧A,剧F,剧B,某敏感片,剧E', '默认门槛 1:只有 1 个人看过的剧B/某敏感片/剧E 也上榜,排在 2 人的后面;<120s / 封禁 / 直播 / 7 天外照旧不算', p1.get('u9').items);
-        ok(titles(p1.get('u1')) === '某敏感片,剧D,剧A,剧F', '默认门槛:调用者自己的观看照旧不算(只有 u1 看过的剧B/剧E 对他不上榜)', p1.get('u1').items);
-        ok(titles(p1.get('')) === '剧D,剧A,剧F', '默认门槛:匿名当他也看过 → 至少 2 人', p1.get('').items);
+        const p0 = createPopular({ db: () => dbp, now: () => PN });
+        ok(POP_DEF.minUsers === 2, '默认 minUsers = 2', POP_DEF);
+        ok(titles(p0.get('u9')) === '剧D,剧A,剧F', '默认门槛 2:只有 1 个人看过的剧B/某敏感片/剧E 不上榜', p0.get('u9').items);
+        ok(p0.get('u1').items.length === 0 && p0.get('').items.length === 0, '默认门槛 2:u1 扣掉自己只剩 1 个别人 → 空;匿名当他也看过 → 空', [p0.get('u1').items, p0.get('').items]);
+    }
+    // 调回门槛 1(opts.minUsers:1):除调用者外有 1 个别人看过 ≥120s 就上榜,仍按人数、再按时长排
+    {
+        const p1 = createPopular({ db: () => dbp, now: () => PN, opts: { minUsers: 1 } });
+        ok(titles(p1.get('u9')) === '剧D,剧A,剧F,剧B,某敏感片,剧E', '门槛 1:只有 1 个人看过的剧B/某敏感片/剧E 也上榜,排在 2 人的后面;<120s / 封禁 / 直播 / 7 天外照旧不算', p1.get('u9').items);
+        ok(titles(p1.get('u1')) === '某敏感片,剧D,剧A,剧F', '门槛 1:调用者自己的观看照旧不算(只有 u1 看过的剧B/剧E 对他不上榜)', p1.get('u1').items);
+        ok(titles(p1.get('')) === '剧D,剧A,剧F', '门槛 1:匿名当他也看过 → 至少 2 人', p1.get('').items);
     }
     // 审查探测(review2/srvfix/pop-probe.js):攻击者给"受害人看过的"和"没人看的"各报 120s
     w('attacker', '某敏感片', 'x', 120, 0); w('attacker', '没人看的片', 'x', 120, 0);
@@ -1937,9 +1944,9 @@ try {
     r = await api('GET', '/api/popular');
     ok(r.status === 401 && r.j && r.j.error === 'auth', '私密站:/api/popular 不带令牌 → 401', r.j);
     r = await api('GET', '/api/popular?token=' + E.bob);
-    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '大家剧,探测剧,独看剧,两人剧' && Object.keys(r.j.items[0]).sort().join() === 'kind,title', '/api/popular:除调用者外有 1 个别人(每人 ≥120s)就上榜,只给片名;bob 自己那票不算(两人剧只剩 alice,按别人的人数/时长排)', r.j);
+    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '大家剧' && Object.keys(r.j.items[0]).sort().join() === 'kind,title', '/api/popular:除调用者外 ≥2 个别人(每人 ≥120s)才上榜,只给片名;bob 自己那票不算(两人剧只剩 alice 一个别人;探测剧 bob 只看 60s、独看剧只有 alice → 都不上榜)', r.j);
     r = await api('GET', '/api/popular?window=1d&token=' + E.main);
-    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '两人剧,大家剧,探测剧,独看剧', '/api/popular?window=1d → 只有 7 天;主密码只看过大家剧 → 两人剧(2 个别人、600s)排在大家剧(2 个别人、350s)前面', r.j);
+    ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '两人剧,大家剧', '/api/popular?window=1d → 只有 7 天;主密码只看过大家剧 → 两人剧(2 个别人、600s)排在大家剧(2 个别人、350s)前面;只有 1 个别人的探测剧/独看剧不上榜', r.j);
     // 匿名 status 每 IP 30 次/分(前面已用 4 次,含一次 401、一次追更日历)
     let got429 = false, okCount = 4;
     for (let i = 0; i < 31 && !got429; i++) {
