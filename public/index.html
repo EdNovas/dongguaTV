@@ -7671,6 +7671,7 @@
                 player.plugins.hls = hls;
                 try { if (cutSess) window.adCut.hook(hls, cutSess); } catch (e) { }
                 try { if (window.adClipSkip) window.adClipSkip.attach(hls, video); } catch (e) { }   // 🛡️ 去插播:必须在 loadSource 前挂(要收 MANIFEST_PARSED)
+                try { hls.on(Hls.Events.MANIFEST_PARSED, (ev, d) => { try { if (window.vueApp && window.vueApp._srcNoteLevels) window.vueApp._srcNoteLevels(hls.url, d && d.levels); } catch (e) { } }); } catch (e) { }   // 📐 真实分辨率
                 hls.loadSource(video.src);
                 hls.attachMedia(video);
                 player.events.on('destroy', () => { try { hls.destroy(); } catch (e) { } if (player.plugins.hls === hls) delete player.plugins.hls; });
@@ -13268,6 +13269,46 @@
                         if (best) this._srcSetRes(s, best.w, best.h, 'm3u8');
                     } catch (e) { }
                 },
+                // hls.js 的 MANIFEST_PARSED:主清单各档宽高 → 记到正在播的线路。地址要对得上 currentUrl(直连或代理里编码的),
+                //   换源途中旧实例晚到的清单不算
+                _srcNoteLevels(url, levels) {
+                    const s = this.currentSource, cur = this.currentUrl;
+                    if (!s || !cur || !url || !Array.isArray(levels) || !levels.length) return;
+                    if (url !== cur && url.indexOf(encodeURIComponent(cur)) < 0) return;
+                    let best = null;
+                    levels.forEach(l => { const w = +(l && l.width) || 0, h = +(l && l.height) || 0; if (w && h && (!best || w * h > best.w * best.h)) best = { w: w, h: h }; });
+                    if (best) this._srcSetRes(s, best.w, best.h, 'm3u8');
+                },
+                // 测速缓存命中的线路没拉过清单 → 没有分辨率。起播稳定后(8s)在后台补读它们的首集主清单:搜索结果自带选集,
+                //   每条只多一个几百字节的文本请求,2 并发、5s 超时;换剧即停;媒体清单(没写分辨率)本会话不再问
+                _srcResBackfill(sources, seq) {
+                    clearTimeout(this._resBackfillTimer);
+                    this._resBackfillTimer = setTimeout(async () => {
+                        if (seq !== _navSeq) return;
+                        const tried = this._resTried || (this._resTried = new Set());
+                        const todo = (sources || []).filter(s => s && !this._isKzSource(s) && s.vod_play_url && typeof s.latency === 'number' && s.latency < 9000 &&
+                            (s._testType === 'direct' || s._testType === 'proxy') && !this._srcRealRes(s) && !tried.has(s.site_key + '|' + s.vod_id));
+                        const one = async (s) => {
+                            if (seq !== _navSeq) return;
+                            tried.add(s.site_key + '|' + s.vod_id);
+                            let pu = String(s.vod_play_url || '');
+                            if (pu.includes('$$$')) { const sets = pu.split('$$$'); pu = sets.find(x => x.toLowerCase().includes('m3u8')) || sets[0]; }
+                            const parts = pu.split('#')[0].split('$');
+                            const u = parts.length > 1 ? parts[1] : parts[0];
+                            if (!u || !/^https?:/.test(u) || this._isKzUrl(u) || (location.protocol === 'https:' && u.startsWith('http:'))) return;
+                            const viaProxy = s._useProxy && (s._proxyUrl || this.corsProxyUrl);
+                            const fu = viaProxy ? (s._proxyUrl || this.corsProxyUrl) + '/?url=' + encodeURIComponent(u) : u;
+                            const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
+                            try {
+                                const r = await fetch(fu, { cache: 'no-cache', signal: ctl.signal });
+                                if (r.ok) this._srcNoteRes(s, await r.text());
+                            } catch (e) { } finally { clearTimeout(t); }
+                        };
+                        let i = 0;
+                        const worker = async () => { while (i < todo.length && seq === _navSeq) await one(todo[i++]); };
+                        await Promise.all([worker(), worker()]);
+                    }, 8000);
+                },
                 // 播放中补测(主清单没写分辨率的线路):播过 2 分钟后取画面尺寸,隔 1 分钟再看一次一样才记(避开片头插播/中插)
                 _srcResSniffPlay() {
                     try {
@@ -16296,6 +16337,7 @@
                         return source;
                     };
                     await runWithConcurrency(misses, 6, testWorker);
+                    this._srcResBackfill(this.currentGroup && this.currentGroup.sources, _openSeq);   // 📐 缓存命中没测速的线路补读分辨率
                     clearTimeout(earlyReturnTimer);
                     clearTimeout(lateReturnTimer);
                     clearTimeout(earlySettleTimer);   // 完成路径自己选源且不置 hasAutoSelected:残留的复查定时器必须清掉,否则会再切一次
