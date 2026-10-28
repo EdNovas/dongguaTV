@@ -3672,6 +3672,12 @@
             font-weight: 600;
         }
 
+        /* 2K / 4K(实测宽高才会出现):金色 */
+        .src-res.uhd {
+            color: #f5c518;
+            border-color: rgba(245, 197, 24, 0.6);
+        }
+
         .src-geo {
             color: var(--src-unknown);
             border-style: dashed;
@@ -6111,7 +6117,7 @@
                                     <span>{{ source.site_name }}</span>
                                     <span class="latency-dot" :class="getLatencyClass(source.latency)"></span>
                                     <span style="font-size:10px; opacity:0.6;">{{ source.latency }}ms</span>
-                                    <span v-if="srcResLabel(source)" class="src-res" :class="{ hd: srcResRank(source) >= 2 }">{{ srcResLabel(source) }}</span>
+                                    <span v-if="srcResLabel(source)" class="src-res" :class="{ hd: srcResRank(source) >= 2, uhd: srcResRank(source) >= 3 }">{{ srcResLabel(source) }}</span>
                                     <span class="src-tag" :class="'t-' + srcGroupOf(source)">{{ srcTierLabel(source) }}</span>
                                     <span v-if="g.tier === 'unreach' && srcProfile(source).geo" class="src-geo">海外受限</span>
                                 </div>
@@ -10926,7 +10932,7 @@
                     const metaOf = new Map();
                     this.playableSources.forEach(s => {
                         const p = this.srcProfile(s);
-                        metaOf.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(p.res)]);
+                        metaOf.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(this._srcResOf(s, p))]);
                         const gid = (this._srcUnreach(s) || p.tier === 'unknown') ? 'unreach' : SRC_TIER_GROUP[p.tier];
                         (by[gid] = by[gid] || []).push(s);
                     });
@@ -13194,14 +13200,94 @@
                 srcTierRank(s) { return SRC_TIER_RANK[this.srcProfile(s).tier]; },
                 _srcResRankOf(res) {
                     const r = String(res || '').toLowerCase();
-                    return (r.indexOf('4k') >= 0 || r.indexOf('2160') >= 0) ? 3 : r.indexOf('1080') >= 0 ? 2 : r.indexOf('720') >= 0 ? 1 : 0;
+                    return (r.indexOf('4k') >= 0 || r.indexOf('2160') >= 0) ? 4 : (r.indexOf('2k') >= 0 || r.indexOf('1440') >= 0) ? 3 :
+                        r.indexOf('1080') >= 0 ? 2 : r.indexOf('720') >= 0 ? 1 : 0;
                 },
-                srcResRank(s) { return this._srcResRankOf(this.srcProfile(s).res); },
+                srcResRank(s) { return this._srcResRankOf(this._srcResOf(s)); },
                 srcResLabel(s) {
-                    const r = String(this.srcProfile(s).res || '').toLowerCase();
+                    const r = String(this._srcResOf(s) || '').toLowerCase();
                     if (!r) return '';
                     const k = this._srcResRankOf(r);
-                    return k === 3 ? '4K' : k === 2 ? '1080P' : k === 1 ? '720P' : '标清';
+                    return k === 4 ? '4K' : k === 3 ? '2K' : k === 2 ? '1080P' : k === 1 ? '720P' : '标清';
+                },
+                // 📐 真实分辨率:档案里的 res 是"这个站一般是多少"(站点级、手填);资源站片名/分类写的"4K"多数实为 1080P。
+                //   这里优先用【这部剧实测】的宽高:测速拉到的主清单 RESOLUTION(_srcNoteRes),主清单没写的由播放中的画面尺寸补
+                //   (_srcResSniffPlay)。按 站点|vod_id 记在本机(donggua_src_res,30 天),测速缓存命中跳过测速时也能显示。
+                //   按长边/短边分档:宽银幕 3840×1600 仍是 4K,1920×800 仍是 1080P,竖屏 1080×1920 是 1080P
+                _resTagOf(w, h) {
+                    w = +w || 0; h = +h || 0;
+                    if (!w || !h) return '';
+                    const L = Math.max(w, h), S = Math.min(w, h);
+                    return (L >= 3200 || S >= 2000) ? '4k' : (L >= 2400 || S >= 1400) ? '2k' : (L >= 1800 || S >= 1000) ? '1080p' : (L >= 1200 || S >= 700) ? '720p' : 'sd';
+                },
+                _srcResMemo() {
+                    if (!this._resMemo) {
+                        let m = null;
+                        try { m = JSON.parse(localStorage.getItem('donggua_src_res') || 'null'); } catch (e) { }
+                        this._resMemo = (m && typeof m === 'object' && !Array.isArray(m)) ? m : {};
+                    }
+                    return this._resMemo;
+                },
+                _srcRealRes(s) {
+                    if (!s) return null;
+                    if (s._realRes && s._realRes.w) return s._realRes;
+                    if (!s.site_key || s.vod_id == null) return null;
+                    const r = this._srcResMemo()[s.site_key + '|' + s.vod_id];
+                    return (r && r.w && r.h) ? r : null;
+                },
+                _srcResOf(s, p) {
+                    const r = this._srcRealRes(s);
+                    return r ? this._resTagOf(r.w, r.h) : (p || this.srcProfile(s)).res;
+                },
+                // 记一条线路的实测宽高(from:'m3u8' 主清单 | 'play' 播放画面)。主清单写了的不被播放画面覆盖(画面可能正好是插播)
+                _srcSetRes(s, w, h, from) {
+                    w = Math.round(+w || 0); h = Math.round(+h || 0);
+                    if (!s || w < 64 || h < 64 || w > 16384 || h > 16384) return;
+                    const old = this._srcRealRes(s);
+                    if (old && old.from === 'm3u8' && from !== 'm3u8') return;
+                    const r = { w: w, h: h, from: from, ts: Date.now() };
+                    s._realRes = r;
+                    if (s.site_key && s.vod_id != null) {
+                        const m = this._srcResMemo(), now = Date.now(), TTL = 30 * 24 * 3600 * 1000;
+                        m[s.site_key + '|' + s.vod_id] = r;
+                        const ks = Object.keys(m);
+                        ks.forEach(k => { if (!m[k] || now - (m[k].ts || 0) > TTL) delete m[k]; });
+                        const left = Object.keys(m);
+                        if (left.length > 600) left.sort((a, b) => (m[a].ts || 0) - (m[b].ts || 0)).slice(0, left.length - 600).forEach(k => { delete m[k]; });
+                        try { localStorage.setItem('donggua_src_res', JSON.stringify(m)); } catch (e) { }
+                    }
+                    if (!old || old.w !== w || old.h !== h) this.srcRev++;
+                },
+                // 测速拿到的清单正文:主清单(EXT-X-STREAM-INF)取 RESOLUTION 最大的一档;媒体清单没有分辨率信息,不动
+                _srcNoteRes(s, text) {
+                    try {
+                        if (!text || !/#EXT-X-STREAM-INF/i.test(text)) return;
+                        const re = /#EXT-X-STREAM-INF:[^\n]*?RESOLUTION=(\d+)x(\d+)/gi;
+                        let m, best = null;
+                        while ((m = re.exec(text))) { const w = +m[1], h = +m[2]; if (!best || w * h > best.w * best.h) best = { w: w, h: h }; }
+                        if (best) this._srcSetRes(s, best.w, best.h, 'm3u8');
+                    } catch (e) { }
+                },
+                // 播放中补测(主清单没写分辨率的线路):播过 2 分钟后取画面尺寸,隔 1 分钟再看一次一样才记(避开片头插播/中插)
+                _srcResSniffPlay() {
+                    try {
+                        const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                        const s = this.currentSource;
+                        if (!v || !s || this._liveActive || (this._isCasting && this._isCasting())) return;
+                        const t = v.currentTime || 0;
+                        if (t < 120 || !v.videoWidth || !v.videoHeight) return;
+                        const known = this._srcRealRes(s);
+                        if (known && known.from === 'm3u8') return;
+                        const key = (s.site_key || '') + '|' + (s.vod_id == null ? '' : s.vod_id) + '|' + (this.currentUrl || '');
+                        const c = this._resSniff;
+                        const dims = v.videoWidth + 'x' + v.videoHeight;
+                        if (!c || c.key !== key) { this._resSniff = { key: key, dims: dims, t: t, done: false }; return; }
+                        if (c.done) return;
+                        if (c.dims !== dims) { c.dims = dims; c.t = t; return; }
+                        if (t - c.t < 60) return;
+                        c.done = true;
+                        this._srcSetRes(s, v.videoWidth, v.videoHeight, 'play');
+                    } catch (e) { }
                 },
                 // 徽章用的显示分组(clean/insert/unknown/ads;noburn 去广告生效时与 clean 同显示为"无广告")
                 srcGroupOf(s) { return SRC_TIER_GROUP[this.srcProfile(s).tier]; },
@@ -13215,6 +13301,8 @@
                     if (this._srcUnreach(s)) parts.push(SRC_GROUP_BY_ID.unreach.desc);
                     else if (p.geo) parts.push('海外受限：部分地区网络可能无法播放');
                     if (p.codec === 'hevc' && !this._srcHevcOk()) parts.push('H.265 编码：本机浏览器可能无法解码，不会自动选用');
+                    const rr = this._srcRealRes(s);
+                    if (rr) parts.push('分辨率 ' + rr.w + '×' + rr.h + (rr.from === 'play' ? '（播放实测）' : '（片源清单）'));
                     return parts.join('；');
                 },
                 // 本机 MSE 能否解 HEVC(H.265),只探一次。Firefox、不少 Linux/Android Chrome、无硬解的旧 Windows 都不行 ——
@@ -13272,7 +13360,8 @@
                     //   3100ms 含广告 vs 8900ms 无广告会挑那条勉强能通的慢线,慢网用户起播更慢
                     const pool = ok.length ? ok : cands.filter(s => s.latency <= lim);
                     const meta = new Map();
-                    pool.forEach(s => { const p = this.srcProfile(s); meta.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(p.res)]); });
+                    // 分辨率只比到 1080P:2K/4K 码率高,弱网/手机自动起到 4K 容易卡,想看 4K 手动点
+                    pool.forEach(s => { const p = this.srcProfile(s); meta.set(s, [SRC_TIER_RANK[p.tier], Math.min(2, this._srcResRankOf(this._srcResOf(s, p)))]); });
                     return pool.slice().sort((a, b) => {
                         const ma = meta.get(a), mb = meta.get(b);
                         return (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
@@ -17174,6 +17263,7 @@
                             try {
                                 const txt = await testRes.clone().text();   // 中止计时器仍在:正文卡住 5s 照样中止
                                 clearTimeout(timeoutId);
+                                this._srcNoteRes(source, txt);
                                 tBody = Date.now() - startTime;
                                 bodyOK = await this._m3u8HasFragments(txt, videoUrl);
                                 tAll = Date.now() - startTime;
@@ -17206,6 +17296,7 @@
                                 try {
                                     const ptxt = await proxyTestRes.clone().text();
                                     clearTimeout(proxyTimeoutId);
+                                    this._srcNoteRes(source, ptxt);
                                     ptBody = Date.now() - proxyStartTime;
                                     proxyBodyOK = await this._m3u8HasFragments(ptxt, proxyUrl);
                                     ptAll = Date.now() - proxyStartTime;
@@ -19324,6 +19415,7 @@
                                     if (dp.video && window.adClipSkip && window.adClipSkip.check(dp.video.currentTime)) return;
                                     if (dp.video && window.skipManager) window.skipManager.check(dp.video.currentTime);
                                     this._maybePreloadNext();  // ⏭️ 临近结尾时预加载下一集(内部有节流/守卫)
+                                    this._srcResSniffPlay();   // 📐 主清单没写分辨率的线路:按播放画面补测
                                 });
 
                                 dp.on('canplay', () => {
