@@ -43,7 +43,7 @@ const cEnd = html.indexOf('const EARLY_SETTLE_MS = 1200;');
 if (cStart < 0 || cEnd < 0) throw new Error('SRC_* consts not found');
 const consts = html.slice(cStart, cEnd + 'const EARLY_SETTLE_MS = 1200;'.length);
 
-const methods = ['srcProfile', '_srcFilterOn', '_srcClipOn', '_clipNativeBadMap', '_clipNativeBad', '_clipNativeSet', '_srcUnreach', '_kzWorkerOk', 'srcGroupOf', '_srcAdBad', 'srcTierRank', '_srcResRankOf', 'srcResRank', 'srcResLabel', 'srcTierLabel', 'srcTitle',
+const methods = ['srcProfile', '_srcFilterOn', '_srcClipOn', '_clipNativeBadMap', '_clipNativeBad', '_clipNativeSet', '_srcUnreach', '_kzWorkerOk', 'srcGroupOf', '_srcAdBad', 'srcTierRank', '_srcResRankOf', 'srcResRank', 'srcResLabel', 'srcTierLabel', 'srcTitle', '_resTagOf', '_srcResMemo', '_srcRealRes', '_srcResOf', '_srcSetRes', '_srcNoteRes',
     '_srcReachClass', '_pickPreferred', '_autoPick', '_earlyPick', '_srcLogTag', '_failoverNext', '_isKzSource'];
 const computed = ['playableSources', 'sourceGroups', 'availableSources', 'fastSources', 'slowSources'];
 let objSrc = '{\n';
@@ -575,6 +575,59 @@ console.log('[10] splitSameNameWorks');
     ok(/mergeInto\(host, g\.sources\)/.test(html), 'kz 变体片名并组时同站只留一条');
     ok(html.indexOf('splitSameNameWorks(matched)') > 0, '刷新线路也按作品拆');
     ok(html.indexOf('splitSameNameWorks(g.items)') > 0, 'groupedList 按作品拆');
+}
+
+// ===== 5b. 真实分辨率角标 =====
+console.log('[5b] 真实分辨率(4K/2K/1080P/720P/标清)');
+{
+    const ls = {};
+    const { vm } = mk({ ls, profiles: { mgzy: { tier: 'ads', res: '1080p' } } });
+    eq(vm._resTagOf(3840, 2160), '4k', '3840×2160 → 4k');
+    eq(vm._resTagOf(3840, 2074), '4k', '攻壳机动队 3840×2074 → 4k');
+    eq(vm._resTagOf(3840, 1600), '4k', '宽银幕 3840×1600 → 4k');
+    eq(vm._resTagOf(4096, 1716), '4k', 'DCI 4096×1716 → 4k');
+    eq(vm._resTagOf(2560, 1440), '2k', '2560×1440 → 2k');
+    eq(vm._resTagOf(2560, 1080), '2k', '2560×1080 → 2k');
+    eq(vm._resTagOf(1920, 1080), '1080p', '1920×1080 → 1080p');
+    eq(vm._resTagOf(1920, 800), '1080p', '宽银幕 1920×800 → 1080p');
+    eq(vm._resTagOf(1080, 1920), '1080p', '竖屏 1080×1920 → 1080p');
+    eq(vm._resTagOf(1280, 720), '720p', '1280×720 → 720p');
+    eq(vm._resTagOf(1280, 534), '720p', '1280×534 → 720p');
+    eq(vm._resTagOf(854, 480), 'sd', '854×480 → sd');
+    eq(vm._resTagOf(0, 0), '', '无宽高 → 空');
+
+    const m4k = '#EXTM3U\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=8000000,RESOLUTION=1920x1080\n1080/index.m3u8\n#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=20000000,RESOLUTION=3840x2074\n2160/index.m3u8\n';
+    const a = S('mgzy', 'direct', 300, null, '', { vod_id: 77 });
+    eq(vm.srcResLabel(a), '1080P', '没实测 → 用档案 1080P');
+    vm._srcNoteRes(a, m4k);
+    eq(vm.srcResLabel(a), '4K', '主清单最高 3840×2074 → 4K');
+    eq(vm.srcResRank(a), 4, '4K 排序档 4');
+    ok(/分辨率 3840×2074/.test(vm.srcTitle(a)), 'title 带实测宽高');
+    ok(ls.donggua_src_res && JSON.parse(ls.donggua_src_res)['mgzy|77'].w === 3840, '按 站点|vod_id 记到本机');
+    const fresh = S('mgzy', 'direct', 300, null, '', { vod_id: 77 });
+    eq(vm.srcResLabel(fresh), '4K', '新线路对象(测速缓存命中、没测)也认得记下的 4K');
+    const { vm: vm2 } = mk({ ls });
+    eq(vm2.srcResLabel(S('mgzy', 'direct', 300, null, '', { vod_id: 77 })), '4K', '刷新页面后从 localStorage 读回');
+
+    const fake = S('mgzy', 'direct', 300, null, '', { vod_id: 78 });
+    vm._srcNoteRes(fake, '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,RESOLUTION=1920x1080\nindex.m3u8\n');
+    eq(vm.srcResLabel(fake), '1080P', '片名写 4K、清单实为 1920×1080 → 1080P');
+    const media = S('mgzy', 'direct', 300, null, '', { vod_id: 79 });
+    vm._srcNoteRes(media, '#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:6,\na.ts\n#EXT-X-ENDLIST\n');
+    eq(vm._srcRealRes(media), null, '媒体清单没有分辨率 → 不记');
+    vm._srcSetRes(media, 2560, 1440, 'play');
+    eq(vm.srcResLabel(media), '2K', '播放画面 2560×1440 → 2K');
+    vm._srcSetRes(a, 1280, 720, 'play');
+    eq(vm.srcResLabel(a), '4K', '播放画面(可能是插播)不覆盖主清单');
+    vm._srcSetRes(media, 999999, 2, 'play');
+    eq(vm.srcResLabel(media), '2K', '离谱宽高丢弃');
+
+    const p1080 = S('x1080', 'direct', 300, 'ads', '1080p', { vod_id: 1 });
+    const p4k = S('x4k', 'direct', 500, 'ads', '1080p', { vod_id: 2 });
+    vm._srcSetRes(p4k, 3840, 2160, 'm3u8');
+    eq(vm._pickPreferred([p1080, p4k]).site_key, 'x1080', '自动选源:4K 只当 1080P 比,同档按延迟(4K 不自动抢)');
+    const p720 = S('x720', 'direct', 200, 'ads', '720p', { vod_id: 3 });
+    eq(vm._pickPreferred([p720, p4k]).site_key, 'x4k', '自动选源:4K(按 1080P 算)仍优先于 720P');
 }
 
 console.log('\n' + (fail ? 'FAILED' : 'ALL PASSED') + ': ' + pass + ' passed, ' + fail + ' failed');
