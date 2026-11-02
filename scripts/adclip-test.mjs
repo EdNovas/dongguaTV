@@ -719,6 +719,13 @@ const RESUME_CORE = (() => {
     return m ? m[1] : '';
 })();
 ok(/function dgNetShaped\(e\)/.test(RESUME_CORE), 'index.html 有 <dg-resume-core> 段(dgNetShaped)');
+// <dg-hole-core>:[6c] 里和 adClipSkip 同跑(确认插播留下的大缺口它不碰)
+const HOLE_CORE = (() => {
+    const h = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
+    const m = /\/\/ <dg-hole-core>\n([\s\S]*?)\n\s*\/\/ <\/dg-hole-core>/.exec(h);
+    return m ? m[1] : '';
+})();
+ok(/const dgHoleWatch = /.test(HOLE_CORE), 'index.html 有 <dg-hole-core> 段(dgHoleWatch)');
 {
     const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
     const body = RESUME_CORE + '\n' + html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
@@ -1607,7 +1614,7 @@ console.log('[6b] 播放前剪清单端到端');
                 if (cur && !(x >= cur.start - 0.3 && x < cur.start + cur.duration)) { cur = null; progress = 0; }
             },
             get buffered() { return { length: ranges.length, start: i => ranges[i][0], end: i => ranges[i][1] }; },
-            addEventListener() { }
+            addEventListener() { }, removeEventListener() { }
         };
         if (o.startAt) { const i = frags.findIndex(x => o.startAt >= x.start && o.startAt < x.start + x.duration); nextLoad = frags[i].start; addRange(frags[i].start, frags[i].start); }
         let endedFired = false;
@@ -1623,6 +1630,13 @@ console.log('[6b] 播放前剪清单端到端');
         skip.attach(hls, video);
         const st = hls._adClip;
         if (o.override) for (let i = 0; i < ep.g.length; i++) if (ep.g[i][3]) st.overrides[i] = 1;
+        // 🩹 真的 <dg-hole-core> 和 adClipSkip 同跑(同一个假时钟 / 同一个 video):插播留下的大缺口它不该碰
+        let holeW = null;
+        if (o.hole) {
+            const setI = (fn, ms) => { const id = ++tid; const arm = () => timers.push({ id, at: clock + ms, fn: () => { arm(); fn(); } }); arm(); return id; };
+            hls.media = video; hls.levels = null;
+            holeW = new Function('performance', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', HOLE_CORE + '\nreturn dgHoleWatch;')({ now: () => clock }, fakeST, fakeCT, setI, fakeCT)(hls, video, { destroying: 'destroying' });
+        }
         hls.trigger('levelLoaded', { details });
         const get = p => hls.streamController ? hls.streamController.getNextFragment(p, details) : pick(p, details);
         const state = x => tracker.get(x.sn) || 'NOT_LOADED';
@@ -1664,6 +1678,7 @@ console.log('[6b] 播放前剪清单端到端');
                 let s = 0;
                 for (const g of ep.g) { const x0 = Math.max(a, s), x1 = Math.min(b, s + g[0]); if (x1 > x0 && !g[3]) contentLost += x1 - x0; s += g[0]; }
             }
+            if (o.punch) for (let i = 0; i < ranges.length; i++) { const q = ranges[i]; if (q[0] < o.punch[0] && q[1] > o.punch[1]) { ranges.splice(i, 1, [q[0], o.punch[0]], [o.punch[1], q[1]]); break; } }   // 模拟音频淘汰留下的小洞(不会被重新加载)
             const r = rangeAt(video._t);
             if (r) {
                 landing = false;
@@ -1674,7 +1689,9 @@ console.log('[6b] 播放前剪清单端到端');
             runTimers();
         }
         const adFrags = loaded.filter(g => ep.g[g.cc][3]);
-        return { log, reqs, st, maxWatched, stall, landStall, contentLost, maxAhead, adFrags, loaded, passed: video.currentTime >= until, endedFired, seeks: log.filter(x => x[0] === 'seek'), flushes: log.filter(x => x[0] === 'flush') };
+        const holeSkips = holeW ? holeW.skips : null;
+        if (holeW) holeW.stop();
+        return { log, reqs, st, maxWatched, stall, landStall, contentLost, maxAhead, adFrags, loaded, passed: video.currentTime >= until, endedFired, seeks: log.filter(x => x[0] === 'seek'), flushes: log.filter(x => x[0] === 'flush'), holeSkips };
     }
     const hotEp = k => HOT6.find(e => e.key === k);
     const ry1 = hotEp('ruyi_嫁金钗_e1'), dy2 = hotEp('dytt_嫁金钗_e2'), dy1 = hotEp('dytt_嫁金钗_e1'), bf1 = hotEp('baofeng_嫁金钗_e1');
@@ -1734,6 +1751,25 @@ console.log('[6b] 播放前剪清单端到端');
         ok(r3.passed && r3.adFrags.length > 0 && r3.seeks.length === 0, '跳转次数已用完:不再绕开广告(否则到点没人跳)', { passed: r3.passed, ad: r3.adFrags.length });
         const r4 = await runHls(ry1, { rate: 2.5, startAt: ry1Ad.start - 20, until: ry1Ad.end + 5, override: true });
         ok(r4.passed && r4.adFrags.length > 0 && r4.seeks.length === 0, '这段已放弃跳过(overrides):不再绕开', { passed: r4.passed, ad: r4.adFrags.length });
+    }
+    // 🩹 缓冲小洞跳过器同跑:绕开插播留下的大缺口绝不误跳;所有跳转、下载、转圈时长和不挂它时一模一样
+    {
+        for (const [ep, name] of [[ry1, '如意'], [dy2, '电影天堂 1080p'], [dy1, '电影天堂 720p'], [bf1, '暴风']]) {
+            for (const rate of [20, 2.5, 1.2]) {
+                const a = await runHls(ep, { rate }), b = await runHls(ep, { rate, hole: true });
+                ok(b.holeSkips.length === 0, name + ' 整集 rate=' + rate + ':跳过器零动作', b.holeSkips);
+                ok(JSON.stringify(a.seeks) === JSON.stringify(b.seeks) && a.adFrags.length === b.adFrags.length && a.loaded.length === b.loaded.length && a.landStall === b.landStall, name + ' 整集 rate=' + rate + ':挂不挂跳过器,跳转和下载都一样', { a: a.seeks, b: b.seeks });
+            }
+        }
+        const r = await runHls(ry1, { rate: 2.5, startAt: ry1Ad.start - 20, until: ry1Ad.end + 5, noCheck: [ry1Ad.start - 5, ry1Ad.start + 8], hole: true });
+        ok(r.passed && r.holeSkips.length === 0 && r.adFrags.length > 0, '到点 check 没跳、停在大缺口前:跳过器不碰,走安全阀把广告下下来', { passed: r.passed, skips: r.holeSkips });
+        const r2 = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start + 5, until: ry1Ad.end + 5, hole: true });
+        ok(r2.passed && r2.holeSkips.length === 0 && r2.seeks.length >= 1, '拖进广告中间:跳过器不碰', { passed: r2.passed, skips: r2.holeSkips });
+        // 对照:同样的模拟里真有小洞时它确实在工作(上面的"零动作"不是因为没跑)
+        const p0 = await runHls(ry1, { rate: 20, until: 200, punch: [150.2, 150.35] });
+        ok(!p0.passed, '小洞对照:不挂跳过器永久卡在洞前', p0.seeks);
+        const p1 = await runHls(ry1, { rate: 20, until: 200, punch: [150.2, 150.35], hole: true });
+        ok(p1.passed && p1.holeSkips.length === 1 && p1.holeSkips[0].at === 150.2 && p1.holeSkips[0].to === 150.36, '小洞对照:挂上之后跳到下一段 +0.01,接着播', p1.holeSkips);
     }
     // 两段广告离得近:第一段之后的正片够了就停,不去碰第二段
     {

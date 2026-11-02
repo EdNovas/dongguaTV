@@ -519,6 +519,7 @@ cp /opt/dongguaTV/db.json /root/backup/
 | `node scripts/worker-test.mjs` | Worker 去广告规则 |
 | `node scripts/adclip-test.mjs` | 播放器剪插播（真实清单回放） |
 | `node scripts/hls-cut-test.mjs` | 剪后清单服务器托管 |
+| `node scripts/hole-skip-test.mjs` | 缓冲小洞跳过器（不误跳欠载、暂停、拖动、插播缺口） |
 | `node scripts/source-list-test.mjs` | 线路分组、拆卡、去重、测速缓存 |
 | `node scripts/site-profiles-test.mjs` | 线路档案 |
 | `node scripts/kazumi-test.mjs` | 番剧规则源 |

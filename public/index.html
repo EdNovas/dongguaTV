@@ -7656,6 +7656,65 @@
                 return isiOS || isSafari;
             } catch (e) { return false; }
         })();
+        // 🩹 缓冲小洞跳过器(hls.js 通道)。音频 SourceBuffer 撞满后往回 seek,Chrome 腾空间时可能删掉分片边界处 0.1~0.2s 的音频:视频还在,video.buffered(音视频交集)出现小洞。
+        //    hls.js 1.1.5 不管它:洞 ≤0.2s 时 bufferPadding 让它认为该片还在,不重新加载;该片不是 partial,_tryFixBufferStall 的跳洞分支不走;nudge 要求 len>maxBufferHole(0.1s),
+        //    而 Chrome 停在洞前约 0.1s → 永久卡死、转圈。来回按方向键也出不去,总停回同一点。
+        //    这里自己轮询判定,并在 waiting 时提前看一眼。不靠 BUFFER_STALLED_ERROR:它是一次性的(nudge / 跳洞把 stalled 清掉后 stallReported 不复位),再卡就不发了。
+        //    全部满足才跳:没暂停、没在 seek、没结束;currentTime 连续约 350ms 没动且 readyState<3;距当前段尾 ≤0.3s(Chrome 停在洞前约 0.1s,不能卡得太死)或不在任何段内;下一段起点 ≤1s。
+        //    其余一律不动:网络欠载(后面没缓冲、或隔得很远)、段中间停住(解码慢)、已判定插播不下载留下的大缺口(20s 起,归 adClipSkip)、直播和投屏。
+        //    跳转幅度 ≤1s:adClipSkip._onSeeking(<2s 不算用户拖动)、dmResync(2s 容差)都不受影响。hls 销毁或被顶替就停,切集/切源/重建不留定时器。任何异常都当没发生。
+        //    scripts/hole-skip-test.mjs 按这对标记抽出来在 node 里跑 —— 段内只用参数和定时器,不碰页面变量。
+        // <dg-hole-core>
+        const DG_HOLE = { POLL: 250, STILL: 350, TAIL: 0.3, NEAR: 1, PAD: 0.01 };
+        // 播放头 t 卡住时该跳到哪(b = TimeRanges 形状);不该跳返回 null
+        const dgHoleTarget = (t, b) => {
+            if (!b || !Number.isFinite(t)) return null;
+            for (let i = 0; i < b.length; i++) {
+                const s = b.start(i), e = b.end(i);
+                if (t < s) return s - t <= DG_HOLE.NEAR ? s + DG_HOLE.PAD : null;   // 不在任何段内
+                if (t > e) continue;
+                if (e - t > DG_HOLE.TAIL || i + 1 >= b.length) return null;   // 段中间停住 / 后面没有缓冲(网络欠载)
+                const n = b.start(i + 1);
+                return n - t <= DG_HOLE.NEAR ? n + DG_HOLE.PAD : null;
+            }
+            return null;   // 比所有缓冲都靠后(网络欠载)
+        };
+        const dgHoleWatch = (hls, video, o) => {
+            o = o || {};
+            let lastT = NaN, since = 0, poll = 0, soon = 0, dead = false;
+            const self = { skips: [], stop: null, tick: null };
+            const onWaiting = () => { self.tick(); clearTimeout(soon); soon = setTimeout(self.tick, DG_HOLE.STILL + 10); };
+            self.stop = () => {
+                if (dead) return;
+                dead = true;
+                try { clearInterval(poll); clearTimeout(soon); video.removeEventListener('waiting', onWaiting); } catch (e) { }
+            };
+            self.tick = () => {
+                if (dead) return;
+                try {
+                    if (!hls.media || (o.gone && o.gone())) return self.stop();
+                    const t = video.currentTime, now = performance.now(), moved = !(Math.abs(t - lastT) < 0.01);
+                    if (moved) lastT = t;
+                    if (moved || video.error || video.paused || video.seeking || video.ended || video.readyState >= 3 || !(video.playbackRate > 0)) { since = now; return; }
+                    const to = dgHoleTarget(t, video.buffered);
+                    if (to == null) { since = now; return; }   // 还不是小洞的样子(等数据):数据到了再从头计时,先让 hls.js 和浏览器自己接上(起播时 hls.js 会自己跳开头的小洞)
+                    if (now - since < DG_HOLE.STILL) return;
+                    const lv = hls.levels ? hls.levels[hls.currentLevel] : null;
+                    if ((lv && lv.details && lv.details.live) || (o.off && o.off())) return;
+                    if (self.skips.length < 50) self.skips.push({ at: +t.toFixed(3), to: +to.toFixed(3), still: Math.round(now - since) });
+                    since = now;
+                    video.currentTime = to;
+                    if (o.log) o.log(t, to);
+                } catch (e) { }
+            };
+            try {
+                hls.on(o.destroying, self.stop);
+                video.addEventListener('waiting', onWaiting);
+                poll = setInterval(self.tick, DG_HOLE.POLL);
+            } catch (e) { self.stop(); }
+            return self;
+        };
+        // </dg-hole-core>
         window._dgHlsCustomType = function (video, player) {
             try {
                 if (window._dgPreferNativeHls || !window.Hls || !Hls.isSupported()) {   // 原生通道(DPlayer 已设好 video.src)
@@ -7674,6 +7733,14 @@
                 try { hls.on(Hls.Events.MANIFEST_PARSED, (ev, d) => { try { if (window.vueApp && window.vueApp._srcNoteLevels) window.vueApp._srcNoteLevels(hls.url, d && d.levels); } catch (e) { } }); } catch (e) { }   // 📐 真实分辨率
                 hls.loadSource(video.src);
                 hls.attachMedia(video);
+                try {   // 🩹 缓冲小洞跳过器:hls 销毁或被顶替就停
+                    hls._dgHole = dgHoleWatch(hls, video, {
+                        destroying: Hls.Events.DESTROYING,
+                        gone: () => player.plugins.hls !== hls,
+                        off: () => { const v = window.vueApp; return !!(v && (v._liveActive || (v._isCasting && v._isCasting()))); },
+                        log: (t, to) => console.log('[播放器] 🩹 跳过缓冲小洞 ' + t.toFixed(3) + ' → ' + to.toFixed(3))
+                    });
+                } catch (e) { }
                 player.events.on('destroy', () => { try { hls.destroy(); } catch (e) { } if (player.plugins.hls === hls) delete player.plugins.hls; });
             } catch (e) { console.warn('[播放器] hls.js 接管失败,回退浏览器原生 HLS:', e && e.message); }
         };
@@ -7754,7 +7821,13 @@
                 // backBufferLength:90 —— 1.1.5 默认 Infinity 把已播部分永远留在 SourceBuffer,10 分钟上下就撞 Chrome 的 12MB 音频/
                 //   150MB 视频上限交给浏览器自己 GC;另据 hls.js #7367,Chrome/Edge 138+ 改了 QuotaExceededError 的类型,1.1.5 可能认不出来而当成
                 //   致命 bufferAppendError → 站内错误链误判换源(该点未在本机单独验证)。自己只留 90s 后向缓冲就基本走不到这条路(回拖 >90s 重拉分片即可)。
-                return { loader: window._OfflineHlsLoader, pLoader: window._CutHlsLoader || window._OfflineHlsLoader, backBufferLength: 90 };
+                // maxMaxBufferLength:120 —— 默认 600。前向目标 = min(max(8×maxBufferSize÷声明码率, maxBufferLength), maxMaxBufferLength),主清单声明 BANDWIDTH 低的线路
+                //   (如意/1080/西瓜都是 800000)算出来就是 600s,而音频约 130kbps 存到约 590s 就撞 Chrome 的 12MB 上限(QuotaExceededError),之后往回 seek 可能留下
+                //   0.1~0.2s 的音频小洞,hls.js 1.1.5 不补也不跳,永久卡死。前向 120s + 后向 90s 正常播放撞不到上限,也少下很多预加载(如意每次打开约 53MB→11MB,推算值)。
+                //   只影响声明码率 <4Mbps 的线路;无主清单线路仍是 30s;adClipSkip.BIG_BUFFER=75 小于它,不受影响。
+                //   ⚠️ 这里只减少触发,不能单独解决:back buffer 清理只删播放头身后 90s 以外的数据,不删前方的旧段,连续往回远跳后音频仍会累积到约 593s,照样出洞 —— 兜底靠 dgHoleWatch。
+                //   代价:断网后能续播的时长从最多约 10 分钟降到 2 分钟。
+                return { loader: window._OfflineHlsLoader, pLoader: window._CutHlsLoader || window._OfflineHlsLoader, backBufferLength: 90, maxMaxBufferLength: 120 };
             } catch (e) { return {}; }
         }
         // 🛡️ 去插播:按"分辨率突变"跳过藏在正片里的插播广告(判定核心 libs/js/ad-clip-core.js,回归 scripts/adclip-test.mjs)。
