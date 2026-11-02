@@ -1547,7 +1547,9 @@ console.log('[6b] 播放前剪清单端到端');
         ok(E.adCut.attachNative(v4, {}) === false && v4.src === MEDIA, '服务器不能托管(hls_cut:false)→ 不接管 src');
     }
 
-    // ============ 6c) hls.js 通道:主动探头 + 清缓冲(模拟 hls.js 按顺序加载:rate = 带宽 / 码率) ============
+    // ============ 6c) hls.js 通道:主动探头 + 不下载已判定的插播 + 清缓冲 ============
+    // 取片逻辑照抄 hls.js 1.1.5 的 doTickIdle:bufferInfo.end 只算播放头所在那段连续缓冲;getNextFragment 取覆盖该位置的分片;
+    //   分片已 OK 且 nextLoadPosition 更靠后 → 用 nextLoadPosition 再取一次(这条路径不封顶的话,跳过广告后会一路下完整集)。rate = 带宽 / 码率
     console.log('[6c] hls.js 通道');
     const HOT6 = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/hot-2026-11.json'), 'utf8')).episodes;
     async function runHls(ep, o = {}) {
@@ -1557,7 +1559,7 @@ console.log('[6b] 播放前剪清单端到端');
             const n = Math.max(1, Math.round(x[0] / 4));
             for (let k = 0; k < n; k++) { frags.push({ sn: sn++, cc: gi, start: tt, duration: x[0] / n, url: 'https://cdn.example/hls/s' + gi + '_' + k + '.ts', k }); tt += x[0] / n; }
         });
-        const total = tt;
+        const total = tt, details = { live: false, fragments: frags };
         const reqs = [];
         const fetchStub = async (url, op) => {
             reqs.push([url, op && op.headers && op.headers.Range]);
@@ -1571,38 +1573,43 @@ console.log('[6b] 播放前剪清单端到端');
         const fakeST = (fn, ms) => { const id = ++tid; timers.push({ id, at: clock + (ms || 0), fn }); return id; };
         const fakeCT = id => { const i = timers.findIndex(x => x.id === id); if (i >= 0) timers.splice(i, 1); };
         const runTimers = () => { for (; ;) { const i = timers.findIndex(x => x.at <= clock); if (i < 0) break; const x = timers.splice(i, 1)[0]; try { x.fn(); } catch (e) { } } };
-        const log = [];
-        // hls.js 加载模型:从 ptr 起顺序加载,预加载窗口 maxBufferLength;首片解析完发事件。seek 到未缓冲处 = 从那里重新加载
-        const hooks = {};
+        const log = [], hooks = {};
+        const tracker = new Map();
+        const pick = (pos, d) => { const ls = d.fragments; if (pos <= ls[0].start) return ls[0]; return ls.find(x => pos >= x.start - 0.001 && pos < x.start + x.duration - 0.001) || null; };
         const hls = {
             config: { maxBufferLength: 30, _dgCut: o.sess || undefined },
-            on(e, f) { (hooks[e] = hooks[e] || []).push(f); },
-            off(e, f) { hooks[e] = (hooks[e] || []).filter(x => x !== f); },
+            streamController: o.noHook ? undefined : { fragmentTracker: { getState: x => tracker.get(x.sn) || 'NOT_LOADED' }, getNextFragment: pick },
+            on(e, h) { (hooks[e] = hooks[e] || []).push(h); },
+            off(e, h) { hooks[e] = (hooks[e] || []).filter(x => x !== h); },
             trigger(e, d) {
                 if (e === 'bufferFlushing') {
                     log.push(['flush', +d.startOffset.toFixed(2), +d.endOffset.toFixed(2), d.type]);
-                    if (!o.noFlushedEvent) { const fl = (hooks.bufferFlushed || []).slice(); fl.forEach(f => f(e, { type: 'audio' })); log.push(['audioFlushed']); fl.forEach(f => f(e, { type: 'video' })); }
+                    if (!o.noFlushedEvent) { const fl = (hooks.bufferFlushed || []).slice(); fl.forEach(h => h(e, { type: 'audio' })); log.push(['audioFlushed']); fl.forEach(h => h(e, { type: 'video' })); }
                     return;
                 }
-                (hooks[e] || []).slice().forEach(f => f(e, d));
+                (hooks[e] || []).slice().forEach(h => h(e, d));
             }
         };
-        const HlsStub = { Events: { MANIFEST_PARSED: 'manifestParsed', LEVEL_LOADED: 'levelLoaded', FRAG_PARSED: 'fragParsed', FRAG_PARSING_INIT_SEGMENT: 'initSeg', INIT_PTS_FOUND: 'initPts', DESTROYING: 'destroying', BUFFER_FLUSHING: 'bufferFlushing', BUFFER_FLUSHED: 'bufferFlushed' } };
-        let ptr = 0, progress = 0, bufS = 0, bufE = 0;
-        const seenCc = new Set();
+        const HlsStub = { Events: { MANIFEST_PARSED: 'manifestParsed', LEVEL_LOADED: 'levelLoaded', FRAG_LOADING: 'fragLoading', FRAG_PARSED: 'fragParsed', FRAG_PARSING_INIT_SEGMENT: 'initSeg', INIT_PTS_FOUND: 'initPts', DESTROYING: 'destroying', BUFFER_FLUSHING: 'bufferFlushing', BUFFER_FLUSHED: 'bufferFlushed' } };
+        // 缓冲 = 若干不连续的区间(绕开广告后中间有空洞)
+        let ranges = [], cur = null, progress = 0, nextLoad = 0;
+        const addRange = (a, b) => { ranges.push([a, b]); ranges.sort((x, y) => x[0] - y[0]); const m = []; for (const r of ranges) { const l = m[m.length - 1]; if (l && r[0] <= l[1] + 0.01) l[1] = Math.max(l[1], r[1]); else m.push(r.slice()); } ranges = m; };
+        const rangeAt = x => ranges.find(r => x >= r[0] - 0.001 && x < r[1] - 0.01);
+        const bufEnd = x => { const r = ranges.find(q => x >= q[0] - 0.1 && x <= q[1] + 0.1); return r ? Math.max(x, r[1]) : x; };
+        let landing = false, landStall = 0;
         const video = {
             src: 'blob:x', _t: o.startAt || 0, playbackRate: 1, paused: false, seeking: false, ended: false, duration: total,
-            get readyState() { return this._t < bufE - 0.01 ? 4 : 2; },
+            get readyState() { return rangeAt(this._t) ? 4 : 2; },
             get currentTime() { return this._t; },
             set currentTime(x) {
                 log.push(['seek', +this._t.toFixed(2), +x.toFixed(2)]);
-                this._t = x;
-                if (!(x >= bufS && x < bufE)) { let i = frags.findIndex(f => x >= f.start && x < f.start + f.duration); if (i < 0) i = frags.length; ptr = i; progress = 0; bufS = bufE = i < frags.length ? frags[i].start : total; }
+                this._t = x; landing = true;
+                if (cur && !(x >= cur.start - 0.3 && x < cur.start + cur.duration)) { cur = null; progress = 0; }
             },
-            get buffered() { return { length: 1, start: () => bufS, end: () => bufE }; },
+            get buffered() { return { length: ranges.length, start: i => ranges[i][0], end: i => ranges[i][1] }; },
             addEventListener() { }
         };
-        if (o.startAt) { const i = frags.findIndex(f => o.startAt >= f.start && o.startAt < f.start + f.duration); ptr = i; bufS = bufE = frags[i].start; }
+        if (o.startAt) { const i = frags.findIndex(x => o.startAt >= x.start && o.startAt < x.start + x.duration); nextLoad = frags[i].start; addRange(frags[i].start, frags[i].start); }
         let endedFired = false;
         const dpStub = { video, plugins: { hls }, container: null, seek(x) { video.currentTime = x; }, notice() { }, events: { trigger(e) { if (e === 'ended') endedFired = true; } }, bar: { set() { } }, danmaku: null };
         const win = { AdClipCore: C, AdFilter: { isEnabled: () => true }, fetch: fetchStub, Hls: HlsStub };
@@ -1612,77 +1619,127 @@ console.log('[6b] 播放前剪清单端到端');
             body + '\nreturn window.adClipSkip;');
         const skip = make(win, C, dpStub, ls, ss, { now: () => clock }, fetchStub, 1, URL, AbortController, { log() { }, warn() { } }, docStub, navStub, fakeST, fakeCT, HlsStub);
         skip.vue = { _playToken: 1, _activePlaySeq: 1, _liveActive: false, _activeKz: null, _isCasting: () => false, _outroSkipped: false, currentSource: { site_key: 'x' }, _activeOffCached: !!o.offCached };
+        if (o.maxActions != null) skip.MAX_ACTIONS = o.maxActions;
         skip.attach(hls, video);
         const st = hls._adClip;
-        hls.trigger('levelLoaded', { details: { live: false, fragments: frags } });
+        if (o.override) for (let i = 0; i < ep.g.length; i++) if (ep.g[i][3]) st.overrides[i] = 1;
+        hls.trigger('levelLoaded', { details });
+        const get = p => hls.streamController ? hls.streamController.getNextFragment(p, details) : pick(p, details);
+        const state = x => tracker.get(x.sn) || 'NOT_LOADED';
+        const seenCc = new Set(), loaded = [];
         const tick = () => new Promise(r => setImmediate(r));
         const adAt = x => { let s = 0; for (const g of ep.g) { if (x >= s && x < s + g[0]) return !!g[3]; s += g[0]; } return false; };
         const until = o.until != null ? o.until : total - 0.3;
-        let watched = 0, maxWatched = 0, stall = 0, steps = 0, contentLost = 0;
-        while (!endedFired && video.currentTime < until && steps++ < 200000) {
-            // 加载
+        let watched = 0, maxWatched = 0, stall = 0, steps = 0, contentLost = 0, maxAhead = 0;
+        while (!endedFired && video.currentTime < until && steps++ < 60000) {
+            // doTickIdle
             let budget = 0.25 * (o.rate || 20);
-            while (budget > 0 && ptr < frags.length && bufE - video._t < hls.config.maxBufferLength) {
-                const f = frags[ptr], need = f.duration - progress;
+            while (budget > 0) {
+                if (!cur) {
+                    const be = bufEnd(video._t);
+                    if (be - video._t >= hls.config.maxBufferLength) break;
+                    let g = get(be);
+                    if (g && state(g) === 'OK' && nextLoad > be) g = get(nextLoad);
+                    if (!g || state(g) === 'OK') break;
+                    cur = g; progress = 0; nextLoad = g.start + g.duration;
+                    loaded.push(g);
+                    hls.trigger('fragLoading', { frag: g });
+                }
+                const need = cur.duration - progress;
                 if (budget < need) { progress += budget; budget = 0; break; }
-                budget -= need; progress = 0; ptr++; bufE = f.start + f.duration;
-                const x = ep.g[f.cc];
-                if (x[1]) hls.trigger('initSeg', { id: 'main', frag: f, tracks: { video: { metadata: { width: +x[1].split('x')[0], height: +x[1].split('x')[1] } } } });
-                if (!seenCc.has(f.cc) && x[2] != null) { seenCc.add(f.cc); hls.trigger('initPts', { id: 'main', frag: f, initPTS: (x[2] - f.start) * 90000, timescale: 90000 }); }
+                budget -= need;
+                const g = cur; cur = null; progress = 0;
+                addRange(g.start, g.start + g.duration); tracker.set(g.sn, 'OK');
+                const x = ep.g[g.cc];
+                if (x[1]) hls.trigger('initSeg', { id: 'main', frag: g, tracks: { video: { metadata: { width: +x[1].split('x')[0], height: +x[1].split('x')[1] } } } });
+                if (!seenCc.has(g.cc) && x[2] != null) { seenCc.add(g.cc); hls.trigger('initPts', { id: 'main', frag: g, initPTS: (x[2] - g.start) * 90000, timescale: 90000 }); }
                 hls.trigger('fragParsed', {});
             }
+            if (ranges.length) maxAhead = Math.max(maxAhead, ranges[ranges.length - 1][1] - video._t);
             const before = video.currentTime;
-            skip.check(before);
+            if (!(o.noCheck && before >= o.noCheck[0] && before < o.noCheck[1])) skip.check(before);
             for (let k = 0; k < 3; k++) await tick();
             if (video.currentTime !== before) {   // 这个 tick 跳了:越过的正片算误伤(落点余量之外)
                 const a = before, b = video.currentTime;
                 let s = 0;
                 for (const g of ep.g) { const x0 = Math.max(a, s), x1 = Math.min(b, s + g[0]); if (x1 > x0 && !g[3]) contentLost += x1 - x0; s += g[0]; }
             }
-            if (video._t < bufE - 0.01) {
+            const r = rangeAt(video._t);
+            if (r) {
+                landing = false;
                 if (adAt(video._t)) { watched += 0.25; maxWatched = Math.max(maxWatched, watched); } else watched = 0;
-                video._t += 0.25;
-            } else stall += 0.25;
+                video._t = Math.min(video._t + 0.25, r[1]);
+            } else { stall += 0.25; if (landing) landStall += 0.25; }
             clock += 250;
             runTimers();
         }
-        return { log, reqs, st, maxWatched, stall, contentLost, seeks: log.filter(x => x[0] === 'seek'), flushes: log.filter(x => x[0] === 'flush') };
+        const adFrags = loaded.filter(g => ep.g[g.cc][3]);
+        return { log, reqs, st, maxWatched, stall, landStall, contentLost, maxAhead, adFrags, loaded, passed: video.currentTime >= until, endedFired, seeks: log.filter(x => x[0] === 'seek'), flushes: log.filter(x => x[0] === 'flush') };
     }
     const hotEp = k => HOT6.find(e => e.key === k);
     const ry1 = hotEp('ruyi_嫁金钗_e1'), dy2 = hotEp('dytt_嫁金钗_e2'), dy1 = hotEp('dytt_嫁金钗_e1'), bf1 = hotEp('baofeng_嫁金钗_e1');
     ok(ry1 && dy2 && dy1 && bf1, '夹具里有 嫁金钗 如意/电影天堂/暴风 e1/e2');
     const ry1Ad = (() => { let s = 0; for (const g of ry1.g) { if (g[3]) return { start: s, end: s + g[0] }; s += g[0]; } })();
-    // 弱网(带宽 ≈ 码率 1.2 倍):以前要等 hls.js 把广告 + 下一组都解析完才判得了,20s 广告实测看了 15.3s
+    // 弱网(带宽 ≈ 码率 1.2 倍):以前 20s 广告看 15.3s;清缓冲 + 主动探头后不放广告了但落点没缓冲,要转一个分片的圈;现在广告压根不下载,正片提前缓冲好
     let rh = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 10 });
     ok(rh.maxWatched <= 1, '弱网:如意 20s 中插实际看到 <= 1s', { watched: rh.maxWatched, seeks: rh.seeks });
+    ok(rh.adFrags.length === 0, '弱网:已判定的插播一片都不下载', rh.adFrags.map(x => x.sn));
+    ok(rh.landStall === 0, '弱网:落点已缓冲好,跳过去不转圈', { landStall: rh.landStall, seeks: rh.seeks });
+    ok(rh.flushes.length === 0, '广告没下载过:不用清缓冲', rh.flushes);
     ok(rh.reqs.length > 0 && rh.reqs.every(x => x[1] === 'bytes=0-16383'), '弱网:主动探头只读每组首片前 16KB', rh.reqs.slice(0, 3));
-    ok(rh.seeks.length === 1 && Math.abs(rh.seeks[0][2] - ry1Ad.end - 0.1) < 0.01, '弱网:落点 = 段后 + 0.1s(没缓冲也立刻跳)', rh.seeks);
+    ok(rh.seeks.length === 1 && Math.abs(rh.seeks[0][2] - ry1Ad.end - 0.1) < 0.01, '弱网:落点 = 段后 + 0.1s', rh.seeks);
     ok(rh.contentLost < 0.5, '弱网:没吃正片', rh.contentLost);
-    // 探头被 CDN 拒绝 → 立刻停手,不影响播放,回到只靠 hls.js 事件(弱网下广告会看到一些,但仍会跳过)
+    // 探头被 CDN 拒绝 → 判定不了 → 广告照常下载:退回"解析完再跳",不影响播放
     rh = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 10, status: 403 });
     ok(rh.reqs.length <= 2 && rh.st.failed === true, 'CDN 403:本实例不再探(最多并发那 2 个请求)', rh.reqs.length);
-    ok(rh.seeks.length >= 1 && rh.maxWatched > 1, 'CDN 403:退回 hls.js 事件(这就是主动探头解决的那段等待)', { watched: rh.maxWatched, seeks: rh.seeks });
-    // 普通网速:跳之前先清掉这一段的缓冲,清完才 seek;范围 = 整段(两组广告也是一个范围)
-    rh = await runHls(ry1, { rate: 20, until: ry1Ad.end + 5 });
+    ok(rh.seeks.length >= 1 && rh.maxWatched > 1 && rh.adFrags.length > 0, 'CDN 403:退回 hls.js 事件(广告照常下载,解析完再跳)', { watched: rh.maxWatched, seeks: rh.seeks });
+    // 广告已经下载进缓冲(换片钩子挂不上 / 判定晚了):跳之前先清掉这一段,清完才 seek;范围 = 整段(两组广告也是一个范围)
+    rh = await runHls(ry1, { rate: 20, until: ry1Ad.end + 5, noHook: true });
+    ok(rh.adFrags.length > 0, '没有 streamController → 退回下载广告,不报错', rh.adFrags.length);
     ok(rh.flushes.length === 1 && Math.abs(rh.flushes[0][1] - ry1Ad.start) < 0.01 && Math.abs(rh.flushes[0][2] - ry1Ad.end) < 0.01 && rh.flushes[0][3] === null, '清缓冲范围 = 插播段(音视频都清)', rh.flushes);
     ok(rh.log.findIndex(x => x[0] === 'flush') < rh.log.findIndex(x => x[0] === 'seek') && rh.seeks.length === 1, '先清缓冲后 seek', rh.log.slice(0, 4));
     ok(rh.log.findIndex(x => x[0] === 'audioFlushed') < rh.log.findIndex(x => x[0] === 'seek'), '要等视频也删完才 seek(音频的 BUFFER_FLUSHED 不算)', rh.log.slice(0, 4));
-    ok(rh.maxWatched <= 1, '普通网速:实际看到 <= 1s', rh.maxWatched);
-    rh = await runHls(ry1, { rate: 20, until: ry1Ad.end + 5, noFlushedEvent: true });
+    ok(rh.maxWatched <= 1, '广告在缓冲里:实际看到 <= 1s', rh.maxWatched);
+    rh = await runHls(ry1, { rate: 20, until: ry1Ad.end + 5, noHook: true, noFlushedEvent: true });
     ok(rh.seeks.length === 1 && rh.maxWatched <= 1, 'BUFFER_FLUSHED 没来 → 150ms 后照样 seek', { seeks: rh.seeks, watched: rh.maxWatched });
-    // 整集(含 P 模式跨两组 / R 模式 / 暴风两段):全中、不误伤、弱网下也一样
+    // 整集(含 P 模式跨两组 / R 模式 / 暴风两段):中插一片不下载、跳过去不转圈、不误伤;预加载总量不失控
     for (const [ep, name] of [[ry1, '如意'], [dy2, '电影天堂 1080p(同分辨率跨两组)'], [dy1, '电影天堂 720p'], [bf1, '暴风']]) {
-        const midRuns = ep.g.filter((x, i) => x[3] && !(i > 0 && ep.g[i - 1][3]) && !ep.g.slice(i).every(y => y[3])).length;
-        for (const rate of [20, 1.2]) {
+        const isTail = i => ep.g.slice(i).every(y => y[3]);
+        const midRuns = ep.g.filter((x, i) => x[3] && !(i > 0 && ep.g[i - 1][3]) && !isTail(i)).length;
+        let maxAd = 0, curAd = 0;
+        for (const x of ep.g) { curAd = x[3] ? curAd + x[0] : 0; maxAd = Math.max(maxAd, curAd); }
+        for (const rate of [20, 2.5, 1.2]) {
             const r = await runHls(ep, { rate });
-            ok(r.seeks.length === midRuns && r.flushes.length === midRuns, name + ' 整集 rate=' + rate + ':每段中插都先清缓冲再跳', { seeks: r.seeks, flushes: r.flushes, midRuns });
+            const midAd = r.adFrags.filter(g => !isTail(g.cc));
+            ok(r.seeks.length === midRuns, name + ' 整集 rate=' + rate + ':每段中插都跳', { seeks: r.seeks, midRuns });
+            ok(midAd.length === 0 && r.flushes.length === 0, name + ' 整集 rate=' + rate + ':中插一片不下载、不用清缓冲', { n: midAd.length, flushes: r.flushes });
+            ok(r.landStall === 0, name + ' 整集 rate=' + rate + ':跳过去不转圈', r.landStall);
             ok(r.maxWatched <= 1, name + ' 整集 rate=' + rate + ':每段实际看到 <= 1s', r.maxWatched);
             ok(r.contentLost < 0.5 * Math.max(1, r.seeks.length), name + ' 整集 rate=' + rate + ':没吃正片', r.contentLost);
+            ok(r.maxAhead <= 30 + maxAd + 15, name + ' 整集 rate=' + rate + ':预加载不失控(段前 + 段后 <= 窗口)', r.maxAhead);
         }
     }
     {
-        const sf = await runHls(dy2, { rate: 20, until: 400 });
-        ok(sf.flushes.length === 1 && sf.flushes[0][2] - sf.flushes[0][1] > 19 && sf.flushes[0][2] - sf.flushes[0][1] < 19.2, '两组广告只清一次,范围覆盖两组(19.07s)', sf.flushes);
+        const r = await runHls(dy2, { rate: 20, until: 400, noHook: true });
+        ok(r.flushes.length === 1 && r.flushes[0][2] - r.flushes[0][1] > 19 && r.flushes[0][2] - r.flushes[0][1] < 19.2, '两组广告只清一次,范围覆盖两组(19.07s)', r.flushes);
+    }
+    // 安全阀:绝不卡死在广告留下的空洞前
+    {
+        const r = await runHls(ry1, { rate: 2.5, startAt: ry1Ad.start - 20, until: ry1Ad.end + 5, noCheck: [ry1Ad.start - 5, ry1Ad.start + 8] });
+        ok(r.passed && r.adFrags.length > 0, '到点 check 没跳(停在空洞前)→ 还原,把广告下下来接着播', { passed: r.passed, ad: r.adFrags.length, stall: r.stall });
+        ok(r.stall <= 12, '…停顿只有下载广告首片那一下', r.stall);
+        const r2 = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start + 5, until: ry1Ad.end + 5 });
+        ok(r2.passed && r2.seeks.length >= 1 && r2.maxWatched <= 8, '拖进广告中间:照常下载 → 判定 → 跳出去,不卡死', { passed: r2.passed, seeks: r2.seeks, watched: r2.maxWatched });
+        const r3 = await runHls(ry1, { rate: 2.5, startAt: ry1Ad.start - 20, until: ry1Ad.end + 5, maxActions: 0 });
+        ok(r3.passed && r3.adFrags.length > 0 && r3.seeks.length === 0, '跳转次数已用完:不再绕开广告(否则到点没人跳)', { passed: r3.passed, ad: r3.adFrags.length });
+        const r4 = await runHls(ry1, { rate: 2.5, startAt: ry1Ad.start - 20, until: ry1Ad.end + 5, override: true });
+        ok(r4.passed && r4.adFrags.length > 0 && r4.seeks.length === 0, '这段已放弃跳过(overrides):不再绕开', { passed: r4.passed, ad: r4.adFrags.length });
+    }
+    // 两段广告离得近:第一段之后的正片够了就停,不去碰第二段
+    {
+        const ep = { g: [[60, '1920x1080', 1.48, 0], [20, '1280x720', 1.4667, 1], [15, '1920x1080', 61.48, 0], [20, '1280x720', 1.4667, 1], [200, '1920x1080', 76.48, 0]] };
+        const r = await runHls(ep, { rate: 2.5 });
+        ok(r.seeks.length === 2 && r.adFrags.length === 0 && r.landStall === 0 && r.contentLost < 1, '相邻两段广告:都绕开、都跳过', { seeks: r.seeks, ad: r.adFrags.length, land: r.landStall, lost: r.contentLost });
     }
     // 播放前整集扫完(sess.full)→ 播放中不再探;没扫全 → 探
     rh = await runHls(ry1, { rate: 20, until: 200, sess: { full: true } });
@@ -1691,13 +1748,19 @@ console.log('[6b] 播放前剪清单端到端');
     ok(rh.reqs.length > 0, '播放前没扫全:播放中继续探', rh.reqs.length);
     rh = await runHls(ry1, { rate: 20, until: 200, offCached: true });
     ok(rh.reqs.length === 0, '离线副本:不去网络上探', rh.reqs.length);
-    // hls.js 的 sn 从 MEDIA-SEQUENCE 起算:探头的下标要减掉首片 sn
+    // hls.js 的 sn 从 MEDIA-SEQUENCE 起算:探头和换片的下标都要减掉首片 sn
     rh = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 5, startSN: 1000 });
-    ok(rh.reqs.length > 0 && rh.maxWatched <= 1, 'MEDIA-SEQUENCE 非 0:探头地址照样对', { reqs: rh.reqs.length, watched: rh.maxWatched });
+    ok(rh.reqs.length > 0 && rh.maxWatched <= 1 && rh.adFrags.length === 0 && rh.landStall === 0, 'MEDIA-SEQUENCE 非 0:探头地址和换片都对', { reqs: rh.reqs.length, watched: rh.maxWatched, ad: rh.adFrags.length, land: rh.landStall });
     // 探到的值让位给 hls.js 真解析的(不算"一组两种分辨率"被打成 mixed)
     {
         const r = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 40 });
         ok(!Object.values(r.st.res).includes(C.MIXED), '探头 + hls.js 事件:没有组被误标 mixed', r.st.res);
+    }
+    // 换片钩子依赖 hls.min.js 内部方法:换版本时这里先报警(_hookLoad 自己也会静默退回下载广告)
+    {
+        const hm = fs.readFileSync(path.join(ROOT, 'public/libs/js/hls.min.js'), 'utf8');
+        ok(/\.getNextFragment=function\(/.test(hm) && /this\.getNextFragment\(g,d\)/.test(hm) && /this\.streamController=new /.test(hm) && /NOT_LOADED="NOT_LOADED"/.test(hm) && /\.getState=function\(/.test(hm), 'hls.min.js 还有 streamController.getNextFragment / fragmentTracker.getState(换片钩子的前提)');
+        ok(/addEventListener\('waiting'/.test(body) && /this\._hookLoad\(st, hls\)/.test(body), '接线:attach 挂换片钩子;waiting 时也判一次(走到空洞前马上跳)');
     }
 }
 

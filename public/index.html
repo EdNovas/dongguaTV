@@ -7789,13 +7789,16 @@
                     attempts: Object.create(null), pendKey: null,
                     actions: 0, lastActAt: -1e9, selfTo: null, selfAt: 0, endedFired: false, lastWhy: '', lastRes: '', mainRes: '',
                     lastT: 0, startFromZero: null, userSeeked: false, bufRaised: false, bufOrig: null,
-                    done: Object.create(null), busy: Object.create(null), tries: Object.create(null), probed: Object.create(null), inflight: 0, probeFails: 0, aborts: new Set()
+                    done: Object.create(null), busy: Object.create(null), tries: Object.create(null), probed: Object.create(null), inflight: 0, probeFails: 0, aborts: new Set(),
+                    loadedCc: Object.create(null), hopKey: '', hops: 0, stallSince: 0
                 };
             },
             _hookSeeking(video) {
                 if (video && !video._adClipSeekHooked) {
                     video._adClipSeekHooked = true;
                     video.addEventListener('seeking', () => { try { window.adClipSkip._onSeeking(video); } catch (e) { } });
+                    // 缓冲走到没下载的插播跟前会停在那里(_nextFrag):timeupdate 可能差一拍,这里也判一次,马上跳过去
+                    video.addEventListener('waiting', () => { try { const s = window.adClipSkip, st = s._cur(); if (st && st.hopKey && !st.native) s.check(video.currentTime); } catch (e) { } });
                 }
             },
             // 每个 hls 实例创建时挂一次(_dgHlsCustomType 是全站唯一的 new Hls 处:首建/切集/切源/分诊换代理都经过它)
@@ -7804,6 +7807,8 @@
                 if (video && video._adClipNative) this._nativeKill(video._adClipNative);   // 同一个 <video> 之前走过原生通道
                 const E = Hls.Events;
                 const st = hls._adClip = this._newState(hls, video);
+                this._hookLoad(st, hls);
+                hls.on(E.FRAG_LOADING, (ev, d) => { try { if (d && d.frag) st.loadedCc[d.frag.cc] = 1; } catch (e) { } });
                 const rebuild = () => { try { if (window.AdClipCore) st.groups = AdClipCore.groupsFromFrags(st.frags); } catch (e) { } };
                 hls.on(E.MANIFEST_PARSED, (ev, d) => { try { st.multi = !!(d && d.levels && d.levels.length > 1); } catch (e) { } });
                 hls.on(E.LEVEL_LOADED, (ev, d) => {
@@ -8036,13 +8041,85 @@
                 const gs = st.groups, t = v.currentTime || 0;
                 const gi = AdClipCore.findGroup(gs, t);
                 if (gi < 0) return;
-                const front = t + this.NATIVE_LOOK;
+                const front = this._bufEnd(v, t) + this.NATIVE_LOOK;   // 从缓冲尽头算:hls.js 接下来要的是那里的分片,要赶在它开始下载之前判定
                 for (let i = Math.max(0, gi - this.NATIVE_BEHIND); i < gs.length && st.inflight < this.NATIVE_CONC; i++) {
                     const g = gs[i];
                     if (g.start > front) break;
                     if ((st.res[g.cc] && st.off[g.cc] != null) || st.done[g.cc] || st.busy[g.cc] || (st.tries[g.cc] || 0) >= 2) continue;
                     this._nativeProbe(st, g);
                 }
+            },
+            // 播放头所在那段连续缓冲的尽头(hls.js 从这里往后要分片)
+            _bufEnd(v, t) {
+                try {
+                    const b = v.buffered;
+                    for (let i = 0; i < b.length; i++) if (t >= b.start(i) - 0.2 && t <= b.end(i) + 0.2) return Math.max(t, b.end(i));
+                } catch (e) { }
+                return t;
+            },
+            // 🛰️ 前方已判定是插播 → 不下载它,直接缓冲段后的正片。否则 hls.js 按顺序下完广告才轮到正片,弱网时跳过去还没缓冲,要转一个分片的圈
+            //   (2026-11 实测:带宽 ≈ 码率 2.5 倍卡 1.5s、1.2 倍卡 3.4s)。只换"下一个要下载的分片":doTickIdle 每 tick 问 getNextFragment,这里包一层
+            //   (hls.min.js 是仓库里固定的 1.1.5;换版本后没有这个方法就什么都不做,退回下载广告再跳)。
+            //   安全阀:视频停在空洞前 0.6s 还没被 check 跳走,或播放头已在段内 → 还原成 hls.js 自己的选择,把广告照常下下来,绝不卡死在空洞前
+            _hookLoad(st, hls) {
+                const sc = hls.streamController;
+                if (!sc || typeof sc.getNextFragment !== 'function' || !sc.fragmentTracker) return;
+                const orig = sc.getNextFragment, self = this;
+                sc.getNextFragment = function (pos, details) {
+                    const f = orig.call(this, pos, details);
+                    try { return self._nextFrag(st, this, f, details); } catch (e) { return f; }
+                };
+            },
+            // 播放头前方最近的一段"已判定要跳"的插播:判定和到点时的 check 同一套(decide,把段起点当播放头);最近的怪组判不了 → null(宁可照常下载)
+            _runAhead(st) {
+                const vue = this.vue, v = st.video;
+                if (!vue || !v || st.dead || st.live || st.multi || st.actions >= this.MAX_ACTIONS || !this.enabled()) return null;
+                if (st.tok !== vue._playToken || vue._activePlaySeq !== _navSeq || vue._liveActive || (vue._isCasting && vue._isCasting())) return null;
+                // 安全阀:走到空洞前本来就会停一下,check 马上跳过去;停住超过 0.6s 还没跳走 → 不再换片
+                if (v.readyState < 3 && !v.seeking) {
+                    const now = performance.now();
+                    if (!st.stallSince) st.stallSince = now;
+                    if (now - st.stallSince > 600) return null;
+                } else st.stallSince = 0;
+                const gs = st.groups, t = v.currentTime || 0;
+                const gi = AdClipCore.findGroup(gs, t);
+                if (gi < 0) return null;
+                // 播放头在段内:拖进来的这段照常下载、由 check 跳出去(seek 要等落点有数据才能完成,绕开它就永远完成不了);
+                //   只有正常播放刚走到段起点(0.3s 内,check 这一拍就会跳)才仍算"前方"
+                const i0 = (!v.seeking && t - gs[gi].start < 0.3) ? gi : gi + 1;
+                const front = this._bufEnd(v, t) + this.NATIVE_LOOK;
+                for (let i = i0; i < gs.length && gs[i].start <= front; i++) {
+                    const g = gs[i];
+                    if (!this._isOdd(st, g, st.res[g.cc], st.off[g.cc])) continue;
+                    const d = AdClipCore.decide(gs, cc => st.res[cc], g.start, this.OPT, { offOf: cc => st.off[cc], overridden: x => !!st.overrides[x.cc], freshStart: false, rate: 1 });
+                    return (d.act === 'seek' && d.run && d.run.g0 === i) ? d.run : null;
+                }
+                return null;
+            },
+            // hls.js 下一个要下载的是插播(或已越过它)→ 换成段后第一个还没缓冲的分片。段前已缓冲 + 段后 ≤ 预加载窗口:doTickIdle 只看到段前那一截,
+            //   不在这里封顶就会一路下完整集;下一段插播也不碰。够了返回 null,hls.js 这一 tick 什么都不做
+            _nextFrag(st, sc, f, details) {
+                if (!f || f.sn === 'initSegment') return f;
+                const run = this._runAhead(st);
+                if (!run || f.start < run.start - 0.05) return f;
+                const gs = st.groups, next = gs[run.g1 + 1], list = details.fragments;
+                if (!next || !list || !list.length) return f;
+                const room = (st.hls.config.maxBufferLength || 30) - Math.max(0, run.start - (st.video.currentTime || 0));
+                for (let i = next.sn0 - list[0].sn; i >= 0 && i < list.length; i++) {
+                    const x = list[i];
+                    if (x.start - next.start >= room) return null;
+                    if (x.cc !== next.cc) {
+                        const gx = gs.find(g => g.cc === x.cc);
+                        if (gx && this._isOdd(st, gx, st.res[x.cc], st.off[x.cc])) return null;
+                    }
+                    const state = sc.fragmentTracker.getState(x);
+                    if (state === 'APPENDING') return null;
+                    if (state === 'NOT_LOADED' || state === 'PARTIAL') {
+                        if (st.hopKey !== run.key) { st.hopKey = run.key; st.hops++; console.log('[去插播] 前方 ' + run.start.toFixed(1) + '+' + run.dur.toFixed(1) + 's 是插播:不下载,直接缓冲段后正片'); }
+                        return x;
+                    }
+                }
+                return null;
             },
             async _nativeProbe(st, g) {
                 const cc = g.cc;
@@ -8167,7 +8244,9 @@
             //   正好带走重叠的广告帧、留下正片首帧,实测 5ms 删完、0 广告帧、不用重载。删不掉就照常 seek
             _seekPast(st, run, to) {
                 const h = st.hls;
-                if (st.native || !h || !window.Hls) return this._seek(to);
+                let loaded = false;   // 这一段压根没下载过(_nextFrag 绕开了)就不用删,也免得白白触发 hls.js 重载正片首片
+                for (let i = run.g0; i <= run.g1; i++) if (st.groups[i] && st.loadedCc[st.groups[i].cc]) loaded = true;
+                if (st.native || !h || !window.Hls || !loaded) return this._seek(to);
                 let done = false, timer = 0;
                 const go = (ev, d) => {
                     if (done || (d && d.type === 'audio')) return;   // 音视频各发一次 BUFFER_FLUSHED:要等视频删完(残留的正是视频帧)
@@ -8281,7 +8360,7 @@
                 return {
                     channel: st.native ? ('原生 HLS' + (st.failed ? '(读不到清单/分片)' : st.unsupported ? '(加密/fMP4,不支持)' : st.netWait ? '(网络未就绪,等恢复)' : '') + ' 已探 ' + Object.keys(st.done).length + ' 组') : 'hls.js',
                     enabled: this.enabled(), live: st.live, multi: st.multi, groups: st.groups.length, resByDur: by, mainRes: st.mainRes,
-                    ptsKnown: Object.keys(st.off).length, actions: st.actions, overrides: Object.keys(st.overrides), lastWhy: st.lastWhy,
+                    ptsKnown: Object.keys(st.off).length, actions: st.actions, hops: st.hops, overrides: Object.keys(st.overrides), lastWhy: st.lastWhy,
                     freshStart: !!st.startFromZero && !st.userSeeked, bufRaised: st.bufRaised
                 };
             }
