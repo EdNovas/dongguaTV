@@ -32,7 +32,8 @@
 // v39: 预缓存 libs/js/qrcode-generator.min.js?v=2.0.4(截帧分享卡片的二维码库;页面首次用到才按需加载,预缓存让它走 SWR、断网也能生成)。
 // v40: 升版只为让 install 重新预缓存 './' 与 './index.html'(v39 之后 index.html 改过多次没升版;总在 ?play= 深链上刷新的 iPad 一直启动旧外壳)。
 //      这一版页面:iOS 长时间后台回来的恢复(剪后清单重交/重接、原生扫描网络重试、覆盖层重排 + 首页隐藏)、播放页开着时新 SW 推迟刷新。
-const CACHE_VERSION = 'v40';
+// v41: ad-clip-core v7(短剧放宽占比上限;计划缓存随版本作废)。
+const CACHE_VERSION = 'v41';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -51,7 +52,7 @@ const STATIC_URLS = [
     './libs/js/bootstrap.bundle.min.js',
     './libs/js/hls.min.js?v=1.1.5-lc1',
     './libs/js/kz-titlematch.js?v=1',   // v29: defer 脚本必须预缓存走 SWR,否则弱网下 Network-First 会拖住其后的 DPlayer/DOMContentLoaded
-    './libs/js/ad-clip-core.js?v=6',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs);v34: v5(播放前剪清单);v35: v6
+    './libs/js/ad-clip-core.js?v=7',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs);v34: v5(播放前剪清单);v35: v6
     './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
     './libs/js/DPlayer.min.js'

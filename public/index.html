@@ -89,7 +89,7 @@
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
     <script data-cfasync="false" src="libs/js/kz-titlematch.js?v=1" defer></script>   <!-- 🎌 Kazumi 源片名归一化/并组(服务端 lib/kazumi 共用同一文件) -->
-    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=6" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
+    <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=7" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
@@ -7788,7 +7788,8 @@
                     tok: vue ? vue._playToken : null, overrides: Object.create(null), skipped: Object.create(null),
                     attempts: Object.create(null), pendKey: null,
                     actions: 0, lastActAt: -1e9, selfTo: null, selfAt: 0, endedFired: false, lastWhy: '', lastRes: '', mainRes: '',
-                    lastT: 0, startFromZero: null, userSeeked: false, bufRaised: false, bufOrig: null
+                    lastT: 0, startFromZero: null, userSeeked: false, bufRaised: false, bufOrig: null,
+                    done: Object.create(null), busy: Object.create(null), tries: Object.create(null), probed: Object.create(null), inflight: 0, probeFails: 0, aborts: new Set()
                 };
             },
             _hookSeeking(video) {
@@ -7815,7 +7816,8 @@
                         const m = d.tracks && d.tracks.video && d.tracks.video.metadata;
                         if (!m || !(m.width > 0 && m.height > 0)) return;
                         const k = m.width + 'x' + m.height, cc = d.frag.cc, old = st.res[cc];
-                        st.res[cc] = (old && old !== k) ? AdClipCore.MIXED : k;
+                        st.res[cc] = (old && old !== k && !st.probed[cc]) ? AdClipCore.MIXED : k;   // 探头探到的值让位给真解析的(不算"一组两种分辨率")
+                        st.probed[cc] = 0;
                         if (st.lastRes && k !== st.lastRes) console.log('[去插播] 分辨率 ' + st.lastRes + '→' + k + ' cc' + cc + ' @' + (+d.frag.start).toFixed(1) + 's');
                         st.lastRes = k;
                         this._adjustBuffer(st, cc);
@@ -7829,7 +7831,7 @@
                         this._adjustBuffer(st, d.frag.cc);
                     } catch (e) { }
                 });
-                hls.on(E.DESTROYING, () => { st.dead = true; });
+                hls.on(E.DESTROYING, () => { st.dead = true; try { st.aborts.forEach(k => k()); st.aborts.clear(); } catch (e) { } });
                 this._hookSeeking(video);
             },
             // 📱 原生 HLS 通道:DPlayer 已把 video.src 设成要播的地址(worker 过滤后的 / 直连的),这里拉同一个地址
@@ -7995,6 +7997,7 @@
             // 只探"往回两组 ~ 往前 75s"里还没探过的组,同时最多 2 个;只在真的开始播了以后才探(不和起播抢带宽)
             _nativePump(st) {
                 if (!st || st.dead || st.failed) return;
+                if (!st.native) return this._scanAhead(st);
                 // 🌙 因"网络没就绪"停下的:网络回来了(可见或在播、在线、过了退避时间)就自己接着跑 —— 不必等 revive()
                 //   (离开不到 60s 就回来、画中画里一直隐藏,都没人叫它;以前这样就整集停扫)
                 if (st.netWait) {
@@ -8017,12 +8020,38 @@
                     this._nativeProbe(st, g);
                 }
             },
+            // hls.js 通道也主动探前方的组(与原生同样的窗口和并发),不等 hls.js 把广告下载完:它按顺序加载,网速只比码率略高时,要把整支广告
+            //   和后面的正片都解析完才判得了(右侧封口 + 架桥),这期间广告一直在播(2026-11 实测:带宽 ≈ 码率 1.2 倍,20s 广告看了 15.3s)。
+            //   播放前已整集扫完(sess.full)就不用再探;读不到(加密 / fMP4 / CDN 拒绝)就停手,回到只靠 hls.js 事件
+            _scanAhead(st) {
+                if (st.live || st.multi || !st.frags || !st.frags.length || !st.groups.length || st.probeFails >= 6) return;
+                if (st.netWait) {
+                    if (this._netNotReady(st) || performance.now() < (st.netWaitUntil || 0)) return;
+                    st.netWait = false;
+                }
+                const sess = st.hls && st.hls.config && st.hls.config._dgCut;
+                if ((sess && sess.full) || (this.vue && this.vue._activeOffCached)) return;   // 离线副本:分片在本地库,不去网络上探
+                const v = st.video;
+                if (!v || v.readyState < 2 || v.ended) return;
+                const gs = st.groups, t = v.currentTime || 0;
+                const gi = AdClipCore.findGroup(gs, t);
+                if (gi < 0) return;
+                const front = t + this.NATIVE_LOOK;
+                for (let i = Math.max(0, gi - this.NATIVE_BEHIND); i < gs.length && st.inflight < this.NATIVE_CONC; i++) {
+                    const g = gs[i];
+                    if (g.start > front) break;
+                    if ((st.res[g.cc] && st.off[g.cc] != null) || st.done[g.cc] || st.busy[g.cc] || (st.tries[g.cc] || 0) >= 2) continue;
+                    this._nativeProbe(st, g);
+                }
+            },
             async _nativeProbe(st, g) {
                 const cc = g.cc;
                 st.busy[cc] = 1; st.inflight++;
                 st.tries[cc] = (st.tries[cc] || 0) + 1;
                 try {
-                    const url = st.frags[g.sn0] && st.frags[g.sn0].url;
+                    // hls.js 的 Fragment.sn 从 MEDIA-SEQUENCE 起算,要减掉首片的 sn 才是下标(原生通道自己解析的从 0 起,减了也一样)
+                    const f0 = st.frags && st.frags[g.sn0 - ((st.frags[0] && st.frags[0].sn) || 0)];
+                    const url = f0 && f0.url;
                     if (!url) { st.done[cc] = 1; return; }
                     let p = null;
                     for (const n of [this.NATIVE_HEAD, this.NATIVE_HEAD * 4]) {
@@ -8039,13 +8068,17 @@
                     }
                     if (p.width > 0 && p.height > 0) {
                         const k = p.width + 'x' + p.height;
-                        if (st.lastRes && k !== st.lastRes) console.log('[去插播] 分辨率 ' + st.lastRes + '→' + k + ' cc' + cc + ' @' + g.start.toFixed(1) + 's');
-                        st.res[cc] = k; st.lastRes = k;
+                        if (st.native) {
+                            if (st.lastRes && k !== st.lastRes) console.log('[去插播] 分辨率 ' + st.lastRes + '→' + k + ' cc' + cc + ' @' + g.start.toFixed(1) + 's');
+                            st.res[cc] = k; st.lastRes = k;
+                        } else if (!st.res[cc]) { st.res[cc] = k; st.probed[cc] = 1; }   // hls.js 通道:真解析出来的优先,探到的只补空
                     }
-                    st.off[cc] = p.pts - g.start;
+                    if (st.native || st.off[cc] == null) st.off[cc] = p.pts - g.start;
                     if (!st.reportedOk) { st.reportedOk = true; this._nativeReport(st, true); }
                 } catch (e) {
                     if (st.dead) return;
+                    // hls.js 通道:CDN 拒绝探测 → 本实例不再探,别连累真实播放的分片请求
+                    if (!st.native && /^HTTP (403|429)$/.test((e && e.message) || '')) { st.failed = true; return; }
                     // 🌙 网络形状的失败(TypeError / 超时中止),且页面在后台没在播 / 断网 / 刚从后台回来 30s 内:这次不算
                     //   (退还尝试次数、不记失败),停 2s 再探(_nativePump 到点自己接着跑)。HTTP 4xx/5xx 是真回应,照常记
                     if (dgNetShaped(e) && (this._netNotReady(st) || this._justResumed())) {
@@ -8129,6 +8162,27 @@
                     this._seek(to);
                 }
             },
+            // hls.js 通道跳过一段插播:先把它从 SourceBuffer 删掉再 seek。不删的话 Chrome 从落点解码时会先出广告末帧,全屏静止 ~1.7s,直到正片
+            //   下一个关键帧才换掉(2026-11 实测:落点放到段后 1s 也一样,广告和正片在交界处有 ~0.1s 帧重叠)。删到 run.end(= 正片首片 start)
+            //   正好带走重叠的广告帧、留下正片首帧,实测 5ms 删完、0 广告帧、不用重载。删不掉就照常 seek
+            _seekPast(st, run, to) {
+                const h = st.hls;
+                if (st.native || !h || !window.Hls) return this._seek(to);
+                let done = false, timer = 0;
+                const go = (ev, d) => {
+                    if (done || (d && d.type === 'audio')) return;   // 音视频各发一次 BUFFER_FLUSHED:要等视频删完(残留的正是视频帧)
+                    done = true;
+                    clearTimeout(timer);
+                    try { h.off(Hls.Events.BUFFER_FLUSHED, go); } catch (e) { }
+                    if (!st.dead) this._seek(to);
+                };
+                try {
+                    const nx = st.groups[run.g1 + 1];   // 活 Fragment 的 start 修正后两边可能差一点:绝不删过正片首片的起点(删到它首帧之后 MSE 会连带删到下一个关键帧)
+                    h.on(Hls.Events.BUFFER_FLUSHED, go);
+                    timer = setTimeout(go, 150);
+                    h.trigger(Hls.Events.BUFFER_FLUSHING, { startOffset: run.start, endOffset: nx ? Math.min(run.end, nx.start) : run.end, type: null });
+                } catch (e) { go(); }
+            },
             // seek 落点必须已缓冲(INIT_SEGMENT 在数据真正 append 之前就到;落点未缓冲 / 交界有空洞会卡 ~2s)
             _landing(v, to) {
                 try {
@@ -8149,7 +8203,7 @@
                     if (vue._liveActive || (vue._activeKz && vue._activeKz.type === 'mp4') || (vue._isCasting && vue._isCasting())) return false;
                     if (st.tok !== vue._playToken || vue._activePlaySeq !== _navSeq) return false;
                     const v = dp.video;
-                    if (st.native) this._nativePump(st);   // 原生通道:边播边探前方的组(内部只补缺,没缺就什么都不做)
+                    this._nativePump(st);   // 边播边探前方的组(内部只补缺,没缺就什么都不做)
                     if (!v || v.paused || v.seeking || v.readyState < 2 || !isFinite(v.duration)) return false;
                     if (st.startFromZero === null) st.startFromZero = t < 3 && !st.userSeeked;
                     st.lastT = t;
@@ -8170,10 +8224,9 @@
                             (d.run.bridge != null ? ' 架桥残差 ' + d.run.bridge.toFixed(2) + 's' : ''));
                     }
                     if (d.act === 'seek') {
-                        // 落点还没缓冲:下个 tick 再试(这几百毫秒仍在广告里)。原生通道不等:浏览器自己的缓冲不受我们控制、
-                        //   预加载窗口也不会因为前面是广告而加大,等它缓冲到段后会把整段广告放完
-                        const to = st.native ? d.to : this._landing(v, d.to);
-                        if (to == null) return false;
+                        // 落点已缓冲就用缓冲里的位置;没缓冲也立刻跳,不等(等它缓冲到段后会把广告放完;宁可转一下圈也不放广告)
+                        const buffered = st.native ? null : this._landing(v, d.to);
+                        const to = buffered == null ? d.to : buffered;
                         const ccs = [];
                         for (let i = d.run.g0; i <= d.run.g1; i++) ccs.push(st.groups[i].cc);
                         if ((st.attempts[d.run.key] = (st.attempts[d.run.key] || 0) + 1) > this.MAX_ATTEMPTS) {
@@ -8184,7 +8237,7 @@
                         ccs.forEach(cc => { st.skipped[cc] = ccs; });
                         st.pendKey = d.run.key;
                         st.actions++; st.lastActAt = now; st.selfTo = to; st.selfAt = now; st.lastT = to;
-                        this._seek(to);   // 静默:不提示、不给放行按钮(用户要求广告不以任何形式出现)
+                        this._seekPast(st, d.run, to);   // 静默:不提示、不给放行按钮(用户要求广告不以任何形式出现)
                         this._learn(vue);
                         return true;
                     }
@@ -8237,7 +8290,7 @@
         //   做法:媒体清单交给播放器之前,读每个 DISCONTINUITY 组首个分片的前 16KB(AdClipCore.probeTs:首帧 PTS + 分辨率),用与播放中
         //   跳过同一套规则(AdClipCore.planCuts → decide:分辨率突变 / 时间戳重启 + 架桥 / 熔断 / 片头片尾)算出插播段,再逐段复核
         //   (被剪组的末片与首片是同一支片子),然后把这些组从清单里删掉 —— 时长和进度条里就没有广告了。
-        //   · 只对需要的站做:档案标了 clip 的(如意、电影天堂:worker 删不掉 / 源站封 worker)+ 本机播放中真的跳到过插播的站(自动学会,
+        //   · 只对需要的站做:档案标了 clip 的(如意:worker 删不掉;电影天堂、非凡:源站封 worker)+ 本机播放中真的跳到过插播的站(自动学会,
         //     30 天)。其余站照常只靠 CF Worker:不扫描、不多等。
         //   · 代价:每集 ~120 个 16KB 请求(约 2MB);实测加拿大出口 0.9-2.2s,国内更快。预算 BUDGET,到点按已探到的部分剪,剩下的由
         //     播放中的静默跳过兜底;结果按清单指纹缓存(会话内 + 本机 30 天),分诊换线 / 重开 / 续看不再重扫;下一集在本集最后 2 分钟预扫。
@@ -8461,6 +8514,7 @@
                 const hard = this.BUDGET + this.VERIFY_MS + 1000;
                 const work = this.plan(text, baseUrl, sess.site).then(r => {
                     if (sess.dead || sess.late || !r) return null;
+                    if (r.full && !r.soft) sess.full = true;   // 整集都扫过且复核做完:播放中不用再探(adClipSkip._scanAhead)
                     this._last = { site: sess.site, cuts: r.cuts, removedDur: r.removedDur, known: r.known, groups: r.groups, ms: r.ms, cached: r.cached, channel: 'hls.js' };
                     if (!r.text) return null;
                     sess.result = r;

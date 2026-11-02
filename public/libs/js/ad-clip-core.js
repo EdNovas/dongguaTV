@@ -1,5 +1,5 @@
 /*!
- * ad-clip-core.js v6 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
+ * ad-clip-core.js v7 —— 插播广告判定(纯函数,零依赖,ES2017,UMD:浏览器 window.AdClipCore / Node require)。
  * 不碰 DOM、不碰 hls 实例;运行时包装在 public/index.html 的 window.adClipSkip,回归测试 scripts/adclip-test.mjs。
  *
  * 为什么要它:CF Worker 只能按清单删插播(看 DISCONTINUITY 分组的时长/目录/域名)。如意(rycj)把 20-22 秒的棋牌广告
@@ -18,7 +18,8 @@
  *   P 模式(时间戳):分辨率与主相同,但首帧 PTS 重新开始(+ 后面接着同一时钟的组,电影天堂一支广告切成两组)且前后架桥成立。
  *   片头(第一组):只在"刚开始播、没拖动过"时、≤15s 才跳(R 模式);片尾(最后一组):必须 PTS 重新开始、≤25s。
  *   左侧未知(拖进/续看落在段中):必须 PTS 重新开始 + 更强的主分辨率证据。
- *   段长 ≤60s、≤全片 10%;已知内容里非主分辨率 / 重新开始的组合计 >12% → 熔断不跳(片源本身就花)。
+ *   段长 ≤60s、≤全片 10%(短剧 <10 分钟且分辨率不同 + PTS 重新开始时放宽到 35%:如意《折腰》86 集每集 1.5-5 分钟,22s 广告占 14-26%);
+ *   已知内容里非主分辨率 / 重新开始的组合计 >12% → 熔断不跳(片源本身就花)。
  *
  * 输入:
  *   groups  = groupsFromFrags(hls 的 level details.fragments) —— 按 cc 切出的连续组
@@ -38,6 +39,8 @@
         landPad: 0.1,        // 落点 = 插播段后第一组起点 + 0.1s(躲 DISCONTINUITY 交界的音视频小空洞)
         maxRun: 60,          // 一段插播最长(实测 5.25-44s)
         maxRunFrac: 0.10,    // 也不得超过全片 10%(实测单段最多 4.3%)
+        shortEp: 600,        // 短剧:整集 <10 分钟时,分辨率不同 + PTS 重新开始的段放宽到 shortRunFrac(证据够强,时长占比本来就高)
+        shortRunFrac: 0.35,
         minRun: 0.5,         // 太短的不值得 seek
         minMainKnown: 30,    // 主分辨率至少已确认 30s
         mainVsRun: 2,        // 且至少是候选段的 2 倍
@@ -54,7 +57,8 @@
         clockTol: 0.5,       // 相邻两组 PTS 偏移差 ≤0.5s = 同一时钟(实测同一支广告/同一段正片的组之间差 0.000s)
         fuseShare: 0.12,     // 已知内容里"非主分辨率 + PTS 重新开始"合计占比上限
         fuseMinKnown: 300,   //   已知 ≥300s 才启用熔断(太少时占比没意义,交给证据规则)
-        maxCutShare: 0.15    // planCuts:整集剪掉的总时长上限(实测单集插播合计最多 ~4%)
+        maxCutShare: 0.15,   // planCuts:整集剪掉的总时长上限(实测单集插播合计最多 ~4%)
+        shortCutShare: 0.35  //   短剧同样放宽
     };
 
     // hls.js 的 fragments → 按 cc 切成连续组。必须用 hls 实例里的【活】Fragment(FRAG_PARSED 后 start 会按 PTS 修正:
@@ -229,7 +233,7 @@
 
         if (run.dur < o.minRun) return out('none', 'too-short');
         if (run.dur > o.maxRun) return out('none', 'too-long');
-        if (run.dur > o.maxRunFrac * total) return out('none', 'too-large-share');
+        if (run.dur > ((total < o.shortEp && mode === 'res' && restart(groups[g0])) ? o.shortRunFrac : o.maxRunFrac) * total) return out('none', 'too-large-share');
 
         // 片头:只在刚开始播(没拖动/续看)时跳,且 ≤15s;PTS 帮不上(正片自己也从 ~1.4s 开始)。动画 OP、片头 logo 多在 15s 以上
         if (atStart) {
@@ -321,7 +325,7 @@
             m.start = groups[m.g0].start; m.end = groups[m.g1].end; m.dur = m.end - m.start;
             cut += m.dur;
         });
-        if (!(total > 0) || cut > (o.maxCutShare || 0.15) * total) return [];
+        if (!(total > 0) || cut > (total < o.shortEp ? o.shortCutShare : (o.maxCutShare || 0.15)) * total) return [];
         return merged;
     }
 
@@ -558,7 +562,7 @@
         } catch (e) { return null; }
     }
 
-    return { VERSION: 6, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
+    return { VERSION: 7, DEF: DEF, MIXED: MIXED, groupsFromFrags: groupsFromFrags, findGroup: findGroup, stats: stats, sameRes: sameRes, decide: decide, probeTs: probeTs,
         planCuts: planCuts, cutPlaylist: cutPlaylist, toCutTime: toCutTime, fromCutTime: fromCutTime,
         parseMedia: parseMedia, fingerprint: fingerprint, groupConsistent: groupConsistent };
 }));

@@ -71,6 +71,9 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     eq(P.profileFor(S('rycj', 'https://cj.rycjapi.com/api.php/provide/vod')),
         { tier: 'noburn', res: '1080p', geo: false, note: '插播广告会被自动去除(播放前剪掉,或播放中自动跳过)', codec: '', clip: true }, 'profile: 如意 = noburn 1080p');
     eq(P.profileFor(S('ffzy', 'http://api.ffzyapi.com/api.php/provide/vod')).geo, true, 'profile: 非凡 海外受限');
+    eq(P.profileFor(S('ffzy', 'http://api.ffzyapi.com/api.php/provide/vod')).clip, true, 'profile: 非凡 clip(源站封 CF 出口,worker 不在链路里,靠播放器剪/跳)');
+    eq(P.profileFor(S('bfzy', 'https://bfzyapi.com/api.php/provide/vod')).clip, false, 'profile: 暴风 不 clip(worker 够得着,清单层就删干净了)');
+    eq(P.profileFor(S('dyttzy', 'http://caiji.dyttzyapi.com/api.php/provide/vod')).clip, true, 'profile: 电影天堂 clip');
     eq(P.profileFor(S('myzy', 'https://api.maoyanapi.top/api.php/provide/vod')).res, 'sd', 'profile: 猫眼 标清');
     eq(P.profileFor(S('lovedan', 'https://www.lovedan.net/api.php/provide/vod')).tier, 'ads', 'profile: www. 前缀也能命中');
     eq(P.profileFor(S('lzi', 'https://cj.lziapi.com/api.php/provide/vod/')),

@@ -8,6 +8,7 @@
 //   2) fixtures/adclip/multi-source.json —— 11 个源 117 集、13661 组:分辨率 + 首帧 PTS + 是否插播(逐类抽帧确认)。
 //      含同分辨率插播(只能靠时间戳抓)。硬指标:正片组 0 误跳
 //   3) fixtures/worker/*.m3u8 + 合成分辨率/时间戳 —— 全主分辨率零动作;1080zyk 型 / wsyzy 型必须跳掉
+//   2f) fixtures/adclip/hot-2026-11.json —— 2026-11-02 实抓 嫁金钗 26 集(如意/暴风/电影天堂)+ 其余热门剧/电影/动漫/综艺 + 短剧《折腰》
 //   4) 对抗(审查清单):±8px 怪组 / 合集里另一集换分辨率 / 89s OP / 冷开场后的 OP / 片尾 60s 彩蛋 / 回到开头 / 倍速 ...
 // 模拟方式与 hls.js 1.1.5 一致:#EXT-X-DISCONTINUITY 让下一个分片 cc+1;一组的分辨率和 PTS 偏移在它的首个分片被转封装时
 //   (FRAG_PARSING_INIT_SEGMENT / INIT_PTS_FOUND)才知道 = 组起点进入"播放头 + 预加载窗口"时;seek 后从落点重新往前加载,已学到的保留。
@@ -385,7 +386,7 @@ console.log('[2e] planCuts / cutPlaylist / toCutTime');
         const offs = g.map((x, i) => (i === 10 || i === 16) ? (shift += 20, 1.4667 - x.start) : 1.48 - shift);
         const resOf = cc => (cc === 10 || cc === 16) ? '1280x720' : '1920x1080';
         ok(C.planCuts(g, resOf, null, { offOf: cc => offs[cc] }).length === 2, 'planCuts:证据够 → 剪两段');
-        ok(C.planCuts(g, resOf, { maxCutShare: 0.05 }, { offOf: cc => offs[cc] }).length === 0, 'planCuts:剪掉总长超过 maxCutShare → 一段都不剪');
+        ok(C.planCuts(g, resOf, { maxCutShare: 0.05, shortCutShare: 0.05 }, { offOf: cc => offs[cc] }).length === 0, 'planCuts:剪掉总长超过 maxCutShare → 一段都不剪');
         // 正片只有 30s、广告 20s:主分辨率证据不足(要 ≥ 2× 段长)→ 不剪
         const gs = C.groupsFromFrags(fragsFromDurs([15, 20, 15]));
         ok(C.planCuts(gs, cc => cc === 1 ? '1280x720' : '1920x1080', null, { offOf: cc => cc === 1 ? 1.4667 - 15 : (cc === 0 ? 1.48 : 1.48 - 20) }).length === 0, 'planCuts:主分辨率证据不足 → 宁可不剪');
@@ -501,6 +502,62 @@ console.log('[2c] probeTs');
 }
 
 // ============ 3) worker 真实清单 + 合成分辨率/时间戳 ============
+// ============ 2f) 2026-11 热门剧真实数据(嫁金钗等):整集判定与真值逐组一致,跨站净时长一致 ============
+console.log('[2f] 2026-11 热门剧真实数据');
+{
+    const HOT = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/hot-2026-11.json'), 'utf8')).episodes;
+    let ads = 0, adDur = 0;
+    const miss = [], fp = [], late = [], lost = [], net = {};
+    for (const ep of HOT) {
+        const frags = fragsFromDurs(ep.g.map(x => x[0]));
+        const groups = C.groupsFromFrags(frags);
+        const resOf = cc => ep.g[cc][1] || undefined, offOf = cc => ep.g[cc][2] == null ? undefined : ep.g[cc][2] - groups[cc].start;
+        const cuts = C.planCuts(groups, resOf, null, { offOf });
+        const inCut = new Set();
+        cuts.forEach(c => { for (let k = c.g0; k <= c.g1; k++) inCut.add(k); });
+        ep.g.forEach((x, i) => {
+            if (x[3]) { ads++; adDur += x[0]; if (!inCut.has(i)) miss.push(ep.key + '#' + i + ' +' + x[0]); }
+            else if (inCut.has(i)) fp.push(ep.key + '#' + i + ' +' + x[0]);
+        });
+        const t = ep.title + '|' + ep.ep;
+        (net[t] = net[t] || {})[ep.src] = ep.g.reduce((a, x) => a + (x[3] ? 0 : x[0]), 0);
+        // 播放中跳过(预加载窗口里才知道)同样全中、不误伤
+        const truth = g => ({ res: resOf(g.cc), off: offOf(g.cc), ad: !!ep.g[g.cc][3] });
+        const r = simulate(frags, truth);
+        if (r.contentLost > 0.5 * Math.max(1, r.events.length)) lost.push([ep.key, +r.contentLost.toFixed(1)]);
+        if (r.maxWatched > 1) late.push([ep.key, r.maxWatched]);
+    }
+    ok(HOT.length >= 100, '夹具不少于 100 集', HOT.length);
+    ok(fp.length === 0, '整集判定:正片 0 误剪', fp.slice(0, 8));
+    ok(miss.length === 0, '整集判定:插播 0 漏剪', miss.slice(0, 8));
+    ok(lost.length === 0, '播放中跳过:正片 0 误跳', lost.slice(0, 5));
+    ok(late.length === 0, '播放中跳过:每段实际看到 <= 1s', late.slice(0, 5));
+    // 同一集跨站净时长(去掉插播后)一致:独立佐证"真值没把正片算成插播"。已知例外逐个抽帧确认过:
+    //   暴风 e2 实为第 3 集内容(站方挂错);暴风 e13 比如意/电影天堂多两段各 ~10s 剧情;如意 e16 清单 EXTINF 累积漂移(每 120s 差 ~1.6s)
+    const EXC = new Set(['嫁金钗|2', '嫁金钗|13', '嫁金钗|16']);
+    const bad = [];
+    let compared = 0;
+    for (const [k, m] of Object.entries(net)) {
+        const v = Object.values(m);
+        if (v.length < 2 || !k.startsWith('嫁金钗') || EXC.has(k)) continue;
+        compared++;
+        if (Math.max(...v) - Math.min(...v) > 0.5) bad.push([k, m]);
+    }
+    ok(compared >= 22 && bad.length === 0, '嫁金钗:跨站净时长一致', { compared, bad: bad.slice(0, 4) });
+    console.log('    ' + HOT.length + ' 集 ' + ads + ' 个插播组(' + adDur.toFixed(0) + 's),正片误剪 ' + fp.length + ',漏剪 ' + miss.length + ',跨站核对 ' + compared + ' 集');
+    // 短剧放宽只给"分辨率不同 + PTS 重新开始":同分辨率、或长剧,占比超过上限照样不动
+    const zy = HOT.find(e => e.key === 'ruyi_折腰_e43');
+    const gz = C.groupsFromFrags(fragsFromDurs(zy.g.map(x => x[0])));
+    const offz = cc => zy.g[cc][2] - gz[cc].start;
+    ok(C.planCuts(gz, cc => zy.g[cc][1], null, { offOf: offz }).length === 1, '短剧:22s 广告占 31% → 剪');
+    ok(C.planCuts(gz, cc => zy.g[cc][1], { shortRunFrac: 0.1 }, { offOf: offz }).length === 0, '短剧:关掉放宽 → 不剪(确实是放宽在起作用)');
+    ok(C.planCuts(gz, () => '1080x1920', null, { offOf: offz }).length === 0, '短剧:同分辨率不放宽');
+    const longG = C.groupsFromFrags(fragsFromDurs([300, 45, 300]));
+    ok(C.planCuts(longG, cc => cc === 1 ? '1280x720' : '1920x1080', null, { offOf: cc => cc === 0 ? 1.48 : cc === 1 ? 1.48 - 300 : 301.48 - 345 }).length === 1, '放宽边界:645s 的集 45s 中插(7%)本来就在 10% 内');
+    const midG = C.groupsFromFrags(fragsFromDurs([350, 55, 350]));
+    ok(C.planCuts(midG, cc => cc === 1 ? '1280x720' : '1920x1080', { maxRunFrac: 0.05 }, { offOf: cc => cc === 0 ? 1.48 : cc === 1 ? 1.48 - 350 : 351.48 - 405 }).length === 0, '放宽边界:>=10 分钟的集不放宽');
+}
+
 console.log('[3] worker 夹具');
 const fixture = name => parseM3u8(fs.readFileSync(path.join(FIX, name), 'utf8'));
 for (const name of fs.readdirSync(FIX).filter(n => n.endsWith('.m3u8'))) {
@@ -1489,6 +1546,159 @@ console.log('[6b] 播放前剪清单端到端');
         const v4 = vid({ src: MEDIA });
         ok(E.adCut.attachNative(v4, {}) === false && v4.src === MEDIA, '服务器不能托管(hls_cut:false)→ 不接管 src');
     }
+
+    // ============ 6c) hls.js 通道:主动探头 + 清缓冲(模拟 hls.js 按顺序加载:rate = 带宽 / 码率) ============
+    console.log('[6c] hls.js 通道');
+    const HOT6 = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/adclip/hot-2026-11.json'), 'utf8')).episodes;
+    async function runHls(ep, o = {}) {
+        const frags = [];
+        let tt = 0, sn = o.startSN || 0;
+        ep.g.forEach((x, gi) => {
+            const n = Math.max(1, Math.round(x[0] / 4));
+            for (let k = 0; k < n; k++) { frags.push({ sn: sn++, cc: gi, start: tt, duration: x[0] / n, url: 'https://cdn.example/hls/s' + gi + '_' + k + '.ts', k }); tt += x[0] / n; }
+        });
+        const total = tt;
+        const reqs = [];
+        const fetchStub = async (url, op) => {
+            reqs.push([url, op && op.headers && op.headers.Range]);
+            if (o.status) return { ok: false, status: o.status };
+            const m = /s(\d+)_(\d+)\.ts/.exec(url), x = ep.g[+m[1]];
+            const data = tsWith(x[1] === '1280x720' ? S720 : S1080, x[2]);
+            return { ok: true, status: 206, url, body: null, arrayBuffer: async () => data.slice().buffer };
+        };
+        let clock = 0;
+        const timers = []; let tid = 0;
+        const fakeST = (fn, ms) => { const id = ++tid; timers.push({ id, at: clock + (ms || 0), fn }); return id; };
+        const fakeCT = id => { const i = timers.findIndex(x => x.id === id); if (i >= 0) timers.splice(i, 1); };
+        const runTimers = () => { for (; ;) { const i = timers.findIndex(x => x.at <= clock); if (i < 0) break; const x = timers.splice(i, 1)[0]; try { x.fn(); } catch (e) { } } };
+        const log = [];
+        // hls.js 加载模型:从 ptr 起顺序加载,预加载窗口 maxBufferLength;首片解析完发事件。seek 到未缓冲处 = 从那里重新加载
+        const hooks = {};
+        const hls = {
+            config: { maxBufferLength: 30, _dgCut: o.sess || undefined },
+            on(e, f) { (hooks[e] = hooks[e] || []).push(f); },
+            off(e, f) { hooks[e] = (hooks[e] || []).filter(x => x !== f); },
+            trigger(e, d) {
+                if (e === 'bufferFlushing') {
+                    log.push(['flush', +d.startOffset.toFixed(2), +d.endOffset.toFixed(2), d.type]);
+                    if (!o.noFlushedEvent) { const fl = (hooks.bufferFlushed || []).slice(); fl.forEach(f => f(e, { type: 'audio' })); log.push(['audioFlushed']); fl.forEach(f => f(e, { type: 'video' })); }
+                    return;
+                }
+                (hooks[e] || []).slice().forEach(f => f(e, d));
+            }
+        };
+        const HlsStub = { Events: { MANIFEST_PARSED: 'manifestParsed', LEVEL_LOADED: 'levelLoaded', FRAG_PARSED: 'fragParsed', FRAG_PARSING_INIT_SEGMENT: 'initSeg', INIT_PTS_FOUND: 'initPts', DESTROYING: 'destroying', BUFFER_FLUSHING: 'bufferFlushing', BUFFER_FLUSHED: 'bufferFlushed' } };
+        let ptr = 0, progress = 0, bufS = 0, bufE = 0;
+        const seenCc = new Set();
+        const video = {
+            src: 'blob:x', _t: o.startAt || 0, playbackRate: 1, paused: false, seeking: false, ended: false, duration: total,
+            get readyState() { return this._t < bufE - 0.01 ? 4 : 2; },
+            get currentTime() { return this._t; },
+            set currentTime(x) {
+                log.push(['seek', +this._t.toFixed(2), +x.toFixed(2)]);
+                this._t = x;
+                if (!(x >= bufS && x < bufE)) { let i = frags.findIndex(f => x >= f.start && x < f.start + f.duration); if (i < 0) i = frags.length; ptr = i; progress = 0; bufS = bufE = i < frags.length ? frags[i].start : total; }
+            },
+            get buffered() { return { length: 1, start: () => bufS, end: () => bufE }; },
+            addEventListener() { }
+        };
+        if (o.startAt) { const i = frags.findIndex(f => o.startAt >= f.start && o.startAt < f.start + f.duration); ptr = i; bufS = bufE = frags[i].start; }
+        let endedFired = false;
+        const dpStub = { video, plugins: { hls }, container: null, seek(x) { video.currentTime = x; }, notice() { }, events: { trigger(e) { if (e === 'ended') endedFired = true; } }, bar: { set() { } }, danmaku: null };
+        const win = { AdClipCore: C, AdFilter: { isEnabled: () => true }, fetch: fetchStub, Hls: HlsStub };
+        const ls = { getItem: () => null, setItem() { } }, ss = { getItem: () => null, setItem() { } };
+        const docStub = { hidden: false }, navStub = { onLine: true };
+        const make = new Function('window', 'AdClipCore', 'dp', 'localStorage', 'sessionStorage', 'performance', 'fetch', '_navSeq', 'URL', 'AbortController', 'console', 'document', 'navigator', 'setTimeout', 'clearTimeout', 'Hls',
+            body + '\nreturn window.adClipSkip;');
+        const skip = make(win, C, dpStub, ls, ss, { now: () => clock }, fetchStub, 1, URL, AbortController, { log() { }, warn() { } }, docStub, navStub, fakeST, fakeCT, HlsStub);
+        skip.vue = { _playToken: 1, _activePlaySeq: 1, _liveActive: false, _activeKz: null, _isCasting: () => false, _outroSkipped: false, currentSource: { site_key: 'x' }, _activeOffCached: !!o.offCached };
+        skip.attach(hls, video);
+        const st = hls._adClip;
+        hls.trigger('levelLoaded', { details: { live: false, fragments: frags } });
+        const tick = () => new Promise(r => setImmediate(r));
+        const adAt = x => { let s = 0; for (const g of ep.g) { if (x >= s && x < s + g[0]) return !!g[3]; s += g[0]; } return false; };
+        const until = o.until != null ? o.until : total - 0.3;
+        let watched = 0, maxWatched = 0, stall = 0, steps = 0, contentLost = 0;
+        while (!endedFired && video.currentTime < until && steps++ < 200000) {
+            // 加载
+            let budget = 0.25 * (o.rate || 20);
+            while (budget > 0 && ptr < frags.length && bufE - video._t < hls.config.maxBufferLength) {
+                const f = frags[ptr], need = f.duration - progress;
+                if (budget < need) { progress += budget; budget = 0; break; }
+                budget -= need; progress = 0; ptr++; bufE = f.start + f.duration;
+                const x = ep.g[f.cc];
+                if (x[1]) hls.trigger('initSeg', { id: 'main', frag: f, tracks: { video: { metadata: { width: +x[1].split('x')[0], height: +x[1].split('x')[1] } } } });
+                if (!seenCc.has(f.cc) && x[2] != null) { seenCc.add(f.cc); hls.trigger('initPts', { id: 'main', frag: f, initPTS: (x[2] - f.start) * 90000, timescale: 90000 }); }
+                hls.trigger('fragParsed', {});
+            }
+            const before = video.currentTime;
+            skip.check(before);
+            for (let k = 0; k < 3; k++) await tick();
+            if (video.currentTime !== before) {   // 这个 tick 跳了:越过的正片算误伤(落点余量之外)
+                const a = before, b = video.currentTime;
+                let s = 0;
+                for (const g of ep.g) { const x0 = Math.max(a, s), x1 = Math.min(b, s + g[0]); if (x1 > x0 && !g[3]) contentLost += x1 - x0; s += g[0]; }
+            }
+            if (video._t < bufE - 0.01) {
+                if (adAt(video._t)) { watched += 0.25; maxWatched = Math.max(maxWatched, watched); } else watched = 0;
+                video._t += 0.25;
+            } else stall += 0.25;
+            clock += 250;
+            runTimers();
+        }
+        return { log, reqs, st, maxWatched, stall, contentLost, seeks: log.filter(x => x[0] === 'seek'), flushes: log.filter(x => x[0] === 'flush') };
+    }
+    const hotEp = k => HOT6.find(e => e.key === k);
+    const ry1 = hotEp('ruyi_嫁金钗_e1'), dy2 = hotEp('dytt_嫁金钗_e2'), dy1 = hotEp('dytt_嫁金钗_e1'), bf1 = hotEp('baofeng_嫁金钗_e1');
+    ok(ry1 && dy2 && dy1 && bf1, '夹具里有 嫁金钗 如意/电影天堂/暴风 e1/e2');
+    const ry1Ad = (() => { let s = 0; for (const g of ry1.g) { if (g[3]) return { start: s, end: s + g[0] }; s += g[0]; } })();
+    // 弱网(带宽 ≈ 码率 1.2 倍):以前要等 hls.js 把广告 + 下一组都解析完才判得了,20s 广告实测看了 15.3s
+    let rh = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 10 });
+    ok(rh.maxWatched <= 1, '弱网:如意 20s 中插实际看到 <= 1s', { watched: rh.maxWatched, seeks: rh.seeks });
+    ok(rh.reqs.length > 0 && rh.reqs.every(x => x[1] === 'bytes=0-16383'), '弱网:主动探头只读每组首片前 16KB', rh.reqs.slice(0, 3));
+    ok(rh.seeks.length === 1 && Math.abs(rh.seeks[0][2] - ry1Ad.end - 0.1) < 0.01, '弱网:落点 = 段后 + 0.1s(没缓冲也立刻跳)', rh.seeks);
+    ok(rh.contentLost < 0.5, '弱网:没吃正片', rh.contentLost);
+    // 探头被 CDN 拒绝 → 立刻停手,不影响播放,回到只靠 hls.js 事件(弱网下广告会看到一些,但仍会跳过)
+    rh = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 10, status: 403 });
+    ok(rh.reqs.length <= 2 && rh.st.failed === true, 'CDN 403:本实例不再探(最多并发那 2 个请求)', rh.reqs.length);
+    ok(rh.seeks.length >= 1 && rh.maxWatched > 1, 'CDN 403:退回 hls.js 事件(这就是主动探头解决的那段等待)', { watched: rh.maxWatched, seeks: rh.seeks });
+    // 普通网速:跳之前先清掉这一段的缓冲,清完才 seek;范围 = 整段(两组广告也是一个范围)
+    rh = await runHls(ry1, { rate: 20, until: ry1Ad.end + 5 });
+    ok(rh.flushes.length === 1 && Math.abs(rh.flushes[0][1] - ry1Ad.start) < 0.01 && Math.abs(rh.flushes[0][2] - ry1Ad.end) < 0.01 && rh.flushes[0][3] === null, '清缓冲范围 = 插播段(音视频都清)', rh.flushes);
+    ok(rh.log.findIndex(x => x[0] === 'flush') < rh.log.findIndex(x => x[0] === 'seek') && rh.seeks.length === 1, '先清缓冲后 seek', rh.log.slice(0, 4));
+    ok(rh.log.findIndex(x => x[0] === 'audioFlushed') < rh.log.findIndex(x => x[0] === 'seek'), '要等视频也删完才 seek(音频的 BUFFER_FLUSHED 不算)', rh.log.slice(0, 4));
+    ok(rh.maxWatched <= 1, '普通网速:实际看到 <= 1s', rh.maxWatched);
+    rh = await runHls(ry1, { rate: 20, until: ry1Ad.end + 5, noFlushedEvent: true });
+    ok(rh.seeks.length === 1 && rh.maxWatched <= 1, 'BUFFER_FLUSHED 没来 → 150ms 后照样 seek', { seeks: rh.seeks, watched: rh.maxWatched });
+    // 整集(含 P 模式跨两组 / R 模式 / 暴风两段):全中、不误伤、弱网下也一样
+    for (const [ep, name] of [[ry1, '如意'], [dy2, '电影天堂 1080p(同分辨率跨两组)'], [dy1, '电影天堂 720p'], [bf1, '暴风']]) {
+        const midRuns = ep.g.filter((x, i) => x[3] && !(i > 0 && ep.g[i - 1][3]) && !ep.g.slice(i).every(y => y[3])).length;
+        for (const rate of [20, 1.2]) {
+            const r = await runHls(ep, { rate });
+            ok(r.seeks.length === midRuns && r.flushes.length === midRuns, name + ' 整集 rate=' + rate + ':每段中插都先清缓冲再跳', { seeks: r.seeks, flushes: r.flushes, midRuns });
+            ok(r.maxWatched <= 1, name + ' 整集 rate=' + rate + ':每段实际看到 <= 1s', r.maxWatched);
+            ok(r.contentLost < 0.5 * Math.max(1, r.seeks.length), name + ' 整集 rate=' + rate + ':没吃正片', r.contentLost);
+        }
+    }
+    {
+        const sf = await runHls(dy2, { rate: 20, until: 400 });
+        ok(sf.flushes.length === 1 && sf.flushes[0][2] - sf.flushes[0][1] > 19 && sf.flushes[0][2] - sf.flushes[0][1] < 19.2, '两组广告只清一次,范围覆盖两组(19.07s)', sf.flushes);
+    }
+    // 播放前整集扫完(sess.full)→ 播放中不再探;没扫全 → 探
+    rh = await runHls(ry1, { rate: 20, until: 200, sess: { full: true } });
+    ok(rh.reqs.length === 0, '播放前已整集扫完:播放中零探测请求', rh.reqs.length);
+    rh = await runHls(ry1, { rate: 20, until: 200, sess: { full: false } });
+    ok(rh.reqs.length > 0, '播放前没扫全:播放中继续探', rh.reqs.length);
+    rh = await runHls(ry1, { rate: 20, until: 200, offCached: true });
+    ok(rh.reqs.length === 0, '离线副本:不去网络上探', rh.reqs.length);
+    // hls.js 的 sn 从 MEDIA-SEQUENCE 起算:探头的下标要减掉首片 sn
+    rh = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 5, startSN: 1000 });
+    ok(rh.reqs.length > 0 && rh.maxWatched <= 1, 'MEDIA-SEQUENCE 非 0:探头地址照样对', { reqs: rh.reqs.length, watched: rh.maxWatched });
+    // 探到的值让位给 hls.js 真解析的(不算"一组两种分辨率"被打成 mixed)
+    {
+        const r = await runHls(ry1, { rate: 1.2, startAt: ry1Ad.start - 25, until: ry1Ad.end + 40 });
+        ok(!Object.values(r.st.res).includes(C.MIXED), '探头 + hls.js 事件:没有组被误标 mixed', r.st.res);
+    }
 }
 
 // ============ 7) 接线:原生通道 + SW 更新策略(静态) ============
@@ -1520,8 +1730,8 @@ console.log('[7] 原生通道 / SW 接线');
     ok(/window\.adCut\.onNativeError\(\(typeof dp !== 'undefined' && dp\) \? dp\.video : null, source\)/.test(html), 'handleError 把错误来源交给 onNativeError(startTimeout 不接管)');
     const body = html.slice(html.indexOf('window.adClipSkip = {'), html.indexOf('let _lastProgressSaveTime'));
     ok(/const ns = v\._adClipNative;\s*\n\s*if \(ns && !ns\.dead && v\.src === ns\.src\) return ns;/.test(body), '_cur:原生状态(video.src 必须还是挂载时那个)优先于 dp.plugins.hls 上残留的状态');
-    ok(/if \(st\.native\) this\._nativePump\(st\)/.test(body), 'check 里驱动原生探测');
-    ok(/st\.native \? d\.to : this\._landing/.test(body), '原生通道不等缓冲直接 seek');
+    ok(/this\._nativePump\(st\);\s+\/\/ 边播边探/.test(body) && /if \(!st\.native\) return this\._scanAhead\(st\)/.test(body), 'check 里驱动探测(原生 / hls.js 两个通道)');
+    ok(/st\.native \? null : this\._landing\(v, d\.to\)/.test(body) && /buffered == null \? d\.to : buffered/.test(body), '落点没缓冲也立刻跳(不等缓冲把广告放完)');
     const ci = html.indexOf('_srcClipOn(s) {');
     const clipOn = ci > 0 ? html.slice(ci, html.indexOf('_srcFilterOn(s) {', ci)) : '';
     ok(/window\.fetch/.test(clipOn) && !/_dgPreferNativeHls \|\| !window\.Hls/.test(clipOn) && /probeTs !== 'function'/.test(clipOn) && /_clipNativeBad\(s\.site_key\)/.test(clipOn),
