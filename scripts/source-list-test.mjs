@@ -44,7 +44,7 @@ if (cStart < 0 || cEnd < 0) throw new Error('SRC_* consts not found');
 const consts = html.slice(cStart, cEnd + 'const EARLY_SETTLE_MS = 1200;'.length);
 
 const methods = ['srcProfile', '_srcFilterOn', '_srcClipOn', '_clipNativeBadMap', '_clipNativeBad', '_clipNativeSet', '_srcUnreach', '_kzWorkerOk', 'srcGroupOf', '_srcAdBad', 'srcTierRank', '_srcResRankOf', 'srcResRank', 'srcResLabel', 'srcTierLabel', 'srcTitle', '_resTagOf', '_srcResMemo', '_srcRealRes', '_srcResOf', '_srcSetRes', '_srcNoteRes',
-    '_srcReachClass', '_pickPreferred', '_autoPick', '_earlyPick', '_srcLogTag', '_failoverNext', '_isKzSource'];
+    '_srcReachClass', '_pickPreferred', '_autoPick', '_earlyPick', '_srcLogTag', '_failoverNext', '_isKzSource', '_srcLenId', '_srcLenPub', '_srcLenDem', 'srcLongSec', 'srcLenNote'];
 const computed = ['playableSources', 'sourceGroups', 'availableSources', 'fastSources', 'slowSources'];
 let objSrc = '{\n';
 methods.forEach(n => { const m = extractMember(n); objSrc += '  ' + n + '(' + m.params + ') ' + m.body + ',\n'; });

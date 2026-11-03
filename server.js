@@ -1808,11 +1808,14 @@ app.post('/api/settings/push', (req, res) => {
     }
 });
 
-// ========== ⏭️ 跳过片头 API：共享的片头/片尾时间标记(众包 + 客户端音频指纹自动学习上报) ==========
+// ========== ⏭️ 跳过片头 API：共享的片头/片尾时间标记(客户端音频指纹自动学习上报) ==========
 // 存储走 cacheManager KV(category='intro')——json/sqlite/memory 全兼容,不像历史同步只限 sqlite。
-// 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>": {os,oe,ed,v,ev,src,at,bs,be,bv} } 整剧一条。
+// 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>|<通道>[|<部分>]": {os,oe,mv,pid,pend,bs,be,bmv,ed,emv,at} } 整剧一条。
 // 必须按【集】存:每集冷开场长度不同,片头起点不同;不能按剧存一个时间。
-// bs/be = 可选"开头贴片"区间(网络视听许可证/平台方片头贴片,与片头曲是两个独立可跳区间),bv = 其票数。
+// bs/be = 可选"开头贴片"区间(网络视听许可证/平台方片头贴片,与片头曲是两个独立可跳区间)。线上旧数据里的 v/bv/ev/src 留着不读。
+// mv/bmv/emv = 片头/贴片/片尾是新算法算的(合并规则见 lib/intro-marks);pid/pend = 学习对 id、待确认(第三集确认);miss/mt = 墓碑(这一集算不出来,1 定位不中 2 学不出 3 两样都不中)及时间。
+// 部分 = 同一期的上/中/下(1/2/3),各用各的标记;老页面不带,写不到这些键上。
+const { MARK_V: INTRO_MARK_V, mergeOp: introMergeOp, mergeBump: introMergeBump, mergeOutro: introMergeOutro, applyMiss: introApplyMiss, settlePair: introSettlePair } = require('./lib/intro-marks');
 const INTRO_TTL = 365 * 24 * 3600;   // 秒。每次写入续期
 function introNormTitle(s) {
     // 与前端 _introTitleKey 保持一致：去括号内容/空格/标点,小写。改这里必须同步改前端。
@@ -1829,7 +1832,7 @@ app.get('/api/intro/marks', introLimiter, (req, res) => {
     res.json({ marks: map });
 });
 
-// 提交一集的片头/片尾标记(手动标记或客户端音频指纹/包络自动学习)。登录站点即可提交(限流防刷)。
+// 提交一集的片头/片尾标记(客户端音频指纹/包络自动学习)。登录站点即可提交(限流防刷)。
 app.post('/api/intro/mark', introLimiter, (req, res) => {
     try {
         const b = req.body || {};
@@ -1847,14 +1850,13 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         const hasOp = opProvided && isFinite(os) && isFinite(oe);
         let ed = b.ed_start == null ? null : Math.round(Number(b.ed_start) * 10) / 10;
         const dur = b.duration == null ? null : Math.round(Number(b.duration) * 10) / 10;
-        const src = b.src === 'manual' ? 'manual' : 'auto';
         // 🧭 时间轴通道:'f'=经去广告代理(贴片/中插已剔除) / 'r'=原始(直连/nofilter)。同一集两条通道时间轴差=被删广告时长,
-        //    票池必须分开(键 ep|ch),否则两边互相削票/加权平均出一个谁都不对的值 → 用户看到"跳过片头多跳二十秒"。
+        //    必须分开存(键 ep|ch),否则两边互相覆盖,观众看到的是另一条时间轴的值 → "跳过片头多跳二十秒"。
         //    老客户端不带 ch → 继续用裸 ep 键(老行为)。
         const ch = b.ch === 'f' || b.ch === 'r' ? b.ch : null;
-        // 校验：ep 放宽到 8 位(综艺用日期做集号,如 20240105);片头起点前 25 分钟内、时长 10~150s(挡"整段5分钟片头"的滥用载荷)
+        // 校验：ep 放宽到 8 位(综艺用日期做集号,如 20240105);片头起点前 25 分钟内、时长 10~240s(挡滥用载荷;曾是 150s,修掉中段掉窗后真实片头已到 144s,新页面超限按算不出记墓碑,不会反复重算)
         if (!title || !site || !Number.isInteger(ep) || ep < 0 || ep > 99999999) return res.status(400).json({ error: 'bad params' });
-        if (opProvided && (!hasOp || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 150)) return res.status(400).json({ error: 'bad range' });
+        if (opProvided && (!hasOp || os < 0 || oe <= os || os > 1500 || (oe - os) < 10 || (oe - os) > 240)) return res.status(400).json({ error: 'bad range' });
         const validDur = isFinite(dur) && dur > 0 && dur <= 6 * 3600 ? dur : null;
         if (ed != null && (!isFinite(ed) || ed <= 0 || ed > 6 * 3600 || (hasOp && ed <= oe) || (validDur && (ed < validDur * 0.45 || ed > validDur - 2)))) ed = null;
         // 可选"开头贴片"区间(网络视听许可证/平台方片头贴片):必须贴近片头部(起点≤120s)、3~90s、且在片头曲之前;非法就静默丢弃不拒整单
@@ -1863,48 +1865,29 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         if (!hasOp || bs == null || be == null || !isFinite(bs) || !isFinite(be) || bs < 0 || bs > 120 || be <= bs || (be - bs) < 3 || (be - bs) > 90 || be > os + 5) { bs = null; be = null; }
         const key = introKey(title, site);
         const map = cacheManager.get('intro', key) || {};
-        const epKey = ch ? (ep + '|' + ch) : String(ep);
+        // 同一期的上/中/下各用各的标记:ep 已被日期式集号占满 8 位,所以部分单独进键。老页面不带这个字段,键不变
+        const part = ch && (b.part === 1 || b.part === 2 || b.part === 3) ? b.part : 0;
+        const epKey = ch ? (ep + '|' + ch + (part ? '|' + part : '')) : String(ep);
         const old = map[epKey];
-        if (ed != null && !hasOp && old && old.oe > old.os && ed <= old.oe) ed = null;
-        if (!hasOp && ed == null) return res.status(400).json({ error: 'bad range' });
-        // 贴片区间独立计票收敛(和 os/oe 同一套 ±5s 加权/削票模型)
-        const mergeBump = (rec, oldRec) => {
-            const obs = oldRec && oldRec.be > oldRec.bs ? oldRec : null;
-            if (bs == null) { if (obs) { rec.bs = obs.bs; rec.be = obs.be; rec.bv = obs.bv || 1; } return rec; }
-            if (obs && Math.abs(obs.bs - bs) <= 5 && Math.abs(obs.be - be) <= 5) {
-                const w = Math.min(obs.bv || 1, 9);
-                rec.bs = Math.round((obs.bs * w + bs) / (w + 1) * 10) / 10; rec.be = Math.round((obs.be * w + be) / (w + 1) * 10) / 10; rec.bv = Math.min((obs.bv || 1) + 1, 99);
-            } else if (!obs || (obs.bv || 1) <= 1) { rec.bs = bs; rec.be = be; rec.bv = 1; }
-            else { rec.bs = obs.bs; rec.be = obs.be; rec.bv = (obs.bv || 1) - 1; }
-            return rec;
-        };
-        const mergeOutro = (rec, oldRec) => {
-            const obs = oldRec && oldRec.ed > 0 ? oldRec : null;
-            if (ed == null) { if (obs) { rec.ed = obs.ed; rec.ev = obs.ev || 1; } return rec; }
-            if (obs && Math.abs(obs.ed - ed) <= 8) {
-                const w = Math.min(obs.ev || 1, 9);
-                rec.ed = Math.round((obs.ed * w + ed) / (w + 1) * 10) / 10;
-                rec.ev = Math.min((obs.ev || 1) + 1, 99);
-            } else if (!obs || (obs.ev || 1) <= 1) { rec.ed = ed; rec.ev = 1; }
-            else { rec.ed = obs.ed; rec.ev = (obs.ev || 1) - 1; }
-            return rec;
-        };
-        if (!hasOp) {
-            map[epKey] = mergeOutro(mergeBump({ ...(old || {}), os: old?.os || 0, oe: old?.oe || 0, v: old?.v || 0, src: old?.src || src, at: Date.now() }, old), old);
-        } else if (old && Math.abs(old.os - os) <= 5 && Math.abs(old.oe - oe) <= 5) {
-            // 与现值一致(±5s)：加权平均收敛 + 计票(封顶防溢出)
-            const w = Math.min(old.v || 1, 9);
-            map[epKey] = mergeOutro(mergeBump({ os: Math.round((old.os * w + os) / (w + 1) * 10) / 10, oe: Math.round((old.oe * w + oe) / (w + 1) * 10) / 10, v: Math.min((old.v || 1) + 1, 99), src: old.src === 'manual' ? 'manual' : src, at: Date.now() }, old), old);
-        } else if (!old || (old.v || 1) <= 1 || (src === 'manual' && old.src !== 'manual' && (old.v || 1) <= 2)) {
-            // 无旧值 / 旧值只有 1 票 / 人工标记纠正低票自动值 → 覆盖
-            map[epKey] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
-        } else {
-            // 与多票旧值冲突：削旧值一票(不直接推翻共识,但也不让先到的错值/被刷值永久钉死——
-            // 诚实多数持续提交正确值会把错值削到 1 票后取而代之,eventual 纠偏)
-            const nv = (old.v || 1) - 1;
-            if (nv <= 1) map[epKey] = mergeOutro(mergeBump({ os, oe, v: 1, src, at: Date.now() }, old), old);
-            else { old.v = nv; old.at = Date.now(); map[epKey] = mergeOutro(mergeBump(old, old), old); }
-        }
+        // 🧭 老页面留下的裸键(不带 ch)是每条通道读取时的兜底(m[ep|ch] || m[ep]),ep|ch 一落地就把它遮住了:只写一个墓碑或片尾,旧片头按钮和片尾就都没了。
+        //    所以第一次写 ep|ch 要把裸键的内容带过来。片头值怎么合只看 ep|ch 自己(old);带上部分的键没有兜底,裸键分不清是上半还是下半
+        const base = old || (ch && !part ? map[String(ep)] : undefined);
+        if (ed != null && !hasOp && base && base.oe > base.os && ed <= base.oe) ed = null;
+        const miss = !opProvided && (b.miss === 1 || b.miss === 2 || b.miss === 3) && b.mv === INTRO_MARK_V ? b.miss : 0;   // 🪦 墓碑只来自新页面,且不能夹带时间
+        if (!hasOp && ed == null && !miss) return res.status(400).json({ error: 'bad range' });
+        const mv2 = b.mv === INTRO_MARK_V;
+        // 学习对 id:这一对算出来的标记和包络都带它,第三集确认只认它(见 lib/intro-marks)
+        const pid = mv2 && typeof b.pid === 'string' && /^[a-z0-9]{4,24}$/.test(b.pid) ? b.pid : '';
+        const pend = mv2 && b.pend === 1;
+        const incBump = { bs, be, mv: mv2 ? INTRO_MARK_V : 0, pend };
+        const incOutro = { ed, emv: b.emv === INTRO_MARK_V ? INTRO_MARK_V : 0 };
+        const now = Date.now();
+        let rec;
+        if (hasOp) rec = introMergeOp(old, { os, oe, mv: mv2 ? INTRO_MARK_V : 0, pid, pend }, now);
+        else if (miss) rec = introApplyMiss(base, miss, now);
+        else rec = { ...(base || {}), os: base?.os || 0, oe: base?.oe || 0, at: now };
+        map[epKey] = introMergeOutro(introMergeBump(rec, base, incBump), base, incOutro);
+        if (hasOp) introSettlePair(map, epKey, { mv: mv2 ? INTRO_MARK_V : 0, pid, pend });
         if (ch && map[epKey]) map[epKey].ch = ch;
         // 单剧集数上限(防灌爆一条 KV)
         const keys = Object.keys(map);
@@ -1925,6 +1908,7 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
 //   借用的包络客户端必须实测定位命中才会转正回传登记到本线路,失配自动回退冷启动学习——坏/不匹配数据自灭,不会长期占坑。
 const INTRO_ENV_TTL = 365 * 24 * 3600;   // 秒。每次写入/被采用回传都会续期
 const INTRO_ENV_B64 = /^[A-Za-z0-9+/]+={0,2}$/;
+const INTRO_ENV_DV = 2;   // 片头包络组件版本,与前端 IntroCore.ENV_DV 一致
 
 // 拉取某剧某线路的包络;本线路没有时借同剧其它线路最新一条(borrowed=true)
 app.get('/api/intro/env', introLimiter, (req, res) => {
@@ -1933,17 +1917,32 @@ app.get('/api/intro/env', introLimiter, (req, res) => {
     const norm = introNormTitle(title);
     if (!norm) return res.json({ env: null });
     const site = String(req.query.site || '').slice(0, 40);
+    // dv=新页面要的片头组件版本:本线路的片头是旧版时,顺带给一份别的线路的新版片头(片尾/贴片还用本线路的);老页面不带 dv,行为不变
+    const wantDv = req.query.dv === String(INTRO_ENV_DV);
+    const isNew = r => !!(r && r.d && r.dv === INTRO_ENV_DV);
     const exact = cacheManager.get('introenv', norm + '|' + site);
-    if (exact) return res.json({ env: exact, from: site, borrowed: false });
-    let best = null, bestKey = '';
+    if (exact && (!wantDv || isNew(exact))) return res.json({ env: exact, from: site, borrowed: false });
+    let best = null, bestKey = '', bestNew = null, bestNewKey = '';
     for (const { key, value } of cacheManager.list('introenv', norm + '|')) {
-        if (value && value.v === 2 && (value.at || 0) > (best ? best.at || 0 : -1)) { best = value; bestKey = key; }
+        if (!value || value.v !== 2) continue;
+        if ((value.at || 0) > (best ? best.at || 0 : -1)) { best = value; bestKey = key; }
+        // 新版片头优先借最长的:短包络定位命中也只能跳短的一截,转正后还不会再重算(一样长才看新旧)
+        const durNew = value.dur || 0, durBest = bestNew ? bestNew.dur || 0 : -1;
+        if (isNew(value) && (durNew > durBest || (durNew === durBest && (value.at || 0) > (bestNew.at || 0)))) { bestNew = value; bestNewKey = key; }
     }
-    if (!best) return res.json({ env: null });
-    res.json({ env: best, from: bestKey.slice(norm.length + 1), borrowed: true });
+    if (exact) {
+        const introBorrow = bestNew ? { dv: bestNew.dv, pid: bestNew.pid, peps: bestNew.peps, psite: bestNew.psite, pk: bestNew.pk, d: bestNew.d, sec: bestNew.sec, dur: bestNew.dur, maxStart: bestNew.maxStart || 0, from: bestNewKey.slice(norm.length + 1) } : undefined;
+        return res.json({ env: exact, from: site, borrowed: false, introBorrow });
+    }
+    const pick = wantDv && bestNew ? bestNew : best, pickKey = wantDv && bestNew ? bestNewKey : bestKey;
+    if (!pick) return res.json({ env: null });
+    res.json({ env: pick, from: pickKey.slice(norm.length + 1), borrowed: true });
 });
 
-// 上传学习成果包络。env 字段与客户端本地记录同构:{v:2, d,sec,dur,maxStart, bd,bdur, od,odur}
+// 上传学习成果包络。env 字段与客户端本地记录同构:{v:2, dv, pid, peps, psite, pk, d,sec,dur,maxStart, bd,bdur, od,odur}
+//   pid/peps=学出这条片头包络的学习对 id 和那两集的集号,在学习对之外的集定位命中才算确认(第三集确认,见 lib/intro-marks)。
+//   psite/pk=学出它的线路、集号体系(d 日期 j 第N集 q 第N期):同一期在别的线路上可能是另一个数字,集号比得上才算确认,客户端判(IntroCore.pairWitness),转正登记到别的线路也不变。
+//   dv=片头组件版本(新算法=2;片尾/贴片算法没变,记录级 v 仍是 2,老页面照样能读能传):老页面传来的 d 盖不掉新版 d,新版 d 可以盖旧版 d。
 //   d=片头曲包络 bd=开头贴片包络 od=片尾包络(都是 base64(Uint8) 10Hz 采样;量化不损 Pearson——尺度无关)。
 // 组件级合并:来的组件覆盖,没带的组件保留旧值(先学出片头、后学出片尾的两次上传互不 clobber)。
 app.post('/api/intro/env', introLimiter, (req, res) => {
@@ -1964,8 +1963,18 @@ app.post('/api/intro/env', introLimiter, (req, res) => {
         const bytesOf = s => Math.floor(s.length * 3 / 4) - (s.endsWith('==') ? 2 : s.endsWith('=') ? 1 : 0);
         const b64 = (s, max, sec) => (typeof s === 'string' && s.length >= 40 && s.length <= max && INTRO_ENV_B64.test(s) && sec != null && Math.abs(bytesOf(s) / 10 - sec) <= 3) ? s : null;
         const rec = { v: 2, at: Date.now() };
-        const sec = num(e.sec, 10, 400), dur = num(e.dur, 10, 160), d = b64(e.d, 5600, sec);
-        if (d && dur) { rec.d = d; rec.sec = sec; rec.dur = dur; rec.maxStart = num(e.maxStart, 0, 1500) || 0; }
+        const sec = num(e.sec, 10, 400), dur = num(e.dur, 10, 250), d = b64(e.d, 5600, sec);
+        if (d && dur) {
+            rec.d = d; rec.sec = sec; rec.dur = dur; rec.maxStart = num(e.maxStart, 0, 1500) || 0;
+            if (e.dv === INTRO_ENV_DV) {
+                rec.dv = INTRO_ENV_DV;
+                if (typeof e.pid === 'string' && /^[a-z0-9]{4,24}$/.test(e.pid) && Array.isArray(e.peps) && e.peps.length === 2 && e.peps.every(x => Number.isInteger(x) && x >= 0 && x <= 99999999)) {
+                    rec.pid = e.pid; rec.peps = e.peps;
+                    if (typeof e.psite === 'string' && e.psite.length >= 1 && e.psite.length <= 40) rec.psite = e.psite;
+                    if (e.pk === 'd' || e.pk === 'j' || e.pk === 'q') rec.pk = e.pk;
+                }
+            }
+        }
         const bdur = num(e.bdur, 3, 90), bd = b64(e.bd, 1200, bdur);
         if (bd) { rec.bd = bd; rec.bdur = bdur; }
         const odur = num(e.odur, 10, 160), od = b64(e.od, 2400, odur);
@@ -1974,7 +1983,11 @@ app.post('/api/intro/env', introLimiter, (req, res) => {
         const key = introNormTitle(title) + '|' + site;
         const old = cacheManager.get('introenv', key);
         if (old && old.v === 2) {
-            if (!rec.d && old.d) { rec.d = old.d; rec.sec = old.sec; rec.dur = old.dur; rec.maxStart = old.maxStart || 0; }
+            if (old.d && (!rec.d || (old.dv === INTRO_ENV_DV && rec.dv !== INTRO_ENV_DV))) {
+                rec.d = old.d; rec.sec = old.sec; rec.dur = old.dur; rec.maxStart = old.maxStart || 0;
+                if (old.dv) rec.dv = old.dv; else delete rec.dv;
+                if (old.pid) { rec.pid = old.pid; rec.peps = old.peps; if (old.psite) rec.psite = old.psite; if (old.pk) rec.pk = old.pk; }
+            }
             if (!rec.bd && old.bd) { rec.bd = old.bd; rec.bdur = old.bdur; }
             if (!rec.od && old.od) { rec.od = old.od; rec.odur = old.odur; }
         }
@@ -3135,6 +3148,21 @@ function danmakuParseId(id) {
     const cacheKey = title + '|' + ep + (k ? '|k:' + k : '') + (hints.year ? '|y:' + hints.year : '') + qd;
     return { title, ep, hints, cacheKey };
 }
+// 🏷️ 这一集弹幕的平台来源(两后端共用,纯函数):前端只对芒果(imgo)做按集自动校正 —— 芒果弹幕的时间轴和多数线路过 Worker 后一致,腾讯等不一致
+//   (见 index.html <dg-dm-auto-core>)。集条目形如 { episodeTitle:'【imgo】 第1集', url:'https://www.mgtv.com/…' }。
+//   取弹幕用的是地址,所以先认地址、再认标签;两边说的不是一个平台(合并源之类)一律当不确定('')。标签要在集名最前面,片名里的 【】 不算。
+const DANMAKU_SRC_HOSTS = [[/(^|\.)mgtv\.com$/, 'imgo'], [/(^|\.)qq\.com$/, 'qq'], [/(^|\.)iqiyi\.com$/, 'qiyi'], [/(^|\.)youku\.com$/, 'youku'], [/(^|\.)(bilibili\.com|b23\.tv)$/, 'bilibili'], [/(^|\.)miguvideo\.com$/, 'migu'], [/(^|\.)sohu\.com$/, 'sohu'], [/(^|\.)le\.com$/, 'leshi'], [/(^|\.)ixigua\.com$/, 'xigua']];
+function danmakuSourceOf(episode) {
+    const e = episode || {};
+    const m = String(e.episodeTitle || '').match(/^\s*【([a-z0-9_]{1,16})】/i);
+    const tag = m ? m[1].toLowerCase() : '';
+    let host = '';
+    try { host = new URL(String(e.url || '')).hostname.toLowerCase(); } catch (err) { }
+    const hit = host ? DANMAKU_SRC_HOSTS.find(x => x[0].test(host)) : null;
+    const byHost = hit ? hit[1] : '';
+    if (byHost && tag && !tag.startsWith(byHost)) return '';
+    return byHost || tag;
+}
 // ⛔ 以下联网(非纯函数),scripts/danmaku-match-test.mjs 抽取的纯函数区到此为止
 // 腾讯选集接口一页。同一页全站共享:并发只打一次、固定 5s 超时(不随调用方剩余时间缩短,慢页照样落进缓存给后来的人用)。
 //   成功缓存 30 分钟;过期或要求更新(maxAge)时重拉,重拉失败继续用旧的(6 小时内;1 分钟内不再重试);没成功过的失败只记 30 秒。
@@ -3344,6 +3372,7 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
             if (!d.length) return danmakuVetoed();
             d._tier = Math.min(bestTier, 1);
             d._oracle = true;
+            d._src = danmakuSourceOf({ url });
             return d;
         } catch (e) {
             const st = e.response && e.response.status;
@@ -3404,7 +3433,8 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
         if (d === null) continue;
         console.log(`[弹幕诊断] comment(${via}) ${via === 'url' ? url : episode.episodeId} (${platOf(pool[tries].animeTitle) || '?'}) 《${pool[tries].animeTitle}》 ${why} → ${d.length} 条 (${Date.now() - _c0}ms)`);
         // _tier 供端点分级缓存:包含档、以及按 id 取到的(可能串到别的剧)都不给长缓存、不进持久层
-        if (d.length) { d._tier = (via === 'url' && !transient) ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; return d; }
+        // _src:实际取到这份弹幕的候选的平台(前面的候选失败、后面顶上时也跟着变);按 id 取的可能串到别的剧,不算数
+        if (d.length) { d._tier = (via === 'url' && !transient) ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; else d._src = danmakuSourceOf(episode); return d; }
     }
     return [];
 }
@@ -3430,21 +3460,24 @@ app.get('/api/danmaku/v3/', async (req, res) => {
     //    重抓拿到空/低置信不覆盖旧的(上游瞬时空不能冲掉好弹幕),一小时内不再重试这一集。
     const hit = danmakuStore.get(storeKey);
     if (hit) {
-        if (!hit.fresh && danmakuStore.refreshAllowed(storeKey) && danmakuBudgetOk()) {
+        // 🏷️ 老条目(加来源字段之前存的,没有 src):弹幕照常回,前端按未知来源、不校正。不作废,只是把下一次后台重抓提前,抓到才替换,抓不到还用旧的;
+        //    这期间只给 10 分钟缓存头,免得 CDN / 浏览器把"没来源"的版本再钉 7 天。提前重抓限速,不挤占前台回源配额(见 danmakuUpgradeOk)
+        const upgrade = hit.fresh && !hit.hasSrc;
+        if ((!hit.fresh || upgrade) && danmakuStore.refreshAllowed(storeKey) && (!upgrade || danmakuUpgradeOk()) && danmakuBudgetOk()) {
             danmakuStore.once('bg|' + storeKey, async () => {
                 const r = await fetchDanmakuFresh(title, ep, hints);
-                if (r.data.length && !r.lowConf && !r.viaId) danmakuStore.put(storeKey, r.data);
+                if (r.data.length && !r.lowConf && !r.viaId) danmakuStore.put(storeKey, r.data, r.src);
                 else danmakuStore.refreshFailed(storeKey);
             }).catch(() => danmakuStore.refreshFailed(storeKey));
         }
-        res.set('Cache-Control', LONG_CACHE);
+        res.set('Cache-Control', hit.hasSrc ? LONG_CACHE : 'public, max-age=600, s-maxage=600');
         return res.type('application/json').send(hit.json);
     }
     // ② 空 / 低置信结果的短期内存缓存(不落盘):低置信只给 CDN 10 分钟,空的 no-store
     const cached = danmakuCache.get(cacheKey);
     if (cached && cached.expiry > Date.now()) {
         if (cached.data.length && !cached.viaId) res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
-        return res.json({ code: 0, version: 3, data: cached.data, msg: '' });
+        return res.json({ code: 0, version: 3, src: cached.src || '', data: cached.data, msg: '' });
     }
     if (!danmakuBudgetOk()) return res.json(empty);
 
@@ -3452,10 +3485,10 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         // ③ 回源:同一集同时只打一次 danmu_api(热剧新集刚出,几十人同时点开也只抓一次)
         const out = await danmakuStore.once(storeKey, async () => {
             const r = await fetchDanmakuFresh(title, ep, hints);
-            if (r.data.length && !r.lowConf && !r.viaId) return { json: danmakuStore.put(storeKey, r.data), long: true };
+            if (r.data.length && !r.lowConf && !r.viaId) return { json: danmakuStore.put(storeKey, r.data, r.src), long: true };
             if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
-            danmakuCache.set(cacheKey, { data: r.data, lowConf: r.lowConf, viaId: r.viaId, expiry: Date.now() + (r.data.length && !r.viaId ? DANMAKU_LOWCONF_TTL : DANMAKU_MISS_TTL) });
-            return { json: danmakuStore.toJson(r.data), long: false, n: r.viaId ? 0 : r.data.length };
+            danmakuCache.set(cacheKey, { data: r.data, lowConf: r.lowConf, viaId: r.viaId, src: r.src, expiry: Date.now() + (r.data.length && !r.viaId ? DANMAKU_LOWCONF_TTL : DANMAKU_MISS_TTL) });
+            return { json: danmakuStore.toJson(r.data, r.src), long: false, n: r.viaId ? 0 : r.data.length };
         });
         if (out.long) res.set('Cache-Control', LONG_CACHE);
         else if (out.n) res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
@@ -3511,11 +3544,22 @@ async function fetchDanmakuFresh(title, ep, hints) {
     // 不再被 7 天 LONG_CACHE 固化(对抗审查实锤:史莱姆事故的错弹幕曾三层缓存一周)。
     const lowConf = !!(data && data.length && (data._tier ?? 9) >= 2);
     const viaId = !!(data && data._viaId);   // 按 id 取的(多实例上可能是别的剧):端点一律 no-store、只在内存放 90 秒
+    // 🏷️ 平台来源:要在下面采样(换数组)之前读;低置信 / 按 id 的可能根本不是这部剧,来源不作数
+    const src = (data && data.length && !lowConf && !viaId) ? String(data._src || '') : '';
     // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
     data.sort((a, b) => a[0] - b[0]);
     // 热门剧单集可达 1.5w+ 条(payload~1.5MB)：按时间均匀采样到上限，控制体积与前端渲染压力
     if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
-    return { data, lowConf, viaId };
+    return { data, lowConf, viaId, src };
+}
+// 🏷️ 老条目补来源的提前重抓:每分钟最多 30 集。全站回源配额(danmakuBudgetOk,300 次/分钟)用完前台新集会直接拿到空弹幕,发版后第一波不能把它吃光
+let danmakuUpgWinStart = 0, danmakuUpgWinCount = 0;
+function danmakuUpgradeOk() {
+    const now = Date.now();
+    if (now - danmakuUpgWinStart > 60000) { danmakuUpgWinStart = now; danmakuUpgWinCount = 0; }
+    if (danmakuUpgWinCount >= 30) return false;
+    danmakuUpgWinCount++;
+    return true;
 }
 // 借来的弹幕只读：DPlayer 发送弹幕会 POST 到此，直接成功返回不持久化(避免报错)
 app.post('/api/danmaku/v3/', (req, res) => res.json({ code: 0, msg: '' }));
