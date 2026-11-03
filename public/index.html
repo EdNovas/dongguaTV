@@ -3721,6 +3721,13 @@
             color: var(--src-group-text);
         }
 
+        .src-len-note {
+            width: 100%;
+            font-size: 11px;
+            line-height: 1.5;
+            color: var(--src-group-text);
+        }
+
         .src-group-head:not(:first-child) {
             border-top: 1px solid var(--src-group-line);
             padding-top: 10px;
@@ -6099,7 +6106,7 @@
 
                         <!-- 🏷️ 线路分组:无广告 > 有插播 > 未评测 > 有水印 > 可能无法播放(数据:lib/site-profiles,经 /api/sites 与搜索结果下发;
                              "可能无法播放"= 本机测速只有服务器能通的线路,与档案无关,所以组内每条照样带自己的广告徽章)。
-                             组内排序:快线(<600ms)在前 → 档位优先 → 分辨率高在前 → 延迟低在前。
+                             组内排序:快线(<600ms)在前 → 档位优先 → 分辨率高在前 → 延迟低在前;本集比过时长后,明显更长的线路再挪到替代后面。
                              显示顺序 = 自动换源顺序 = TV"切换线路"顺序(三者都读 availableSources,见 sourceGroups)。
                              旧的 直连/中转/服务 角标与图例已撤:那是测速通道,用户看不懂也不关心;_testType 逻辑原样保留(选源/健康缓存/去广告分诊都靠它)。 -->
                         <div class="source-list" v-if="fastSources.length > 0 || slowSources.length > 0">
@@ -6120,8 +6127,10 @@
                                     <span v-if="srcResLabel(source)" class="src-res" :class="{ hd: srcResRank(source) >= 2, uhd: srcResRank(source) >= 3 }">{{ srcResLabel(source) }}</span>
                                     <span class="src-tag" :class="'t-' + srcGroupOf(source)">{{ srcTierLabel(source) }}</span>
                                     <span v-if="g.tier === 'unreach' && srcProfile(source).geo" class="src-geo">海外受限</span>
+                                    <span v-if="srcLongSec(source)" class="src-geo">可能有广告</span>
                                 </div>
                             </template>
+                            <div v-if="srcLenNote()" class="src-len-note">标「可能有广告」的线路，这一集比其他线路长，多出来的可能是广告，也可能是片头或花絮。部分线路没有比过，没标不代表没有。</div>
                         </div>
 
                         <!-- 全部不可用提示 -->
@@ -9344,6 +9353,80 @@
         ];
         const SRC_GROUP_BY_ID = {};
         SRC_GROUPS.forEach(g => { SRC_GROUP_BY_ID[g.tier] = g; });
+        // <dg-src-len-core>
+        // 🎚️ 同一集跨线路比时长。平台创意中插/贴片被录进片源时,没有 DISCONTINUITY,分辨率、SPS、PTS 都和正片一样,清单上只有总时长露馅
+        //   (大奉打更人 e5:14 条线路比无尽/百度多约 128s)。长的不一定是广告(2026-11 抽帧 11 组:7 组含广告,其余是片头、官方小剧场、挂错集),
+        //   所以标签只说"可能有广告"、只调列表顺序,不剪片、不影响起播选线。纯函数,回归 scripts/src-len-test.mjs(23 部剧 93 集真实数据)。
+        const SRC_LEN = { TH: 30, CUT_MAX: 0.2, CUT_BASE: 0.06, MIN_VOTES: 3, MIN_MEDIAN: 600, MIN_RATIO: 0.75, CLUSTER: 2 };
+        // 只看清单文本的净时长:减掉 worker / 播放器本来就会去掉的插播组,剩下的才是观众真要看的长度。groups = AdClipCore.parseMedia 的组。
+        //   切块清单(如每 5 片一个 DISCONTINUITY,条件与 worker 的 chunkMode 一致):插播打断某个整 N 组,断点前后各剩一截,中间夹着广告 ——
+        //   对每段连续的非整 N 组,首组是被打断的正片;首尾片数凑得成整 N 时末组也是;开头的连续段不动(同 worker)。
+        //   worker 还按目录认外来短组,这里只看文本(实测差 17.6s,低于 30s 阈值)。减掉超过 20% = 清单结构没看懂(如最大的按镜头乱切)→ 无数据,不参与比较。skip = 被减掉的组下标
+        function dgSrcLenNet(groups, tot) {
+            if (!groups || !groups.length || !(tot > 0)) return null;
+            if (groups.length === 1) return { d: tot, cut: 0, skip: [] };
+            const isShort = g => g.dur >= 3 && g.dur <= 120 && g.n < 15;
+            const hist = {};
+            groups.forEach(g => { hist[g.n] = (hist[g.n] || 0) + 1; });
+            let N = 0, top = 0;
+            Object.keys(hist).forEach(k => { if (hist[k] > top) { top = hist[k]; N = +k; } });
+            let reg = 0, all = 0;
+            groups.forEach(g => { all += g.dur; if (g.n % N === 0) reg += g.dur; });
+            const chunk = groups.length >= 10 && N >= 2 && top / groups.length >= 0.7 && reg / all >= 0.7;
+            const skip = [];
+            if (chunk) {
+                for (let i = 0; i < groups.length;) {
+                    if (groups[i].n % N === 0) { i++; continue; }
+                    let j = i;
+                    while (j + 1 < groups.length && groups[j + 1].n % N) j++;
+                    if (i > 0) {
+                        const hi = (j - i >= 2 && (groups[i].n + groups[j].n) % N === 0) ? j - 1 : j;
+                        for (let k = i + 1; k <= hi; k++) if (isShort(groups[k])) skip.push(k);
+                    }
+                    i = j + 1;
+                }
+            } else groups.forEach((g, k) => { if (isShort(g)) skip.push(k); });
+            const sub = skip.reduce((a, k) => a + groups[k].dur, 0);
+            const cut = sub / tot;
+            return cut > SRC_LEN.CUT_MAX ? null : { d: tot - sub, cut, skip };
+        }
+        // 一个上游一票。票 = 净片段的 EXTINF 序列(不含文件名、DISCONTINUITY 计数和被减掉的组):同一次切片换 CDN、改文件名、
+        //   每次请求随机插广告(360 / 爱奇艺资源每拉一次清单都不同)都还是同一票,判定不会因为抽到哪次而翻转
+        function dgSrcLenVote(frags, groups, skip) {
+            const out = new Set(skip.map(k => groups[k].cc));
+            let h = 0x811c9dc5, n = 0;
+            frags.forEach(f => {
+                if (out.has(f.cc)) return;
+                n++;
+                const u = Math.round(f.duration * 1000) + ',';
+                for (let k = 0; k < u.length; k++) { h ^= u.charCodeAt(k); h = Math.imul(h, 0x01000193) >>> 0; }
+            });
+            return n + '-' + (h >>> 0).toString(16);
+        }
+        // rows = [{ id, d, cut, fp }],fp = dgSrcLenVote 的票。同一票只算一次;众数不可靠(大奉这集众数正是带广告的版本),
+        //   基准取"最短的、含 2 票以上的簇":单独一条最短的不算(如意常把片头连贴片去掉),中位数 75% 以下的残片不算(芒果 25% 试看)。
+        //   减掉太多的线路(cut > 6%)可以被判长,不能当基准。返回 { long: Map(id → 多出的秒数), clean: Set(id), base }
+        function dgSrcLenJudge(rows) {
+            const none = { long: new Map(), clean: new Set(), base: null };
+            const votes = new Map();
+            (rows || []).forEach(r => { if (!votes.has(r.fp)) votes.set(r.fp, r); });
+            const uniq = Array.from(votes.values()).sort((a, b) => a.d - b.d);
+            if (uniq.length < SRC_LEN.MIN_VOTES) return none;
+            const m = uniq[uniq.length >> 1].d;
+            if (m < SRC_LEN.MIN_MEDIAN) return none;
+            const good = rows.filter(r => r.d >= m * SRC_LEN.MIN_RATIO).sort((a, b) => a.d - b.d);
+            const clusters = [];
+            good.filter(r => r.cut <= SRC_LEN.CUT_BASE).forEach(r => {
+                const c = clusters[clusters.length - 1];
+                if (c && r.d - c.d0 < SRC_LEN.CLUSTER) c.it.push(r); else clusters.push({ d0: r.d, it: [r] });
+            });
+            const c = clusters.find(x => new Set(x.it.map(r => r.fp)).size >= 2);
+            if (!c) return none;
+            const long = new Map(), clean = new Set();
+            good.forEach(r => { if (r.d - c.d0 >= SRC_LEN.TH) long.set(r.id, r.d - c.d0); else clean.add(r.id); });
+            return { long, clean, base: c.d0 };
+        }
+        // </dg-src-len-core>
         // 档案档位 → 显示分组(徽章文字/颜色)
         const SRC_TIER_GROUP = { clean: 'clean', noburn: 'clean', insert: 'insert', unknown: 'unknown', ads: 'ads' };
         const SRC_UNKNOWN_PROFILE = Object.freeze({ tier: 'unknown', res: '', geo: false, note: '', codec: '', clip: false, downgraded: false });
@@ -11129,7 +11212,7 @@
                     if (!this.currentGroup || !this.currentGroup.sources) return [];
                     return this.currentGroup.sources.filter(s => typeof s.latency === 'number' && s.latency < 9000);
                 },
-                // 🏷️ 分组(SRC_GROUPS 顺序),组内:快线(<600ms)在前 → 档位(无广告 > 插播已去除)→ 分辨率高在前 → 延迟低在前。
+                // 🏷️ 分组(SRC_GROUPS 顺序),组内:快线(<600ms)在前 → 档位(无广告 > 插播已去除)→ 分辨率高在前 → 延迟低在前;本集比过时长后,偏长线路再挪到替代后面(_srcLenDem)。
                 //    "可能无法播放"组(最后):本机测速只有服务器能通(可达档 2)的线路 + 所有未评测线路;组内用户端测得通的在前,
                 //    再按档位。按【本机测速结果】而非档案里的"海外受限"分:国内用户测得通的海外受限线路(有档案的)留在原分组。
                 //    offset = 本组第一条在 availableSources 里的下标(模板 tabindex 用)。
@@ -11144,15 +11227,18 @@
                         (by[gid] = by[gid] || []).push(s);
                     });
                     let off = 0;
+                    const lenPub = this._srcLenPub();
                     return SRC_GROUPS.filter(t => by[t.tier]).map(t => {
                         const unreach = t.tier === 'unreach';
-                        const items = by[t.tier].slice().sort((a, b) => {
+                        const sorted = by[t.tier].slice().sort((a, b) => {
                             const ma = metaOf.get(a), mb = metaOf.get(b);
                             // 年份对不上的 kz(多半是同名的另一部)永远垫底;合并后的"无广告"组里它不能压过插播已去除的线路
                             return ((a._kzMismatch ? 1 : 0) - (b._kzMismatch ? 1 : 0)) ||
                                 (unreach ? (this._srcUnreach(a) ? 1 : 0) - (this._srcUnreach(b) ? 1 : 0) : 0) ||   // 本组里用户端测得通的(未评测)排前
                                 (unreach ? 0 : ((a.latency >= 600) - (b.latency >= 600))) || (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
                         });
+                        // 🎚️ 有判定结果时把偏长线路挪到替代后面(没人判长时与原顺序逐条相同)
+                        const items = (lenPub && !unreach) ? this._srcLenDem(sorted, lenPub, metaOf) : sorted;
                         const g = { tier: t.tier, label: t.label, desc: t.desc, items: items, offset: off };
                         off += items.length;
                         return g;
@@ -11208,7 +11294,7 @@
             },
             watch: {
                 // ⭐ 开始播放/换集时清掉这部收藏的"有更新"红点(seen)。currentUrl 只在起播/换集时变,低频
-                currentUrl(v) { if (v) this._favOnPlay(); },
+                currentUrl(v) { if (v) this._favOnPlay(); this._srcLenArm(); },
                 // ⭐ 回到首页(关详情页/退出搜索)时刷新收藏状态,最多每 10 分钟一次
                 showDetail(v) {
                     // 🌙 播放页开/关的页面锁统一在这里(以前 11 处手动 add/remove,goHome 漏了 remove;那些手动的留着,重复无害):
@@ -13536,6 +13622,199 @@
                         this._srcSetRes(s, v.videoWidth, v.videoHeight, 'play');
                     } catch (e) { }
                 },
+                // 🎚️ 比本集各线路时长(判定见 dg-src-len-core)。只读清单文本、只在浏览器端直连(VPS 不拉 m3u8,也不占 worker 配额),播放稳定才动,
+                //   卡顿时 timeupdate 停了新请求也就停了。状态全在非响应式的 this._srcLen,只有"发布"和"清除非空结果"两处 srcRev++。
+                //   不进选源:起播线路、可达档、换线都不受影响,只改同组内的列表顺序(失败换源顺序随之)。localStorage donggua_srclen_off=1 关掉;
+                //   控制台 vueApp._srcLen.diag 看本集结果
+                _srcLenId(s) { return ((s && s.site_key) || '') + '|' + (s && s.vod_id != null ? s.vod_id : ''); },
+                _srcLenPub() { void this.srcRev; const L = this._srcLen; return (L && L.pub && L.nav === _navSeq) ? L.pub : null; },
+                srcLongSec(s) { const P = this._srcLenPub(); return (P && s && P.long.get(this._srcLenId(s))) || 0; },
+                srcLenNote() { return !!this._srcLenPub() && this.availableSources.some(s => this.srcLongSec(s) > 0); },
+                // 换集 / 换剧时调:同一集换线路什么都不做(结果和发布时记下的在播线路都留着);换了就中止在途请求,旧结果非空才通知重排。
+                //   集名必须是干净的"第 N 集":上下集、电影、综艺日期都不比(各线路未必是同一个东西)。国语/粤语会归到同一个键,同一线路两个版本都列出时那条线路不比(见 _srcLenEpUrl)
+                _srcLenArm() {
+                    try {
+                        const ep = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                        const epk = ep ? this._epMatchKey(ep.name) : '';
+                        const key = _navSeq + '|' + epk;
+                        const old = this._srcLen;
+                        if (old && epk && old.key === key) return;
+                        if (old) {
+                            old.ctrls.forEach(c => { try { c.abort(); } catch (e) { } });
+                            const had = !!(old.pub && old.pub.long.size);
+                            this._srcLen = null;
+                            if (had) this.srcRev++;
+                        }
+                        if (this._srcLenOff || !/^N\d+\|$/.test(epk) || localStorage.getItem('donggua_srclen_off') === '1') return;
+                        if (!this._srcLenUi) {
+                            const ui = this._srcLenUi = { t: -1e9, ptr: null }, f = () => { ui.t = performance.now(); }, op = { passive: true, capture: true };
+                            document.addEventListener('touchstart', f, op);
+                            document.addEventListener('scroll', f, op);
+                            // 点到别处只有焦点真的离开才清(按页面滚动条时 pointerdown 落在页面上,焦点不动)
+                            document.addEventListener('pointerdown', e => {
+                                const p = (e.target && e.target.closest) ? e.target.closest('.source-pill') : null;
+                                if (p) ui.ptr = p;
+                                else setTimeout(() => { if (document.activeElement !== ui.ptr) ui.ptr = null; });
+                            }, op);
+                            document.addEventListener('focusin', e => { if (e.target !== ui.ptr) ui.ptr = null; }, op);
+                            // 第一次起播前就手点了线路:那次 pointerdown 没听到,这里接上(键盘选的不算)
+                            const a0 = document.activeElement;
+                            if (a0 && a0.closest && a0.closest('.source-pill')) { try { if (!a0.matches(':focus-visible')) ui.ptr = a0; } catch (e) { } }
+                        }
+                        this._srcLen = { key, nav: _navSeq, ep: epk, t0: 0, q: null, busy: 0, rows: [], ctrls: new Set(), res: null, pub: null, done: false, diag: { planned: 0, ok: 0, fail: 0, nodata: 0, base: null, long: 0 } };
+                    } catch (e) { }
+                },
+                // timeupdate 里调。没有武装或已完成时几乎零开销;不写响应式数据。
+                //   导航检查必须在 done 之前:关掉详情再从"继续观看"回到同一集时 currentUrl 没变,watch 不触发,只能靠这里重新武装
+                _srcLenTick() {
+                    const L = this._srcLen;
+                    if (!L) return;
+                    if (L.nav !== _navSeq) { this._srcLenArm(); return; }
+                    if (L.done) return;
+                    try {
+                        if (L.res) { this._srcLenPublish(L); return; }
+                        if (L.q && !L.q.length && !L.busy) { this._srcLenFinish(L); return; }
+                        if (!this._srcLenStable()) { L.t0 = 0; return; }
+                        const now = performance.now();
+                        if (!L.t0) { L.t0 = now; return; }
+                        if (now - L.t0 < 20000) return;
+                        if (!L.q) { L.q = this._srcLenPlan(L); L.diag.planned = L.q.length; }
+                        while (L.busy < 2 && L.q.length) this._srcLenFetch(L, L.q.shift());
+                    } catch (e) { this._srcLenOff = true; L.done = true; L.diag.err = String(e && e.message); }
+                },
+                // 这一刻适合发后台请求吗:在正常播放、前向缓冲够、页面可见、网络不紧、没有别的后台任务
+                _srcLenStable() {
+                    const v = (typeof dp !== 'undefined' && dp) ? dp.video : null;
+                    if (!v || v.paused || v.seeking || v.readyState < 3 || !isFinite(v.duration)) return false;
+                    if (this.isTestingSources || this.previewLocked || (this.trial && this.trial.on) || this._liveActive || this._activeOffCached || this._activeKz || (this._isCasting && this._isCasting())) return false;
+                    if (document.hidden || navigator.onLine === false) return false;
+                    const c = navigator.connection;
+                    if (c && (c.saveData || /2g/.test(c.effectiveType || ''))) return false;
+                    if ((window.afpOffline && window.afpOffline._busy) || (window.adCut && window.adCut.busy())) return false;
+                    const t = v.currentTime;
+                    if (v.duration - t <= 180) return false;
+                    const b = v.buffered;
+                    for (let i = 0; i < b.length; i++) if (t >= b.start(i) - 0.2 && t <= b.end(i) + 0.2) return b.end(i) - t >= 15;
+                    return false;
+                },
+                // 某线路这一集的地址(地址来源与 _sourceHasEpisode 相同)。同键恰好一条才算:国语/粤语撞键时说不清比的是哪个版本
+                _srcLenEpUrl(s, epk) {
+                    const pu = (s && s._cachedDetail && s._cachedDetail.vod_play_url) || (s && s.vod_play_url) || '';
+                    if (!pu) return '';
+                    let seg = pu;
+                    if (pu.includes('$$$')) { const sets = pu.split('$$$'); seg = sets.find(x => x.toLowerCase().includes('m3u8')) || sets[0]; }
+                    const hit = seg.split('#').map(e => e.split('$')).filter(p => this._epMatchKey(p[0]) === epk);
+                    return (hit.length === 1 && hit[0][1]) || '';
+                },
+                // 按显示顺序取可比的线路,同一地址只拉一次,结果写给共用它的每条线路;最多 20 个地址(93 集实测每集去重后最多 19 个,不触顶)。
+                //   只取本机直连测通的;如意这类靠播放器跳插播的不比(切块清单算不准净时长)
+                _srcLenPlan(L) {
+                    const byUrl = new Map();
+                    for (const s of this.availableSources) {
+                        if (s._testType !== 'direct' || typeof s.latency !== 'number' || s.latency >= 9000) continue;
+                        if (s._kzMismatch || this._isKzSource(s) || this.srcProfile(s).clip) continue;
+                        const url = this._srcLenEpUrl(s, L.ep);
+                        if (!url || !/^https?:/.test(url) || !/\.m3u8/i.test(url.split('?')[0])) continue;
+                        if (location.protocol === 'https:' && url.startsWith('http:')) continue;
+                        const row = byUrl.get(url);
+                        if (row) row.ids.push(this._srcLenId(s));
+                        else if (byUrl.size < 20) byUrl.set(url, { ids: [this._srcLenId(s)], url });
+                    }
+                    return Array.from(byUrl.values());
+                },
+                async _srcLenFetch(L, row) {
+                    L.busy++;
+                    const ctl = new AbortController();
+                    L.ctrls.add(ctl);
+                    const timer = setTimeout(() => ctl.abort(), 5000);
+                    const get = async (u) => {
+                        const r = await fetch(u, { cache: 'no-cache', credentials: 'omit', signal: ctl.signal, priority: 'low' });
+                        if (!r.ok || +(r.headers.get('content-length') || 0) > 1500000) return null;
+                        const text = await r.text();
+                        return text.length > 1500000 ? null : AdClipCore.parseMedia(text, r.url || u);
+                    };
+                    try {
+                        let p = await get(row.url);
+                        if (p && p.master && p.master.variants.length) { p = await get(p.master.variants[0]); if (p && p.master) p = null; }
+                        if (L !== this._srcLen) return;
+                        const ok = p && !p.live && p.frags.length;
+                        const net = ok ? dgSrcLenNet(p.groups, p.frags.reduce((a, f) => a + f.duration, 0)) : null;
+                        if (net) {
+                            const fp = dgSrcLenVote(p.frags, p.groups, net.skip);
+                            row.ids.forEach(id => L.rows.push({ id, d: net.d, cut: net.cut, fp }));
+                            L.diag.ok++;
+                        } else L.diag.nodata++;
+                    } catch (e) { L.diag.fail++; }
+                    // 超限时 return null 并没有停止下载,不 abort 的话连接要占到 GC(和 hls.js 同一个连接池)
+                    finally { clearTimeout(timer); try { ctl.abort(); } catch (e) { } L.ctrls.delete(ctl); L.busy--; }
+                },
+                _srcLenFinish(L) {
+                    const r = dgSrcLenJudge(L.rows);
+                    L.res = r;
+                    L.diag.base = r.base; L.diag.long = r.long.size;
+                    console.log('[线路时长] ' + L.ep + ' 拉取 ' + L.diag.planned + ' 条,有效 ' + L.diag.ok + ',基准 ' + r.base + ',偏长 ' + r.long.size);
+                    if (r.long.size) this._srcLenPublish(L); else L.done = true;
+                },
+                // 观众正在操作、发布会把东西挪走:手机没有 hover(点过还会粘住),看 3 秒内碰过 / 滚过页面没有;鼠标停在线路上(它们会换位),
+                //   或停在选集这一块而网格留不住(简介在列表上方不会动,不拦);遥控器和键盘的焦点在线路上。
+                //   鼠标点过的线路留着焦点,之后按一下空格 Chrome 还会把它算成 :focus-visible,这两种都不算,否则点完一直发布不了
+                _srcLenUiBusy() {
+                    const ui = this._srcLenUi;
+                    if (ui && performance.now() - ui.t < 3000) return true;
+                    if (window.matchMedia && window.matchMedia('(hover: hover)').matches) {
+                        if (document.querySelector('.source-list:hover')) return true;
+                        const g = document.querySelector('.ep-grid');
+                        if (g && g.parentElement.matches(':hover') && !this._srcLenPin()) return true;
+                    }
+                    const a = document.activeElement;
+                    if (!a || !a.closest || !a.closest('.source-list') || (ui && a === ui.ptr)) return false;
+                    try { return a.matches(':focus-visible'); } catch (e) { return true; }
+                },
+                // 发布时列表变高,选集网格被往下顶,正要点的那集就换了。网格在视口内、页面能滚时补偿滚动把它留在原位;
+                //   但播放器过半露在视口里时不补偿:那是观众正看着的,没有任何操作就把视频顶走不行,换集清除结果时又不补偿,还会一集集累积
+                _srcLenPin() {
+                    const g = document.querySelector('.ep-grid'), ov = document.querySelector('.detail-overlay'), p = document.querySelector('.player-box');
+                    if (!g || !ov || g.getBoundingClientRect().top >= window.innerHeight || ov.scrollHeight <= ov.clientHeight) return null;
+                    const r = p && p.getBoundingClientRect();
+                    return (r && Math.min(r.bottom, window.innerHeight) - Math.max(r.top, 0) > r.height / 2) ? null : { g, ov };
+                },
+                // 一次发布,最多一次重排。观众在操作时留到后面的 tick
+                _srcLenPublish(L) {
+                    if (this._srcLenUiBusy()) return;
+                    L.pub = { long: L.res.long, clean: L.res.clean, base: L.res.base, keep: this.currentSource ? this._srcLenId(this.currentSource) : '' };
+                    L.done = true;
+                    const pin = this._srcLenPin(), t0 = pin ? pin.g.getBoundingClientRect().top : 0;
+                    this.srcRev++;
+                    if (pin) this.$nextTick(() => { pin.ov.scrollTop += pin.g.getBoundingClientRect().top - t0; });
+                },
+                // 把偏长线路挪到不长的替代后面,其他线路的相对顺序尽量不动。替代 = 判过不长、<3s、本次导航没失败过、本机能解码、分辨率不低于它。
+                //   第一条替代顶到它原来的位置(组首分辨率不掉),它自己排到最后一条替代之后。
+                //   发布时的在播线路留在原下标,长线路也不跨过它:失败换源和 TV 切线都从在播线路往后走,绕一圈才回到它前面,跨过去长线路就成了下一条。
+                //   手动换线不动这个位置(列表不能在指针下面换位),失败换源由下一条接替(_srcLenKeep)
+                _srcLenDem(sorted, P, metaOf) {
+                    const isAlt = x => P.clean.has(this._srcLenId(x)) && x.latency < 3000 && x._failNav !== _navSeq &&
+                        !(this.srcProfile(x).codec === 'hevc' && !this._srcHevcOk());
+                    const demote = a => {
+                        for (let i = a.length - 1; i >= 0; i--) {
+                            const r = a[i];
+                            if (!P.long.get(this._srcLenId(r))) continue;
+                            const rr = metaOf.get(r)[1];
+                            const alts = a.slice(i + 1).filter(x => isAlt(x) && metaOf.get(x)[1] >= rr);
+                            if (!alts.length) continue;
+                            a.splice(a.indexOf(alts[0]), 1);
+                            a.splice(i, 1, alts[0]);
+                            a.splice(a.indexOf(alts[alts.length - 1]) + 1, 0, r);
+                        }
+                        return a;
+                    };
+                    const kept = sorted.findIndex(x => this._srcLenId(x) === P.keep);
+                    return kept < 0 ? demote(sorted.slice()) : demote(sorted.slice(0, kept)).concat(sorted[kept], demote(sorted.slice(kept + 1)));
+                },
+                // 失败换源时调:原在播线路标了不可用、离开列表,屏障没了长线路会排到还没试过的线路前面,所以由下一条接替
+                _srcLenKeep(s) {
+                    const P = this._srcLenPub();
+                    if (P) { P.keep = this._srcLenId(s); this.srcRev++; }
+                },
                 // 徽章用的显示分组(clean/insert/unknown/ads;noburn 去广告生效时与 clean 同显示为"无广告")
                 srcGroupOf(s) { return SRC_TIER_GROUP[this.srcProfile(s).tier]; },
                 srcTierLabel(s) { return SRC_GROUP_BY_ID[this.srcGroupOf(s)].label; },
@@ -13550,6 +13829,19 @@
                     if (p.codec === 'hevc' && !this._srcHevcOk()) parts.push('H.265 编码：本机浏览器可能无法解码，不会自动选用');
                     const rr = this._srcRealRes(s);
                     if (rr) parts.push('分辨率 ' + rr.w + '×' + rr.h + (rr.from === 'play' ? '（播放实测）' : '（片源清单）'));
+                    const longSec = this.srcLongSec(s);
+                    if (longSec) {
+                        const sec = Math.round(longSec);
+                        // "无广告"线路的说法不能和前一句打架:它去掉的是插播,多出来的这段不在那个范围里
+                        parts.push(SRC_TIER_GROUP[p.tier] === 'clean' ? '这一集比其他线路多出约 ' + sec + ' 秒，不在自动去除范围内，可能是平台插入的广告，也可能是片头片尾' : '本集比其他线路长约 ' + sec + ' 秒，可能是片头、片尾、平台插入的广告或额外内容');
+                    }
+                    // 换线按秒数接上,不做时间轴换算:和当前线路长度差得多时先说一声(当前线路自己偏长、换到正常线路时一样要说)。
+                    //   两边都比过才说数字:没比过的线路(如意这类)不知道多长,不能当成基准长度
+                    const cur = this.currentSource, P = this._srcLenPub(), seen = x => !!P && (P.long.has(this._srcLenId(x)) || P.clean.has(this._srcLenId(x)));
+                    if (cur && this._srcLenId(cur) !== this._srcLenId(s) && seen(s) && seen(cur)) {
+                        const diff = Math.abs(longSec - this.srcLongSec(cur));
+                        if (diff >= SRC_LEN.TH) parts.push('从当前线路换过去，进度可能相差约 ' + Math.round(diff) + ' 秒');
+                    }
                     return parts.join('；');
                 },
                 // 本机 MSE 能否解 HEVC(H.265),只探一次。Firefox、不少 Linux/Android Chrome、无硬解的旧 Windows 都不行 ——
@@ -19664,6 +19956,7 @@
                                     if (dp.video && window.skipManager) window.skipManager.check(dp.video.currentTime);
                                     this._maybePreloadNext();  // ⏭️ 临近结尾时预加载下一集(内部有节流/守卫)
                                     this._srcResSniffPlay();   // 📐 主清单没写分辨率的线路:按播放画面补测
+                                    this._srcLenTick();        // 🎚️ 播放稳定后比本集各线路时长(内部没事做时第一行就返回)
                                 });
 
                                 dp.on('canplay', () => {
@@ -21138,6 +21431,7 @@
                                 failingSource.latency = 9998;      // 标记为用户端不可用
                                 failingSource._failNav = mySeq;    // 🔁 本次导航已试过(绕圈扫描不再回到它)
                             }
+                            this._srcLenKeep(nextSource);
                             this.switchSource(nextSource);
                             setTimeout(() => { this.autoRetryMessage = ''; }, 1500);
                         }, 1500);
