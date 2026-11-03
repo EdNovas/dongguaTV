@@ -7,7 +7,7 @@
 //  ④ server.js 端到端:老页面/新页面交替上报互不写坏;包络组件级合并;GET 借用;上限;墓碑校验;请求里的 src 没有任何特权
 //  ⑤ server.js 端到端:老页面的裸键(不带 ch)不被 ep|ch 遮住;借用优先长包络
 //  ⑥ server.js 端到端:优先级和确认的全路径(真实 _apply + 真实路由 + 真实 check());上中下各用各的键,老页面不带部分字段写不到这些键上
-//  ⑦ 老页面(闸门读不到票数为假,上报不报错也改不动新值)、综艺变体集在真实 _introOnEpisode 里不分析不套用不亮按钮
+//  ⑦ 老页面(闸门读不到票数为假,上报不报错也改不动新值)、综艺变体集在真实 _introOnEpisode 里不分析不套用不亮按钮、留一行判定;README 和 OUTRO_AUTO 注释与现状一致
 // 改片头标记、包络格式、/api/intro/* 后必跑。
 import fs from 'node:fs';
 import os from 'node:os';
@@ -1003,20 +1003,21 @@ await withServer(async ({ post, mark, marks }) => {
     ok(!!keyM, '_introMarkGet/_introMarkSet 在');
     const numM = /_introEpNum\(\) \{[\s\S]*?_introEpVariant\(\) \{[\s\S]*?\n {16}\},/.exec(HTML);
     ok(!!numM, '_introEpNum/_introEpPart/_introEpVariant 在');
-    const run = async (list, curIdx, marksObj) => {
+    const run = async (list, curIdx, marksObj, extra) => {
         const { A, IntroCore } = makeClient();
-        const calls = [], eng = { started: 0, stopped: 0 };
+        const calls = [], eng = { started: 0, stopped: 0 }, logs = [];
         A.learnOrDetect = async (o) => { calls.push(o); };
         const win = { afpOffline: A, afpEngine: { start() { eng.started++; }, stop() { eng.stopped++; } } };
         const methods = new Function('IntroCore', 'return {' + keyM[0] + numM[0] + '};')(IntroCore);
         const v = Object.assign(methods, {
             _liveActive: false, currentGroup: { name: 'T' }, currentSource: { site_key: 'S' }, episodeList: list, currentUrl: list[curIdx].url,
             _introTitleKey: () => 'T', _introChannel: () => 'r', _isKzUrl: () => false, introBtn: { show: false }, _introRenderBtn() { }, _introMarks: { key: 'T|S', at: Date.now(), marks: marksObj }, introSkipShow: true, introSkipAuto: true,
-        });
+        }, extra || {});
         const body = m[1];
         const fn = new Function('window', 'IntroCore', 'console', 'fetchT', 'return (async function () {' + body + '\n}).call(this);');
-        await fn.call(v, win, IntroCore, { log() { }, warn() { } }, async () => ({ json: async () => ({ marks: marksObj }) }));
-        return { v, calls, eng };
+        const go = () => fn.call(v, win, IntroCore, { log: (...a) => logs.push(a.join(' ')), warn() { } }, async () => ({ json: async () => ({ marks: marksObj }) }));
+        await go();
+        return { v, calls, eng, logs, go };
     };
     const url = (i) => 'u:' + i;
     const L = ['第1期上', '第1期下', '第1期纯享版', '第2期上', '第2期下', '先导片'].map((name, i) => ({ name, url: url(i) }));
@@ -1053,6 +1054,45 @@ await withServer(async ({ post, mark, marks }) => {
     ok(r.v._introCur && r.v._introCur.oe === 90 && !IntroCoreOf().opAuto(r.v._introCur), '电视剧:裸键兜底照旧,旧值只亮按钮', r.v._introCur);
     r = await run(D, 1, { '2|r': { os: 5, oe: 91, mv: 2, miss: 1, mt: Date.now() }, '2': { os: 5, oe: 90, v: 3 } });
     ok(r.v._introCur && r.v._introCur.oe === 91 && r.eng.started === 1, '电视剧:墓碑留着的旧值,引擎还跑(只亮按钮)', r.eng);
+
+    // 判定日志:这集为什么没按钮。变体集三种原因都说清楚
+    r = await run(L, 2, { ...marksObj });
+    ok(r.logs.length === 1 && /第1集判定: 「第1期纯享版」不当正片\(集名带变体词.*不分析、不套用标记、不显示按钮/.test(r.logs[0]), '变体集:一行判定,说清哪一集、为什么', r.logs);
+    r = await run(['第1期', '主题曲', '第2期'].map((name, i) => ({ name, url: url(i) })), 1, {});
+    ok(r.logs.length === 1 && /「主题曲」不当正片\(别的集有集号,这集解析不出/.test(r.logs[0]), '解析不出的集:一行判定', r.logs);
+    r = await run(['2021-08-12期', '2021-08-12期', '2021-08-13期'].map((name, i) => ({ name, url: url(i) })), 1, {});
+    ok(r.logs.length === 1 && /第20210812集判定: 「2021-08-12期」不当正片\(同一集号对应多个地址/.test(r.logs[0]), '同号多地址:一行判定', r.logs);
+    // 奇葩说第七季的写法不再当变体:真的走到分析
+    r = await run(['第20201217(上)期', '第20201219(下)期', '第20201224(上)期'].map((name, i) => ({ name, url: url(i) })), 0, {});
+    ok(r.calls.length === 1 && r.logs.some(s => /第20201217集判定: 共享标记=无 \| 离线分析→启动/.test(s)) && !r.logs.some(s => /不当正片/.test(s)), '第20201217(上)期:是正片,要分析', r.logs);
+    // 不分析:判定摘要里说原因
+    const offWhy = async (name, re, args, wantCalls = 0) => {
+        const x = await run(...args);
+        ok(x.calls.length === wantCalls && x.logs.length === 1 && re.test(x.logs[0]), '判定摘要:' + name, x.logs);
+    };
+    await offWhy('只有一集', /离线分析→不分析\(只有一集/, [D.slice(0, 1), 0, {}]);
+    await offWhy('片头片尾都有值', /离线分析→不分析\(片头片尾都有值\)/, [L, 0, { ...marksObj }]);
+    await offWhy('待确认也算有值', /片头5→90s\(待确认\).*离线分析→不分析\(片头片尾都有值\)/, [D, 1, { '2|r': { os: 5, oe: 90, mv: 2, pend: 1, ed: 2000 } }]);
+    await offWhy('墓碑还有效', /离线分析→不分析\(算不出的墓碑还有效/, [D, 1, { '2|r': { os: 0, oe: 0, mv: 2, miss: 1, mt: Date.now(), ed: 2000 } }]);
+    await offWhy('共享标记没拉到', /离线分析→不分析\(共享标记没拉到\)/, [D, 1, {}, { _introMarks: { key: 'T|S', at: Date.now(), marks: {}, failed: true } }]);
+    await offWhy('番剧解析地址', /离线分析→不分析\(番剧解析地址拉不了\)/, [D, 1, {}, { _isKzUrl: () => true }]);
+    await offWhy('要分析', /离线分析→启动\(缺片头\+片尾\)/, [D, 1, {}], 1);
+    // 当前地址不在列表里:没有集键,说一次(canplay 会重复进来)
+    r = await run(D, 1, {}, { currentUrl: 'u:x' });
+    ok(r.v._introCur === null && r.calls.length === 0 && r.logs.length === 1 && /判定: 当前地址不在选集列表里,不分析、不显示按钮/.test(r.logs[0]), '不在列表里:一行判定', r.logs);
+    await r.go();
+    ok(r.logs.length === 1, '不在列表里:同一地址重复进来不再说', r.logs);
+}
+{
+    // README 和 OUTRO_AUTO 注释与现状一致
+    const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+    ok(!/投票|至少 2 票|被佐证|片尾直接下一集|直接叫「下一集」/.test(readme), 'README:不再写投票和片尾直接下一集');
+    const sec = /### 跳过片头片尾\r\n([\s\S]*?)\r\n### /.exec(readme);
+    ok(!!sec && /只信已确认的新算法标记/.test(sec[1]) && /默认关/.test(sec[1]) && /片尾只亮按钮/.test(sec[1]) && /「跳过按钮」/.test(sec[1]), 'README:写明按钮、默认关、只信已确认的新算法标记、片尾只亮按钮');
+    ok(/\| 自动跳过片头\/片尾 \| 关 \| [^|\r\n]*片尾还是显示按钮 \|/.test(readme), 'README 设置表:片尾还是显示按钮');
+    ok(!/(^|[^\r])\n/.test(readme), 'README:还是纯 CRLF');
+    const outro = HTML.slice(HTML.indexOf('// 片尾自动切下一集的总开关'), HTML.indexOf('const OUTRO_AUTO = false;'));
+    ok(/魔道祖师/.test(outro) && /司藤/.test(outro) && /狂飙 yzzy/.test(outro), 'OUTRO_AUTO 注释:抽样写全魔道祖师、司藤、狂飙 yzzy', outro.length);
 }
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} 通过, ${fail} 失败`);

@@ -7,7 +7,7 @@
 //  ④ M3 窗口截断:藏海传第 1 集片头跨 480s 阶段上限,要多抓一档
 //  ⑤ 全流程(真 learnOrDetect,只桩抓取):dur 不含静音延伸,定位 = 起点 + dur + 本集延伸;无 mv 旧标记重新定位一次,重算成 mv:2 后真实 skipManager.check 自动跳;片头贴着窗口尾巴时补抓;顺带定位开头贴片;墓碑;让路不记墓碑;流量上限和中止都还在;解码失败太多不写共享墓碑;换剧竞态和 0 片清单不写墓碑
 //  ⑥ 有值的 mv:2 标记不抓、不上报、不变(待确认的也一样,确认不靠多下载);不读写 donggua_afpvote;包络不带 ep
-//  ⑦ 综艺变体:真实集名拆成 期号/部分/变体词;配对只用正片,期号不同、部分相同,由近及远;普通电视剧配对不变;变体集不分析;找不到配对不学、不写墓碑、不进 LEARN_BLOCK;上中下不共用
+//  ⑦ 综艺变体:真实集名拆成 期号/部分/变体词(第20201217(上)期 里单独的"期"不算残留);配对只用正片,期号不同、部分相同,由近及远;普通电视剧配对不变;变体集不分析;找不到配对不学、不下载、不进 LEARN_BLOCK,借来的包络定位不中才记墓碑(解码失败不记);不分析都留一行判定;上中下不共用
 //  ⑧ 第三集确认(真 learnOrDetect):学习对待确认只亮按钮,包络带 pid;学习对之外定位命中才转正,确认绑定这条包络;两个学习对凑集数不能确认;学习对的集再定位不算确认;不多下载
 // 改片头精修、定位阈值、包络格式后必跑。阈值变动要再回放真实 m3u8(见 memory 的 skip-intro 笔记),这里只防回退。
 import fs from 'node:fs';
@@ -575,7 +575,8 @@ console.log('⑤ 全流程');
         const nc = fl.conLog.length;
         ok(fl.A._st['T|S'].noDecode === 1 && !fl.ups.length && fl.A._busy === false, '解不了:记在这条线路上,不写标记也不写墓碑', fl.ups);
         await fl.run(21, 'a', 22, 'b');
-        ok(fl.conLog.length === nc, '解不了:这条线路这次会话不再启动分析');
+        const moreLog = fl.conLog.slice(nc);
+        ok(moreLog.length === 1 && /第21集不分析: 本机解不出/.test(moreLog[0]), '解不了:这条线路这次会话不再启动分析,只留一行判定', moreLog);
 
         const e2 = makeEnv(), b = e2.A, S2 = { url: 'u', base: 'u', text: '#EXTM3U', env: new Float32Array(600), n: 0, filled: 0, keyCache: {}, chunks: [], baseStart: 0 };
         b._segList = a._segList; b._tsToAdts = a._tsToAdts;
@@ -806,6 +807,9 @@ console.log('⑦ 综艺变体');
         ['第5集会员版', 'ji 5 0 V'], ['第5集未删减版', 'ji 5 0 V'], ['第5期超前点映', 'qi 5 0 V'], ['超前点映第5集', 'ji 5 0 V'], ['第5集 番外', 'ji 5 0 V'], ['第5集 试播', 'ji 5 0 V'], ['第5集 特别篇', 'ji 5 0 V'], ['第5集 独家花絮', 'ji 5 0 V'], ['第5集预告', 'ji 5 0 V'],
         // 电视剧的副标题不是变体词(结构位置才算)
         ['第6集 幕后黑手', 'ji 6 0'], ['第12集大结局', 'ji 12 0'], ['第5期 聊聊人生', 'qi 5 0'], ['第5集 预告犯', 'ji 5 0'], ['第3集上海滩', 'ji 3 0'], ['第3集 上海滩', 'ji 3 0'], ['第12集HD', 'ji 12 0'], ['庆余年第5集', 'ji 5 0'], ['第2季第5集', 'ji 5 0'], ['第5期 下午茶', 'qi 5 0'],
+        // 括号把"期"隔开(奇葩说第七季的真实写法):单独的"期"不是残留;连着别的字、括号里是别的字,还是残留
+        ['第20201217(上)期', 'date 20201217 1'], ['第20201219(下)期', 'date 20201219 3'], ['第20201217（中）期', 'date 20201217 2'], ['20201217(上)期', 'date 20201217 1'], ['20201217-期', 'date 20201217 0'],
+        ['第20201217(上)期纯享', 'date 20201217 1 V'], ['第20201217(上)期 加更', 'date 20201217 1 V'], ['第20201217(加更)期', 'date 20201217 0 V'], ['第20201217(上)期末考', 'date 20201217 1 V'], ['20201217(陈伟霆)期', 'date 20201217 0 V'],
         // 老写法不变
         ['第1集', 'ji 1 0'], ['第01话', 'ji 1 0'], ['EP05', 'ji 5 0'], ['Ep.12', 'ji 12 0'], ['05', 'ji 5 0'], ['1', 'ji 1 0'], ['0', 'ji 0 0'],
         // 解析不出
@@ -875,6 +879,16 @@ console.log('⑦ 综艺变体');
     ok(pick(['先导片', '第1期', '第2期'], 0) === null, '正在看先导片:不配');
     const pep = C.pickPair(L('第1期上', '第1期下', '第2期上'), 'u0');
     ok(pep.ep === 2 && pep.part === 1 && pep.kind === 'qi', '配对结果带集号、部分和写法', pep);
+    // 奇葩说第七季 mdzy、ikun、moduanime、moduzy 的真实写法:整张表 46 集曾全判变体,整季没按钮
+    const QP = ['第20201217(上)期', '第20201219(下)期', '第20201224(上)期', '第20201224(下)期', '第20201226(上)期', '第20201226(下)期'];
+    ok(I(L(...QP)).join() === '20201217 1,20201219 3,20201224 1,20201224 3,20201226 1,20201226 3', '奇葩说第七季:都是正片,部分认得出', I(L(...QP)));
+    ok(pick(QP, 0) === '第20201224(上)期' && pick(QP, 1) === '第20201224(下)期', '奇葩说第七季:上配上,下配下');
+    ok(C.epInfos(L(...QP)).every(x => C.epScheme(x) === 'd'), '奇葩说第七季:集号体系是日期式');
+    // 判定日志用的原因:三种不当正片各说各的,正片没有原因
+    const whyOf = C.epInfos(L('第1期', '第1期纯享版', '主题曲', '第2期'));
+    ok(whyOf[0].why === '' && whyOf[3].why === '' && /变体词/.test(whyOf[1].why) && /解析不出/.test(whyOf[2].why), '不当正片的原因:变体词、解析不出', whyOf);
+    const whyDup = C.epInfos([{ name: '2021-08-12期', url: 'a' }, { name: '2021-08-12期', url: 'b' }, { name: '2021-08-13期', url: 'c' }]);
+    ok(/多个地址/.test(whyDup[0].why) && /多个地址/.test(whyDup[1].why) && whyDup[2].why === '', '不当正片的原因:同一集号多个地址,两边都说', whyDup);
 
     // 集号体系:真实集名。d=日期式 j=第N集 q=第N期/分上下/列表位置
     const SC = (name) => C.epScheme(C.epInfos([{ name, url: 'u' }])[0]);
@@ -923,6 +937,50 @@ console.log('⑦ 综艺变体');
     ok(nf.conLog.some(s => /找不到能配对/.test(s)), '找不到配对:控制台说明了原因');
     ok(!nf.A._epDone['T|S|1|1'], '找不到配对:不记完成(列表更新了还能学)');
     ok(C.learnMissCount(nf.marks, 'r', Date.now()) === 0, '找不到配对:不进 LEARN_BLOCK');
+    // 奇葩说第七季全流程:真 learnOrDetect 真的分析,抓第20201224(上)期做学习对,写带部分的键
+    const qf = makeFlow({ a: J.A, c: J.B });
+    await qf.runNames(QP, 0);
+    ok(qf.fetchCalls.some(c => c.url === 'u:a') && qf.fetchCalls.some(c => c.url === 'u:c') && !qf.fetchCalls.some(c => c.url === 'u:b'), '奇葩说第七季:第20201217(上)期配第20201224(上)期', qf.fetchCalls.map(c => c.url));
+    ok(qf.ups.length === 2 && qf.ups.every(u => u.part === 1 && u.oe > u.os) && !!qf.marks['20201217|r|1'] && !!qf.marks['20201224|r|1'], '奇葩说第七季:学出来了,按部分写键', qf.ups);
+    // 借来的包络没中、列表里又找不到配对:记定位不中,否则每个会话都拿借来的包络重抓一遍(乘风2024 hongniuzy 第1期(中) 实测每会话 165MB)
+    const bwSrc = makeFlow({ a: J.A, b: J.B });
+    await bwSrc.run(21, 'a', 22, 'b');
+    const bwEnv = { ...bwSrc.A._st['T|S'].intro, iB: 1, from: 'X' };
+    const bwFlow = (data, opts, env) => { const f = makeFlow(data, opts || {}); f.A._st['T|S'] = { phase: 'idle', tries: 0, intro: { ...(env || bwEnv) }, outroTries: 0, mb: 0, envFetched: 1 }; return f; };
+    const MID = ['第1期上', '第1期中', '第1期下', '第2期上', '第2期下'], MISS = J.A.slice(0, 1);   // 第1期中:没有别的"中",配不了对
+    const m1 = bwFlow({ b: MISS });
+    await m1.runNames(MID, 1);
+    ok(m1.fetchCalls.length >= 1 && m1.fetchCalls.every(c => c.url === 'u:b') && m1.ups.length === 1 && m1.ups[0].ep === 1 && m1.ups[0].part === 2 && m1.ups[0].miss === 1 && m1.marks['1|r|2'].miss === 1, '借来的没中、找不到配对:记定位不中,按部分写键', { calls: m1.fetchCalls, ups: m1.ups });
+    ok(m1.A._st['T|S'].tries === 0 && C.learnMissCount(m1.marks, 'r', Date.now(), 2) === 0, '借来的没中、找不到配对:不算学不出,不进 LEARN_BLOCK', m1.A._st['T|S'].tries);
+    ok(m1.conLog.some(s => /找不到能配对/.test(s)) && !m1.conLog.some(s => /回退冷启动/.test(s)), '借来的没中、找不到配对:日志不说回退冷启动', m1.conLog);
+    const m1n = m1.fetchCalls.length;
+    m1.A._st = {}; m1.A._epDone = {};
+    await m1.runNames(MID, 1);
+    ok(m1.fetchCalls.length === m1n && m1.ups.length === 1, '记完新会话不再抓', m1.fetchCalls.length);
+    ok(m1.conLog.some(s => /第1集不分析: 片头算不出\(1\)的墓碑还有效/.test(s)), '记完新会话:日志说明了为什么不分析', m1.conLog);
+    // 已判过学不出的集,这条路照旧升成 3
+    const m3 = bwFlow({ b: MISS }, { marks: { '1|r|2': { os: 0, oe: 0, mv: 2, miss: 2, mt: Date.now(), ed: 99999 } } });
+    await m3.runNames(MID, 1);
+    ok(m3.ups.length === 1 && m3.ups[0].miss === 3 && m3.marks['1|r|2'].miss === 3, '学不出的集借包络也没中、找不到配对:记 3', m3.ups);
+    const m4 = bwFlow({ a: MISS }, { marks: { '1|r|1': { os: 0, oe: 0, mv: 2, miss: 2, mt: Date.now(), ed: 99999 } } });
+    await m4.runNames(MID, 0);
+    ok(m4.ups.length === 1 && m4.ups[0].miss === 3 && m4.marks['1|r|1'].miss === 3 && m4.fetchCalls.length >= 1 && m4.fetchCalls.every(c => c.url === 'u:a'), '学不出的集有配对、借包络也没中:记 3,不抓配对那集', { ups: m4.ups, calls: m4.fetchCalls });
+    // 解码失败不算数:一段音频都没有、失败太多,都不写墓碑,下个会话还试
+    const m0 = bwFlow({});
+    await m0.runNames(MID, 1);
+    ok(m0.fetchCalls.length >= 1 && !m0.ups.length && !m0.marks['1|r|2'], '找不到配对、0 片清单:不写墓碑', m0.ups);
+    const mf = bwFlow({ b: MISS }, { onFetch: (s) => { s.decFail = 5; s.segs = 10; } });
+    await mf.runNames(MID, 1);
+    ok(mf.fetchCalls.length >= 1 && !mf.ups.length && !mf.marks['1|r|2'], '找不到配对、解码失败太多:不写墓碑', mf.ups);
+    const mfn = mf.fetchCalls.length;
+    mf.A._st['T|S'] = { phase: 'idle', tries: 0, intro: { ...bwEnv }, outroTries: 0, mb: 0, envFetched: 1 }; mf.A._epDone = {};
+    await mf.runNames(MID, 1);
+    ok(mf.fetchCalls.length > mfn, '找不到配对、解码失败太多:下个会话还试', mf.fetchCalls.length);
+    // 有配对的集:借来的没中照旧回退冷启动,学出来就不留墓碑
+    const noiseEnv = { ...bwEnv, env: Float32Array.from({ length: bwEnv.env.length }, (_, i) => Math.abs(Math.sin(i * 12.9898) * 43758.5453) % 1) };
+    const mp = bwFlow({ a: J.A, d: J.B }, {}, noiseEnv);
+    await mp.runNames(MID, 0);
+    ok(mp.conLog.some(s => /回退冷启动/.test(s)) && mp.ups.length === 2 && mp.ups.every(u => !u.miss && u.oe > u.os), '有配对:借来的没中,回退冷启动学出来,不留墓碑', mp.ups);
     // 配对只用同部分:真 learnOrDetect 抓的是第2期上,不是第1期下
     const pf = makeFlow({ a: J.A, b: J.C, c: J.B, d: J.C });
     await pf.runNames(['第21期上', '第21期下', '第22期上', '第22期下'], 0);
@@ -943,6 +1001,46 @@ console.log('⑦ 综艺变体');
     of1.A._fetchTailEnv = async (s) => { tailUrls.push(s.url); return false; };
     await of1.runNames(['第21期上', '第21期下', '第22期上', '第22期下'], 0);
     ok(tailUrls.includes('u:a') && tailUrls.includes('u:c') && !tailUrls.includes('u:b'), '片尾学习:同样配第22期上,不配第21期下', tailUrls);
+
+    // 不分析的情况各留一行判定,排查"这集为什么没按钮"
+    const noRun = async (mark, st, hook) => {
+        const fl = makeFlow({ a: J.A }, { needOutro: true, marks: mark ? { '5|r': mark } : {} });
+        fl.A._st['T|S'] = { phase: 'idle', tries: 0, intro: null, outroTries: 0, mb: 0, ...(st || {}) };
+        if (hook) hook(fl);
+        await fl.run(5, 'a');
+        return fl;
+    };
+    const ED = 2000;
+    for (const [name, mark, st, hook, re] of [
+        ['有新算法的值', { os: 5, oe: 90, mv: 2, ed: ED }, null, null, /第5集不分析: 片头有新算法的值,片尾有值/],
+        ['待确认', { os: 5, oe: 90, mv: 2, pend: 1, ed: ED }, null, null, /第5集不分析: 片头有待确认的值,片尾有值/],
+        ['墓碑', { os: 0, oe: 0, mv: 2, miss: 1, mt: Date.now(), ed: ED }, null, null, /第5集不分析: 片头算不出\(1\)的墓碑还有效,片尾有值/],
+        ['本线路学不出', { ed: ED }, { phase: 'nointro' }, null, /第5集不分析: 片头本线路学不出,片尾有值/],
+        ['失败两次', { ed: ED }, { tries: 2 }, null, /第5集不分析: 片头本线路已失败 2 次,片尾有值/],
+        ['本会话算过片头', { ed: ED }, null, f => { f.A._epDone['T|S|5'] = 1; }, /第5集不分析: 片头本会话算过,片尾有值/],
+        ['片尾试过', { os: 5, oe: 90, mv: 2 }, { outroTries: 1 }, null, /第5集不分析: 片头有新算法的值,片尾本线路这次会话试过一次/],
+        ['本会话算过片尾', { os: 5, oe: 90, mv: 2 }, null, f => { f.A._outroDone['T|S|5'] = 1; }, /第5集不分析: 片头有新算法的值,片尾本会话算过/],
+        ['解不了', null, { noDecode: 1 }, null, /第5集不分析: 本机解不出/],
+        ['别的分析在跑', null, null, f => { f.A._busy = true; }, /第5集不分析: 另一轮分析还没结束/],
+        ['本线路分析中', null, { phase: 'pending' }, null, /第5集不分析: 另一轮分析还没结束/],
+    ]) {
+        const fl = await noRun(mark, st, hook);
+        ok(fl.fetchCalls.length === 0 && !fl.ups.length && fl.conLog.filter(s => /不分析/.test(s)).length === 1 && fl.conLog.some(s => re.test(s)), '判定日志:' + name, fl.conLog);
+    }
+    // 等播放稳定的 60 秒里:换了集、别的分析先开跑
+    const waitOf = async (onRead) => {
+        const fl = makeFlow({ a: J.A });
+        const need0 = fl.A._introNeed;
+        fl.A._introNeed = function (o, m) { let n = 0; Object.defineProperty(o.vue, '_playToken', { get() { return onRead(fl, n++); } }); return need0.call(this, o, m); };
+        await fl.run(5, 'a');
+        return fl;
+    };
+    const wt = await waitOf((fl, n) => n ? 2 : 1);
+    ok(wt.fetchCalls.length === 0 && wt.conLog.some(s => /第5集不分析: 等播放稳定时换了集或线路/.test(s)), '判定日志:等待时换集', wt.conLog);
+    const wb = await waitOf((fl, n) => { if (n) fl.A._busy = true; return 1; });
+    ok(wb.fetchCalls.length === 0 && wb.conLog.some(s => /第5集不分析: 另一轮分析还没结束/.test(s)), '判定日志:等待时别的分析先开跑', wb.conLog);
+    // 正常分析不说"不分析"
+    ok(!pf.conLog.some(s => /不分析/.test(s)), '正常分析:没有不分析的判定', pf.conLog);
 }
 
 console.log('⑧ 第三集确认');

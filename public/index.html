@@ -8513,6 +8513,7 @@
             // 片尾自动切下一集的总开关。放开时只信带新算法标记的片尾(emv:2)。判定线:任何一部剧系统性地切掉 >5s 正片,或切掉 >5s 的样本超过 1/20,就不放开。
             //   2026-11 抽样 13 部剧 47 集(其中 4 部综艺;真实 m3u8 跑真实 _learnOutro/_detectOutro,按播放器时间轴抽帧,精度 1 秒):魔道祖师 3/3 集都早 5~6 秒(片尾曲第 7 秒才响,前面是正片最后一个镜头),
             //   算系统性切掉正片,所以只亮按钮。其余 44 集切掉 0~4 秒。阈值或片尾算法改了要重新抽样再放开;放开前片尾还要补第三集确认,现在学习对算出的片尾也带 emv。
+            //   之后两轮验证又抽到同样的情况,都不在上面 44 集里:司藤第 13~15 集切掉 5~6 秒(按 1 秒抽帧,ed+5 还是正片,ed+6 才是片尾画面,片尾曲先响);狂飙 yzzy 的 ed=2588.3,第 1 集 2594s 还是正片、2596s 才出字幕,早约 6~8 秒,第 2 集 2592s 还是正片、2600s 已是字幕,至少早约 4 秒。
             const OUTRO_AUTO = false;
             const LV_TOL = 0.25;         // 响度比容差(|ln 比值|,约 ±28%)
             const LV_LOW = 0.002;        // 两边都低于它算一样(静音附近比值没意义)
@@ -8757,10 +8758,11 @@
                 }
                 const head = s.slice(0, at).replace(/第\s*(?:\d+|[零一二两三四五六七八九十百]+)\s*[季集话話期]/g, '').replace(/第\s*$/, '').replace(new RegExp(EP_SEP.source, 'g'), '').replace(/^\d{1,4}$/, '');   // 歌手2025第1期:共同前缀遇到数字就停,剩下的 2025 不算残留
                 if (head && (kind !== 'ji' || VAR_ANY.test(head))) variant = true;
-                // 紧贴的部分和变体词逐个剥;日期后面的"第 N 期"不算残留(20220819(第1期上)、20240731期-第1期)
+                // 紧贴的部分和变体词逐个剥;日期后面的"第 N 期"不算残留(20220819(第1期上)、20240731期-第1期);括号把"期"隔开时单独的"期"也不算(第20201217(上)期:奇葩说第七季四条线路整张表曾判成变体,整季没按钮)
                 const peel = (x, glued) => {
                     for (;;) {
                         let g;
+                        if (x === '期') return '';
                         if (kind === 'date' && (g = /^第\s*0*\d+\s*[集话話期]/.exec(x))) { x = x.slice(g[0].length); continue; }
                         if ((g = PART_HEAD.exec(x))) { part = PART_CODE[g[1]]; x = x.slice(g[0].length); continue; }
                         if (glued && VAR_HEAD.test(x)) { variant = true; return ''; }
@@ -8776,7 +8778,7 @@
                 });
                 return { num, part, variant, kind };
             };
-            // 整个选集列表 → 每集 { ep, part, variant, kind }。list 项 { name, url };variant=不是正片:不分析、不套用别集的标记、不显示按钮。
+            // 整个选集列表 → 每集 { ep, part, variant, kind, why }。list 项 { name, url };variant=不是正片:不分析、不套用别集的标记、不显示按钮;why=为什么不当正片(只给判定日志看)。
             //   · 全列表共同前缀先去掉(披荆斩棘的哥哥20210813下),遇到数字就停
             //   · 解析不出的:列表里别的集解析得出,它就是先导片/主题曲/回顾这类,不当正片(用列表位置当集号会撞上真的第 N 期);全都解析不出(第一部、HD),还按列表位置
             //   · 同一个 (期号, 部分) 对应多个地址(2021-08-12期 三条),分不清谁是谁,都不当正片
@@ -8791,13 +8793,13 @@
                 }
                 const parsed = names.map(n => parseEpName(pre ? n.slice(pre.length) : n));
                 const anyTok = parsed.some(p => p.kind);
-                const out = parsed.map((p, i) => ({ ep: p.kind ? p.num : i + 1, part: p.part, variant: p.variant || (anyTok && !p.kind), kind: p.kind }));
+                const out = parsed.map((p, i) => ({ ep: p.kind ? p.num : i + 1, part: p.part, variant: p.variant || (anyTok && !p.kind), kind: p.kind, why: p.variant ? '集名带变体词或别的文字' : anyTok && !p.kind ? '别的集有集号,这集解析不出' : '' }));
                 const seen = new Map();
                 out.forEach((x, i) => {
                     if (x.variant) return;
                     const k = x.ep + '|' + x.part, j = seen.get(k);
                     if (j === undefined) seen.set(k, i);
-                    else if (arr[j].url !== arr[i].url) { out[j].variant = true; x.variant = true; }
+                    else if (arr[j].url !== arr[i].url) { out[j].variant = true; x.variant = true; out[j].why = x.why = '同一集号对应多个地址,分不清'; }
                 });
                 return out;
             };
@@ -18764,7 +18766,11 @@
                         const title = this._introTitleKey();
                         const site = (this.currentSource && this.currentSource.site_key) || '';
                         const ep = this._introEpNum();
-                        if (!title || !site || ep == null) { this._introCur = null; return; }
+                        if (!title || !site || ep == null) {
+                            this._introCur = null;
+                            if (this._introNoKeyLog !== this.currentUrl) { this._introNoKeyLog = this.currentUrl; console.log('[跳过片头] 判定: ' + (!title ? '没有剧名' : !site ? '没有线路' : '当前地址不在选集列表里') + ',不分析、不显示按钮'); }   // canplay 会重复进来,同一地址只说一次
+                            return;
+                        }
                         // 🧭 键里带时间轴通道:同一集若中途从过滤代理退到直连/无过滤(switchTo),时间轴变了,canplay 再来时必须重取该通道的标记
                         const part = this._introEpPart(), variant = this._introEpVariant();
                         const epKey = title + '|' + site + '|' + ep + '|' + part + (variant ? '|v' : '') + '|' + this._introChannel();
@@ -18778,7 +18784,12 @@
                         this._introChkLogged = false;   // 让 check() 对新集重新打印一次"可跳区间 vs 起播位置"诊断
                         this.introBtn.show = false; this._introRenderBtn();
                         // 🏷️ 纯享/加更/先导这类不是正片:不分析、不套用别集的标记、不显示按钮(和正片共享大段音频,片头也不一定有)
-                        if (variant) { if (window.afpEngine) window.afpEngine.stop(); return; }
+                        if (variant) {
+                            if (window.afpEngine) window.afpEngine.stop();
+                            const ve = (this.episodeList || []).find(e => e.url === this.currentUrl), vi = IntroCore.epInfoOf(this.episodeList, this.currentUrl);
+                            console.log('[跳过片头] 第' + ep + '集判定: 「' + (ve && ve.name) + '」不当正片(' + (vi && vi.why) + '),不分析、不套用标记、不显示按钮');
+                            return;
+                        }
                         // 共享标记(每 剧|线路 拉一次,15min 内存缓存)
                         const marksKey = title + '|' + site;
                         if (!this._introMarks || this._introMarks.key !== marksKey || Date.now() - this._introMarks.at > 15 * 60 * 1000) {
@@ -18805,8 +18816,9 @@
                         const willEngine = !!window.afpEngine && multiEp && !part && (!mk || mk.mv !== IntroCore.MARK_V || !!mk.miss);   // 引擎按集号存录音,分不清上下半;新算法有值就省 CPU
                         // 📋 每集一行判定摘要:按钮数据从哪来/还差什么,一眼定位"为什么没按钮"
                         try {
+                            const noOff = !multiEp ? '只有一集,学不了' : !window.afpOffline ? '分析模块没加载' : this._introMarks.failed ? '共享标记没拉到' : this._isKzUrl(this.currentUrl) ? '番剧解析地址拉不了' : mk && mk.miss ? '算不出的墓碑还有效,片尾有值' : '片头片尾都有值';
                             const seg = mk ? [(mk.be > mk.bs ? '贴片' + mk.bs + '→' + mk.be + 's' + (mk.bmv === IntroCore.MARK_V ? '' : '(旧算法)') : ''), (mk.oe > mk.os ? '片头' + mk.os + '→' + mk.oe + 's' + (mk.mv === IntroCore.MARK_V ? (mk.pend ? '(待确认)' : '') : '(旧算法)') : ''), (mk.miss ? '算不出(' + mk.miss + ')' : ''), (mk.ed > 0 ? '片尾@' + mk.ed + 's' + (mk.emv === IntroCore.MARK_V ? '' : '(旧算法)') : '')].filter(Boolean).join(' ') : '';
-                            console.log('[跳过片头] 第' + ep + '集判定: 共享标记=' + (seg || '无') + ' | 离线分析' + (willOffline ? '→启动(缺' + [introNeed.intro ? '片头' : '', !(mk && mk.ed > 0) ? '片尾' : ''].filter(Boolean).join('+') + ')' : '→不需要') + ' | 边看边学' + (willEngine ? '→启动' : '→停') + ' | 按钮开关=' + (this.introSkipShow ? '开' : '关') + ' 自动跳=' + (this.introSkipAuto ? '开' : '关'));
+                            console.log('[跳过片头] 第' + ep + '集判定: 共享标记=' + (seg || '无') + ' | 离线分析' + (willOffline ? '→启动(缺' + [introNeed.intro ? '片头' : '', !(mk && mk.ed > 0) ? '片尾' : ''].filter(Boolean).join('+') + ')' : '→不分析(' + noOff + ')') + ' | 边看边学' + (willEngine ? '→启动' : '→停') + ' | 按钮开关=' + (this.introSkipShow ? '开' : '关') + ' 自动跳=' + (this.introSkipAuto ? '开' : '关'));
                         } catch (e) { }
                         if (willOffline) {
                             window.afpOffline.learnOrDetect({ vue: this, title, site, ep, epList: this.episodeList }).catch(() => { });
@@ -20763,6 +20775,12 @@
                                         if (n.intro && !n.noLearn && V._introMarks && V._introMarks.key === o.title + '|' + o.site && IntroCore.learnMissCount(V._introMarks.marks, ch, now, o.part) >= IntroCore.LEARN_BLOCK) n.noLearn = true;
                                         return n;
                                     },
+                                    // 这集这次不分析:片头、片尾各说一句原因(排查"这集为什么没按钮")
+                                    _noRunWhy(mark, need, st, epK) {
+                                        const op = !need.intro ? (mark && mark.miss ? '算不出(' + mark.miss + ')的墓碑还有效' : mark && mark.pend ? '有待确认的值' : '有新算法的值') : this._epDone[epK] ? '本会话算过' : st.phase === 'nointro' ? '本线路学不出' : '本线路已失败 ' + st.tries + ' 次';
+                                        const ed = mark && mark.ed > 0 ? '有值' : this._outroDone[epK] ? '本会话算过' : '本线路这次会话试过一次';
+                                        return '片头' + op + ',片尾' + ed;
+                                    },
                                     // 🪦 墓碑:算不出来的集记到服务器,后来人不再重抓(定位 26~66MB、学习 58~124MB)。kind 1=定位不中 2=学不出(以后有包络还能试定位) 3=学不出且定位也不中。
                                     //   旧值留着继续亮按钮;新算法的真值不动。
                                     _tomb(o, ep, kind) {
@@ -20898,11 +20916,11 @@
                                         const need = this._introNeed(o, mark);   // 旧算法的标记要重算;有值的 mv:2 标记不算;算不出来的集有墓碑(见 IntroCore.introNeed)
                                         let needIntro = need.intro && !this._epDone[epK] && st.phase !== 'nointro';
                                         let needOutro = !(mark && mark.ed > 0) && !this._outroDone[epK];
-                                        if (st.noDecode) return;   // 本机一段音频都解不出来:这次会话不再分析这条线路
-                                        if (this._busy || st.phase === 'pending') return;
+                                        if (st.noDecode) { console.log('[AFP离线] 第' + o.ep + '集不分析: 本机解不出这条线路的音频'); return; }   // 本机一段音频都解不出来:这次会话不再分析这条线路
+                                        if (this._busy || st.phase === 'pending') { console.log('[AFP离线] 第' + o.ep + '集不分析: 另一轮分析还没结束'); return; }
                                         if (needIntro && st.phase === 'idle' && st.tries >= 2) needIntro = false;
                                         if (needOutro && st.outroTries >= 1) needOutro = false;
-                                        if (!needIntro && !needOutro) return;
+                                        if (!needIntro && !needOutro) { console.log('[AFP离线] 第' + o.ep + '集不分析: ' + this._noRunWhy(mark, need, st, epK)); return; }
                                         // 设备离线不自动分析(分析要从网络抓分段,断网时全是白费的挂起请求,还挤占离线播放)
                                         if (navigator.onLine === false) { if (!this._offLogged) { this._offLogged = true; console.log('[AFP离线] 设备离线,跳过自动分析(已有标记仍正常使用)'); } return; }
                                         // 省流量模式/2G/蜂窝流量不自动分析(蜂窝判断只有 Chrome/Android 给 type,尽力而为;WiFi/桌面不受影响)
@@ -20918,14 +20936,14 @@
                                         let stable = false;
                                         for (let i = 0; i < 60; i++) {
                                             await new Promise(r => setTimeout(r, 1000));
-                                            if (o.vue._playToken !== myToken) return;   // 换集/换源/换剧 → 本次分析作废(别对新源乱抓)
+                                            if (o.vue._playToken !== myToken) { console.log('[AFP离线] 第' + o.ep + '集不分析: 等播放稳定时换了集或线路,这次作废'); return; }   // 换集/换源/换剧 → 本次分析作废(别对新源乱抓)
                                             try {
                                                 const v = (typeof dp !== 'undefined' && dp && dp.video) ? dp.video : null;
                                                 if (v && !v.paused && v.readyState >= 3 && (v.currentTime || 0) > 10) { stable = true; break; }
                                             } catch (e) { }
                                         }
                                         if (!stable) { if (!this._unstableLogged) { this._unstableLogged = true; console.log('[AFP离线] 播放未稳定(卡顿/暂停/已切源),本次不分析——优先保证播放'); } return; }
-                                        if (this._busy || st.phase === 'pending') return;   // 等待期间可能已有别的分析开跑
+                                        if (this._busy || st.phase === 'pending') { console.log('[AFP离线] 第' + o.ep + '集不分析: 另一轮分析还没结束'); return; }   // 等待期间可能已有别的分析开跑
                                         this._busy = true; const back = st.phase; st.phase = 'pending';
                                         this._abort = false; this._token = myToken;
                                         const mbBefore = this._mb;
@@ -20982,10 +21000,10 @@
                                                         console.log('[AFP离线] 定位: 第' + o.ep + '集片头 @' + os.toFixed(1) + '→' + (end + ext).toFixed(1) + 's' + (trimmed ? '(包络尾部对不上,收回 ' + (fullEnd - end).toFixed(1) + 's)' : '') + (bump ? ' + 开头贴片 @' + bump.bs + '→' + bump.be + 's' : '') + ' (conf ' + hit.conf.toFixed(2) + ',会话流量 ' + this._mb.toFixed(0) + 'MB)');
                                                     } else if (saved.iB) {
                                                         // 借用的片头包络在本线路失配(版本/剪辑不同):丢弃,顺流而下回退冷启动学习(本集包络已抓好,复用)
-                                                        console.log('[AFP离线] ☁️ 借用的片头包络本线路未命中(版本可能不同)' + (need.noLearn ? '' : ',回退冷启动学习'));
+                                                        console.log('[AFP离线] ☁️ 借用的片头包络本线路未命中(版本可能不同)' + (need.noLearn || !sib ? '' : ',回退冷启动学习'));
                                                         saved.env = null; saved.iB = 0; saved.pid = ''; saved.peps = null; saved.psite = ''; saved.pk = ''; preSessA = sess;
-                                                        // 不会再冷启动的集(已判过学不出):这次没中也要记下来,否则每个会话都拿借来的包络重抓一遍
-                                                        if (need.noLearn && this._decodeOk(sess)) this._tomb(o, o.ep, 1);
+                                                        // 不会再冷启动的集(已判过学不出、列表里找不到配对):这次没中也要记下来,否则每个会话都拿借来的包络重抓一遍(乘风2024 hongniuzy 第1期(中) 实测每会话 165MB);解码失败太多不算数
+                                                        if ((need.noLearn || !sib) && this._decodeOk(sess)) this._tomb(o, o.ep, 1);
                                                     } else {
                                                         this._epDone[epK] = 1; done = true; st.phase = 'learned';
                                                         console.log('[AFP离线] 定位: 第' + o.ep + '集前' + sess.filled + 's未找到已知片头(可能本集无片头/被剪)');
@@ -21014,7 +21032,7 @@
                                                 if (needOutro && sib) await this._learnOutro(o, F, curUrl, sib, st, saved);
                                                 return;
                                             }
-                                            // 🏷️ 列表里找不到能配对的正片(期号不同、部分相同):不学,也不算学不出,不写墓碑、不进 LEARN_BLOCK
+                                            // 🏷️ 列表里找不到能配对的正片(期号不同、部分相同):不学,也不算学不出,这里没下载,不写墓碑、不进 LEARN_BLOCK(借来的包络刚定位不中的,上面已经按定位不中记过)
                                             if (!sib) { console.log('[AFP离线] 第' + o.ep + '集在列表里找不到能配对的正片,不学片头'); return; }
                                             st.tries++;
                                             console.log('[AFP离线] 冷启动学习: 抓 本集+第' + sib.ep + '集 音频响度包络(先前4分钟,学不出自动扩到10分钟)…');
