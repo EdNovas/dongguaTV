@@ -9,6 +9,7 @@
 //  ⑥ 有值的 mv:2 标记不抓、不上报、不变(待确认的也一样,确认不靠多下载);不读写 donggua_afpvote;包络不带 ep
 //  ⑦ 综艺变体:真实集名拆成 期号/部分/变体词(第20201217(上)期 里单独的"期"不算残留);配对只用正片,期号不同、部分相同,由近及远;普通电视剧配对不变;变体集不分析;找不到配对不学、不下载、不进 LEARN_BLOCK,借来的包络定位不中才记墓碑(解码失败不记);不分析都留一行判定;上中下不共用
 //  ⑧ 第三集确认(真 learnOrDetect):学习对待确认只亮按钮,包络带 pid;学习对之外定位命中才转正,确认绑定这条包络;两个学习对凑集数不能确认;学习对的集再定位不算确认;不多下载
+//  ⑨ 开头贴片(真实包络切片 + 真 learnOrDetect + 真 check()):假贴片不中不写(乘风2024 ikun、隐秘的角落 1080zyk、咒术回战 zy360、奔跑吧第八季 jisu);真贴片保住且落点不切正片;只在集首 30s;bmv:2 的旧贴片只亮按钮,集首之外的不亮,不为它重算
 // 改片头精修、定位阈值、包络格式后必跑。阈值变动要再回放真实 m3u8(见 memory 的 skip-intro 笔记),这里只防回退。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +22,7 @@ const FX = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/intro/sl
 let pass = 0, fail = 0;
 const ok = (c, msg, extra) => { if (c) pass++; else { fail++; console.log('  ✗ ' + msg + (extra === undefined ? '' : '  ->  ' + JSON.stringify(extra))); } };
 const near = (a, b, d) => Math.abs(a - b) <= d;
+const atob_len = (b64) => Buffer.from(b64, 'base64').length;
 
 const coreM = /\/\/ <dg-intro-core>\n([\s\S]*?)\n\s*\/\/ <\/dg-intro-core>/.exec(HTML);
 const i0 = HTML.indexOf('if (!window.afpOffline) window.afpOffline = {'), i1 = HTML.indexOf('// ========== 🗨️ 弹幕样式管理器', i0);
@@ -498,13 +500,13 @@ console.log('⑤ 全流程');
     const withBump = [...bumpR.map((r, j) => ({ st: 10 + j * 2, r })), ...J.C];
     const bumpFlow = (data, intro, marks) => {
         const fl = makeFlow({ c: data }, marks ? { marks } : {});
-        fl.A._st['T|S'] = { phase: 'learned', tries: 0, intro: { ...saved, benv: bumpEnv, bdur: 20, ...intro }, outroTries: 0, mb: 0 };
+        fl.A._st['T|S'] = { phase: 'learned', tries: 0, intro: { ...saved, benv: bumpEnv, bdur: 20, bdv: 3, ...intro }, outroTries: 0, mb: 0 };
         return fl;
     };
     const bh = bumpFlow(withBump);
     const bhCur = await bh.run(23, 'c');
     ok(bh.ups[0] && bh.ups[0].bump && near(bh.ups[0].bump.bs, 10, 0.15) && near(bh.ups[0].bump.be, 30, 0.15) && near(bh.ups[0].oe, 101.02, 0.25), '贴片包络命中:上报带贴片区间,片头不受影响', bh.ups);
-    ok(near(bh.marks['23|r'].bs, 10, 0.15) && near(bh.marks['23|r'].be, 30, 0.15) && bh.marks['23|r'].bmv === 2 && !('bv' in bh.marks['23|r']), '贴片包络命中:写进本地缓存,带 bmv', bh.marks['23|r']);
+    ok(near(bh.marks['23|r'].bs, 10, 0.15) && near(bh.marks['23|r'].be, 30, 0.15) && bh.marks['23|r'].bmv === 3 && !('bv' in bh.marks['23|r']), '贴片包络命中:写进本地缓存,带 bmv', bh.marks['23|r']);
     const bn = bumpFlow(J.C);
     await bn.run(23, 'c');
     ok(bn.ups[0] && !bn.ups[0].bump && bn.ups[0].oe > 0 && bn.A._st['T|S'].intro.benv === bumpEnv, '本线路的贴片包络没中:不带贴片,包络留着(别的集还要用)', bn.ups);
@@ -518,8 +520,8 @@ console.log('⑤ 全流程');
     const bo = bumpFlow(withBump, {}, { '23|r': { os: 60, oe: 100, v: 1, src: 'auto', bs: 10.1, be: 30.1, bv: 9, ed: 99999 } });
     const boCur = await bo.run(23, 'c');
     pc = playCheck(boCur._introCur);
-    ok(boCur._introCur.bmv === 2 && near(boCur._introCur.bs, 10, 0.15) && pc.seeks.length === 2, '旧标记重算 + 贴片:都是新算法值,都自动跳', { cur: boCur._introCur, pc });
-    ok(bo.marks['23|r'].bmv === 2 && !('bv' in bo.marks['23|r']) && !('v' in bo.marks['23|r']), '旧标记重算 + 贴片:本地缓存不留旧票数', bo.marks['23|r']);
+    ok(boCur._introCur.bmv === 3 && near(boCur._introCur.bs, 10, 0.15) && pc.seeks.length === 2, '旧标记重算 + 贴片:都是新算法值,都自动跳', { cur: boCur._introCur, pc });
+    ok(bo.marks['23|r'].bmv === 3 && !('bv' in bo.marks['23|r']) && !('v' in bo.marks['23|r']), '旧标记重算 + 贴片:本地缓存不留旧票数', bo.marks['23|r']);
     // 旧贴片这次没量到:留着,只亮按钮;片头照跳
     const bo2 = bumpFlow(J.C, {}, { '23|r': { os: 60, oe: 100, v: 1, src: 'auto', bs: 3, be: 20, bv: 9, ed: 99999 } });
     const bo2Cur = await bo2.run(23, 'c');
@@ -527,10 +529,16 @@ console.log('⑤ 全流程');
     ok(pc.seeks.length === 1 && near(pc.seeks[0], bo2Cur._introCur.oe, 0.01) && pc.btn === 'bump', '旧贴片这次没量到:只亮按钮,不能跟着片头一起跳', pc);
     pc = playCheck(bhCur._introCur);
     ok(bhCur._introCur.src === 'afp' && pc.seeks.length === 2 && near(pc.seeks[0], 30, 0.15) && near(pc.seeks[1], bhCur._introCur.oe, 0.01), '定位命中的集:贴片和片头都自动跳', { cur: bhCur._introCur, pc });
-    // 只在前 150s 里找:同样的音频挪到 170s 不算贴片
+    // 只在集首前 30s 里找:同样的音频挪到 40s、170s 都不算贴片(位置不对的,就算对得上也多半是正片里的音乐)
     const bl2 = bumpFlow([...bumpR.map((r, j) => ({ st: 170 + j * 2, r })), ...J.C]);
     await bl2.run(23, 'c');
-    ok(bl2.ups[0] && bl2.ups[0].oe > 0 && !bl2.ups[0].bump, '贴片包络只在前 150s 里找', bl2.ups);
+    ok(bl2.ups[0] && bl2.ups[0].oe > 0 && !bl2.ups[0].bump, '贴片包络在 170s:不算', bl2.ups);
+    const bl3 = bumpFlow([...bumpR.map((r, j) => ({ st: 31 + j * 2, r })), ...J.C]);
+    await bl3.run(23, 'c');
+    ok(bl3.ups[0] && bl3.ups[0].oe > 0 && !bl3.ups[0].bump, '贴片包络在 31s:不算', bl3.ups);
+    const bl4 = bumpFlow([...bumpR.map((r, j) => ({ st: 30 + j * 2, r })), ...J.C]);
+    await bl4.run(23, 'c');
+    ok(bl4.ups[0] && bl4.ups[0].bump && near(bl4.ups[0].bump.bs, 30, 0.15), '贴片包络在 30s:还算(边界)', bl4.ups);
 
     // 解码失败太多:算不出来不写共享墓碑,只记本会话
     const badDec = (fl) => { fl.A._fetchEnvTo = (orig => async (sess, F, cap) => { const r = await orig(sess, F, cap); sess.segs = 100; sess.decFail = 60; return r; })(fl.A._fetchEnvTo); };
@@ -1198,13 +1206,206 @@ console.log('⑧ 第三集确认');
     const R = Array.from({ length: 10 }, (_, j) => Array.from({ length: 19 }, (_, i) => 3000 + ((j * 19 + i) * 7919 % 997) * 20));
     const bEnv = Float32Array.from(R.flatMap(r => [...r, r[18]]).map(x => x / 1e5));
     const bData = [...R.map((r, j) => ({ st: 10 + j * 2, r })), ...J.A];
-    const bp = flowOf({ a: bData }, {}, { ...saved, benv: bEnv, bdur: 20 });
+    const bp = flowOf({ a: bData }, {}, { ...saved, benv: bEnv, bdur: 20, bdv: 3 });
     const bv = await bp.run(21, 'a');
     pc = playCheck(bv._introCur);
-    ok(bv._introCur.pend === 1 && bv._introCur.bmv === 2 && pc.seeks.length === 0 && pc.btn === 'bump,op', '待确认的贴片:带 bmv 也不跳,只亮按钮', { cur: bv._introCur, pc });
+    ok(bv._introCur.pend === 1 && bv._introCur.bmv === 3 && pc.seeks.length === 0 && pc.btn === 'bump,op', '待确认的贴片:带 bmv 也不跳,只亮按钮', { cur: bv._introCur, pc });
     // 引擎学到的值和旧片尾都不被信任(这里只钉真实 check 的结果,引擎的代码路径见 intro-mark-migrate-test)
     pc = playCheck({ os: 100, oe: 200, ed: 0 });
     ok(pc.seeks.length === 0 && pc.btn === 'op', '只有时间、没有 mv 的 _introCur(边看边学引擎):只亮按钮', pc);
+}
+
+console.log('⑨ 开头贴片');
+{
+    const { A, C } = makeEnv();
+    const BD = FX.bump_d, BL = FX.bump_l, sec = (x) => Math.round(x) / 10;
+    ok(C.BUMP_V === 3 && C.MARK_V === 2, '贴片版本单独算:bmv:3 才自动跳,片头还是 mv:2');
+    // 真实假贴片:旧判定(前 150s 整段 ≥0.6)都命中,抽帧是正片或片中转场;新判定都不中
+    for (const [k, name] of [['cf0422', '乘风2024 ikun 第20240422期 109.8s,嘉宾聊天'], ['cf0426', '乘风2024 ikun 第20240426期 111.8s'], ['ym8', '隐秘的角落 1080zyk 第8集 112.1s,海滩正片'], ['ym10', '隐秘的角落 1080zyk 第10集 83.6s'], ['zs3', '咒术回战 zy360 第3集 109.6s,对白']]) {
+        const d = BD[k], env = F32(d.env), head = F32(d.head), old = A._xcorrDetect(env, head, Math.min(head.length, 1500));
+        ok(old && old.at === d.oldAt && old.conf < 0.75, '旧判定:' + name + ' 命中', old);
+        ok(C.bumpLocate(env, head, head.length, null) === null, '新判定:' + name + ' 不中');
+    }
+    // 只提高整段线不够:0.8 放到前 30s 也有误命中(乘风2024 第20240422期 7.9s 0.62 这种只是 0.6 线挡不住;别的剧头部能到 0.85 以上)
+    {
+        const d = BD.neg85, env = F32(d.env), head = F32(d.head), hi = A._xcorrDetect(env, head, Math.min(head.length, 300 + env.length), 0.85);
+        ok(hi && hi.at > 30, '别的剧头部:整段 Pearson 能到 0.85,光提高线挡不住(' + d.src + ')', hi);
+        ok(C.bumpLocate(env, head, head.length, null) === null, '别的剧头部:locate 不中(' + d.src + ')');
+    }
+    // 真实真贴片。be=位置+长度,不能切到正片:天官赐福第 3 集 28s 已是字幕;哈哈哈哈哈第 2 期下 14s 进正片;向往的生活 25s 进正片
+    const T = [
+        ['tg3', 0, 27.2, 0.2, '天官赐福第 3 集:旧包络 31.8s,尾部收回到 logo 后的黑场'],
+        ['tg7', 14.1, 45, 0.2, '天官赐福第 7 集:贴片前面多 14.1s;旧算法的 31.8s 包络落到 45.0s(抽帧 43s 起已是正片),所以没版本的旧包络只亮按钮,见下'],
+        ['yfx16', 0, 16.4, 0.2, '与凤行第 16 集:尾部 1s 对不上,整段只有 0.82,主体 0.99 还是中'],
+        ['xw605', 0.8, 24.4, 0.2, '向往的生活第七季 ikun 20230605:旧判定漏掉(整段 0.60),新判定看主体'],
+        ['hh23', 0, 13.2, 0.2, '哈哈哈哈哈第四季第 2 期下:旧包络 15s,收回到 13.2s'],
+        ['md16', 0, 16.8, 0.1, '魔道祖师第 16 集:92.8s 处还有 0.81 的相似段,不影响'],
+        ['ym7', 0, 7.4, 0.1, '隐秘的角落 1080zyk 第 7 集:7.4s 短包络,0.96'],
+        ['zhj10', 0, 5.4, 0.1, '镇魂街第 10 集:5.4s,贴着最短线'],
+        ['cm6', 0, 7.8, 0.1, '沉默的真相第 6 集:新选的剧'],
+    ];
+    for (const [k, at, be, tol, name] of T) {
+        const d = BD[k], h = C.bumpLocate(F32(d.env), F32(d.head), d.head.length, null);
+        ok(h && near(h.at / 10, at, 0.21) && near((h.at + h.len) / 10, be, tol), name, h && { at: h.at, len: h.len, conf: h.conf });
+    }
+    {
+        // 天官赐福第 7 集:新算法学出的长度(学习对收回到 27.2s,见下面 tg12)落在 41.3s,logo 后的黑场;旧的 31.8s 包络落到 45.0s
+        const d = BD.tg7, h = C.bumpLocate(F32(d.env).slice(0, 272), F32(d.head), d.head.length, null);
+        ok(h && near(h.at / 10, 14.1, 0.21) && near((h.at + h.len) / 10, 41.3, 0.2), '天官赐福第 7 集:新算法长度的包络落在 41.3s 黑场', h && { at: h.at, len: h.len, conf: h.conf });
+    }
+    {
+        // 极限挑战第九季 20230430:19.8s 的 5.2s 广告尾标,定位是对的(0.98),这一集尾部对不上,收回后不到 5s,不要(损失,跳它也只跳掉一小段广告)
+        const d = BD.jx430, env = F32(d.env), head = F32(d.head), h = C.locate(env, head, head.length, null);
+        ok(h && near(h.at / 10, 19.8, 0.1) && C.bumpLocate(env, head, head.length, null) === null, '收回后短于 5s:不要', h);
+    }
+    // 只在集首找:把真贴片挪到 31s,再好也不要;30s 还算(真贴片起点 0~23s,假的 35s 起)
+    {
+        const d = BD.cm6, env = F32(d.env), L = env.length;
+        const pad = (n) => { const f = new Float32Array(n + d.head.length); for (let i = 0; i < n; i++) f[i] = 0.05 + 0.01 * Math.sin(i * 1.7); f.set(F32(d.head), n); return f; };
+        let h = C.bumpLocate(env, pad(300), 300 + d.head.length, null);
+        ok(h && h.at === 300, '贴片起点 30s:算', h);
+        ok(C.bumpLocate(env, pad(301), 301 + d.head.length, null) === null, '贴片起点 30.1s:不算');
+        h = C.locate(env, pad(301), 301 + d.head.length, null);
+        ok(h && h.at === 301, '(同一段 locate 本身是中的,挡住它的是位置)', h);
+        // 短于 5s 的包络不要:同一段切成 4.9s,对得再好也不算
+        const short = F32(d.env.slice(0, 49));
+        ok(C.locate(short, F32(d.head), d.head.length, null) && C.bumpLocate(short, F32(d.head), d.head.length, null) === null, '包络短于 5s:不用');
+        ok(C.bumpLocate(F32(d.env.slice(0, 50)), F32(d.head), d.head.length, null) !== null, '包络正好 5s:还用');
+    }
+    // 学习对:收回尾部、A 集的包络要能在 B 集原位定位中
+    const mk = (x) => { const eA = F32(x.A), eB = F32(x.B), full = (f) => new Uint8Array(f.length).fill(1); return { c: { eA, eB, covA: full(eA), covB: full(eB) }, nB: eB.length }; };
+    const LT = [
+        ['yn23', 157, '一年一度喜剧大赛 ikun:17.4s 收回 15.7s(16s 已是正片)'],
+        ['hh', 131, '哈哈哈哈哈第四季 zy360:15s 收回 13.1s(14s 已是正片)'],
+        ['xd', 284, '令人心动的offer ikun:30.2s 收回 28.4s(另一集 28.4s 进黑场接正片)'],
+        ['tg12', 272, '天官赐福 jisu:31.8s 靠多看 3s 找到 logo 后的黑场,收回 27.2s'],
+        ['xw', 236, '向往的生活第七季 ikun:25.6s 收回 23.6s;整段只有 0.70,主体够'],
+        ['wz78', 185, '伪装者 jisu 第 7、8 集:19.2s 收回 18.5s(第一个镜头在 18.4s)'],
+        ['md78', 168, '魔道祖师 jisu:结尾就是公共静音,不收'],
+    ];
+    for (const [k, len, name] of LT) {
+        const x = BL[k], { c, nB } = mk(x), r = C.bumpLearn({ aStart: x.aStart, bStart: x.bStart, len: x.len, conf: x.conf }, c, nB, null);
+        ok(r && r.aStart === x.aStart && r.bStart === x.bStart && near(r.len, len, 2), name, r);
+    }
+    for (const [k, name] of [['cf', '乘风2024 ikun 35.4s / 46.7s:片中转场,位置就不对'], ['zs', '咒术回战 zy360 17.4s / 47.1s:正片,47.1s 位置不对'], ['bp', '奔跑吧第八季 jisu 5.2s / 6.6s:位置对,5s 只有 0.77,定位过不了'], ['jx', '极限挑战第九季 44.1s / 10s:真广告,但不在集首(损失)'], ['tk', '脱口秀大会第五季 22.1s / 22s:真广告,只有 0.61(损失)']]) {
+        const x = BL[k], { c, nB } = mk(x);
+        ok(C.bumpLearn({ aStart: x.aStart, bStart: x.bStart, len: x.len, conf: x.conf }, c, nB, null) === null, '学习对不写:' + name);
+    }
+    // 位置这一条单独挡:把能过的那一对整体往后挪过 30s
+    {
+        const x = BL.md78, n = 301, shiftArr = (a) => { const f = new Float32Array(n + a.length); for (let i = 0; i < n; i++) f[i] = 0.05 + 0.01 * Math.sin(i * 1.3 + (a.length % 7)); f.set(F32(a), n); return f; };
+        const eA = shiftArr(x.A), eB = shiftArr(x.B), full = (f) => new Uint8Array(f.length).fill(1), c = { eA, eB, covA: full(eA), covB: full(eB) };
+        ok(C.bumpLearn({ aStart: n, bStart: n, len: x.len }, c, eB.length, null) === null, '学习对:两集都在 30.1s:不要');
+        ok(C.bumpLearn({ aStart: 0, bStart: n, len: x.len }, { eA: F32(x.A), eB, covA: full(F32(x.A)), covB: full(eB) }, eB.length, null) === null, '学习对:只有 B 集在 30.1s:也不要');
+        const n2 = 300, a2 = new Float32Array(n2 + x.A.length), b2 = new Float32Array(n2 + x.B.length);
+        for (let i = 0; i < n2; i++) { a2[i] = 0.05 + 0.01 * Math.sin(i * 1.3); b2[i] = 0.03 + 0.02 * Math.sin(i * 2.1); }
+        a2.set(F32(x.A), n2); b2.set(F32(x.B), n2);
+        ok(C.bumpLearn({ aStart: n2, bStart: n2, len: x.len }, { eA: a2, eB: b2, covA: full(a2), covB: full(b2) }, b2.length, null) !== null, '学习对:两集都在 30s:还算');
+    }
+    // A 集的包络在 B 集定位到别处:这一对对不上,不要(给错 bStart)
+    {
+        const x = BL.md78, { c, nB } = mk(x);
+        ok(C.bumpLearn({ aStart: 0, bStart: 20, len: x.len }, c, nB, null) === null, '学习对:对不到原位,不要');
+    }
+    // 尾部 ≥4s 对不上:tailCut 只看最后 2s,靠定位收回
+    {
+        const x = BL.yn23, eA = F32(x.A), eB = F32(x.B).slice(), full = (f) => new Uint8Array(f.length).fill(1);
+        for (let i = 100; i < eB.length; i++) eB[i] = 0.2 + 0.15 * Math.sin(i * 0.9) * Math.sin(i * 0.13);
+        const r = C.bumpLearn({ aStart: 0, bStart: 0, len: 174 }, { eA, eB, covA: full(eA), covB: full(eB) }, eB.length, null);
+        ok(r && r.len >= 95 && r.len <= 125, '学习对:尾部 ≥4s 对不上,长度跟着定位收回', r);
+    }
+    // 收回太短也不要
+    {
+        const x = BL.md78, { c, nB } = mk(x);
+        ok(C.bumpLearn({ aStart: 0, bStart: 0, len: 49 }, c, nB, null) === null, '学习对:短于 5s 不要');
+    }
+    // 片头的 tailCut 默认行为没变:不传 silWin 还是只看最后 3s
+    {
+        const x = BL.tg12, { c } = mk(x);
+        ok(near(C.tailCut(c, 0, 0, x.len).end, 303, 3), '片头用的 tailCut 默认只看 3s,天官赐福这里走能量比(不是 27.2s 那段黑场)', C.tailCut(c, 0, 0, x.len));
+        ok(C.tailCut(c, 0, 0, x.len, 60).end === 272, '贴片给 6s:找到黑场', C.tailCut(c, 0, 0, x.len, 60));
+    }
+
+    // 真 learnOrDetect + 真 check():贴片不再跟着片头切正片
+    const toChunks = (arr, st0 = 0) => { const out = []; for (let k = 0; k * 20 < arr.length; k++) { const r = arr.slice(k * 20, k * 20 + 20); if (r.length) out.push({ st: st0 + k * 2, r }); } return out; };
+    const base = makeFlow({ a: J.A, b: J.B });
+    await base.run(21, 'a', 22, 'b');
+    const saved = base.A._st['T|S'].intro;
+    const flowB = (data, intro, marks) => { const fl = makeFlow({ c: data }, marks ? { marks } : {}); fl.A._st['T|S'] = { phase: 'learned', tries: 0, intro: { ...saved, ...intro }, outroTries: 0, mb: 0 }; return fl; };
+    {
+        const d = BD.cf0422, fl = flowB([...toChunks(d.head), ...shift(J.C, 130)], { benv: F32(d.env), bdur: d.env.length / 10 }), v = await fl.run(23, 'c'), pc = playCheck(v._introCur);
+        ok(fl.ups[0] && fl.ups[0].oe > 0 && !fl.ups[0].bump && !fl.ups[0].bmv, '乘风2024 ikun 第20240422期:片头定位中,假贴片不写、不上报', fl.ups);
+        ok(pc.seeks.length === 1 && near(pc.seeks[0], v._introCur.oe, 0.01) && pc.btn === '' && v._introCur.src === 'afp', '乘风2024 ikun 第20240422期:开着自动跳过只跳片头,109.8s 不跳', { cur: v._introCur, pc });
+        ok(fl.A._st['T|S'].intro.benv && fl.A._st['T|S'].intro.benv.length === d.env.length, '本线路的贴片包络没中:留着(和以前一样,这一集不中不代表别的集不中)');
+    }
+    {
+        // 新算法学的包络(带 bdv:3,长度是学习对收回后的 27.2s)
+        const d = BD.tg3, fl = flowB([...toChunks(d.head), ...shift(J.C, 0)], { benv: F32(d.env).slice(0, 272), bdur: 27.2, bdv: 3 }), v = await fl.run(23, 'c'), pc = playCheck(v._introCur), u = fl.ups[0];
+        ok(u && u.bump && u.bump.bs === 0 && near(u.bump.be, 27.2, 0.2) && u.bmv === 3 && !u.pend, '天官赐福第 3 集:贴片 0→27.2s,上报带 bmv:3', u);
+        ok(near(fl.marks['23|r'].be, 27.2, 0.2) && fl.marks['23|r'].bmv === 3, '天官赐福第 3 集:本地缓存同样的值', fl.marks['23|r']);
+        ok(pc.seeks.length === 2 && near(pc.seeks[0], 27.2, 0.2) && near(pc.seeks[1], v._introCur.oe, 0.01), '天官赐福第 3 集:贴片和片头都自动跳,落点在 28s 字幕之前', pc);
+    }
+    {
+        // 同一集用没版本的旧包络(旧算法学的 31.8s):定位出来一样是 0→27.2,但按旧值算:本地 bmv:2、上报不带 bmv(服务器按 2 存),开着自动跳过只亮按钮,片头照跳
+        const d = BD.tg3, fl = flowB([...toChunks(d.head), ...shift(J.C, 0)], { benv: F32(d.env), bdur: d.env.length / 10 }), v = await fl.run(23, 'c'), pc = playCheck(v._introCur), u = fl.ups[0];
+        ok(u && u.bump && u.bump.bs === 0 && near(u.bump.be, 27.2, 0.2) && !('bmv' in u) && u.mv === 2 && !u.pend, '没版本的旧包络:贴片照样上报,不带 bmv', u);
+        ok(fl.marks['23|r'].bmv === 2 && v._introCur.bmv === 2 && v._introCur.src === 'afp', '没版本的旧包络:本地记 bmv:2', { m: fl.marks['23|r'], cur: v._introCur });
+        ok(pc.seeks.length === 1 && near(pc.seeks[0], v._introCur.oe, 0.01) && pc.btn === 'bump', '没版本的旧包络:片头已确认也只跳片头,贴片只亮按钮', pc);
+        const rec = JSON.parse(fl.localStorage.getItem('donggua_afpenv|T|S'));
+        ok(!rec || (rec.bd && !('bdv' in rec)), '没版本的旧包络转正回传:还是没版本(不会因为这次命中变成 bdv:3)', rec && { bdv: rec.bdv, bdur: rec.bdur });
+        // 天官赐福第 7 集:旧包络落到 45.0s(切掉 43~45s 正片),新页面也只亮按钮
+        const d7 = BD.tg7, f7 = flowB([...toChunks(d7.head), ...shift(J.C, 130)], { benv: F32(d7.env), bdur: d7.env.length / 10 }), v7 = await f7.run(23, 'c'), p7 = playCheck(v7._introCur);
+        ok(f7.ups[0] && f7.ups[0].bump && near(f7.ups[0].bump.be, 45, 0.2) && !('bmv' in f7.ups[0]) && p7.btn === 'bump' && !p7.seeks.some(x => near(x, 45, 0.2)), '天官赐福第 7 集,旧包络:落点 45.0s 只亮按钮,不自动跳', { up: f7.ups[0], p7 });
+    }
+    // 解码失败的集:包络里的零洞不算对不上,定位要带上覆盖(同片头)
+    {
+        const d = BD.md16, env = F32(d.env), all = toChunks(d.head).filter(c => c.st < 300);
+        const data = [...all.filter(c => c.st < 2 || c.st > 6), ...shift(J.C, 130)];
+        const mkf = (dec) => { const fl = makeFlow({ c: data }, dec ? { onFetch: (sess) => { sess.decFail = 1; } } : {}); fl.A._st['T|S'] = { phase: 'learned', tries: 0, intro: { ...saved, benv: env, bdur: env.length / 10 }, outroTries: 0, mb: 0 }; return fl; };
+        const f1 = mkf(true); await f1.run(23, 'c');
+        ok(f1.ups[0] && f1.ups[0].bump && f1.ups[0].bump.bs === 0, '贴片中间有一段解码失败:带覆盖,还是中', f1.ups[0]);
+        const f2 = mkf(false); await f2.run(23, 'c');
+        ok(f2.ups[0] && f2.ups[0].oe > 0 && !f2.ups[0].bump, '(同样的洞,没记解码失败就当真的对不上)', f2.ups[0]);
+    }
+    // 学习对:写进去的是收回后的值,包络也是;没过判定的不写,控制台说一声
+    {
+        const x = BL.yn23, fl = makeFlow({ a: [...toChunks(x.A), ...shift(J.A, 30)], b: [...toChunks(x.B), ...shift(J.B, 30)] }), v = await fl.run(21, 'a', 22, 'b');
+        const a = fl.ups.find(u => u.ep === 21), b = fl.ups.find(u => u.ep === 22), rec = JSON.parse(fl.localStorage.getItem('donggua_afpenv|T|S'));
+        ok(a && a.bump && a.bump.bs === 0 && near(a.bump.be, 15.7, 0.25) && a.bmv === 3 && a.pend === 1, '学习对:贴片收回到 15.7s,带 bmv:3,待确认', a);
+        ok(b && b.bump && near(b.bump.be, 15.7, 0.25) && b.bmv === 3, '学习对:另一集同样', b);
+        ok(rec.bd && near(rec.bdur, 15.7, 0.25) && Math.abs(atob_len(rec.bd) - rec.bdur * 10) <= 1, '包络跟着收回', { bdur: rec.bdur });
+        ok(rec.bdv === 3 && fl.A._st['T|S'].intro.bdv === 3 && fl.A._envParse(rec).bdv === 3, '学习对学出的贴片包络带 bdv:3(以后定位出来的才能自动跳)', { local: rec.bdv, st: fl.A._st['T|S'].intro.bdv });
+        ok(fl.posts.some(q => q.u.indexOf('/api/intro/env') >= 0 && q.body && q.body.env && q.body.env.bd && q.body.env.bdv === 3), '学习对的云备份也带 bdv:3', fl.posts.map(q => q.body && q.body.env && { bdv: q.body.env.bdv, bd: !!q.body.env.bd }));
+        const pc = playCheck(v._introCur);
+        ok(pc.seeks.length === 0 && pc.btn === 'bump,op', '学习对:待确认,贴片也只亮按钮', pc);
+    }
+    {
+        const x = BL.cf, fl = makeFlow({ a: [...toChunks(x.A), ...shift(J.A, 30)], b: [...toChunks(x.B), ...shift(J.B, 30)] }), v = await fl.run(21, 'a', 22, 'b');
+        const a = fl.ups.find(u => u.ep === 21), rec = JSON.parse(fl.localStorage.getItem('donggua_afpenv|T|S'));
+        ok(a && a.oe > 0 && !a.bump && !a.bmv && !rec.bd, '乘风2024 ikun 学习对:片头照常,假贴片不写、不存包络', { a, bd: !!rec.bd });
+        ok(fl.conLog.some(s => /没过贴片判定,不写/.test(s)), '没过判定:控制台说一声(排查"这集为什么没有跳过开头")', fl.conLog.slice(-4));
+        ok(v._introCur.bs === 0 && v._introCur.be === 0, '当前集也不亮贴片', v._introCur);
+    }
+    // 迁移:已确认标记里的旧贴片不再自动跳;集首之外的旧贴片按钮也不亮;不多分析
+    {
+        const cf = { os: 184.4, oe: 203, mv: 2, pid: 'pairabcd', bs: 109.8, be: 117.2, bmv: 2, ed: 99999 };
+        let pc = playCheck(C.curOf(cf));
+        ok(pc.seeks.length === 1 && pc.seeks[0] === 203 && pc.btn === '', '乘风2024 ikun 已确认的旧标记:只跳片头,109.8s 不跳也不亮按钮', pc);
+        const yf = { os: 25.2, oe: 94.5, mv: 2, pid: 'pairabcd', bs: 0, be: 16.8, bmv: 2, ed: 99999 };
+        pc = playCheck(C.curOf(yf));
+        ok(pc.seeks.length === 1 && pc.seeks[0] === 94.5 && pc.btn === 'bump', '与凤行 已确认的旧标记:贴片在集首,只亮按钮;片头照跳', pc);
+        pc = playCheck(C.curOf({ ...yf, bmv: 3 }));
+        ok(pc.seeks.length === 2 && pc.seeks[0] === 16.8 && pc.btn === '', 'bmv:3 才自动跳', pc);
+        pc = playCheck(C.curOf({ ...cf, bs: 30, be: 40 }));
+        ok(pc.seeks.length === 1 && pc.btn === 'bump', '旧贴片起点 30s:亮按钮', pc);
+        pc = playCheck(C.curOf({ ...cf, bs: 30.1, be: 40 }));
+        ok(pc.seeks.length === 1 && pc.btn === '', '旧贴片起点 30.1s:不亮', pc);
+        ok(C.bumpShow(null) === false && C.bumpShow({ bs: 0, be: 0 }) === false && C.bumpShow({ bs: 0, be: 3 }) === true, 'bumpShow:没贴片不亮');
+        // 有值的 mv:2 旧标记不为贴片重算(不新增下载):整段不分析
+        const fl = flowB([...toChunks(BD.cf0422.head), ...shift(J.C, 130)], { benv: F32(BD.cf0422.env), bdur: 7.4 }, { '23|r': { ...cf } });
+        const v = await fl.run(23, 'c');
+        ok(fl.fetchCalls.length === 0 && fl.ups.length === 0 && fl.marks['23|r'].bmv === 2 && fl.marks['23|r'].bs === 109.8, '有值的 mv:2 旧标记:不抓、不上报、不改(不为贴片重算)', { calls: fl.fetchCalls.length, ups: fl.ups });
+    }
 }
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} 通过, ${fail} 失败`);

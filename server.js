@@ -1813,9 +1813,9 @@ app.post('/api/settings/push', (req, res) => {
 // 键 = 归一剧名|线路site_key(不同线路时间轴不同,不能混用);值 = { "<集号>|<通道>[|<部分>]": {os,oe,mv,pid,pend,bs,be,bmv,ed,emv,at} } 整剧一条。
 // 必须按【集】存:每集冷开场长度不同,片头起点不同;不能按剧存一个时间。
 // bs/be = 可选"开头贴片"区间(网络视听许可证/平台方片头贴片,与片头曲是两个独立可跳区间)。线上旧数据里的 v/bv/ev/src 留着不读。
-// mv/bmv/emv = 片头/贴片/片尾是新算法算的(合并规则见 lib/intro-marks);pid/pend = 学习对 id、待确认(第三集确认);miss/mt = 墓碑(这一集算不出来,1 定位不中 2 学不出 3 两样都不中)及时间。
+// mv/emv = 片头/片尾是新算法算的,bmv = 贴片算法版本(3 才自动跳,2 只亮按钮)(合并规则见 lib/intro-marks);pid/pend = 学习对 id、待确认(第三集确认);miss/mt = 墓碑(这一集算不出来,1 定位不中 2 学不出 3 两样都不中)及时间。
 // 部分 = 同一期的上/中/下(1/2/3),各用各的标记;老页面不带,写不到这些键上。
-const { MARK_V: INTRO_MARK_V, mergeOp: introMergeOp, mergeBump: introMergeBump, mergeOutro: introMergeOutro, applyMiss: introApplyMiss, settlePair: introSettlePair } = require('./lib/intro-marks');
+const { MARK_V: INTRO_MARK_V, BUMP_V: INTRO_BUMP_V, mergeOp: introMergeOp, mergeBump: introMergeBump, mergeOutro: introMergeOutro, applyMiss: introApplyMiss, settlePair: introSettlePair, marksForRead: introMarksForRead } = require('./lib/intro-marks');
 const INTRO_TTL = 365 * 24 * 3600;   // 秒。每次写入续期
 function introNormTitle(s) {
     // 与前端 _introTitleKey 保持一致：去括号内容/空格/标点,小写。改这里必须同步改前端。
@@ -1829,7 +1829,7 @@ app.get('/api/intro/marks', introLimiter, (req, res) => {
     const title = String(req.query.title || '').trim();
     if (!title) return res.json({ marks: {} });
     const map = cacheManager.get('intro', introKey(title, req.query.site)) || {};
-    res.json({ marks: map });
+    res.json({ marks: introMarksForRead(map) });
 });
 
 // 提交一集的片头/片尾标记(客户端音频指纹/包络自动学习)。登录站点即可提交(限流防刷)。
@@ -1879,7 +1879,7 @@ app.post('/api/intro/mark', introLimiter, (req, res) => {
         // 学习对 id:这一对算出来的标记和包络都带它,第三集确认只认它(见 lib/intro-marks)
         const pid = mv2 && typeof b.pid === 'string' && /^[a-z0-9]{4,24}$/.test(b.pid) ? b.pid : '';
         const pend = mv2 && b.pend === 1;
-        const incBump = { bs, be, mv: mv2 ? INTRO_MARK_V : 0, pend };
+        const incBump = { bs, be, mv: mv2 ? INTRO_MARK_V : 0, bmv: mv2 && b.bmv === INTRO_BUMP_V ? INTRO_BUMP_V : 0, pend };
         const incOutro = { ed, emv: b.emv === INTRO_MARK_V ? INTRO_MARK_V : 0 };
         const now = Date.now();
         let rec;
@@ -1939,10 +1939,11 @@ app.get('/api/intro/env', introLimiter, (req, res) => {
     res.json({ env: pick, from: pickKey.slice(norm.length + 1), borrowed: true });
 });
 
-// 上传学习成果包络。env 字段与客户端本地记录同构:{v:2, dv, pid, peps, psite, pk, d,sec,dur,maxStart, bd,bdur, od,odur}
+// 上传学习成果包络。env 字段与客户端本地记录同构:{v:2, dv, pid, peps, psite, pk, d,sec,dur,maxStart, bd,bdur,bdv, od,odur}
+//   bdv=贴片包络算法版本(3 = 新算法学的,和标记的 bmv 同一个数):老页面传来的、没版本的 bd 盖不掉 bdv:3 的 bd;没版本的 bd 新页面定位出来只亮按钮
 //   pid/peps=学出这条片头包络的学习对 id 和那两集的集号,在学习对之外的集定位命中才算确认(第三集确认,见 lib/intro-marks)。
 //   psite/pk=学出它的线路、集号体系(d 日期 j 第N集 q 第N期):同一期在别的线路上可能是另一个数字,集号比得上才算确认,客户端判(IntroCore.pairWitness),转正登记到别的线路也不变。
-//   dv=片头组件版本(新算法=2;片尾/贴片算法没变,记录级 v 仍是 2,老页面照样能读能传):老页面传来的 d 盖不掉新版 d,新版 d 可以盖旧版 d。
+//   dv=片头组件版本(新算法=2;片尾算法没变,贴片看 bdv,记录级 v 仍是 2,老页面照样能读能传):老页面传来的 d 盖不掉新版 d,新版 d 可以盖旧版 d。
 //   d=片头曲包络 bd=开头贴片包络 od=片尾包络(都是 base64(Uint8) 10Hz 采样;量化不损 Pearson——尺度无关)。
 // 组件级合并:来的组件覆盖,没带的组件保留旧值(先学出片头、后学出片尾的两次上传互不 clobber)。
 app.post('/api/intro/env', introLimiter, (req, res) => {
@@ -1976,7 +1977,7 @@ app.post('/api/intro/env', introLimiter, (req, res) => {
             }
         }
         const bdur = num(e.bdur, 3, 90), bd = b64(e.bd, 1200, bdur);
-        if (bd) { rec.bd = bd; rec.bdur = bdur; }
+        if (bd) { rec.bd = bd; rec.bdur = bdur; if (e.bdv === INTRO_BUMP_V) rec.bdv = INTRO_BUMP_V; }
         const odur = num(e.odur, 10, 160), od = b64(e.od, 2400, odur);
         if (od) { rec.od = od; rec.odur = odur; }
         if (!rec.d && !rec.od) return res.status(400).json({ error: 'no payload' });
@@ -1988,7 +1989,7 @@ app.post('/api/intro/env', introLimiter, (req, res) => {
                 if (old.dv) rec.dv = old.dv; else delete rec.dv;
                 if (old.pid) { rec.pid = old.pid; rec.peps = old.peps; if (old.psite) rec.psite = old.psite; if (old.pk) rec.pk = old.pk; }
             }
-            if (!rec.bd && old.bd) { rec.bd = old.bd; rec.bdur = old.bdur; }
+            if (old.bd && (!rec.bd || (old.bdv === INTRO_BUMP_V && rec.bdv !== INTRO_BUMP_V))) { rec.bd = old.bd; rec.bdur = old.bdur; if (old.bdv) rec.bdv = old.bdv; else delete rec.bdv; }
             if (!rec.od && old.od) { rec.od = old.od; rec.odur = old.odur; }
         }
         cacheManager.set('introenv', key, rec, INTRO_ENV_TTL);

@@ -8070,10 +8070,13 @@
             const FADE_TOP = 0.01;       // 慢淡出只从弱音开始算(约 −40dBFS),响的声音 3s 内落到静音多半是正片
             const HIT_CONF = 0.8;        // 片头定位命中线
             const MARK_V = 2;            // 标记算法版本(mv=片头、bmv=贴片、emv=片尾)
-            const ENV_DV = 2;            // 片头包络组件版本(片尾/贴片包络算法没变,不作废)
+            const ENV_DV = 2;            // 片头包络组件版本(片尾包络算法没变,不作废;贴片包络另记 bdv,见 BUMP_V)
             const MAX_OP = 240;          // 片头最长秒数,与 server.js 校验一致
             const MISS_TTL = 30 * 864e5; // 墓碑 30 天后允许重试一次
             const LEARN_BLOCK = 3;       // 本线路 ≥3 集学不出(至少两对)就不再冷启动
+            const BUMP_V = 3;            // 贴片算法版本(bmv)。2 的贴片是整段 Pearson≥0.6 在前 150s 里扫出来的,7.4s 包络放到别的剧头部 88% 都能"命中",只亮按钮不自动跳。贴片包络也记这个版本(bdv):没版本的是旧算法学的,可能偏长(天官赐福 jisu 31.8s,第 7 集落到 45.0s,43s 已是正片)甚至就是正片,它定位出的贴片按 2 算,只亮按钮
+            const BUMP_HEAD = 30;        // 贴片只在集首前 30s 里找(抽帧真贴片起点 0~23s;假的散落到 35~112s)
+            const BUMP_MIN = 5;          // 收回尾部后短于 5s 的不要(server.js 校验 ≥3s;太短的包络哪都对得上)
             // 片尾自动切下一集的总开关。放开时只信带新算法标记的片尾(emv:2)。判定线:任何一部剧系统性地切掉 >5s 正片,或切掉 >5s 的样本超过 1/20,就不放开。
             //   2026-11 抽样 13 部剧 47 集(其中 4 部综艺;真实 m3u8 跑真实 _learnOutro/_detectOutro,按播放器时间轴抽帧,精度 1 秒):魔道祖师 3/3 集都早 5~6 秒(片尾曲第 7 秒才响,前面是正片最后一个镜头),
             //   算系统性切掉正片,所以只亮按钮。其余 44 集切掉 0~4 秒。阈值或片尾算法改了要重新抽样再放开;放开前片尾还要补第三集确认,现在学习对算出的片尾也带 emv。
@@ -8163,8 +8166,9 @@
             };
             // 公共段尾部:①末窗里有 ≥0.5s 两集同时静音 → 到静音结束为止;①' 短暂的公共低谷(黑场切换)之后自身不相关 → 到低谷结束为止;②否则 0.5s 块能量比裁掉 2s 窗越界的部分。
             //   ②比能量前必须先按前 10s 归一两集响度:Pearson 不看音量,这条看(墨雨云间两集尾部差 2 倍,不归一会从 +0.06 退化到 +1.86)
-            const tailCut = (c, lag, st, en) => {
-                for (let i = Math.max(st, en - 30); i < en; i++) {
+            //   silWin = 往回找公共静音的帧数。片头用默认 3s;贴片后面常跟一小段黑场才进正片,学习时给 6s(见 bumpLearn)
+            const tailCut = (c, lag, st, en, silWin = 30) => {
+                for (let i = Math.max(st, en - silWin); i < en; i++) {
                     if (!bothSil(c, lag, i)) continue;
                     let j = i; while (j < en && bothSil(c, lag, j)) j++;
                     if (j - i >= 5) return { end: j, why: 'sil' };
@@ -8292,6 +8296,29 @@
                 if (!hit && L >= 300) { const a1 = scan(Math.round(L * 0.7)); if (a1 !== a0) hit = judge(a1); }
                 return hit;
             };
+            // 🎞️ 开头贴片:判定和片头同一个 locate,只在集首找。过不了的不写(不是只亮按钮):过不了的多半是正片,按钮点一下就切掉正片;真贴片过不了,观众只是多看几秒广告。
+            //   规则在之前用过的剧上定,见 intro-refine-test ⑨;2026-11 另选 19 部没用过的剧(25 条线路 163 集,真实 m3u8,抽帧标注)验证:会自动跳的 16 个贴片切到正片 0 秒,旧做法有 6 个各切 1.5 秒。
+            //   旧做法(前 150s 整段 Pearson≥0.6)会把 7.4s 的包络扫到正片里(乘风2024 ikun 第20240422期 109.8s,0.63),学习对也一样(35.4s / 46.7s,0.76);只提高线不够,别的剧头部整段能到 0.85(⑨ neg85),locate 不中。
+            // 这一集的贴片在哪、到哪结束 → { at, conf, len }(帧)。尾部按这一集自己比:学习对两集可能多共享一小段(天官赐福第 1、2 集,logo 后面都是环境声,别的集 28s 就进字幕了)
+            const bumpLocate = (benv, e, n, cov) => {
+                const L = benv.length;
+                if (L < BUMP_MIN * EHZ) return null;
+                const hit = locate(benv, e, Math.min(n, BUMP_HEAD * EHZ + L), cov);
+                if (!hit) return null;
+                // 包络可能是量化存的(0~255),静音线按本集的尺度比,先按增益归一
+                const g = lvGain(benv, 0, e, hit.at, hit.len) || 1, eA = benv.map(x => x / g), full = x => new Uint8Array(x.length).fill(1);
+                const len = tailCut({ eA, eB: e, covA: full(eA), covB: cov || full(e) }, -hit.at, 0, hit.len).end;
+                return len < BUMP_MIN * EHZ ? null : { at: hit.at, conf: hit.conf, len };
+            };
+            // 学习对顺带找到的贴片过不过 → { aStart, bStart, len, conf }(帧)或 null。bp = _xcorrLearn 的 bump;c = { eA, eB, covA, covB };cov = 定位用的覆盖(同 locate)。
+            //   2s 窗越界要先收(一年一度喜剧大赛 ikun 17.4→15.7、哈哈哈哈哈第四季 zy360 15→13.1、令人心动的offer 30.2→28.4,原来都切掉 1~2s 正片;天官赐福 31.8→27.2,靠多看 3s 找黑场),收完 A 集的包络要能在 B 集原位定位中
+            const bumpLearn = (bp, c, nB, cov) => {
+                if (!bp || bp.aStart > BUMP_HEAD * EHZ || bp.bStart > BUMP_HEAD * EHZ) return null;
+                const end = tailCut(c, bp.aStart - bp.bStart, bp.aStart, bp.aStart + bp.len, 60).end, len = end - bp.aStart;
+                if (len < BUMP_MIN * EHZ) return null;
+                const hit = locate(c.eA.subarray(bp.aStart, end), c.eB, Math.min(nB, bp.bStart + len + 10), cov);
+                return hit && Math.abs(hit.at - bp.bStart) <= 5 ? { aStart: bp.aStart, bStart: bp.bStart, len: Math.min(len, hit.len), conf: hit.conf } : null;
+            };
             // 🏷️ 集名按结构拆成 期号、部分(上/中/下)、变体词。综艺同一期有上下半、纯享、加更、先导,以前都解析成同一个集号:上半的片头套到下半和纯享版上,
             //   第 1 期上和第 1 期下、纯享版配成学习对(共享大段正片音频,能把正片当成片头,最长 240 秒),"先导片"按列表位置当集号又会撞上真的第 N 期。
             //   ⚠️只从结构位置认标记,不从副标题里扫:紧贴期号的文字、分隔开的整个 token、期号前面的文字。"第 5 集 幕后黑手"是正片。
@@ -8387,7 +8414,8 @@
             };
             // 自动跳过的闸门,片头和贴片同一条:只信新算法算的值(mv:2,待确认的和墓碑留着的旧值不算)、本机刚定位出来的(src:'afp')。旧标记只亮按钮,重算成 mv:2 才生效。
             const opAuto = c => !!c && (c.src === 'afp' || (c.mv === MARK_V && !c.miss && !c.pend));
-            const bumpAuto = c => opAuto(c) && c.bmv === MARK_V;
+            const bumpAuto = c => opAuto(c) && c.bmv === BUMP_V;   // 贴片算法升过版:bmv:2 的旧贴片不再跟着片头自动跳,只亮按钮(不重算、不多下载)
+            const bumpShow = c => !!c && c.be > c.bs && c.bs <= BUMP_HEAD;   // 旧贴片里起点在集首之外的按钮也不亮:那些多半是正片(乘风2024 ikun 109.8s),点一下就切掉正片
             const outroAuto = c => OUTRO_AUTO && !!c && c.emv === MARK_V;
             // 共享标记 → 当前集的 _introCur
             const curOf = m => ({ os: m.os || 0, oe: m.oe || 0, mv: m.mv, miss: m.miss, pend: m.pend, bs: m.bs || 0, be: m.be || 0, bmv: m.bmv, ed: m.ed || 0, emv: m.emv });
@@ -8424,7 +8452,7 @@
                 }
                 return n;
             };
-            return { EHZ, SIL, HIT_CONF, MARK_V, ENV_DV, MAX_OP, MISS_TTL, LEARN_BLOCK, OUTRO_AUTO, VAR_WORDS, pearson, coverage, levelWalk, locate, tailCut, silenceExt, introNeed, learnMissCount, parseEpName, epInfos, epInfoOf, pickPair, opAuto, bumpAuto, outroAuto, curOf, newPid, epScheme, pairWitness };
+            return { EHZ, SIL, HIT_CONF, MARK_V, BUMP_V, BUMP_HEAD, BUMP_MIN, ENV_DV, MAX_OP, MISS_TTL, LEARN_BLOCK, OUTRO_AUTO, VAR_WORDS, pearson, coverage, levelWalk, locate, bumpLocate, bumpLearn, tailCut, silenceExt, introNeed, learnMissCount, parseEpName, epInfos, epInfoOf, pickPair, opAuto, bumpAuto, bumpShow, outroAuto, curOf, newPid, epScheme, pairWitness };
         })();
         // </dg-intro-core>
         window._dgHlsCustomType = function (video, player) {
@@ -18255,7 +18283,7 @@
                         // 📋 每集一行判定摘要:按钮数据从哪来/还差什么,一眼定位"为什么没按钮"
                         try {
                             const noOff = !multiEp ? '只有一集,学不了' : !window.afpOffline ? '分析模块没加载' : this._introMarks.failed ? '共享标记没拉到' : this._isKzUrl(this.currentUrl) ? '番剧解析地址拉不了' : mk && mk.miss ? '算不出的墓碑还有效,片尾有值' : '片头片尾都有值';
-                            const seg = mk ? [(mk.be > mk.bs ? '贴片' + mk.bs + '→' + mk.be + 's' + (mk.bmv === IntroCore.MARK_V ? '' : '(旧算法)') : ''), (mk.oe > mk.os ? '片头' + mk.os + '→' + mk.oe + 's' + (mk.mv === IntroCore.MARK_V ? (mk.pend ? '(待确认)' : '') : '(旧算法)') : ''), (mk.miss ? '算不出(' + mk.miss + ')' : ''), (mk.ed > 0 ? '片尾@' + mk.ed + 's' + (mk.emv === IntroCore.MARK_V ? '' : '(旧算法)') : '')].filter(Boolean).join(' ') : '';
+                            const seg = mk ? [(mk.be > mk.bs ? '贴片' + mk.bs + '→' + mk.be + 's' + (mk.bmv === IntroCore.BUMP_V ? '' : '(旧算法)') : ''), (mk.oe > mk.os ? '片头' + mk.os + '→' + mk.oe + 's' + (mk.mv === IntroCore.MARK_V ? (mk.pend ? '(待确认)' : '') : '(旧算法)') : ''), (mk.miss ? '算不出(' + mk.miss + ')' : ''), (mk.ed > 0 ? '片尾@' + mk.ed + 's' + (mk.emv === IntroCore.MARK_V ? '' : '(旧算法)') : '')].filter(Boolean).join(' ') : '';
                             console.log('[跳过片头] 第' + ep + '集判定: 共享标记=' + (seg || '无') + ' | 离线分析' + (willOffline ? '→启动(缺' + [introNeed.intro ? '片头' : '', !(mk && mk.ed > 0) ? '片尾' : ''].filter(Boolean).join('+') + ')' : '→不分析(' + noOff + ')') + ' | 边看边学' + (willEngine ? '→启动' : '→停') + ' | 按钮开关=' + (this.introSkipShow ? '开' : '关') + ' 自动跳=' + (this.introSkipAuto ? '开' : '关'));
                         } catch (e) { }
                         if (willOffline) {
@@ -19386,7 +19414,7 @@
                                                 v._introChkLogged = true;
                                                 try {
                                                     const segs = [];
-                                                    if (cur.be > cur.bs) segs.push('贴片' + cur.bs + '→' + cur.be + 's' + (time >= cur.be - 1 ? '(已过,不弹)' : ''));
+                                                    if (IntroCore.bumpShow(cur)) segs.push('贴片' + cur.bs + '→' + cur.be + 's' + (time >= cur.be - 1 ? '(已过,不弹)' : ''));
                                                     if (cur.oe > cur.os) segs.push('片头' + cur.os + '→' + cur.oe + 's' + (time >= cur.oe - 1 ? '(已过,不弹)' : ''));
                                                     if (cur.ed > 0) segs.push('片尾@' + cur.ed + 's');
                                                     console.log('[跳过片头] 本集可跳区间: ' + (segs.join(' ') || '(空)') + ' | 起播位置 ' + time.toFixed(1) + 's');
@@ -19395,7 +19423,7 @@
                                             // 判定含提前量(reg.in=真正进入区间):按钮提前 LEAD 秒亮出;自动跳严格等区间起点(提前跳会切掉区间前的正片)
                                             const L = this.LEAD;
                                             let reg = null;
-                                            if (cur.be > cur.bs && time >= cur.bs - L && time < cur.be - 1 && !v._bumpSkipped) reg = { start: cur.bs, to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: IntroCore.bumpAuto(cur), notice: '已自动跳过开头', in: time >= cur.bs };
+                                            if (IntroCore.bumpShow(cur) && time >= cur.bs - L && time < cur.be - 1 && !v._bumpSkipped) reg = { start: cur.bs, to: cur.be, label: '跳过开头', flag: '_bumpSkipped', kind: 'bump', ok: IntroCore.bumpAuto(cur), notice: '已自动跳过开头', in: time >= cur.bs };
                                             else if (cur.oe > cur.os && time >= cur.os - L && time < cur.oe - 1 && !v._introSkipped) reg = { start: cur.os, to: cur.oe, label: '跳过片头', flag: '_introSkipped', kind: 'op', ok: IntroCore.opAuto(cur), notice: '已自动跳过片头', in: time >= cur.os };
                                             else if (cur.ed > 0 && time >= cur.ed - L && time < dur - 2 && !v._outroSkipped) reg = { start: cur.ed, to: 0, label: v._outroNextEp() ? '下一集' : '跳过片尾', flag: '_outroSkipped', kind: 'outro', ok: IntroCore.outroAuto(cur), notice: '已自动跳过片尾', in: time >= cur.ed };
                                             if (reg) {
@@ -19991,8 +20019,8 @@
                                         return bestR;
                                     },
                                     // 解码失败的帧:没有 chunk 覆盖,包络里的 0 不是静音。没失败过就不算(定位走快路径)
-                                    _covOf(sess) {
-                                        if (!sess.decFail) return null;
+                                    _covOf(sess) { return sess.decFail ? this._covAll(sess) : null; },
+                                    _covAll(sess) {
                                         const cov = new Uint8Array(sess.n);
                                         for (const c of sess.chunks) {
                                             const i0 = Math.round((c.t0 == null ? c.st : c.t0) * this.EHZ), i1 = Math.min(cov.length, i0 + c.rms.length + 3);
@@ -20003,7 +20031,7 @@
                                     // 解码失败多到结论不可信(>5% 的分段):算不出来可能只是本机的问题,不能写进共享墓碑让所有观众 30 天不再试
                                     //   一段音频都没分析到(0 片清单,sess.n=0)同样不算数:没比过不等于不中
                                     _decodeOk(sess) { return sess.chunks.length > 0 && (!sess.decFail || sess.decFail / (sess.segs || 1) <= 0.05); },
-                                    // —— 定位:已知包络在整集包络里滑动找(0.1s 步进,整段 Pearson≥minConf 才认;片头走 IntroCore.locate,片尾/贴片仍用这里的 0.6) ——
+                                    // —— 定位:已知包络在整集包络里滑动找(0.1s 步进,整段 Pearson≥minConf 才认;片头、贴片走 IntroCore.locate,片尾仍用这里的 0.6) ——
                                     _xcorrDetect(intro, env, n, minConf) {
                                         const L = intro.length; if (n < L + 10) return null;
                                         let best = -1, bi = -1;
@@ -20099,16 +20127,16 @@
                                     _dq(s) { const bin = atob(s), f = new Float32Array(bin.length); for (let i = 0; i < bin.length; i++) f[i] = bin.charCodeAt(i); return f; },
                                     _envParse(j) {
                                         if (!j || j.v !== 2) return null;
-                                        // 只认新算法的片头组件(dv);片尾/贴片算法没变,照常用(否则多出每集尾部 4 分钟重学)。记录级 v 不动,老页面照样能读
+                                        // 只认新算法的片头组件(dv);片尾算法没变,照常用(否则多出每集尾部 4 分钟重学)。贴片包络照常用,bdv 记它是不是新算法学的(没有的定位出来只亮按钮,见 _apply)。记录级 v 不动,老页面照样能读
                                         const dOk = !!j.d && j.dv === IntroCore.ENV_DV;
-                                        return { env: dOk ? this._dq(j.d) : null, sec: dOk ? j.sec || 0 : 0, maxStart: dOk ? j.maxStart || 0 : 0, dur: dOk ? j.dur || j.sec || 0 : 0, pid: (dOk && j.pid) || '', peps: (dOk && j.peps) || null, psite: (dOk && j.psite) || '', pk: (dOk && j.pk) || '', benv: j.bd ? this._dq(j.bd) : null, bdur: j.bdur || 0, oenv: j.od ? this._dq(j.od) : null, odur: j.odur || 0 };
+                                        return { env: dOk ? this._dq(j.d) : null, sec: dOk ? j.sec || 0 : 0, maxStart: dOk ? j.maxStart || 0 : 0, dur: dOk ? j.dur || j.sec || 0 : 0, pid: (dOk && j.pid) || '', peps: (dOk && j.peps) || null, psite: (dOk && j.psite) || '', pk: (dOk && j.pk) || '', benv: j.bd ? this._dq(j.bd) : null, bdur: j.bdur || 0, bdv: j.bd && j.bdv === IntroCore.BUMP_V ? IntroCore.BUMP_V : 0, oenv: j.od ? this._dq(j.od) : null, odur: j.odur || 0 };
                                     },
                                     // pair = { pid, peps, psite, pk }:学出这条片头包络的学习对 id、那两集、学习线路、集号体系,第三集确认只认它(见 _apply、IntroCore.pairWitness)
                                     _envSave(o, intro, sec, maxStart, dur, benv, bdur, outroEnv, outroDur, pair) {
                                         try {
                                             const rec = { v: 2 };   // v2:v1 可能学到片源头部贴片,作废重学
                                             if (intro && intro.length) { rec.dv = IntroCore.ENV_DV; rec.sec = sec; rec.maxStart = maxStart; rec.dur = dur; rec.d = this._q(intro); if (pair && pair.pid) { rec.pid = pair.pid; rec.peps = pair.peps; if (pair.psite) rec.psite = pair.psite; if (pair.pk) rec.pk = pair.pk; } }
-                                            if (benv && benv.length) { rec.bd = this._q(benv); rec.bdur = bdur; }
+                                            if (benv && benv.length) { rec.bd = this._q(benv); rec.bdur = bdur; if (pair && pair.bdv === IntroCore.BUMP_V) rec.bdv = IntroCore.BUMP_V; }
                                             if (outroEnv && outroEnv.length) { rec.od = this._q(outroEnv); rec.odur = outroDur; }
                                             if (!rec.d && !rec.od) return;
                                             this._envUpload(o, rec);   // ☁️ 学习成果顺手备份云端(先传后存:隐私模式 setItem 会抛,别把云备份陪葬)
@@ -20154,12 +20182,12 @@
                                         if (!extra) return base;
                                         if (!base) return extra;
                                         if (!base.env && extra.env) { base.env = extra.env; base.sec = extra.sec; base.dur = extra.dur; base.maxStart = extra.maxStart; base.pid = extra.pid; base.peps = extra.peps; base.psite = extra.psite; base.pk = extra.pk; base.iB = extra.iB; base.from = extra.from; }
-                                        if (!base.benv && extra.benv) { base.benv = extra.benv; base.bdur = extra.bdur; base.bB = extra.bB; }
+                                        if (!base.benv && extra.benv) { base.benv = extra.benv; base.bdur = extra.bdur; base.bdv = extra.bdv; base.bB = extra.bB; }
                                         if (!base.oenv && extra.oenv) { base.oenv = extra.oenv; base.odur = extra.odur; base.oB = extra.oB; }
                                         return base;
                                     },
                                     // 内容归一 JSON(上传去重比对用;server 的 at 等额外字段不参与)
-                                    _envJson(r) { return JSON.stringify({ d: r.d || '', dv: r.d ? r.dv || 0 : 0, pid: r.d ? r.pid || '' : '', sec: r.sec || 0, dur: r.dur || 0, ms: r.maxStart || 0, bd: r.bd || '', bdur: r.bdur || 0, od: r.od || '', odur: r.odur || 0 }); },
+                                    _envJson(r) { return JSON.stringify({ d: r.d || '', dv: r.d ? r.dv || 0 : 0, pid: r.d ? r.pid || '' : '', sec: r.sec || 0, dur: r.dur || 0, ms: r.maxStart || 0, bd: r.bd || '', bdur: r.bdur || 0, bdv: r.bd ? r.bdv || 0 : 0, od: r.od || '', odur: r.odur || 0 }); },
                                     // ☁️ 拉云端包络(服务器端:本线路精确 → borrowed=false;借同剧其它线路 → borrowed=true)
                                     async _envFetchRemote(o) {
                                         try {
@@ -20248,8 +20276,11 @@
                                         if (old && old.oe > old.os && old.mv === IntroCore.MARK_V && !old.miss) return;
                                         if (oe - os > IntroCore.MAX_OP || oe - os < 10) { console.log('[AFP离线] 第' + ep + '集片头算出 ' + (oe - os).toFixed(0) + 's,超出范围,按算不出处理'); this._tomb(o, ep, 1); return; }
                                         // 这次没量到贴片就留着原来的(服务器也是这么合的),别把按钮弄丢
-                                        const newBump = bump && bump.be > bump.bs && !(old && old.bmv === IntroCore.MARK_V) ? { bs: Math.max(0, Math.round(bump.bs * 10) / 10), be: Math.round(bump.be * 10) / 10 } : null;
-                                        const bs = newBump ? newBump.bs : (old && old.bs) || 0, be = newBump ? newBump.be : (old && old.be) || 0, bmv = newBump ? IntroCore.MARK_V : old && old.bmv;
+                                        //   贴片要在片头之前,和 server.js 校验同一条(不一样的话这位观众自动跳、别人没有)
+                                        //   贴片版本 bv:新算法包络定位/学出的是 3;没版本的旧包络定位出的按 2 算(只亮按钮,上报不带 bmv,服务器也按 2 存)。和服务器一样,已有同版本或更高版本的贴片不动
+                                        const bv = bump && bump.v === IntroCore.MARK_V ? IntroCore.MARK_V : IntroCore.BUMP_V;
+                                        const newBump = bump && bump.be > bump.bs && bump.be <= os + 5 && !(old && old.bmv >= bv) ? { bs: Math.max(0, Math.round(bump.bs * 10) / 10), be: Math.round(bump.be * 10) / 10 } : null;
+                                        const bs = newBump ? newBump.bs : (old && old.bs) || 0, be = newBump ? newBump.be : (old && old.be) || 0, bmv = newBump ? bv : old && old.bmv;
                                         const ed = old && old.ed > 0 ? old.ed : 0;
                                         const pid = (pair && pair.pid) || '', confirmed = !!(pair && pair.confirmed) || this._pidConfirmed(V, pid);
                                         const rec = { ...(old || {}), os, oe, mv: IntroCore.MARK_V, bs, be, ed };
@@ -20269,7 +20300,7 @@
                                                 V._introCur = { ...cur, os, oe, mv: IntroCore.MARK_V, miss: 0, pend: rec.pend || 0, src: isCur && confirmed ? 'afp' : 'auto', bs, be, bmv: rec.bmv, ed: cur.ed || ed || 0, emv: cur.emv || (old && old.emv) };
                                             }
                                         } catch (e) { }
-                                        V._introUpload(o.title, o.site, ep, os, oe, newBump, null, null, this._ex(o, { mv: IntroCore.MARK_V, ...(pid ? { pid } : {}), ...(confirmed ? {} : { pend: 1 }) }));
+                                        V._introUpload(o.title, o.site, ep, os, oe, newBump, null, null, this._ex(o, { mv: IntroCore.MARK_V, ...(newBump && bv === IntroCore.BUMP_V ? { bmv: IntroCore.BUMP_V } : {}), ...(pid ? { pid } : {}), ...(confirmed ? {} : { pend: 1 }) }));
                                     },
                                     _applyOutro(o, ep, ed, duration) {
                                         ed = Math.round(ed * 10) / 10;
@@ -20423,12 +20454,12 @@
                                                         const trimmed = hit.len < saved.env.length && !this._tailExt(sess, fullEnd);
                                                         const end = trimmed ? Math.min(fullEnd, os + hit.len / this.EHZ) : fullEnd;
                                                         const ext = this._tailExt(sess, end);
-                                                        // 顺带定位开头贴片(只在前 150s 里找,片头贴片都在头部)
+                                                        // 顺带定位开头贴片(判定见 IntroCore.bumpLocate)
                                                         let bump = null;
                                                         if (saved.benv && saved.benv.length) {
-                                                            const bh = this._xcorrDetect(saved.benv, sess.env, Math.min(sess.n, 150 * this.EHZ));
-                                                            if (bh) { bump = { bs: Math.round(bh.at / this.EHZ * 10) / 10, be: Math.round((bh.at / this.EHZ + saved.bdur) * 10) / 10 }; saved.bB = 0; }
-                                                            else if (saved.bB) { saved.benv = null; saved.bdur = 0; saved.bB = 0; }   // 贴片是线路特有的,借来的没中就丢,别反复找
+                                                            const bh = IntroCore.bumpLocate(saved.benv, sess.env, sess.n, this._covOf(sess));
+                                                            if (bh) { bump = { bs: Math.round(bh.at / this.EHZ * 10) / 10, be: Math.round((bh.at + bh.len) / this.EHZ * 10) / 10, v: saved.bdv === IntroCore.BUMP_V ? IntroCore.BUMP_V : IntroCore.MARK_V }; saved.bB = 0; }
+                                                            else if (saved.bB) { saved.benv = null; saved.bdur = 0; saved.bdv = 0; saved.bB = 0; }   // 贴片是线路特有的,借来的没中就丢,别反复找
                                                         }
                                                         if (saved.iB) { saved.iB = 0; this._envPromote(o, saved); console.log('[AFP离线] ☁️ 借用包络实测命中,已登记到本线路(后来人直接用)'); }
                                                         else this._envPromote(o, saved);   // 本线路可信包络:兼作老本地成果的云端补传(内容级去重,不会重复发)
@@ -20511,7 +20542,8 @@
                                             // 后续集定位的跳过时长:公共段长度取两集较小者,不含静音延伸(延伸各集按自己的包络算)
                                             const dur = fine ? Math.min(fine.comA - fine.osA, fine.comB - fine.osB) : Math.min(oe1 - os1, oe2 - os2);
                                             // 开头贴片区间(网络视听许可证/平台方片头贴片,片头曲之外的第二个可跳区间)——一起上报共享
-                                            const bp = r.bump || null;
+                                            const bp = r.bump ? IntroCore.bumpLearn(r.bump, { eA: sA.env, eB: sB.env, covA: this._covAll(sA), covB: this._covAll(sB) }, sB.n, this._covOf(sB)) : null;
+                                            if (r.bump && !bp) console.log('[AFP离线] 开头公共段 ' + (r.bump.aStart / this.EHZ).toFixed(1) + 's / ' + (r.bump.bStart / this.EHZ).toFixed(1) + 's 长 ' + (r.bump.len / this.EHZ).toFixed(1) + 's 没过贴片判定,不写');
                                             const bumpA = bp ? { bs: Math.round(bp.aStart / this.EHZ * 10) / 10, be: Math.round((bp.aStart + bp.len) / this.EHZ * 10) / 10 } : null;
                                             const bumpB = bp ? { bs: Math.round(bp.bStart / this.EHZ * 10) / 10, be: Math.round((bp.bStart + bp.len) / this.EHZ * 10) / 10 } : null;
                                             const pid = IntroCore.newPid(), peps = [o.ep, sib.ep], pk = IntroCore.epScheme(me) === IntroCore.epScheme(sib) ? IntroCore.epScheme(me) : '';   // 学习对算出的值待确认,包络和标记带同一个 id(见 _apply);两集不是一套集号就谁也比不了
@@ -20520,7 +20552,7 @@
                                             const benv = bp ? sA.env.slice(bp.aStart, bp.aStart + bp.len) : null;
                                             // 云端来的已验证片尾包络别丢:借用片头失配回退学习的场景里,片尾可能已实测命中转正,新记录要带着它
                                             const keepO = saved && saved.oenv && !saved.oB ? { oenv: saved.oenv, odur: saved.odur } : { oenv: null, odur: 0 };
-                                            const learned = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2), pid, peps, psite: o.site, pk, benv, bdur: bp ? bp.len / this.EHZ : 0, oenv: keepO.oenv, odur: keepO.odur };
+                                            const learned = { env: headEnv, sec: headSec, dur, maxStart: Math.max(os1, os2), pid, peps, psite: o.site, pk, benv, bdur: bp ? bp.len / this.EHZ : 0, bdv: bp ? IntroCore.BUMP_V : 0, oenv: keepO.oenv, odur: keepO.odur };
                                             st.phase = 'learned'; done = true;
                                             this._epDone[epK] = 1; this._epDone[this._doneKey(o, sib.ep)] = 1;
                                             const outroLearned = needOutro ? await this._learnOutro(o, F, curUrl, sib, st, learned) : false;
