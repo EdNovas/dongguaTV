@@ -531,6 +531,79 @@
         #dplayer .dm-toggle.dm-on .dm-knob {
             transform: translateX(18px);
         }
+        /* 🗨️ 弹幕时间(手动偏移):按钮不用文本框(手机会弹键盘);touch-action 防连点时被当成双击缩放 */
+        #dplayer .dm-off-block {
+            margin: 11px 0;
+        }
+        #dplayer .dm-off-block.dg-dmoff-off,
+        #dplayer .dg-mob-row.dg-dmoff-off {
+            display: none !important;
+        }
+        #dplayer .dm-off-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #dplayer .dm-off-val {
+            flex: 1;
+            min-width: 0;
+            text-align: right;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            opacity: 0.9;
+            white-space: nowrap;
+        }
+        #dplayer .dm-off-reset {
+            flex-shrink: 0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.12);
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        #dplayer .dm-off-reset.dm-off-na {
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        #dplayer .dm-off-btns {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-top: 8px;
+        }
+        #dplayer .dm-off-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 30px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            background: rgba(255, 255, 255, 0.12);
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        #dplayer .dm-off-btn:active {
+            background: rgba(229, 9, 20, 0.7);
+        }
+        #dplayer .dm-off-hint {
+            margin-top: 6px;
+            font-size: 11px;
+            opacity: 0.6;
+        }
+        @media (pointer: coarse), (max-width: 768px) {
+            #dplayer .dm-off-btn {
+                min-height: 38px;
+            }
+            #dplayer .dm-off-reset {
+                padding: 6px 10px;
+            }
+        }
         /* 弹幕的原生齿轮项(显示弹幕/海量弹幕/弹幕透明度)已移到独立弹幕设置面板 → 齿轮里隐藏 */
         #dplayer .dplayer-setting-showdan,
         #dplayer .dplayer-setting-danunlimit,
@@ -7458,8 +7531,8 @@
                         if (stale()) return;
                         if (d && d.code === 0) {
                             if (o.success) o.success((d.data || []).map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] })));
-                            // 列表晚到时 DPlayer 的读指针还在 0:下一帧会把"当前时间之前"的弹幕一口气全画出来(实测开海量一帧 8 秒)→ 对到当前时间
-                            try { if (typeof dp !== 'undefined' && dp && dp.danmaku && dp.video && (dp.video.currentTime || 0) > 1) dp.danmaku.seek(); } catch (e) { }
+                            // 列表晚到时 DPlayer 的读指针还在 0:下一帧会把"弹幕时间之前"的弹幕一口气全画出来(实测开海量一帧 8 秒)→ 对到当前弹幕时间(见 dmAlignAfterLoad)
+                            try { if (typeof dp !== 'undefined') dmAlignAfterLoad(dp); } catch (e) { }
                         }
                         else if (o.error) o.error(d && d.msg);
                     })
@@ -7520,6 +7593,247 @@
             return true;
         };
         // </dg-dm-px-core>
+        // 🗨️ 绕过 dp.seek 的跳转(双击快进快退、TV 方向键、换源后恢复进度)只改 video.currentTime,DPlayer 的弹幕读指针不动:
+        //    快退后这段没有弹幕,要等播放追回原位置;快进则把跳过的弹幕一口气全画出来。切后台回来同理(rAF 停了,读指针落在后面)。
+        //    seeking / 回到前台时看读指针和当前时间差多少,超过 2 秒才重新对齐:dp.seek 自己对齐过,这里判出来没差,不会多清一次屏;
+        //    hls.js 跳小空洞、微调都在 2 秒内,屏幕上正在飘的弹幕也不动。
+        // <dg-dm-resync-core>
+        const dmPointerOff = (dm, t, gap) => {
+            const list = dm && dm.dan;
+            if (!list || !list.length || !Number.isFinite(t)) return false;
+            const next = list[dm.danIndex], prev = list[dm.danIndex - 1];
+            return !!((next && parseFloat(next.time) < t - gap) || (prev && parseFloat(prev.time) > t + gap));
+        };
+        const dmResync = (player, doc) => {
+            const dm = player && player.danmaku, video = player && player.video;
+            if (!dm || dm._dgResync || !video || typeof video.addEventListener !== 'function' || typeof dm.seek !== 'function') return false;
+            dm._dgResync = true;
+            const fix = () => { try { if (player.danmaku === dm && dm.options && dmPointerOff(dm, dm.options.time(), 2)) dm.seek(); } catch (e) { } };
+            video.addEventListener('seeking', fix);
+            if (doc && typeof doc.addEventListener === 'function') {
+                doc._dgDmFix = fix;   // 只留当前播放器的(重建播放器后旧实例不再动弹幕)
+                if (!doc._dgDmVis) {
+                    doc._dgDmVis = true;
+                    doc.addEventListener('visibilitychange', () => { if (!doc.hidden && doc._dgDmFix) doc._dgDmFix(); });
+                }
+            }
+            return true;
+        };
+        // </dg-dm-resync-core>
+        // 🗨️ 弹幕时间轴:弹幕是按平台时间发的,线路的时间轴和平台不一样时整体错位(如意缺平台开头 100~135 秒,逐集不同;录屏那集弹幕比画面晚整整 120 秒)。
+        //    DPlayer 的 frame / seek / send 和 dmResync 都读 danmaku.options.time(),这里把它换成:
+        //        弹幕时间 = currentTime − 时间轴上已判定的插播累计 + 偏移(负数按 0)
+        //    · 插播累计只来自 adClipSkip 手里的组(st.groups),它们永远是【正在播的那条时间轴】:hls.js 通道读的是 _CutHlsLoader 剪后的清单,原生通道拉的是占位地址
+        //      → adCut 剪掉的段已经不在里面,不会重复扣;切勿用 _cutToBase(如意原时间轴是 +120→+100 的阶梯,剪后才是全程 +120)。
+        //      判定不另起一套:st.skipped / st.overrides(跳过的、放弃跳过照常播的)+ 同一套 AdClipCore.planCuts 跑在 st.res / st.off 上(用户拖过去、check 没轮到的)。
+        //      组在 t 之前就扣;t 落在组内时停在组起点(播广告不出弹幕)。没加载过的组不知道分辨率和时间戳,判不出,也不为它多发请求(手动偏移兜底)。
+        //    · 偏移:手动值【覆盖】自动值 h,不叠加。有效偏移 = 手动值 ?? h。手动设过就不受后续 setAuto 影响(setAuto 只记下 h);手动调整从当前有效值起步;
+        //      重置才回到 h。手动设成 0 也算设过。h 这一版恒为 0,下一批自动校正调 dmTime.setAuto(h, _playToken)。方向:提前 = 弹幕更早出现 = 弹幕时间加正数。
+        //    · 负向偏移:弹幕时间按 0 封底,currentTime 小于偏移量时读指针停在开头、一条不画,走过之后接着出。
+        //    · 状态是模块级普通对象(不进 Vue 响应式),绑定本次播放:play() 递增 _playToken 时 begin() 立刻清零并换成这一集的手动值;
+        //      switchVideo 复用实例靠这个,new DPlayer / 后来才有弹幕模块靠 install()。直播不启用,弹幕时间就是 currentTime。
+        //    · map() 每帧调用:不读 Vue 数据、不分配、不解析,只走插播段。插播段由 timeupdate 里的 refresh() 按状态变化重算,差值超过 2 秒才重新对齐(同 dmResync 的容差),别的时候不清屏。
+        // <dg-dm-time-core>
+        const DM_OFF_MAX = 600, DM_OFF_STORE = 'donggua_dm_offset', DM_OFF_CAP = 300, DM_ALIGN_GAP = 2, DM_NO_RUNS = [];
+        // runs = [起,止,起,止…]:按时间排序、互不重叠
+        const dmStripAds = (t, runs) => {
+            let cut = 0;
+            for (let i = 0; i < runs.length; i += 2) {
+                const s = runs[i], e = runs[i + 1];
+                if (t >= e) { cut += e - s; continue; }
+                if (t > s) return s - cut;
+                break;
+            }
+            return t - cut;
+        };
+        // 把 adClipSkip 的状态折成 runs
+        const dmAdRuns = (st, core, opt) => {
+            const gs = st && st.groups;
+            if (!gs || !gs.length) return DM_NO_RUNS;
+            const hit = new Uint8Array(gs.length);
+            for (let i = 0; i < gs.length; i++) {
+                const cc = gs[i].cc;
+                if ((st.skipped && st.skipped[cc]) || (st.overrides && st.overrides[cc])) hit[i] = 1;
+            }
+            try {
+                if (core && typeof core.planCuts === 'function') {
+                    for (const c of core.planCuts(gs, cc => st.res[cc], opt, { offOf: cc => st.off[cc] })) {
+                        for (let i = c.g0; i <= c.g1; i++) hit[i] = 1;
+                    }
+                }
+            } catch (e) { }
+            const out = [];
+            let last = -Infinity;
+            for (let i = 0; i < gs.length; i++) {
+                if (!hit[i]) continue;
+                let j = i;
+                while (j + 1 < gs.length && hit[j + 1]) j++;
+                // 活 Fragment 的 start 按 PTS 修正后会漂,相邻两段可能压一点:压到的部分不重复算,时间轴才单调
+                const s = Math.max(gs[i].start, last), e = gs[j].end;
+                if (Number.isFinite(s) && Number.isFinite(e) && e > s) { out.push(s, e); last = e; }
+                i = j;
+            }
+            return out.length ? out : DM_NO_RUNS;
+        };
+        const dmAdSig = (st) => {
+            const n = o => (o ? Object.keys(o).length : 0);
+            return (st.groups ? st.groups.length : 0) + '/' + n(st.res) + '/' + n(st.off) + '/' + n(st.skipped) + '/' + n(st.overrides);
+        };
+        const dmOffClamp = (v) => {
+            const n = +v;
+            return Number.isFinite(n) ? Math.max(-DM_OFF_MAX, Math.min(DM_OFF_MAX, Math.round(n * 100) / 100)) : 0;
+        };
+        // 手动偏移按 剧|线路|集 存本机。键来自片名:加 k: 前缀 + hasOwnProperty,constructor / __proto__ 这种片名不会碰到原型链
+        const dmOffSlot = (key) => 'k:' + String(key).slice(0, 200);
+        const dmOffRead = (store) => {
+            const raw = store().getItem(DM_OFF_STORE);   // 存储不可用时抛,调用方接住
+            try { const m = JSON.parse(raw || '{}'); return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {}; } catch (e) { return {}; }
+        };
+        const dmOffGet = (store, key) => {
+            try {
+                const m = dmOffRead(store), k = dmOffSlot(key);
+                if (!Object.prototype.hasOwnProperty.call(m, k)) return null;
+                const v = m[k] && m[k].v;
+                return Number.isFinite(v) ? dmOffClamp(v) : null;
+            } catch (e) { return null; }
+        };
+        // v = null 删除;超过上限淘汰最久没改的
+        const dmOffPut = (store, key, v, now) => {
+            try {
+                const m = dmOffRead(store), k = dmOffSlot(key);
+                if (v == null) delete m[k]; else m[k] = { v, at: now };
+                const ks = Object.keys(m), at = x => (m[x] && m[x].at) || 0;
+                if (ks.length > DM_OFF_CAP) ks.sort((a, b) => at(a) - at(b)).slice(0, ks.length - DM_OFF_CAP).forEach(x => delete m[x]);
+                store().setItem(DM_OFF_STORE, JSON.stringify(m));
+            } catch (e) { }
+        };
+        const dmOffText = (v) => {
+            const n = Math.round(Math.abs(v || 0) * 10) / 10;
+            return n ? (v > 0 ? '弹幕提前 ' : '弹幕推后 ') + n + ' 秒' : '未调整';
+        };
+        // 列表到达后读指针还在 0:下一帧会把"弹幕时间之前"的全部画出来(实测开海量一帧 8 秒)→ 对到当前弹幕时间。
+        //    看弹幕时间不看 currentTime:偏移已知时起播前(currentTime=0)弹幕时间就可能是 120;负偏移算出来 ≤1 时读指针留在开头,本来就对
+        const dmAlignAfterLoad = (player) => {
+            const dm = player && player.danmaku;
+            if (!dm || !dm.options || typeof dm.seek !== 'function' || !(dm.options.time() > 1)) return false;
+            dm.seek();
+            return true;
+        };
+        const dmTimeCreate = (env) => {
+            const s = {
+                active: false, tok: null, key: '', runs: DM_NO_RUNS, h: 0, manual: null, offset: 0, st: null, sig: '', align: false,
+                map(t) {
+                    if (!s.active || !Number.isFinite(t)) return t;
+                    const x = dmStripAds(t, s.runs) + s.offset;
+                    return Number.isFinite(x) ? Math.max(0, x) : t;
+                },
+                // 新的一次播放(play() 递增 _playToken 时调):上一集的插播段、h、手动值全部作废,换成这一集的
+                begin(tok, key, live) {
+                    const prevOffset = s.offset;
+                    s.tok = tok; s.key = key || ''; s.active = !live;
+                    s.runs = DM_NO_RUNS; s.st = null; s.sig = ''; s.h = 0;
+                    s.manual = (s.active && s.key) ? dmOffGet(env.store, s.key) : null;
+                    s.offset = s.manual != null ? s.manual : 0;
+                    s.align = true;   // 同集换线不重载弹幕,读指针还在上一条线路的位置:拿到新视频后看一眼
+                    s.install(env.player());
+                    // 🛡️ 同集换线 / 起播失败自动换线:danmakuKey 不变、不重载,列表和读指针都留着,而 s.align 要等元数据到之后的第一个 timeupdate。
+                    //    dp.play() 之后的下一帧比它早,已经按新偏移比较:读指针在新偏移之前 → 一帧画出整段(线路 B 存过 +120,t=30 换过去,每秒 4 条就是一帧 360 条)。
+                    //    偏移变了就当场对齐:读指针落到 旧 currentTime+新偏移,不小于新视频 t=0 的弹幕时间,这一帧不画;s.align 留着,第一个 timeupdate 再拉回准确位置。
+                    //    偏移没变不动,同集换线不多清一次屏(读指针本来就不小于 0+偏移;恢复进度走 dp.seek,弹幕同步对齐)。
+                    if (s.offset !== prevOffset) s.realign();
+                    s.render();
+                },
+                install(player) {
+                    const dm = player && player.danmaku;
+                    if (!dm || dm._dgTime || !dm.options || typeof dm.options.time !== 'function') return false;
+                    dm._dgTime = true;
+                    const raw = dm.options.time;
+                    dm.options.time = () => {
+                        try { return s.map(player.video.currentTime); } catch (e) { return raw(); }
+                    };
+                    const video = player.video;
+                    if (video && typeof video.addEventListener === 'function') {
+                        video.addEventListener('timeupdate', () => {
+                            try { if (player.danmaku === dm && env.player() === player) s.refresh(player); } catch (e) { }
+                        });
+                    }
+                    s.render();
+                    return true;
+                },
+                // timeupdate 里调:adClipSkip 的状态有变化才重算插播段;映射因此变了超过 2 秒才重新对齐
+                refresh(player) {
+                    const dm = player && player.danmaku, video = player && player.video;
+                    if (!s.active || !dm || !video) return false;
+                    const st = env.adState() || null, sig = st ? dmAdSig(st) : '';
+                    if (st !== s.st || sig !== s.sig) {
+                        s.st = st; s.sig = sig;
+                        const t = video.currentTime, before = s.map(t);
+                        s.runs = st ? dmAdRuns(st, env.adCore(), env.adOpt()) : DM_NO_RUNS;
+                        if (Math.abs(s.map(t) - before) > DM_ALIGN_GAP) { dm.seek(); s.align = false; }
+                    }
+                    if (s.align && video.readyState >= 1 && !video.seeking) {
+                        s.align = false;
+                        if (dmPointerOff(dm, dm.options.time(), DM_ALIGN_GAP)) dm.seek();
+                    }
+                    return true;
+                },
+                realign() {
+                    try { const p = env.player(), dm = p && p.danmaku; if (dm && typeof dm.seek === 'function') dm.seek(); } catch (e) { }
+                },
+                setManual(v) {
+                    if (!s.active) return null;
+                    s.manual = s.offset = dmOffClamp(v);
+                    if (s.key) dmOffPut(env.store, s.key, s.manual, Date.now());
+                    s.realign(); s.render();
+                    return s.manual;
+                },
+                step(d) { return s.setManual((s.manual != null ? s.manual : s.h) + d); },
+                resetManual() {
+                    if (!s.active) return;
+                    s.manual = null; s.offset = s.h;
+                    if (s.key) dmOffPut(env.store, s.key, null, Date.now());
+                    s.realign(); s.render();
+                },
+                // 自动值接口(这一版没有调用方):只认本次播放;手动设过时只记下 h,不生效
+                setAuto(h, tok) {
+                    if (!s.active || tok !== s.tok) return false;
+                    s.h = dmOffClamp(h);
+                    if (s.manual == null && s.offset !== s.h) { s.offset = s.h; s.realign(); s.render(); }
+                    return true;
+                },
+                render() {
+                    try {
+                        const p = env.player();
+                        env.render({ visible: !!(s.active && p && p.danmaku), text: dmOffText(s.offset), canReset: s.manual != null });
+                    } catch (e) { }
+                }
+            };
+            return s;
+        };
+        // </dg-dm-time-core>
+        const dmTime = dmTimeCreate({
+            player: () => (typeof dp !== 'undefined' ? dp : null),
+            store: () => window.localStorage,
+            adCore: () => window.AdClipCore,
+            adOpt: () => (window.adClipSkip ? window.adClipSkip.OPT : null),
+            // 与 adClipSkip.check 同一道门:它不判的(关了、直播、多码率、上一次播放留下的状态)这里也不算
+            adState: () => {
+                const a = window.adClipSkip;
+                if (!a || !a.vue || !a.enabled()) return null;
+                const st = a._cur();
+                return (st && !st.live && !st.multi && st.tok === a.vue._playToken) ? st : null;
+            },
+            // 只动弹幕设置面板和手机齿轮菜单里那一行的 DOM,不碰 Vue
+            render: (view) => {
+                const c = document.getElementById('dplayer');
+                if (!c) return;
+                c.querySelectorAll('.dm-off-block, .dg-mob-row[data-dg="dmoffset"]').forEach(el => el.classList.toggle('dg-dmoff-off', !view.visible));
+                c.querySelectorAll('.dm-off-val').forEach(el => { el.textContent = view.text; });
+                c.querySelectorAll('.dg-dmoff-val').forEach(el => { el.textContent = view.text.replace('弹幕', ''); });   // 齿轮菜单只有 150px 宽,行名已经写了"弹幕时间"
+                const r = c.querySelector('.dm-off-reset');
+                if (r) r.classList.toggle('dm-off-na', !view.canReset);
+            }
+        });
         // 🛡️ 安全跳转：媒体在换源/代理回退重载时 currentTime 会是 NaN，相对跳转会把 NaN 写进 currentTime →
         //    DPlayer 抛 "non-finite" TypeError、可能打断换源。所有跳转统一走守卫，非有限值直接跳过。
         const safeSeek = (t) => { if (dp && Number.isFinite(t) && t >= 0) { try { dp.seek(t); } catch (e) { } } };
@@ -7529,7 +7843,7 @@
             if (!Number.isFinite(cur)) return; // 媒体重载中 currentTime=NaN → 放弃本次相对跳转
             const dur = Number.isFinite(dp.video.duration) ? dp.video.duration : Infinity;
             const next = Math.min(dur, Math.max(0, cur + delta));
-            if (Number.isFinite(next)) { try { dp.video.currentTime = next; } catch (e) { } }
+            if (Number.isFinite(next)) { try { dp.video.currentTime = next; if (dp.danmaku) dp.danmaku.seek(); } catch (e) { } }
         };
 
         // ⬇️ ========== 离线缓存(IndexedDB) ==========
@@ -17215,6 +17529,16 @@
                         if (dp.template && dp.template.danmakuLoading) dp.template.danmakuLoading.style.display = 'none';
                     } catch (e) { }
                 },
+                // 🗨️ 弹幕时间映射绑到这一次播放(见 dmTime):键 = 剧|线路|集,集用 _danmakuKey 归一后的写法。直播不启用
+                _dmTimeBegin() {
+                    const tok = this._playToken;
+                    try {
+                        const g = this.currentGroup, site = (this.currentSource && this.currentSource.site_key) || '';
+                        const live = !!(this._liveActive || (g && g._isLive));
+                        const key = (!live && g && g.name) ? g.name + '|' + site + '|' + this._danmakuKey().slice(g.name.length + 1) : '';
+                        dmTime.begin(tok, key, live);
+                    } catch (e) { dmTime.begin(tok, '', true); }
+                },
                 // 🗨️ 弹幕匹配提示:我方这部的类型(归一后的 k:)、年份、集数。服务器用它在同名候选里挑对的那部
                 //    (综艺"王牌对王牌"别配到 1998 年同名电影;天龙八部 2003 版别配到 1997 版;苍兰诀 电视剧≠动画)。
                 //    返回 "|k:…|y:…|n:…"(缺的段省略)。优先用【当前线路】自己的分类/年份,没有才取其它线路的多数票;
@@ -17763,6 +18087,7 @@
                         this._activeKz = null; this._activeAdFilterProxyUsed = false;
                         this._activePlaySeq = _navSeq;
                         this.currentUrl = url;
+                        this._dmTimeBegin();   // 🗨️ 解析期间令牌已变:上一集的弹幕时间映射先作废
                         try { if (dp) { dp.pause(); if (dp.plugins && dp.plugins.hls) dp.plugins.hls.stopLoad(); dp.notice('正在解析视频地址…', 3000); } } catch (e) { }
                         // 45s > 服务器最坏解析耗时(多线路回退预算 25s + 在途请求),免得服务器刚解出来客户端已放弃
                         fetchT(url, null, 45000)
@@ -17814,6 +18139,7 @@
                     //    因此绝不能用它给"本次播放"的异步回调(看门狗/重试)做边界——那会让上一个源装的定时器对下一个源生效。
                     const playToken = (this._playToken = (this._playToken || 0) + 1);
                     try { if (window.adClipSkip) window.adClipSkip.vue = this; } catch (e) { }   // 🛡️ 去插播:attach 时要读到本次的 _playToken(必须早于建/切 hls)
+                    this._dmTimeBegin();   // 🗨️ 弹幕时间映射:上一集的插播段和偏移立刻清零,换成这一集的(复用实例和新建实例都走这里)
                     try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }   // 🚦 换源/换集:先叫停上一轮后台分析,别让它继续抢新源的带宽
                     // ⏱️ 起播看门狗(不依赖任何 hls 事件的最后一道闸)。
                     //   实测有死源(空清单/极小清单)会让 hls.js 【完全静默】:不触发 LEVEL_LOADED、不触发 FRAG_LOADED、
@@ -18388,6 +18714,8 @@
                             dp.danmaku._sendPatched = true;
                         }
                         dmPixelStart(dp);   // 🗨️ iOS / iPadOS 新弹幕先在右边闪一下
+                        dmResync(dp, document);   // 🗨️ 绕过 dp.seek 的跳转、切后台回来:弹幕读指针对齐到当前时间
+                        dmTime.install(dp);   // 🗨️ 弹幕时间映射(新实例的 options.time 是原始的,要重新挂)
 
                         // ========== 🔧 设置菜单修复 ==========
                         setTimeout(() => {
@@ -19589,6 +19917,20 @@
                                                     <div class="dm-set-title">弹幕设置</div>
                                                     ${tg('show', '显示弹幕', dmShown)}
                                                     ${tg('unlimited', '海量弹幕', dmUnlim)}
+                                                    <div class="dm-off-block">
+                                                        <div class="dm-off-head">
+                                                            <span class="dm-set-label">弹幕时间</span>
+                                                            <span class="dm-off-val">未调整</span>
+                                                            <span class="dm-off-reset dm-off-na">重置</span>
+                                                        </div>
+                                                        <div class="dm-off-btns">
+                                                            <div class="dm-off-btn" data-d="-10">推后10</div>
+                                                            <div class="dm-off-btn" data-d="-1">推后1</div>
+                                                            <div class="dm-off-btn" data-d="1">提前1</div>
+                                                            <div class="dm-off-btn" data-d="10">提前10</div>
+                                                        </div>
+                                                        <div class="dm-off-hint">单位秒。弹幕比画面晚就点提前,比画面早就点推后</div>
+                                                    </div>
                                                     ${sl('rows', '行数', 1, 20, 1)}
                                                     ${sl('speed', '速度', 1, 10, 1)}
                                                     ${sl('font', '字号', 12, 44, 1)}
@@ -19631,6 +19973,13 @@
                                                 r.addEventListener('input', onChange);
                                                 r.addEventListener('click', e => e.stopPropagation());
                                             });
+                                            // 🗨️ 弹幕时间:±1 / ±10 秒 + 重置。stopPropagation:点按钮不关面板、不冒泡到播放器(面板已在 #dplayer 点击 / 触摸两处白名单里)
+                                            panel.querySelectorAll('.dm-off-btn').forEach(b => b.addEventListener('click', (e) => {
+                                                e.stopPropagation();
+                                                dmTime.step(+b.getAttribute('data-d'));
+                                            }));
+                                            const offReset = panel.querySelector('.dm-off-reset');
+                                            if (offReset) offReset.addEventListener('click', (e) => { e.stopPropagation(); dmTime.resetManual(); });
                                             // 开关：显示弹幕 / 海量弹幕(直接驱动 DPlayer；原生 danmaku_show/hide 事件负责本地+服务器持久化)
                                             panel.querySelectorAll('.dm-toggle').forEach(t => t.addEventListener('click', (e) => {
                                                 e.stopPropagation();
@@ -19736,6 +20085,7 @@
 
                                 // 挂载"弹幕设置"按钮+滑块面板(控件此时已就绪)
                                 if (window.danmakuStyle) window.danmakuStyle.mount();
+                                dmTime.render();   // 🗨️ 弹幕时间:面板刚挂上,写当前值(没有弹幕模块 / 直播时隐藏)
 
                                 // 📸 分享当前画面(桌面):相机图标插在设置(齿轮)左边。手机端 CSS 把它收起,入口在齿轮菜单里(.dg-mob-row[data-dg=frame]);
                                 //    直播/未登录预览由 .player-box.dg-no-frame 藏掉
@@ -19790,11 +20140,13 @@
                                             html += row('dmshow', '弹幕', `<span class="dg-mob-toggle ${dmShowing ? 'on' : ''}"></span>`);
                                             html += row('dmsend', '发送弹幕', '<span class="dg-mob-arrow">›</span>');
                                             html += row('dmstyle', '弹幕样式', '<span class="dg-mob-arrow">›</span>');
+                                            html += row('dmoffset', '弹幕时间', '<span class="dg-mob-arrow"><span class="dg-dmoff-val"></span> ›</span>');   // 🗨️ 手机入口:按钮在弹幕设置面板里,这一行显示当前值并直接打开到那里
                                         }
                                         if (pipBtn) html += row('pip', '画中画', '<span class="dg-mob-arrow">›</span>');
                                         html += row('webfull', '网页全屏', '<span class="dg-mob-arrow dg-webfull-label">›</span>');
                                         html += row('frame', '分享当前画面', '<span class="dg-mob-arrow">›</span>');   // 📸 直播/未登录预览由 .player-box.dg-no-frame 藏掉
                                         settingPanel.insertAdjacentHTML('beforeend', html);
+                                        dmTime.render();   // 🗨️ 弹幕时间:面板和菜单行都已就位,写当前值(直播时隐藏)
 
                                         const setDmKnob = (on) => { const k = settingPanel.querySelector('.dg-mob-row[data-dg="dmshow"] .dg-mob-toggle'); if (k) k.classList.toggle('on', !!on); };
                                         const setWebFullLabel = () => {
@@ -19829,7 +20181,15 @@
                                                     if (cbtn) cbtn.click();
                                                 } else if (key === 'dmstyle') {
                                                     const panel = dplayerContainer.querySelector('.dm-settings-panel');
-                                                    if (panel) panel.style.display = 'block';
+                                                    if (panel) { panel.style.display = 'block'; panel.scrollTop = 0; }   // 先点过弹幕时间时面板停在下面,两个开关会在视口外
+                                                } else if (key === 'dmoffset') {
+                                                    const panel = dplayerContainer.querySelector('.dm-settings-panel');
+                                                    if (panel) {
+                                                        panel.style.display = 'block';
+                                                        // 竖屏内联播放器里面板只有 ~120px 高、内部滚动:滚到弹幕时间这一块(面板是定位元素,offsetTop 相对它)
+                                                        const block = panel.querySelector('.dm-off-block');
+                                                        if (block) panel.scrollTop = Math.max(0, block.offsetTop - 8);
+                                                    }
                                                 } else if (key === 'pip') {
                                                     if (pipBtn) pipBtn.click();
                                                 } else if (key === 'webfull') {

@@ -525,6 +525,8 @@ cp /opt/dongguaTV/db.json /root/backup/
 | `node scripts/kazumi-test.mjs` | 番剧规则源 |
 | `node scripts/danmaku-match-test.mjs` | 弹幕候选匹配（约 340 个真实用例回放，含留出集；综艺日期式集名按腾讯发布日期 + 时长的 778 例回放） |
 | `node scripts/danmaku-cache-test.mjs` | 弹幕服务器缓存 |
+| `node scripts/danmaku-sync-test.mjs` | 弹幕读指针跟随跳转（绕过 `dp.seek` 的跳转、切后台回来） |
+| `node scripts/danmaku-offset-test.mjs` | 弹幕时间映射与手动偏移（插播累计、不重复扣已剪的段、换集清零、存储上限） |
 | `node scripts/user-stats-test.mjs` | 观看与分享统计、站长后台接口 |
 | `node scripts/watch-meter-test.mjs` | 播放页观看计时（只在真的在播时计、离线合并补发） |
 | `node scripts/history-sync-test.mjs` | 观看历史增量同步（只推变化的、瘦身、双设备端到端） |
