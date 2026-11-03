@@ -25,7 +25,7 @@ const ok = (c, msg, extra) => { if (c) pass++; else { fail++; console.log('  ✗
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 const introMarks = require(path.join(ROOT, 'lib/intro-marks'));
-const { MARK_V, mergeOp, mergeBump, mergeOutro, applyMiss, settlePair } = introMarks;
+const { MARK_V, mergeOp, mergeBump, mergeOutro, applyMiss, settlePair, marksForRead } = introMarks;
 const NOW = 1800000000000;
 const IntroCoreOf = () => makeClient().IntroCore;
 
@@ -108,6 +108,34 @@ console.log('① 合并规则');
     ok(x.bs === 3 && !x.bmv, '贴片:待确认的贴片不能落到已确认的记录上(闸门按整条记录看 pend)', x);
     x = bump({ os: 0, oe: 100, mv: 2, pend: 1 }, null, 5, 10, MARK_V, true);
     ok(x.bs === 5 && x.bmv === 2 && x.pend === 1, '贴片:待确认的记录上落待确认的贴片,照常', x);
+    // 贴片算法版本:高版本盖低版本,低版本盖不掉高版本,同版本不翻来翻去
+    const b2 = { os: 0, oe: 100, mv: 2, bs: 35.4, be: 42.8, bmv: 2 }, b3 = { os: 0, oe: 100, mv: 2, bs: 0, be: 16, bmv: 3 };
+    const bumpV = (old, bs, be, inc) => mergeBump({ ...old }, old, { bs, be, ...inc });
+    x = bumpV(b2, 0, 16, { mv: MARK_V, bmv: 3 });
+    ok(x.bs === 0 && x.be === 16 && x.bmv === 3, '贴片:bmv:2 + bmv:3:覆盖', x);
+    for (const [name, inc] of [['bmv:3 连报', { mv: MARK_V, bmv: 3 }], ['老页面(mv:2 不带 bmv)', { mv: MARK_V }], ['不带 mv', { mv: 0 }]]) {
+        x = bumpV(b3, 50, 60, inc);
+        ok(x.bs === 0 && x.be === 16 && x.bmv === 3, '贴片:bmv:3 + ' + name + ':动不了', x);
+    }
+    for (const [name, inc] of [['老页面(mv:2 不带 bmv)', { mv: MARK_V }], ['不带 mv', { mv: 0 }]]) {
+        x = bumpV(b2, 50, 60, inc);
+        ok(x.bs === 35.4 && x.be === 42.8 && x.bmv === 2, '贴片:bmv:2 + ' + name + ':动不了(不翻来翻去)', x);
+    }
+    x = mergeBump({ os: 0, oe: 100 }, null, { bs: 3, be: 8, mv: MARK_V, bmv: 3 });
+    ok(x.bs === 3 && x.bmv === 3, '贴片:空位 + bmv:3', x);
+    x = mergeBump({ os: 0, oe: 100, mv: 2 }, { os: 0, oe: 100, mv: 2, bs: 3, be: 8 }, { bs: 5, be: 10, mv: MARK_V, bmv: 3, pend: true });
+    ok(x.bs === 3 && !x.bmv, '贴片:待确认的 bmv:3 不能落到已确认的记录上', x);
+    x = mergeBump({ os: 0, oe: 100, v: 1 }, { os: 0, oe: 100, bs: 3, be: 8, bv: 5 }, { bs: 5, be: 10, mv: MARK_V, bmv: 3 });
+    ok(x.bs === 5 && x.bmv === 3 && !('bv' in x), '贴片:旧票数的旧值 + bmv:3:覆盖', x);
+    // 读标记不下发 bmv:2:还开着的老页面按 bmv===2 自动跳贴片;存的不动
+    {
+        const src = { '1|r': { ...b2 }, '2|r': { ...b3 }, '3|r': { os: 0, oe: 100, mv: 2 }, '4': { os: 0, oe: 100, bs: 3, be: 8, bv: 5 } };
+        const v = marksForRead(src);
+        ok(!('bmv' in v['1|r']) && v['1|r'].bs === 35.4 && v['1|r'].be === 42.8 && v['1|r'].mv === 2, '读标记:bmv:2 不下发,区间留着', v['1|r']);
+        ok(v['2|r'].bmv === 3 && v['3|r'].mv === 2 && v['4'].bv === 5, '读标记:bmv:3 和别的记录原样', v);
+        ok(src['1|r'].bmv === 2, '读标记:存的不动', src['1|r']);
+        ok(JSON.stringify(marksForRead({})) === '{}' && JSON.stringify(marksForRead(null)) === '{}', '读标记:空表不报错');
+    }
 
     const el = { os: 0, oe: 100, ed: 2000, ev: 5 }, en = { os: 0, oe: 100, ed: 2000, emv: 2 };
     x = outro({ ...el }, el, 2003, MARK_V);
@@ -245,11 +273,13 @@ console.log('② 什么标记要重算');
 
     // 闸门:片头和贴片同一条
     const G = (c) => [C.opAuto(c), C.bumpAuto(c)].map(Number).join();
-    ok(G({ mv: 2, bmv: 2 }) === '1,1', '闸门:mv:2 片头、贴片都跳');
+    ok(G({ mv: 2, bmv: 3 }) === '1,1', '闸门:mv:2 + bmv:3 片头、贴片都跳');
+    ok(G({ mv: 2, bmv: 2 }) === '1,0', '闸门:已确认标记里的 bmv:2 旧贴片:片头跳,贴片只亮按钮(乘风2024 ikun 那种假贴片不能继续跳)');
     ok(G({ mv: 2 }) === '1,0', '闸门:mv:2 的记录上留着旧贴片:片头跳,贴片只亮按钮');
-    ok(G({ src: 'afp', bmv: 2 }) === '1,1', '闸门:本机刚定位出来的(src:afp)跳');
+    ok(G({ src: 'afp', bmv: 3 }) === '1,1', '闸门:本机刚定位出来的(src:afp)跳');
+    ok(G({ src: 'afp', bmv: 2 }) === '1,0', '闸门:src:afp 也不能带着 bmv:2 的贴片一起跳');
     ok(G({ src: 'afp' }) === '1,0', '闸门:src:afp 不能带着旧贴片一起跳');
-    for (const [name, c] of [['旧标记', { os: 0, oe: 100 }], ['旧标记多票', { os: 0, oe: 100, v: 9, bv: 9 }], ['旧 src:manual', { os: 0, oe: 100, src: 'manual', v: 9, bv: 9 }], ['待确认', { mv: 2, bmv: 2, pend: 1 }], ['墓碑留着的旧值', { mv: 2, bmv: 2, miss: 1 }], ['边看边学引擎', { os: 0, oe: 100, ed: 0 }]]) {
+    for (const [name, c] of [['旧标记', { os: 0, oe: 100 }], ['旧标记多票', { os: 0, oe: 100, v: 9, bv: 9 }], ['旧 src:manual', { os: 0, oe: 100, src: 'manual', v: 9, bv: 9 }], ['待确认', { mv: 2, bmv: 3, pend: 1 }], ['墓碑留着的旧值', { mv: 2, bmv: 3, miss: 1 }], ['边看边学引擎', { os: 0, oe: 100, ed: 0 }]]) {
         ok(G(c) === '0,0', '闸门:' + name + '不跳', c);
     }
     ok(C.OUTRO_AUTO === false, '片尾自动切集:抽样没过判定线,现在是关的(放开要重新抽样,见 index.html 注释)');
@@ -357,7 +387,7 @@ console.log('③ 真实 afpOffline');
         // 定位命中:本集、贴片都能跳
         x = run(null, hit);
         ok(x.cur.src === 'afp' && !x.rec.pend && !x.ups[0].extra.pend && x.play.seeks.join() === '8.1,262', '学习对之外定位命中:本集自动跳贴片和片头', { cur: x.cur, play: x.play });
-        ok(x.rec.bmv === 2 && !('src' in x.rec), '定位命中:src:afp 只活在本会话,缓存里是 mv:2 / bmv:2', x.rec);
+        ok(x.rec.bmv === 3 && x.ups[0].extra.bmv === 3 && !('src' in x.rec), '定位命中:src:afp 只活在本会话,缓存里是 mv:2 / bmv:3,上报带 bmv:3', { rec: x.rec, up: x.ups[0] });
         x = run(oldM, hit);
         ok(x.rec.oe === 262 && x.rec.mv === 2 && x.play.seeks.join() === '8.1,262', '旧标记定位命中:重算成 mv:2 后可以自动跳(片头、新贴片)', x.play);
         x = run(oldM, hit, null);
@@ -368,8 +398,29 @@ console.log('③ 真实 afpOffline');
         ok(!x.rec.miss && !x.rec.mt && x.rec.mv === 2 && x.play.seeks.join() === '8.1,262', '留着旧值的过期墓碑:命中后覆盖墓碑', x.rec);
         x = run(oldM, pending, BP, false);
         ok(x.cur.src !== 'afp' && x.play.seeks.length === 0, '学习对的邻集正好在播:同样只亮按钮', x.cur);
+        x = run({ os: 200, oe: 260, v: 1, bs: 3, be: 8, bmv: 3 }, hit);
+        ok(x.rec.bs === 3 && x.rec.be === 8 && x.rec.bmv === 3 && x.ups[0].bump === null && !x.ups[0].extra.bmv, '已有新算法贴片:本地保留,不再上报', { rec: x.rec, up: x.ups[0] });
         x = run({ os: 200, oe: 260, v: 1, bs: 3, be: 8, bmv: 2 }, hit);
-        ok(x.rec.bs === 3 && x.rec.be === 8 && x.rec.bmv === 2 && x.ups[0].bump === null, '已有新算法贴片:本地保留,不再上报', { rec: x.rec, up: x.ups[0] });
+        ok(x.rec.bs === 3.2 && x.rec.be === 8.1 && x.rec.bmv === 3 && x.ups[0].bump.bs === 3.2 && x.ups[0].extra.bmv === 3, 'bmv:2 的旧贴片:这次量到了就换成新值', { rec: x.rec, up: x.ups[0] });
+        x = run({ os: 200, oe: 260, v: 1, bs: 3, be: 8, bmv: 2 }, hit, null);
+        ok(x.rec.bs === 3 && x.rec.bmv === 2 && x.play.seeks.join() === '262' && x.play.btn === 'bump', 'bmv:2 的旧贴片:这次没量到,留着只亮按钮,片头照跳', { rec: x.rec, play: x.play });
+        // 没版本的旧贴片包络定位出来的(bump.v=2):按旧值算,本地 bmv:2、上报不带 bmv(服务器按 2 存),确认了也只亮按钮;已有 bmv:2/3 的不换
+        const BP2 = { ...BP, v: 2 };
+        x = run(null, hit, BP2);
+        ok(x.rec.bs === 3.2 && x.rec.be === 8.1 && x.rec.bmv === 2 && x.ups[0].bump.bs === 3.2 && !('bmv' in x.ups[0].extra) && x.ups[0].extra.mv === 2, '旧包络定位的贴片:本地 bmv:2,上报不带 bmv', { rec: x.rec, up: x.ups[0] });
+        ok(x.cur.src === 'afp' && x.play.seeks.join() === '262' && x.play.btn === 'bump', '旧包络定位的贴片:片头已确认也只亮按钮,片头照跳', { cur: x.cur, play: x.play });
+        x = run(oldM, hit, BP2);
+        ok(x.rec.bs === 3.2 && x.rec.bmv === 2 && x.play.seeks.join() === '262', '旧包络定位的贴片换掉没版本的旧贴片:还是只亮按钮', { rec: x.rec, play: x.play });
+        x = run({ os: 200, oe: 260, v: 1, bs: 3, be: 8, bmv: 2 }, hit, BP2);
+        ok(x.rec.bs === 3 && x.rec.bmv === 2 && x.ups[0].bump === null, '旧包络定位的贴片:已有 bmv:2 的不换(同版本不翻来翻去)', { rec: x.rec, up: x.ups[0] });
+        x = run({ os: 200, oe: 260, v: 1, bs: 3, be: 8, bmv: 3 }, hit, BP2);
+        ok(x.rec.bs === 3 && x.rec.bmv === 3 && x.ups[0].bump === null && x.play.seeks.join() === '8,262', '旧包络定位的贴片:盖不掉 bmv:3', { rec: x.rec, play: x.play });
+        x = run(null, pending, BP2);
+        ok(x.rec.bmv === 2 && x.rec.pend === 1 && x.play.seeks.length === 0 && x.play.btn === 'bump,op', '旧包络定位的贴片 + 学习对待确认:只亮按钮', x.play);
+        x = run(null, hit, { bs: 3, be: 211 });
+        ok(!x.rec.be && !x.rec.bmv && x.ups[0].bump === null && !x.ups[0].extra.bmv, '贴片压进片头 5s 以上:不写,不上报(和 server.js 校验同一条)', { rec: x.rec, up: x.ups[0] });
+        x = run(null, hit, { bs: 3, be: 210 });
+        ok(x.rec.be === 210 && x.ups[0].bump.be === 210, '贴片压进片头正好 5s:还算(和 server.js 同一条)', x.rec);
         // 包络不带 pid:确认不了
         x = run(null, { pid: '', confirmed: false });
         ok(x.rec.pend === 1 && !x.rec.pid && x.play.seeks.length === 0, '包络没有 pid:永远待确认,不跳', x.rec);
@@ -477,6 +528,22 @@ console.log('③ 真实 afpOffline');
         ok(A._envJson({ d: 'x', pid: 'pa' }) !== A._envJson({ d: 'x', pid: 'pb' }), '_envJson:pid 不同算内容不同');
         const filled = A._envFill({ env: null }, { env: new Float32Array(1), pid: 'pb', peps: [1, 2], psite: 'L', pk: 'd', iB: 1 });
         ok(filled.pid === 'pb' && filled.peps.join() === '1,2' && filled.psite === 'L' && filled.pk === 'd', '_envFill:借来的片头带着它的 pid、peps、学习线路、集号体系', filled.pid);
+        // 贴片包络版本 bdv:只有学习对用新算法学出来的(pair.bdv=3)才带;没版本的旧包络定位出来只亮按钮
+        A._st['T|B'] = {};
+        A._envSave({ vue: {}, title: 'T', site: 'B' }, new Float32Array(200).fill(0.5), 20, 3, 18, new Float32Array(80).fill(0.3), 8, null, 0, { pid: 'pa', peps: [5, 6], bdv: 3 });
+        const rb = JSON.parse(localStorage.getItem('donggua_afpenv|T|B')), ub = posts[posts.length - 1].body.env;
+        ok(rb.bd && rb.bdv === 3 && ub.bd && ub.bdv === 3, '新算法学的贴片包络:本地和云备份都带 bdv:3', { local: rb.bdv, up: ub.bdv });
+        ok(A._envParse(rb).bdv === 3 && A._envParse(rb).benv.length === 80, '_envParse 读出 bdv:3');
+        A._st['T|B2'] = {};
+        A._envSave({ vue: {}, title: 'T', site: 'B2' }, new Float32Array(200).fill(0.5), 20, 3, 18, new Float32Array(80).fill(0.3), 8, null, 0, { pid: 'pa', peps: [5, 6] });
+        const rb2 = JSON.parse(localStorage.getItem('donggua_afpenv|T|B2'));
+        ok(rb2.bd && !('bdv' in rb2), '没给版本(旧包络转正回传):不带 bdv', rb2.bdv);
+        ok(A._envParse({ v: 2, bd: rb.bd, bdur: 8, bdv: 2 }).bdv === 0 && A._envParse({ v: 2, bd: rb.bd, bdur: 8, bdv: '3' }).bdv === 0 && A._envParse({ v: 2, bdur: 8, bdv: 3 }).bdv === 0, '_envParse:bdv 只认数字 3,没有 bd 不算');
+        ok(A._envJson({ bd: 'x', bdv: 3 }) !== A._envJson({ bd: 'x' }), '_envJson:bdv 不同算内容不同(旧包络换成新包络要上传)');
+        const fb = A._envFill({ env: new Float32Array(1), benv: null }, { benv: new Float32Array(2), bdur: 3, bdv: 3, bB: 1 });
+        ok(fb.bdv === 3 && fb.bB === 1 && fb.benv.length === 2, '_envFill:借来的贴片包络带着它的 bdv', fb);
+        const fb2 = A._envFill({ env: new Float32Array(1), benv: new Float32Array(3), bdur: 3, bdv: 0 }, { benv: new Float32Array(2), bdur: 3, bdv: 3 });
+        ok(fb2.benv.length === 3 && fb2.bdv === 0, '_envFill:本线路已有贴片包络(哪怕没版本)不被借来的换掉', fb2);
     }
     {
         // 云端来的:本线路记录、别的线路借来的、本线路旧版时顺带的,都带学习线路和集号体系
@@ -585,9 +652,9 @@ await withServer(async ({ post, get, mark, marks }) => {
     await post('/api/intro/mark', { title: '测试剧', site: 's1', ep: 1, ch: 'r', ed_start: 2000 });
     m = (await marks())['1|r'];
     ok(m.ed === 2000 && !m.emv && m.oe === 101.1 && m.mv === 2, '只报片尾:片头值和 mv 不动', m);
-    await mark(1, 0.1, 101.2, { mv: 2, b_start: 1, b_end: 4.5 });
+    await mark(1, 0.1, 101.2, { mv: 2, bmv: 3, b_start: 1, b_end: 4.5 });
     m = (await marks())['1|r'];
-    ok(m.bs === 1 && m.bmv === 2 && m.ed === 2000 && m.oe === 101.1, '片头保留已有值时,贴片、片尾照常合', m);
+    ok(m.bs === 1 && m.bmv === 3 && m.ed === 2000 && m.oe === 101.1, '片头保留已有值时,贴片、片尾照常合', m);
     // 墓碑
     let r = await post('/api/intro/mark', { title: '测试剧', site: 's1', ep: 3, ch: 'r', miss: 1 });
     ok(r.status === 400, '不带 mv 的墓碑:拒', r);
@@ -638,6 +705,29 @@ await withServer(async ({ post, get }) => {
     r = await envPost('e1', { v: 2, od: b64(250, 6), odur: 25 });
     e = (await envGet('e1')).env;
     ok(e.od === b64(250, 6) && e.dv === 2 && e.d === b64(1000, 3), '只传片尾:片头组件和 dv 都在');
+    // 贴片包络版本 bdv:新算法学的(3)盖得掉没版本的;老页面传来的没版本 bd 盖不掉 bdv:3;不带 bd 的上传留着原来的 bd 和 bdv
+    ok(!('bdv' in e) && e.bd === b64(100, 5), '老页面传的贴片包络:不带 bdv', e.bdv);
+    r = await envPost('e1', { v: 2, dv: 2, d: b64(1000, 3), sec: 100, dur: 101, maxStart: 5, bd: b64(80, 6), bdur: 8, bdv: 3 });
+    e = (await envGet('e1')).env;
+    ok(r.status === 200 && e.bd === b64(80, 6) && e.bdur === 8 && e.bdv === 3, '新算法的贴片包络(bdv:3):盖掉没版本的', { bdur: e.bdur, bdv: e.bdv });
+    r = await envPost('e1', { v: 2, d: b64(300, 4), sec: 30, dur: 30, maxStart: 5, bd: b64(100, 5), bdur: 10 });
+    e = (await envGet('e1')).env;
+    ok(e.bd === b64(80, 6) && e.bdur === 8 && e.bdv === 3, '老页面的没版本贴片包络:盖不掉 bdv:3', { bdur: e.bdur, bdv: e.bdv });
+    for (const bdv of [2, '3', 9, true]) {
+        await envPost('e1', { v: 2, od: b64(250, 6), odur: 25, bd: b64(90, 7), bdur: 9, bdv });
+        e = (await envGet('e1')).env;
+        ok(e.bd === b64(80, 6) && e.bdv === 3, '乱写的 bdv(' + JSON.stringify(bdv) + '):按没版本算,盖不掉 bdv:3', { bdur: e.bdur, bdv: e.bdv });
+    }
+    await envPost('e1', { v: 2, od: b64(250, 6), odur: 25 });
+    e = (await envGet('e1')).env;
+    ok(e.bd === b64(80, 6) && e.bdv === 3, '不带贴片包络的上传:bd 和 bdv 都留着', { bdv: e.bdv });
+    await envPost('e1', { v: 2, od: b64(250, 6), odur: 25, bd: b64(70, 8), bdur: 7, bdv: 3 });
+    e = (await envGet('e1')).env;
+    ok(e.bd === b64(70, 8) && e.bdur === 7 && e.bdv === 3, '新算法的贴片包络:同版本后来的照常换(和以前一样)', { bdur: e.bdur });
+    await envPost('e4', { v: 2, od: b64(250, 6), odur: 25, bd: b64(90, 7), bdur: 9 });
+    await envPost('e4', { v: 2, od: b64(250, 6), odur: 25 });
+    e = (await envGet('e4')).env;
+    ok(e.bd === b64(90, 7) && !('bdv' in e), '没版本的 bd:不带 bd 的上传留着它,也不凭空加 bdv', { bdv: e.bdv });
     r = await envPost('e2', { v: 2, d: b64(2000, 7), sec: 200, dur: 200, maxStart: 0, od: b64(200, 8), odur: 20 });
     r = await envPost('e2', { v: 2, dv: 2, d: b64(2300, 7), sec: 230, dur: 240, maxStart: 0 });
     ok(r.status === 200 && (await envGet('e2')).env.dur === 240, '长片头(240s)包络收下', r.status);
@@ -757,7 +847,7 @@ await withServer(async ({ post, mark, marks }) => {
     ok(m.bs === 5 && m.ed === 2010, '旧贴片、旧片尾:老页面后写覆盖', m);
     await P(3, 201, 261, both(6, 11, 2020, true));
     m = (await marks())['3|r'];
-    ok(m.oe === 260 && m.bs === 6 && m.bmv === 2 && m.ed === 2020 && m.emv === 2, '片头保留已有值时,旧贴片、旧片尾照样被新算法覆盖', m);
+    ok(m.oe === 260 && m.bs === 6 && m.ed === 2020 && m.emv === 2, '片头保留已有值时,旧贴片、旧片尾照样被新算法覆盖', m);
     // 只报片尾、墓碑夹带片尾
     await mark(4, 200, 260);
     r = await post('/api/intro/mark', { title: '测试剧', site: 's1', ep: 4, ch: 'r', ed_start: 2002, emv: 2 });
@@ -990,7 +1080,36 @@ await withServer(async ({ post, mark, marks }) => {
         ok(r.status === 200 && r.j.ok === true, '老页面上报不报错', { body, status: r.status });
     }
     const after = (await marks())['1|r'];
-    ok(after.os === 200 && after.oe === 260 && after.bs === 3 && after.be === 8 && after.ed === 2000 && after.mv === 2 && after.bmv === 2 && after.emv === 2, '老页面改不动新值', after);
+    ok(after.os === 200 && after.oe === 260 && after.bs === 3 && after.be === 8 && after.ed === 2000 && after.mv === 2 && after.emv === 2, '老页面改不动新值', after);
+    // 贴片升版:老页面(mv:2,不带 bmv)写的算 bmv:2;读的时候不下发 bmv,还开着的老页面也不再自动跳(它按 bmv===2 判);存的不动
+    const oldBumpGate = (c) => (c.mv === 2 && !c.miss && !c.pend) && c.bmv === 2;
+    let rb = await mark(60, 200, 260, { mv: 2, pid: 'pair0060', b_start: 35.4, b_end: 42.8 });
+    ok(rb.j.mark.bs === 35.4 && rb.j.mark.bmv === 2, '老页面上报贴片:存成 bmv:2', rb.j.mark);
+    let mb = (await marks())['60|r'];
+    ok(mb.bs === 35.4 && mb.be === 42.8 && mb.mv === 2 && !('bmv' in mb) && !oldBumpGate(mb), '读标记:区间留着,不下发 bmv,老页面的闸门为假', mb);
+    let pcb = playCheck(curOf(mb));
+    ok(pcb.seeks.join() === '260' && pcb.btn === '', '新页面读这条:35.4s 不跳,也不亮(在集首之外);片头照跳', pcb);
+    // 新页面的值能覆盖,之后老页面改不动
+    rb = await mark(60, 200, 260, { mv: 2, bmv: 3, pid: 'pair0060', b_start: 0, b_end: 16 });
+    ok(rb.j.mark.bs === 0 && rb.j.mark.be === 16 && rb.j.mark.bmv === 3 && rb.j.mark.oe === 260, '新页面 bmv:3:覆盖旧贴片,片头不变', rb.j.mark);
+    for (const body of [{ mv: 2, b_start: 35, b_end: 42 }, { b_start: 35, b_end: 42 }, { mv: 2, pid: 'pair0060', pend: 1, b_start: 35, b_end: 42 }]) {
+        rb = await mark(60, 201, 261, body);
+        ok(rb.status === 200 && rb.j.mark.bs === 0 && rb.j.mark.bmv === 3, '老页面改不动 bmv:3', { body, mark: rb.j.mark });
+    }
+    mb = (await marks())['60|r'];
+    ok(mb.bmv === 3 && oldBumpGate(mb) === false, '读标记:bmv:3 下发;老页面闸门为假,只亮按钮', mb);
+    pcb = playCheck(curOf(mb));
+    ok(pcb.seeks.join() === '16,260', '新页面读这条:贴片、片头都跳', pcb);
+    // bmv:3 只认新页面:不带 mv 的上报夹带 bmv:3 不算
+    rb = await mark(61, 200, 260, { bmv: 3, b_start: 3, b_end: 8 });
+    ok(rb.j.mark.bs === 3 && !rb.j.mark.bmv, '不带 mv 的上报夹带 bmv:3:不算', rb.j.mark);
+    rb = await mark(62, 200, 260, { mv: 2, bmv: 9, b_start: 3, b_end: 8 });
+    ok(rb.j.mark.bmv === 2, '乱写的 bmv 版本:按老页面算', rb.j.mark);
+    // 已确认标记里的 bmv:2:没人重算,也不会变(只亮按钮靠页面);带 pid 的第三集确认不动贴片版本
+    await mark(63, 200, 260, { mv: 2, pid: 'pair0063', pend: 1, b_start: 0, b_end: 16 });
+    await mark(64, 200, 260, { mv: 2, pid: 'pair0063' });
+    mb = await marks();
+    ok(!mb['63|r'].pend && !('bmv' in mb['63|r']) && mb['63|r'].bs === 0 && playCheck(curOf(mb['63|r'])).seeks.join() === '260', '旧贴片的学习对转正:片头跳,贴片还是只亮按钮', mb['63|r']);
     // 旧数据的 v/bv/ev 留着不读:没有写接口能造这些字段,但旧行本身不被清理
     const r5 = await post('/api/intro/mark', { title: '测试剧', site: 's1', ep: 5, op_start: 10, op_end: 100, v: 9, bv: 9, ev: 9 });
     ok(r5.status === 200 && !('v' in r5.j.mark), '请求里写 v/bv/ev:不存', r5.j.mark);
