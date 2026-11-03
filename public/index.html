@@ -531,6 +531,79 @@
         #dplayer .dm-toggle.dm-on .dm-knob {
             transform: translateX(18px);
         }
+        /* 🗨️ 弹幕时间(手动偏移):按钮不用文本框(手机会弹键盘);touch-action 防连点时被当成双击缩放 */
+        #dplayer .dm-off-block {
+            margin: 11px 0;
+        }
+        #dplayer .dm-off-block.dg-dmoff-off,
+        #dplayer .dg-mob-row.dg-dmoff-off {
+            display: none !important;
+        }
+        #dplayer .dm-off-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        #dplayer .dm-off-val {
+            flex: 1;
+            min-width: 0;
+            text-align: right;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            opacity: 0.9;
+            white-space: nowrap;
+        }
+        #dplayer .dm-off-reset {
+            flex-shrink: 0;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            background: rgba(255, 255, 255, 0.12);
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        #dplayer .dm-off-reset.dm-off-na {
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        #dplayer .dm-off-btns {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 6px;
+            margin-top: 8px;
+        }
+        #dplayer .dm-off-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 30px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            background: rgba(255, 255, 255, 0.12);
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+        }
+        #dplayer .dm-off-btn:active {
+            background: rgba(229, 9, 20, 0.7);
+        }
+        #dplayer .dm-off-hint {
+            margin-top: 6px;
+            font-size: 11px;
+            opacity: 0.6;
+        }
+        @media (pointer: coarse), (max-width: 768px) {
+            #dplayer .dm-off-btn {
+                min-height: 38px;
+            }
+            #dplayer .dm-off-reset {
+                padding: 6px 10px;
+            }
+        }
         /* 弹幕的原生齿轮项(显示弹幕/海量弹幕/弹幕透明度)已移到独立弹幕设置面板 → 齿轮里隐藏 */
         #dplayer .dplayer-setting-showdan,
         #dplayer .dplayer-setting-danunlimit,
@@ -7446,6 +7519,8 @@
             seq: 0,       // 每次 read 递增,只有最新的那次可以在等时长
             key: '',      // 当前弹幕对应的 _danmakuKey(play() 设)
             sent: null,   // 日期式集名最近一次发出去的 { id, d:时长, key }
+            src: null,    // 最近一份弹幕的平台来源 { id, v }(v = imgo/qq/…,'' = 未知;响应里没有这个字段的老缓存也是未知)。模块级,不进 Vue 响应式
+            source() { const s = _dmBackend.src; return (s && s.id === _dmBackend.want) ? s.v : undefined; },   // 当前要的这份弹幕的来源;undefined = 还没到
             read(o) {
                 const m = /[?&]id=([^&]*)/.exec(o.url || '');
                 const id = m ? m[1] : '';
@@ -7457,9 +7532,11 @@
                     .then(d => {
                         if (stale()) return;
                         if (d && d.code === 0) {
+                            _dmBackend.src = { id, v: dmAutoSrcOf(d) };
                             if (o.success) o.success((d.data || []).map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] })));
-                            // 列表晚到时 DPlayer 的读指针还在 0:下一帧会把"当前时间之前"的弹幕一口气全画出来(实测开海量一帧 8 秒)→ 对到当前时间
-                            try { if (typeof dp !== 'undefined' && dp && dp.danmaku && dp.video && (dp.video.currentTime || 0) > 1) dp.danmaku.seek(); } catch (e) { }
+                            // 列表晚到时 DPlayer 的读指针还在 0:下一帧会把"弹幕时间之前"的弹幕一口气全画出来(实测开海量一帧 8 秒)→ 对到当前弹幕时间(见 dmAlignAfterLoad)
+                            try { if (typeof dp !== 'undefined') dmAlignAfterLoad(dp); } catch (e) { }
+                            try { dmAuto.wake(); } catch (e) { }   // 列表比等待期还晚到:再看一眼要不要自动校正
                         }
                         else if (o.error) o.error(d && d.msg);
                     })
@@ -7520,6 +7597,695 @@
             return true;
         };
         // </dg-dm-px-core>
+        // 🗨️ 绕过 dp.seek 的跳转(双击快进快退、TV 方向键、换源后恢复进度)只改 video.currentTime,DPlayer 的弹幕读指针不动:
+        //    快退后这段没有弹幕,要等播放追回原位置;快进则把跳过的弹幕一口气全画出来。切后台回来同理(rAF 停了,读指针落在后面)。
+        //    seeking / 回到前台时看读指针和当前时间差多少,超过 2 秒才重新对齐:dp.seek 自己对齐过,这里判出来没差,不会多清一次屏;
+        //    hls.js 跳小空洞、微调都在 2 秒内,屏幕上正在飘的弹幕也不动。
+        // <dg-dm-resync-core>
+        const dmPointerOff = (dm, t, gap) => {
+            const list = dm && dm.dan;
+            if (!list || !list.length || !Number.isFinite(t)) return false;
+            const next = list[dm.danIndex], prev = list[dm.danIndex - 1];
+            return !!((next && parseFloat(next.time) < t - gap) || (prev && parseFloat(prev.time) > t + gap));
+        };
+        const dmResync = (player, doc) => {
+            const dm = player && player.danmaku, video = player && player.video;
+            if (!dm || dm._dgResync || !video || typeof video.addEventListener !== 'function' || typeof dm.seek !== 'function') return false;
+            dm._dgResync = true;
+            const fix = () => { try { if (player.danmaku === dm && dm.options && dmPointerOff(dm, dm.options.time(), 2)) dm.seek(); } catch (e) { } };
+            video.addEventListener('seeking', fix);
+            if (doc && typeof doc.addEventListener === 'function') {
+                doc._dgDmFix = fix;   // 只留当前播放器的(重建播放器后旧实例不再动弹幕)
+                if (!doc._dgDmVis) {
+                    doc._dgDmVis = true;
+                    doc.addEventListener('visibilitychange', () => { if (!doc.hidden && doc._dgDmFix) doc._dgDmFix(); });
+                }
+            }
+            return true;
+        };
+        // </dg-dm-resync-core>
+        // 🗨️ 弹幕时间轴:弹幕是按平台时间发的,线路的时间轴和平台不一样时整体错位(如意缺平台开头 100~135 秒,逐集不同;录屏那集弹幕比画面晚整整 120 秒)。
+        //    DPlayer 的 frame / seek / send 和 dmResync 都读 danmaku.options.time(),这里把它换成:
+        //        弹幕时间 = currentTime − 时间轴上已判定的插播累计 + 偏移(负数按 0)
+        //    · 插播累计只来自 adClipSkip 手里的组(st.groups),它们永远是【正在播的那条时间轴】:hls.js 通道读的是 _CutHlsLoader 剪后的清单,原生通道拉的是占位地址
+        //      → adCut 剪掉的段已经不在里面,不会重复扣;切勿用 _cutToBase(如意原时间轴是 +120→+100 的阶梯,剪后才是全程 +120)。
+        //      判定不另起一套:st.skipped / st.overrides(跳过的、放弃跳过照常播的)+ 同一套 AdClipCore.planCuts 跑在 st.res / st.off 上(用户拖过去、check 没轮到的)。
+        //      组在 t 之前就扣;t 落在组内时停在组起点(播广告不出弹幕)。没加载过的组不知道分辨率和时间戳,判不出,也不为它多发请求(手动偏移兜底)。
+        //    · 偏移:手动值【覆盖】自动值 h,不叠加。有效偏移 = 手动值 ?? h。手动设过就不受后续 setAuto 影响(setAuto 只记下 h);手动调整从当前有效值起步;
+        //      重置才回到 h。手动设成 0 也算设过。h 由下面的按集自动校正(dmAuto)算,调 dmTime.setAuto(h, _playToken)。方向:提前 = 弹幕更早出现 = 弹幕时间加正数。
+        //    · 负向偏移:弹幕时间按 0 封底,currentTime 小于偏移量时读指针停在开头、一条不画,走过之后接着出。
+        //    · 状态是模块级普通对象(不进 Vue 响应式),绑定本次播放:play() 递增 _playToken 时 begin() 立刻清零并换成这一集的手动值;
+        //      switchVideo 复用实例靠这个,new DPlayer / 后来才有弹幕模块靠 install()。直播不启用,弹幕时间就是 currentTime。
+        //    · map() 每帧调用:不读 Vue 数据、不分配、不解析,只走插播段。插播段由 timeupdate 里的 refresh() 按状态变化重算,差值超过 2 秒才重新对齐(同 dmResync 的容差),别的时候不清屏。
+        // <dg-dm-time-core>
+        const DM_OFF_MAX = 600, DM_OFF_STORE = 'donggua_dm_offset', DM_OFF_CAP = 300, DM_ALIGN_GAP = 2, DM_NO_RUNS = [];
+        // runs = [起,止,起,止…]:按时间排序、互不重叠
+        const dmStripAds = (t, runs) => {
+            let cut = 0;
+            for (let i = 0; i < runs.length; i += 2) {
+                const s = runs[i], e = runs[i + 1];
+                if (t >= e) { cut += e - s; continue; }
+                if (t > s) return s - cut;
+                break;
+            }
+            return t - cut;
+        };
+        // 把 adClipSkip 的状态折成 runs
+        const dmAdRuns = (st, core, opt) => {
+            const gs = st && st.groups;
+            if (!gs || !gs.length) return DM_NO_RUNS;
+            const hit = new Uint8Array(gs.length);
+            for (let i = 0; i < gs.length; i++) {
+                const cc = gs[i].cc;
+                if ((st.skipped && st.skipped[cc]) || (st.overrides && st.overrides[cc])) hit[i] = 1;
+            }
+            try {
+                if (core && typeof core.planCuts === 'function') {
+                    for (const c of core.planCuts(gs, cc => st.res[cc], opt, { offOf: cc => st.off[cc] })) {
+                        for (let i = c.g0; i <= c.g1; i++) hit[i] = 1;
+                    }
+                }
+            } catch (e) { }
+            const out = [];
+            let last = -Infinity;
+            for (let i = 0; i < gs.length; i++) {
+                if (!hit[i]) continue;
+                let j = i;
+                while (j + 1 < gs.length && hit[j + 1]) j++;
+                // 活 Fragment 的 start 按 PTS 修正后会漂,相邻两段可能压一点:压到的部分不重复算,时间轴才单调
+                const s = Math.max(gs[i].start, last), e = gs[j].end;
+                if (Number.isFinite(s) && Number.isFinite(e) && e > s) { out.push(s, e); last = e; }
+                i = j;
+            }
+            return out.length ? out : DM_NO_RUNS;
+        };
+        const dmAdSig = (st) => {
+            const n = o => (o ? Object.keys(o).length : 0);
+            return (st.groups ? st.groups.length : 0) + '/' + n(st.res) + '/' + n(st.off) + '/' + n(st.skipped) + '/' + n(st.overrides);
+        };
+        const dmOffClamp = (v) => {
+            const n = +v;
+            return Number.isFinite(n) ? Math.max(-DM_OFF_MAX, Math.min(DM_OFF_MAX, Math.round(n * 100) / 100)) : 0;
+        };
+        // 手动偏移按 剧|线路|集 存本机。键来自片名:加 k: 前缀 + hasOwnProperty,constructor / __proto__ 这种片名不会碰到原型链
+        const dmOffSlot = (key) => 'k:' + String(key).slice(0, 200);
+        const dmOffRead = (store) => {
+            const raw = store().getItem(DM_OFF_STORE);   // 存储不可用时抛,调用方接住
+            try { const m = JSON.parse(raw || '{}'); return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {}; } catch (e) { return {}; }
+        };
+        const dmOffGet = (store, key) => {
+            try {
+                const m = dmOffRead(store), k = dmOffSlot(key);
+                if (!Object.prototype.hasOwnProperty.call(m, k)) return null;
+                const v = m[k] && m[k].v;
+                return Number.isFinite(v) ? dmOffClamp(v) : null;
+            } catch (e) { return null; }
+        };
+        // v = null 删除;超过上限淘汰最久没改的
+        const dmOffPut = (store, key, v, now) => {
+            try {
+                const m = dmOffRead(store), k = dmOffSlot(key);
+                if (v == null) delete m[k]; else m[k] = { v, at: now };
+                const ks = Object.keys(m), at = x => (m[x] && m[x].at) || 0;
+                if (ks.length > DM_OFF_CAP) ks.sort((a, b) => at(a) - at(b)).slice(0, ks.length - DM_OFF_CAP).forEach(x => delete m[x]);
+                store().setItem(DM_OFF_STORE, JSON.stringify(m));
+            } catch (e) { }
+        };
+        const dmOffText = (v) => {
+            const n = Math.round(Math.abs(v || 0) * 10) / 10;
+            return n ? (v > 0 ? '弹幕提前 ' : '弹幕推后 ') + n + ' 秒' : '未调整';
+        };
+        // 列表到达后读指针还在 0:下一帧会把"弹幕时间之前"的全部画出来(实测开海量一帧 8 秒)→ 对到当前弹幕时间。
+        //    看弹幕时间不看 currentTime:偏移已知时起播前(currentTime=0)弹幕时间就可能是 120;负偏移算出来 ≤1 时读指针留在开头,本来就对
+        const dmAlignAfterLoad = (player) => {
+            const dm = player && player.danmaku;
+            if (!dm || !dm.options || typeof dm.seek !== 'function' || !(dm.options.time() > 1)) return false;
+            dm.seek();
+            return true;
+        };
+        const dmTimeCreate = (env) => {
+            const s = {
+                active: false, tok: null, key: '', runs: DM_NO_RUNS, h: 0, manual: null, offset: 0, st: null, sig: '', align: false, onManual: null,
+                map(t) {
+                    if (!s.active || !Number.isFinite(t)) return t;
+                    const x = dmStripAds(t, s.runs) + s.offset;
+                    return Number.isFinite(x) ? Math.max(0, x) : t;
+                },
+                // 新的一次播放(play() 递增 _playToken 时调):上一集的插播段、h、手动值全部作废,换成这一集的
+                begin(tok, key, live) {
+                    const prevOffset = s.offset;
+                    s.tok = tok; s.key = key || ''; s.active = !live;
+                    s.runs = DM_NO_RUNS; s.st = null; s.sig = ''; s.h = 0;
+                    s.manual = (s.active && s.key) ? dmOffGet(env.store, s.key) : null;
+                    s.offset = s.manual != null ? s.manual : 0;
+                    s.align = true;   // 同集换线不重载弹幕,读指针还在上一条线路的位置:拿到新视频后看一眼
+                    s.install(env.player());
+                    // 🛡️ 同集换线 / 起播失败自动换线:danmakuKey 不变、不重载,列表和读指针都留着,而 s.align 要等元数据到之后的第一个 timeupdate。
+                    //    dp.play() 之后的下一帧比它早,已经按新偏移比较:读指针在新偏移之前 → 一帧画出整段(线路 B 存过 +120,t=30 换过去,每秒 4 条就是一帧 360 条)。
+                    //    偏移变了就当场对齐:读指针落到 旧 currentTime+新偏移,不小于新视频 t=0 的弹幕时间,这一帧不画;s.align 留着,第一个 timeupdate 再拉回准确位置。
+                    //    偏移没变不动,同集换线不多清一次屏(读指针本来就不小于 0+偏移;恢复进度走 dp.seek,弹幕同步对齐)。
+                    if (s.offset !== prevOffset) s.realign();
+                    s.render();
+                },
+                install(player) {
+                    const dm = player && player.danmaku;
+                    if (!dm || dm._dgTime || !dm.options || typeof dm.options.time !== 'function') return false;
+                    dm._dgTime = true;
+                    const raw = dm.options.time;
+                    dm.options.time = () => {
+                        try { return s.map(player.video.currentTime); } catch (e) { return raw(); }
+                    };
+                    const video = player.video;
+                    if (video && typeof video.addEventListener === 'function') {
+                        video.addEventListener('timeupdate', () => {
+                            try { if (player.danmaku === dm && env.player() === player) s.refresh(player); } catch (e) { }
+                        });
+                    }
+                    s.render();
+                    return true;
+                },
+                // timeupdate 里调:adClipSkip 的状态有变化才重算插播段;映射因此变了超过 2 秒才重新对齐
+                refresh(player) {
+                    const dm = player && player.danmaku, video = player && player.video;
+                    if (!s.active || !dm || !video) return false;
+                    const st = env.adState() || null, sig = st ? dmAdSig(st) : '';
+                    if (st !== s.st || sig !== s.sig) {
+                        s.st = st; s.sig = sig;
+                        const t = video.currentTime, before = s.map(t);
+                        s.runs = st ? dmAdRuns(st, env.adCore(), env.adOpt()) : DM_NO_RUNS;
+                        if (Math.abs(s.map(t) - before) > DM_ALIGN_GAP) { dm.seek(); s.align = false; }
+                    }
+                    if (s.align && video.readyState >= 1 && !video.seeking) {
+                        s.align = false;
+                        if (dmPointerOff(dm, dm.options.time(), DM_ALIGN_GAP)) dm.seek();
+                    }
+                    return true;
+                },
+                realign() {
+                    try { const p = env.player(), dm = p && p.danmaku; if (dm && typeof dm.seek === 'function') dm.seek(); } catch (e) { }
+                },
+                setManual(v) {
+                    if (!s.active) return null;
+                    s.manual = s.offset = dmOffClamp(v);
+                    if (s.key) dmOffPut(env.store, s.key, s.manual, Date.now());
+                    s.realign(); s.render();
+                    try { if (s.onManual) s.onManual('set'); } catch (e) { }   // 手动设过的集不再为自动校正下载
+                    return s.manual;
+                },
+                step(d) { return s.setManual((s.manual != null ? s.manual : s.h) + d); },
+                resetManual() {
+                    if (!s.active) return;
+                    s.manual = null; s.offset = s.h;
+                    if (s.key) dmOffPut(env.store, s.key, null, Date.now());
+                    s.realign(); s.render();
+                    try { if (s.onManual) s.onManual('reset'); } catch (e) { }
+                },
+                // 自动值接口(dmAuto 调):只认本次播放;手动设过时只记下 h,不生效
+                setAuto(h, tok) {
+                    if (!s.active || tok !== s.tok) return false;
+                    s.h = dmOffClamp(h);
+                    if (s.manual == null && s.offset !== s.h) { s.offset = s.h; s.realign(); s.render(); }
+                    return true;
+                },
+                render() {
+                    try {
+                        const p = env.player();
+                        env.render({ visible: !!(s.active && p && p.danmaku), text: dmOffText(s.offset), canReset: s.manual != null });
+                    } catch (e) { }
+                }
+            };
+            return s;
+        };
+        // </dg-dm-time-core>
+        const dmTime = dmTimeCreate({
+            player: () => (typeof dp !== 'undefined' ? dp : null),
+            store: () => window.localStorage,
+            adCore: () => window.AdClipCore,
+            adOpt: () => (window.adClipSkip ? window.adClipSkip.OPT : null),
+            // 与 adClipSkip.check 同一道门:它不判的(关了、直播、多码率、上一次播放留下的状态)这里也不算
+            adState: () => {
+                const a = window.adClipSkip;
+                if (!a || !a.vue || !a.enabled()) return null;
+                const st = a._cur();
+                return (st && !st.live && !st.multi && st.tok === a.vue._playToken) ? st : null;
+            },
+            // 只动弹幕设置面板和手机齿轮菜单里那一行的 DOM,不碰 Vue
+            render: (view) => {
+                const c = document.getElementById('dplayer');
+                if (!c) return;
+                c.querySelectorAll('.dm-off-block, .dg-mob-row[data-dg="dmoffset"]').forEach(el => el.classList.toggle('dg-dmoff-off', !view.visible));
+                c.querySelectorAll('.dm-off-val').forEach(el => { el.textContent = view.text; });
+                c.querySelectorAll('.dg-dmoff-val').forEach(el => { el.textContent = view.text.replace('弹幕', ''); });   // 齿轮菜单只有 150px 宽,行名已经写了"弹幕时间"
+                const r = c.querySelector('.dm-off-reset');
+                if (r) r.classList.toggle('dm-off-na', !view.canReset);
+            }
+        });
+        // 🗨️ 弹幕按集自动校正:如意等线路缺平台开头 100~135 秒(逐集不同,第 29 集 120 秒),弹幕整体晚这么多,手动偏移只能一集一调。算出来的 h 交给 dmTime.setAuto。
+        //    · 只对芒果弹幕(来源 imgo)做:实测芒果的时间轴 = 多数线路过 Worker 后的时间轴。腾讯不是 —— 众数线路自身就分段错位(庆余年第二季第 5 集 −42→−90→−110),
+        //      音频校验只能证明"和众数线路对齐",拦不住:如意 Δ=140.65、r=0.925 能过校验,套上去弹幕从晚 99~31 秒变成提前 42~110 秒,后半段比不修还差。
+        //      所以别的平台、来源不确定(缓存里的老条目)一律不动,也不下载任何东西,只靠手动偏移。
+        //    · ① 同集 3~5 条其它线路的 Worker 媒体清单(跟到媒体清单,直连拿到的是没过滤的),按 ±1 秒聚类取众数,至少 3 票且过半。这一步只有清单文本。
+        //      ② Δ = 众数 − 本线路播放总长(hls.js 手里的清单,adCut 生效时就是剪后长度)。|Δ|<1:h=0,不下载分片;Δ<0:多出来的是插播,定位不了,不动;
+        //         Δ 超过 min(300 秒, 总长 15%):残缺线路(芒果 Δ=2209.8),拒绝。
+        //      ③ 音频实测,Δ 只当提示,h 取实测 lag:Worker 删掉尾部片段就会让 Δ 偏(小巷人家第 30 集 Δ=119.96、真值 115.09)。我方 P∈[40,60] 的 10Hz 响度包络在参考线路
+        //         [40+Δ−15, 60+Δ+15] 里滑动找,r≥0.8 才算。参考线路取众数簇内的,取片失败换下一条,都失败就放弃。
+        //      ④ 第二锚点:总长约 55% 处再取 20 秒,对参考线路 [锚点+h−3, 锚点+20+h+3],r≥0.8 且 |lag−h|≤1 才应用。阶梯形偏移(量子 +7.1→+15.15→+25.1)一个常数修不了,一律拒绝。
+        //    · 时机:和片头分析同一道门 —— 已播 >10 秒(续看也要这次真的播满 10 秒)、readyState≥3、前方缓冲 ≥6 秒、省流量和蜂窝不跑。占 afpOffline._busy,不和片头分析同时下;连续稳 3 秒才开始,
+        //      片头分析(每秒看一次)先抢到就等它做完。下载中 _fetchEnvRange 逐段让路;换集 / 换线 / 关弹幕 / 手动调偏移立刻停,不再等在途的分片(in-flight 这一片会下完,但没人要了)。
+        //    · 模板时间走 _cutToBase 换回清单时间轴取分片,段里有被剪的插播或判成插播的组就往后挪。片头包络 /api/intro/env 用不上:如意根本没有片头。
+        //    · 结果按 剧|线路|集|通道 存本机(带总长,取用时相差 <1 秒才认):成功 / Δ≈0 / 拒绝都记 30 天,失败记 6 小时,让路没做完记半小时。这一版不做服务器共享。
+        //    · 一切失败都当没发生:h 留 0、播放不受影响。控制台 dmAuto.status() 看本次判定。
+        // <dg-dm-auto-core>
+        const DM_AUTO = {
+            SRC: 'imgo', STORE: 'donggua_dm_auto', CAP: 300,
+            REFS: 5, TRIES: 8, CONC: 2, VOTES: 3, TOL: 1,
+            NEAR: 1, ABS_MAX: 300, RATIO_MAX: 0.15, MIN_TOTAL: 180,
+            P0: 40, WIN: 20, HINT_PAD: 15, ANCHOR2: 0.55, ANCHOR2_PAD: 3, R_MIN: 0.8, LAG_TOL: 1, HZ: 10,
+            TICK: 1000, SRC_WAIT: 180e3, WAIT_MAX: 900e3, CALM: 3, PLAY_MIN: 10, AHEAD_MIN: 6, YIELDS: 1, NO_WANT_TICKS: 5,
+            REJ_STOP: 2, MAX_BYTES: 80 * 1048576, SESSION_MB: 2000, LIST_MS: 15000, SEG_MS: 30000,
+            TTL: { ok: 30 * 864e5, zero: 30 * 864e5, neg: 30 * 864e5, big: 30 * 864e5, rej: 30 * 864e5, fail: 6 * 3600e3, few: 1800e3, yield: 1800e3 }
+        };
+        // 响应里的来源:没有这个字段(缓存里的老条目)和空串一样,都是未知
+        const dmAutoSrcOf = (d) => ((d && typeof d.src === 'string') ? d.src.trim().toLowerCase() : '');
+        // 按 ±1 秒聚类取众数。返回 { mode, votes, n, idx } 或 null(不够 3 票 / 没过半)
+        const dmAutoCluster = (totals) => {
+            let best = null;
+            for (const c of totals) {
+                const idx = [];
+                totals.forEach((x, i) => { if (Math.abs(x - c) <= DM_AUTO.TOL) idx.push(i); });
+                const vals = idx.map(i => totals[i]), spread = Math.max(...vals) - Math.min(...vals);
+                if (!best || idx.length > best.idx.length || (idx.length === best.idx.length && spread < best.spread)) best = { idx, spread };
+            }
+            if (!best || best.idx.length < DM_AUTO.VOTES || best.idx.length * 2 <= totals.length) return null;
+            const v = best.idx.map(i => totals[i]).sort((a, b) => a - b);
+            return { mode: v[v.length >> 1], votes: best.idx.length, n: totals.length, idx: best.idx };
+        };
+        const dmAutoJudge = (mode, own) => {
+            const d = mode - own;
+            if (!Number.isFinite(d) || !(own > 0)) return { v: 'fail', d: 0 };
+            if (Math.abs(d) < DM_AUTO.NEAR) return { v: 'zero', d };
+            if (d < 0) return { v: 'neg', d };
+            if (d > Math.min(DM_AUTO.ABS_MAX, own * DM_AUTO.RATIO_MAX)) return { v: 'big', d };
+            return { v: 'measure', d };
+        };
+        // 我方 [p, p+len) 这段模板。toBase = 播放时间 → 清单时间;strip = 播放时间 → 弹幕时间(不含偏移)。段里跨了被剪的段或判成插播的组 → 往后挪,模板里混进广告的声音一定对不上
+        const dmAutoWindow = (p, len, total, toBase, strip) => {
+            for (let i = 0; i < 8; i++, p += len + 5) {
+                if (p + len > total - 5) return null;
+                const b0 = toBase(p), b1 = toBase(p + len), s0 = strip(p), s1 = strip(p + len);
+                if (Math.abs(b1 - b0 - len) < 0.25 && Math.abs(s1 - s0 - len) < 0.25) return { p, b0, b1, s0 };
+            }
+            return null;
+        };
+        const dmAutoRefRange = (s0, len, hint, pad) => ({ from: Math.max(0, s0 + hint - pad), to: s0 + len + hint + pad });
+        // 模板在参考包络里滑动,lag = 参考时间 − 我方弹幕时间(0.1 秒一步)。corr 复用 afpOffline._p
+        const dmAutoLag = (tpl, ref, from, s0, corr) => {
+            let best = -2, at = -1;
+            for (let o = 0; o + tpl.length <= ref.length; o++) {
+                const r = corr(tpl, 0, ref, o, tpl.length);
+                if (r > best) { best = r; at = o; }
+            }
+            return at < 0 ? null : { lag: from + at / DM_AUTO.HZ - s0, r: best };
+        };
+        const dmAutoHintOk = (m) => !!(m && m.r >= DM_AUTO.R_MIN && m.lag > 0);
+        const dmAutoConfirm = (m, h) => !!(m && m.r >= DM_AUTO.R_MIN && Math.abs(m.lag - h) <= DM_AUTO.LAG_TOL);
+        // 同集其它线路。只要 m3u8;keyOf = _epMatchKey,集名写法不同也能对上(上/下半这种"部分"不能混);rank 小的在前
+        const dmAutoRefs = (sources, curSite, curUrl, epName, keyOf, rank) => {
+            const want = epName ? keyOf(epName) : '';
+            if (!want) return [];
+            const out = [];
+            (sources || []).forEach((s, i) => {
+                if (!s || s.site_key === curSite) return;
+                let pu = String((s._cachedDetail && s._cachedDetail.vod_play_url) || s.vod_play_url || '');
+                if (pu.includes('$$$')) { const sets = pu.split('$$$'); pu = sets.find(x => x.toLowerCase().includes('m3u8')) || sets[0]; }
+                const ep = pu.split('#').map(e => e.split('$')).find(p => p.length > 1 && keyOf(p[0]) === want);
+                if (!ep || ep[1] === curUrl || !/^https?:\/\/\S+\.m3u8(?:[?#]\S*)?$/i.test(ep[1])) return;
+                out.push({ site: s.site_key, url: ep[1], o: rank(s), i });
+            });
+            return out.sort((a, b) => (a.o - b.o) || (a.i - b.i));
+        };
+        // 本机结果。键来自片名:同 dmOffSlot 加前缀 + hasOwnProperty。过期 / 总长对不上 → null(重算)
+        const dmAutoRead = (store) => {
+            const raw = store().getItem(DM_AUTO.STORE);   // 存储不可用时抛,调用方接住
+            try { const m = JSON.parse(raw || '{}'); return (m && typeof m === 'object' && !Array.isArray(m)) ? m : {}; } catch (e) { return {}; }
+        };
+        const dmAutoFresh = (r, total, now) => {
+            const ttl = r && Object.prototype.hasOwnProperty.call(DM_AUTO.TTL, r.st) ? DM_AUTO.TTL[r.st] : 0;
+            return !!(ttl && now - r.at >= 0 && now - r.at < ttl && Math.abs(r.dur - total) < 1);
+        };
+        const dmAutoGet = (store, key, total, now) => {
+            try {
+                const m = dmAutoRead(store), k = dmOffSlot(key);
+                if (!Object.prototype.hasOwnProperty.call(m, k)) return null;
+                return dmAutoFresh(m[k], total, now) ? m[k] : null;
+            } catch (e) { return null; }
+        };
+        const dmAutoPut = (store, key, rec) => {
+            try {
+                const m = dmAutoRead(store);
+                m[dmOffSlot(key)] = rec;
+                const ks = Object.keys(m), at = x => (m[x] && m[x].at) || 0;
+                if (ks.length > DM_AUTO.CAP) ks.sort((a, b) => at(a) - at(b)).slice(0, ks.length - DM_AUTO.CAP).forEach(x => delete m[x]);
+                store().setItem(DM_AUTO.STORE, JSON.stringify(m));
+            } catch (e) { }
+        };
+        // 同一部剧同一条线路连续对不上(片源和众数线路不是一个剪辑):再测多半还是对不上,每集白花 11~24MB。够数就不测了;这条线路对上过就不算,旧记录过期后再试
+        const dmAutoLineOff = (store, memo, key, now) => {
+            const c = key.lastIndexOf('|'), e = c > 0 ? key.lastIndexOf('|', c - 1) : -1;
+            if (e < 0) return false;
+            const head = dmOffSlot(key.slice(0, e + 1)), tail = key.slice(c);
+            let m;
+            try { m = dmAutoRead(store); } catch (err) { m = memo; }
+            let rej = 0;
+            for (const k of Object.keys(m)) {
+                const r = m[k];
+                if (!r || !k.startsWith(head) || !k.endsWith(tail) || !(now - r.at >= 0 && now - r.at < DM_AUTO.TTL.rej)) continue;
+                if (r.st === 'ok') return false;
+                if (r.st === 'rej') rej++;
+            }
+            return rej >= DM_AUTO.REJ_STOP;
+        };
+        const dmAutoText = (r) => {
+            const n = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : '?');
+            const tail = '(众数 ' + n(r.mode) + ',' + (r.votes || 0) + ' 票,流量 ' + (r.mb || 0) + 'MB)';
+            if (r.st === 'ok') return '弹幕时间 +' + n(r.h) + ' 秒:Δ=' + n(r.d) + ',开头 r=' + n(r.r) + ',第二锚点 lag=' + n(r.lag2) + ' r=' + n(r.r2) + tail;
+            if (r.st === 'zero') return '和众数一致,不用校正' + tail;
+            if (r.st === 'neg') return '比众数长 ' + n(-r.d) + ' 秒,多出来的定位不了,不动' + tail;
+            if (r.st === 'big') return '比众数短 ' + n(r.d) + ' 秒,像残缺线路,不动' + tail;
+            if (r.st === 'rej') return '音频对不上,不动:' + (r.why || '') + ' Δ=' + n(r.d) + ' r=' + n(r.r) + ' lag=' + n(r.lag) + ' r2=' + n(r.r2) + ' lag2=' + n(r.lag2) + tail;
+            return '没做成,不动:' + (r.why || r.st) + tail;
+        };
+        const dmAutoCreate = (env) => {
+            const T = env.time;
+            const s = {
+                tok: null, run: 0, state: 'idle', why: '', last: null, hls: null, work: null, looping: false, kill: null, holding: false, halted: false, memo: Object.create(null),
+                // 新的一次播放(_dmTimeBegin 调):上一轮立刻作废,dmTime 已经把 h 清零了
+                begin(tok) {
+                    s.halt();
+                    s.tok = tok; s.why = ''; s.last = null; s.hls = null; s.work = null;
+                    s.start();
+                },
+                start() {
+                    const run = ++s.run;
+                    s.state = 'wait'; s.looping = true;
+                    s.loop(run).catch(() => { }).then(() => { if (run === s.run) s.looping = false; });
+                },
+                // 关弹幕 / 手动调偏移 / 换线:叫停在跑的测量,在途请求不再等
+                halt() {
+                    s.halted = true;
+                    if (s.kill) s.kill();
+                    if (s.holding) { const A = env.afp(); if (A) A._abort = true; }
+                },
+                // 又开了弹幕 / 重置了手动值 / 弹幕列表晚到:等待已经结束才需要重新开始
+                wake() {
+                    if (s.looping || s.tok == null || env.token() !== s.tok || s.state === 'done' || s.state === 'cache') return false;
+                    s.start();
+                    return true;
+                },
+                // 同一次播放里换了 hls 实例(代理回退换通道,_dpSwitchHls 调):时间轴变了,这条线路刚才的 h 不能再用
+                onSwitch() {
+                    if (!s.hls || env.token() !== s.tok || env.view().hls === s.hls) return false;
+                    s.halt();
+                    s.hls = null; s.work = null; s.last = null; s.why = '';
+                    T.setAuto(0, s.tok);
+                    s.start();
+                    return true;
+                },
+                end(why) {
+                    s.state = 'off';
+                    if (why !== s.why) { s.why = why; env.log('[弹幕校正] 不校正:' + why); }
+                },
+                apply(rec) {
+                    if (rec.st === 'ok') T.setAuto(rec.h, s.tok);
+                    else if (rec.st === 'zero') T.setAuto(0, s.tok);
+                },
+                lookup(key, total) {
+                    const now = env.now(), r = dmAutoGet(env.store, key, total, now);
+                    if (r) return r;
+                    const k = dmOffSlot(key), m = s.memo[k];   // 存储不可用时(隐私模式)本页也别每次重下
+                    return dmAutoFresh(m, total, now) ? m : null;
+                },
+                finish(key, total, rec) {
+                    Object.assign(rec, { dur: total, at: env.now(), mb: s.work ? Math.round(s.work.bytes / 104857.6) / 10 : 0 });
+                    s.last = rec; s.work = null; s.state = 'done';
+                    s.memo[dmOffSlot(key)] = rec;
+                    dmAutoPut(env.store, key, rec);
+                    env.log('[弹幕校正] ' + key + ' ' + dmAutoText(rec));
+                    return 'done';
+                },
+                async loop(run) {
+                    const alive = () => run === s.run && env.token() === s.tok;
+                    const t0 = env.now();
+                    let calm = 0, ticks = 0, played = 0;
+                    while (alive()) {
+                        await env.sleep(DM_AUTO.TICK);
+                        if (!alive()) return;
+                        ticks++;
+                        const waited = env.now() - t0;
+                        if (waited > DM_AUTO.WAIT_MAX) return s.end('等了太久,播放一直没稳定');
+                        const g = env.view();
+                        if (!g.paused && !g.seeking && g.readyState >= 3) played++;   // 真的播了多少秒:续看时 currentTime 一上来就 >10,只看它等于起播就开抓
+                        if (!T.active || g.off) return s.end(g.off || '直播');
+                        const src = env.source();
+                        if (src === undefined) {
+                            if (!g.want && ticks >= DM_AUTO.NO_WANT_TICKS) return s.end('本次没有弹幕');
+                            if (waited > DM_AUTO.SRC_WAIT) return s.end('弹幕一直没到');
+                            continue;
+                        }
+                        if (src !== DM_AUTO.SRC) return s.end('弹幕来源 ' + (src || '未知'));
+                        if (!g.hls) {
+                            if (g.readyState >= 1) return s.end('不是 hls.js 通道');
+                            continue;
+                        }
+                        if (!g.showing || !g.listN || !(g.total > 0)) { calm = 0; continue; }
+                        s.hls = g.hls;
+                        if (g.total < DM_AUTO.MIN_TOTAL) return s.end('片子太短');
+                        if (!g.key) return s.end('没有键');
+                        const hit = s.lookup(g.key, g.total);
+                        if (hit) {
+                            s.apply(hit);
+                            s.last = hit; s.state = 'cache';
+                            env.log('[弹幕校正] 本机记录:' + g.key + ' ' + dmAutoText(hit));
+                            return;
+                        }
+                        if (T.manual != null) return s.end('手动调过这一集');
+                        if (!g.proxy) return s.end('没有配 Worker');
+                        if (g.saving) return s.end('省流量 / 蜂窝 / 离线');
+                        const A = env.afp();
+                        if (!A) { calm = 0; continue; }
+                        if (A._mb > DM_AUTO.SESSION_MB) return s.end('本次会话分析流量已到上限');
+                        const stable = !g.paused && !g.seeking && g.readyState >= 3 && played > DM_AUTO.PLAY_MIN && g.currentTime > DM_AUTO.PLAY_MIN && g.ahead >= DM_AUTO.AHEAD_MIN && !g.cutBusy;
+                        if (!stable || A._busy) { calm = 0; continue; }
+                        if (++calm < DM_AUTO.CALM) continue;
+                        if (env.refs().length < DM_AUTO.VOTES) { calm = 0; continue; }   // 同集线路还不够投票(线路列表可能还在搜):不发请求,接着等
+                        if (dmAutoLineOff(env.store, s.memo, g.key, env.now())) return s.end('这条线路连续对不上,不再测');
+                        const out = await s.measure(alive, g, A);
+                        if (out !== 'again') return;
+                        calm = 0;
+                    }
+                },
+                async measure(alive, g, A) {
+                    const tok = s.tok, key = g.key, total = g.total;
+                    const W = s.work || (s.work = { bytes: 0, yields: 0, lists: null, own: null, order: null, c: null, d: 0, a: null });
+                    let rejKill = null;
+                    const killed = new Promise((_, rej) => { rejKill = rej; });
+                    killed.catch(() => { });
+                    s.kill = () => rejKill(new Error('中止'));
+                    s.halted = false;
+                    // _mkFetch 不收 signal:在途请求断不了,但这里不等它 —— 换集 / 换线后立刻放开 _busy,新一集的分析不被挡
+                    const guard = (p, ms) => new Promise((res, rej) => {
+                        const t = setTimeout(() => rej(new Error('超时')), ms);
+                        Promise.race([p, killed]).then(v => { clearTimeout(t); res(v); }, e => { clearTimeout(t); rej(e); });
+                    });
+                    const wrapRes = (r) => ({
+                        ok: r.ok, status: r.status, url: r.url,
+                        text: () => guard(r.text(), DM_AUTO.LIST_MS).then(t => { W.bytes += t.length; return t; }),
+                        arrayBuffer: () => guard(r.arrayBuffer(), DM_AUTO.SEG_MS).then(b => {
+                            W.bytes += b.byteLength;
+                            if (W.bytes > DM_AUTO.MAX_BYTES) throw new Error('超流量上限');
+                            return b;
+                        })
+                    });
+                    const wrap = (F0) => {
+                        const F = (u) => guard(F0(u), DM_AUTO.LIST_MS).then(wrapRes);
+                        F.playlist = (u) => guard(F0.playlist(u), DM_AUTO.LIST_MS).then(wrapRes);
+                        F.channel = F0.channel;
+                        return F;
+                    };
+                    const chk = () => { if (!alive() || s.halted) throw new Error('中止'); };
+                    const giveUp = (e) => !alive() || s.halted || /让路|超流量/.test((e && e.message) || '');
+                    const mkSess = (url, base, text) => {
+                        const x = A._mkTailSess(url);
+                        x.env = new Float32Array(1);   // 累计轴不用:_localEnv 按 EXTINF 局部重建,零累计误差
+                        x.base = base; x.text = text;
+                        return x;
+                    };
+                    // 取 [from, to) 的包络。_segList 只收起点落在区间内的分片,要把盖住 from 的那一片也带上
+                    const grab = async (x, F, from, to) => {
+                        const segs = A._segList(x.text, x.base, 0, to);
+                        let start = -1;
+                        for (const f of segs) { if (f.st <= from + 1e-3) start = f.st; else break; }
+                        if (start < 0 || !(await A._fetchEnvRange(x, F, start, to))) throw new Error('清单里没有这一段');
+                        chk();
+                        return A._localEnv(x, from, to).subarray(0, Math.round((to - from) * DM_AUTO.HZ));
+                    };
+                    const rec = (st, extra) => Object.assign({ st, h: 0, d: W.d, mode: W.c ? W.c.mode : 0, votes: W.c ? W.c.votes : 0 }, extra || {});
+                    s.state = 'measure'; s.holding = true;
+                    A._busy = true; A._abort = false;
+                    try {
+                        const vue = env.vue(), RF0 = A._mkFetch(vue);
+                        RF0.channel = 'f';   // 参考线路的清单只认 Worker:F.playlist 跟的是当前线路的通道,当前线路直连时会拿到没过滤的
+                        const RF = wrap(RF0), OF = wrap(A._mkFetch(vue));
+                        if (!W.lists) {
+                            const cands = env.refs(), lists = [];
+                            let i = 0, flying = 0;
+                            const one = async () => {
+                                while (alive() && !s.halted && i < cands.length && i < DM_AUTO.TRIES && lists.length + flying < DM_AUTO.REFS) {
+                                    const c = cands[i++];
+                                    flying++;
+                                    try {
+                                        const r = await A._resolveMedia(c.url, RF);
+                                        const t = A._playlistDuration(r.text);
+                                        if (t > 0) lists.push({ site: c.site, url: c.url, base: r.origBase, text: r.text, total: t });
+                                    } catch (e) { if (giveUp(e)) throw e; } finally { flying--; }
+                                }
+                            };
+                            await Promise.all(Array.from({ length: DM_AUTO.CONC }, one));
+                            chk();
+                            W.lists = lists;
+                            W.c = dmAutoCluster(lists.map(x => x.total));
+                            if (W.c) W.order = W.c.idx.map(i2 => lists[i2]);
+                        }
+                        // 拉到的清单不够 3 份(这时线路列表可能还没搜全,或 Worker 拉不到)和拉够了但各说各话不一样:前者过会儿再开一次可能就够了
+                        if (!W.c) return s.finish(key, total, rec(W.lists.length < DM_AUTO.VOTES ? 'few' : 'fail', { why: '凑不出众数(' + W.lists.map(x => Math.round(x.total)).join(',') + ')' }));
+                        const j = dmAutoJudge(W.c.mode, total);
+                        W.d = j.d;
+                        if (j.v === 'zero') { T.setAuto(0, tok); return s.finish(key, total, rec('zero')); }
+                        if (j.v !== 'measure') return s.finish(key, total, rec(j.v === 'fail' ? 'fail' : j.v, j.v === 'fail' ? { why: '总长不对' } : null));
+                        if (!W.own) {
+                            const r = await A._resolveMedia(env.curUrl(), OF);
+                            chk();
+                            // 拿到的清单和在播的不是一份(同一地址每次插播位置不同、换了码率)→ 模板时间不可信
+                            if (Math.abs(A._playlistDuration(r.text) - env.baseTotal(total)) >= 1) return s.finish(key, total, rec('fail', { why: '本线路清单和在播的对不上' }));
+                            W.own = mkSess(env.curUrl(), r.origBase, r.text);
+                        }
+                        // 在众数簇里逐条试:取片失败换下一条,都失败就放弃
+                        const measureAt = async (w, tpl, range) => {
+                            for (const ref of W.order) {
+                                try {
+                                    ref.sess = ref.sess || mkSess(ref.url, ref.base, ref.text);
+                                    const m = dmAutoLag(tpl, await grab(ref.sess, RF, range.from, range.to), range.from, w.s0, A._p.bind(A));
+                                    if (m) { m.site = ref.site; return m; }
+                                } catch (e) { if (giveUp(e)) throw e; W.err = (e && e.message) || ''; }
+                            }
+                            return null;
+                        };
+                        const tplOf = (w) => grab(W.own, OF, w.b0, w.b1);
+                        if (!W.a) {
+                            const w = dmAutoWindow(DM_AUTO.P0, DM_AUTO.WIN, total, env.toBase, env.strip);
+                            if (!w) return s.finish(key, total, rec('rej', { why: '开头找不到干净的 20 秒' }));
+                            const tpl = await tplOf(w);
+                            const m = await measureAt(w, tpl, dmAutoRefRange(w.s0, DM_AUTO.WIN, j.d, DM_AUTO.HINT_PAD));
+                            chk();
+                            if (!m) return s.finish(key, total, rec('fail', { why: '参考线路都取不到分片 ' + (W.err || '') }));
+                            if (!dmAutoHintOk(m)) return s.finish(key, total, rec('rej', { why: '开头', r: m.r, lag: m.lag }));
+                            W.a = m;
+                        }
+                        const h = W.a.lag;
+                        const w2 = dmAutoWindow(Math.round(total * DM_AUTO.ANCHOR2), DM_AUTO.WIN, total, env.toBase, env.strip);
+                        if (!w2) return s.finish(key, total, rec('rej', { why: '后段找不到干净的 20 秒', r: W.a.r, lag: h }));
+                        const tpl2 = await tplOf(w2);
+                        const m2 = await measureAt(w2, tpl2, dmAutoRefRange(w2.s0, DM_AUTO.WIN, h, DM_AUTO.ANCHOR2_PAD));
+                        chk();
+                        if (!m2) return s.finish(key, total, rec('fail', { why: '参考线路都取不到分片 ' + (W.err || '') }));
+                        if (!dmAutoConfirm(m2, h)) return s.finish(key, total, rec('rej', { why: '第二锚点', r: W.a.r, lag: h, r2: m2.r, lag2: m2.lag }));
+                        // 测量期间弹幕可能重载过:只有芒果弹幕才能用这个结果
+                        if (env.source() !== DM_AUTO.SRC) { s.end('测量中弹幕来源变了'); return 'done'; }
+                        const done = dmOffClamp(h);
+                        if (!alive()) return 'dead';
+                        T.setAuto(done, tok);
+                        return s.finish(key, total, rec('ok', { h: done, r: W.a.r, lag: h, r2: m2.r, lag2: m2.lag, ref: W.a.site }));
+                    } catch (e) {
+                        if (!alive()) return 'dead';
+                        if (s.halted) return 'again';
+                        const msg = (e && e.message) || '';
+                        if (/让路/.test(msg)) {
+                            if (W.yields++ < DM_AUTO.YIELDS) return 'again';
+                            return s.finish(key, total, rec('yield', { why: msg }));
+                        }
+                        return s.finish(key, total, rec('fail', { why: msg }));
+                    } finally {
+                        s.holding = false; s.kill = null;
+                        A._busy = false;
+                        if (s.state === 'measure') s.state = 'wait';
+                    }
+                },
+                status() {
+                    return { state: s.state, why: s.why, source: env.source(), last: s.last, h: T.h, manual: T.manual, offset: T.offset };
+                }
+            };
+            T.onManual = (kind) => { if (kind === 'set') s.halt(); else s.wake(); };
+            return s;
+        };
+        // </dg-dm-auto-core>
+        const dmAuto = dmAutoCreate({
+            time: dmTime,
+            now: () => Date.now(),
+            sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+            store: () => window.localStorage,
+            log: (t) => console.log(t),
+            token: () => (window.vueApp ? window.vueApp._playToken : null),
+            vue: () => window.vueApp,
+            afp: () => window.afpOffline || null,
+            source: () => _dmBackend.source(),
+            curUrl: () => window.vueApp.currentUrl,
+            toBase: (t) => window.vueApp._cutToBase(t),
+            baseTotal: (d) => window.vueApp._cutBaseDur(d),
+            strip: (t) => dmStripAds(t, dmTime.runs),
+            refs: () => {
+                const q = window.vueApp, g = q.currentGroup, cs = q.currentSource, cur = (q.episodeList || []).find(e => e.url === q.currentUrl);
+                // 档案 clip 的线路(如意、非凡、电影天堂)插播 Worker 删不掉,Worker 清单的总长不代表干净的片子,不投票
+                const sources = ((g && g.sources) || []).filter(x => x && !q._isKzSource(x) && !x._kzMismatch && !q.srcProfile(x).clip);
+                // 本机直连 / 经 Worker 测通的在前(只有服务器测通的,Worker 多半也被封:非凡、电影天堂),同档里无广告的在前
+                const rank = (x) => ((typeof x.latency === 'number' && x.latency < 9000) ? ((x._testType === 'direct' || x._testType === 'proxy') ? 0 : 50) : 100) + q.srcTierRank(x);
+                return dmAutoRefs(sources, cs && cs.site_key, q.currentUrl, cur && cur.name, (n) => q._epMatchKey(n), rank);
+            },
+            // 每秒读一次门控要看的状态(只读,不写 Vue;p.dan 只取长度)
+            view: () => {
+                const p = typeof dp !== 'undefined' ? dp : null, v = p && p.video, dm = p && p.danmaku, h = (p && p.plugins && p.plugins.hls) || null, q = window.vueApp;
+                const o = { off: '', want: !!_dmBackend.want, hls: h, showing: !!(dm && dm.showing), listN: (dm && dm.dan && dm.dan.length) || 0, total: 0, key: '', proxy: false, saving: false, cutBusy: false, paused: true, seeking: false, readyState: 0, currentTime: 0, ahead: 0 };
+                if (!q) { o.off = '页面还没就绪'; return o; }
+                if (q._liveActive) o.off = '直播';
+                else if (q._activeOffCached) o.off = '离线副本';
+                else if (q._activeKz || q._isKzUrl(q.currentUrl)) o.off = '番剧规则源';
+                else if (q._isCasting && q._isCasting()) o.off = '投屏中';
+                if (v) {
+                    o.paused = v.paused; o.seeking = v.seeking; o.readyState = v.readyState; o.currentTime = v.currentTime || 0;
+                    try {
+                        for (let i = 0; i < v.buffered.length; i++) {
+                            if (o.currentTime >= v.buffered.start(i) - 0.5 && o.currentTime <= v.buffered.end(i) + 0.5) { o.ahead = v.buffered.end(i) - o.currentTime; break; }
+                        }
+                    } catch (e) { }
+                }
+                try {
+                    if (h && h.levels) {
+                        const lv = h.levels[h.currentLevel >= 0 ? h.currentLevel : h.loadLevel] || h.levels.find(x => x && x.details);
+                        const d = lv && lv.details;
+                        if (d && !d.live && d.fragments && d.fragments.length) o.total = d.totalduration;
+                    }
+                } catch (e) { }
+                o.key = dmTime.key ? dmTime.key + '|' + q._introChannel() : '';
+                o.proxy = !!((q.currentSource && q.currentSource._proxyUrl) || q.corsProxyUrl);
+                try {
+                    if (navigator.onLine === false) o.saving = true;
+                    const c = navigator.connection;
+                    if (c && (c.saveData || /(^|\b)2g/.test(c.effectiveType || '') || c.type === 'cellular')) o.saving = true;
+                } catch (e) { }
+                try { o.cutBusy = !!(window.adCut && window.adCut.busy()); } catch (e) { }
+                return o;
+            }
+        });
+        window.dmAuto = dmAuto;
         // 🛡️ 安全跳转：媒体在换源/代理回退重载时 currentTime 会是 NaN，相对跳转会把 NaN 写进 currentTime →
         //    DPlayer 抛 "non-finite" TypeError、可能打断换源。所有跳转统一走守卫，非有限值直接跳过。
         const safeSeek = (t) => { if (dp && Number.isFinite(t) && t >= 0) { try { dp.seek(t); } catch (e) { } } };
@@ -7529,7 +8295,7 @@
             if (!Number.isFinite(cur)) return; // 媒体重载中 currentTime=NaN → 放弃本次相对跳转
             const dur = Number.isFinite(dp.video.duration) ? dp.video.duration : Infinity;
             const next = Math.min(dur, Math.max(0, cur + delta));
-            if (Number.isFinite(next)) { try { dp.video.currentTime = next; } catch (e) { } }
+            if (Number.isFinite(next)) { try { dp.video.currentTime = next; if (dp.danmaku) dp.danmaku.seek(); } catch (e) { } }
         };
 
         // ⬇️ ========== 离线缓存(IndexedDB) ==========
@@ -17054,6 +17820,7 @@
                     //   安卓 App 返回键注入的 JS、#tv-back、关闭按钮被弹窗盖着点不到)。以前连播放页一起关,而且弹窗退历史的 back()
                     //   是异步的、下面 replaceState(pathname) 是同步的 → 退回落在打开弹窗前那条 ?play= 上,首页地址栏留着深链,刷新又把剧打开
                     if (this.frameShare && this.frameShare.show) { this.closeFrameShare(); return; }
+                    try { dmAuto.halt(); } catch (e) { }   // 🗨️ 关播放页只暂停、令牌不变:弹幕校正要自己停,否则接着下完这次测量
                     this.showDetail = false;
                     this._liveActive = false;       // 📺 退出直播模式(否则下一部 VOD 会被当直播、丢进度)
                     this._liveOpenSeq++;            // 作废在飞的直播测速循环
@@ -17585,6 +18352,17 @@
                         dp.danmaku.clear();
                         if (dp.template && dp.template.danmakuLoading) dp.template.danmakuLoading.style.display = 'none';
                     } catch (e) { }
+                },
+                // 🗨️ 弹幕时间映射绑到这一次播放(见 dmTime):键 = 剧|线路|集,集用 _danmakuKey 归一后的写法。直播不启用
+                _dmTimeBegin() {
+                    const tok = this._playToken;
+                    try {
+                        const g = this.currentGroup, site = (this.currentSource && this.currentSource.site_key) || '';
+                        const live = !!(this._liveActive || (g && g._isLive));
+                        const key = (!live && g && g.name) ? g.name + '|' + site + '|' + this._danmakuKey().slice(g.name.length + 1) : '';
+                        dmTime.begin(tok, key, live);
+                    } catch (e) { dmTime.begin(tok, '', true); }
+                    try { dmAuto.begin(tok); } catch (e) { }   // 上一集的自动校正立刻停,这一集稳定后重算(或读本机记录)
                 },
                 // 🗨️ 弹幕匹配提示:我方这部的类型(归一后的 k:)、年份、集数。服务器用它在同名候选里挑对的那部
                 //    (综艺"王牌对王牌"别配到 1998 年同名电影;天龙八部 2003 版别配到 1997 版;苍兰诀 电视剧≠动画)。
@@ -18145,6 +18923,7 @@
                         this._activeKz = null; this._activeAdFilterProxyUsed = false;
                         this._activePlaySeq = _navSeq;
                         this.currentUrl = url;
+                        this._dmTimeBegin();   // 🗨️ 解析期间令牌已变:上一集的弹幕时间映射先作废
                         try { if (dp) { dp.pause(); if (dp.plugins && dp.plugins.hls) dp.plugins.hls.stopLoad(); dp.notice('正在解析视频地址…', 3000); } } catch (e) { }
                         // 45s > 服务器最坏解析耗时(多线路回退预算 25s + 在途请求),免得服务器刚解出来客户端已放弃
                         fetchT(url, null, 45000)
@@ -18196,6 +18975,7 @@
                     //    因此绝不能用它给"本次播放"的异步回调(看门狗/重试)做边界——那会让上一个源装的定时器对下一个源生效。
                     const playToken = (this._playToken = (this._playToken || 0) + 1);
                     try { if (window.adClipSkip) window.adClipSkip.vue = this; } catch (e) { }   // 🛡️ 去插播:attach 时要读到本次的 _playToken(必须早于建/切 hls)
+                    this._dmTimeBegin();   // 🗨️ 弹幕时间映射:上一集的插播段和偏移立刻清零,换成这一集的(复用实例和新建实例都走这里)
                     try { if (window.afpOffline) window.afpOffline._abort = true; } catch (e) { }   // 🚦 换源/换集:先叫停上一轮后台分析,别让它继续抢新源的带宽
                     // ⏱️ 起播看门狗(不依赖任何 hls 事件的最后一道闸)。
                     //   实测有死源(空清单/极小清单)会让 hls.js 【完全静默】:不触发 LEVEL_LOADED、不触发 FRAG_LOADED、
@@ -18756,6 +19536,8 @@
                         //    DPlayer 已把状态写进 localStorage(dplayer-danmaku-show)；这里再同步到服务器。
                         dp.on('danmaku_show', () => this.pushDanmakuPref(false));
                         dp.on('danmaku_hide', () => this.pushDanmakuPref(true));
+                        dp.on('danmaku_show', () => { try { dmAuto.wake(); } catch (e) { } });   // 🗨️ 弹幕按集自动校正:关弹幕立刻停(不看弹幕不下载),再打开接着算
+                        dp.on('danmaku_hide', () => { try { dmAuto.halt(); } catch (e) { } });
 
                         // 🗨️ 保证"自己发的弹幕"一定显示：DPlayer 发送时也走轨道占用判定，顶部 1/3 区域轨道少、
                         //    关海量时高能片段常无空轨 → 自己发的被丢弃。包一层：发送那一刻临时开 unlimited(允许重叠)，
@@ -18770,6 +19552,8 @@
                             dp.danmaku._sendPatched = true;
                         }
                         dmPixelStart(dp);   // 🗨️ iOS / iPadOS 新弹幕先在右边闪一下
+                        dmResync(dp, document);   // 🗨️ 绕过 dp.seek 的跳转、切后台回来:弹幕读指针对齐到当前时间
+                        dmTime.install(dp);   // 🗨️ 弹幕时间映射(新实例的 options.time 是原始的,要重新挂)
 
                         // ========== 🔧 设置菜单修复 ==========
                         setTimeout(() => {
@@ -20086,6 +20870,20 @@
                                                     <div class="dm-set-title">弹幕设置</div>
                                                     ${tg('show', '显示弹幕', dmShown)}
                                                     ${tg('unlimited', '海量弹幕', dmUnlim)}
+                                                    <div class="dm-off-block">
+                                                        <div class="dm-off-head">
+                                                            <span class="dm-set-label">弹幕时间</span>
+                                                            <span class="dm-off-val">未调整</span>
+                                                            <span class="dm-off-reset dm-off-na">重置</span>
+                                                        </div>
+                                                        <div class="dm-off-btns">
+                                                            <div class="dm-off-btn" data-d="-10">推后10</div>
+                                                            <div class="dm-off-btn" data-d="-1">推后1</div>
+                                                            <div class="dm-off-btn" data-d="1">提前1</div>
+                                                            <div class="dm-off-btn" data-d="10">提前10</div>
+                                                        </div>
+                                                        <div class="dm-off-hint">单位秒。弹幕比画面晚就点提前,比画面早就点推后</div>
+                                                    </div>
                                                     ${sl('rows', '行数', 1, 20, 1)}
                                                     ${sl('speed', '速度', 1, 10, 1)}
                                                     ${sl('font', '字号', 12, 44, 1)}
@@ -20128,6 +20926,13 @@
                                                 r.addEventListener('input', onChange);
                                                 r.addEventListener('click', e => e.stopPropagation());
                                             });
+                                            // 🗨️ 弹幕时间:±1 / ±10 秒 + 重置。stopPropagation:点按钮不关面板、不冒泡到播放器(面板已在 #dplayer 点击 / 触摸两处白名单里)
+                                            panel.querySelectorAll('.dm-off-btn').forEach(b => b.addEventListener('click', (e) => {
+                                                e.stopPropagation();
+                                                dmTime.step(+b.getAttribute('data-d'));
+                                            }));
+                                            const offReset = panel.querySelector('.dm-off-reset');
+                                            if (offReset) offReset.addEventListener('click', (e) => { e.stopPropagation(); dmTime.resetManual(); });
                                             // 开关：显示弹幕 / 海量弹幕(直接驱动 DPlayer；原生 danmaku_show/hide 事件负责本地+服务器持久化)
                                             panel.querySelectorAll('.dm-toggle').forEach(t => t.addEventListener('click', (e) => {
                                                 e.stopPropagation();
@@ -20233,6 +21038,7 @@
 
                                 // 挂载"弹幕设置"按钮+滑块面板(控件此时已就绪)
                                 if (window.danmakuStyle) window.danmakuStyle.mount();
+                                dmTime.render();   // 🗨️ 弹幕时间:面板刚挂上,写当前值(没有弹幕模块 / 直播时隐藏)
 
                                 // 📸 分享当前画面(桌面):相机图标插在设置(齿轮)左边。手机端 CSS 把它收起,入口在齿轮菜单里(.dg-mob-row[data-dg=frame]);
                                 //    直播/未登录预览由 .player-box.dg-no-frame 藏掉
@@ -20287,11 +21093,13 @@
                                             html += row('dmshow', '弹幕', `<span class="dg-mob-toggle ${dmShowing ? 'on' : ''}"></span>`);
                                             html += row('dmsend', '发送弹幕', '<span class="dg-mob-arrow">›</span>');
                                             html += row('dmstyle', '弹幕样式', '<span class="dg-mob-arrow">›</span>');
+                                            html += row('dmoffset', '弹幕时间', '<span class="dg-mob-arrow"><span class="dg-dmoff-val"></span> ›</span>');   // 🗨️ 手机入口:按钮在弹幕设置面板里,这一行显示当前值并直接打开到那里
                                         }
                                         if (pipBtn) html += row('pip', '画中画', '<span class="dg-mob-arrow">›</span>');
                                         html += row('webfull', '网页全屏', '<span class="dg-mob-arrow dg-webfull-label">›</span>');
                                         html += row('frame', '分享当前画面', '<span class="dg-mob-arrow">›</span>');   // 📸 直播/未登录预览由 .player-box.dg-no-frame 藏掉
                                         settingPanel.insertAdjacentHTML('beforeend', html);
+                                        dmTime.render();   // 🗨️ 弹幕时间:面板和菜单行都已就位,写当前值(直播时隐藏)
 
                                         const setDmKnob = (on) => { const k = settingPanel.querySelector('.dg-mob-row[data-dg="dmshow"] .dg-mob-toggle'); if (k) k.classList.toggle('on', !!on); };
                                         const setWebFullLabel = () => {
@@ -20326,7 +21134,15 @@
                                                     if (cbtn) cbtn.click();
                                                 } else if (key === 'dmstyle') {
                                                     const panel = dplayerContainer.querySelector('.dm-settings-panel');
-                                                    if (panel) panel.style.display = 'block';
+                                                    if (panel) { panel.style.display = 'block'; panel.scrollTop = 0; }   // 先点过弹幕时间时面板停在下面,两个开关会在视口外
+                                                } else if (key === 'dmoffset') {
+                                                    const panel = dplayerContainer.querySelector('.dm-settings-panel');
+                                                    if (panel) {
+                                                        panel.style.display = 'block';
+                                                        // 竖屏内联播放器里面板只有 ~120px 高、内部滚动:滚到弹幕时间这一块(面板是定位元素,offsetTop 相对它)
+                                                        const block = panel.querySelector('.dm-off-block');
+                                                        if (block) panel.scrollTop = Math.max(0, block.offsetTop - 8);
+                                                    }
                                                 } else if (key === 'pip') {
                                                     if (pipBtn) pipBtn.click();
                                                 } else if (key === 'webfull') {
@@ -21875,12 +22691,14 @@
                         // 🎌 原生 <video> 通道(Kazumi MP4 直链):DPlayer 的 'normal' 不碰 hls,旧 hls 实例还挂着 → switchVideo 【之后】
                         //    手动销毁并摘掉(此刻 video.src 已是新直链,hls.js detach 只在 src 仍是自己的 blob 时才清空,与 hls→hls 同理)
                         if (oldHls) { try { oldHls.destroy(); } catch (e) { } if (dp.plugins && dp.plugins.hls === oldHls) delete dp.plugins.hls; }
+                        try { dmAuto.onSwitch(); } catch (e) { }
                         return;
                     }
                     this._attachHlsErrorHook();   // 🔌 switchVideo 会新建 hls 实例,错误钩子要重挂(实例级防重)
                     if (oldHls && oldHls !== (dp.plugins && dp.plugins.hls)) {
                         try { oldHls.destroy(); } catch (e) { }
                     }
+                    try { dmAuto.onSwitch(); } catch (e) { }   // 🗨️ 同一次播放里换了通道(代理回退):时间轴变了,自动校正的 h 作废重算
                 },
 
                 _attachHlsErrorHook() {
