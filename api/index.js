@@ -1085,6 +1085,21 @@ function danmakuParseId(id) {
     const cacheKey = title + '|' + ep + (k ? '|k:' + k : '') + (hints.year ? '|y:' + hints.year : '') + qd;
     return { title, ep, hints, cacheKey };
 }
+// 🏷️ 这一集弹幕的平台来源(两后端共用,纯函数):前端只对芒果(imgo)做按集自动校正 —— 芒果弹幕的时间轴和多数线路过 Worker 后一致,腾讯等不一致
+//   (见 index.html <dg-dm-auto-core>)。集条目形如 { episodeTitle:'【imgo】 第1集', url:'https://www.mgtv.com/…' }。
+//   取弹幕用的是地址,所以先认地址、再认标签;两边说的不是一个平台(合并源之类)一律当不确定('')。标签要在集名最前面,片名里的 【】 不算。
+const DANMAKU_SRC_HOSTS = [[/(^|\.)mgtv\.com$/, 'imgo'], [/(^|\.)qq\.com$/, 'qq'], [/(^|\.)iqiyi\.com$/, 'qiyi'], [/(^|\.)youku\.com$/, 'youku'], [/(^|\.)(bilibili\.com|b23\.tv)$/, 'bilibili'], [/(^|\.)miguvideo\.com$/, 'migu'], [/(^|\.)sohu\.com$/, 'sohu'], [/(^|\.)le\.com$/, 'leshi'], [/(^|\.)ixigua\.com$/, 'xigua']];
+function danmakuSourceOf(episode) {
+    const e = episode || {};
+    const m = String(e.episodeTitle || '').match(/^\s*【([a-z0-9_]{1,16})】/i);
+    const tag = m ? m[1].toLowerCase() : '';
+    let host = '';
+    try { host = new URL(String(e.url || '')).hostname.toLowerCase(); } catch (err) { }
+    const hit = host ? DANMAKU_SRC_HOSTS.find(x => x[0].test(host)) : null;
+    const byHost = hit ? hit[1] : '';
+    if (byHost && tag && !tag.startsWith(byHost)) return '';
+    return byHost || tag;
+}
 // ⛔ 以下联网(非纯函数),scripts/danmaku-match-test.mjs 抽取的纯函数区到此为止
 // 腾讯选集接口一页。同一页全站共享:并发只打一次、固定 5s 超时(不随调用方剩余时间缩短,慢页照样落进缓存给后来的人用)。
 //   成功缓存 30 分钟;过期或要求更新(maxAge)时重拉,重拉失败继续用旧的(6 小时内;1 分钟内不再重试);没成功过的失败只记 30 秒。
@@ -1294,6 +1309,7 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
             if (!d.length) return danmakuVetoed();
             d._tier = Math.min(bestTier, 1);
             d._oracle = true;
+            d._src = danmakuSourceOf({ url });
             return d;
         } catch (e) {
             const st = e.response && e.response.status;
@@ -1354,7 +1370,8 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
         if (d === null) continue;
         console.log(`[弹幕诊断] comment(${via}) ${via === 'url' ? url : episode.episodeId} (${platOf(pool[tries].animeTitle) || '?'}) 《${pool[tries].animeTitle}》 ${why} → ${d.length} 条 (${Date.now() - _c0}ms)`);
         // _tier 供端点分级缓存:包含档、以及按 id 取到的(可能串到别的剧)都不给长缓存、不进持久层
-        if (d.length) { d._tier = (via === 'url' && !transient) ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; return d; }
+        // _src:实际取到这份弹幕的候选的平台(前面的候选失败、后面顶上时也跟着变);按 id 取的可能串到别的剧,不算数
+        if (d.length) { d._tier = (via === 'url' && !transient) ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; else d._src = danmakuSourceOf(episode); return d; }
     }
     return [];
 }
@@ -1374,7 +1391,7 @@ app.get('/api/danmaku/v3/', async (req, res) => {
 
     const cached = danmakuCache.get(cacheKey);
     // 低置信结果命中短缓存时也只给 10 分钟(旧版这里一律给 7 天,包含档的错弹幕会被 CDN/浏览器固化)
-    if (cached && cached.expiry > Date.now()) { if (cached.data.length && !cached.viaId) res.set('Cache-Control', cached.lowConf ? 'public, max-age=600, s-maxage=600' : LONG_CACHE); return res.json({ code: 0, version: 3, data: cached.data, msg: '' }); }
+    if (cached && cached.expiry > Date.now()) { if (cached.data.length && !cached.viaId) res.set('Cache-Control', cached.lowConf ? 'public, max-age=600, s-maxage=600' : LONG_CACHE); return res.json({ code: 0, version: 3, src: cached.src || '', data: cached.data, msg: '' }); }
     if (!danmakuBudgetOk()) return res.json(empty);
 
     try {
@@ -1415,12 +1432,14 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         // 包含档(杂牌名字沾边)结果置信低:只缓存 10 分钟,不给 7 天长缓存(错了也只错一阵)
         const lowConf = !!(data && data.length && (data._tier ?? 9) >= 2);
         const viaId = !!(data && data._viaId);   // 按 id 取的(多实例上可能是别的剧):no-store、只在内存放 90 秒
+        // 🏷️ 平台来源:要在下面采样(换数组)之前读;低置信 / 按 id 的可能根本不是这部剧,来源不作数
+        const src = (data && data.length && !lowConf && !viaId) ? String(data._src || '') : '';
         data.sort((a, b) => a[0] - b[0]); // 先按时间升序，保证下面按索引均匀采样=按时间均匀采样(后半段不丢)
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
-        danmakuCache.set(cacheKey, { data, lowConf, viaId, expiry: Date.now() + (data.length && !viaId ? (lowConf ? 10 * 60 * 1000 : DANMAKU_CACHE_TTL) : DANMAKU_MISS_TTL) });
+        danmakuCache.set(cacheKey, { data, lowConf, viaId, src, expiry: Date.now() + (data.length && !viaId ? (lowConf ? 10 * 60 * 1000 : DANMAKU_CACHE_TTL) : DANMAKU_MISS_TTL) });
         if (data.length && !viaId) res.set('Cache-Control', lowConf ? 'public, max-age=600, s-maxage=600' : LONG_CACHE);
-        return res.json({ code: 0, version: 3, data, msg: '' });
+        return res.json({ code: 0, version: 3, src, data, msg: '' });
     } catch (e) {
         console.error('[弹幕] 获取失败:', e.message);
         return res.json(empty);

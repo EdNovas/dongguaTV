@@ -3163,6 +3163,21 @@ function danmakuParseId(id) {
     const cacheKey = title + '|' + ep + (k ? '|k:' + k : '') + (hints.year ? '|y:' + hints.year : '') + qd;
     return { title, ep, hints, cacheKey };
 }
+// 🏷️ 这一集弹幕的平台来源(两后端共用,纯函数):前端只对芒果(imgo)做按集自动校正 —— 芒果弹幕的时间轴和多数线路过 Worker 后一致,腾讯等不一致
+//   (见 index.html <dg-dm-auto-core>)。集条目形如 { episodeTitle:'【imgo】 第1集', url:'https://www.mgtv.com/…' }。
+//   取弹幕用的是地址,所以先认地址、再认标签;两边说的不是一个平台(合并源之类)一律当不确定('')。标签要在集名最前面,片名里的 【】 不算。
+const DANMAKU_SRC_HOSTS = [[/(^|\.)mgtv\.com$/, 'imgo'], [/(^|\.)qq\.com$/, 'qq'], [/(^|\.)iqiyi\.com$/, 'qiyi'], [/(^|\.)youku\.com$/, 'youku'], [/(^|\.)(bilibili\.com|b23\.tv)$/, 'bilibili'], [/(^|\.)miguvideo\.com$/, 'migu'], [/(^|\.)sohu\.com$/, 'sohu'], [/(^|\.)le\.com$/, 'leshi'], [/(^|\.)ixigua\.com$/, 'xigua']];
+function danmakuSourceOf(episode) {
+    const e = episode || {};
+    const m = String(e.episodeTitle || '').match(/^\s*【([a-z0-9_]{1,16})】/i);
+    const tag = m ? m[1].toLowerCase() : '';
+    let host = '';
+    try { host = new URL(String(e.url || '')).hostname.toLowerCase(); } catch (err) { }
+    const hit = host ? DANMAKU_SRC_HOSTS.find(x => x[0].test(host)) : null;
+    const byHost = hit ? hit[1] : '';
+    if (byHost && tag && !tag.startsWith(byHost)) return '';
+    return byHost || tag;
+}
 // ⛔ 以下联网(非纯函数),scripts/danmaku-match-test.mjs 抽取的纯函数区到此为止
 // 腾讯选集接口一页。同一页全站共享:并发只打一次、固定 5s 超时(不随调用方剩余时间缩短,慢页照样落进缓存给后来的人用)。
 //   成功缓存 30 分钟;过期或要求更新(maxAge)时重拉,重拉失败继续用旧的(6 小时内;1 分钟内不再重试);没成功过的失败只记 30 秒。
@@ -3372,6 +3387,7 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
             if (!d.length) return danmakuVetoed();
             d._tier = Math.min(bestTier, 1);
             d._oracle = true;
+            d._src = danmakuSourceOf({ url });
             return d;
         } catch (e) {
             const st = e.response && e.response.status;
@@ -3432,7 +3448,8 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
         if (d === null) continue;
         console.log(`[弹幕诊断] comment(${via}) ${via === 'url' ? url : episode.episodeId} (${platOf(pool[tries].animeTitle) || '?'}) 《${pool[tries].animeTitle}》 ${why} → ${d.length} 条 (${Date.now() - _c0}ms)`);
         // _tier 供端点分级缓存:包含档、以及按 id 取到的(可能串到别的剧)都不给长缓存、不进持久层
-        if (d.length) { d._tier = (via === 'url' && !transient) ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; return d; }
+        // _src:实际取到这份弹幕的候选的平台(前面的候选失败、后面顶上时也跟着变);按 id 取的可能串到别的剧,不算数
+        if (d.length) { d._tier = (via === 'url' && !transient) ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; else d._src = danmakuSourceOf(episode); return d; }
     }
     return [];
 }
@@ -3458,21 +3475,24 @@ app.get('/api/danmaku/v3/', async (req, res) => {
     //    重抓拿到空/低置信不覆盖旧的(上游瞬时空不能冲掉好弹幕),一小时内不再重试这一集。
     const hit = danmakuStore.get(storeKey);
     if (hit) {
-        if (!hit.fresh && danmakuStore.refreshAllowed(storeKey) && danmakuBudgetOk()) {
+        // 🏷️ 老条目(加来源字段之前存的,没有 src):弹幕照常回,前端按未知来源、不校正。不作废,只是把下一次后台重抓提前,抓到才替换,抓不到还用旧的;
+        //    这期间只给 10 分钟缓存头,免得 CDN / 浏览器把"没来源"的版本再钉 7 天。提前重抓限速,不挤占前台回源配额(见 danmakuUpgradeOk)
+        const upgrade = hit.fresh && !hit.hasSrc;
+        if ((!hit.fresh || upgrade) && danmakuStore.refreshAllowed(storeKey) && (!upgrade || danmakuUpgradeOk()) && danmakuBudgetOk()) {
             danmakuStore.once('bg|' + storeKey, async () => {
                 const r = await fetchDanmakuFresh(title, ep, hints);
-                if (r.data.length && !r.lowConf && !r.viaId) danmakuStore.put(storeKey, r.data);
+                if (r.data.length && !r.lowConf && !r.viaId) danmakuStore.put(storeKey, r.data, r.src);
                 else danmakuStore.refreshFailed(storeKey);
             }).catch(() => danmakuStore.refreshFailed(storeKey));
         }
-        res.set('Cache-Control', LONG_CACHE);
+        res.set('Cache-Control', hit.hasSrc ? LONG_CACHE : 'public, max-age=600, s-maxage=600');
         return res.type('application/json').send(hit.json);
     }
     // ② 空 / 低置信结果的短期内存缓存(不落盘):低置信只给 CDN 10 分钟,空的 no-store
     const cached = danmakuCache.get(cacheKey);
     if (cached && cached.expiry > Date.now()) {
         if (cached.data.length && !cached.viaId) res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
-        return res.json({ code: 0, version: 3, data: cached.data, msg: '' });
+        return res.json({ code: 0, version: 3, src: cached.src || '', data: cached.data, msg: '' });
     }
     if (!danmakuBudgetOk()) return res.json(empty);
 
@@ -3480,10 +3500,10 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         // ③ 回源:同一集同时只打一次 danmu_api(热剧新集刚出,几十人同时点开也只抓一次)
         const out = await danmakuStore.once(storeKey, async () => {
             const r = await fetchDanmakuFresh(title, ep, hints);
-            if (r.data.length && !r.lowConf && !r.viaId) return { json: danmakuStore.put(storeKey, r.data), long: true };
+            if (r.data.length && !r.lowConf && !r.viaId) return { json: danmakuStore.put(storeKey, r.data, r.src), long: true };
             if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
-            danmakuCache.set(cacheKey, { data: r.data, lowConf: r.lowConf, viaId: r.viaId, expiry: Date.now() + (r.data.length && !r.viaId ? DANMAKU_LOWCONF_TTL : DANMAKU_MISS_TTL) });
-            return { json: danmakuStore.toJson(r.data), long: false, n: r.viaId ? 0 : r.data.length };
+            danmakuCache.set(cacheKey, { data: r.data, lowConf: r.lowConf, viaId: r.viaId, src: r.src, expiry: Date.now() + (r.data.length && !r.viaId ? DANMAKU_LOWCONF_TTL : DANMAKU_MISS_TTL) });
+            return { json: danmakuStore.toJson(r.data, r.src), long: false, n: r.viaId ? 0 : r.data.length };
         });
         if (out.long) res.set('Cache-Control', LONG_CACHE);
         else if (out.n) res.set('Cache-Control', 'public, max-age=600, s-maxage=600');
@@ -3539,11 +3559,22 @@ async function fetchDanmakuFresh(title, ep, hints) {
     // 不再被 7 天 LONG_CACHE 固化(对抗审查实锤:史莱姆事故的错弹幕曾三层缓存一周)。
     const lowConf = !!(data && data.length && (data._tier ?? 9) >= 2);
     const viaId = !!(data && data._viaId);   // 按 id 取的(多实例上可能是别的剧):端点一律 no-store、只在内存放 90 秒
+    // 🏷️ 平台来源:要在下面采样(换数组)之前读;低置信 / 按 id 的可能根本不是这部剧,来源不作数
+    const src = (data && data.length && !lowConf && !viaId) ? String(data._src || '') : '';
     // 上游不保证按时间排序：先按时间[0]升序，确保下面"按索引均匀采样"=="按时间均匀采样"(后半段不丢)
     data.sort((a, b) => a[0] - b[0]);
     // 热门剧单集可达 1.5w+ 条(payload~1.5MB)：按时间均匀采样到上限，控制体积与前端渲染压力
     if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
-    return { data, lowConf, viaId };
+    return { data, lowConf, viaId, src };
+}
+// 🏷️ 老条目补来源的提前重抓:每分钟最多 30 集。全站回源配额(danmakuBudgetOk,300 次/分钟)用完前台新集会直接拿到空弹幕,发版后第一波不能把它吃光
+let danmakuUpgWinStart = 0, danmakuUpgWinCount = 0;
+function danmakuUpgradeOk() {
+    const now = Date.now();
+    if (now - danmakuUpgWinStart > 60000) { danmakuUpgWinStart = now; danmakuUpgWinCount = 0; }
+    if (danmakuUpgWinCount >= 30) return false;
+    danmakuUpgWinCount++;
+    return true;
 }
 // 借来的弹幕只读：DPlayer 发送弹幕会 POST 到此，直接成功返回不持久化(避免报错)
 app.post('/api/danmaku/v3/', (req, res) => res.json({ code: 0, msg: '' }));
