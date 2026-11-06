@@ -672,6 +672,8 @@ function danmakuAirDated(title, ep, hints) {
     return !!danmakuAirDateTarget(ep, py);
 }
 const danmakuVetoed = () => Object.assign([], { _veto: true });
+// 这一次没取到是因为出错 / 超时(不是真没有):端点据此告诉前端"弹幕源没响应",而不是"本集暂无弹幕"
+const danmakuFailed = () => Object.assign([], { _fail: true });
 // 候选里这部剧的腾讯 cid:优先腾讯自己的候选(from tencent),否则取各候选腾讯地址里最常见的
 function danmakuPoolQqCid(pool) {
     const cnt = new Map();
@@ -1321,7 +1323,14 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
     // 前面的候选取弹幕【瞬时失败】(超时/限流/5xx)后由后面的候选顶上:多半是弹幕少得多的别的平台(实测腾讯 4 万条超时 → aiyifan 309 条),
     //   照常长缓存 7 天就一直是那几百条 → 这种结果降为低置信(只短缓存),过会儿重抓能拿到正主的
     let transient = false;
+    // ⏱️ 取弹幕的超时:优酷弹幕是 danmu_api 现抓的(一集分好几段翻页,它自己不缓存),实测《嫁金钗》一集 1.8 万条单抓 19~23 秒、
+    //    两个实例同时抓同一集 32~33 秒、同时抓几集 21~38 秒。旧的一律 12 秒 → 每次都超时拿到空,空的又不进缓存,这部剧哪一集都没弹幕(2026-11 用户反馈)。
+    //    VPS 一次最多等 55 秒,这个实例的几个候选合起来 60 秒封顶;前端不干等:端点到点先回"还在加载",抓完存进缓存,前端过两秒再要。
+    //    Vercel 函数 10 秒封顶,照旧 12 秒。
+    const cEnd = Date.now() + 60000;
+    const cWait = () => process.env.VERCEL ? 12000 : Math.min(55000, cEnd - Date.now());
     for (let tries = 0; tries < pool.length && tries < 3; tries++) {
+        if (cWait() < 5000) { transient = true; break; }
         const episode = pickDanmakuEpisode(pool[tries].episodes, ep, preferYear);
         if (!episode || (!episode.episodeId && !episode.url)) continue;
         const _c0 = Date.now();
@@ -1337,7 +1346,7 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
         // "这个 danmu_api 不认 ?url="的时间见上面 urlUnsupported;1 小时后再试一次(站长升级了 danmu_api 不用重启本站)
         if (url && !urlUnsupported()) {
             try {
-                const cr = await axios.get(`${base}${prefix}/api/v2/comment`, { params: { url, chConvert: '0', format: 'json' }, timeout: 12000 });
+                const cr = await axios.get(`${base}${prefix}/api/v2/comment`, { params: { url, chConvert: '0', format: 'json' }, timeout: cWait() });
                 if (!cr.data || !Array.isArray(cr.data.comments)) throw new Error('bad body');
                 d = dandanToDplayer(cr.data.comments);
                 via = 'url';
@@ -1349,7 +1358,7 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
                 const body = e.response && e.response.data;
                 if (st === 404 || (st === 400 && /missing|commentid|url/i.test(JSON.stringify(body || '')))) danmakuUrlMode.set(base, Date.now());
                 if (st === 429) danmakuWarnRateLimited(base);
-                console.warn(`[弹幕诊断] comment?url 失败: ${e.code || ''} ${st ? 'HTTP' + st : e.message} (${Date.now() - _c0}ms)`);
+                console.warn(`[弹幕诊断] comment?url(${platOf(pool[tries].animeTitle) || '?'}) 失败: ${e.code || ''} ${st ? 'HTTP' + st : e.message} (${Date.now() - _c0}ms)`);
                 if (!urlUnsupported()) { transient = true; continue; }
             }
         }
@@ -1358,7 +1367,7 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
         const idAllowed = urlUnsupported() || (!url && singleInstance);
         if (d === null && episode.episodeId && idAllowed) {
             try {
-                const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: 12000 });
+                const cr = await axios.get(`${base}${prefix}/api/v2/comment/${episode.episodeId}`, { params: { withRelated: 'true', chConvert: '0' }, timeout: cWait() });
                 d = dandanToDplayer((cr.data && cr.data.comments) || []);
                 via = 'id';
             } catch (e) {
@@ -1373,7 +1382,7 @@ async function fetchDanmakuFromInstance(base, token, title, ep, hints) {
         // _src:实际取到这份弹幕的候选的平台(前面的候选失败、后面顶上时也跟着变);按 id 取的可能串到别的剧,不算数
         if (d.length) { d._tier = (via === 'url' && !transient) ? bestTier : Math.max(bestTier, 2); if (via === 'id') d._viaId = true; else d._src = danmakuSourceOf(episode); return d; }
     }
-    return [];
+    return transient ? danmakuFailed() : [];
 }
 app.get('/api/danmaku/v3/', async (req, res) => {
     const empty = { code: 0, version: 3, data: [], msg: '' };
@@ -1391,8 +1400,9 @@ app.get('/api/danmaku/v3/', async (req, res) => {
 
     const cached = danmakuCache.get(cacheKey);
     // 低置信结果命中短缓存时也只给 10 分钟(旧版这里一律给 7 天,包含档的错弹幕会被 CDN/浏览器固化)
-    if (cached && cached.expiry > Date.now()) { if (cached.data.length && !cached.viaId) res.set('Cache-Control', cached.lowConf ? 'public, max-age=600, s-maxage=600' : LONG_CACHE); return res.json({ code: 0, version: 3, src: cached.src || '', data: cached.data, msg: '' }); }
-    if (!danmakuBudgetOk()) return res.json(empty);
+    // 空结果带上原因(why),前端据此提示:fail = 弹幕源出错 / 超时,busy = 回源配额用完;没有 why = 真没有(与 server.js 同口径)
+    if (cached && cached.expiry > Date.now()) { if (cached.data.length && !cached.viaId) res.set('Cache-Control', cached.lowConf ? 'public, max-age=600, s-maxage=600' : LONG_CACHE); return res.json(Object.assign({ code: 0, version: 3, src: cached.src || '', data: cached.data, msg: '' }, cached.fail && !cached.data.length ? { why: 'fail' } : {})); }
+    if (!danmakuBudgetOk()) return res.json(Object.assign({}, empty, { why: 'busy' }));
 
     try {
         // 多源回退：DANMU_API_URL 逗号分隔多个实例(不同出口IP绕开限流)；DANMU_API_TOKEN 逗号分隔配对或单 token 共用
@@ -1404,11 +1414,12 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         const dated = danmakuAirDated(title, ep, hints);
         const raceInstances = () => new Promise(resolve => {
             if (!instances.length) return resolve([]);
-            let pending = instances.length, held = null, timer = null, done = false, veto = false;
+            let pending = instances.length, held = null, timer = null, done = false, veto = false, fail = false;
             const finish = v => { if (done) return; done = true; if (timer) clearTimeout(timer); resolve(v); };
             for (const inst of instances) {
                 fetchDanmakuFromInstance(inst.base, inst.token, title, ep, hints)
                     .then(d => {
+                        if (d && d._fail) fail = true;
                         const v = danmakuRaceVerdict(d, dated);
                         if (v === 'veto') veto = true;
                         else if (v === 'finish') finish(d);
@@ -1419,16 +1430,19 @@ app.get('/api/danmaku/v3/', async (req, res) => {
                         }
                         else if (v === 'hold' && !held) { held = d; timer = setTimeout(() => finish(held), 1500); }
                     })
-                    .catch(() => { })
-                    .finally(() => { if (--pending === 0) finish(veto ? danmakuVetoed() : (held || [])); });
+                    .catch(() => { fail = true; })
+                    .finally(() => { if (--pending === 0) finish(veto ? danmakuVetoed() : (held || (fail ? danmakuFailed() : []))); });
             }
         });
+        const t0 = Date.now();
         let data = await raceInstances();
         // 全部实例空 → 多为上游限流瞬时空：等 3s 再赛一轮(Vercel 有 10s 函数上限，谨慎;搜索级空快照已不缓存,重试是真重试)
-        if (!data.length && !data._veto && instances.length) {
+        //   只在第一轮【很快】就空了时重试:超时 / 慢平台没抓完的,马上再抓一样慢(与 server.js 同)
+        if (!data.length && !data._veto && instances.length && Date.now() - t0 < 15000) {
             await new Promise(r => setTimeout(r, 3000));
             data = await raceInstances();
         }
+        const fail = !data.length && !!data._fail;
         // 包含档(杂牌名字沾边)结果置信低:只缓存 10 分钟,不给 7 天长缓存(错了也只错一阵)
         const lowConf = !!(data && data.length && (data._tier ?? 9) >= 2);
         const viaId = !!(data && data._viaId);   // 按 id 取的(多实例上可能是别的剧):no-store、只在内存放 90 秒
@@ -1437,9 +1451,9 @@ app.get('/api/danmaku/v3/', async (req, res) => {
         data.sort((a, b) => a[0] - b[0]); // 先按时间升序，保证下面按索引均匀采样=按时间均匀采样(后半段不丢)
         if (data.length > DANMAKU_MAX) { const step = data.length / DANMAKU_MAX, s = []; for (let i = 0; i < DANMAKU_MAX; i++) s.push(data[Math.floor(i * step)]); data = s; }
         if (danmakuCache.size >= DANMAKU_CACHE_MAX) { const k = danmakuCache.keys().next().value; if (k !== undefined) danmakuCache.delete(k); }
-        danmakuCache.set(cacheKey, { data, lowConf, viaId, src, expiry: Date.now() + (data.length && !viaId ? (lowConf ? 10 * 60 * 1000 : DANMAKU_CACHE_TTL) : DANMAKU_MISS_TTL) });
+        danmakuCache.set(cacheKey, { data, lowConf, viaId, src, fail, expiry: Date.now() + (data.length && !viaId ? (lowConf ? 10 * 60 * 1000 : DANMAKU_CACHE_TTL) : DANMAKU_MISS_TTL) });
         if (data.length && !viaId) res.set('Cache-Control', lowConf ? 'public, max-age=600, s-maxage=600' : LONG_CACHE);
-        return res.json({ code: 0, version: 3, src, data, msg: '' });
+        return res.json(Object.assign({ code: 0, version: 3, src, data, msg: '' }, fail ? { why: 'fail' } : {}));
     } catch (e) {
         console.error('[弹幕] 获取失败:', e.message);
         return res.json(empty);

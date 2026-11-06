@@ -33,7 +33,10 @@
 // v40: 升版只为让 install 重新预缓存 './' 与 './index.html'(v39 之后 index.html 改过多次没升版;总在 ?play= 深链上刷新的 iPad 一直启动旧外壳)。
 //      这一版页面:iOS 长时间后台回来的恢复(剪后清单重交/重接、原生扫描网络重试、覆盖层重排 + 首页隐藏)、播放页开着时新 SW 推迟刷新。
 // v41: ad-clip-core v7(短剧放宽占比上限;计划缓存随版本作废)。
-const CACHE_VERSION = 'v41';
+// v42: 弹幕 /api/danmaku/ 一律直达不缓存。策略4 把空弹幕(服务器发的是 no-store,Cache API 不认)也存了,之后再开这一集,
+//      服务器 4 秒内没回(慢平台现抓要几十秒)就回这份旧的空弹幕 —— 服务器早抓到了也看不到(《嫁金钗》实锤)。
+//      弹幕自带 HTTP 缓存头(非空 7 天、空 no-store),交给浏览器缓存;升版顺带清掉旧缓存里存着的空弹幕。
+const CACHE_VERSION = 'v42';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -116,6 +119,8 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/kz/')) return;
     // ⑤ 站点测速 /api/check:探测结果不能被策略4缓存、在 4s 竞速/断网时陈旧回放(会吞掉 transient、把超时写成 12h 死亡记录)(v32)
     if (url.origin === self.location.origin && url.pathname === '/api/check') return;
+    // ⑤b 弹幕 /api/danmaku/:空的(no-store)不能存、更不能在 4s 竞速里回放;非空的浏览器按 7 天缓存头自己存(v42)
+    if (url.origin === self.location.origin && url.pathname.startsWith('/api/danmaku/')) return;
     // ⑥ sw.js 自己(含 ?check= 之类的探测):永远直达服务器,绝不进缓存(v33)
     if (url.origin === self.location.origin && url.pathname === '/sw.js') return;
     // ⑦ 剪掉插播后的清单托管 /api/hls/cut/<id>.m3u8:一次性地址,直达服务器(v34)
