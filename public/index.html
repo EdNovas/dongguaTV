@@ -404,6 +404,11 @@
             font-size: var(--dm-fontsize, 22px) !important;
             font-family: var(--dm-fontfamily, inherit) !important;
         }
+        /* 🗨️ 不显示 DPlayer 的"弹幕加载中":它在画面正中间、带 5 秒一抖的动画,慢平台(优酷)一等几十秒,一直挡着画面(用户反馈)。
+           弹幕在后台抓,到了直接飘;最后是空的会在左上角提示一句原因(见 dmEmptyNotice)。 */
+        #dplayer .dplayer-danloading {
+            display: none !important;
+        }
         /* 字体选择子列表(点"字体"行展开，每项用各自字体显示) */
         #dplayer .dm-font-list {
             display: none;
@@ -7087,6 +7092,13 @@
         // 日期式集名(综艺按播出日期命名):要等视频时长才请求弹幕(见 _dmBackend.read)。须覆盖服务器 danmakuMarkers 认作日期的所有写法
         //   (scripts/danmaku-match-test.mjs 用真实集名校验);多认几个只是晚一两秒发请求,不碍事。
         const _dmDatedRe = /(?:^|\D)(?:19|20)\d{6}(?!\d)|\d{4}\s*[-./年]\s*\d{1,2}|(?:^|\D)\d{6}(?!\d)|(?:^|\D)\d{4}\s*期|\d{1,2}\s*月\s*\d{1,2}/;
+        // 🗨️ 这一集弹幕最后是空的:左上角说一声为什么(以前"弹幕加载中"一闪就没了,看不出是没有还是没取到)。关着弹幕时不说
+        const dmEmptyNotice = (why) => {
+            try {
+                if (typeof dp === 'undefined' || !dp || !dp.danmaku || !dp.danmaku.showing || typeof dp.notice !== 'function') return;
+                dp.notice(why === 'fail' ? '弹幕源暂时没响应，稍后重开本集再试' : why === 'busy' ? '弹幕服务繁忙，稍后重开本集再试' : '本集暂无弹幕', 3000);
+            } catch (e) { }
+        };
         const _dmBackend = {
             want: null,
             seq: 0,       // 每次 read 递增,只有最新的那次可以在等时长
@@ -7097,7 +7109,7 @@
             read(o) {
                 const m = /[?&]id=([^&]*)/.exec(o.url || '');
                 const id = m ? m[1] : '';
-                const seq = ++_dmBackend.seq;
+                const seq = ++_dmBackend.seq, born = Date.now();
                 // 已换剧/换集/进直播(want 变了),或之后又重载过弹幕(有更新的一次 read)→ 晚到的旧弹幕不要
                 const stale = () => id !== _dmBackend.want || seq !== _dmBackend.seq;
                 const go = url => fetch(url, { credentials: 'same-origin' })
@@ -7105,11 +7117,16 @@
                     .then(d => {
                         if (stale()) return;
                         if (d && d.code === 0) {
+                            const list = d.data || [];
+                            // ⏳ 服务器还在抓(优酷等慢平台一集现抓 20~40 秒,端点前台最多等 45 秒,到点回 pending):两秒后再要一次 ——
+                            //    服务器那边这一集的抓取接着在跑,再要会合并进去,不重复回源。最多等 3 分钟,等不到按"弹幕源没响应"
+                            if (d.pending && !list.length && Date.now() - born < 180e3) { setTimeout(() => { if (!stale()) go(url); }, 2000); return; }
                             _dmBackend.src = { id, v: dmAutoSrcOf(d) };
-                            if (o.success) o.success((d.data || []).map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] })));
+                            if (o.success) o.success(list.map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] })));
                             // 列表晚到时 DPlayer 的读指针还在 0:下一帧会把"弹幕时间之前"的弹幕一口气全画出来(实测开海量一帧 8 秒)→ 对到当前弹幕时间(见 dmAlignAfterLoad)
                             try { if (typeof dp !== 'undefined') dmAlignAfterLoad(dp); } catch (e) { }
                             try { dmAuto.wake(); } catch (e) { }   // 列表比等待期还晚到:再看一眼要不要自动校正
+                            if (!list.length) dmEmptyNotice(d.pending ? 'fail' : d.why);
                         }
                         else if (o.error) o.error(d && d.msg);
                     })
