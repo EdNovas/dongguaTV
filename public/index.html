@@ -57,6 +57,38 @@
         })();
     </script>
 
+    <!-- 📱 iOS 状态栏兜底:页面盖住了整屏高(画进了状态栏那一行)时,把状态栏高度写到 html 的 --dg-sb-guard,贴顶的按钮(.close-btn)据此往下让。
+         正常情况下 env(safe-area-inset-top) 已经报了这个高度;这里只防"画进去了、env() 却是 0"的情况(请求桌面网站 / 各版本 iOS 的怪行为)。
+         只认 iOS(桌面网站模式 UA 是 Macintosh,靠触点数认),只写 CSS 变量不碰 Vue 状态 -->
+    <script>
+        (function () {
+            try {
+                var ua = navigator.userAgent || '';
+                if (!(/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1))) return;
+                var last = -1, raf = 0;
+                function update() {
+                    raf = 0;
+                    var sw = screen.width || 0, sh = screen.height || 0, longSide = Math.max(sw, sh), shortSide = Math.min(sw, sh);
+                    if (!longSide) return;
+                    var portrait = window.innerWidth <= window.innerHeight;
+                    var phone = shortSide < 600;
+                    // iOS 的 screen.width/height 不随转屏变;iPhone(刘海 / 灵动岛)横屏不显示状态栏
+                    var full = portrait ? longSide : shortSide;
+                    var covers = (portrait || !phone) && window.innerHeight >= full - 2;
+                    var g = covers ? (phone ? 54 : 24) : 0;
+                    if (g === last) return;
+                    last = g;
+                    document.documentElement.style.setProperty('--dg-sb-guard', g + 'px');
+                }
+                function schedule() { if (!raf) raf = requestAnimationFrame(update); }
+                update();
+                window.addEventListener('resize', schedule, { passive: true });
+                window.addEventListener('orientationchange', function () { setTimeout(update, 300); }, { passive: true });
+                window.addEventListener('pageshow', schedule, { passive: true });
+            } catch (e) { }
+        })();
+    </script>
+
 
     <!-- 性能优化：DNS 预解析和预连接 -->
     <link rel="dns-prefetch" href="//api.themoviedb.org">
@@ -3313,11 +3345,31 @@
             transform: rotate(90deg);
         }
 
+        /* 📱 iOS 状态栏:主屏 App(black-translucent + viewport-fit=cover)这类页面从屏幕最顶上画起的环境里,top:25px 正好落在
+           状态栏 / 灵动岛那一行 —— 那一行的点按被 iOS 拿去做"回到顶部",按钮看得见却点不到。往下让开 safe-area;
+           --dg-sb-guard 是页头脚本量出的兜底(页面盖住了整屏高、env() 却报 0 时)。安卓 / 桌面 / 普通 Safari 竖屏 env() 和兜底都是 0,
+           max() 取回原来的 25px / 30px,样式不变。包在 @supports 里:不认 max() 的老 TV WebView 遇到带 var() 的声明不会回退到上面那条,
+           而是算成 top:auto,按钮会跑位 */
+        @supports (top: max(1px, 2px)) {
+            .close-btn {
+                top: max(25px, calc(env(safe-area-inset-top, 0px) + 12px), calc(var(--dg-sb-guard, 0px) + 12px));
+                right: max(30px, calc(env(safe-area-inset-right, 0px) + 12px));
+            }
+        }
+
         /* 布局容器 */
         .player-layout {
             max-width: 1200px;
             margin: 0 auto;
             padding: 90px 4% 50px;
+        }
+
+        /* 📱 关闭按钮让开状态栏后,标题区跟着让同样多(原来 90px = 按钮底 69px + 21px 间隔),否则长片名第一行钻到按钮底下。
+           env() 和兜底都是 0 时 max() 取回 90px。必须写在上面那条 padding 简写之后 */
+        @supports (top: max(1px, 2px)) {
+            .player-layout {
+                padding-top: max(90px, calc(env(safe-area-inset-top, 0px) + 66px), calc(var(--dg-sb-guard, 0px) + 66px));
+            }
         }
 
         /* 视频区域 */
