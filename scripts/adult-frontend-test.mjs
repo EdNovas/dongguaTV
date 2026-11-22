@@ -1134,7 +1134,7 @@ console.log('⑦ phase 3:分面浏览 / 筛选面板 / 标签云 / 标签页 / �
         '标签页:按分类细分(去掉 0 和非导航桶)、相关标签只要 featured(审查类 / blocked / 自己都去掉)', ti);
     const tr = A.normTagInfo({ tag: { id: 'noncon', label: '强制凌辱' }, related: [{ id: 'heels', label: '高跟鞋' }] });
     ok(tr && tr.tag.review === true && eq(tr.related, []) && A.normTagInfo({ tag: { id: 'x_minor', label: 'x' } }) === null && A.normTagInfo(null) === null, '审查类标签页:没有相关标签;blocked → null(当 404)');
-    ok(eq(A.normActress({ actress: { aid: 'a:7', name: '合成女优丁', aliases: ['合成别名', '合成女优丁', '', '合成别名'] } }), { aid: 'a:7', name: '合成女优丁', aliases: ['合成别名'] }) && A.normActress({ actress: { aid: '..', name: 'x' } }) === null, 'normActress');
+    ok(eq(A.normActress({ actress: { aid: 'a:7', name: '合成女优丁', aliases: ['合成别名', '合成女优丁', '', '合成别名'] } }), { aid: 'a:7', name: '合成女优丁', aliases: ['合成别名'], latest: '' }) && A.normActress({ actress: { aid: '..', name: 'x' } }) === null, 'normActress');
     ok(eq(A.normActressList([{ aid: 'a:1', name: '合成甲', n: 30 }, { aid: 'a:1', name: '重复' }, { aid: 'x y', name: 'z' }]), [{ aid: 'a:1', name: '合成甲', n: 30 }]) && eq(A.normActressList(null), []), 'normActressList(≤10)');
     ok(eq(A.normStudios([{ id: 'S1', label: 'S1', count: 40 }, { id: '', label: 'x' }, { id: 'S1' }]), [{ id: 'S1', label: 'S1', count: 40 }]), 'normStudios');
     // AVDB 的 aid 是整数(行号):facets / 信息条 / 女优页 / 搜索都转成字符串;0、负数、小数不认
@@ -1348,6 +1348,23 @@ function C2() { return A.catalog; }
     appS._adOnPop();
     ok(closedByPop === 1 && nav3.loc.hash === '#/c/jp?b=jp_censored&t=busty&dur=unk&v=zh' && !appS._adSheetHist, '手机返回键:关面板(不关浏览页),筛选保留并压成新的一条', nav3.ops.slice(-3));
     ok(appS.adOpenSheet() === true && makeApp().adOpenSheet() === false, '顶上摘要条的「筛选」:有面板就直接打开面板,没有就照旧回到顶部');
+    // 复核 r3:无痕时浏览路由(分类 / 标签 / 女优 / 厂牌)用 replaceState,不往浏览器历史里压
+    const nav4 = fakeNav('');
+    globalThis.location = nav4.loc; globalThis.history = nav4.hist;
+    const P0 = globalThis.dgPrivacy;
+    globalThis.dgPrivacy = { incognito: () => true };
+    const appI = makeApp();
+    appI._jumpTo = () => { }; appI._browseFill = () => { };
+    appI.adult.routeOn = true;
+    appI.adGo({ sel: { b: 'jp_censored' } });
+    appI._adRouteSync(appI.adRouteHash);
+    appI.adGo({ view: 'tag', id: 'black_stockings' });
+    appI._adRouteSync(appI.adRouteHash);
+    ok(nav4.entries.length === 1 && nav4.loc.hash === '#/tag/black_stockings' && nav4.ops.length === 2 && nav4.ops.every(o => o.startsWith('replace ')), '无痕:浏览路由只替换当前这一条(浏览器历史里不留分类 / 标签页)', nav4.ops);
+    globalThis.dgPrivacy = P0;
+    appI.adGo({ sel: { b: 'jp_subbed' } });
+    appI._adRouteSync(appI.adRouteHash);
+    ok(nav4.entries.length === 2 && nav4.ops[nav4.ops.length - 1].startsWith('push '), '关了无痕:照旧压新历史', nav4.ops);
     globalThis.location = L0; globalThis.history = H0;
 }
 function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', name: '合成女优甲', count: 1 }] }); }
@@ -1428,8 +1445,8 @@ function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', na
     for (const [n, def] of Object.entries(A.components)) {
         try { const fn = vctx.Vue.compile(def.template, { decodeEntities: (x) => x, onError: (e) => cerr.push(n + ': ' + e.message) }); if (typeof fn !== 'function') cerr.push(n + ': no fn'); } catch (e) { cerr.push(n + ': ' + e.message); }
     }
-    ok(Object.keys(A.components).length === 4 && !cerr.length, '四个组件(网格 / 筛选 / 页头 / 标签云)的模板都能被 Vue 编译', cerr);
-    ok(A.mixin.components === undefined || eq(Object.keys(A.mixin.components), ['DgAdGrid', 'DgAdFilter', 'DgAdHead', 'DgAdCloud']), 'mixin 注册了这四个组件(index.html 用 <dg-ad-grid> 等)');
+    ok(Object.keys(A.components).length === 6 && !cerr.length, '六个组件(网格 / 筛选 / 页头 / 标签云 / p4 相关推荐 / 女优索引)的模板都能被 Vue 编译', cerr);
+    ok(A.mixin.components === undefined || eq(Object.keys(A.mixin.components), ['DgAdGrid', 'DgAdFilter', 'DgAdHead', 'DgAdCloud', 'DgAdRails', 'DgAdActresses']), 'mixin 注册了这六个组件(index.html 用 <dg-ad-grid> / <dg-ad-rails> / <dg-ad-actresses> 等)');
     // 组件里不用老 WebView 不认的语法(?. / ??)
     const SRCA = fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8');
     ok(!/\?\.[a-zA-Z_$[(]/.test(SRCA.replace(/\/\/[^\n]*/g, '')) && !/[^?]\?\?[^?]/.test(SRCA.replace(/\/\/[^\n]*/g, '').replace(/'[^'\n]*'/g, "''")), 'adult.js 不用 ?. / ??(老电视 WebView 解析不了,整个文件会挂)');
@@ -1438,12 +1455,12 @@ function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', na
     // ---- 模板接线 ----
     ok(/if \(this\.adultMode && typeof this\._adBrowseFetch === 'function'\) return this\._adBrowseFetch\(reset\);/.test(HTML), '_browseFetch 在成人站交给 _adBrowseFetch(游标 + facets)');
     ok(/b\.items\.length >= \(this\.adultMode \? 10000 : 600\)/.test(HTML), 'browseMore:成人站不按 600 张封顶');
-    ok(/<dg-ad-grid v-if="adultMode" v-show="adult\.view !== 'tags'" :items="browse\.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse\.loading" @pick="browsePick"><\/dg-ad-grid>/.test(HTML)
+    ok(/<dg-ad-grid v-if="adultMode" v-show="!adNoList" :items="browse\.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse\.loading" @pick="browsePick"><\/dg-ad-grid>/.test(HTML)
         && /<div class="browse-grid" v-if="!adultMode">/.test(HTML), '浏览页网格:成人站换成窗口化的 <dg-ad-grid>(点卡片照旧 browsePick),主站网格不动');
-    ok(/<dg-ad-cloud v-if="adultMode && adult\.view === 'tags'" :b="browse\.sel\.b \|\| ''" @go="adGo" @learn="adLearned"><\/dg-ad-cloud>/.test(HTML) && /<dg-ad-head v-if="adultMode" :view="adult\.view" :sel="browse\.sel" @go="adGo" @learn="adLearned"><\/dg-ad-head>/.test(HTML),
+    ok(/<dg-ad-cloud v-if="adultMode && adult\.view === 'tags'" :b="browse\.sel\.b \|\| ''" @go="adGo" @learn="adLearned"><\/dg-ad-cloud>/.test(HTML) && /<dg-ad-head v-if="adultMode" :view="adult\.view" :sel="browse\.sel" :total="browse\.total" @go="adGo" @learn="adLearned"><\/dg-ad-head>/.test(HTML),
         '标签云 / 标签页与女优页页头');
     ok(/<h2 class="browse-title">\{\{ adultMode \? adBrowseTitle : browseTitle \}\}<\/h2>/.test(HTML) && /\{\{ adultMode \? adBrowseSummary : browseSummary \}\}/.test(HTML) && /@click="\(adultMode && adOpenSheet\(\)\) \|\| browseToTop\(\)"/.test(HTML), '标题 / 顶上摘要条(点「筛选」直接开面板)');
-    ok(/v-show="!\(adultMode && adult\.view === 'tags'\)"/.test(HTML) && /@click="adOpenTags\(catNavType\)">标签/.test(HTML), '标签云页不出片单底栏;首页分类栏有「标签」入口');
+    ok(/<div class="browse-foot" ref="browseFoot" aria-live="polite" v-show="!adNoList">/.test(HTML) && /@click="adOpenTags\(catNavType\)">标签/.test(HTML), '标签云 / 女优索引页不出片单底栏(adNoList);首页分类栏有「标签」入口');
     ok(/<span v-if="adMeta\.released" class="dg-meta-t dg-meta-rel">/.test(HTML) && /@click="adMetaStudio\(adMeta\.studio\)"/.test(HTML) && /@click="adMetaActress\(a\)"/.test(HTML)
         && /<div v-for="g in adMeta\.tagGroups" :key="'mg-' \+ g\.id" class="dg-meta-tg">/.test(HTML), '信息条:发行日期 / 厂牌 / 女优(进女优页)/ 按分面组排的标签');
     const browseTpl = HTML.slice(HTML.indexOf('<div class="browse-page" v-if="browse.open"'), HTML.indexOf('<div class="browse-sticky"'));
@@ -1458,7 +1475,9 @@ console.log('⑤ 页面接线 / sw.js');
     ok(/<title>DGX<\/title>/.test(head) && !/E视界/.test(headNoComments) && !/E视界/.test(head), '<title> 是站名,head 里不再有主站品牌');
     ok(/<meta name="robots" content="noindex, nofollow, noarchive">/.test(head) && !/og:|twitter:|rel="canonical"|ednovas\.video/.test(head), 'robots noindex;没有 OG / Twitter 卡片 / canonical / 主站域名');
     ok(!/<link rel="(dns-prefetch|preconnect)" href="[^"]*(tmdb|themoviedb)/.test(headNoComments), '不预连接 TMDB');
-    const iAdult = head.indexOf('src="adult/adult.js?v=4"'), iVue = head.indexOf('vue.global.prod.min.js');
+    // ?v= 不钉死:页面引用的版本 = sw.js 预缓存的版本(升版时两处一起改,测试跟着走)
+    const AV = (/src="adult\/adult\.js\?v=(\d+)"/.exec(head) || [])[1] || '';
+    const iAdult = AV ? head.indexOf('src="adult/adult.js?v=' + AV + '"') : -1, iVue = head.indexOf('vue.global.prod.min.js');
     ok(iAdult > 0 && iAdult < iVue && !/src="adult\/adult\.js[^"]*"[^>]*\b(defer|async)\b/.test(head), 'adult.js 在 Vue 之前同步加载');
     const body = HTML.slice(HTML.indexOf('<body>'));
     const iGate = body.indexOf('DgAdult.ageGate.mount()'), iLoader = body.indexOf('id="app-loader"'), iPw = body.indexOf('id="password-screen"');
@@ -1479,7 +1498,7 @@ console.log('⑤ 页面接线 / sw.js');
         '首页行两处 + 浏览页:海报上叠 N线(≥2)/ 时长 / 番号');
     ok(/<span v-if="config\.adult && config\.srcLabel" class="dg-row-src" :title="config\.srcTip">\{\{ config\.srcLabel \}\}<\/span>/.test(HTML), '热门行标题旁的来源角标(本站热门 / 外站热门)');
     ok(/<button v-if="key !== 'randomRow'" v-show="!\(config\.adult && !config\.more\)" type="button" class="expand-toggle row-all"/.test(HTML), '没有 more 的目录行(热门)不给「全部」');
-    ok(/<dg-ad-filter v-if="adultMode && adult\.view !== 'tags'" ref="adFilter" :sel="browse\.sel"[^>]*:legacy="adTagOpts" @go="adGo" @sheet="adSheet"><\/dg-ad-filter>/.test(HTML), '浏览页:标签行 + 排序 + 筛选面板(<dg-ad-filter>,旧服务器的标签列表当后备)');
+    ok(/<dg-ad-filter v-if="adultMode && !adNoList" ref="adFilter" :sel="browse\.sel"[^>]*:legacy="adTagOpts" @go="adGo" @sheet="adSheet"><\/dg-ad-filter>/.test(HTML), '浏览页:标签行 + 排序 + 筛选面板(<dg-ad-filter>,旧服务器的标签列表当后备)');
     ok(/<div class="search-section" @focusout="adultMode && adSugBlur\(\$event\)"/.test(HTML) && /@keydown="adultMode && adSugKey\(\$event\)" @focus="adultMode && adSugFocus\(\)"/.test(HTML)
         && /<div v-if="adultMode && adult\.sug\.open && adSugRows\.length" class="dg-sug"/.test(HTML) && /@mousedown\.prevent @click="adSugPick\(r\)"/.test(HTML), '搜索建议下拉:焦点离开收起、方向键、点行不先失焦');
     ok(/if \(this\.adultMode && typeof this\.adSuggestInput === 'function' && this\.adSuggestInput\(this\.keyword\)\) return;\s*\n\s*if \(!this\.keyword \|\| this\.keyword\.length < 2\)/.test(HTML), 'debouncedSearch 最前面:成人站交给搜索建议(不再自动全站搜)');
@@ -1524,7 +1543,7 @@ console.log('⑤ 页面接线 / sw.js');
     const ver = +((/const CACHE_VERSION = 'v(\d+)'/.exec(SW) || [])[1] || 0), rev = (/const ADULT_REV = '([^']+)'/.exec(SW) || [])[1] || '';
     ok(ver >= 42 && /^-adult\d+$/.test(rev) && ['static', 'images', 'live-img'].every(n => SW.includes("'donggua-" + n + "-' + CACHE_VERSION + ADULT_REV")),
         'sw.js 升版:三个缓存名都带成人站版本(新 SW 重新预缓存、activate 清掉旧缓存)', [ver, rev]);
-    ok(SW.includes("'./adult/adult.js?v=4'"), 'sw.js 预缓存的 adult.js 与页面引用同一个 ?v=');
+    ok(!!AV && +AV >= 4 && SW.includes("'./adult/adult.js?v=" + AV + "'"), 'sw.js 预缓存的 adult.js 与页面引用同一个 ?v=', AV);
     // 真跑 sw.js 的 fetch 处理:哪些请求 SW 接手
     const handlers = {};
     const swCtx = {
@@ -1543,11 +1562,637 @@ console.log('⑤ 页面接线 / sw.js');
     ok(!handled('https://site.test/api/catalog/home') && !handled('https://site.test/api/catalog/browse?b=x&page=1') && !handled('https://site.test/api/detail?site_key=a&id=1') && !handled('https://site.test/api/search?wd=x'), '目录/详情/搜索接口直达不缓存');
     ok(!handled('https://site.test/api/sites') && !handled('https://site.test/api/check?key=a') && !handled('https://site.test/api/catalog/suggest?q=a') && !handled('https://site.test/api/img?k=c%3AA-1&s=s1', 'image'),
         'phase 2:/api/sites、/api/check、/api/catalog/*(含 suggest/tags/beacon)、/api/img 海报代理都直达不缓存');
-    ok(/const ADULT_REV = '-adult4';/.test(SW), 'sw.js 成人站升版到 -adult4(adult.js?v=4 重新预缓存、旧缓存清掉)');
-    ok(handled('https://site.test/adult/adult.js?v=4') && handled('https://site.test/api/config') && handled('https://site.test/', 'document'), '外壳(页面/adult.js)和 /api/config 照旧由 SW 接手');
+    ok(+((/const ADULT_REV = '-adult(\d+)';/.exec(SW) || [])[1] || 0) >= 4, 'sw.js 成人站版本 ≥ -adult4(adult.js 升 ?v= 时一起升,重新预缓存、旧缓存清掉)');
+    ok(handled('https://site.test/adult/adult.js?v=' + AV) && handled('https://site.test/api/config') && handled('https://site.test/', 'document'), '外壳(页面/adult.js)和 /api/config 照旧由 SW 接手');
     ok(!handled('https://site.test/api/catalog/tag/busty') && !handled('https://site.test/api/catalog/actress/a1?page=1') && !handled('https://site.test/api/catalog/actress?q=x') && !handled('https://site.test/api/catalog/studios?b=') && !handled('https://site.test/api/catalog/browse?t=a,b&cursor=xyz&facets=1'),
         'phase 3:标签页 / 女优 / 厂牌 / 游标翻页的目录接口同样直达不缓存');
+    // p4(-adult5):四个扩展模块按页面同一个 ?v= 预缓存;后台页面 / 后台脚本 / 后台接口一律直达;相关 / 短片流 / 热度接口直达
+    const P4MODS = ['player-x', 'privacy', 'preview', 'feed'].map(n => [n, (new RegExp('src="adult/' + n + '\\.js\\?v=(\\d+)"').exec(head) || [])[1] || '']);
+    ok(+((/const ADULT_REV = '-adult(\d+)';/.exec(SW) || [])[1] || 0) >= 5 && P4MODS.every(([n, v]) => !!v && SW.includes("'./adult/" + n + ".js?v=" + v + "'")),
+        'p4:sw.js ≥ -adult5,预缓存 player-x / privacy / preview / feed(与页面同一个 ?v=)', P4MODS);
+    ok(P4MODS.every(([n, v]) => handled('https://site.test/adult/' + n + '.js?v=' + v)), 'p4:四个扩展模块走静态资源策略(SWR)');
+    const swStatic = ((/const STATIC_URLS = \[[\s\S]*?\];/.exec(SW) || [''])[0].match(/'\.\/[^']*'/g) || []);
+    ok(swStatic.length > 10 && !swStatic.some(u => /admin/.test(u)), 'p4:后台 admin.html / admin.js 不预缓存', swStatic);
+    ok(!handled('https://site.test/admin/adult', 'document') && !handled('https://site.test/adult/admin.html', 'document') && !handled('https://site.test/adult/admin.js?v=1')
+        && !handled('https://site.test/api/adult/admin/stats') && !handled('https://site.test/api/adult/admin/hidden'),
+        'p4:后台页面 / 脚本 / 接口(带 X-Admin-Token)一律直达不缓存');
+    ok(!handled('https://site.test/api/catalog/related/' + encodeURIComponent('c:A-1')) && !handled('https://site.test/api/catalog/feed?vert=1&cursor=x') && !handled('https://site.test/api/catalog/heat/' + encodeURIComponent('c:A-1')),
+        'p4:相关推荐 / 刷短片 / 热度条接口直达不缓存');
 }
 
+console.log('⑧ p4:扩展钩子 / 女优索引 / 相关推荐 / 猜你喜欢 / 刷短片 / 搜索结果窗口化 / 预取');
+const P4 = { card: (wk, extra) => Object.assign({ wk, name: '合成 ' + wk, pic: 'https://img.example/' + encodeURIComponent(wk) + '.jpg', sub: '', badge: '', code: '', dur: 120, n_sites: 1, bucket: 'jp_censored' }, extra || {}) };
+function fakeVideo() {
+    const ls = {};
+    return {
+        paused: true, ended: false, currentTime: 0, readyState: 0, videoWidth: 0, videoHeight: 0,
+        addEventListener(t, f) { (ls[t] = ls[t] || []).push(f); }, removeEventListener(t, f) { ls[t] = (ls[t] || []).filter(x => x !== f); },
+        dispatch(t) { (ls[t] || []).slice().forEach(f => f({ type: t })); }, _ls: ls,
+    };
+}
+{
+    // ---- 钩子:赋值 = 追加、重复不加、一个抛错不影响别的、否决、链式包装不递归 ----
+    const Hk = A.hooks;
+    ok(eq(A.HOOK_NAMES, ['onPlayerReady', 'onPlayerDestroy', 'onHistoryWrite', 'onSettingsRender', 'onCardHover']) && A.HOOK_NAMES.every(n => typeof Hk[n] === 'function')
+        && typeof Hk.add === 'function' && typeof Hk.remove === 'function' && typeof Hk.count === 'function', '契约 F 的五个钩子 + add/remove/count');
+    const calls = [];
+    const f1 = (a, b) => { calls.push(['f1', a, b]); };
+    const f2 = () => { calls.push(['f2']); throw new Error('合成错误'); };
+    Hk.onPlayerDestroy = f1; Hk.onPlayerDestroy = f2; Hk.onPlayerDestroy = f1;
+    ok(Hk.count('onPlayerDestroy') === 2, '赋值 = 追加订阅(不顶掉别人的),同一个函数不重复加');
+    const cw0 = console.warn; console.warn = () => { };   // 订阅者故意抛错:adult.js 会 console.warn 一行,测试里静音
+    const r0 = A.hook('onPlayerDestroy', 'close', 9);
+    console.warn = cw0;
+    ok(eq(calls, [['f1', 'close', 9], ['f2']]) && r0 === true, '按订阅顺序调;一个订阅者抛错不影响别的、不往外抛', calls);
+    ok(A.hook('onSettingsRender', {}) === true && A.hook('nope') === true, '没人订阅 / 不认识的钩子 = 什么都不做');
+    const v2 = (it) => (it && it.kind === 'history' ? false : undefined);
+    const vTrue = () => true;
+    Hk.add('onHistoryWrite', vTrue); Hk.add('onHistoryWrite', v2);
+    ok(A.hook('onHistoryWrite', { kind: 'history' }) === false && A.hook('onHistoryWrite', { kind: 'stats' }) === true, 'onHistoryWrite:任一订阅者返回 false = 否决');
+    let n = 0;
+    const prev = Hk.onCardHover;
+    const wrap = function () { prev.apply(null, arguments); n++; };
+    Hk.onCardHover = wrap;
+    A.hook('onCardHover', { wk: 'c:X-1' }, null);
+    ok(n === 1 && Hk.count('onCardHover') === 1, '链式包装(先读旧的再赋新函数)不会无限递归、dispatch 本身不会被当订阅者加进去');
+    Hk.remove('onPlayerDestroy', f1); Hk.remove('onPlayerDestroy', f2); Hk.remove('onHistoryWrite', v2); Hk.remove('onHistoryWrite', vTrue); Hk.remove('onCardHover', wrap);
+    ok(A.HOOK_NAMES.every(k => Hk.count(k) === 0), '订阅者都能 remove 掉');
+}
+{
+    // ---- 在假 window 里跑 adult.js:boot 装好 window.dgAdultHooks(先放进来的合并、整体赋值合并、x = x || {} 无害)、卡片悬停委托 ----
+    const dl = {};
+    const mkEl = () => ({ style: {}, classList: { add() { }, remove() { }, toggle() { }, contains: () => false }, setAttribute() { }, appendChild() { }, querySelector: () => null });
+    const doc = {
+        title: '', cookie: '', head: mkEl(), body: mkEl(), documentElement: mkEl(),
+        getElementById: () => null, createElement: () => mkEl(), querySelector: () => null, querySelectorAll: () => [],
+        addEventListener(t, f) { (dl[t] = dl[t] || []).push(f); },
+    };
+    const st = new Map();
+    const got = [];
+    const pre = (s) => { got.push(['pre', s]); };
+    const win = {
+        document: doc, localStorage: { getItem: k => (st.has(k) ? st.get(k) : null), setItem: (k, v) => st.set(k, String(v)), removeItem: k => st.delete(k) },
+        sessionStorage: { getItem: () => null, setItem() { } }, location: { href: 'https://site.test/', protocol: 'https:', replace() { } }, navigator: {},
+        fetch: () => new Promise(() => { }), Headers, Promise, URL, JSON, Math, Date, Object, Array, String, Number, Boolean, RegExp, Map, Set, WeakMap, WeakSet, Symbol, Error,
+        setTimeout, clearTimeout, console: { log() { }, warn() { }, error() { } }, encodeURIComponent, decodeURIComponent, parseInt, parseFloat, isFinite,
+        dgAdultHooks: { onSettingsRender: pre },
+    };
+    win.window = win; win.globalThis = win;
+    vm.createContext(win);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8'), win, { filename: 'adult.js' });
+    const W = win.DgAdult;
+    ok(!!W && win.dgAdultHooks === W.hooks, 'boot 之后 window.dgAdultHooks 就是 DgAdult.hooks');
+    W.hook('onSettingsRender', 'EL');
+    ok(eq(got, [['pre', 'EL']]), '比 adult.js 先放上去的 dgAdultHooks 里的函数被合并进来');
+    const late = (c, el, ev) => { got.push(['hover', c && c._wk, el && el.id, ev && ev.type]); };
+    win.dgAdultHooks = { onCardHover: late };
+    win.dgAdultHooks = win.dgAdultHooks || {};
+    ok(win.dgAdultHooks === W.hooks && W.hooks.count('onCardHover') === 1 && W.hooks.count('onSettingsRender') === 1, '之后整个赋值 = 合并;x = x || {} 不会把分发器自己加进去');
+    W.cardToItem(P4.card('c:HOV-1'));
+    const card = { id: 'card', getAttribute: (k) => (k === 'data-wk' ? 'c:HOV-1' : null), contains: (x) => x === child || x === child2 || x === card };
+    const child = { closest: () => card }, child2 = { closest: () => card };
+    const fire = (t, ev) => (dl[t] || []).forEach(f => f(ev));
+    got.length = 0;
+    fire('pointerover', { pointerType: 'mouse', target: child, relatedTarget: null, type: 'pointerover' });
+    fire('pointerover', { pointerType: 'mouse', target: child2, relatedTarget: child, type: 'pointerover' });
+    fire('pointerover', { pointerType: 'touch', target: child, relatedTarget: null, type: 'pointerover' });
+    fire('touchstart', { touches: [{}], target: child, type: 'touchstart' });
+    fire('pointerover', { pointerType: 'mouse', target: { closest: () => null }, relatedTarget: null, type: 'pointerover' });
+    ok(eq(got, [['hover', 'c:HOV-1', 'card', 'pointerover'], ['hover', 'c:HOV-1', 'card', 'touchstart']]), '卡片悬停委托:鼠标进入卡片一次(卡片内部移动不算)、触屏走 touchstart;card 是 cardToItem 出来的那个对象', got);
+}
+{
+    // ---- adPlayerReady / adPlayerGone / adHistoryOk / 设置钩子 ----
+    const app = makeApp({ showDetail: true });
+    app.currentGroup = { name: '合成作品', _wk: 'c:REL-1', _meta: { tags: [{ id: 'busty', label: '巨乳', featured: true }, { id: 'noncon', label: '审查', featured: true }, { id: 'x_bad', label: '拦', featured: true }], dur: 600 }, sources: [] };
+    app.currentSource = { site_key: 's1', vod_id: 7, _dur: 590 };
+    app.episodeList = [{ name: '正片', url: 'https://m.example/x/index.m3u8' }];
+    const got = [];
+    const fR = (dp, v, ctx) => got.push([dp, v, ctx]);
+    A.hooks.add('onPlayerReady', fR);
+    const vid = fakeVideo(), dp = { video: vid };
+    app.adPlayerReady(dp, 'https://m.example/x/index.m3u8', true);
+    const ctx = got[0] && got[0][2];
+    ok(got.length === 1 && got[0][0] === dp && got[0][1] === vid && Object.isFrozen(ctx)
+        && eq(ctx, { wk: 'c:REL-1', dur: 590, isLive: false, lineKey: 's1|7', siteKey: 's1', vodId: '7', url: 'https://m.example/x/index.m3u8', fresh: true, episodes: 1 }), 'onPlayerReady(dp, video, ctx):ctx = {wk, dur, isLive, lineKey, siteKey, vodId, url, fresh, episodes}', ctx);
+    ok(eq(A.wkTags.get('c:REL-1'), ['busty']), '顺带记下这部的 featured 标签(审查类 / blocked 不记)', A.wkTags.get('c:REL-1'));
+    ok(app.adult.relWk === '', '首帧之前不拉相关推荐');
+    vid.dispatch('playing');
+    ok(app.adult.relWk === 'c:REL-1' && !(vid._ls.playing || []).length, '主播放器出了第一帧(playing)才挂相关推荐,监听随即摘掉');
+    // 直播不挂、不记
+    got.length = 0;
+    app.currentGroup = { name: '直播', _wk: 'c:LIVE-1', _isLive: true, sources: [] };
+    app.adult.relWk = '';
+    app.adPlayerReady({ video: fakeVideo() }, 'u', false);
+    ok(got.length === 1 && got[0][2].isLive === true && A.wkTags.get('c:LIVE-1') === null && typeof app._adRelOff !== 'function', '直播:照样通知订阅者(isLive=true),不记标签、不挂相关推荐');
+    // 无痕:不记标签
+    globalThis.dgPrivacy = { incognito: () => true, locked: () => false, onChange() { } };
+    app.currentGroup = { name: '无痕', _wk: 'c:INC-1', _meta: { tags: [{ id: 'legs', label: '美腿', featured: true }] }, sources: [] };
+    app.adPlayerReady({ video: fakeVideo() }, 'u', false);
+    ok(A.wkTags.get('c:INC-1') === null && A.incognito() === true, '无痕时不记标签');
+    if (typeof app._adRelOff === 'function') app._adRelOff();
+    delete globalThis.dgPrivacy;
+    A.hooks.remove('onPlayerReady', fR);
+    // 销毁 / 历史否决
+    const gone = [];
+    const fG = (r) => gone.push(r);
+    A.hooks.add('onPlayerDestroy', fG);
+    app.adPlayerGone('close');
+    A.hooks.remove('onPlayerDestroy', fG);
+    ok(eq(gone, ['close']), 'adPlayerGone(reason) → onPlayerDestroy(reason)');
+    const seen = [];
+    const veto = (it) => { seen.push(it); return it.kind === 'stats' ? true : false; };
+    A.hooks.add('onHistoryWrite', veto);
+    app.currentGroup = { name: '合成作品', _wk: 'c:REL-1', sources: [] };
+    ok(app.adHistoryOk('history', '合成作品', { episode: null }) === false && app.adHistoryOk('stats', '') === true
+        && seen[0].kind === 'history' && seen[0].wk === 'c:REL-1' && seen[0].name === '合成作品', 'adHistoryOk(kind, name, extra):item = {kind, name, wk, ...extra}', seen[0]);
+    // 主组件的 addToWatchHistory:被否决就不写
+    app.trial = { on: false };
+    app.watchHistory = [];
+    app._loadTombstones = () => ({}); app._saveTombstones = () => { }; app.saveWatchHistoryToStorage = () => { app._saved = (app._saved || 0) + 1; };
+    app.addToWatchHistory('合成作品', '', null, 100, 200, null);
+    ok(app.watchHistory.length === 0 && !app._saved, '无痕(onHistoryWrite 否决):addToWatchHistory 什么都不写');
+    A.hooks.remove('onHistoryWrite', veto);
+    app.addToWatchHistory('合成作品', '', null, 100, 200, null);
+    ok(app.watchHistory.length === 1 && app._saved === 1, '没人否决:照常写');
+    // 设置弹窗打开 → onSettingsRender(容器)
+    const box = { id: 'ext' };
+    const sr = [];
+    const fS = (el) => sr.push(el);
+    A.hooks.add('onSettingsRender', fS);
+    app.$refs = { adSetExt: box };
+    A.mixin.watch.showSettingsModal.call(app, true);
+    A.mixin.watch.showSettingsModal.call(app, false);
+    A.hooks.remove('onSettingsRender', fS);
+    ok(sr.length === 1 && sr[0] === box, '偏好设置打开 → onSettingsRender(空容器);关的时候不调');
+}
+{
+    // ---- 女优索引(#/actresses)/ 女优页头 / 发行日期排序 ----
+    ok(eq(A.parseRoute('#/actresses'), { view: 'actresses', type: 'all', sel: {} }) && A.routeOf('actresses', 'all', { b: 'jp_subbed' }) === '#/actresses' && A.canonHash('#/actresses') === '#/actresses'
+        && A.isOurHash('#/actresses') && A.parseRoute('#/actresses/x') === null && A.isOurHash('#/actress/5'), '#/actresses 路由(只有路径,不带参数)');
+    ok(!A.isOurHash('#/feed') && A.isFeedHash('#/feed') && !A.isFeedHash('#/feed?x') && A.parseRoute('#/feed') === null && A.FEED_HASH === '#/feed', '#/feed 不归浏览页路由管(不透明,不带任何作品信息)');
+    ok(A.noList('tags') && A.noList('actresses') && !A.noList('tag') && !A.noList(''), 'noList:标签云 / 女优索引没有片单');
+    ok(A.sortOpts(null, { sort: 'new', actress: '5' }).some(s => s.k === 'released') && !A.sortOpts(null, { sort: 'new' }).some(s => s.k === 'released'), '女优页的排序下拉总有「发行日期」');
+    const app = makeApp();
+    let opened = null;
+    app.openBrowse = (p) => { opened = p; app.browse.open = true; app.browse.type = p.type; app.browse.sel = p.sel; };
+    app.adGo({ view: 'actresses' });
+    ok(opened && opened.type === 'all' && app.adult.view === 'actresses' && app.adNoList === true && app.adBrowseTitle === '女优' && app.adBrowseSummary === '女优', 'adGo({view:"actresses"}) → 女优索引页(标题「女优」、没有片单)');
+    ok(app.adRouteHash === null || app.adRouteHash === '#/actresses', '地址栏写 #/actresses');
+    net.calls.length = 0;
+    app._browseFill = () => { };
+    await app._browseFetch(true);
+    ok(app.browse.done === true && !net.calls.length, '女优索引页不拉片单');
+    ok(app.adOpenSheet() === false, '女优索引页没有筛选面板');
+    app.browse.type = 'jp'; app.browse.sel = A.catalog.normSel('jp', {});
+    net.handler = () => null;
+    await app._browseFetch(true);
+    ok(app.adult.view === '' && app.adNoList === false, '女优索引页上点了别的大类 → 那个大类的普通浏览页');
+    // 女优页头:作品数(浏览页总数)+ 最新发行
+    const na = A.normActress({ actress: { aid: 12, name: '合成女优丙', aliases: [] }, results: [{ released: '2024-02-01' }, { released: '2025-13-01' }, { released: '2025-06-30' }, {}] });
+    ok(na && na.latest === '2025-06-30' && na.aid === '12', 'normActress:latest = 第 1 页里最晚的真实发行日期');
+    const Hd = A.components.DgAdHead;
+    ok(Hd.props.total && /共 \{\{ countLabel\(total\) \}\} 部/.test(Hd.template) && /最新 \{\{ info\.latest \}\} 发行/.test(Hd.template) && /\$emit\('go', \{ view: 'actresses' \}\)/.test(Hd.template), '女优页头:共 N 部 · 最新 YYYY-MM-DD 发行 · 女优索引入口');
+    ok(/\$emit\('go', \{ view: 'actresses' \}\)/.test(A.components.DgAdCloud.template), '标签云页有「女优索引」入口');
+    // 索引组件:全部 + 日本三个分类的 facets.actress
+    const urls = A.actIndexUrls();
+    ok(eq(urls, ['/api/catalog/browse?sort=new&page=1&facets=1', '/api/catalog/browse?b=jp_censored&sort=new&page=1&facets=1', '/api/catalog/browse?b=jp_uncensored&sort=new&page=1&facets=1', '/api/catalog/browse?b=jp_subbed&sort=new&page=1&facets=1']), '索引用浏览接口的 facets(快照现算)', urls);
+    const secs = A.actSections([{ facets: { actress: [{ aid: 1, name: '合成甲', count: 9 }] } }, null, { facets: { actress: [] } }, { facets: { actress: [{ aid: 'a:2', name: '合成乙', count: 3 }] } }]);
+    ok(eq(secs.map(s => [s.k, s.label, s.list.map(a => a.aid)]), [['all', '热门女优', ['1']], ['jp_subbed', '中文字幕', ['a:2']]]), 'actSections:空的 / 失败的分类不出', secs);
+    const Ad = A.components.DgAdActresses;
+    const ai = (function () { const o = Object.assign({}, Ad.data()); for (const [k, fn] of Object.entries(Ad.methods)) o[k] = fn.bind(o); o._ev = []; o.$emit = (nn, a) => o._ev.push([nn, a]); return o; })();
+    net.calls.length = 0;
+    net.handler = (u) => (u.startsWith('/api/catalog/browse?') ? { body: { results: [], facets: { actress: [{ aid: 77, name: '合成丁', count: 5 }] } } } : u.startsWith('/api/catalog/actress?q=') ? { body: [{ aid: 78, name: '合成戊', n: 2 }] } : null);
+    ai.load(true);
+    for (let i = 0; i < 10; i++) await tick();
+    ok(ai.secs && ai.secs.length === 4 && ai.secs[0].list[0].aid === '77' && ai._ev.some(e => e[0] === 'learn') && net.calls.length === 4, '女优索引:4 个分类各一次(10 分钟缓存)', net.calls);
+    ai.pick({ aid: '77' });
+    ok(eq(ai._ev[ai._ev.length - 1], ['go', { sel: { actress: '77' }, type: 'all' }]), '点名字 → 女优页');
+    ai.q = '合成戊'; ai.search();
+    await sleep(300); for (let i = 0; i < 6; i++) await tick();
+    ok(eq(ai.res, [{ aid: '78', name: '合成戊', n: 2 }]), '搜索框 → /api/catalog/actress?q=(250ms 防抖)');
+    clearTimeout(ai._t);
+}
+{
+    // ---- 相关推荐 ----
+    const items = [P4.card('c:R-1'), P4.card('c:SELF-1#U'), P4.card('c:SELF-1'), P4.card('c:R-1')].concat(Array.from({ length: 30 }, (_, i) => P4.card('c:R-X' + i)));
+    const rails = A.normRelated({ items, actress: { aid: 12, name: '合成女优乙', items: [P4.card('c:R-2'), P4.card('c:SELF-1~2')] }, studio: { id: 'S1', label: '合成片商', items: [] } }, 'c:SELF-1');
+    ok(eq(rails.map(r => r.k), ['rel', 'act']) && rails[0].items.length === 24 && rails[0].items[0]._wk === 'c:R-1' && !rails[0].items.some(x => /SELF-1/.test(x._wk))
+        && rails[0].items.filter(x => x._wk === 'c:R-1').length === 1 && Object.isFrozen(rails[0].items[0]), '相关推荐:≤24 张、排内去重、不含这一部和它的 #U/~N 兄弟', rails.map(r => [r.k, r.items.length]));
+    ok(rails[1].title === '同演员 · 合成女优乙' && eq(rails[1].go, { sel: { actress: '12' }, type: 'all' }) && rails[1].items.length === 1, '同演员 · 名字(「全部」进女优页);没有卡片的同片商不出');
+    const r2 = A.normRelated({ items: [], actress: { aid: '..', name: 'x', items: [P4.card('c:Q-1')] }, studio: { id: 'S"1', label: '', items: [P4.card('c:Q-2')] } }, 'c:Z');
+    ok(eq(r2.map(r => [r.k, r.title]), [['st', '同片商 · S1']]) && eq(A.normRelated(null, 'c:Z'), []), 'aid 不合法的同演员不出;厂牌 id 清洗', r2.map(r => r.title));
+    const Rd = A.components.DgAdRails;
+    ok(/class="dg-rail-card" :data-wk="it\._wk"/.test(Rd.template) && /@click="pick\(it\)"/.test(Rd.template) && /\$emit\('go', r\.go\)/.test(Rd.template), '卡片带 data-wk(悬停预览)、点了换到那一部、「全部」跳转');
+    const ri = (function () { const o = Object.assign({ wk: '', poster: null, tv: false }, Rd.data()); for (const [k, fn] of Object.entries(Rd.methods)) o[k] = fn.bind(o); return o; })();
+    net.calls.length = 0;
+    net.handler = (u) => (u === '/api/catalog/related/' + encodeURIComponent('c:SELF-9') ? { body: { items: [P4.card('c:R-9')], actress: null, studio: null } } : null);
+    ri.wk = 'c:SELF-9'; ri.load();
+    for (let i = 0; i < 6; i++) await tick();
+    ok(net.calls[0] === '/api/catalog/related/c%3ASELF-9' && ri.rails && ri.rails.length === 1 && ri.rails[0].items[0]._wk === 'c:R-9', 'GET /api/catalog/related/:wk(作品键整体编码)', net.calls);
+    ri.wk = '..'; ri.load();
+    ok(ri.rails === null, '坏作品键不请求');
+}
+{
+    // ---- 猜你喜欢(纯本机)----
+    ok(eq(A.forYouTags(['c:A', 'c:B', 'c:C'], { 'c:A': ['busty', 'noncon'], 'c:B': ['busty', 'legs'], 'c:C': ['legs', 'x_minor', 'legs'] }, 3), ['busty', 'legs']), 'forYouTags:越新的权重越大;审查类 / blocked 绝不当种子');
+    store.set('dg_wk_tags', JSON.stringify({ v: 1, m: [['c:H-1', ['busty', 'legs'], 1], ['c:H-2', ['busty', 'noncon'], 2]] }));
+    ok(eq(A.wkTags.get('c:H-2'), ['busty']), 'wkTags:读出来也只留 featured');
+    const app = makeApp();
+    app.adult.home = 'ok';
+    app.watchHistory = [{ name: 'a', groupData: { _wk: 'c:H-1' } }, { name: 'b', groupData: { _wk: 'c:H-2' } }, { name: 'c', groupData: { _wk: 'c:H-3' } }, { name: 'd' }];
+    app.rowConfigs = { ad_new: { title: '新上架' }, ad_hot: { title: '热门' } }; app.rowLists = { ad_new: [1], ad_hot: [2] };
+    net.calls.length = 0;
+    const fy = (pre, n) => Array.from({ length: n }, (_, i) => P4.card('c:' + pre + i));
+    net.handler = (u) => {
+        if (u === '/api/catalog/work?k=' + encodeURIComponent('c:H-3')) return { body: { name: 'h3', _wk: 'c:H-3', _meta: { tags: [{ id: 'legs', label: '美腿', featured: true }] }, sources: [] } };
+        // 复核 r3:推荐位带 nr=1(服务器去掉审查级作品)
+        if (u === '/api/catalog/browse?t=busty,legs&sort=hot&page=1&nr=1') return { body: { results: [P4.card('c:H-1')].concat(fy('FA', 6)) } };
+        if (u === '/api/catalog/browse?t=busty&sort=hot&page=1&nr=1') return { body: { results: fy('FA', 3).concat(fy('FB', 10)) } };
+        return null;
+    };
+    await app.adultLoadForYou(true);
+    const L = app.rowLists.ad_foryou || [];
+    ok(eq(Object.keys(app.rowConfigs), ['ad_new', 'ad_foryou', 'ad_hot']) && app.rowConfigs.ad_foryou.title === '猜你喜欢' && app.rowConfigs.ad_foryou.adult === true && app.rowConfigs.ad_foryou.more === null,
+        '猜你喜欢插在第一行目录行之后(没有「全部」)', Object.keys(app.rowConfigs));
+    ok(L.length === 16 && !L.some(x => /^c:H-/.test(x._wk)) && new Set(L.map(x => x._wk)).size === L.length && L.every(Object.isFrozen), '排除看过的、去重、冻结', L.length);
+    ok(net.calls.filter(u => u.startsWith('/api/catalog/work?')).length === 1 && eq(A.wkTags.get('c:H-3'), ['legs']), '没记过标签的(以前看的)补拉作品信息,记下来;记过的不再拉', net.calls);
+    ok(net.calls.filter(u => u.startsWith('/api/catalog/browse?')).length === 2, '够 16 张就不再拉下一组');
+    ok(net.calls.filter(u => u.startsWith('/api/catalog/browse?')).every(u => /&nr=1$/.test(u)), '猜你喜欢的浏览请求都带 nr=1(审查级作品永不推荐)', net.calls);
+    ok(A.browseApiUrl ? !/nr=/.test(A.browseApiUrl({ t: ['busty'] }, { page: 1 })) : true, '普通浏览不带 nr(审查级照样可筛)');
+    net.calls.length = 0;
+    await app.adultLoadForYou(false);
+    ok(!net.calls.length, '历史没变(签名相同)→ 不重算');
+    // 不足 8 张 → 整行不出
+    store.set('dg_wk_tags', JSON.stringify({ v: 1, m: [['c:H-9', ['oral'], 1]] }));
+    app.watchHistory = [{ name: 'z', groupData: { _wk: 'c:H-9' } }];
+    net.handler = (u) => (u.startsWith('/api/catalog/browse?t=oral') ? { body: { results: fy('FC', 5) } } : null);
+    await app.adultLoadForYou(false);
+    ok(!app.rowConfigs.ad_foryou && !app.rowLists.ad_foryou && eq(Object.keys(app.rowConfigs), ['ad_new', 'ad_hot']), '不足 8 张:整行收起');
+    // 无痕 → 不出、不请求
+    globalThis.dgPrivacy = { incognito: () => true };
+    app.watchHistory = [{ name: 'a', groupData: { _wk: 'c:H-1' } }];
+    net.calls.length = 0;
+    await app.adultLoadForYou(true);
+    ok(!app.rowConfigs.ad_foryou && !net.calls.length, '无痕:猜你喜欢不出、一个请求都不发');
+    delete globalThis.dgPrivacy;
+    clearTimeout(app._adFyT);
+    ok(Object.keys(A.mixin.watch).includes('watchHistory') && Object.keys(A.mixin.watch).includes('showSettingsModal'), '历史整份换了 / 设置打开 都有侦听');
+}
+{
+    // ---- 预取(dgAdultPlayer.prefetched)/ 去广告地址 / 网络 / 主播放器忙 / 方向上报 ----
+    const raw = { name: '预取作品', _wk: 'c:PF-1', sources: [{ site_key: 's1', site_name: '站一', vod_id: 1, vod_name: 'x' }] };
+    globalThis.dgAdultPlayer = { prefetched: (wk) => (wk === 'c:PF-1' ? Promise.resolve(raw) : null) };
+    net.calls.length = 0;
+    net.handler = (u) => (u.startsWith('/api/catalog/work?k=') ? { body: { name: '网络作品', _wk: 'c:PF-2', sources: [{ site_key: 's2', vod_id: 2, vod_name: 'y' }] } } : null);
+    const g1 = await A.fetchWork('c:PF-1', false);
+    ok(g1 && g1.name === '预取作品' && !net.calls.length, '不扩线的作品请求先用 dgAdultPlayer.prefetched(wk)');
+    const g2 = await A.fetchWork('c:PF-2', false);
+    ok(g2 && g2.name === '网络作品' && net.calls.length === 1, '没预取的照常请求');
+    net.calls.length = 0;
+    await A.fetchWork('c:PF-1', true);
+    ok(net.calls.length === 1 && /expand=1/.test(net.calls[0]), '扩线(expand)不用预取');
+    globalThis.dgAdultPlayer = { prefetched: () => ({ bogus: 1 }) };
+    net.calls.length = 0;
+    await A.fetchWorkRaw('c:PF-2');
+    globalThis.dgAdultPlayer = { prefetched: () => Promise.resolve({ _wk: 'c:OTHER', sources: [] }) };
+    await A.fetchWorkRaw('c:PF-2');
+    globalThis.dgAdultPlayer = { prefetched: () => { throw new Error('x'); } };
+    await A.fetchWorkRaw('c:PF-2');
+    ok(net.calls.length === 3, '预取的形状不对 / 不是这一部 / 抛错 → 照常请求', net.calls);
+    delete globalThis.dgAdultPlayer;
+    const u = 'https://m.example/v/index.m3u8';
+    ok(A.wrapPlayUrl(u, { filterOn: true, proxy: 'https://w.example/' }) === 'https://w.example/?url=' + encodeURIComponent(u)
+        && A.wrapPlayUrl(u, { filterOn: false, proxy: 'https://w.example' }) === u && A.wrapPlayUrl(u, { filterOn: true, proxy: '' }) === u
+        && A.wrapPlayUrl(u, { filterOn: true, proxy: 'https://w.example', bad: true }) === u && A.wrapPlayUrl('https://m.example/v.mp4', { filterOn: true, proxy: 'https://w.example' }) === 'https://m.example/v.mp4',
+    '去广告地址变换与播放页同规则(开着去广告 + 配了 Worker + .m3u8 + 本站没被记过不了代理)');
+    globalThis.AdFilter = { isEnabled: () => true };
+    A._bridge.app = { corsProxyUrl: 'https://w.example', _adProxyBad: (k) => k === 'bad', showDetail: false, isTVMode: false };
+    ok(A.playUrl(u, 's1') === 'https://w.example/?url=' + encodeURIComponent(u) && A.playUrl(u, 'bad') === u && A.proxyUrl() === 'https://w.example', 'playUrl 用主组件的 corsProxyUrl / _adProxyBad');
+    delete globalThis.AdFilter;
+    ok(A.netBlock({ saveData: true }) === 'save-data' && A.netBlock({ effectiveType: '3g' }) === 'slow' && A.netBlock({ effectiveType: 'slow-2g' }) === 'slow' && A.netBlock({ type: 'cellular' }, false) === 'cellular'
+        && A.netBlock({ type: 'cellular', effectiveType: '4g' }, true) === '' && A.netBlock(null) === '' && A.netBlock({ type: 'wifi', effectiveType: '4g' }) === '', 'netBlock:省流量 / 2G·3G / 蜂窝(没允许)');
+    globalThis.document = { querySelector: (s) => (s === '#dplayer video' ? { paused: false, ended: false } : null) };
+    const busy1 = A.mainBusy();
+    A._bridge.app.showDetail = true;
+    const busy2 = A.mainBusy();
+    globalThis.document = { querySelector: () => ({ paused: true, ended: false }) };
+    const busy3 = A.mainBusy();
+    globalThis.adCut = { busy: () => true };
+    const busy4 = A.mainBusy();
+    delete globalThis.adCut; delete globalThis.document;
+    ok(!busy1 && busy2 && !busy3 && busy4, '主播放器在放(播放页开着且没暂停)/ 剪插播在跑 → 忙', [busy1, busy2, busy3, busy4]);
+    A._bridge.app = null;
+    const bp = A.beacon.payload({ wk: 'c:A-1', site_key: 's', vod_id: 1, ok: true, w: 720, h: 1280, orient: 'v' });
+    ok(bp && bp.orient === 'v' && bp.w === 720 && A.beacon.keyOf(bp).startsWith('or|') && !('orient' in A.beacon.payload({ wk: 'c:A-1', site_key: 's', vod_id: 1, ok: true, orient: 'up' })) && A.beacon.keyOf(A.beacon.payload({ wk: 'c:A-1', site_key: 's', vod_id: 1, ok: true })).startsWith('ok|'),
+        'beacon 带 orient(v/h/sq),方向上报与起播上报各记一次');
+}
+{
+    // ---- 搜索结果窗口化 ----
+    const app = makeApp({ searched: true });
+    app.rawList = [
+        { _wk: 'c:S-1', _wt: '合成搜到', vod_name: '一', vod_pic: 'https://p.example/1.jpg', site_key: 's1', vod_id: 1, vod_play_url: '正片$https://a.example/1/index.m3u8' },
+        { _wk: 'c:S-1', _wt: '合成搜到', vod_name: '二', vod_pic: '', site_key: 's2', vod_id: 2, vod_play_url: '正片$https://b.example/2/index.m3u8' },
+        { vod_name: '没有作品键', vod_pic: '', site_key: 's3', vod_id: 4 },
+    ];
+    const items0 = app.adSearchItems;
+    const s1 = items0.find(i => i._wk === 'c:S-1'), s0 = items0.find(i => !i._wk);
+    const items = [s1];
+    ok(items0.length === 2 && s1 && s1._n === 2 && s1.title === '合成搜到' && Object.isFrozen(s1) && s1._g.sources.length === 2 && s0 && s0.title === '没有作品键', '搜索结果 → 窗口化网格的卡片(_g = 原分组)', items0.map(i => [i.title, i._n]));
+    let od = null, he = null;
+    app.openDetail = (g) => { od = g; };
+    app.handleImgError = (k, nm) => { he = [k, nm]; };
+    app.adSearchPick(items[0]); app.adSearchImgErr(items[0]);
+    ok(od === items[0]._g && he && he[0] === items[0]._pk && he[1] === '合成搜到', '点卡片 = openDetail(分组);坏图走原来的回退');
+    const Gd = A.components.DgAdGrid;
+    ok(Gd.props.keep && /@error="\$emit\('imgerr', item\)"/.test(Gd.template) && /:data-wk="item\._wk \|\| null"/.test(Gd.template), '网格:keep / imgerr / data-wk');
+    const gi = { dead: { 0: 100 }, keep: true, _resets: 0 };
+    gi.reset = () => { gi._resets++; gi.dead = {}; };
+    Gd.watch.items.call(gi, [1, 2, 3], [1, 2]);
+    ok(gi._resets === 0 && gi.dead[0] === 100, 'keep:片单流式变长 / 重排不重新分块');
+    Gd.watch.items.call(gi, [], [1, 2]);
+    ok(gi._resets === 1, 'keep:清空了才重来');
+    gi.keep = false;
+    Gd.watch.items.call(gi, [1, 2, 3], [1, 2]);
+    ok(gi._resets === 2, '不 keep(浏览页换筛选):整个新数组就重来');
+}
+{
+    // ---- 刷短片:adult.js 的路由 / 收起 / 恢复(假 dgAdultFeed)----
+    const nav = fakeNav('');
+    const L0 = globalThis.location, H0 = globalThis.history;
+    globalThis.location = nav.loc; globalThis.history = nav.hist;
+    const F = {
+        o: false, s: false, opened: 0, closed: 0, resumed: 0, opts: null,
+        open(opts) { this.o = true; this.s = false; this.opts = opts; this.opened++; return true; }, close() { this.o = false; this.s = false; this.closed++; },
+        suspend() { this.s = true; }, resume() { this.s = false; this.resumed++; },
+        isOpen() { return this.o && !this.s; }, suspended() { return this.o && this.s; },
+    };
+    globalThis.dgAdultFeed = F;
+    const app = makeApp();
+    app.adult.routeOn = true;
+    let ow = null;
+    app.openWork = (c) => { ow = c; app.showDetail = true; };
+    app.closeDetail = () => { app.closed++; app.showDetail = false; };
+    ok(app.adFeedOn === true, '有目录、不是电视、feed.js 在 → 出刷短片入口');
+    app.adOpenFeed();
+    ok(nav.loc.hash === '#/feed' && app._adFeedPushed === true, '入口 → 地址栏 #/feed(压一条历史,返回键关)');
+    nav.hist.pushState(null, '', '#/feed');
+    app._adOnHash();
+    ok(F.opened === 1 && F.isOpen() && typeof F.opts.onClose === 'function' && typeof F.opts.onPick === 'function', 'hashchange 到 #/feed → dgAdultFeed.open({onClose, onPick})');
+    F.opts.onPick({ _wk: 'c:FD-1', title: 'x' });
+    ok(F.suspended() && ow && ow._wk === 'c:FD-1', '点片名:刷短片收起,开正常播放页');
+    nav.hist.back();
+    app._adOnHash();
+    ok(app.closed === 1 && nav.loc.hash === '#/feed' && F.suspended(), '播放页上按返回:关播放页、把 #/feed 压回去', nav.ops);
+    app._adAfterDetail();
+    clearTimeout(app._adFyT);
+    ok(F.isOpen() && F.resumed === 1, '播放页关了 → 回到刷短片原位');
+    F.opts.onClose();
+    ok(nav.loc.hash === '' && nav.ops[nav.ops.length - 1] === 'back', '刷短片的返回:退掉自己压的那条历史', nav.ops);
+    app._adOnHash();
+    ok(F.closed === 1 && !F.isOpen(), '离开 #/feed → close()');
+    // 返回键 / goHome
+    nav.hist.pushState(null, '', '#/feed'); app._adFeedPushed = true; app._adOnHash();
+    ok(F.isOpen() && app.adFeedBack() === true, 'adFeedBack:刷短片开着 → 关(goHome / 安卓返回键)');
+    app._adOnHash();
+    ok(!F.isOpen() && app.adFeedBack() === false, '关了之后 adFeedBack 不接手');
+    // 书签 / 刷新直接停在 #/feed(没有自己压的历史:关的时候换掉地址)
+    const app2 = makeApp();
+    globalThis.location.hash = '#/feed'; nav.hist.replaceState(null, '', '#/feed');
+    app2._adRouteBoot();
+    ok(F.isOpen() && app2._adFeedPushed === false, '启动时地址栏是 #/feed → 直接开刷短片');
+    F.opts.onClose();
+    ok(!F.isOpen() && nav.loc.hash === '' && /^replace \/$/.test(nav.ops[nav.ops.length - 1]), '没有自己压的历史:关掉并把地址换回首页', nav.ops.slice(-2));
+    // 电视:不出入口,#/feed 直接换掉
+    const app3 = makeApp({ isTVMode: true });
+    app3.adult.routeOn = true;
+    nav.hist.pushState(null, '', '#/feed');
+    const n0 = F.opened;
+    app3._adOnHash();
+    ok(app3.adFeedOn === false && F.opened === n0 && nav.loc.hash === '', '电视:没有刷短片(入口不出,#/feed 换掉)');
+    // 修订:播放页开着(不是从刷短片开的)时地址变成 #/feed(前进键 / 书签 / 手改)→ 先关播放页再开刷短片(不能两个一起放)
+    const app4 = makeApp();
+    app4.adult.routeOn = true;
+    app4.showDetail = true; app4.closed = 0;
+    app4.closeDetail = () => { app4.closed++; app4.showDetail = false; };
+    nav.hist.pushState(null, '', '#/feed');
+    const n4 = F.opened;
+    app4._adOnHash();
+    ok(app4.closed === 1 && !app4.showDetail && F.opened === n4 + 1 && F.isOpen(), '播放页开着时到 #/feed:先关播放页(主播放器停),再开刷短片', [app4.closed, F.opened - n4]);
+    F.close();
+    // 关不掉(截帧分享弹窗开着:closeDetail 只关弹窗)→ 这次不开,地址换回去
+    const app5 = makeApp();
+    app5.adult.routeOn = true;
+    app5.showDetail = true; app5.closed = 0;
+    app5.closeDetail = () => { app5.closed++; };
+    nav.hist.pushState(null, '', '#/feed');
+    const n5 = F.opened;
+    app5._adOnHash();
+    ok(app5.closed === 1 && app5.showDetail && F.opened === n5 && !F.isOpen() && nav.loc.hash === '', '播放页关不掉 → 不开刷短片,#/feed 换掉', [F.opened - n5, nav.loc.hash]);
+    delete globalThis.dgAdultFeed;
+    ok(makeApp().adFeedOn === false, 'feed.js 没加载 → 没有入口');
+    globalThis.location = L0; globalThis.history = H0;
+}
+{
+    // ---- 刷短片模块(feed.js)纯函数 ----
+    const FD = require(path.join(ROOT, 'public/adult/feed.js'));
+    ok(FD.feedUrl('', false) === '/api/catalog/feed' && FD.feedUrl('abc+/=', true) === '/api/catalog/feed?cursor=abc%2B%2F%3D&vert=1', 'feedUrl(契约:/api/catalog/feed?cursor=&vert=1)');
+    ok(FD.orientOf(720, 1280) === 'v' && FD.orientOf(1920, 1080) === 'h' && FD.orientOf(1000, 1100) === 'sq' && FD.orientOf(0, 10) === '', 'orientOf:高/宽 ≥1.15 竖、宽/高 ≥1.15 横,其余方');
+    {   // 修订:和服务器 lib/site-catalog/common.js orientOf 同一个阈值(1.15 ~ 1.25 之间两边以前判得不一样)
+        const KC = require(path.join(ROOT, 'lib/site-catalog/common.js'));
+        const sizes = [[1000, 1160], [1160, 1000], [1000, 1200], [1200, 1000], [1000, 1140], [1140, 1000], [720, 1280], [1280, 720], [1080, 1080], [1000, 1150], [1150, 1000]];
+        ok(sizes.every(([w, hh]) => FD.orientOf(w, hh) === KC.orientOf(w, hh)), 'orientOf:前端和服务器在 1.15 ~ 1.25 之间也判得一样', sizes.map(([w, hh]) => w + 'x' + hh + ':' + FD.orientOf(w, hh) + '/' + KC.orientOf(w, hh)));
+    }
+    const fi = (wk, extra) => Object.assign({ wk, name: '合成短片', pic: 'https://img.example/a.jpg', code: '', badge: '', dur: 60, orient: 'v', lines: [{ site: 's1', url: 'https://m.example/' + wk.slice(2) + '/index.m3u8', dur: 60, vod_id: 5 }] }, extra || {});
+    const it = FD.normItem(fi('t:F1'), A.cardToItem);
+    ok(it && it.wk === 't:F1' && it.card._wk === 't:F1' && it.lines.length === 1 && it.lines[0].vod_id === '5' && it.orient === 'v' && !('tags' in it), 'normItem:卡片同形、线路带 vod_id、不带任何标签');
+    ok(FD.normItem(fi('t:F2', { dur: 7 })) === null && FD.normItem(fi('t:F3', { dur: 301 })) === null && FD.normItem(fi('t:F4', { dur: 0 })) !== null, '时长已知时只要 8–300 秒');
+    ok(FD.normItem(fi('t:F5', { lines: [{ site: 's1', url: 'javascript:alert(1)' }, { site: '', url: 'https://m.example/a.m3u8' }, { site: 's', url: 'https://m.example/a.mp4' }] })) === null
+        && FD.normItem(fi('bad')) === null && FD.normItem(null) === null, '线路只要 http(s) .m3u8 + 站点;作品键不合法的丢掉');
+    const seen = new Set(['t:F1']);
+    const pg = FD.normFeed({ items: [fi('t:F1'), fi('t:F6'), fi('t:F6'), fi('t:F7', { orient: 'h' }), fi('t:F8', { orient: '' })], cursor_next: 'next' }, A.cardToItem, seen, true);
+    ok(eq(pg.items.map(x => x.wk), ['t:F6', 't:F8']) && pg.next === 'next' && pg.done === false && seen.has('t:F6'), 'normFeed:跨页去重;只看竖屏时横屏的丢掉(方向未知的留着)');
+    ok(FD.normFeed({ items: [], cursor_next: null }).done === true && FD.normFeed(null).items.length === 0, '没有下一页 = 到底');
+    ok(FD.netMode(null, false, 0) === 'auto' && FD.netMode({ saveData: true }, true, 0) === 'tap' && FD.netMode({ effectiveType: '3g' }, true, 0) === 'tap' && FD.netMode({ type: 'cellular' }, false, 0) === 'tap'
+        && FD.netMode({ type: 'cellular', effectiveType: '4g' }, true, 0) === 'auto' && FD.netMode(null, false, FD.SESSION_CAP) === 'tap' && FD.SESSION_CAP === 300 * 1048576, 'netMode:省流量 / 慢网 / 蜂窝没允许 / 本会话 300MB 用完 → 点一下才播');
+    const hc = FD.hlsConfig();
+    ok(hc.autoStartLoad === false && hc.maxBufferLength === 10, 'hls.js:autoStartLoad false(清单到了才 startLoad)、maxBufferLength 10');
+    ok(FD.fitOf(1920, 1080, 390, 844) === 'contain' && FD.fitOf(720, 1280, 390, 844) === 'cover' && FD.fitOf(720, 1280, 1440, 900) === 'contain', '横屏片 contain;竖屏片在竖屏上接近比例才铺满');
+    const SRCF = fs.readFileSync(path.join(ROOT, 'public/adult/feed.js'), 'utf8').replace(/\/\/[^\n]*/g, '');
+    ok(!/\?\.[a-zA-Z_$[(]/.test(SRCF) && !/[^?]\?\?[^?]/.test(SRCF.replace(/'[^'\n]*'/g, "''")) && !/catch\s*\{/.test(SRCF) && !/innerHTML/.test(SRCF), 'feed.js 不用 ?. / ?? / 可选 catch 绑定,不用 innerHTML(片名一律 textContent)');
+}
+{
+    // ---- 刷短片模块:假 DOM 里跑一遍(复核:只有 1 个在放、不预拉下一条的清单;≥60% 可见才建、窗口外清空、300MB 后点一下才播、方向上报、收起 / 恢复 / 关)----
+    const ids = new Set();
+    function El(tag) {
+        const e = {
+            tagName: String(tag).toUpperCase(), attrs: {}, children: [], parentNode: null, style: {}, hidden: false, _ls: {}, _text: '', _cls: new Set(),
+            get className() { return [...e._cls].join(' '); }, set className(v) { e._cls = new Set(String(v).split(/\s+/).filter(Boolean)); },
+            classList: { add: (...c) => c.forEach(x => e._cls.add(x)), remove: (...c) => c.forEach(x => e._cls.delete(x)), contains: (c) => e._cls.has(c), toggle: (c, on) => { if (on === undefined ? !e._cls.has(c) : on) e._cls.add(c); else e._cls.delete(c); } },
+            setAttribute(k, v) { e.attrs[k] = String(v); if (k === 'id') ids.add(String(v)); }, getAttribute(k) { return k in e.attrs ? e.attrs[k] : null; }, removeAttribute(k) { delete e.attrs[k]; },
+            get firstChild() { return e.children[0] || null; },
+            appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = e; e.children.push(c); return c; },
+            insertBefore(c, ref) { if (!ref) return e.appendChild(c); if (c.parentNode) c.parentNode.removeChild(c); const i = e.children.indexOf(ref); c.parentNode = e; e.children.splice(i < 0 ? e.children.length : i, 0, c); return c; },
+            removeChild(c) { e.children = e.children.filter(x => x !== c); c.parentNode = null; return c; },
+            set textContent(v) { e.children = []; e._text = String(v); }, get textContent() { return e._text + e.children.map(c => c.textContent).join(''); },
+            matches(sel) { return sel.split(',').some(s => { s = s.trim(); return s[0] === '.' ? s.slice(1).split('.').every(c => e._cls.has(c)) : e.tagName === s.toUpperCase(); }); },
+            closest(sel) { let n = e; while (n) { if (n.matches && n.matches(sel)) return n; n = n.parentNode; } return null; },
+            querySelectorAll(sel) { const out = []; const walk = (n) => n.children.forEach(c => { if (c.matches && c.matches(sel)) out.push(c); walk(c); }); walk(e); return out; },
+            querySelector(sel) { return e.querySelectorAll(sel)[0] || null; },
+            addEventListener(t, f) { (e._ls[t] = e._ls[t] || []).push(f); }, removeEventListener(t, f) { e._ls[t] = (e._ls[t] || []).filter(x => x !== f); },
+            dispatch(t, ev) { (e._ls[t] || []).slice().forEach(f => f(Object.assign({ type: t, target: e }, ev || {}))); },
+            focus() { }, scrollTo() { }, clientHeight: 800, scrollTop: 0,
+        };
+        if (e.tagName === 'VIDEO') Object.assign(e, { paused: true, muted: false, videoWidth: 0, videoHeight: 0, _plays: 0, play() { e.paused = false; e._plays++; return Promise.resolve(); }, pause() { e.paused = true; }, load() { }, canPlayType: () => '' });
+        return e;
+    }
+    const docL = {};
+    const doc = {
+        hidden: false, body: El('body'), head: El('head'), documentElement: El('html'),
+        createElement: (t) => El(t), createTextNode: (t) => { const n = El('#text'); n.textContent = t; return n; },
+        getElementById: (id) => (ids.has(id) ? {} : null),
+        addEventListener(t, f) { (docL[t] = docL[t] || []).push(f); }, removeEventListener(t, f) { docL[t] = (docL[t] || []).filter(x => x !== f); },
+    };
+    const hls = [];
+    class FakeHls {
+        static isSupported() { return true; }
+        constructor(cfg) { this.cfg = cfg; this.h = {}; this.starts = 0; this.destroyed = false; hls.push(this); }
+        on(ev, f) { (this.h[ev] = this.h[ev] || []).push(f); } emit(ev, d) { (this.h[ev] || []).forEach(f => f(ev, d)); }
+        loadSource(u) { this.src = u; } attachMedia(v) { this.media = v; } startLoad() { this.starts++; } destroy() { this.destroyed = true; }
+    }
+    FakeHls.Events = { MANIFEST_PARSED: 'hlsManifestParsed', FRAG_LOADED: 'hlsFragLoaded', ERROR: 'hlsError' };
+    const fItem = (i, extra) => Object.assign({ wk: 't:FS' + i, name: '合成短片 ' + i, pic: '', code: 'SYN-' + i, dur: 60, orient: '', lines: [{ site: 's1', url: 'https://m.example/fs' + i + '/index.m3u8', dur: 60, vod_id: i + 100 }] }, extra || {});
+    const fetched = [];
+    const beacons = [];
+    const picks = [];
+    let closes = 0;
+    let incog = false;
+    let privLocked = false;
+    const privSubs = [];
+    const win = {
+        document: doc, Hls: FakeHls, navigator: {}, innerWidth: 390, innerHeight: 844,
+        localStorage: { getItem: () => null, setItem() { } },
+        dgPrivacy: { locked: () => privLocked, incognito: () => false, onChange: (f) => { privSubs.push(f); return () => { }; } },
+        fetch: async (u) => {
+            fetched.push(u);
+            if (u === '/api/catalog/feed') return new Response(JSON.stringify({ items: [0, 1, 2, 3, 4, 5].map(i => fItem(i)), cursor_next: 'c2' }), { status: 200 });
+            if (u === '/api/catalog/feed?cursor=c2') return new Response(JSON.stringify({ items: [6, 7, 8].map(i => fItem(i)), cursor_next: null }), { status: 200 });
+            return new Response('{}', { status: 404 });
+        },
+        DgAdult: {
+            cardToItem: A.cardToItem, playUrl: (url) => 'W:' + url, isTV: () => false, cellOk: () => false, incognito: () => incog,
+            beacon: { send: (o) => { beacons.push(o); return true; } }, fetchWorkRaw: async () => null,
+        },
+        IntersectionObserver: function (cb, opt) { this.cb = cb; this.opt = opt; this.observe = () => { }; this.disconnect = () => { }; },
+        AbortController, Response, setTimeout, clearTimeout, console, Promise, JSON, Math, Date, Map, Set, Object, Array, String, Number, RegExp, Error, encodeURIComponent,
+    };
+    win.window = win;
+    const ctx = vm.createContext(win);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'public/adult/feed.js'), 'utf8'), ctx, { filename: 'feed.js' });
+    const FDw = win.dgAdultFeed;
+    const S = FDw._S;
+    ok(FDw.open({ onClose: () => { closes++; }, onPick: (c) => picks.push(c) }) === true && FDw.isOpen(), 'open()');
+    for (let i = 0; i < 10; i++) await tick();
+    ok(eq(fetched, ['/api/catalog/feed']) && S.items.length === 6 && S.slides.length === 6 && S.cur === 0, '第一页 → 6 条空壳,当前第 0 条', fetched);
+    ok(hls.length === 1 && hls[0].src === 'W:https://m.example/fs0/index.m3u8' && hls.every(x => x.cfg.autoStartLoad === false && x.cfg.maxBufferLength === 10), '只有 1 个在放(不预拉下一条的清单);地址走去广告变换', hls.map(x => x.src));
+    hls[0].emit('hlsManifestParsed');
+    ok(hls[0].starts === 1 && hls[0].media.muted === true && hls[0].media._plays >= 1, '在放的清单到了才 startLoad、静音自动播');
+    const slide = (i) => S.slides[i];
+    FDw._onIO([{ target: slide(1), isIntersecting: true, intersectionRatio: 0.4 }]);
+    ok(S.cur === 0 && hls.length === 1, '只露出 40% 不算翻过去(下一条的清单也不拉)');
+    FDw._onIO([{ target: slide(1), isIntersecting: true, intersectionRatio: 0.7 }, { target: slide(0), isIntersecting: true, intersectionRatio: 0.3 }]);
+    for (let i = 0; i < 4; i++) await tick();
+    const live = hls.filter(x => !x.destroyed);
+    ok(S.cur === 1 && hls[0].destroyed && hls.length === 2 && live.length === 1 && live[0] === hls[1] && hls[1].src === 'W:https://m.example/fs1/index.m3u8' && hls[1].starts === 0,
+        '≥60% 可见 → 才给它建实例、拉清单;上一条销毁(始终只有 1 个实例,不预拉第 2 条)', hls.map(x => [x.src.slice(-16), x.destroyed, x.starts]));
+    hls[1].emit('hlsManifestParsed');
+    ok(hls[1].starts === 1, '翻到的这条:清单到了才 startLoad');
+    // 方向:量到 720x1280 → 报一次(线路带 vod_id)
+    const v1 = hls[1].media;
+    v1.videoWidth = 720; v1.videoHeight = 1280; v1.paused = false;
+    v1.dispatch('playing');
+    ok(beacons.length === 1 && eq(beacons[0], { wk: 't:FS1', site_key: 's1', vod_id: '101', ok: true, w: 720, h: 1280, orient: 'v' }) && slide(1).classList.contains('dg-fs-on') && slide(1).classList.contains('dg-fit-cover'), '第一帧:淡入、竖屏铺满、按 beacon 报方向(每部一次)', beacons);
+    v1.dispatch('playing');
+    ok(beacons.length === 1, '同一部不重复报');
+    // 点画面:静音 → 开声音
+    FDw._click({ target: v1 });
+    ok(S.muted === false && v1.muted === false, '点画面:开声音');
+    // 片名 → onPick(卡片)
+    FDw._click({ target: slide(1).querySelector('.dg-fs-title') });
+    ok(picks.length === 1 && picks[0]._wk === 't:FS1' && picks[0].title === '合成短片 1', '点片名 → onPick(卡片对象)');
+    ok(slide(1).querySelector('.dg-fs-title').textContent === '合成短片 1', '片名用 textContent');
+    // 流量:本会话 300MB 后改「点一下才播」
+    hls[1].emit('hlsFragLoaded', { frag: { stats: { loaded: 301 * 1048576 } } });
+    FDw._onIO([{ target: slide(2), isIntersecting: true, intersectionRatio: 0.9 }, { target: slide(1), isIntersecting: false, intersectionRatio: 0 }]);
+    for (let i = 0; i < 10; i++) await tick();
+    ok(S.cur === 2 && FDw.status().mode === 'tap' && !slide(2).querySelector('.dg-fs-tap').hidden && !hls.some(x => x.src.indexOf('fs2/') > 0) && !hls.some(x => x.src.indexOf('fs3/') > 0), '300MB 用完:不自动播,出「点一下播放」(这条的清单也不拉)');
+    ok(eq(fetched, ['/api/catalog/feed', '/api/catalog/feed?cursor=c2']) && S.items.length === 9, '离末尾还剩 4 条就按游标拉下一页');
+    FDw._click({ target: slide(2).querySelector('.dg-fs-tap') });
+    const pre2 = hls.find(x => x.src.indexOf('fs2/') > 0);
+    if (pre2) pre2.emit('hlsManifestParsed');
+    ok(pre2 && pre2.starts === 1 && slide(2).querySelector('.dg-fs-tap').hidden, '点了才建、才播');
+    // 窗口:翻到第 7 条,远处的条目清空(先把流量计数归零 → 回到自动播)
+    S.bytes = 0;
+    FDw._onIO([{ target: slide(7), isIntersecting: true, intersectionRatio: 1 }, { target: slide(2), isIntersecting: false, intersectionRatio: 0 }]);
+    ok(S.cur === 7 && slide(0).children.length === 0 && slide(4).children.length === 0 && slide(5).children.length > 0 && slide(8).children.length > 0 && hls.filter(x => !x.destroyed).length === 1 && !hls.some(x => !x.destroyed && x.src.indexOf('fs8/') > 0), '当前 ±2/3 条以外的只留空壳;只有 1 个实例(第 7 条在放,第 8 条不预拉)');
+    // 无痕:不报方向
+    incog = true;
+    const live7 = hls.filter(x => !x.destroyed && x.src.indexOf('fs7/') > 0)[0];
+    if (live7) { live7.media.videoWidth = 1920; live7.media.videoHeight = 1080; live7.media.paused = false; live7.media.dispatch('playing'); }
+    ok(!!live7 && beacons.length === 1 && S.slides[7].classList.contains('dg-fs-h'), '无痕:不上报(横屏片照样按 contain 放)');
+    incog = false;
+    // 收起 / 恢复 / 关
+    FDw.suspend();
+    ok(FDw.suspended() && !FDw.isOpen() && hls.every(x => x.destroyed) && S.el.style.display === 'none', '收起:实例全销毁、隐藏(位置和条目留着)');
+    S.bytes = 0;
+    FDw.resume();
+    ok(FDw.isOpen() && S.el.style.display === '' && S.cur === 7 && hls.filter(x => !x.destroyed).length === 1, '恢复:回到原来那条接着放');
+    // 修订:隐私锁 —— 锁上 → 实例全销毁(锁屏后面不接着下清单 / 分片);锁着翻页不建实例;解锁不自动续播(点一下才建);head 预锁类也算锁着
+    privLocked = true; privSubs.forEach(f => f());
+    ok(FDw.isOpen() && hls.every(x => x.destroyed), '锁上:实例全销毁');
+    const nLock = hls.length;
+    FDw._onIO([{ target: slide(8), isIntersecting: true, intersectionRatio: 1 }, { target: slide(7), isIntersecting: false, intersectionRatio: 0 }]);
+    for (let i = 0; i < 4; i++) await tick();
+    ok(S.cur === 8 && hls.length === nLock, '锁着翻页:一个实例都不建(不拉清单 / 分片,也不预备下一条)', hls.length - nLock);
+    privLocked = false; privSubs.forEach(f => f());
+    ok(hls.length === nLock && !slide(8).querySelector('.dg-fs-tap').hidden, '解锁:不自动续播,当前这条出「点一下播放」');
+    doc.documentElement.classList.add('dgp-prelock');
+    FDw._click({ target: slide(8).querySelector('.dg-fs-tap') });
+    ok(hls.length === nLock, 'head 预锁类(dgp-prelock)还在 = 当锁着:点了也不建');
+    doc.documentElement.classList.remove('dgp-prelock');
+    FDw._click({ target: slide(8).querySelector('.dg-fs-tap') });
+    ok(hls.length === nLock + 1 && hls[nLock].src === 'W:https://m.example/fs8/index.m3u8', '解锁后点一下才建实例', hls.length - nLock);
+    (docL.keydown || []).forEach(f => f({ key: 'Escape', preventDefault() { }, stopPropagation() { } }));
+    ok(closes === 1 && !FDw.isOpen() && !FDw.suspended() && hls.every(x => x.destroyed) && !doc.body.children.length, 'Esc / 返回:交给 onClose,自己也关干净');
+    win.DgAdult.isTV = () => true;
+    ok(FDw.open({}) === false && !FDw.isOpen(), '电视上不开');
+}
+{
+    // ---- index.html 接线(p4)----
+    const head = HTML.slice(0, HTML.indexOf('</head>'));
+    const iSeek = head.indexOf('libs/js/seek-preview.js');
+    const tags = ['adult/player-x.js?v=2', 'adult/privacy.js?v=2', 'adult/preview.js?v=1', 'adult/feed.js?v=3'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
+    // 修订:head 里的隐私预锁片段(设过 PIN 才加 dgp-prelock;privacy.js 10 秒没起来就撤掉),要在任何 body 内容之前
+    const iPre = head.indexOf('dgp-prelock body > *:not(.dgp-layer)'), iPreJs = head.indexOf("localStorage.getItem('dgp_pin')");
+    ok(iPre > 0 && iPreJs > iPre && iPreJs < head.indexOf('adult/adult.js?v=') && /if \(!window\.dgPrivacy\) d\.classList\.remove\('dgp-prelock'\); \}, 10000\)/.test(head), 'head:隐私预锁(CSS + 设过 PIN 才加类 + 10 秒兜底撤掉),在 adult.js 之前', [iPre, iPreJs]);
+    ok(tags.every(i => i > iSeek) && tags.every((x, i) => i === 0 || x > tags[i - 1]) && head.indexOf('libs/js/hls.min.js') < tags[0], '四个扩展模块 <script defer>(hls.min.js 之后,顺序 player-x / privacy / preview / feed)', tags);
+    ok(/if \(isFreshPlayer\) dp\.play\(\);\s*\n\s*\/\/ \[adult\] p4[^\n]*\n\s*if \(this\.adultMode && typeof this\.adPlayerReady === 'function'\) \{ try \{ this\.adPlayerReady\(dp, url, isFreshPlayer\); \} catch \(e\) \{ \} \}/.test(HTML), 'play():播放器拿到线路之后 → adPlayerReady(onPlayerReady)');
+    const gone = (HTML.match(/if \(this\.adultMode( && this\.showDetail)?\) \{ try \{ this\.adPlayerGone\('(close|home|switch|rebuild|offline)'\); \} catch \(e\) \{ \} \}/g) || []).map(x => /'(\w+)'/.exec(x)[1]);
+    ok(eq(gone.slice().sort(), ['close', 'home', 'offline', 'rebuild', 'switch']), 'onPlayerDestroy:关播放页 / 回首页 / 换剧销毁 / 重建 / 离线上下文', gone);
+    ok(/if \(this\.adultMode\) \{ try \{ this\.adPlayerGone\('rebuild'\); \} catch \(e\) \{ \} \}[^\n]*\n\s*try \{ dp\.destroy\(\); \} catch \(e\) \{ \}/.test(HTML), '销毁之前调(不是之后)');
+    ok(/if \(this\.trial\.on\) return;\s*\n[^\n]*\n\s*if \(this\.adultMode && typeof this\.adHistoryOk === 'function' && !this\.adHistoryOk\('history', name, \{ episode: episode \|\| null \}\)\) return;/.test(HTML)
+        && /if \(this\.adultMode && typeof this\.adHistoryOk === 'function' && !this\.adHistoryOk\('progress', movieName, \{ episode: episodeName \}\)\) return;\s*\n\s*\n\s*try \{\s*\n\s*const data = \{\s*\n\s*time: Math\.floor\(currentTime\)/.test(HTML)
+        && /window\.DgAdult\.hook\('onHistoryWrite', \{ kind: 'stats', name: '', wk: '' \}\) === false\) return 'private';/.test(HTML), 'onHistoryWrite:观看历史 / 进度 / 观看统计 三条写入路径都能被否决');
+    ok(/<div v-if="adultMode" ref="adSetExt" class="dg-set-ext"><\/div>/.test(HTML) && /@change="adSetPv\(\$event\.target\.checked\)"/.test(HTML) && /@change="adSetCell\(\$event\.target\.checked\)"/.test(HTML), '设置:onSettingsRender 容器 + 悬停预览 / 移动网络自动播放 开关');
+    ok((HTML.match(/class="hot-card" v-for="item in (rowLists\[key\]|getPagedItems\(key\))" :key="[^"]+" :data-wk="item\._wk \|\| null"/g) || []).length === 2, '首页行(横排 + 展开网格)的卡片带 data-wk(onCardHover)');
+    ok(/<button v-if="adultMode && adFeedOn" type="button" class="dg-nav-feed" @click="adOpenFeed\(\)"/.test(HTML) && /<button v-if="adultMode && adFeedOn" type="button" class="catnav-q is-feed" @click="adOpenFeed\(\)">/.test(HTML), '刷短片入口:导航栏 + 首页分类栏');
+    ok(/if \(this\.adultMode && !this\.showDetail && typeof this\.adFeedBack === 'function' && this\.adFeedBack\(\)\) return;/.test(HTML) && /window\.dgAdultFeed\.isOpen\(\)\)\) : Reflect\.get\(t, k\)\)/.test(HTML), '返回键:刷短片开着先关它(goHome / 安卓 App 的 searched 探测)');
+    ok(/<dg-ad-rails v-if="adultMode && adult\.relWk && !previewLocked" :wk="adult\.relWk" :poster="getPosterUrl" :tv="isTVMode" @pick="adRelPick" @go="adGo"><\/dg-ad-rails>/.test(HTML), '播放页:相关推荐(首帧之后才有 relWk)');
+    ok(/<dg-ad-actresses v-if="adultMode && adult\.view === 'actresses'" @go="adGo" @learn="adLearned"><\/dg-ad-actresses>/.test(HTML), '浏览页:女优索引');
+    ok(/<dg-ad-grid v-if="adultMode && groupedList\.length > 0" :keep="true" :items="adSearchItems" :tv="isTVMode" @pick="adSearchPick" @imgerr="adSearchImgErr"><\/dg-ad-grid>/.test(HTML)
+        && /<div class="result-grid" v-if="groupedList\.length > 0 && !adultMode">/.test(HTML), '搜索结果:成人站走窗口化网格,主站照旧');
+    const called = ['adPlayerReady', 'adPlayerGone', 'adHistoryOk', 'adSetPv', 'adSetCell', 'adOpenFeed', 'adFeedBack', 'adRelPick', 'adSearchPick', 'adSearchImgErr'];
+    ok(called.every(nm => typeof A.mixin.methods[nm] === 'function'), 'index.html 调的 p4 mixin 方法都在', called.filter(nm => typeof A.mixin.methods[nm] !== 'function'));
+    ok(['adNoList', 'adFeedOn', 'adSearchItems'].every(nm => typeof A.mixin.computed[nm] === 'function'), 'p4 computed 都在');
+}
 console.log(`\n${fail ? '✗' : '✓'} adult-frontend-test: ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

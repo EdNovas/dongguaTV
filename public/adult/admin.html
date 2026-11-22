@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
+    <meta name="referrer" content="no-referrer">
+    <meta name="color-scheme" content="dark">
+    <title>管理后台</title>
+    <!-- [adult] 过滤规则后台(GET /admin/adult)。页面本身不鉴权,所有数据都要 X-Admin-Token(服务器 ADULT_ADMIN_TOKEN,没设就用 ADMIN_TOKEN;都没设或 ADULT_ADMIN_TOKEN=off = 整个后台关闭)。
+         令牌只放 sessionStorage(关掉标签页就没了);服务器字符串一律 textContent,不拼 HTML。脚本 /adult/admin.js(绝对路径:页面在 /admin/adult 也能找到) -->
+    <style>
+        :root { --bg: #141414; --panel: #1c1c1f; --panel2: #232327; --line: rgba(255, 255, 255, 0.09); --text: #e5e5e5; --muted: #9a9aa0; --accent: #e50914; --ok: #46d369; --warn: #ffb74d; --bad: #ff8a80; }
+        * { box-sizing: border-box; }
+        html, body { margin: 0; background: var(--bg); color: var(--text); }
+        body { font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; -webkit-text-size-adjust: 100%; }
+        .adm { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+        .adm-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+        .adm-head h1 { margin: 0; font-size: 22px; font-weight: 600; color: #fff; }
+        .adm-head .adm-sub { color: var(--muted); font-size: 13px; }
+        .adm-head .adm-out { margin-left: auto; }
+        .adm-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 14px; }
+        .adm-card h2 { margin: 0 0 10px; font-size: 16px; font-weight: 600; color: #fff; }
+        .adm-card p { margin: 0 0 10px; color: var(--muted); }
+        label.adm-lbl { display: block; color: var(--muted); font-size: 13px; margin: 0 0 4px; }
+        input.adm-in, textarea.adm-in, select.adm-in { width: 100%; background: #111; color: #fff; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 8px; padding: 8px 10px; font: inherit; }
+        textarea.adm-in { min-height: 260px; resize: vertical; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 13px; }
+        input.adm-in:focus, textarea.adm-in:focus, .adm-btn:focus-visible, .adm-tab:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        .adm-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+        .adm-row > .adm-grow { flex: 1 1 240px; min-width: 0; }
+        .adm-btn { min-height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.18); background: var(--panel2); color: #eee; font: inherit; cursor: pointer; white-space: nowrap; }
+        .adm-btn:hover:not(:disabled) { background: #2d2d32; }
+        .adm-btn:disabled { opacity: 0.45; cursor: default; }
+        .adm-btn.pri { background: var(--accent); border-color: transparent; color: #fff; font-weight: 600; }
+        .adm-btn.small { min-height: 28px; padding: 0 10px; font-size: 12px; }
+        .adm-btn.danger { color: var(--bad); border-color: rgba(255, 138, 128, 0.4); }
+        .adm-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+        .adm-tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--muted); padding: 10px 14px; font: inherit; cursor: pointer; }
+        .adm-tab[aria-selected="true"] { color: #fff; border-bottom-color: var(--accent); }
+        .adm-msg { min-height: 22px; margin: 8px 0; font-size: 13px; }
+        .adm-msg.err { color: var(--bad); }
+        .adm-msg.ok { color: var(--ok); }
+        .adm-msg.warn { color: var(--warn); }
+        .adm-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+        .adm-stat { background: var(--panel2); border-radius: 10px; padding: 12px; }
+        .adm-stat b { display: block; font-size: 22px; color: #fff; font-weight: 600; }
+        .adm-stat span { color: var(--muted); font-size: 12px; }
+        .adm-tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        table.adm-t { width: 100%; border-collapse: collapse; font-size: 13px; }
+        table.adm-t th, table.adm-t td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+        table.adm-t th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+        table.adm-t td.num { text-align: right; font-variant-numeric: tabular-nums; }
+        .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; word-break: break-all; }
+        .adm-pill { display: inline-block; padding: 0 8px; border-radius: 10px; font-size: 12px; line-height: 20px; background: var(--panel2); color: var(--muted); margin: 0 4px 4px 0; }
+        .adm-pill.ok { background: rgba(70, 211, 105, 0.14); color: var(--ok); }
+        .adm-pill.bad { background: rgba(255, 138, 128, 0.14); color: var(--bad); }
+        .adm-pill.warn { background: rgba(255, 183, 77, 0.14); color: var(--warn); }
+        dl.adm-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; }
+        dl.adm-kv dt { color: var(--muted); }
+        dl.adm-kv dd { margin: 0; word-break: break-word; }
+        pre.adm-pre { background: #0f0f11; border: 1px solid var(--line); border-radius: 8px; padding: 10px; max-height: 360px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; margin: 10px 0 0; }
+        .adm-note { color: var(--muted); font-size: 12px; }
+        .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+        @media (max-width: 560px) { .adm { padding: 14px 12px 40px; } .adm-tab { padding: 8px 10px; } }
+    </style>
+</head>
+<body>
+    <main id="dgx-admin" class="adm">
+        <header class="adm-head">
+            <h1>管理后台</h1>
+            <span class="adm-sub">过滤规则 · 隐藏作品 · 资源站 · 镜像</span>
+        </header>
+        <noscript><div class="adm-card"><p>这个页面需要开启 JavaScript。</p></div></noscript>
+    </main>
+    <script src="/adult/admin.js?v=3" defer></script>
+</body>
+</html>

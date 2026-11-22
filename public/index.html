@@ -11,6 +11,10 @@
          主站的 description/keywords/canonical/Open Graph/Twitter 卡片标签已去掉(指向主站域名、带主站品牌,页面源码里也不留) -->
     <title>DGX</title>
     <meta name="robots" content="noindex, nofollow, noarchive">
+    <!-- [adult] p4 隐私预锁:设过 PIN 的设备,在 adult/privacy.js(defer,要等整页解析完)接手之前先把页面藏起来 —— 慢设备上首页不会先闪一下再被锁屏盖住。
+         privacy.js 起来后锁屏(或撤掉预锁);它 10 秒还没起来 = 撤掉预锁(和没有这段时一样,不把页面永远藏住) -->
+    <style>html.dgp-prelock body > *:not(.dgp-layer) { visibility: hidden !important; }</style>
+    <script data-cfasync="false">(function () { try { var d = document.documentElement; if (window.localStorage && localStorage.getItem('dgp_pin')) { d.classList.add('dgp-prelock'); setTimeout(function () { if (!window.dgPrivacy) d.classList.remove('dgp-prelock'); }, 10000); } } catch (e) { } })();</script>
 
     <!-- 兼容性检测 (必须在所有脚本之前) -->
     <script>
@@ -81,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=4"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=7"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -112,6 +116,12 @@
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
     <script data-cfasync="false" src="libs/js/DPlayer.min.js" defer></script>
     <script data-cfasync="false" src="libs/js/seek-preview.js?v=1" defer></script>   <!-- 🖼️ 进度条缩略图预览(window.dgSeekPreview;改了要升 ?v= 和 sw.js 版本,回归 scripts/seek-preview-test.mjs) -->
+    <!-- [adult] p4 扩展模块(各自独立文件,挂在 adult.js 建好的 window.dgAdultHooks 上;缺了 / 加载失败页面照常):
+         播放器增强(热度条/手势/起播提速)· 隐私(无痕/锁)· 封面悬停预览 · 刷短片。改了要升 ?v= 和 sw.js 版本 -->
+    <script data-cfasync="false" src="adult/player-x.js?v=2" defer></script>
+    <script data-cfasync="false" src="adult/privacy.js?v=2" defer></script>
+    <script data-cfasync="false" src="adult/preview.js?v=1" defer></script>
+    <script data-cfasync="false" src="adult/feed.js?v=3" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
 
     <style>
@@ -5054,6 +5064,7 @@
         <nav class="navbar-custom" v-show="!offHome">
             <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
                     src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">{{ (adult && adult.siteName) || 'DGX' }}</div>   <!-- [adult] 站名(原:视界 MAX) -->
+            <button v-if="adultMode && adFeedOn" type="button" class="dg-nav-feed" @click="adOpenFeed()" title="刷短片" aria-label="刷短片"><i class="fas fa-mobile-screen" aria-hidden="true"></i><span>刷短片</span></button>   <!-- [adult] p4 刷短片入口(电视上没有) -->
         </nav>
 
         <!-- Back to Top Button -->
@@ -5391,6 +5402,8 @@
                             <i class="fas fa-dice" aria-hidden="true"></i>随机盲盒</button>
                         <button v-if="recommendList.length > 0 && homeOn.recommend" type="button" class="catnav-q is-rec" @click="catNavJump('recommend')">
                             <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>猜你想看</button>
+                        <button v-if="adultMode && adFeedOn" type="button" class="catnav-q is-feed" @click="adOpenFeed()">
+                            <i class="fas fa-mobile-screen" aria-hidden="true"></i>刷短片</button>   <!-- [adult] p4 刷短片(竖屏短片,#/feed) -->
                     </div>
                 </div>
                 <div class="catnav-body" role="group" :aria-label="catNavLabel">
@@ -5452,7 +5465,7 @@
                             aria-label="向左滚动"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                         <div class="hot-row" :ref="key" @scroll="onRowScroll(key)">
                             <!-- [adult] 目录卡片(带 _wk):点开按作品键开播放页;角标 中字/无码/竖屏,副行「3小时前 · 时长 · N线」 -->
-                            <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
+                            <div class="hot-card" v-for="item in rowLists[key]" :key="item.id" :data-wk="item._wk || null"
                                 @click="item._wk ? openWork(item) : autoSearch(item.title || item.name, item.original_title || item.original_name)">
                                 <div class="poster-wrap">
                                     <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
@@ -5473,7 +5486,7 @@
                     </div>
                     <!-- 展开状态：分页网格布局 -->
                     <div class="grid-expanded" v-show="expandedRows[key]">
-                        <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id"
+                        <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id" :data-wk="item._wk || null"
                             @click="item._wk ? openWork(item) : autoSearch(item.title || item.name, item.original_title || item.original_name)">   <!-- [adult] 同上 -->
                             <div class="poster-wrap">
                                 <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
@@ -5564,7 +5577,7 @@
                     </div>
                 </div>
                 <!-- [adult] 标签页 / 女优页页头:分面组、按分类细分、相关标签;女优名 + 别名(DgAdHead) -->
-                <dg-ad-head v-if="adultMode" :view="adult.view" :sel="browse.sel" @go="adGo" @learn="adLearned"></dg-ad-head>
+                <dg-ad-head v-if="adultMode" :view="adult.view" :sel="browse.sel" :total="browse.total" @go="adGo" @learn="adLearned"></dg-ad-head>   <!-- [adult] p4:女优页带作品数 / 最新发行 -->
                 <div class="browse-filters">
                     <div class="browse-frow" v-for="g in browseGroups" :key="browse.type + '-' + g.k" role="group" :aria-label="g.l">
                         <span class="browse-flabel">{{ g.l }}</span>
@@ -5576,7 +5589,7 @@
                     </div>
                     <!-- [adult] 标签行(featured,≤3 个同时满足)+ 排序(只列这次可用的)/ 筛选面板(分组标签带数、更多(审查类,只能筛)、
                          排除、时长含「时长未知」、版本、厂牌、女优)/ 已选条件;组件在 adult/adult.js(DgAdFilter),标签云页不出 -->
-                    <dg-ad-filter v-if="adultMode && adult.view !== 'tags'" ref="adFilter" :sel="browse.sel" :type="browse.type" :facets="adult.facets"
+                    <dg-ad-filter v-if="adultMode && !adNoList" ref="adFilter" :sel="browse.sel" :type="browse.type" :facets="adult.facets"
                         :total="browse.total" :tv="isTVMode" :legacy="adTagOpts" @go="adGo" @sheet="adSheet"></dg-ad-filter>
                 </div>
                 <div v-if="browse.keyword" class="browse-kwhint">
@@ -5587,7 +5600,9 @@
 
             <!-- [adult] 标签云(#/tags?b=)/ 窗口化网格(片单可到上千张:只渲染视口附近几块,块的死活由 IntersectionObserver 定,滚动时不写响应式状态) -->
             <dg-ad-cloud v-if="adultMode && adult.view === 'tags'" :b="browse.sel.b || ''" @go="adGo" @learn="adLearned"></dg-ad-cloud>
-            <dg-ad-grid v-if="adultMode" v-show="adult.view !== 'tags'" :items="browse.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse.loading" @pick="browsePick"></dg-ad-grid>
+            <!-- [adult] p4 女优索引(#/actresses):热门女优(全部 / 日本各分类,按作品数)+ 按名字搜 -->
+            <dg-ad-actresses v-if="adultMode && adult.view === 'actresses'" @go="adGo" @learn="adLearned"></dg-ad-actresses>
+            <dg-ad-grid v-if="adultMode" v-show="!adNoList" :items="browse.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse.loading" @pick="browsePick"></dg-ad-grid>
             <div class="browse-grid" v-if="!adultMode">
                 <div class="browse-card" v-for="item in browse.items" :key="'b-' + item.id" :data-bid="item.id"
                     :tabindex="isTVMode ? 0 : null" @click="browsePick(item)" @keydown.enter.prevent="browsePick(item)">
@@ -5610,7 +5625,7 @@
                 </template>
             </div>
 
-            <div class="browse-foot" ref="browseFoot" aria-live="polite" v-show="!(adultMode && adult.view === 'tags')">   <!-- [adult] 标签云页没有片单 -->
+            <div class="browse-foot" ref="browseFoot" aria-live="polite" v-show="!adNoList">   <!-- [adult] 标签云 / 女优索引页没有片单(adNoList;主站恒 false) -->
                 <div v-if="browse.loading && browse.items.length" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载更多…</div>
                 <div v-else-if="browse.error" class="browse-state">
                     加载失败，可能是网络不稳定
@@ -5659,7 +5674,9 @@
             </div>
 
             <!-- 搜索结果网格 (即使在 loading 也可以显示) -->
-            <div class="result-grid" v-if="groupedList.length > 0">
+            <!-- [adult] p4 成人站全站扇出能到几百张:换成窗口化网格(只渲染视口附近几块,滚动不写响应式状态);点卡片照旧 openDetail -->
+            <dg-ad-grid v-if="adultMode && groupedList.length > 0" :keep="true" :items="adSearchItems" :tv="isTVMode" @pick="adSearchPick" @imgerr="adSearchImgErr"></dg-ad-grid>
+            <div class="result-grid" v-if="groupedList.length > 0 && !adultMode">
                 <div class="result-card" v-for="group in groupedList" :key="group.name + '|' + (group._work || '')" @click="openDetail(group)">
                     <div class="poster-wrap">
                         <img v-if="!isFallback(posterKey(group))" :src="finalPoster(group)" :key="finalPoster(group)"
@@ -5828,6 +5845,29 @@
                             <span class="settings-slider"></span>
                         </label>
                     </div>
+                    <!-- [adult] p4 封面悬停预览 / 移动网络也自动播放(只存本机;电视上没有悬停、不出刷短片) -->
+                    <div class="set-row" v-if="adultMode && !isTVMode">
+                        <div>
+                            <div class="set-title">封面悬停预览</div>
+                            <div class="set-desc">鼠标停在封面上、或手机长按封面时，静音播几段预览（省流量模式和移动网络下不播）</div>
+                        </div>
+                        <label class="settings-switch">
+                            <input type="checkbox" :checked="adult.pv" @change="adSetPv($event.target.checked)" aria-label="封面悬停预览">
+                            <span class="settings-slider"></span>
+                        </label>
+                    </div>
+                    <div class="set-row" v-if="adultMode && !isTVMode">
+                        <div>
+                            <div class="set-title">移动网络也自动播放</div>
+                            <div class="set-desc">用流量时也自动播封面预览和「刷短片」（默认关：移动网络下点一下才播）</div>
+                        </div>
+                        <label class="settings-switch">
+                            <input type="checkbox" :checked="adult.cell" @change="adSetCell($event.target.checked)" aria-label="移动网络也自动播放">
+                            <span class="settings-slider"></span>
+                        </label>
+                    </div>
+                    <!-- [adult] p4 扩展设置:dgAdultHooks.onSettingsRender(容器) 往这个空容器里放自己的设置行(隐私 / 播放器增强等) -->
+                    <div v-if="adultMode" ref="adSetExt" class="dg-set-ext"></div>
 
                     <!-- ⏭️ 跳过片头/片尾 -->
                     <div class="set-row" v-if="!adultMode || adult.intro">   <!-- [adult] 成人站默认关了片头学习(INTRO_DISABLE) -->
@@ -6452,6 +6492,9 @@
                         </template>
                     </div>
                 </div>
+
+                <!-- [adult] p4 相关推荐 / 同演员 / 同片商(/api/catalog/related/:wk;主播放器出了第一帧才拉,每排 ≤24 张;点了换到那一部) -->
+                <dg-ad-rails v-if="adultMode && adult.relWk && !previewLocked" :wk="adult.relWk" :poster="getPosterUrl" :tv="isTVMode" @pick="adRelPick" @go="adGo"></dg-ad-rails>
 
                 <!-- 📺 直播控制面板：替代 VOD 的简介/线路/选集 -->
                 <div class="controls-area" v-if="currentGroup && currentGroup._isLive">
@@ -10456,6 +10499,8 @@
                 let token = '';
                 try { token = localStorage.getItem('emax_auth_hash') || ''; } catch (e) { }
                 if (!token) return 'no-token';
+                // [adult] p4 钩子:观看统计也是观看记录,无痕时不计(dgAdultHooks.onHistoryWrite 否决;每秒问一次,订阅者要轻)
+                try { if (typeof window !== 'undefined' && window.DgAdult && window.DgAdult.ON === true && typeof window.DgAdult.hook === 'function' && window.DgAdult.hook('onHistoryWrite', { kind: 'stats', name: '', wk: '' }) === false) return 'private'; } catch (e) { }
                 const cur = this._cur || (this._cur = this._ident());   // 换源那刻还没剧名(极少)→ 有了再钉
                 if (!cur) return 'no-title';
                 const rate = v.playbackRate > 0 ? v.playbackRate : 1;
@@ -12369,6 +12414,13 @@
                 window.vueApp = new Proxy(this, {
                     get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen) : Reflect.get(t, k)),
                 });
+                // [adult] p4 刷短片开着也算「不在首页」(安卓 App 返回键 → goHome 关刷短片)。主线那一行原样不动(scripts/catalog-test.mjs 钉着),外面再包一层
+                if (this.adultMode) {
+                    const _dgVueApp = window.vueApp;
+                    window.vueApp = new Proxy(this, {
+                        get: (t, k) => (k === 'searched' ? !!(_dgVueApp.searched || (t.adultMode && window.dgAdultFeed && typeof window.dgAdultFeed.isOpen === 'function' && window.dgAdultFeed.isOpen())) : Reflect.get(t, k)),
+                    });
+                }
 
                 // 定义 startApp 函数供密码验证成功后调用
                 window.startApp = () => {
@@ -13564,6 +13616,8 @@
                 addToWatchHistory(name, poster, episode, progress, duration, groupData) {
                     // 🎟️ 试看(没登录)不记:没加载本机历史,这时写进去会把这台设备原有的历史整个盖掉
                     if (this.trial.on) return;
+                    // [adult] p4 钩子:dgAdultHooks.onHistoryWrite 否决(无痕)→ 这次不记
+                    if (this.adultMode && typeof this.adHistoryOk === 'function' && !this.adHistoryOk('history', name, { episode: episode || null })) return;
                     // 重新观看 → 作废该剧的删除墓碑(否则同步时会被压制成"已删")
                     if (name) { const t = this._loadTombstones(); if (t[name] != null) { delete t[name]; this._saveTombstones(t); } }
                     // 查找是否已存在
@@ -13987,6 +14041,7 @@
                     const isSwitchingShow = this.currentGroup?.name && this.currentGroup.name !== item.name;
                     if (isSwitchingShow && dp) {
                         console.log('[观看历史] 切换到不同剧集，销毁旧播放器实例');
+                        if (this.adultMode) { try { this.adPlayerGone('switch'); } catch (e) { } }   // [adult] p4 钩子:onPlayerDestroy
                         try { dp.destroy(); } catch (e) { console.warn('[观看历史] 销毁播放器异常:', e); }
                         dp = null;
                     }
@@ -16355,6 +16410,8 @@
                 scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); },
 
                 goHome() {
+                    // [adult] p4 刷短片开着(且没开播放页):返回 = 关刷短片,别的不动(安卓 App 返回键 / 电视返回键都走这里)
+                    if (this.adultMode && !this.showDetail && typeof this.adFeedBack === 'function' && this.adFeedBack()) return;
                     // 🗂️ 分类浏览页开着:一次退一层 —— 搜索结果 → 浏览页(筛选和位置都在),浏览页 → 首页。
                     //    搜索结果页的返回按钮、TV 遥控返回键、安卓 App 返回键(MainActivity 注入的 JS)都走这里
                     if (this.browse.open && !this.showDetail) {
@@ -16378,6 +16435,7 @@
                     this.scrollToTop();
                     this._cancelDeepLink(true);   // 🔗 还没落地的深链作废(否则它的搜索结束后又把播放页开回来)
                     try { if (window.dgSeekPreview) window.dgSeekPreview.reset('home'); } catch (e) { }   // 🖼️ 这里也会直接收起播放页(不走 closeDetail):进度条预览实例连同在路上的分片一起销毁
+                    if (this.adultMode && this.showDetail) { try { this.adPlayerGone('home'); } catch (e) { } }   // [adult] p4 钩子:onPlayerDestroy(播放页开着才算)
                     // 关闭播放详情页
                     this.showDetail = false;
                     if (dp) dp.pause();
@@ -18351,6 +18409,7 @@
                     if (this.frameShare && this.frameShare.show) { this.closeFrameShare(); return; }
                     try { dmAuto.halt(); } catch (e) { }   // 🗨️ 关播放页只暂停、令牌不变:弹幕校正要自己停,否则接着下完这次测量
                     try { if (window.dgSeekPreview) window.dgSeekPreview.reset('close'); } catch (e) { }   // 🖼️ 关播放页:进度条预览实例连同在路上的分片一起销毁
+                    if (this.adultMode) { try { this.adPlayerGone('close'); } catch (e) { } }   // [adult] p4 钩子:onPlayerDestroy
                     this.showDetail = false;
                     this._liveActive = false;       // 📺 退出直播模式(否则下一部 VOD 会被当直播、丢进度)
                     this._liveOpenSeq++;            // 作废在飞的直播测速循环
@@ -18381,7 +18440,8 @@
                     this.isTestingSources = false;
 
                     // 🔗 清理地址栏深链参数（回到首页 URL）
-                    try { history.replaceState(history.state, '', location.pathname); } catch (e) { }
+                    // [adult] p4 成人站的 # 路由(#/c/… 浏览页、#/feed 刷短片)只有 id、不带片名,关播放页时留着(否则从刷短片 / 浏览页开的播放页一关,地址就丢了)
+                    try { history.replaceState(history.state, '', location.pathname + ((this.adultMode && /^#\/[a-z]/.test(location.hash)) ? location.hash : '')); } catch (e) { }
 
                     // 🧹 重置进度保存节流（timeupdate 随播放器销毁自动停止）
                     _lastProgressSaveTime = 0;
@@ -19008,6 +19068,9 @@
                         // 只在直播(无固定片头)排除;点播全类型通吃——剧集/动漫/综艺/电影都跑。综艺没固定片头曲的自然学不出(返回空,安全),
                         // 有固定开场的(不少综艺有)照样能用;不按"类型"关。单集(电影)不做本地跨集学习,但仍消费全站共享标记。
                         if (this._liveActive || !this.currentGroup) { this._introCur = null; this.introBtn.show = false; this._introRenderBtn(); return; }
+                        // [adult] 复核:成人站没开片头学习(adult.intro,站长显式 INTRO_DISABLE=0 才开)时服务器只回空标记 —— 整段不跑:
+                        //   不发 /api/intro/marks?title=<完整片名>(会进服务器 / 反代访问日志)、不做离线分析;开了但处于无痕模式时也不跑
+                        if (this.adultMode && (!(this.adult && this.adult.intro) || (window.dgPrivacy && typeof window.dgPrivacy.incognito === 'function' && window.dgPrivacy.incognito()))) { this._introCur = null; this.introBtn.show = false; this._introRenderBtn(); return; }
                         const multiEp = (this.episodeList || []).length >= 2;   // 跨集自学需 ≥2 集;单集只消费共享标记
                         const title = this._introTitleKey();
                         const site = (this.currentSource && this.currentSource.site_key) || '';
@@ -22407,6 +22470,9 @@
                                 return;
                             }
 
+                            // [adult] p4 钩子:进度也是观看记录,无痕时不写(onHistoryWrite 否决)
+                            if (this.adultMode && typeof this.adHistoryOk === 'function' && !this.adHistoryOk('progress', movieName, { episode: episodeName })) return;
+
                             try {
                                 const data = {
                                     time: Math.floor(currentTime),
@@ -22619,6 +22685,8 @@
                     }
                     // 新建播放器：直接播放；切换资源/集数：由 else 分支的 playAfterSwitch 在就绪后播放
                     if (isFreshPlayer) dp.play();
+                    // [adult] p4 钩子:播放器已拿到这条线路(新建 / 换源 / 换集)→ dgAdultHooks.onPlayerReady(dp, video, ctx);出错不影响播放
+                    if (this.adultMode && typeof this.adPlayerReady === 'function') { try { this.adPlayerReady(dp, url, isFreshPlayer); } catch (e) { } }
 
                     // 📺 TV 模式：自动全屏 + 添加控制栏按钮
                     if (this.isTVMode) {
@@ -23209,6 +23277,7 @@
                 //   #dplayer 容器上那批手势/点击/双击/MutationObserver 监听还在,重建时会再绑一份(双击快进变 20s、中央双击失效)。
                 //   换一个同属性的空容器把旧监听一并丢掉。#dplayer 在模板里是纯静态节点,Vue 不会再 patch 它。
                 _dpRebuildFresh() {
+                    if (this.adultMode) { try { this.adPlayerGone('rebuild'); } catch (e) { } }   // [adult] p4 钩子:onPlayerDestroy
                     try { dp.destroy(); } catch (e) { }
                     dp = null;
                     try {
@@ -23547,6 +23616,7 @@
                     this.previewLocked = false;    // 🔒 深链锁定态在此路径也要解除(否则选集/面板被锁定遮罩挡住)
                     this.deepLinkLoading = false;
                     if (this.currentGroup && this.currentGroup.name && this.currentGroup.name !== item.name && dp) {
+                        if (this.adultMode) { try { this.adPlayerGone('offline'); } catch (e) { } }   // [adult] p4 钩子:onPlayerDestroy
                         try { dp.destroy(); } catch (e) { }
                         dp = null;
                     }

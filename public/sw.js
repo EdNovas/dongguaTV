@@ -45,8 +45,14 @@
 // v43(主线合入): 进度条缩略图预览 libs/js/seek-preview.js?v=1(defer,预缓存走 SWR)。策略1b(跨域图片 Cache First)只认 <img>/CSS 图片(destination=image):
 //      hls.js 用 XHR 取分片(destination 为空),有的资源站把 TS 分片伪装成 .png/.jpg,以前按扩展名被当台标存进 LIVE_IMG_CACHE —— 现在 XHR/fetch 一律不碰。
 //      成人站本来就整条关掉策略1b(ADULT_SITE),这里只是保持和主线同一份判断。
+// [adult] -adult5(第四阶段):adult.js?v=5;预缓存四个扩展模块 adult/player-x.js、privacy.js、preview.js、feed.js(?v=1,defer,与 index.html 同一个 ?v=);
+//      成人站后台(/admin/adult 页面、/adult/admin.html|js、/api/adult/* 接口)一律直达不缓存(带 X-Admin-Token 的数据不能进 Cache Storage、页面不能被离线回放);
+//      相关推荐 / 刷短片 / 热度条(/api/catalog/related|feed|heat)本来就在 /api/catalog 直达规则里。
+// [adult] -adult6(第四阶段修订):adult.js?v=6、privacy.js?v=2、feed.js?v=2(刷短片不再盖在播放页上 / 锁屏后面不建实例;无痕多拦两个本机键);index.html head 加了隐私预锁片段。
+// [adult] -adult7(第四阶段复核):player-x.js?v=2(快点击:按下即预取、不重复拉)、feed.js?v=3(不预拉下一条的 m3u8 清单,只预连源站)。
+// [adult] -adult8(第四阶段复核 r3):adult.js?v=7(「猜你喜欢」带 nr=1 不推荐审查级作品;无痕时浏览路由用 replaceState 不进浏览器历史)。
 const CACHE_VERSION = 'v43';
-const ADULT_REV = '-adult4';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult8';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -71,7 +77,11 @@ const STATIC_URLS = [
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
     './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js',
-    './adult/adult.js?v=4'   // [adult] v42-adult4:与 index.html 引用同一个 ?v=
+    './adult/adult.js?v=7',   // [adult] v43-adult8:与 index.html 引用同一个 ?v=
+    './adult/player-x.js?v=2',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
+    './adult/privacy.js?v=2',
+    './adult/preview.js?v=1',
+    './adult/feed.js?v=3'
 ];
 
 // 图片缓存配置
@@ -147,6 +157,8 @@ self.addEventListener('fetch', event => {
     // ⑨ [adult] 成人站的内容接口(目录/搜索/详情)直达:片名/海报地址不写进 Cache Storage(v42-adult1);
     //    v42-adult3:线路列表 /api/sites(各站档案/失效标记要是这一次的)、海报代理 /api/img(服务器自己有磁盘 LRU,设备上不再存一份)同样直达
     if (ADULT_SITE && url.origin === self.location.origin && /^\/api\/(catalog|search|detail|sites|img)(\/|$)/.test(url.pathname)) return;
+    //    -adult5:成人站后台 —— 页面 /admin/adult、静态 /adult/admin.html|js、接口 /api/adult/*(GET 带 X-Admin-Token,缓存键不含它)一律直达
+    if (ADULT_SITE && url.origin === self.location.origin && (/^\/api\/adult(\/|$)/.test(url.pathname) || /^\/admin\/adult(\/|$)/.test(url.pathname) || /^\/adult\/admin\./.test(url.pathname))) return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {

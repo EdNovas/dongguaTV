@@ -143,6 +143,7 @@
         if (o.cursor) q.push(['cursor', String(o.cursor)]);
         else q.push(['page', String(Math.max(1, Math.min(500, parseInt(o.page, 10) || 1)))]);
         if (o.facets) q.push(['facets', '1']);
+        if (o.nr) q.push(['nr', '1']);   // 不要审查级作品(推荐位用,服务器 snapshot rvl)
         return '/api/catalog/browse?' + q.filter(([k, v]) => v !== '' || k === 'page').map(([k, v]) => k + '=' + encQ(v)).join('&');
     }
     function browseUrl(tk, sel, page) { return browseApiUrl(normSel(tk, sel), { page }); }
@@ -191,6 +192,7 @@
         // phase 3:番号作品有发行日期(AVDB)→ 副行先写发行日,再跟上架时间;没有就不带这个键(与旧对象逐字相同)
         const rel = relDate(c.released);
         if (rel && c.wk.indexOf('c:') === 0) { o._rel = rel; o._sub = rel + (sub ? ' · ' + sub : ''); }
+        indexCard(o);   // [adult] p4:悬停预览 / 刷短片按 wk 找回卡片(不改输出)
         return o;
     }
     // 'YYYY-MM-DD'(1950..2100 年的真实日期)→ 原样;别的 → ''
@@ -372,7 +374,8 @@
     function sortOpts(facets, sel) {
         const av = (facets && facets.sorts && facets.sorts.length) ? facets.sorts : DEFAULT_SORTS;
         const cur = sel && sel.sort;
-        return SORTS.filter(s => av.indexOf(s.k) >= 0 || s.k === cur);
+        const act = !!(sel && sel.actress);   // p4:女优页总能按「发行日期」排(AVDB 的发行日;服务器的演员页就是按它排的)
+        return SORTS.filter(s => av.indexOf(s.k) >= 0 || s.k === cur || (act && s.k === 'released'));
     }
     // 标签行:已选(正向)在前 → 已排除 → 当前分类数量最多的 featured 标签(facets.groups 摊平,≤12);数为 0 的置灰不可点。
     //   没有 facets(旧服务器)→ 用 /api/catalog/tags 的 legacy 列表。审查类(选中了也)永不在这一行出现
@@ -402,11 +405,15 @@
         return out;
     }
     // ---- 地址栏路由(只有 id,不写片名):#/c/<大类>?b=&t=&x=&dur=&v=&studio=&actress=&lp=&sort= / #/tags?b= / #/tag/<id> / #/actress/<aid>
+    //      p4:#/actresses(女优索引,浏览页的一种「没有片单」的形态,同标签云);#/feed(刷短片)不归这里管(见 mixin 的 _adFeedHash)
     const DEF_SEL_KEYS = ['t', 'x', 'dur', 'v', 'studio', 'actress', 'lp'];
     const onlyKeys = (s, keys) => DEF_SEL_KEYS.every(k => keys.indexOf(k) >= 0 || !s[k] || (Array.isArray(s[k]) && !s[k].length));
+    // 没有片单的页面形态(标签云 / 女优索引):不拉片单、不出筛选行和底栏
+    const noList = (view) => view === 'tags' || view === 'actresses';
     function routeOf(view, tk, sel) {
         const T = typeOf(tk) || typeOf('all');
         const s = normSel(T.k, sel);
+        if (view === 'actresses') return '#/actresses';
         if (view === 'tags') return '#/tags' + (s.b ? '?b=' + encodeURIComponent(s.b) : '');
         if (T.k === 'all' && s.sort === 'new') {
             if (view === 'tag' && s.t && s.t.length === 1 && onlyKeys(s, ['t'])) return '#/tag/' + encodeURIComponent(s.t[0]);
@@ -439,6 +446,7 @@
             const b = BUCKET_LABEL[params.b] ? params.b : '';
             return { view: 'tags', type: b ? typeOfBucket(b) : 'all', sel: { b } };
         }
+        if (seg[1] === 'actresses' && seg.length === 2) return { view: 'actresses', type: 'all', sel: {} };
         if (seg[1] === 'tag' && validTag(one) && !isBlockedTag(one)) return { view: 'tag', type: 'all', sel: { t: [one] } };
         if (seg[1] === 'actress' && validAid(one)) return { view: '', type: 'all', sel: { actress: one } };
         if (seg[1] === 'c' && typeOf(one)) {
@@ -451,7 +459,9 @@
     }
     // 规范化后的地址(两边都按这个比:浏览器对 # 后面字符的转义各家不同)
     const canonHash = (hash) => { const r = parseRoute(hash); return r ? routeOf(r.view, r.type, r.sel) : ''; };
-    const isOurHash = (hash) => /^#\/(c|tags|tag|actress)(\/|\?|$)/.test(String(hash || ''));
+    const isOurHash = (hash) => /^#\/(c|tags|tag|actress|actresses)(\/|\?|$)/.test(String(hash || ''));
+    const FEED_HASH = '#/feed';
+    const isFeedHash = (hash) => String(hash || '') === FEED_HASH;
     // /api/catalog/tags(标签云)→ { groups:[{id,label,tags:[{id,label,count,w}]}] };只要 featured,字号档 w 1..5 按 log(数量)
     function normCloud(d) {
         const arr = (v) => (Array.isArray(v) ? v : []);
@@ -512,7 +522,57 @@
         if (!name) return null;
         learnActress(aid, name);
         const aliases = (Array.isArray(a.aliases) ? a.aliases : []).map(x => cleanText(x, 40)).filter(x => x && x !== name).filter((x, i, arr) => arr.indexOf(x) === i).slice(0, 6);
-        return { aid, name, aliases };
+        // p4:最新发行(服务器的演员页按发行日期排,第 1 页里最晚的那个真实日期)
+        let latest = '';
+        for (const c of Array.isArray(d.results) ? d.results : []) { const r = relDate(c && c.released); if (r && r > latest) latest = r; }
+        return { aid, name, aliases, latest };
+    }
+    // p4 /api/catalog/related/:wk → 排好的几排 [{k, title, icon, items, go}](相关推荐 / 同演员 · 名字 / 同片商 · 名字);
+    //   每排 ≤24 张、排内去重、不含这一部本身和它的 #clip/#U/~N 兄弟;同演员只在有合法 aid + 名字时出;没有卡片的排不出
+    const wkBase = (wk) => String(wk || '').split(/[#~]/)[0];
+    function normRelated(d, self) {
+        if (!d || typeof d !== 'object') return [];
+        const base = wkBase(self);
+        const take = (arr) => {
+            const out = [], seen = new Set();
+            for (const c of Array.isArray(arr) ? arr : []) {
+                const it = cardToItem(c);
+                if (!it || seen.has(it._wk) || (base && wkBase(it._wk) === base)) continue;
+                seen.add(it._wk);
+                out.push(Object.freeze(it));
+                if (out.length >= 24) break;
+            }
+            return out;
+        };
+        const rails = [];
+        const rel = take(d.items);
+        if (rel.length) rails.push({ k: 'rel', title: '相关推荐', icon: 'fa-wand-magic-sparkles', items: rel, go: null });
+        const a = d.actress && typeof d.actress === 'object' ? d.actress : null;
+        const aid = a ? aidStr(a.aid) : '', an = a ? cleanText(a.name, 40) : '';
+        if (aid && an) {
+            learnActress(aid, an);
+            const items = take(a.items);
+            if (items.length) rails.push({ k: 'act', title: '同演员 · ' + an, icon: 'fa-user', items, go: { sel: { actress: aid }, type: 'all' } });
+        }
+        const s = d.studio && typeof d.studio === 'object' ? d.studio : null;
+        const sid = s ? cleanStudio(s.id) : '', sl = s ? (cleanText(s.label, 40) || sid) : '';
+        if (sid) {
+            learnStudio(sid, sl);
+            const items = take(s.items);
+            if (items.length) rails.push({ k: 'st', title: '同片商 · ' + sl, icon: 'fa-building', items, go: { sel: { studio: sid }, type: 'all' } });
+        }
+        return rails;
+    }
+    // p4 猜你喜欢的种子标签:最近看过的作品(新 → 旧,越新权重越大)的 featured 标签打分,取前 n 个(审查类 / blocked 永远不当种子)
+    function forYouTags(recent, tagMap, n) {
+        const score = Object.create(null);
+        (Array.isArray(recent) ? recent : []).forEach((wk, i) => {
+            const w = 1 / (1 + i * 0.35);
+            const ids = tagMap && Array.isArray(tagMap[wk]) ? tagMap[wk] : [];
+            const seen = new Set();
+            ids.forEach(id => { if (!featurable(id) || seen.has(id)) return; seen.add(id); score[id] = (score[id] || 0) + w; });
+        });
+        return Object.keys(score).sort((a, b) => (score[b] - score[a]) || (a < b ? -1 : 1)).slice(0, Math.max(1, n || 3));
     }
     // /api/catalog/actress?q= → [{aid,name,n}] ≤10
     function normActressList(d) {
@@ -1130,8 +1190,23 @@
             .catch(() => null)
             .then(d => { if (t) clearTimeout(t); return d; });
     }
+    // [adult] p4:不扩线的作品请求先用 adult/player-x.js 预取好的(dgAdultPlayer.prefetched(wk) → Promise / 作品 JSON / null);
+    //   拿不到、形状不对、不是这一部 → 照常请求 /api/catalog/work
+    function prefetchedWork(wk) {
+        try {
+            const P = root.dgAdultPlayer;
+            if (!P || typeof P.prefetched !== 'function') return null;
+            const r = P.prefetched(wk);
+            if (r == null) return null;
+            return Promise.resolve(r).then(d => (d && typeof d === 'object' && Array.isArray(d.sources) && (d._wk == null || d._wk === wk)) ? d : null, () => null);
+        } catch (e) { return null; }
+    }
+    function fetchWorkRaw(wk) {
+        const p = prefetchedWork(wk);
+        return p ? p.then(d => d || fetchJson(workUrl(wk, false), 10000)) : fetchJson(workUrl(wk, false), 10000);
+    }
     // 作品 → openDetail 用的 group;expand=true 时服务器现搜各站补线路(最多 ~20s)
-    const fetchWork = (wk, expand) => fetchJson(workUrl(wk, expand), expand ? 25000 : 10000).then(workToGroup);
+    const fetchWork = (wk, expand) => (expand ? fetchJson(workUrl(wk, true), 25000) : fetchWorkRaw(wk)).then(workToGroup);
 
     // ========== 线路反馈(POST /api/catalog/beacon) ==========
     //   同一部作品的同一条线路,一个会话里「失败」「起播」各最多报一次(sessionStorage 记着,刷新也不重报);发了就不管,绝不挡播放
@@ -1162,10 +1237,14 @@
             if (dur) p.dur = dur;
             const w = int(o.w, 16, 16384), h = int(o.h, 16, 16384);
             if (w && h) { p.w = w; p.h = h; }
+            // p4:画面方向(刷短片在 loadedmetadata 后量 videoWidth/Height 报;契约 P4 B1 beacon 的 orient)
+            if (o.orient === 'v' || o.orient === 'h' || o.orient === 'sq') p.orient = o.orient;
             return p;
         }
-        const keyOf = (p) => (p.ok ? 'ok' : 'x') + '|' + p.wk + '|' + p.site_key + '|' + p.vod_id;
+        // 刷短片的方向上报(带 orient)与播放页的起播上报分开记(各报一次)
+        const keyOf = (p) => (p.ok ? (p.orient ? 'or' : 'ok') : 'x') + '|' + p.wk + '|' + p.site_key + '|' + p.vod_id;
         function send(o) {
+            if (incognito()) return false;   // [adult] p4:无痕时本机什么都不报(上报带作品键)
             const p = payload(o);
             if (!p) return false;
             const s = load(), k = keyOf(p);
@@ -1177,6 +1256,158 @@
         }
         return { send, payload, keyOf, _reset() { sent = new Set(); save(); } };
     })();
+
+    // ========== [adult] p4 扩展点:window.dgAdultHooks ==========
+    //   别的模块(adult/player-x.js、privacy.js、preview.js、feed.js)往上挂;adult.js / index.html 在固定的地方调:
+    //     onPlayerReady(dp, video, ctx)  每次 play() 把线路交给播放器之后(新建或换源/换集都算);
+    //                                    ctx = { wk, dur, isLive, lineKey('站|vod_id'), siteKey, vodId, url, fresh, episodes }
+    //     onPlayerDestroy(reason)        关播放页 / 回首页 / 销毁重建播放器之前;reason = 'close' | 'home' | 'switch' | 'rebuild' | 'offline'
+    //     onHistoryWrite(item)           每次写观看历史 / 进度 / 观看统计之前;任一订阅者返回 false = 这次不写(无痕);
+    //                                    item = { kind: 'history' | 'progress' | 'stats', name, wk, episode }
+    //     onSettingsRender(container)    偏好设置弹窗打开:container 是一个空 div,订阅者往里放自己的设置行(每次打开都是新的)
+    //     onCardHover(card, el, ev)      目录卡片 鼠标进入 / 手指按下(card = 卡片对象,至少有 wk;ev.type = 'pointerover' | 'touchstart')
+    //   订阅:window.dgAdultHooks.onPlayerReady = fn(赋值 = 追加,不会顶掉别人的)/ .add(name, fn) / .remove(name, fn);
+    //   整个对象被换掉(window.dgAdultHooks = {...})时把里面的函数逐个追加。没人订阅 = 什么都不做;每个订阅者各自 try/catch
+    const HOOK_NAMES = ['onPlayerReady', 'onPlayerDestroy', 'onHistoryWrite', 'onSettingsRender', 'onCardHover'];
+    const hooks = (function () {
+        const subs = Object.create(null), busy = Object.create(null);
+        HOOK_NAMES.forEach(n => { subs[n] = []; });
+        function add(name, fn) {
+            const L = subs[name];
+            if (!L || typeof fn !== 'function' || fn.__dgHookDispatch) return false;
+            if (L.indexOf(fn) < 0) L.push(fn);
+            return true;
+        }
+        function remove(name, fn) { const L = subs[name], i = L ? L.indexOf(fn) : -1; if (i >= 0) L.splice(i, 1); return i >= 0; }
+        // 调一个钩子:返回 false = 有订阅者否决(只对 onHistoryWrite 有意义)。同一个钩子在订阅者里又被调(链式包装)→ 不重入
+        function call(name, args) {
+            const L = subs[name];
+            if (!L || !L.length || busy[name]) return true;
+            busy[name] = true;
+            let ok = true;
+            try {
+                for (const fn of L.slice()) {
+                    try { if (fn.apply(null, args || []) === false) ok = false; }
+                    catch (e) { try { console.warn('[adult] 钩子 ' + name + ' 出错', e); } catch (_) { } }
+                }
+            } finally { busy[name] = false; }
+            return ok;
+        }
+        const H = {};
+        HOOK_NAMES.forEach(n => {
+            const dispatch = function () { return call(n, Array.prototype.slice.call(arguments)); };
+            dispatch.__dgHookDispatch = true;
+            Object.defineProperty(H, n, { enumerable: true, get: () => dispatch, set: (fn) => { add(n, fn); } });
+        });
+        Object.defineProperty(H, 'add', { value: add });
+        Object.defineProperty(H, 'remove', { value: remove });
+        Object.defineProperty(H, 'call', { value: function (n) { return call(n, Array.prototype.slice.call(arguments, 1)); } });
+        Object.defineProperty(H, 'count', { value: (n) => (subs[n] ? subs[n].length : 0) });
+        function merge(v) {
+            if (!v || v === H || typeof v !== 'object') return;
+            HOOK_NAMES.forEach(n => { let f = null; try { f = v[n]; } catch (e) { } if (typeof f === 'function') add(n, f); });
+        }
+        // 装到 window 上:先放进来的(脚本顺序意外时)合并;之后整个赋值也只是合并
+        function install() {
+            if (!root || typeof root !== 'object') return;
+            let prev = null;
+            try { prev = root.dgAdultHooks; } catch (e) { }
+            if (prev === H) return;
+            try { Object.defineProperty(root, 'dgAdultHooks', { configurable: true, enumerable: true, get: () => H, set: (v) => merge(v) }); }
+            catch (e) { try { root.dgAdultHooks = H; } catch (_) { } }
+            merge(prev);
+        }
+        return { H, add, remove, call, install, merge, NAMES: HOOK_NAMES };
+    })();
+    // 调钩子(index.html 用:window.DgAdult.hook('onPlayerDestroy', 'close'));返回 false = 被否决
+    function hook(name) { return hooks.call(name, Array.prototype.slice.call(arguments, 1)); }
+
+    // ========== [adult] p4 本机作品标签(「猜你喜欢」的种子):wk → featured 标签 id,最多 80 部,最近看的在后 ==========
+    const wkTags = (function () {
+        const KEY = 'dg_wk_tags', MAX = 80;
+        function load() {
+            try {
+                const d = JSON.parse(lsGet(KEY) || 'null');
+                return (d && Array.isArray(d.m)) ? d.m.filter(r => Array.isArray(r) && typeof r[0] === 'string' && WK_RE.test(r[0]) && Array.isArray(r[1])) : [];
+            } catch (e) { return []; }
+        }
+        function get(wk) { const r = load().find(x => x[0] === wk); return r ? r[1].filter(featurable) : null; }
+        function put(wk, ids) {
+            if (typeof wk !== 'string' || !WK_RE.test(wk) || wk.length > 300) return false;
+            const clean = (Array.isArray(ids) ? ids : []).filter(featurable).slice(0, 6);
+            const m = load().filter(x => x[0] !== wk);
+            m.push([wk, clean, Date.now()]);
+            return lsSet(KEY, JSON.stringify({ v: 1, m: m.slice(-MAX) }));
+        }
+        function all() { const o = Object.create(null); load().forEach(r => { o[r[0]] = r[1].filter(featurable); }); return o; }
+        return { KEY, get, put, all };
+    })();
+
+    // ========== [adult] p4 卡片索引:wk → 卡片对象(悬停预览 / 刷短片拿得到片名、海报、时长),最多 3000 个,先进先出 ==========
+    const cardIndex = new Map();
+    const CARD_INDEX_MAX = 3000;
+    function indexCard(o) {
+        if (!o || typeof o._wk !== 'string' || !o._wk) return;
+        if (cardIndex.has(o._wk)) cardIndex.delete(o._wk);
+        cardIndex.set(o._wk, o);
+        if (cardIndex.size > CARD_INDEX_MAX) { const k = cardIndex.keys().next().value; cardIndex.delete(k); }
+    }
+    const cardOf = (wk) => (typeof wk === 'string' && cardIndex.get(wk)) || null;
+
+    // ========== [adult] p4 给独立模块用的桥(preview.js / feed.js 不直接摸 Vue 实例) ==========
+    const bridge = { app: null };
+    // 主播放器的去广告地址变换(与 index.html play() 同规则):开着去广告、配了 Worker、是 .m3u8、这个站没被记「过不了代理」→ 套 Worker;否则原样
+    function wrapPlayUrl(url, o) {
+        const u = String(url == null ? '' : url);
+        const opt = o || {};
+        if (!/^https?:\/\//i.test(u) || !opt.filterOn || !opt.proxy || u.indexOf('.m3u8') < 0 || opt.bad) return u;
+        return String(opt.proxy).replace(/\/+$/, '') + '/?url=' + encodeURIComponent(u);
+    }
+    function playUrl(url, siteKey) {
+        const app = bridge.app;
+        let filterOn = false, proxy = '', bad = false;
+        try { const AF = root.AdFilter; filterOn = !!(AF && typeof AF.isEnabled === 'function' && AF.isEnabled()); } catch (e) { }
+        try { proxy = (app && app.corsProxyUrl) || ''; } catch (e) { }
+        try { bad = !!(siteKey && app && typeof app._adProxyBad === 'function' && app._adProxyBad(siteKey)); } catch (e) { }
+        return wrapPlayUrl(url, { filterOn, proxy, bad });
+    }
+    // 配置的 CORS 代理(Worker)地址;没配 → ''
+    function proxyUrl() { try { const app = bridge.app; return (app && typeof app.corsProxyUrl === 'string') ? app.corsProxyUrl.replace(/\/+$/, '') : ''; } catch (e) { return ''; } }
+    // 主播放器正在放 / 后台在剪插播或离线分析 → 预览、刷短片让路(v1.1.176:后台抢带宽会让正片起不来)
+    function mainBusy() {
+        try {
+            if (root.adCut && typeof root.adCut.busy === 'function' && root.adCut.busy()) return true;
+            if (root.afpOffline && root.afpOffline._busy) return true;
+            const app = bridge.app;
+            if (!app || !app.showDetail) return false;
+            const v = root.document && root.document.querySelector('#dplayer video');
+            return !!(v && !v.paused && !v.ended);
+        } catch (e) { return false; }
+    }
+    function isTV() { try { const app = bridge.app; return !!(app && app.isTVMode); } catch (e) { return false; } }
+    function openWorkExt(card) {
+        const app = bridge.app;
+        if (!app || typeof app.openWork !== 'function' || !card) return false;
+        try { Promise.resolve(app.openWork(card)).catch(() => { }); return true; } catch (e) { return false; }
+    }
+    // 无痕(adult/privacy.js 的 dgPrivacy):开着时本机不记历史 / 不攒「猜你喜欢」的标签 / 不上报
+    function incognito() { try { const P = root.dgPrivacy; return !!(P && typeof P.incognito === 'function' && P.incognito()); } catch (e) { return false; } }
+    function privLocked() { try { const P = root.dgPrivacy; return !!(P && typeof P.locked === 'function' && P.locked()); } catch (e) { return false; } }
+    // 网络:省流量 / 2G·3G / 蜂窝(没在设置里允许)→ 不自动拉视频。opt 是「移动网络也自动播放」(设置里开,只存本机)
+    const CELL_KEY = 'dg_cell_ok';
+    const cellOk = () => lsGet(CELL_KEY) === '1';
+    // 封面悬停预览总开关(只存本机,默认开;preview.js 读同一个键)
+    const PV_KEY = 'dg_pv_on';
+    const pvOn = () => lsGet(PV_KEY) !== '0';
+    function netBlock(conn, optIn) {
+        const c = conn || null;
+        if (!c) return '';
+        if (c.saveData) return 'save-data';
+        if (/(^|\b)(slow-2g|2g|3g)$/.test(String(c.effectiveType || ''))) return 'slow';
+        if (c.type === 'cellular' && !optIn) return 'cellular';
+        return '';
+    }
+    function netNow() { try { return netBlock(root.navigator && root.navigator.connection, cellOk()); } catch (e) { return ''; } }
 
     // ========== 样式 ==========
     const CSS = [
@@ -1303,6 +1534,32 @@
         '.dg-meta-tgl { color: #777; min-width: 5em; }',
         '.dg-meta-rel { white-space: nowrap; color: #bbb; }',
         '.browse-filters:empty { display: none; }',
+        // ---- p4:刷短片入口 / 播放页相关推荐 / 女优索引与女优页头 / 扩展设置容器 ----
+        '.dg-nav-feed { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }',
+        '.dg-nav-feed:hover, .dg-nav-feed:focus { border-color: #fff; background: rgba(229, 9, 20, 0.3); outline: none; }',
+        '@media (max-width: 480px) { .dg-nav-feed span { display: none; } .dg-nav-feed { width: 36px; padding: 0; justify-content: center; } }',
+        '.catnav-q.is-feed i { color: #2dd4bf; }',
+        '.dg-rails { margin-top: 18px; }',
+        '.dg-rail { margin-top: 14px; }',
+        '.dg-rail-t { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 16px; font-weight: 600; margin: 0 0 8px; }',
+        '.dg-rail-t > i { color: #e50914; font-size: 14px; }',
+        '.dg-rail-all { margin-left: auto; background: none; border: 0; color: #aaa; font-size: 13px; cursor: pointer; padding: 4px 6px; }',
+        '.dg-rail-all:hover, .dg-rail-all:focus { color: #fff; }',
+        '.dg-rail-row { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; padding: 2px 2px 10px; scrollbar-width: thin; }',
+        '.dg-rail-card { flex: none; width: calc(var(--card-w, 150px) * 0.86); cursor: pointer; }',
+        '.dg-rail-card .poster-wrap { position: relative; border-radius: 8px; overflow: hidden; }',
+        '.dg-rail-card .movie-name { font-size: 13px; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+        '.dg-rail-card:focus { outline: 3px solid #fff; outline-offset: 2px; }',
+        '.dg-acts { padding: 8px 0 30px; }',
+        '.dg-acts-q { max-width: 420px; }',
+        '.dg-acts-sec { margin: 16px 0 6px; }',
+        '.dg-cloud-links { display: flex; justify-content: flex-end; margin: 0 0 4px; }',
+        '.dg-act-head { margin: 0 0 4px; }',
+        '.dg-act-name { color: #fff; font-size: 18px; font-weight: 700; margin: 0 0 4px; }',
+        '.dg-act-idx { margin-left: 10px; background: none; border: 0; padding: 0; color: #ff8a80; font-size: 12px; cursor: pointer; }',
+        '.dg-set-ext:empty { display: none; }',
+        // 封面上长按预览时不弹系统菜单(iOS 存图 / 安卓长按菜单)
+        '.hot-card .poster-wrap img, .browse-card .poster-wrap img, .dg-rail-card .poster-wrap img { -webkit-touch-callout: none; }',
     ].join('\n');
     function injectCss() {
         const d = root.document;
@@ -1329,6 +1586,32 @@
             img.src = PLACEHOLDER;
         }, true);
     }
+    // [adult] p4 目录卡片的悬停 / 按下 → dgAdultHooks.onCardHover(card, el, ev)。卡片带 data-wk(首页行 / 浏览网格 / 相关推荐);
+    //   文档级委托(不给几百张卡各绑监听),鼠标在卡片内部移动不重复触发;没人订阅时什么都不做
+    const CARD_SEL = '.hot-card[data-wk], .browse-card[data-wk], .dg-rail-card[data-wk]';
+    function hookCardHover() {
+        const d = root.document;
+        const fire = (el, ev) => {
+            const wk = el.getAttribute('data-wk');
+            if (!wk || !WK_RE.test(wk) || wk.length > 300) return;
+            hooks.call('onCardHover', [cardOf(wk) || { wk, _wk: wk }, el, ev]);
+        };
+        const cardEl = (t) => (t && t.closest ? t.closest(CARD_SEL) : null);
+        d.addEventListener('pointerover', (e) => {
+            if (!hooks.H.count('onCardHover')) return;
+            if (e.pointerType && e.pointerType !== 'mouse' && e.pointerType !== 'pen') return;   // 触屏走 touchstart
+            const el = cardEl(e.target);
+            if (!el) return;
+            const from = e.relatedTarget;
+            if (from && el.contains(from)) return;   // 卡片内部移动
+            fire(el, e);
+        }, { passive: true, capture: true });
+        d.addEventListener('touchstart', (e) => {
+            if (!hooks.H.count('onCardHover') || (e.touches && e.touches.length > 1)) return;
+            const el = cardEl(e.target);
+            if (el) fire(el, e);
+        }, { passive: true, capture: true });
+    }
     // 模糊封面(本机设置,默认关):<html> 上的 dg-blur 类
     const BLUR_KEY = 'dg_blur_cover';
     const blurOn = () => lsGet(BLUR_KEY) === '1';
@@ -1342,6 +1625,8 @@
         try { root.document.addEventListener('DOMContentLoaded', () => { brand.apply(brand.name()); brand.showBuy(); }, { once: true }); } catch (e) { }
         auth.install();
         hookImages();
+        hooks.install();      // [adult] p4:window.dgAdultHooks(先于 defer 的扩展模块)
+        hookCardHover();
         // 登录框比 Vue 应用先出来:年龄确认之后单独拿一次 /api/config(站名、购买地址),不等应用启动
         ageGate.whenAccepted().then(() => fetchJson('/api/config', 8000)).then(c => {
             if (!c || typeof c !== 'object') return;
@@ -1374,15 +1659,16 @@
     //   列数变了(转屏/改窗口)才重新分块,空壳高度按一张卡片的实测高度估
     const DgAdGrid = {
         name: 'DgAdGrid',
-        props: { items: { type: Array, default: () => [] }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false }, loading: { type: Boolean, default: false } },
-        emits: ['pick'],
+        // p4:keep = 片单是「一直在长 / 重排」的同一份(搜索结果流式到达):换数组不重新分块,只有清空 / 从空到有才重来
+        props: { items: { type: Array, default: () => [] }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false }, loading: { type: Boolean, default: false }, keep: { type: Boolean, default: false } },
+        emits: ['pick', 'imgerr'],
         data() { return { cols: guessCols(), dead: {} }; },
         computed: {
             per() { return Math.max(1, this.cols | 0) * ROWS_PER_BLOCK; },
             nBlocks() { return Math.ceil(this.items.length / this.per); },
         },
         watch: {
-            items(nv, ov) { if (nv !== ov) this.reset(); },   // 换了筛选:整个新数组
+            items(nv, ov) { if (nv !== ov && !(this.keep && nv && nv.length && ov && ov.length)) this.reset(); },   // 换了筛选:整个新数组
             nBlocks(n, o) {
                 // 新的一页落在最后一块:它永远是活的(还在被填)
                 if (n > 0 && this.dead[n - 1] != null) { const d = Object.assign({}, this.dead); delete d[n - 1]; this.dead = d; }
@@ -1487,9 +1773,9 @@
   <div v-if="loading && !items.length" class="browse-grid"><div class="browse-card is-skel" v-for="n in 12" :key="'sk' + n" aria-hidden="true"><div class="poster-wrap"></div><div class="skel-line"></div><div class="skel-line short"></div></div></div>
   <div v-for="bi in nBlocks" :key="'blk' + bi" class="browse-grid dg-blk" :class="{ 'dg-live': dead[bi - 1] == null }" :data-blk="bi - 1" :style="dead[bi - 1] != null ? { height: dead[bi - 1] + 'px' } : null">
     <template v-if="dead[bi - 1] == null">
-      <div class="browse-card" v-for="item in slice(bi - 1)" :key="'b-' + item.id" :data-bid="item.id" :tabindex="tv ? 0 : null" @click="pick(item)" @keydown.enter.prevent="pick(item)">
+      <div class="browse-card" v-for="item in slice(bi - 1)" :key="'b-' + item.id" :data-bid="item.id" :data-wk="item._wk || null" :tabindex="tv ? 0 : null" @click="pick(item)" @keydown.enter.prevent="pick(item)">
         <div class="poster-wrap">
-          <img :src="src(item.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded">
+          <img :src="src(item.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded" @error="$emit('imgerr', item)">
           <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div><span v-if="item._n >= 2" class="dg-ov-n">{{ item._n }}线</span><span v-if="item._durText" class="dg-ov-dur">{{ item._durText }}</span><span v-if="item._code" class="dg-ov-code">{{ item._code }}</span>
         </div>
         <div class="movie-name">{{ item.title || item.name }}</div>
@@ -1732,7 +2018,8 @@
     // 标签页 / 女优页的页头:标签所属分面组、按分类细分(点了 = 这个标签 + 那个分类)、相关标签(只有 featured);女优名 + 别名
     const DgAdHead = {
         name: 'DgAdHead',
-        props: { view: { type: String, default: '' }, sel: { type: Object, default: () => ({}) } },
+        // p4:total = 浏览页当前筛选的部数(女优页头的「共 N 部」)
+        props: { view: { type: String, default: '' }, sel: { type: Object, default: () => ({}) }, total: { type: Number, default: 0 } },
         emits: ['go', 'learn'],
         data() { return { info: null, err: false }; },
         computed: {
@@ -1766,7 +2053,11 @@
       <div v-if="info.related.length" class="browse-frow" role="group" aria-label="相关标签"><span class="browse-flabel">相关</span><div class="browse-fopts"><button v-for="r in info.related" :key="'hr-' + r.id" type="button" class="browse-fopt" @click="$emit('go', { view: 'tag', id: r.id })">#{{ r.label }}</button></div></div>
     </template>
   </template>
-  <div v-else-if="info" class="dg-head-sub"><i class="fas fa-user" aria-hidden="true"></i> {{ info.name }}<span v-if="info.aliases.length"> · 又名 {{ info.aliases.join(' / ') }}</span></div>
+  <div v-else-if="info" class="dg-act-head">
+    <div class="dg-act-name"><i class="fas fa-user" aria-hidden="true"></i> {{ info.name }}</div>
+    <div v-if="info.aliases.length" class="dg-head-sub">又名 {{ info.aliases.join(' / ') }}</div>
+    <div class="dg-head-sub"><span v-if="total">共 {{ countLabel(total) }} 部</span><span v-if="info.latest">{{ total ? ' · ' : '' }}最新 {{ info.latest }} 发行</span><button type="button" class="dg-act-idx" @click="$emit('go', { view: 'actresses' })">女优索引 <i class="fas fa-angle-right" aria-hidden="true"></i></button></div>
+  </div>
 </div>`,
     };
 
@@ -1796,6 +2087,7 @@
             },
         },
         template: `<div class="dg-cloud">
+  <div class="dg-cloud-links"><button type="button" class="browse-fopt" @click="$emit('go', { view: 'actresses' })"><i class="fas fa-user" aria-hidden="true"></i> 女优索引</button></div>
   <div v-if="err" class="browse-state">标签加载失败 <button type="button" class="browse-btn" @click="load(true)"><i class="fas fa-rotate-right" aria-hidden="true"></i> 重试</button></div>
   <div v-else-if="!data" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载标签…</div>
   <div v-else-if="!data.groups.length" class="browse-empty"><i class="fas fa-tags" aria-hidden="true"></i><div class="browse-empty-t">这个分类还没有标签</div></div>
@@ -1803,6 +2095,109 @@
     <div class="dg-cloud-gt">{{ g.label }}</div>
     <div class="dg-cloud-ts"><button v-for="t in g.tags" :key="'ct-' + t.id" type="button" class="dg-cloud-t" :class="'w' + t.w" :title="t.label + ' · ' + t.count + ' 部'" @click="pick(t.id)">{{ t.label }}<span class="dg-c">{{ t.count }}</span></button></div>
   </section>
+</div>`,
+    };
+
+    // [adult] p4 播放页的「相关推荐 / 同演员 / 同片商」(GET /api/catalog/related/:wk)。wk 由根组件在主播放器出了第一帧之后才给
+    //   (不跟起播抢);每排横向滑动 ≤24 张;点卡片 @pick → openWork,点「全部」@go → 女优页 / 厂牌浏览
+    const DgAdRails = {
+        name: 'DgAdRails',
+        props: { wk: { type: String, default: '' }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false } },
+        emits: ['pick', 'go'],
+        data() { return { rails: null }; },
+        watch: { wk: { immediate: true, handler() { this.load(); } } },
+        methods: {
+            src(p) { return this.poster ? this.poster(p) : (p || PLACEHOLDER); },
+            loaded: onImgLoad,
+            load() {
+                const wk = this.wk;
+                this.rails = null;
+                if (!wk || !WK_RE.test(wk) || wk.length > 300) return;
+                cachedJson('/api/catalog/related/' + encodeURIComponent(wk), 10000).then(d => {
+                    if (wk !== this.wk) return;
+                    this.rails = Object.freeze(normRelated(d, wk));
+                });
+            },
+            pick(it) { this.$emit('pick', it); },
+        },
+        template: `<div v-if="rails && rails.length" class="dg-rails">
+  <section v-for="r in rails" :key="r.k" class="dg-rail" :aria-label="r.title">
+    <div class="dg-rail-t"><i :class="['fas', r.icon]" aria-hidden="true"></i><span>{{ r.title }}</span><button v-if="r.go" type="button" class="dg-rail-all" :tabindex="tv ? 2 : null" @click="$emit('go', r.go)">全部 <i class="fas fa-angle-right" aria-hidden="true"></i></button></div>
+    <div class="dg-rail-row">
+      <div v-for="it in r.items" :key="r.k + '-' + it.id" class="dg-rail-card" :data-wk="it._wk" :tabindex="tv ? 2 : null" @click="pick(it)" @keydown.enter.prevent="pick(it)">
+        <div class="poster-wrap">
+          <img :src="src(it.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded">
+          <div v-if="it._badge" class="dg-ad-badge">{{ it._badge }}</div><span v-if="it._durText" class="dg-ov-dur">{{ it._durText }}</span><span v-if="it._code" class="dg-ov-code">{{ it._code }}</span>
+        </div>
+        <div class="movie-name">{{ it.title }}</div>
+        <div class="movie-date dg-ad-sub">{{ it._sub }}</div>
+      </div>
+    </div>
+  </section>
+</div>`,
+    };
+
+    // [adult] p4 女优索引(#/actresses):热门女优 = 全部 + 日本三个分类各自按作品数的前 20(浏览接口的 facets.actress,快照里现算、10 分钟缓存);
+    //   上面一个搜索框走 /api/catalog/actress?q=(≤10 个);点名字 @go → 女优页
+    const ACT_SECTIONS = [['', '热门女优'], ['jp_censored', '日本有码'], ['jp_uncensored', '日本无码'], ['jp_subbed', '中文字幕']];
+    const actIndexUrls = () => ACT_SECTIONS.map(([b]) => browseApiUrl(b ? normSel(typeOfBucket(b), { b }) : normSel('all', {}), { page: 1, facets: true }));
+    function actSections(ds) {
+        const out = [];
+        (Array.isArray(ds) ? ds : []).forEach((d, i) => {
+            const f = d && d.facets ? normFacets(d.facets) : null;
+            const list = f ? f.actress.slice(0, 20) : [];
+            if (list.length && ACT_SECTIONS[i]) out.push({ k: ACT_SECTIONS[i][0] || 'all', label: ACT_SECTIONS[i][1], list });
+        });
+        return out;
+    }
+    const DgAdActresses = {
+        name: 'DgAdActresses',
+        emits: ['go', 'learn'],
+        data() { return { q: '', res: null, secs: null, err: false }; },
+        mounted() { this.load(); },
+        beforeUnmount() { this._gone = true; clearTimeout(this._t); },
+        methods: {
+            countLabel,
+            load(force) {
+                const urls = actIndexUrls();
+                if (force) urls.forEach(u => dCache.delete(u));
+                this.err = false; this.secs = null;
+                Promise.all(urls.map(u => cachedJson(u, 10000))).then(ds => {
+                    if (this._gone) return;
+                    if (ds.every(d => !d)) { this.err = true; return; }
+                    this.secs = Object.freeze(actSections(ds));
+                    this.$emit('learn');
+                });
+            },
+            search() {
+                clearTimeout(this._t);
+                const q = this.q.trim();
+                if (!q) { this.res = null; return; }
+                if (q.length > 40) return;
+                this._t = setTimeout(() => {
+                    const seq = (this._seq = (this._seq || 0) + 1);
+                    cachedJson('/api/catalog/actress?q=' + encodeURIComponent(q), 8000).then(d => {
+                        if (seq === this._seq && this.q.trim() === q) this.res = normActressList(d);
+                    });
+                }, 250);
+            },
+            pick(a) { if (a && validAid(a.aid)) this.$emit('go', { sel: { actress: aidStr(a.aid) }, type: 'all' }); },
+        },
+        template: `<div class="dg-acts">
+  <input class="dg-sq dg-acts-q" type="search" v-model="q" placeholder="搜索女优名字（也认别名）" aria-label="搜索女优" maxlength="40" @input="search()">
+  <section v-if="q.trim()" class="dg-acts-sec">
+    <div v-if="res && !res.length" class="dg-sec-n">没有找到</div>
+    <div class="dg-chips"><button v-for="a in (res || [])" :key="'aq-' + a.aid" type="button" class="dg-chip" @click="pick(a)">{{ a.name }}<span v-if="a.n" class="dg-c">{{ a.n }}</span></button></div>
+  </section>
+  <template v-else>
+    <div v-if="err" class="browse-state">加载失败 <button type="button" class="browse-btn" @click="load(true)"><i class="fas fa-rotate-right" aria-hidden="true"></i> 重试</button></div>
+    <div v-else-if="!secs" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载…</div>
+    <div v-else-if="!secs.length" class="browse-empty"><i class="fas fa-user" aria-hidden="true"></i><div class="browse-empty-t">还没有可浏览的女优</div></div>
+    <section v-for="s in (secs || [])" :key="'as-' + s.k" class="dg-acts-sec">
+      <div class="dg-cloud-gt">{{ s.label }}</div>
+      <div class="dg-chips"><button v-for="a in s.list" :key="s.k + '-' + a.aid" type="button" class="dg-chip" :title="a.name + ' · ' + a.count + ' 部'" @click="pick(a)">{{ a.name }}<span class="dg-c">{{ countLabel(a.count) }}</span></button></div>
+    </section>
+  </template>
 </div>`,
     };
 
@@ -1825,10 +2220,12 @@
                     // phase 3 浏览页:facets = 当前筛选的分面计数(冻结;第 1 页随结果下发);view = ''(浏览)/ 'tags'(标签云)/ 'tag'(标签页);
                     //   labv = 学到新名字(标签/厂牌/女优)时 +1,让标题重算;routeOn = 地址栏路由已接管(启动时先按地址栏开页,再开始写)
                     facets: null, view: '', labv: 0, routeOn: false,
+                    // p4:relWk = 播放页「相关推荐」这部(首帧之后才有);pv / feedAuto = 设置里的「封面悬停预览」「刷短片自动播放(移动网络)」
+                    relWk: '', pv: pvOn(), cell: cellOk(),
                 },
             };
         },
-        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud },
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud, DgAdRails, DgAdActresses },
         computed: {
             // 播放页作品信息条(currentGroup._meta 的展示版;没有 _meta 不出)
             adMeta() {
@@ -1882,12 +2279,13 @@
                 void this.adult.labv;
                 const b = this.browse, s = (b && b.sel) || {};
                 if (this.adult.view === 'tags') return '全部标签' + (s.b && BUCKET_LABEL[s.b] ? ' · ' + BUCKET_LABEL[s.b] : '');
+                if (this.adult.view === 'actresses') return '女优';   // p4 女优索引
                 if (this.adult.view === 'tag' && s.t && s.t.length) return '#' + tagLabel(s.t[0]);
                 return catalog.title(b.type, s);
             },
             adBrowseSummary() {
                 void this.adult.labv;
-                if (this.adult.view === 'tags' || this.adult.view === 'tag') return this.adBrowseTitle;
+                if (noList(this.adult.view) || this.adult.view === 'tag') return this.adBrowseTitle;
                 return catalog.summary(this.browse.type, this.browse.sel);
             },
             // 搜索建议下拉的各行:分类词 → 「按分类浏览」;作品卡片(≤8);最后一行「搜索全部站点」
@@ -1900,6 +2298,26 @@
                 rows.push({ t: 'all', k: 'all', q: S.q });
                 return rows;
             },
+            // ---- p4 ----
+            // 浏览页当前是「没有片单」的形态(标签云 / 女优索引):不出筛选行、网格、底栏
+            adNoList() { return !!(this.adultMode && this.adult && noList(this.adult.view)); },
+            // 刷短片入口:有目录、不是电视、feed.js 加载了
+            adFeedOn() { return !!(this.adultMode && this.adult && this.adult.catalog && !this.isTVMode && root.dgAdultFeed && typeof root.dgAdultFeed.open === 'function'); },
+            // 搜索结果(全站扇出可到几百张)→ 窗口化网格的卡片:海报按主组件的 finalPoster / 回退规则,_g 是原来的分组(点了 openDetail)
+            adSearchItems() {
+                if (!this.adultMode) return [];
+                const out = [];
+                for (const g of (this.groupedList || [])) {
+                    if (!g || !g.name) continue;
+                    let key = '', pic = '';
+                    try { key = this.posterKey(g); pic = this.isFallback(key) ? '' : (this.finalPoster(g) || ''); } catch (e) { }
+                    out.push(Object.freeze({
+                        id: g.name + '|' + (g._work || ''), _wk: typeof g._wk === 'string' ? g._wk : '', title: g.name, name: g.name, poster_path: pic,
+                        _n: (g.sources || []).length, _sub: g._workLabel || '', _badge: '', _code: '', _durText: '', _pk: key, _g: g,
+                    }));
+                }
+                return out;
+            },
         },
         // 主组件 data 之后、第一次渲染之前:首页榜单起步为空(不先渲染一排 TMDB 榜单标题,adultLoadHome 整个换掉);
         //   分类栏默认大类换成目录版的(主组件按 localStorage 记的 TMDB 大类起步)
@@ -1911,6 +2329,9 @@
         watch: {
             // 从首页行 / 浏览页开的播放页关掉后回到原来的滚动位置(closeDetail 会先滚回顶部)
             showDetail(v) {
+                if (!v && this.adult && this.adult.relWk) this.adult.relWk = '';   // [adult] p4:相关推荐跟着播放页走
+                if (!v && typeof this._adRelOff === 'function') this._adRelOff();
+                if (!v && this.adultMode) this._adAfterDetail();                 // [adult] p4:从刷短片进来的回到刷短片;猜你喜欢按新历史重算
                 if (v || this._adReturnY == null) return;
                 const y = this._adReturnY;
                 this._adReturnY = null;
@@ -1920,6 +2341,7 @@
             currentGroup(g, old) {
                 if (!this.adultMode) return;
                 if (g !== old) {
+                    if (this.adult.relWk && (!g || g._wk !== this.adult.relWk)) this.adult.relWk = '';   // [adult] p4:换了一部,相关推荐等新的首帧
                     if (Object.keys(this.adult.famOpen || {}).length) this.adult.famOpen = {};
                     if (this.adult.varPref && this.adult.varPref.kind && (!g || this.adult.varPref.wk !== (g._wk || ''))) this.adult.varPref = { wk: '', kind: '' };
                 }
@@ -1927,9 +2349,17 @@
             },
             // 浏览页的类型/筛选/开关一变 → 写地址栏(新的一条历史;从地址栏来的 / 面板开着时替换当前这条)
             adRouteHash(h) { this._adRouteSync(h); },
+            // [adult] p4:历史整份换了(云同步合并 / 清空)→ 猜你喜欢按新历史重算(签名没变就什么都不做)
+            watchHistory() { if (this.adultMode && this.adult && this.adult.home === 'ok') this._adForYouSoon(1500); },
+            // [adult] p4:偏好设置打开 → onSettingsRender(空容器,订阅者自己往里放设置行)
+            showSettingsModal(v) {
+                if (!v || !this.adultMode) return;
+                this.$nextTick(() => { const el = this.$refs && this.$refs.adSetExt; if (el) hooks.call('onSettingsRender', [el]); });
+            },
         },
         mounted() {
             if (!this.adultMode) return;
+            bridge.app = this;   // [adult] p4:preview.js / feed.js 经 DgAdult 的桥用(去广告地址、开作品、主播放器忙不忙)
             this._adHashFn = () => this._adOnHash();
             this._adPopFn = () => this._adOnPop();
             try { root.addEventListener('hashchange', this._adHashFn); root.addEventListener('popstate', this._adPopFn); } catch (e) { }
@@ -1954,7 +2384,14 @@
                     this.rowLists = Object.assign({}, r.lists);
                     this.rowConfigs = Object.assign({}, r.configs);
                     this.adult.home = r.order.length ? 'ok' : 'empty';
+                    this._adFySig = '';             // [adult] p4:首页行整个换了,猜你喜欢重新插
+                    this._adForYouSoon(1500);
                 };
+                // [adult] p4:无痕开关一变 → 猜你喜欢重算(开了无痕整行收起)
+                if (!this._adPrivHooked) {
+                    this._adPrivHooked = true;
+                    try { const P = root.dgPrivacy; if (P && typeof P.onChange === 'function') P.onChange(() => { this._adFySig = ''; this._adForYouSoon(0); }); } catch (e) { }
+                }
                 if (d === 'slow') {   // 先放行进应用,同一个请求回来后再填首页
                     p.then(h => { if (h) apply(h); else this.adult.home = 'error'; });
                     this._adRouteBoot();
@@ -2123,9 +2560,11 @@
                     this._adPaged = false;
                     // 标签页(#/tag/<id>)只认「全部 + 只选这一个标签 + 默认排序」;动了别的就是普通浏览
                     if (this.adult.view === 'tag' && !(b.type === 'all' && /^#\/tag\//.test(routeOf('tag', b.type, b.sel)))) this.adult.view = '';
+                    // p4:女优索引页上点了别的大类 → 那个大类的普通浏览页(索引本身不分大类)
+                    if (this.adult.view === 'actresses' && b.type !== 'all') this.adult.view = '';
                 }
                 if (b.loading) return;
-                if (this.adult.view === 'tags') { b.done = true; return; }
+                if (noList(this.adult.view)) { b.done = true; return; }   // 标签云 / 女优索引不拉片单
                 const seq = b.seq, page = b.page + 1;
                 const first = page === 1;
                 const cursor = first || this._adPaged ? '' : this._adCursor;
@@ -2180,6 +2619,8 @@
                 if (n.view === 'tags') {
                     const bk = BUCKET_LABEL[n.b] ? n.b : '';
                     view = 'tags'; type = bk ? typeOfBucket(bk) : 'all'; sel = { b: bk };
+                } else if (n.view === 'actresses') {
+                    view = 'actresses'; type = 'all'; sel = {};   // p4 女优索引
                 } else if (n.view === 'tag') {
                     if (!validTag(n.id) || isBlockedTag(n.id)) return;
                     view = 'tag'; sel = { t: [n.id] };
@@ -2209,7 +2650,7 @@
                     const prev = this.adult.view;
                     this.adult.view = view;
                     // 筛选没变:同一种页面什么都不做;只换了页面形态(#/c/all?t=x ↔ #/tag/x)片单不变,不重拉;进出标签云要重拉 / 清空片单
-                    if (same && (prev === view || (prev !== 'tags' && view !== 'tags'))) return;
+                    if (same && (prev === view || (!noList(prev) && !noList(view)))) return;
                     if (typeof this._browseDropKeyword === 'function') this._browseDropKeyword();
                     b.type = T.k;
                     b.sel = ns;
@@ -2231,7 +2672,7 @@
             // 顶上摘要条的「筛选」:直接打开筛选面板(返回 true = 已处理;没有面板时调用方照旧滚回顶部)
             adOpenSheet() {
                 const f = this.$refs && this.$refs.adFilter;
-                if (!f || typeof f.openSheet !== 'function' || this.adult.view === 'tags') return false;
+                if (!f || typeof f.openSheet !== 'function' || noList(this.adult.view)) return false;
                 return f.openSheet() === true;
             },
             // ---------- 地址栏路由 ----------
@@ -2248,20 +2689,21 @@
                 const sheet = this._adSheetHist;
                 try {
                     if (sheet) root.history.replaceState(Object.assign({}, root.history.state || {}, { dgAdSheet: sheet }), '', url);
-                    else if (this._adRouteReplace) root.history.replaceState({ dgAd: 1 }, '', url);
+                    else if (this._adRouteReplace || incognito()) root.history.replaceState({ dgAd: 1 }, '', url);   // 复核 r3:无痕不往浏览器历史里压浏览路由
                     else root.history.pushState({ dgAd: 1 }, '', url);
                 } catch (e) { }
             },
             // 地址栏 → 状态(后退 / 前进 / 手改地址栏)。播放页开着时后退 = 关播放页(浏览页留在原样,把刚退掉的那条压回去)
             _adOnHash() {
                 if (!this.adultMode || !this.adult.catalog || !this.adult.routeOn) return;
+                if (this._adFeedHash()) return;   // [adult] p4:#/feed 进出归刷短片管
                 const want = canonHash(root.location.hash);
                 const have = this.adRouteHash;
                 if (have == null || want === have) return;
                 if (!want && root.location.hash && !isOurHash(root.location.hash)) return;   // 别人的 #
                 if (this.showDetail) {
                     if (typeof this.closeDetail === 'function') this.closeDetail();
-                    try { root.history.pushState({ dgAd: 1 }, '', have || (root.location.pathname + root.location.search)); } catch (e) { }
+                    try { root.history[incognito() ? 'replaceState' : 'pushState']({ dgAd: 1 }, '', have || (root.location.pathname + root.location.search)); } catch (e) { }
                     return;
                 }
                 this._adApplyRoute(parseRoute(root.location.hash));
@@ -2285,6 +2727,7 @@
                 const h = (root.location && root.location.hash) || '';
                 const r = parseRoute(h);
                 this.adult.routeOn = true;
+                if (isFeedHash(h)) { this._adFeedPushed = false; this._adFeedHash(); return; }   // [adult] p4:书签 / 刷新时停在刷短片
                 if (r) this._adApplyRoute(r);
                 else if (isOurHash(h)) { try { root.history.replaceState(root.history.state, '', root.location.pathname + root.location.search); } catch (e) { } }   // 坏掉的旧路由:清掉
             },
@@ -2316,7 +2759,7 @@
                 if (h == null) return;
                 let cur = '';
                 try { cur = canonHash(root.location.hash); } catch (e) { return; }
-                if (h !== cur) { try { root.history.pushState({ dgAd: 1 }, '', h || (root.location.pathname + root.location.search)); } catch (e) { } }
+                if (h !== cur) { try { root.history[incognito() ? 'replaceState' : 'pushState']({ dgAd: 1 }, '', h || (root.location.pathname + root.location.search)); } catch (e) { } }
             },
             // 信息条:标签 → 标签页(跨分类,带按分类细分);厂牌 → 按厂牌浏览;女优(有 aid)→ 女优页,没有 aid 的旧名字 → 全站搜
             adMetaTag(id) { if (featurable(id)) this.adGo({ view: 'tag', id }); },
@@ -2437,9 +2880,9 @@
                 if (!g || typeof g._wk !== 'string' || !WK_RE.test(g._wk) || g._meta || g._isLive || g._offlineCtx) return;
                 if (!this.adult.catalog || !Array.isArray(g.sources) || !g.sources.length || enriched.has(g)) return;
                 enriched.add(g);
-                const d = await fetchJson(workUrl(g._wk, false), 10000);
+                const d = await fetchWorkRaw(g._wk);   // [adult] p4:预取过的直接用
                 if (!d || this.currentGroup !== g) return;
-                if (d._meta && typeof d._meta === 'object' && !g._meta) g._meta = d._meta;
+                if (d._meta && typeof d._meta === 'object' && !g._meta) { g._meta = d._meta; this._adRememberTags(g); }
                 const by = new Map();
                 (Array.isArray(d.sources) ? d.sources : []).forEach(s => { if (s && s.site_key && s.vod_id != null) by.set(s.site_key + '|' + s.vod_id, srcExtra(s)); });
                 (g.sources || []).forEach(s => {
@@ -2495,6 +2938,212 @@
                 this.adult.blur = v;
                 lsSet(BLUR_KEY, v ? '1' : '0');
                 applyBlur(v);
+            },
+            // [adult] p4 封面悬停预览总开关 / 移动网络也自动播放(preview.js、feed.js 读同样的键)
+            adSetPv(on) {
+                const v = !!on;
+                this.adult.pv = v;
+                lsSet(PV_KEY, v ? '1' : '0');
+                try { if (!v && root.dgAdultPreview && typeof root.dgAdultPreview.stop === 'function') root.dgAdultPreview.stop('off'); } catch (e) { }
+            },
+            adSetCell(on) {
+                const v = !!on;
+                this.adult.cell = v;
+                lsSet(CELL_KEY, v ? '1' : '0');
+            },
+            // ---------- [adult] p4 钩子(index.html 在固定的地方调这几个) ----------
+            // play() 把线路交给播放器之后(新建 / 换源 / 换集):onPlayerReady(dp, video, ctx);顺带记下这部的标签(猜你喜欢)、相关推荐等首帧后再拉
+            adPlayerReady(dp, url, fresh) {
+                if (!this.adultMode || !dp) return;
+                const g = this.currentGroup, s = this.currentSource;
+                const wk = (g && typeof g._wk === 'string') ? g._wk : '';
+                const m = g && g._meta && typeof g._meta === 'object' ? g._meta : null;
+                const dur = Math.max(0, Math.round(Number(s && s._dur) || Number(m && m.dur) || 0));
+                const ctx = Object.freeze({
+                    wk, dur, isLive: !!(this._liveActive || (g && g._isLive)), lineKey: s && s.site_key ? s.site_key + '|' + s.vod_id : '',
+                    siteKey: s && s.site_key ? String(s.site_key) : '', vodId: s && s.vod_id != null ? String(s.vod_id) : '',
+                    url: String(url || ''), fresh: !!fresh, episodes: (this.episodeList || []).length,
+                });
+                hooks.call('onPlayerReady', [dp, dp.video || null, ctx]);
+                if (wk && !ctx.isLive) { this._adRememberTags(g); this._adArmRelated(dp, g); }
+            },
+            // 「猜你喜欢」用:本机记下看过的目录作品的 featured 标签(审查类 / blocked 不记;无痕不记)
+            _adRememberTags(g) {
+                if (!g || typeof g._wk !== 'string' || !WK_RE.test(g._wk) || !g._meta || typeof g._meta !== 'object' || incognito()) return;
+                const ids = metaTagList(g._meta.tags, 6).map(t => t.id);
+                if (ids.length) wkTags.put(g._wk, ids);
+            },
+            // 相关推荐:等主播放器出了第一帧(playing / 真的走动了)才挂上(不跟起播抢);20s 还没起播也挂(线路坏了时用户照样能换一部)
+            _adArmRelated(dp, g) {
+                const wk = g && g._wk;
+                if (!wk || this.adult.relWk === wk) return;
+                if (typeof this._adRelOff === 'function') this._adRelOff();
+                const v = dp && dp.video;
+                const go = () => {
+                    off();
+                    const cg = this.currentGroup;
+                    if (!this.showDetail || !cg || cg._wk !== wk) return;
+                    if (this.adult.relWk !== wk) this.adult.relWk = wk;
+                };
+                const onT = () => { if (v && v.currentTime > 0 && v.readyState >= 2) go(); };
+                let t = 0;
+                const off = () => {
+                    clearTimeout(t);
+                    if (v) { try { v.removeEventListener('playing', go); v.removeEventListener('timeupdate', onT); } catch (e) { } }
+                    if (this._adRelOff === off) this._adRelOff = null;
+                };
+                this._adRelOff = off;
+                if (v && v.addEventListener) { v.addEventListener('playing', go); v.addEventListener('timeupdate', onT); }
+                t = setTimeout(go, 20000);
+            },
+            adRelPick(item) { if (item && item._wk) this.openWork(item); },
+            // 搜索结果的窗口化网格:点卡片 = 原来的 openDetail(分组);海报坏了走原来的回退(换同组别的线路的海报 → 中性占位)
+            adSearchPick(item) { if (item && item._g && typeof this.openDetail === 'function') this.openDetail(item._g); },
+            adSearchImgErr(item) { if (item && item._pk && typeof this.handleImgError === 'function') { try { this.handleImgError(item._pk, item.title); } catch (e) { } } },
+            // ---------- [adult] p4 刷短片(#/feed;页面本身在 adult/feed.js 的 window.dgAdultFeed)----------
+            //   入口按钮 → 压一条 #/feed(返回键关);刷短片里点片名 → 刷短片先收起(停掉视频),开播放页;关播放页回到刷短片原位
+            adOpenFeed() {
+                if (!this.adFeedOn) return;
+                try {
+                    if (root.location.hash !== FEED_HASH) { this._adFeedPushed = true; root.location.hash = FEED_HASH; }
+                    else this._adFeedHash();
+                } catch (e) { }
+            },
+            // 返回键 / goHome:刷短片开着 → 关掉(退掉压的那条历史),返回 true
+            adFeedBack() {
+                const F = root.dgAdultFeed;
+                if (!F || typeof F.isOpen !== 'function' || !F.isOpen()) return false;
+                this._adFeedLeave();
+                return true;
+            },
+            _adFeedLeave() {
+                const F = root.dgAdultFeed;
+                if (isFeedHash(root.location.hash) && this._adFeedPushed) { this._adFeedPushed = false; try { root.history.back(); return; } catch (e) { } }
+                this._adFeedPushed = false;
+                if (F && typeof F.close === 'function') F.close();
+                if (isFeedHash(root.location.hash)) { try { root.history.replaceState(root.history.state, '', root.location.pathname + root.location.search); } catch (e) { } }
+            },
+            // 地址栏是 / 不是 #/feed → 开 / 关刷短片。返回 true = 这次地址变化归刷短片管(_adOnHash 不再往下走)
+            _adFeedHash() {
+                const F = root.dgAdultFeed;
+                if (!F || typeof F.open !== 'function') return false;
+                const want = isFeedHash(root.location.hash);
+                const sus = typeof F.suspended === 'function' && F.suspended();
+                if (want) {
+                    if (!this.adFeedOn) { try { root.history.replaceState(root.history.state, '', root.location.pathname + root.location.search); } catch (e) { } return true; }
+                    if (sus && this.showDetail) return true;   // 播放页开着时又回到 #/feed(前进键):等播放页关了再恢复
+                    if (sus) { F.resume(); return true; }
+                    if (!F.isOpen() && this.showDetail) {
+                        // 播放页开着(不是从刷短片开的)时地址变成 #/feed(前进键 / 书签 / 手改地址):先关播放页(主播放器停下、销毁),再开刷短片 ——
+                        //   否则两个同时放:主播放器有声 + 刷短片静音自动播,两份 HLS 下载。关不掉(截帧分享弹窗开着,closeDetail 只关弹窗)→ 这次不开
+                        try { if (typeof this.closeDetail === 'function') this.closeDetail(); } catch (e) { }
+                        if (this.showDetail) { try { root.history.replaceState(root.history.state, '', root.location.pathname + root.location.search); } catch (e) { } return true; }
+                    }
+                    if (!F.isOpen()) {
+                        F.open({
+                            onClose: () => this._adFeedLeave(),
+                            onPick: (card) => { if (card && card._wk) { F.suspend(); this.openWork(card); } },
+                        });
+                    }
+                    return true;
+                }
+                if (sus && this.showDetail) {
+                    // 从刷短片开的播放页上按返回:关播放页,把刚退掉的 #/feed 压回去(关播放页的侦听器会恢复刷短片)
+                    if (typeof this.closeDetail === 'function') this.closeDetail();
+                    try { root.history.pushState({ dgAd: 1 }, '', FEED_HASH); } catch (e) { }
+                    return true;
+                }
+                if (F.isOpen() || sus) { this._adFeedPushed = false; F.close(); }
+                return false;
+            },
+            // 播放页关了:从刷短片来的回到刷短片;「猜你喜欢」按新的历史再算一次
+            _adAfterDetail() {
+                const F = root.dgAdultFeed;
+                if (F && typeof F.suspended === 'function' && F.suspended()) {
+                    if (isFeedHash(root.location.hash)) this.$nextTick(() => { try { F.resume(); } catch (e) { } });
+                    else F.close();
+                }
+                this._adForYouSoon(2500);
+            },
+            // ---------- [adult] p4 猜你喜欢(纯本机:最近看过的目录作品的 featured 标签 → /api/catalog/browse?t=..&sort=hot;无痕不出)----------
+            _adForYouSoon(ms) {
+                clearTimeout(this._adFyT);
+                this._adFyT = setTimeout(() => { this.adultLoadForYou(false).catch(() => { }); }, ms || 0);
+            },
+            async adultLoadForYou(force) {
+                if (!this.adultMode || !this.adult || !this.adult.catalog) return;
+                const seq = (this._adFySeq = (this._adFySeq || 0) + 1);
+                const KEY = 'ad_foryou';
+                const drop = () => {
+                    if (!this.rowConfigs || !this.rowConfigs[KEY]) return;
+                    const c = Object.assign({}, this.rowConfigs), l = Object.assign({}, this.rowLists);
+                    delete c[KEY]; delete l[KEY];
+                    this.rowConfigs = c; this.rowLists = l;
+                };
+                if (incognito()) { this._adFySig = ''; drop(); return; }
+                const seen = new Set(), recent = [];
+                (this.watchHistory || []).forEach(h => {
+                    const wk = h && h.groupData && h.groupData._wk;
+                    if (typeof wk === 'string' && WK_RE.test(wk) && !seen.has(wk)) { seen.add(wk); recent.push(wk); }
+                });
+                const top12 = recent.slice(0, 12);
+                if (!top12.length) { this._adFySig = ''; drop(); return; }
+                const sig = top12.join('|');
+                if (!force && this._adFySig === sig) return;
+                // 没记过标签的(以前看的 / 别的设备同步来的):补拉最近 3 部的作品信息(本地目录,零上游)
+                let tags = wkTags.all();
+                for (const wk of top12.filter(k => !tags[k]).slice(0, 3)) {
+                    const d = await fetchWorkRaw(wk);
+                    if (seq !== this._adFySeq) return;
+                    wkTags.put(wk, d && d._meta ? metaTagList(d._meta.tags, 6).map(t => t.id) : []);
+                }
+                tags = wkTags.all();
+                const top = forYouTags(top12, tags, 3);
+                if (!top.length) { this._adFySig = sig; drop(); return; }
+                const qs = [top.slice(0, 2), [top[0]], top[1] ? [top[1]] : null, top[2] ? [top[2]] : null].filter(q => q && q.length);
+                const uq = qs.filter((q, i) => qs.findIndex(x => x.join(',') === q.join(',')) === i);
+                const items = [];
+                for (const t of uq) {
+                    if (items.length >= 16) break;
+                    // 复核 r3:推荐位 = 审查级(乱伦/强制等)永不推荐 → nr=1 让服务器把 rvl≠0 的作品整个去掉
+                    const d = await cachedJson(browseApiUrl({ t, sort: 'hot' }, { page: 1, nr: true }), 8000);
+                    if (seq !== this._adFySeq) return;
+                    for (const c of (d && Array.isArray(d.results) ? d.results : [])) {
+                        const it = cardToItem(c);
+                        if (!it || seen.has(it._wk)) continue;
+                        seen.add(it._wk);
+                        items.push(Object.freeze(it));
+                        if (items.length >= 24) break;
+                    }
+                }
+                if (seq !== this._adFySeq || incognito()) return;
+                this._adFySig = sig;
+                if (items.length < 8) { drop(); return; }
+                const labels = top.map(tagLabel).filter(Boolean);
+                const cfg = {
+                    title: '猜你喜欢', icon: 'fa-wand-magic-sparkles', path: 'ADULT', params: '', page: 1, totalPages: 1, adult: true,
+                    more: null, today: 0, srcLabel: labels.slice(0, 2).join(' · '), srcTip: '按你最近看过的作品的标签推荐(只在这台设备上算,不上传)', foryou: labels.join(' · '),
+                };
+                // 放在第一行目录行(新上架)之后
+                const c = {}, l = Object.assign({}, this.rowLists);
+                const keys = Object.keys(this.rowConfigs || {}).filter(k => k !== KEY);
+                keys.forEach((k, i) => { c[k] = this.rowConfigs[k]; if (i === 0) c[KEY] = cfg; });
+                if (!keys.length) c[KEY] = cfg;
+                l[KEY] = items;
+                this.rowLists = l;
+                this.rowConfigs = c;
+            },
+            // 关播放页 / 回首页 / 销毁重建播放器之前
+            adPlayerGone(reason) {
+                if (!this.adultMode) return;
+                hooks.call('onPlayerDestroy', [String(reason || '')]);
+            },
+            // 写历史 / 进度 / 观看统计之前问一句(无痕时订阅者返回 false);返回 false = 别写
+            adHistoryOk(kind, name, extra) {
+                if (!this.adultMode) return true;
+                const g = this.currentGroup;
+                const item = Object.assign({ kind: String(kind || 'history'), name: String(name || ''), wk: (g && typeof g._wk === 'string') ? g._wk : '' }, extra || {});
+                return hooks.call('onHistoryWrite', [item]) !== false;
             },
             // 加载帧(与已登录深链同一个播放页框架)
             _adShowFrame(wk, name, pic, n) {
@@ -2565,7 +3214,12 @@
         // phase 3
         browseApiUrl, filterCount, nextTagState, normFacets, sortOpts, chipRow, activePills, routeOf, parseRoute, canonHash, isOurHash,
         normCloud, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
-        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud },
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud, DgAdRails, DgAdActresses },
         ageGate, brand, auth, fetchWork, mixin, boot,
+        // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
+        hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, isTV,
+        openWork: openWorkExt, incognito, privLocked, netBlock, netNow, cellOk, pvOn, CELL_KEY, PV_KEY,
+        normRelated, forYouTags, noList, actSections, actIndexUrls, isFeedHash, FEED_HASH,
+        _hooks: hooks, _bridge: bridge,
     };
 });
