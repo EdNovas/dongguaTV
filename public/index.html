@@ -16252,6 +16252,7 @@
 
                     this.scrollToTop();
                     this._cancelDeepLink(true);   // 🔗 还没落地的深链作废(否则它的搜索结束后又把播放页开回来)
+                    try { if (window.dgSeekPreview) window.dgSeekPreview.reset('home'); } catch (e) { }   // 🖼️ 这里也会直接收起播放页(不走 closeDetail):进度条预览实例连同在路上的分片一起销毁
                     // 关闭播放详情页
                     this.showDetail = false;
                     if (dp) dp.pause();

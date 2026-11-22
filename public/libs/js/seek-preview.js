@@ -11,14 +11,18 @@
  * ⚠️ 绝不能抢主播放的带宽(v1.1.176:后台分析抢带宽,整站播不了):
  *   · 只在主视频暂停、或前方已缓冲 ≥20s(片尾不足 20s 时缓冲到片尾也算)时才取;起播 4s 内、拖动/卡顿后 2s 内、正在 seek、
  *     readyState 不够、页面在后台时一律不取;主视频一 waiting / seeking 就中止在路上的预览分片;取的过程中前方缓冲掉到 8s 以下也中止。
+ *     暂停时取,必须这次播放(本令牌绑定之后)收到过主视频的 playing、且 readyState ≥3 —— 自动播放被拦、停在起播点拉首屏时不抢。
+ *   · 预览实例只发目标分片(及其密钥 / fMP4 初始化段)的请求;分离音轨 / 字幕(EXT-X-MEDIA)的片只放行和目标分片时间段重叠的;
+ *     中止在任何阶段都生效(离线 loader 还在查 IndexedDB 时中止,查完也不再发请求)。
  *   · 不启用:省流量模式(saveData)、2G/3G、TV 模式、不支持 MSE(iPhone)、浏览器原生 HLS 通道(Safari / iPad attachNative)、
  *     主视频此刻不在 MSE 上(src 不是 blob:,比如同一次播放里换成了 MP4 直链)、直播、投屏、未登录预览框架、试看已结束;
  *     localStorage donggua_seekprev_off=1 手动关掉。
  *   · 每次播放(播放令牌)最多下 200MB、整个页面会话最多 1GB,超了这一集不再取(已缓存的照样显示)。
  *
  * ⚠️ 与主播放器完全隔离:不碰 dp.plugins.hls、_dpSwitchHls、_proxyRetrying、playToken / handleError 的任何状态,
- *   只读 vueApp._playToken / _cutToBase 等。接线只有四处(index.html):_dgHlsCustomType 的 hls.js 分支 bind(原生分支不接:
- *   那边主视频不是 blob:,这里自己不启用),play() 两处递增令牌后与 closeDetail 调 reset。预览实例绑定当时的播放令牌:换线路、换集、switchVideo、关播放页、下一次 play()、
+ *   只读 vueApp._playToken / _cutToBase 等。接线只有五处(index.html):_dgHlsCustomType 的 hls.js 分支 bind(原生分支不接:
+ *   那边主视频不是 blob:,这里自己不启用),play() 两处递增令牌后、closeDetail、goHome(TV 遥控 / 安卓返回键 / 回首页也会直接收起播放页)调 reset。
+ *   预览实例绑定当时的播放令牌:换线路、换集、switchVideo、关播放页、下一次 play()、
  *   播放器销毁都会销毁它;任何时刻最多一个预览实例;所有失败都静默(没有缩略图),绝不弹错、绝不抛到页面。
  *   分片请求是普通 XHR:跨域的 SW 不碰(sw.js v43 起连 .png/.jpg 伪装分片也不碰),走代理的(?url=)本来就豁免。
  */
@@ -145,16 +149,30 @@
         }
         return null;
     }
+    // 分片 f 和时间段 [s, e) 有没有真重叠(重叠 >0.05s,极短片按半个片长;只碰到边、清单时长累加的浮点误差都不算);时间不明 → false(不放行)
+    //   分离音轨的片按它判:画目标分片里那一帧只需要和它同一段的音频(video.buffered 是各 SourceBuffer 的交集),再往后的一律挂着
+    function fragOverlaps(f, s, e) {
+        const a = f ? +f.start : NaN, d = f ? +f.duration : NaN;
+        if (!(isFinite(a) && d > 0 && e > s)) return false;
+        return Math.min(a + d, e) - Math.max(a, s) > Math.min(0.05, d / 2);
+    }
 
     // 带宽让路闸门:主视频状态 → 这时能不能去取一个预览分片。
-    //   s = { hidden, paused, ended, seeking, readyState, ahead, remain, sinceStall(ms,没有为 Infinity), sincePlaying(ms,还没播过为 -1) }
+    //   s = { hidden, paused, ended, seeking, readyState, ahead, remain, sinceStall(ms,没有为 Infinity), sincePlaying(ms,还没播过为 -1),
+    //         played(这次播放 —— 本令牌的绑定 —— 收到过主视频的 playing 事件) }
     function gate(s) {
         if (!s) return { ok: false, why: 'nomain' };
         if (s.hidden) return { ok: false, why: 'hidden' };
         if (s.seeking) return { ok: false, why: 'seeking' };
         if (!(s.readyState >= 2)) return { ok: false, why: 'startup' };
         if (s.sinceStall < C.SETTLE_MS) return { ok: false, why: 'settle' };
-        if (s.paused || s.ended) return { ok: true, why: 'paused' };
+        if (s.paused || s.ended) {
+            // 暂停:这次播放里主视频真播起来过才取 —— 自动播放被拦、停在起播点时主播放器正在拉首屏,一个字节都不跟它抢;
+            //   暂停着还要 readyState ≥3(当前位置往后已有数据,主播放器没在等这一段)。播完(ended)前方已没东西可取,有首帧就行
+            if (!s.played) return { ok: false, why: 'unplayed' };
+            if (!s.ended && s.readyState < 3) return { ok: false, why: 'stall' };
+            return { ok: true, why: 'paused' };
+        }
         if (!(s.sincePlaying >= C.STARTUP_MS)) return { ok: false, why: 'startup' };
         if (s.readyState < 3) return { ok: false, why: 'stall' };
         const need = Math.min(C.AHEAD_MIN, Math.max(0, (s.remain || 0) - 1));
@@ -163,7 +181,7 @@
     // 取的过程中还能不能继续(waiting / seeking 由事件直接中止;这里兜住"前方缓冲在往下掉"和后台)
     function keepJob(s) {
         if (!s || s.hidden || s.seeking) return false;
-        if (s.paused || s.ended) return true;
+        if (s.paused || s.ended) return !!s.ended || s.readyState >= 3;
         if (s.readyState < 3) return false;
         const need = Math.min(C.AHEAD_JOB_MIN, Math.max(0, (s.remain || 0) - 1));
         return s.ahead >= need;
@@ -238,17 +256,23 @@
     //   fragOk(frag) = false 的分片(及其密钥)【不发请求】,挂着等 stopLoad 来 abort:hls.js 刚建好的实例在目标片缓冲完那一拍
     //   (内部 loadedmetadata 还没置位,取片位置 = 刚取完那片的片尾)会同步发出下一片的请求,我们的 FRAG_BUFFERED 监听排在它后面,
     //   只能事后 abort —— 请求其实已经出去了。挂着的 loader 没调过父类 load,abort/destroy 都是空操作(XhrLoader 没有 xhr、没有 callbacks)
+    //   分离音轨 / 字幕(EXT-X-MEDIA)的片同样过 fragOk(控制器只放行和目标分片时间段重叠的);只有 fMP4 初始化段不过闸。
+    //   abort 在任何阶段都生效:离线 loader 先 await IndexedDB 才决定走不走网络,那之前 XhrLoader 还没有 xhr,super.abort() 什么也掐不到 ——
+    //   置 _offDestroyed 让 OfflineLoader 查完库直接丢掉(不发请求、不回调);loadInternal(XhrLoader.load 里真正 new XMLHttpRequest、
+    //   以及失败重试走的那一步)再挡一道,父类换了标志名也发不出去
     function makeLoader(Base, mem, nowFn, later, fragOk) {
         if (!Base) return null;
         return class SeekPreviewLoader extends Base {
-            abort() { this._spDead = true; super.abort(); }
-            destroy() { this._spDead = true; super.destroy(); }
+            abort() { this._spDead = true; this._offDestroyed = true; super.abort(); }
+            destroy() { this._spDead = true; this._offDestroyed = true; super.destroy(); }
+            loadInternal() { if (this._spDead) return; if (typeof super.loadInternal === 'function') super.loadInternal(); }
             load(context, config, callbacks) {
+                if (this._spDead) return;
                 const ty = context && context.type;
                 const isList = ty === 'manifest' || ty === 'level' || ty === 'audioTrack' || ty === 'subtitleTrack';
                 if (!isList) {
                     const f = context && context.frag;
-                    if (fragOk && f && f.sn !== 'initSegment' && f.type !== 'audio' && f.type !== 'subtitle' && !fragOk(f)) { this._spHeld = true; return; }
+                    if (fragOk && f && f.sn !== 'initSegment' && !fragOk(f)) { this._spHeld = true; return; }
                     return super.load(context, config, callbacks);
                 }
                 const hit = mem.get(context.url);
@@ -347,7 +371,8 @@
             return {
                 hidden: !!(doc && doc.hidden), paused: !!v.paused, ended: !!v.ended, seeking: !!v.seeking, readyState: v.readyState | 0,
                 ahead: bufferedAhead(v.buffered, ct), remain: (dur > 0 && isFinite(dur)) ? dur - ct : 0,
-                sinceStall: b.stallAt ? t - b.stallAt : Infinity, sincePlaying: b.playingAt ? t - b.playingAt : -1
+                sinceStall: b.stallAt ? t - b.stallAt : Infinity, sincePlaying: b.playingAt ? t - b.playingAt : -1,
+                played: !!b.played
             };
         }
 
@@ -369,8 +394,14 @@
             if (!H || !doc || !(H.isSupported && H.isSupported())) return null;
             const Base = win._OfflineHlsLoader || (H.DefaultConfig && H.DefaultConfig.loader);
             let inst = null;
-            // 只放行这次要的那一片(和它的密钥);没有任务、别的实例的任务、hls.js 顺手预取的下一片一律挂着不发
-            const fragOk = f => { const j = S.job; return !!(inst && !inst.dead && j && j.inst === inst && j.sn != null && f.sn === j.sn); };
+            // 只放行这次要的那一片(和它的密钥);没有任务、别的实例的任务、hls.js 顺手预取的下一片一律挂着不发。
+            //   分离音轨 / 字幕的片(sn 是它自己那条清单的)只放行和目标分片时间段 [fs, fe) 重叠的 —— 画那一帧要同段音频,目标段以外的一个都不取
+            const fragOk = f => {
+                const j = S.job;
+                if (!(inst && !inst.dead && j && j.inst === inst && j.sn != null)) return false;
+                if (f.type === 'audio' || f.type === 'subtitle') return fragOverlaps(f, j.fs, j.fe);
+                return f.sn === j.sn;
+            };
             const Loader = makeLoader(Base, b.mem, now, f => setT(f, 0), fragOk);
             const video = doc.createElement('video');
             video.muted = true; video.playsInline = true; video.preload = 'auto';
@@ -752,7 +783,15 @@
             };
             v.addEventListener('waiting', stall);
             v.addEventListener('seeking', stall);
-            v.addEventListener('playing', () => { try { const b = S.bound; if (b && b.video === v && !b.playingAt) b.playingAt = now(); } catch (e) { } });
+            // playing 只记到当前令牌的绑定上(令牌已变、旧绑定还没拆时那是下一次播放的 playing);played = 这次播放真播起来过(暂停时取图的前提)
+            v.addEventListener('playing', () => {
+                try {
+                    const b = S.bound;
+                    if (!b || b.video !== v || tokNow() !== b.tok) return;
+                    b.played = true;
+                    if (!b.playingAt) b.playingAt = now();
+                } catch (e) { }
+            });
         }
         if (doc && typeof doc.addEventListener === 'function') {
             doc.addEventListener('visibilitychange', () => { try { if (doc.hidden && S.job) endJob('abort:hidden'); } catch (e) { } });
@@ -772,7 +811,7 @@
                 S.bound = {
                     player, video, url, tok, hlsOk, off: lsOff(),
                     cache: new Lru(C.LRU_MAX, C.LRU_BYTES), failed: new Set(), mem: new Map(),
-                    fails: 0, bytes: 0, dead: '', details: null, stallAt: 0, playingAt: 0, lastSize: null
+                    fails: 0, bytes: 0, dead: '', details: null, stallAt: 0, playingAt: 0, played: false, lastSize: null
                 };
                 S.n.binds++;
                 installUi(player);
@@ -809,7 +848,7 @@
     }
 
     const Core = {
-        C, fragIndexAt, thumbTime, Lru, nearestKey, nearSec, bufferedAhead, isBuffered, pointIn, gate, keepJob,
+        C, fragIndexAt, thumbTime, Lru, nearestKey, nearSec, bufferedAhead, isBuffered, pointIn, fragOverlaps, gate, keepJob,
         disabledReason, boxLeft, fmtTime, thumbSize, fitSize, hlsConfig, makeLoader, createController
     };
     if (typeof module === 'object' && module && module.exports) module.exports = Core;
