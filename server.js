@@ -955,6 +955,7 @@ const apiLimiter = rateLimit({
         if (req.path === '/api/config' || req.path.startsWith('/api/auth/') || req.path === '/api/sites') return true;
         // 图片代理请求不限流（前端有大量图片）
         if (req.path.startsWith('/api/tmdb-image/')) return true;
+        if (req.path === '/api/img') return true;   // [adult] 封面代理(ADULT_IMG_PROXY=1)同理:一屏几十张图
         // TMDB 代理请求不限流
         if (req.path === '/api/tmdb-proxy') return true;
         return false;
@@ -1010,6 +1011,8 @@ if (cacheManager.type === 'sqlite' && cacheManager.db && !process.env.VERCEL) {
             },
             log: (msg) => console.log('[Catalog] ' + msg),
             env: process.env,
+            // [adult] 本站热门行:lib/popular 的片名(快照所有人共用 → 按匿名调用者口径,即至少 minUsers+1 人);popular 在下面才建,调用时再取
+            popularTitles: () => { try { return (popular && popular.enabled()) ? (popular.get('').items || []).map(x => x.title) : []; } catch (e) { return []; } },
         });
         catalog.start();
     } catch (e) { console.error('[Catalog] 首页目录不可用(/api/catalog/* 回 503,搜索/播放不受影响):', e.message); catalog = null; }

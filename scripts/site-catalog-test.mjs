@@ -14,10 +14,17 @@
 //  ⑤ 扩线:全局 ≤12 / 单次 ≤6 并发、同作品并发合并、只搜 [带横线, 不带横线]、search:false / codeTrust:false 跳过、
 //     正 6h / 负 24h 缓存、出错不缓存、搜到的线路写回索引、无关模糊结果不写
 //  ⑥ 搜索回写(含先片段后完整版的迁移)、规则版本变了全库重扫(重扫完之前读接口回空)、保留期
+//  ⑦ 第二阶段:外站计数可信检查(有序/KS 非均匀/复取在涨,每周一次)、ids= 复取(每批 20、每轮 ≤2、每小时 ≤10)、热门行(紧跟新上架;
+//     本站 ≥12 部用本站否则外站,只收有活线路的作品)、站点表 strict/codeTrust 传进 checkItem、tags(featured)、浏览 tag 组合、
+//     suggest(empty/blocked/code+exact/alias/text,零上游)、beacon(不同上报者 3 个/24h 判死、成功复活、换地址复活、时长/宽高补全)、
+//     线路 _family/_dead/_res/_native/_same 与排序、_meta(分区名/标签/厂牌前缀/演员/兄弟/首见)、封面代理(改写、索引查地址、魔数、
+//     内网拒、LRU、负缓存)、薄分区回填(6h 后、每周、只拉叶子、≤10 页、每轮 ≤12)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import os from 'node:os';
+import crypto from 'node:crypto';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -79,7 +86,8 @@ function mkNet(clock) {
         const u = new URL(url);
         const host = u.hostname;
         const rec = { url, host, start: clock.t, end: null, timeout: opts && opts.timeout, siteKey: opts && opts.siteKey, ac: u.searchParams.get('ac'), wd: u.searchParams.get('wd'),
-            pg: Number(u.searchParams.get('pg')) || 0, ps: Number(u.searchParams.get('pagesize')) || 0, h: Number(u.searchParams.get('h')) || 0 };
+            pg: Number(u.searchParams.get('pg')) || 0, ps: Number(u.searchParams.get('pagesize')) || 0, h: Number(u.searchParams.get('h')) || 0,
+            ids: u.searchParams.get('ids'), t: u.searchParams.get('t') };
         net.log.push(rec);
         const n = (net.inflight.get(host) || 0) + 1;
         net.inflight.set(host, n);
@@ -101,8 +109,14 @@ function mkNet(clock) {
             if (s.fail) throw new Error('timeout of 10000ms exceeded');
             if (rec.ac === 'list') return { code: 1, msg: '数据列表', class: classes, list: [] };
             if (rec.wd != null) return JSON.stringify({ code: 1, page: 1, pagecount: 1, list: s.search ? s.search(rec.wd) : [] });   // 字符串响应也要认
+            if (rec.ids != null) {   // ac=detail&ids=a,b,c(外站计数复取):idsHook 可以改计数
+                const want = rec.ids.split(',');
+                const list = s.items.filter((it) => want.includes(String(it.vod_id))).map((it) => (s.idsHook ? s.idsHook(it) : it));
+                return { code: 1, page: 1, pagecount: 1, total: list.length, list };
+            }
             const ps = s.cap ? Math.min(s.cap, rec.ps || 20) : (rec.ps || 20);
-            const win = (s.ignoreH || !rec.h ? s.items : s.items.filter((it) => it._t >= clock.t - rec.h * HOUR)).slice().sort((a, b) => b._t - a._t);
+            const pool = rec.t != null ? s.items.filter((it) => String(it.type_id) === rec.t) : s.items;   // &t=<分类>(薄分区回填)
+            const win = (s.ignoreH || !rec.h ? pool : pool.filter((it) => it._t >= clock.t - rec.h * HOUR)).slice().sort((a, b) => b._t - a._t);
             const pg = rec.pg || 1;
             return { code: 1, page: pg, pagecount: Math.max(1, Math.ceil(win.length / ps)), limit: String(ps), total: win.length, list: win.slice((pg - 1) * ps, pg * ps) };
         } finally {
@@ -112,7 +126,8 @@ function mkNet(clock) {
             if (wkey) { net.wdIn.set(wkey, net.wdIn.get(wkey) - 1); net.wdAll--; }
         }
     };
-    net.sitesCfg = () => [...net.hosts.values()].map((s) => ({ key: s.key, name: s.key.toUpperCase() + '站', api: s.api, search: !s.noSearch, active: s.active !== false, codeTrust: s.codeTrust !== false, family: s.family }));
+    net.sitesCfg = () => [...net.hosts.values()].map((s) => ({ key: s.key, name: s.key.toUpperCase() + '站', api: s.api, search: !s.noSearch, active: s.active !== false, codeTrust: s.codeTrust !== false, family: s.family,
+        nativeHls: s.nativeHls, strict: s.strict, extHot: s.extHot, upstream: s.upstream }));
     return net;
 }
 function mkCat(db, net, clock, extra = {}) {
@@ -682,6 +697,445 @@ console.log('⑤ 扩线');
     crawlOnlyY0 = false;
     const g8 = await cat6.work('c:SSIS-800', { expand: true });
     ok(g8 && g8.sources.length === 2 && n7.log.some((x) => x.host === 'y1.test' && x.ac === 'list'), '扩线遇到没分类表的站先拉 ac=list 再收', n7.log.map((x) => x.host + ' ' + x.ac + ' ' + (x.wd || '')));
+}
+
+// =====================================================================
+console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 / 联想 / 上报 / 线路字段 / 封面代理 / 薄分区回填');
+{
+    const IMG = require(path.join(ROOT, 'lib/site-catalog/img.js'));
+    // ---- 外站计数可信检查(纯函数) ----
+    {
+        const real = [], unif = [], disorder = [], stat = [];
+        let seed = 7;
+        const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+        for (let i = 0; i < 60; i++) {
+            const tot = Math.round(200000 / (i + 1)) + 50, mon = Math.round(tot * 0.6), wk = Math.round(mon * 0.5), day = Math.round(wk * 0.3);
+            real.push({ day, week: wk, month: mon, total: tot, at: T0, prev_total: tot - 120, prev_at: T0 - 5 * MIN });
+            const u = Math.floor(rnd() * 1000);
+            unif.push({ day: Math.floor(rnd() * 1000), week: Math.floor(rnd() * 1000), month: Math.floor(rnd() * 1000), total: u, at: T0, prev_total: u, prev_at: T0 - 5 * MIN });
+            disorder.push({ day: wk + 5, week: wk, month: mon, total: tot, at: T0, prev_total: tot - 1, prev_at: T0 - 5 * MIN });
+            stat.push({ day, week: wk, month: mon, total: tot, at: T0, prev_total: tot, prev_at: T0 - 5 * MIN });
+        }
+        const r1 = U.hitsTrust(real), r2 = U.hitsTrust(unif), r3 = U.hitsTrust(disorder), r4 = U.hitsTrust(stat);
+        ok(r1.decided && r1.ok && r1.ordered === 1 && r1.ks > r1.crit, '可信检查:有序 + 长尾 + 复取在涨 → 可信', r1);
+        ok(r2.decided && !r2.ok && /uniform/.test(r2.reason) && /order/.test(r2.reason), '可信检查:均匀随机的假计数 → 不可信', r2);
+        ok(r3.decided && !r3.ok && r3.reason === 'order', '可信检查:日 > 周(<95% 有序)→ 不可信', r3);
+        ok(r4.decided && !r4.ok && r4.reason === 'static', '可信检查:隔 ≥2 分钟复取不涨 → 不可信', r4);
+        ok(!U.hitsTrust(real.slice(0, 10)).decided && U.hitsTrust(real.map((r) => Object.assign({}, r, { prev_at: null }))).reason === 'no-refetch'
+            && U.hitsTrust(real.map((r) => Object.assign({}, r, { prev_at: T0 - MIN }))).reason === 'no-refetch', '数据不够 / 没复取过 / 复取间隔 <2 分钟 → 不判(decided:false)');
+        ok(U.ksUniform([1, 2, 3]).n === 3 && U.ksUniform([]).n === 0 && U.ksUniform([0, 0, 0]).D === 0, 'ksUniform 边界');
+    }
+
+    // ---- 主场景:6 个站(两个同家族、一个 nativeHls:false、一个 strict、一个 codeTrust:false、一个外站计数站) ----
+    const c7 = mkClock(T0);
+    const n7 = mkNet(c7);
+    n7.latency = 20;
+    const db7 = new Database(':memory:');
+    const PA = n7.site('pa', { family: 'fam1' }), PB = n7.site('pb', { family: 'fam2', nativeHls: false }), PC = n7.site('pc', { family: 'fam1' });
+    const PD = n7.site('pd', { strict: true }), PE = n7.site('pe', { codeTrust: false }), HX = n7.site('hx', { family: 'fam3', extHot: true });
+    const hitsOf = (i) => { const tot = Math.round(400000 / (i + 1)) + 100, mon = Math.round(tot * 0.6), wk = Math.round(mon * 0.5); return { vod_hits: tot, vod_hits_month: mon, vod_hits_week: wk, vod_hits_day: Math.round(wk * 0.3) }; };
+    const samePath = (h) => '正片$https://cdn-' + h + '.example/v/20261121/abcdef1234/index.m3u8';
+    PA.items.push(mk('SSIS-900 某合成标题', '日本有码', { t: T0 - HOUR, dur: 7200, extra: { vod_play_url: samePath('a') } }));
+    PB.items.push(mk('SSIS-900 某合成标题', '日本有码', { t: T0 - HOUR - MIN, dur: 7202, extra: { vod_play_url: samePath('b') } }));
+    PC.items.push(mk('SSIS-900 某合成标题-架空ユメ', '日本有码', { t: T0 - HOUR - 2 * MIN, dur: 7201, extra: { vod_actor: 'テスト花子' } }));
+    HX.items.push(mk('SSIS-900 某合成标题', '日本有码', { t: T0 - HOUR - 3 * MIN, dur: 7200, extra: hitsOf(45) }));
+    PA.items.push(mk('[无码流出] SSIS-900 某合成标题', '日本无码', { t: T0 - HOUR - 4 * MIN, dur: 7200 }));
+    PB.items.push(mk('水果派解说 SSIS-900', 'AV解说', { t: T0 - HOUR - 5 * MIN, dur: 600 }));
+    PA.items.push(mk('SSIS-903 某合成乙', '日本有码', { t: T0 - 2 * HOUR, dur: 7200 }));
+    PC.items.push(mk('SSIS-903 某合成乙', '日本有码', { t: T0 - 2 * HOUR - MIN, dur: 5000 }));      // 时长对不上 → 第二部正片(~2)
+    PA.items.push(mk('有码2024-09-28SSIS-902架空太郎', '日本有码', { t: T0 - 3 * HOUR, dur: 7000 })); // 结构化尾巴的纯汉字名 → 不当演员
+    PB.items.push(mk('某国产合成自拍片', '国产自拍', { t: T0 - 3 * HOUR - MIN, dur: 900, extra: { vod_actor: '某网名' } }));   // 国产自拍 → 不给演员
+    PA.items.push(mk('SSIS-906 某合成丙', '日本有码', { t: T0 - 4 * HOUR, dur: 7200 }));
+    PB.items.push(mk('SSIS-906 某合成丙', '日本有码', { t: T0 - 4 * HOUR - MIN }));               // 时长未知 → 等上报补
+    PA.items.push(mk('SSIS-907 某合成丁', '日本有码', { t: T0 - 4 * HOUR - 2 * MIN, dur: 7200 }));
+    PB.items.push(mk('SSIS-907 某合成丁', '日本有码', { t: T0 - 4 * HOUR - 3 * MIN }));
+    for (let i = 0; i < 3; i++) PA.items.push(mk(`SSIS-92${i} 某合成剧情${i}`, '强奸乱伦', { t: T0 - 5 * HOUR - i * MIN, dur: 7100 + i }));   // 标签 incest/noncon(审查级)
+    for (let i = 0; i < 5; i++) PC.items.push(mk(`SSIS-93${i} 某合成人妻${i}`, '人妻熟女', { t: T0 - 6 * HOUR - i * MIN, dur: 7000 + i * 100 }));
+    for (let i = 0; i < 3; i++) PB.items.push(mk(`某合成人妻无番号${i}`, '人妻熟女', { t: T0 - 6 * HOUR - 10 * MIN - i * MIN, dur: 1200 + i }));
+    for (let i = 0; i < 3; i++) PD.items.push(mk(`某严格站合成作品${i}`, '国产自拍', { t: T0 - 7 * HOUR - i * MIN, dur: 800 + i }));
+    PD.items.push(mk('SSIS-904 某合成严格站标题', '爱播资源', { t: T0 - 7 * HOUR - 5 * MIN, dur: 7200, extra: { vod_class: '国产传媒' } }));   // 严格站:国产分类挂日本番号 → 政策不信
+    PE.items.push(mk('SSIS-910 某合成标题', '日本有码', { t: T0 - 7 * HOUR, dur: 7200 }));
+    PA.items.push(mk('某合成欧美长标题-架空マリ', '欧美', { t: T0 - 7 * HOUR - 30 * MIN, dur: 1500 }));   // 片名解析出的名字只在日本片分区用 → 欧美不给
+    for (let i = 0; i < 40; i++) HX.items.push(mk(`某合成热门作品${i}`, '国产自拍', { t: T0 - 8 * HOUR - i * MIN, dur: 1000 + i * 30, extra: hitsOf(i) }));
+    HX.grow = false;
+    HX.idsHook = (it) => { if (HX.grow) for (const k of ['vod_hits', 'vod_hits_day', 'vod_hits_week', 'vod_hits_month']) it[k] += 100; return it; };
+
+    const calls = [];
+    const spyAdult = Object.assign({}, adult, {
+        policy: Object.assign({}, adult.policy, { checkItem: (it, ctx) => { calls.push({ n: it && it.vod_name, ctx: Object.assign({}, ctx || {}) }); return adult.policy.checkItem(it, ctx); } }),
+    });
+    let popTitles = [];
+    const cat7 = createCatalog({ db: db7, getSites: () => n7.sitesCfg(), adult: spyAdult, httpGet: n7.httpGet, log: () => {}, env: {}, now: c7.now, sleep: c7.sleep, popularTitles: () => (typeof popTitles === 'function' ? popTitles() : popTitles) });
+    await cat7.tick();
+    const dead = (site, wk) => !!db7.prepare('SELECT dead FROM adult_items WHERE site=? AND wk=?').get(site, wk || 'c:SSIS-900').dead;
+    {
+        // 站点标志传进 policy.checkItem
+        const pd = calls.filter((c) => /严格站/.test(c.n)), pe = calls.filter((c) => c.n === 'SSIS-910 某合成标题'), oth = calls.filter((c) => /热门作品/.test(c.n));
+        ok(pd.length >= 3 && pd.every((c) => c.ctx.strict === true && c.ctx.siteTrust === true), 'strict:true 的站:checkItem 收到 ctx.strict=true', pd.map((c) => c.ctx.strict));
+        ok(pe.length >= 1 && pe.every((c) => c.ctx.siteTrust === false && c.ctx.strict === false && c.ctx.codeOk === false), 'codeTrust:false 的站:ctx.siteTrust=false、codeOk=false', pe.map((c) => [c.ctx.siteTrust, c.ctx.codeOk]));
+        ok(oth.length >= 40 && oth.every((c) => c.ctx.strict === false && c.ctx.siteTrust === true), '其他站 ctx.strict=false、siteTrust=true');
+        ok(db7.prepare("SELECT wk FROM adult_items WHERE site='pe'").get().wk.startsWith('t:'), 'codeTrust:false 的站番号不进 c: 键');
+        const sx = db7.prepare("SELECT wk, code_ok, bucket FROM adult_items WHERE site='pd' AND name LIKE 'SSIS-904%'").get();
+        ok(sx && sx.wk.startsWith('t:') && sx.code_ok === 0 && sx.bucket === 'cn_studio' && !db7.prepare("SELECT 1 FROM adult_works WHERE wk='c:SSIS-904'").get(),
+            'strict 站:政策回的 codeOk 更严(国产分类挂日本番号)→ 以它为准:不进 c: 键、code_ok=0', sx);
+    }
+    {
+        // 外站计数:爬虫顺手记下;第一轮还没复取过 → 可信检查判不了 → 没有热门行
+        ok(db7.prepare("SELECT COUNT(*) n FROM adult_hits WHERE site='hx'").get().n === 41 && !n7.log.some((x) => x.ids != null), '外站计数站的条目爬取时记下计数(41 条),刚取过的不复取');
+        ok(db7.prepare("SELECT COUNT(*) n FROM adult_hits WHERE site<>'hx'").get().n === 0, '别的站的 vod_hits 一律不记');
+        ok(!cat7.home().rows.some((r) => r.id === 'hot'), '没复取过 → 可信检查判不了 → 没有热门行');
+        // 61 分钟后:每轮最多 2 个 ids= 请求、每批 20 个
+        HX.grow = true;
+        c7.t += 61 * MIN;
+        const m = n7.log.length;
+        await cat7.tick();
+        const idr = n7.log.slice(m).filter((x) => x.ids != null);
+        ok(idr.length === 2 && idr.every((x) => x.host === 'hx.test' && x.ac === 'detail' && x.ids.split(',').length === 20), '复取:ac=detail&ids= 每批 20 个、每轮 ≤2 个请求', idr.map((x) => x.ids.split(',').length));
+        ok(pacingOk(n7.log, 2000).length === 0 && n7.maxHost === 1, '复取也守同域名串行 / 间隔');
+        cat7.rebuild();
+        const rows = cat7.home().rows;
+        const hot = rows.find((r) => r.id === 'hot');
+        ok(rows[0].id === 'new' && rows[1] && rows[1].id === 'hot', '热门行紧跟在新上架后面', rows.map((r) => r.id));
+        ok(hot && hot.source === 'ext' && hot.title === '外站热门' && hot.more === null && hot.items.length >= 12 && hot.items.length <= 24, '没有本站数据 → 外站热门(source ext,more:null)', hot && { s: hot.source, n: hot.items.length });
+        ok(hot && hot.items[0].name === '某合成热门作品0' && hot.items.every((c) => c.wk && c.name && 'pic' in c && 'sub' in c && 'badge' in c && 'bucket' in c && 'code' in c && 'dur' in c && 'n_sites' in c && 'first_seen' in c), '按 hits_week 排序、卡片字段不变', hot && hot.items.slice(0, 3).map((c) => c.name));
+        const tr = cat7.stats().extTrust;
+        ok(tr && tr.decided && tr.ok && tr.site === 'hx' && tr.pairs >= 10, '可信检查结果记在库里', tr);
+        // 只收至少有一条没判死线路的作品
+        const w0 = hot.items[0].wk;
+        const v0 = db7.prepare('SELECT vod_id FROM adult_items WHERE wk=?').get(w0).vod_id;
+        for (const who of ['x1', 'x2', 'x3']) cat7.beacon({ wk: w0, site_key: 'hx', vod_id: v0, ok: false }, who);
+        cat7.rebuild();
+        const hot2 = cat7.home().rows.find((r) => r.id === 'hot');
+        ok(hot2 && !hot2.items.some((c) => c.wk === w0), '线路全判死的作品不进热门行');
+        // 本站热门:够 12 部 → 用本站;不够 → 退回外站
+        const names = db7.prepare("SELECT name FROM adult_works WHERE name LIKE '某合成人妻%' OR name LIKE 'SSIS-9%' ORDER BY name").all().map((r) => r.name);
+        popTitles = ['不存在的片名', ...names];
+        cat7.rebuild();
+        let h3 = cat7.home().rows.find((r) => r.id === 'hot');
+        ok(names.length >= 13 && h3 && h3.source === 'local' && h3.title === '本站热门' && h3.items.length >= 12 && h3.items[0].name === names[0], '本站热门 ≥12 部 → 用本站(按榜单顺序,对不上的片名跳过)', h3 && { s: h3.source, n: h3.items.length, first: h3.items[0].name });
+        popTitles = names.slice(0, 5);
+        cat7.rebuild();
+        h3 = cat7.home().rows.find((r) => r.id === 'hot');
+        ok(h3 && h3.source === 'ext', '本站不足 12 部 → 外站热门');
+        popTitles = () => { throw new Error('x'); };
+        cat7.rebuild();
+        ok(cat7.home().rows.find((r) => r.id === 'hot').source === 'ext', 'popularTitles 出错 → 当没有');
+        popTitles = [];
+        // 每小时 ≤10 个计数请求(独立实例:复取间隔设 0、每轮额度放开)
+        const c9 = mkClock(T0), n9 = mkNet(c9), H9 = n9.site('hy', { extHot: true });
+        n9.latency = 20;
+        for (let i = 0; i < 30; i++) H9.items.push(mk(`某合成计数作品${i}`, '国产自拍', { t: T0 - HOUR - i * MIN, dur: 900 + i, extra: hitsOf(i) }));
+        const cat9 = createCatalog({ db: new Database(':memory:'), getSites: () => n9.sitesCfg(), adult, httpGet: n9.httpGet, log: () => {}, now: c9.now, sleep: c9.sleep, opts: { hitsPerTick: 50, hitsRefreshMs: 0 } });
+        await cat9.tick();
+        const ids1 = n9.log.filter((x) => x.ids != null).length;
+        c9.t += 10 * MIN;
+        await cat9.tick();
+        const ids2 = n9.log.filter((x) => x.ids != null).length;
+        c9.t += 55 * MIN;
+        await cat9.tick();
+        const ids3 = n9.log.filter((x) => x.ids != null).length;
+        ok(ids1 === 10 && ids2 === 10 && ids3 > 10 && ids3 <= 20, '外站计数请求每小时 ≤10 个(额度用完这一小时不再要)', [ids1, ids2, ids3]);
+        // 外站计数不可信(复取不涨)→ 没有外站热门行
+        const c10 = mkClock(T0), n10 = mkNet(c10), H10 = n10.site('hz', { extHot: true });
+        n10.latency = 20;
+        for (let i = 0; i < 40; i++) H10.items.push(mk(`某合成静止作品${i}`, '国产自拍', { t: T0 - HOUR - i * MIN, dur: 900 + i, extra: hitsOf(i) }));
+        const cat10 = createCatalog({ db: new Database(':memory:'), getSites: () => n10.sitesCfg(), adult, httpGet: n10.httpGet, log: () => {}, now: c10.now, sleep: c10.sleep, opts: { hitsPerTick: 3 } });
+        await cat10.tick();
+        c10.t += 61 * MIN;
+        await cat10.tick();
+        cat10.rebuild();
+        const t10 = cat10.stats().extTrust;
+        ok(t10 && t10.decided && !t10.ok && t10.reason === 'static' && !cat10.home().rows.some((r) => r.id === 'hot'), '可信检查不过(计数不涨)→ 没有外站热门行', t10);
+        // 每周一次:判过的结论 7 天内不重判;过期后按当时的数据重判
+        db7.prepare("UPDATE adult_hits SET day = week + 1 WHERE site='hx'").run();
+        cat7.rebuild();
+        ok(cat7.home().rows.some((r) => r.id === 'hot' && r.source === 'ext'), '可信结论 7 天内沿用');
+        c7.t += 8 * DAY;
+        db7.prepare("UPDATE adult_hits SET at=?, prev_at=? WHERE site='hx'").run(c7.t, c7.t - 5 * MIN);
+        cat7.rebuild();
+        const tr2 = cat7.stats().extTrust;
+        ok(tr2 && tr2.decided && !tr2.ok && tr2.reason === 'order' && !cat7.home().rows.some((r) => r.id === 'hot'), '超过 7 天重判:日 > 周 → 不可信 → 没有外站热门行', tr2);
+        c7.t -= 8 * DAY;
+        db7.prepare("DELETE FROM adult_meta WHERE k='exthot:trust'").run();
+        cat7.rebuild();
+    }
+    {
+        // 标签
+        const tg = cat7.tags('');
+        ok(tg.tags.length > 0 && tg.tags.length <= 24 && tg.tags.every((t, i) => typeof t.id === 'string' && t.label && t.count > 0 && typeof t.featured === 'boolean' && (i === 0 || t.count <= tg.tags[i - 1].count)),
+            'tags():{id,label,count,featured},按数量降序、≤24', tg.tags);
+        const byId = Object.fromEntries(tg.tags.map((t) => [t.id, t]));
+        ok(byId.incest && byId.noncon && byId.incest.featured === false && byId.noncon.featured === false && byId.incest.count === 3, '审查级标签(乱伦/强制凌辱)featured:false', [byId.incest, byId.noncon]);
+        ok(byId.milf && byId.milf.featured === true && byId.milf.count === 8, '普通标签 featured:true、计数对', byId.milf);
+        const tj = cat7.tags('jp_censored').tags;
+        ok(tj.length > 0 && tj.find((t) => t.id === 'milf').count === 5, '按分区计数(日本有码里的人妻 = 5)', tj);
+        ok(cat7.tags('nope').tags.length === 0 && cat7.tags('!bad').tags.length === 0, '未知分区 → 空');
+        // 浏览 &tag= 与 b/sort/dur/flag/page 组合
+        const has = (c, id) => String(workRow(db7, c.wk).tags).includes(',' + id + ',');
+        const b1 = cat7.browse({ tag: 'milf' });
+        ok(b1.total_results === 8 && b1.results.every((c) => has(c, 'milf')), '浏览 tag=milf', b1.results.map((c) => c.name));
+        const b2 = cat7.browse({ tag: 'milf', b: 'jp_censored', sort: 'dur', dur: 'l', page: 1 });
+        ok(b2.total_results === 5 && b2.results.every((c, i) => has(c, 'milf') && c.bucket === 'jp_censored' && c.dur > 3600 && (i === 0 || c.dur <= b2.results[i - 1].dur)), 'tag + 分区 + 时长排序 + 时长筛选', b2.results.map((c) => [c.name, c.dur]));
+        ok(cat7.browse({ tag: 'milf', dur: 's' }).total_results === 0 && cat7.browse({ tag: 'milf', flag: 'zh' }).total_results === 0 && cat7.browse({ tag: 'milf', page: 2 }).results.length === 0, 'tag + 其他筛选 / 翻过头 → 空');
+        ok(cat7.browse({ tag: 'incest', b: 'jp_censored' }).total_results === 3, '审查级标签只在浏览筛选里可用');
+        // 厂牌 / 无码 / 中字 不进标签行(没筛选意义 / 和「标记」筛选重复)
+        const noChip = ['studio', 'uncensored', 'subbed'];
+        ok(['', 'jp_censored', 'jp_uncensored', 'jp_subbed'].every((b) => !cat7.tags(b).tags.some((t) => noChip.includes(t.id))), 'tags():厂牌/无码/中字 不在标签行里');
+        // 厂牌前缀 lp(作品页「SSIS」按钮)
+        const bl = cat7.browse({ lp: 'ssis' });
+        ok(bl.total_results > 0 && bl.results.every((c) => /^c:SSIS-/.test(c.wk)), '浏览 lp=SSIS:只出 SSIS 番号作品', bl.results.map((c) => c.wk));
+        const blm = cat7.browse({ lp: 'SSIS', tag: 'milf' });
+        ok(blm.results.every((c) => /^c:SSIS-/.test(c.wk) && has(c, 'milf')), 'lp + tag 组合', blm.results.map((c) => c.wk));
+        ok(cat7.browse({ lp: 'SS%' }).total_results === 0 && cat7.browse({ lp: '!bad' }).total_results === 0 && cat7.browse({ lp: 'ZZZZ' }).total_results === 0, 'lp 非法 / 没有这个厂牌 → 空');
+    }
+    {
+        // 联想(零上游)
+        const m = n7.log.length;
+        const sg = (x) => cat7.suggest(x);
+        ok(sg('').kind === 'empty' && sg('   ').kind === 'empty' && sg(null).kind === 'empty', '空查询 → empty');
+        const sb = sg('迷奸');
+        ok(sb.kind === 'blocked' && sb.items.length === 0 && sb.exact === null && sb.alias === null, '被拦的查询 → blocked、items 空', sb);
+        const s1 = sg('ssis900');
+        ok(s1.kind === 'code' && s1.exact === 'c:SSIS-900' && s1.items[0].wk === 'c:SSIS-900' && s1.items.some((c) => c.wk === 'c:SSIS-900#U') && s1.items.some((c) => c.wk === 'c:SSIS-900#clip'),
+            '番号:恰好一部正片 → exact(#U / #clip 兄弟不算),正片排第一', s1);
+        const s2 = sg('SSIS-903');
+        ok(s2.kind === 'code' && s2.exact === 'c:SSIS-903' && s2.items.length === 2 && s2.items.some((c) => c.wk === 'c:SSIS-903~2'),
+            '番号:本体 + 时长拆出的 ~2 → exact 指本体(作品页列着 ~2)', s2);
+        ok(sg('SSIS-999').kind === 'code' && sg('SSIS-999').items.length === 0 && sg('SSIS-999').exact === null, '番号:本地没有 → 空');
+        const sa = sg('无码'), sm = sg('人妻'), sl = sg('乱伦');
+        ok(sa.kind === 'alias' && sa.alias.b === 'jp_uncensored' && sa.alias.label === '日本无码' && !('tag' in sa.alias), '别名:无码 → 分区 jp_uncensored', sa.alias);
+        ok(sm.kind === 'alias' && sm.alias.tag === 'milf' && sm.items.length > 0, '别名:人妻 → 标签 milf(同时给片名匹配)', sm);
+        ok(sl.kind === 'text' && sl.alias === null, '审查级标签不做别名(乱伦 → 普通文字)', sl);
+        ok(sg('日本无码').alias.b === 'jp_uncensored' && sg('中字').alias.b === 'jp_subbed' && sg('探花').alias.b === 'cn_hookup' && sg('里番').alias.b === 'anime' && sg('欧美').alias.b === 'western', '分区名 / 常用词别名');
+        const t3 = sg('合成热门');
+        ok(t3.kind === 'text' && t3.items.length === 8 && t3.items.every((c) => c.name.includes('合成热门')), '文字 ≥3 字:FTS trigram,最多 8 张', t3.items.length);
+        const t2 = sg('热门');
+        ok(t2.kind === 'text' && t2.items.length === 8 && t2.items.every((c) => c.name.includes('热门')), '文字 ≤2 字:LIKE', t2.items.length);
+        cat7.tags('');
+        ok(n7.log.length === m, '联想 / 标签零上游请求');
+    }
+    {
+        // 播放上报
+        const m = n7.log.length;
+        const L = (site, wk) => db7.prepare('SELECT vod_id FROM adult_items WHERE site=? AND wk=?').get(site, wk || 'c:SSIS-900').vod_id;
+        const bk = (site, okv, who, extra, wk) => cat7.beacon(Object.assign({ wk: wk || 'c:SSIS-900', site_key: site, vod_id: L(site, wk), ok: okv }, extra || {}), who);
+        ok(cat7.beacon({}, 'w1').ok === false && cat7.beacon({ site_key: 'pa', vod_id: L('pa'), ok: 'yes' }, 'w1').reason === 'invalid' && cat7.beacon({ site_key: 'pa', vod_id: L('pa'), ok: false }, '').reason === 'anonymous',
+            '上报:字段不对 → 忽略;匿名(认不出上报者)的失败 → 不计');
+        for (let i = 0; i < 4; i++) cat7.beacon({ site_key: 'pa', vod_id: L('pa'), ok: false }, '');
+        ok(!dead('pa') && db7.prepare('SELECT COUNT(*) n FROM adult_line_fail WHERE site=?').get('pa').n === 0, '匿名失败报多少次都不判死、不进失败表');
+        const ra = cat7.beacon({ site_key: 'pa', vod_id: L('pa'), ok: true }, '');
+        ok(ra.ok === true && ra.dead === false, '匿名的成功照收(补时长/分辨率/复活)', ra);
+        ok(cat7.beacon({ site_key: 'pa', vod_id: 'nope', ok: false }, 'w1').reason === 'unknown', '上报:不认识的线路 → 忽略');
+        bk('pa', false, 'w1'); bk('pa', false, 'w1'); bk('pa', false, 'w1');
+        ok(!dead('pa'), '同一个上报者报 3 次不算');
+        bk('pa', false, 'w2');
+        ok(!dead('pa'), '2 个不同上报者 → 还不算');
+        const r3 = bk('pa', false, 'w3');
+        ok(r3.ok && r3.dead === true && dead('pa'), '24h 内 3 个不同上报者失败 → 判死');
+        let g = await cat7.work('c:SSIS-900');
+        ok(g.sources[g.sources.length - 1].site_key === 'pa' && g.sources.find((s) => s.site_key === 'pa')._dead === true && g.sources.filter((s) => s._dead).length === 1, '判死的线路 _dead:true、排最后', g.sources.map((s) => s.site_key + (s._dead ? '†' : '')));
+        bk('pa', true, 'w4');
+        ok(!dead('pa'), '之后任何一次成功 → 复活');
+        bk('pa', false, 'w1'); bk('pa', false, 'w2');
+        ok(!dead('pa'), '复活之前的失败不再算');
+        bk('pa', false, 'w3');
+        ok(dead('pa'), '复活后再有 3 个不同上报者失败 → 再判死');
+        bk('pa', true, 'w9');
+        // 资源站换了播放地址 → 复活;只是签名参数变了不算
+        for (const w of ['y1', 'y2', 'y3']) bk('pc', false, w);
+        ok(dead('pc'), 'pc 判死');
+        const pcIt = PC.items.find((x) => x.vod_name === 'SSIS-900 某合成标题-架空ユメ');
+        cat7.ingestSearchItems('pc', [Object.assign({}, pcIt, { vod_play_url: '正片$https://media.example/new-path/index.m3u8?sign=1' })]);
+        await cat7.flush();
+        ok(!dead('pc'), '资源站换了播放地址 → 判死清掉');
+        for (const w of ['y5', 'y6', 'y7']) bk('pc', false, w);
+        cat7.ingestSearchItems('pc', [Object.assign({}, pcIt, { vod_play_url: '正片$https://media.example/new-path/index.m3u8?sign=3' })]);
+        await cat7.flush();
+        ok(dead('pc'), '只是签名参数变了 → 不算换地址');
+        bk('pc', true, 'y4');
+        // 时长补全:不知道的才补,和作品对得上才收;作品中位数重算
+        bk('pb', true, 'w5', { dur: 7203 }, 'c:SSIS-906');
+        const i906 = db7.prepare("SELECT dur FROM adult_items WHERE site='pb' AND wk='c:SSIS-906'").get();
+        ok(i906.dur === 7203 && workRow(db7, 'c:SSIS-906').dur_med === 7202, '成功上报带时长 → 补上未知时长、重算作品中位数', [i906.dur, workRow(db7, 'c:SSIS-906').dur_med]);
+        bk('pb', true, 'w5', { dur: 3000 }, 'c:SSIS-907');
+        ok(db7.prepare("SELECT dur FROM adult_items WHERE site='pb' AND wk='c:SSIS-907'").get().dur === 0, '上报时长和作品对不上 → 不收');
+        bk('pa', true, 'w5', { dur: 100 });
+        ok(db7.prepare("SELECT dur FROM adult_items WHERE site='pa' AND wk='c:SSIS-900'").get().dur === 7200, '已知时长不被上报改写');
+        bk('pb', true, 'w5', { w: 1920, h: 1080 });
+        bk('pc', true, 'w5', { w: 'x', h: 99999 });
+        g = await cat7.work('c:SSIS-900');
+        ok(g.sources.find((s) => s.site_key === 'pb')._res === '1920x1080' && g.sources.find((s) => s.site_key === 'pc')._res === '', '成功上报带宽高 → _res;乱填的不收');
+        // 24h 窗口
+        bk('pb', false, 'z1'); bk('pb', false, 'z2');
+        c7.t += 25 * HOUR;
+        bk('pb', false, 'z3');
+        ok(!dead('pb'), '超过 24h 的失败不算');
+        c7.t -= 25 * HOUR;
+        ok(n7.log.length === m, '上报零上游请求');
+        const st = cat7.stats().beacon;
+        ok(st.dead >= 3 && st.revived >= 2 && st.dur === 1 && st.res >= 1, '上报计数', st);
+    }
+    {
+        // 线路字段 / 排序 / _meta
+        const g = await cat7.work('c:SSIS-900');
+        const by = Object.fromEntries(g.sources.map((s) => [s.site_key, s]));
+        ok(by.pa._family === 'fam1' && by.pc._family === 'fam1' && by.pb._family === 'fam2' && by.hx._family === 'fam3', '_family = 站点表 family', g.sources.map((s) => [s.site_key, s._family]));
+        ok(by.pb._native === 'risky' && by.pa._native === 'ok' && by.hx._native === 'ok', "_native:nativeHls:false → 'risky'");
+        ok(by.pa._same && by.pa._same === by.pb._same && by.pc._same === '' && by.hx._same === '', '_same:不同家族、第一集路径(去掉域名)相同 → 同一组', g.sources.map((s) => [s.site_key, s._same]));
+        ok(g.sources.every((s) => typeof s._dead === 'boolean' && typeof s._res === 'string' && typeof s._family === 'string' && typeof s._same === 'string'), '线路字段类型');
+        const keys = g.sources.map((s) => s.site_key);
+        ok(Math.abs(keys.indexOf('pc') - keys.indexOf('pa')) === 1, '同家族挨着(pa, pc 都是 fam1,中间不夹别家)', keys);
+        PC.upstream = 'up1'; HX.upstream = 'up1';
+        const gu = await cat7.work('c:SSIS-900');
+        const bu = Object.fromEntries(gu.sources.map((s) => [s.site_key, s]));
+        ok(bu.pc._same && bu.pc._same === bu.hx._same && bu.pc._same !== bu.pa._same, '_same:站点表 upstream 相同的站同一组', gu.sources.map((s) => [s.site_key, s._same]));
+        delete PC.upstream; delete HX.upstream;
+        // 判死的线路:活的先,同家族也不跨过死活分界
+        const paId = db7.prepare("SELECT vod_id FROM adult_items WHERE site='pa' AND wk='c:SSIS-900'").get().vod_id;
+        for (const w of ['d1', 'd2', 'd3']) cat7.beacon({ wk: 'c:SSIS-900', site_key: 'pa', vod_id: paId, ok: false }, w);
+        const gd = await cat7.work('c:SSIS-900');
+        const dk = gd.sources.map((s) => s.site_key);
+        ok(dk.length === 4 && dk[3] === 'pa' && gd.sources[3]._dead === true && gd.sources.slice(0, 3).every((s) => !s._dead), '活的在前、死的在后(同家族也不跨过死活分界)', gd.sources.map((s) => s.site_key + (s._dead ? '†' : '')));
+        cat7.beacon({ wk: 'c:SSIS-900', site_key: 'pa', vod_id: paId, ok: true }, 'd4');
+        const M = g._meta;
+        ok(M.code === 'SSIS-900' && M.bucket === 'jp_censored' && M.bucket_label === '日本有码' && M.label_prefix === 'SSIS' && M.n_sites === 4 && M.first_seen > 0 && M.dur >= 7200, '_meta 基本字段', M);
+        ok(Array.isArray(M.tags) && M.tags.every((t) => typeof t.id === 'string' && typeof t.label === 'string' && typeof t.featured === 'boolean'), '_meta.tags = [{id,label,featured}]', M.tags);
+        ok(JSON.stringify(M.siblings.map((s) => s.kind).sort()) === '["U","clip"]' && M.siblings.every((s) => s.wk && s.name), "_meta.siblings kind 'U' / 'clip'", M.siblings);
+        const gU = await cat7.work('c:SSIS-900#U');
+        ok(gU && gU._meta.siblings.some((s) => s.wk === 'c:SSIS-900' && s.kind === 'main'), "#U 作品的兄弟里正片 kind 'main'", gU && gU._meta.siblings);
+        const g903 = await cat7.work('c:SSIS-903');
+        ok(g903 && g903._meta.siblings.length === 1 && g903._meta.siblings[0].kind === 'main', "~2 第二部正片也是 'main'", g903 && g903._meta.siblings);
+        ok(M.actress.includes('テスト花子') && M.actress.includes('架空ユメ'), '演员:vod_actor + title.js 有把握的解析', M.actress);
+        const g902 = await cat7.work('c:SSIS-902');
+        ok(g902 && g902._meta.actress.length === 0, '演员:纯汉字的解析结果不要', g902 && g902._meta.actress);
+        const wwe = db7.prepare("SELECT wk, bucket FROM adult_works WHERE name LIKE '某合成欧美长标题%'").get();
+        const gwe = wwe && await cat7.work(wwe.wk);
+        ok(gwe && gwe._meta.bucket === 'western' && gwe._meta.actress.length === 0, '演员:片名解析出的名字只在日本片分区用(欧美不给)', gwe && gwe._meta);
+        const wcn = db7.prepare("SELECT wk FROM adult_works WHERE name='某国产合成自拍片'").get().wk;
+        const gcn = await cat7.work(wcn);
+        ok(gcn && gcn._meta.bucket === 'cn_amateur' && gcn._meta.actress.length === 0 && gcn._meta.label_prefix === '' && gcn._meta.siblings.length === 0, '国产自拍:不给演员(哪怕有 vod_actor)、没有厂牌前缀', gcn && gcn._meta);
+    }
+    {
+        // 封面代理:开着时卡片 / 线路封面改写;地址只从索引查
+        const catImg = createCatalog({ db: db7, getSites: () => n7.sitesCfg(), adult, httpGet: n7.httpGet, log: () => {}, env: { ADULT_IMG_PROXY: '1' }, now: c7.now, sleep: c7.sleep });
+        const cards = catImg.home().rows.flatMap((r) => r.items);
+        ok(cards.length > 0 && cards.every((c) => /^\/api\/img\?k=[^&]+&s=[a-z0-9]+$/.test(c.pic)), 'ADULT_IMG_PROXY=1:卡片封面 → /api/img?k=&s=', cards.slice(0, 3).map((c) => c.pic));
+        const gi = await catImg.work('c:SSIS-900');
+        ok(gi.sources.every((s) => s.vod_pic === '/api/img?k=' + encodeURIComponent('c:SSIS-900') + '&s=' + s.site_key) && /^\/api\/img\?k=/.test(gi.pic), '线路封面 → /api/img?k=&s=<站>', gi.sources.map((s) => s.vod_pic));
+        ok(catImg.stats().imgProxy === true && cat7.stats().imgProxy === false, 'stats.imgProxy');
+        ok(cat7.home().rows.flatMap((r) => r.items).every((c) => !c.pic || /^https:\/\/img\.example\//.test(c.pic)), '默认关:卡片封面是直链');
+        const pa = db7.prepare("SELECT pic FROM adult_items WHERE site='pa' AND wk='c:SSIS-900'").get().pic;
+        ok(catImg.picUrl('c:SSIS-900', 'pa') === pa && /^https:\/\/img\.example\//.test(pa), 'picUrl:按 (作品, 站) 从索引查地址');
+        const meta = catImg.picUrl('c:SSIS-900', '', { meta: true });
+        ok(meta && /^https:\/\/img\.example\//.test(meta.url) && meta.name === 'SSIS-900 某合成标题' && meta.bucket === 'jp_censored', 'picUrl 不给站 → 用作品封面那一条;meta:true 带片名 / 分区', meta);
+        ok(catImg.picUrl('c:SSIS-900', 'zz') === null && catImg.picUrl('c:NOPE-001', 'pa') === null && catImg.picUrl('', 'pa') === null && catImg.picUrl('c:SSIS-900', 'pd') === null, 'picUrl:没有 / 不相干的站 → null');
+        db7.prepare("UPDATE adult_works SET review='hide' WHERE wk='c:SSIS-906'").run();
+        ok(catImg.picUrl('c:SSIS-906', 'pa') === null, 'picUrl:审查过滤藏起来的作品 → null');
+        db7.prepare("UPDATE adult_works SET review=NULL WHERE wk='c:SSIS-906'").run();
+    }
+    {
+        // 封面代理模块:魔数 / 内网地址 / 地址检查 / 缓存 / LRU / 负缓存
+        const JPG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(60, 1)]);
+        const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(60, 2)]);
+        const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.from([0, 0, 0, 0]), Buffer.from('WEBPVP8 '), Buffer.alloc(40)]);
+        ok(IMG.sniff(JPG).type === 'image/jpeg' && IMG.sniff(PNG).ext === 'png' && IMG.sniff(WEBP).ext === 'webp' && IMG.sniff(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>')) === null
+            && IMG.sniff(Buffer.from('<html>hello world</html>')) === null && IMG.sniff(Buffer.alloc(3)) === null, '魔数认图片(SVG / HTML 不认)');
+        const priv = ['127.0.0.1', '10.1.2.3', '172.16.0.1', '172.31.255.1', '192.168.1.1', '169.254.169.254', '0.0.0.0', '100.64.0.1', '224.0.0.1', '::1', '::', 'fd00::1', 'fe80::1', '::ffff:127.0.0.1', '::ffff:10.0.0.1', 'garbage'];
+        const pub = ['1.1.1.1', '8.8.8.8', '172.32.0.1', '2606:4700::1111', '::ffff:8.8.8.8'];
+        ok(priv.every(IMG.isPrivateAddr) && !pub.some(IMG.isPrivateAddr), '内网 / 回环 / 链路本地 / 组播地址判定', [priv.filter((x) => !IMG.isPrivateAddr(x)), pub.filter(IMG.isPrivateAddr)]);
+        const thr = (u) => { try { IMG.checkUrl(u); return false; } catch (e) { return true; } };
+        ok(['http://127.0.0.1/x.jpg', 'http://[::1]/x.jpg', 'file:///etc/passwd', 'http://localhost/x.jpg', 'http://a.localhost/x', 'http://user:pw@img.example/x.jpg', 'ftp://img.example/x.jpg', 'http://10.0.0.8:8080/x.jpg', 'javascript:alert(1)'].every(thr)
+            && !thr('https://img.example/a.jpg') && !thr('http://img.example:8080/a.jpg'), 'checkUrl:非 http(s) / 内网字面量 / localhost / 带账号 一律拒');
+        await new Promise((r) => IMG.safeLookup('localhost', {}, (err) => { ok(err && /private/.test(err.message), 'safeLookup:域名解析到内网地址 → 拒', err && err.message); r(); }));
+        const tmpImg = fs.mkdtempSync(path.join(os.tmpdir(), 'adult-img-'));
+        const fetched = [];
+        const big = (n) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(n, n % 7)]);
+        const map = { 'c:A|pa': 'https://img.example/a.jpg', 'c:B|pa': 'https://img.example/b.bin', 'c:C|pa': 'https://img.example/c.html', 'c:D|pa': 'http://10.0.0.1/d.jpg', 'c:E|pa': 'https://img.example/e.jpg' };
+        for (let i = 1; i <= 4; i++) map['c:L' + i + '|pa'] = 'https://img.example/l' + i + '.jpg';
+        let tnow = T0;
+        const px = IMG.createImgProxy({
+            dir: tmpImg, capMb: 1, now: () => tnow, resolve: (k, s) => map[k + '|' + s] || null,
+            fetchImage: async (u) => {
+                fetched.push(u);
+                if (/a\.jpg$/.test(u)) return JPG;
+                if (/b\.bin$/.test(u)) return PNG;
+                if (/c\.html$/.test(u)) return Buffer.from('<html><body>not an image at all</body></html>');
+                if (/e\.jpg$/.test(u)) return big(6 * 1024 * 1024);
+                if (/l\d\.jpg$/.test(u)) return big(400 * 1024);
+                throw new Error('boom');
+            },
+        });
+        const mockRes = () => { const r = { code: 200, h: {}, body: null, sent: false }; r.set = (k, v) => { r.h[k.toLowerCase()] = v; return r; }; r.status = (c) => { r.code = c; return r; }; r.json = (b) => { r.body = b; r.sent = true; return r; }; r.end = (b) => { r.body = b; r.sent = true; return r; }; Object.defineProperty(r, 'headersSent', { get: () => r.sent }); return r; };
+        const call = async (query) => { const res = mockRes(); await px.handle({ query }, res); return res; };
+        let r = await call({ k: 'c:A', s: 'pa', url: 'http://169.254.169.254/latest/meta-data' });
+        ok(r.code === 200 && r.h['content-type'] === 'image/jpeg' && Buffer.isBuffer(r.body) && /private/.test(r.h['cache-control']) && r.h['x-content-type-options'] === 'nosniff' && fetched.join() === 'https://img.example/a.jpg',
+            '代理:地址从索引查(请求里的 url= 不看),回图片', [r.code, r.h, fetched]);
+        r = await call({ k: 'c:A', s: 'pa' });
+        ok(r.code === 200 && fetched.length === 1 && px.stats().hits === 1, '第二次:磁盘缓存命中,不再出网');
+        ok(fs.readdirSync(tmpImg).some((f) => /^[0-9a-f]{40}\.jpg$/.test(f)), '缓存文件名 = sha256(地址) 前 40 位 + 扩展名');
+        r = await call({ k: 'c:B', s: 'pa' });
+        ok(r.code === 200 && r.h['content-type'] === 'image/png', '上游 octet-stream:按魔数改成 image/png');
+        r = await call({ k: 'c:C', s: 'pa' });
+        const n1 = fetched.length;
+        const r2 = await call({ k: 'c:C', s: 'pa' });
+        ok(r.code === 502 && r2.code === 502 && fetched.length === n1, '不是图片 → 502,1 小时内不再试');
+        r = await call({ k: 'c:D', s: 'pa' });
+        ok(r.code === 502 && !fetched.some((u) => /10\.0\.0\.1/.test(u)) && px.stats().refused >= 1, '索引里的地址是内网 → 拒,一次都不连');
+        r = await call({ k: 'c:E', s: 'pa' });
+        ok(r.code === 502, '超过 5MB → 拒');
+        ok((await call({ k: 'c:NOPE', s: 'pa' })).code === 404 && (await call({ k: 'x', s: 'pa' })).code === 400 && (await call({ k: 'c:A', s: '../x' })).code === 400 && (await call({ url: 'https://img.example/a.jpg' })).code === 400,
+            '不认识的作品 404;参数不合法 400;只给 url= → 400');
+        for (let i = 1; i <= 4; i++) { tnow += 1000; await call({ k: 'c:L' + i, s: 'pa' }); }
+        const st = px.stats();
+        ok(st.bytes <= 1024 * 1024 && st.evicted >= 2 && fs.readdirSync(tmpImg).filter((f) => !/\.tmp$/.test(f)).length === st.files, 'LRU:总量超过上限 → 删最久没用的,删到 90% 以下', st);
+        const keep = crypto.createHash('sha256').update('https://img.example/l4.jpg').digest('hex').slice(0, 40) + '.jpg';
+        ok(fs.existsSync(path.join(tmpImg, keep)), 'LRU:最新的那张还在');
+        fs.rmSync(tmpImg, { recursive: true, force: true });
+    }
+}
+{
+    // 薄分区回填:首爬 6h 后才开始、每周一次、只拉叶子分类(&t=<叶子>&pagesize=60,每叶子 ≤10 页)、每轮 ≤12 个、守爬虫节奏
+    const leafId = tidOf('欧美精品', '欧美'), parentId = tidOf('欧美');
+    const c8 = mkClock(T0), n8b = mkNet(c8);
+    n8b.latency = 20;
+    const db8 = new Database(':memory:');
+    const B1 = n8b.site('bf1');
+    for (let i = 0; i < 20; i++) B1.items.push(mk('某合成国产回填' + i, '国产自拍', { t: T0 - i * 10 * MIN - MIN, dur: 600 + i }));
+    for (let i = 0; i < 700; i++) B1.items.push(mk('某合成欧美旧片 ' + i, '欧美精品', { parent: '欧美', t: T0 - 100 * DAY - i * HOUR, dur: 1500 + i }));
+    const cat8 = createCatalog({ db: db8, getSites: () => n8b.sitesCfg(), adult, httpGet: n8b.httpGet, log: () => {}, now: c8.now, sleep: c8.sleep });
+    await cat8.tick();
+    ok(!n8b.log.some((x) => x.t != null), '首次爬取 6h 内不回填');
+    const western = () => db8.prepare("SELECT COUNT(*) n FROM adult_works WHERE bucket='western'").get().n;
+    ok(western() === 0, '增量爬虫(h=72)拿不到旧片');
+    c8.t += 7 * HOUR;
+    let m0 = n8b.log.length;
+    const r = await cat8.tick();
+    const first = n8b.log.slice(m0).filter((x) => x.t != null);
+    ok(first.length > 0 && first.length <= 12 && r.requests <= 120 && r.backfill === first.length, '回填每轮 ≤12 个请求(用爬虫预算)', [first.length, r.requests, r.backfill]);
+    for (let g = 0; g < 200; g++) {
+        const st = cat8.stats().backfillState;
+        if (!st || !st.queued) break;
+        c8.t += 5 * MIN;
+        await cat8.tick();
+    }
+    const all = n8b.log.filter((x) => x.t != null);
+    const cmap = adult.taxonomy.buildClassMap(classes, { host: B1.api });
+    ok(all.every((x) => { const row = cmap.get(Number(x.t)); return row && !row.container && !row.block; }) && !all.some((x) => Number(x.t) === parentId), '只拉叶子分类,绝不拉父分类 / 硬拦分类',
+        all.filter((x) => { const row = cmap.get(Number(x.t)); return !row || row.container || row.block; }).map((x) => x.t));
+    ok(all.every((x) => x.ps === 60 && x.pg >= 1 && x.pg <= 10 && x.ac === 'detail' && !x.h), '&t=<叶子>&pagesize=60,页码 1~10,不带 h');
+    const leafPages = all.filter((x) => Number(x.t) === leafId).map((x) => x.pg);
+    ok(leafPages.length === 10 && Math.max(...leafPages) === 10, '每个叶子最多翻 10 页(这个叶子有 12 页)', leafPages);
+    ok(western() === 600, '回填的旧片入库(10 页 × 60)', western());
+    ok(pacingOk(n8b.log, 2000).length === 0 && n8b.maxHost === 1, '回填也守同域名串行 / 间隔');
+    const bst = cat8.stats().backfillState;
+    ok(bst && bst.thin.includes('western'), '最近 30 天作品 <60 的分区算薄', bst);
+    m0 = n8b.log.length;
+    c8.t += DAY;
+    await cat8.tick();
+    ok(!n8b.log.slice(m0).some((x) => x.t != null), '一周内不再回填');
+    c8.t += 7 * DAY;
+    await cat8.tick();
+    ok(n8b.log.slice(m0).some((x) => x.t != null), '一周后再回填一轮');
 }
 
 console.log(`\nsite-catalog-test: ${pass} passed, ${fail} failed`);
