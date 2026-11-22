@@ -204,6 +204,10 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     for (const q of CAN.queries.allow) ok(A.policy.checkQuery(q) === false, 'checkQuery 放: ' + JSON.stringify(q));
     ok(A.policy.checkQuery(null) === false && A.policy.checkQuery(undefined) === false, 'checkQuery: 空值不拦不抛');
     ok(A.policy.checkQuery('萝 莉') && A.policy.checkQuery('蘿莉') && A.policy.checkQuery('ＬＯＬＩ'), 'checkQuery: 空白/繁体/全角');
+    // p6:leet 写法折一遍再查;番号/分辨率/厂牌这类字母数字混写的正常查询不受影响
+    for (const q of ['l0li', 'L0LI', '10li', 'lo1i', 'sh0ta', 'ch1ld', 'k1ds', 'j4ilbait', 'l0li collection']) ok(A.policy.checkQuery(q) === true, 'checkQuery p6 leet 拦: ' + q);
+    for (const q of ['SSIS-001', 'ssis001', '300MIUM-1402', 'FC2-PPV-1234567', 'MD0315', '1080p', '4k', 'S1', 'HEYZO-1234', '1PON-100626_001', 'x264', '3p', 'm1lf', '0nlyfans', 'tokyo hot n1234', '1pondo'])
+        ok(A.policy.checkQuery(q) === false, 'checkQuery p6 leet 放: ' + q);
 }
 
 // ============ 7. filterItems ============
@@ -227,6 +231,55 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     for (let i = 0; i < 3000; i++) A.policy.checkItem({ vod_name: `SSIS-${100 + (i % 800)} 某作品标题第${i}集 中文字幕`, type_name: i % 2 ? '日本有码' : '国产自拍', vod_content: '一段普通的简介文字'.repeat(20) });
     const ms = Date.now() - t0;
     ok(ms < 3000, 'perf: 3000 次 checkItem < 3s', ms);
+}
+
+// ============ 9. 严格站 ctx.strict(p5,爱播 s51 这类大杂烩站) ============
+{
+    const chk = A.policy.checkItem;
+    const S = { strict: true };
+    // 金丝雀:fixtures canaries.json 的 strict 组(严格站专用,普通站入库测试不用这一组)
+    ok(CAN.strict && CAN.strict.block.length >= 10 && CAN.strict.allow.length >= 5, 'strict: 金丝雀组存在', CAN.strict && [CAN.strict.block.length, CAN.strict.allow.length]);
+    for (const c of CAN.strict.block) {
+        const r = chk(c.item, Object.assign({}, c.ctx || {}, S));
+        ok(!r.ok && String(r.reason).startsWith(c.want), '严格站必拦: ' + c.item.vod_name + ' [' + c.item.type_name + '/' + (c.item.vod_class || '') + ']', { got: r.reason, want: c.want });
+    }
+    for (const c of CAN.strict.allow) {
+        const r = chk(c.item, Object.assign({}, c.ctx || {}, S));
+        ok(r.ok, '严格站放行: ' + c.item.vod_name, r);
+    }
+    // 普通站的必拦金丝雀在严格站也必拦(严格站只会更严)
+    let looser = [];
+    for (const c of CAN.block) { const r = chk(c.item, Object.assign({}, c.ctx || {}, S)); if (r.ok) looser.push(c.item.vod_name); }
+    eq(looser, [], 'strict: 普通站必拦的严格站也拦');
+    // 只认严格的 true
+    const leakish = { vod_name: '95后小嫩模私拍狂欢夜', type_name: '爱播资源' };
+    ok(chk(leakish).ok && chk(leakish, { strict: 'yes' }).ok && chk(leakish, { strict: 1 }).ok, 'strict: 不是 true 就不算严格站', chk(leakish, { strict: 'yes' }));
+    eq(chk(leakish, S).reason, 'item:leak', 'strict: 同一条在严格站被拦');
+    // S6 大杂烩分类按 vod_class 定大类、并上标签;非严格站不动
+    const short = { vod_name: '这妹子太主动了', type_name: '爱播资源', vod_class: '抖阴短片,抖阴短' };
+    eq(chk(short).bucket, 'uncat', 'strict: 非严格站大杂烩仍是 uncat(爱播资源 只是站点级大杂烩名)');
+    eq(chk(short, S).bucket, 'short', 'strict: 严格站按 vod_class 定大类');
+    const jp = chk({ vod_name: 'HODV-21995 某某', type_name: '爱播资源', vod_class: '强奸乱伦,日本有码' }, S);
+    ok(jp.ok && jp.bucket === 'jp_censored' && jp.review === 'code' && jp.tags.length > 0, 'strict: 第一个能导航的 token 定大类,审查级与标签并进来', jp);
+    ok(chk({ vod_name: '某某', type_name: '视频二区', vod_class: '国产精品' }, S).review === 'filter', 'strict: 审查级至少是 filter');
+    // S4 番号放回上游分类重判;codeOk 字段给调用方用
+    const cnJav = { vod_name: 'SSIS-505 普通の人妻', type_name: '爱播资源', vod_class: '国产主播' };
+    ok(chk(cnJav).ok && chk(cnJav).codeOk === true, 'strict: 非严格站 codeOk=true(只看 type_name)', chk(cnJav));
+    const r4 = chk(cnJav, S);
+    ok(r4.ok && r4.codeOk === false && r4.code && r4.code.ok === false, 'strict: 国产 vod_class 里的日本番号 codeOk=false', r4);
+    ok(chk(cnJav, Object.assign({ codeOk: true }, S)).codeOk === false, 'strict: 调用方传 codeOk:true 也会被降级');
+    // S1 vod_class 是数组 / 超多 token 也不抛;token 太多 = hide
+    ok(!chk({ vod_name: 'x', type_name: '爱播资源', vod_class: ['国产精品', '偷拍偷窥'] }, S).ok, 'strict: vod_class 数组也查');
+    eq(chk({ vod_name: '某某', type_name: '爱播资源', vod_class: Array.from({ length: 90 }, (_, i) => '标签' + i).join(',') }, S).reason, 'review:hide', 'strict: token 超过 80 个 = 不认识 = 藏');
+    // S7 只对国产类;日本片真简介放行
+    const prose = '她叫小某,某地本地人,身高一米六八,皮肤白皙,今天穿着黑色蕾丝内裤等着你来。镜头前她缓缓抬起一条腿,眼神迷离地看着镜头';
+    eq(chk({ vod_name: '某某巨乳 爆操', type_name: '爱播资源', vod_class: '国产主播', vod_content: prose }, S).reason, 'item:strict', 'strict: 国产类 AI 叙述简介');
+    ok(chk({ vod_name: '某某巨乳 爆操', type_name: '爱播资源', vod_class: '国产主播', vod_content: '某某巨乳 爆操' }, S).ok, 'strict: 简介=片名 不算叙述');
+    ok(chk({ vod_name: '某某巨乳 爆操', type_name: '爱播资源', vod_class: '国产主播', vod_content: prose }).ok, 'strict: 非严格站不做 S7');
+    // 性能
+    const t0 = Date.now();
+    for (let i = 0; i < 3000; i++) chk({ vod_name: `某作品标题第${i}集 中文字幕`, type_name: '爱播资源', vod_class: i % 2 ? '国产精品,主播直播' : '强奸乱伦', vod_tag: '高清AV,麻豆傳媒,素人', vod_content: '一段普通的简介文字'.repeat(20) }, S);
+    ok(Date.now() - t0 < 3000, 'perf: 3000 次严格站 checkItem < 3s', Date.now() - t0);
 }
 
 console.log(`adult-policy-test: ${pass} passed, ${fail} failed`);

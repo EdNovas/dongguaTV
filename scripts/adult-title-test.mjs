@@ -200,5 +200,84 @@ for (const [n, t, code, key, kind] of CASES) {
     eq(W(null), 't:', 'workKey: 坏输入');
 }
 
+// ============ 9. 净标题去上传者/平台前缀与杂项(p2,从 items.jsonl + 目录片名统计) ============
+{
+    const C = (n, t) => P(n, t).cleanTitle;
+    eq(C('ED MOASIC-寂寞少妇的测试片名。全程露脸', '国产'), '寂寞少妇的测试片名。全程露脸', 'junk: ED MOASIC- 前缀');
+    eq(C('ED MOSAIC—双飞测试-闺蜜姐妹花无聊寻求刺激轮番', '国产'), '双飞测试-闺蜜姐妹花无聊寻求刺激轮番', 'junk: ED MOSAIC— 前缀(长横杠)');
+    eq(C('EdMosaic11-16测试模特的初体验', '国产'), '测试模特的初体验', 'junk: EdMosaic+日期 前缀');
+    eq(C('【ED MOASIC】测试生日会', '国产'), '测试生日会', 'junk: 【ED MOASIC】');
+    eq(C('测试片名男友的报复 ED MOASIC', '国产'), '测试片名男友的报复', 'junk: ED MOASIC 尾巴');
+    eq(C('KU【天美传媒】测试人【绝对测试按摩店】高清原版首发【TMW038】 new', '天美传媒'), '测试人【绝对测试按摩店】', 'junk: KU + 【片商】 + new');
+    eq(C('myfans裏垢男子の日常-somehandle-テスト密会してきました', ''), 'テスト密会してきました', 'junk: myfans 频道名 + handle');
+    eq(C('Onlyfans测试人妻【testhandle】肛交测试 (4)', ''), '测试人妻【testhandle】肛交测试 (4)', 'junk: Onlyfans 平台词(分集号保留)');
+    eq(C('香蕉视频.XJX880测试修女', '香蕉视频'), '测试修女', 'junk: 香蕉视频. 前缀');
+    eq(C('星空无限传媒.XKTY053.某某.测试兼职', '星空传媒'), '某某.测试兼职', 'junk: 星空无限传媒. 前缀');
+    eq(C('色控 . 渴望测试的日夜 . PH-176 . 某某', '色控'), '渴望测试的日夜', 'junk: 色控 . 前缀');
+    eq(C('國產AV 天美傳媒 偷看测试', '天美传媒'), '偷看测试', 'junk: 國產AV 天美傳媒(繁体)');
+    eq(C('02月24日售价126RMB测试店长', '国产'), '测试店长', 'junk: 日期+价签');
+    eq(C('11月20日测试赛季决赛', ''), '11月20日测试赛季决赛', 'junk: 普通日期开头不动(是片名)');
+    eq(C('[独家] 测试网红被金主', '国产'), '测试网红被金主', 'junk: [独家]');
+    eq(C('【日本无码】测试临床护理', ''), '测试临床护理', 'junk: 【日本无码】');
+    eq(C('测试片名长长的测试3(8V)', ''), '测试片名长长的测试3', 'junk: (8V) 分段数');
+    eq(C('测试控制:某某(26岁),G罩YMDS-174テストエンジェルス映像出版未知演员', ''), '测试控制:某某(26岁),G罩', 'junk: 155 尾巴 <片名><番号><片商>未知演员');
+    eq(C('测试很长的片名-cd2', ''), '测试很长的片名', 'junk: -cd2 分碟');
+    eq(C('测试很长的片名 -ABCD', ''), '测试很长的片名', 'junk: 全大写上传者缩写尾巴');
+    eq(C('测试很长的片名-妄想族', ''), '测试很长的片名', 'junk: -妄想族');
+    // 永不吃掉真片名
+    eq(C('ED MOASIC', ''), 'ED MOASIC', 'junk: 去掉后不剩字就不去');
+    eq(C('测试片名-出轨已婚女上司', ''), '测试片名-出轨已婚女上司', 'junk: 横杠后的长片名不是演员名,不切');
+    eq(C('「测试経験なし」と言っていた婚約者。', ''), '「测试経験なし」と言っていた婚約者。', 'junk: 片尾句号保留');
+    eq(C('PACO-113024 测试人妻巨乳', ''), '测试人妻巨乳', 'junk: 片商前缀不是演员名前缀');
+    eq(P('PACO-113024 测试人妻巨乳', '').actress.concat(P('PACO-113024 测试人妻巨乳', '').actressGuess), [], 'junk: PACO 不当演员');
+    // 标题键跟着净标题走:带不带上传者前缀同键
+    eq(P('ED MOASIC-测试情侣互换', '国产').titleKey, P('测试情侣互换', '国产').titleKey, 'junk: 上传者前缀不影响标题键');
+}
+
+// ============ 10. 演员:有把握 / 猜测(p2) ============
+{
+    const p1 = P('ABP-601 测试片名 山田テスト', '日本有码');
+    ok(p1.actressConfident === true && JSON.stringify(p1.actress) === '["山田テスト"]' && p1.actressGuess.length === 0, 'actress: 假名名 = 有把握', p1);
+    const p2 = P('测试片名-张三', '国产传媒');
+    ok(p2.actressConfident === false && p2.actress.length === 0 && JSON.stringify(p2.actressGuess) === '["张三"]', 'actress: 纯汉字 = 猜测', p2);
+    const p3 = T.parseTitle('测试片名-张三', '国产传媒', { actor: '张三,未知演员' });
+    ok(p3.actressConfident === true && JSON.stringify(p3.actress) === '["张三"]' && p3.actressGuess.length === 0, 'actress: vod_actor 证实的纯汉字名 = 有把握', p3);
+    const p4 = T.parseTitle('测试片名一二三四', '日本有码', { actor: '架空ユメ / 素人' });
+    eq(p4.actress, ['架空ユメ'], 'actress: vod_actor 名单(占位词去掉)');
+    eq(T.parseTitle('测试片名', '国产自拍', { actor: '某某' }).actress, [], 'actress: 自拍类连 vod_actor 也不给');
+    const p5 = P('测试名字 -MIDV-968 测试片名', '女优明星');
+    ok(p5.cleanTitle === '测试片名' && p5.actress.length === 0 && JSON.stringify(p5.actressGuess) === '["测试名字"]', 'actress: "名字 -番号" 前缀(纯汉字 = 猜测)', p5);
+    const p6 = P('三枝テスト-MILK-149 测试片名', '女优明星');
+    ok(p6.cleanTitle === '测试片名' && JSON.stringify(p6.actress) === '["三枝テスト"]' && p6.actressConfident, 'actress: "名字-番号" 前缀(带假名 = 有把握)', p6);
+    const p7 = P('测试片名有码2024-09-28JKSR-656测试花子', '女优明星');
+    ok(p7.actress.length === 0 && JSON.stringify(p7.actressGuess) === '["测试花子"]', 'actress: 结构化尾巴里的纯汉字名也只是猜测', p7);
+    const p8 = P('##测试媛#测试瑶 测试', '麻豆传媒');
+    ok(p8.actress.length === 0 && p8.actressGuess.length === 2, 'actress: #标签 纯汉字 = 猜测', p8);
+    for (const junk of ['cd2', 'JVID', 'HMV', 'ED MOASIC', 'ABCDE', '妄想族', 'soop']) {
+        const p = P('测试很长的片名-' + junk, '日本有码');
+        ok(!p.actress.includes(junk) && !p.actressGuess.includes(junk), 'actress: 不是人名 ' + junk, p);
+    }
+    // p6:#标签 / 【】括号词 / 拉丁 handle / 称呼 / 题材词 都只是猜测(前端绝不显示)
+    for (const [n, t, g] of [
+        ['ABCD-123 测试标题 #覗き #女のごほうび', '日本有码', '覗き'],
+        ['ABCD-124 #個撮 #テスト活女子', '日本有码', 'テスト活女子'],
+        ['[Uploader]_测试标题【TestChannel】', '动漫', 'TestChannel'],
+        ['继母测试标题【SomeStudioChannel】', '欧美', 'SomeStudioChannel'],
+        ['ABP-601 测试 The Motion Anime', '动漫', 'Anime'],
+        ['测试很长的片名-testhandle', '国产传媒', 'testhandle'],
+        ['ABP-601 测试片名 玲衣さん', '日本有码', '玲衣さん'],
+        ['ABP-601 测试片名 痴女ギャル', '日本有码', '痴女ギャル'],
+        ['ABP-601 测试片名 女のごほうび', '日本有码', '女のごほうび'],
+    ]) {
+        const p = P(n, t);
+        ok(p.actress.length === 0 && p.actressConfident === false && p.actressGuess.includes(g), 'actress p6:不是有把握的名字 ' + g, p);
+    }
+    ok(T.parseTitle('测试标题【TestHandle】', '欧美', { actor: 'TestHandle' }).actress.includes('TestHandle'), 'actress p6:【】里的 handle 有 vod_actor 证实 → 有把握');
+    ok(JSON.stringify(P('ABP-601 测试片名 円山テスト', '日本有码').actress) === '["円山テスト"]', 'actress p6:番号片名后面的 汉字姓+假名名 仍有把握');
+    const pl = P('测试片名-终极测试之某某某某极致体验', '日本有码');
+    ok(pl.actressGuess.length === 0 && pl.cleanTitle === '测试片名-终极测试之某某某某极致体验', 'actress: 长片名碎片不是名字,也不从净标题里切', pl);
+    ok(Array.isArray(P(null).actressGuess) && P(null).actressConfident === false, 'actress: 坏输入');
+}
+
 console.log(`adult-title-test: ${pass} passed, ${fail} failed`);
 if (fail) { for (const f of failures) console.log('  FAIL ' + f); process.exit(1); }
