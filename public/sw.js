@@ -51,8 +51,9 @@
 // [adult] -adult6(第四阶段修订):adult.js?v=6、privacy.js?v=2、feed.js?v=2(刷短片不再盖在播放页上 / 锁屏后面不建实例;无痕多拦两个本机键);index.html head 加了隐私预锁片段。
 // [adult] -adult7(第四阶段复核):player-x.js?v=2(快点击:按下即预取、不重复拉)、feed.js?v=3(不预拉下一条的 m3u8 清单,只预连源站)。
 // [adult] -adult8(第四阶段复核 r3):adult.js?v=7(「猜你喜欢」带 nr=1 不推荐审查级作品;无痕时浏览路由用 replaceState 不进浏览器历史)。
+// [adult] -adult9:player-x.js?v=3(热度条选择器压过 DPlayer 的 .dplayer svg{height:100%},桌面端曲线不再被压成 3px)。
 const CACHE_VERSION = 'v43';
-const ADULT_REV = '-adult8';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult9';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -78,7 +79,7 @@ const STATIC_URLS = [
     './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js',
     './adult/adult.js?v=7',   // [adult] v43-adult8:与 index.html 引用同一个 ?v=
-    './adult/player-x.js?v=2',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
+    './adult/player-x.js?v=3',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
     './adult/privacy.js?v=2',
     './adult/preview.js?v=1',
     './adult/feed.js?v=3'

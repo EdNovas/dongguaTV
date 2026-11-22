@@ -257,7 +257,8 @@
 
     const CSS = [
         // ① 热度条:插在 .dplayer-bar 里,贴着进度条上沿;控制栏藏起来它跟着藏(在进度条里面);缩略图框亮着时让开
-        '.dgx-heat{position:absolute;left:0;right:0;bottom:100%;width:100%;height:20px;margin-bottom:2px;overflow:visible;pointer-events:none;opacity:0;transition:opacity .2s;z-index:1}',
+        //   选择器要压过 DPlayer 自带的 ".dplayer svg{width:100%;height:100%}"(0,1,1)——只写 .dgx-heat 时桌面端曲线被压成进度条的 3px 高
+        '.dplayer svg.dgx-heat,.dgx-heat{position:absolute;left:0;right:0;bottom:100%;width:100%;height:20px;margin-bottom:2px;overflow:visible;pointer-events:none;opacity:0;transition:opacity .2s;z-index:1}',
         '.dgx-heat.on{opacity:1}',
         '.dgx-heat-a{fill:var(--dgx-heat-fill,rgba(255,255,255,.2))}',
         '.dgx-heat-l{fill:none;stroke:var(--dgx-heat-line,var(--accent,#e50914));stroke-width:1.5;stroke-opacity:.9;vector-effect:non-scaling-stroke}',

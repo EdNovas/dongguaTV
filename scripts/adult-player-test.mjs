@@ -1312,6 +1312,12 @@ await (async () => {
     ok(/addEventListener\('pointermove', onWrapMove/.test(SP_SRC) && /e\.pointerType !== 'touch'/.test(SP_SRC) && /addEventListener\('pointerleave', onWrapLeave/.test(SP_SRC), 'seek-preview.js 仍把非 touch 的 pointermove 当悬停、pointerleave 收起(横滑缩略图的前提)');
     ok(/dp\.video\.addEventListener\('ratechange'[\s\S]{0,200}localStorage\.setItem\('dplayer_speed', speed\)/.test(HTML), 'index.html 的 ratechange 仍会记倍速(长按要把它写回去的原因)');
     ok(errors.length === 0, '整个过程没有监听器抛错', errors.slice(0, 5).map(e => String(e && e.stack || e)));
+    // 浏览器实测回归:DPlayer 自带 ".dplayer svg{width:100%;height:100%}"(特异性 0,1,1),只写 .dgx-heat(0,1,0)时
+    //   桌面端热度曲线被压成进度条的 3px 高 —— 定高的那条规则必须带 ".dplayer svg.dgx-heat"(0,2,1)
+    const DP_CSS = fs.readFileSync(path.join(ROOT, 'public/libs/js/DPlayer.min.js'), 'utf8');
+    const heatRule = (SRC.match(/'([^']*\.dgx-heat[^']*\{[^']*height:20px[^']*)'/) || [])[1] || '';
+    ok(/\.dplayer svg ?\{[^}]*height: ?100%/.test(DP_CSS) &&/\.dplayer svg\.dgx-heat[,{]/.test(heatRule),
+        '热度条定高规则压得过 DPlayer 的 .dplayer svg{height:100%}(桌面端曲线不被压成 3px)', heatRule.slice(0, 80));
 }
 
 console.log(`\n${fail ? '❌' : '✅'} ${pass} 通过, ${fail} 失败`);
