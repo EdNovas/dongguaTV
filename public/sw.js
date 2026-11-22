@@ -36,13 +36,16 @@
 // v42: 弹幕 /api/danmaku/ 一律直达不缓存。策略4 把空弹幕(服务器发的是 no-store,Cache API 不认)也存了,之后再开这一集,
 //      服务器 4 秒内没回(慢平台现抓要几十秒)就回这份旧的空弹幕 —— 服务器早抓到了也看不到(《嫁金钗》实锤)。
 //      弹幕自带 HTTP 缓存头(非空 7 天、空 no-store),交给浏览器缓存;升版顺带清掉旧缓存里存着的空弹幕。
-// [adult] v42-adult1 起(成人站分支自己的升版,缓存名换成 donggua-*-v42 + ADULT_REV,现为 -adult4;CACHE_VERSION 字面保持与主线一致,合并主线升版时只改这一处):
+// [adult] v42-adult1 起(成人站分支自己的升版,缓存名换成 donggua-*-<CACHE_VERSION> + ADULT_REV;CACHE_VERSION 字面保持与主线一致,合并主线升版时只改这一处):
 //      ① 跨域图片(资源站海报)一律不进缓存(策略1b 只给主站直播台标用,成人站关掉),旧的台标缓存随升版清掉;
 //      ② 目录/搜索/详情(/api/catalog、/api/search、/api/detail)直达不缓存 —— 片名不落在设备的 Cache Storage 里;
 //      ③ 预缓存 adult/adult.js(年龄确认门/站名/目录首页,页面同步加载它,弱网要能秒出)。
 //      -adult3:adult.js?v=3(phase 2:搜索建议/线路家族/线路反馈/信息条);/api/sites 与 /api/img(海报代理)也直达不缓存。
 //      -adult4:adult.js?v=4(phase 3:分面浏览/筛选面板/标签云/标签页/女优页/地址栏路由/窗口化网格);接口规则不变(/api/catalog/* 本来就直达)。
-const CACHE_VERSION = 'v42';
+// v43(主线合入): 进度条缩略图预览 libs/js/seek-preview.js?v=1(defer,预缓存走 SWR)。策略1b(跨域图片 Cache First)只认 <img>/CSS 图片(destination=image):
+//      hls.js 用 XHR 取分片(destination 为空),有的资源站把 TS 分片伪装成 .png/.jpg,以前按扩展名被当台标存进 LIVE_IMG_CACHE —— 现在 XHR/fetch 一律不碰。
+//      成人站本来就整条关掉策略1b(ADULT_SITE),这里只是保持和主线同一份判断。
+const CACHE_VERSION = 'v43';
 const ADULT_REV = '-adult4';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
@@ -66,6 +69,7 @@ const STATIC_URLS = [
     './libs/js/ad-clip-core.js?v=7',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs);v34: v5(播放前剪清单);v35: v6
     './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
+    './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js',
     './adult/adult.js?v=4'   // [adult] v42-adult4:与 index.html 引用同一个 ?v=
 ];
@@ -151,9 +155,10 @@ self.addEventListener('fetch', event => {
     }
 
     // 📺 策略1b：直播台标等【跨域图片】- Cache First(台标在 tb.zbds.top/github 等多个域，按"图片请求"统一缓存)
-    //    [adult] 成人站没有直播,跨域图片都是资源站海报:不缓存(落到下面"跨域一律不拦"交给浏览器)
+    //    v43:只认真正的图片请求。XHR/fetch(destination 为 '')一律不接 —— hls.js 取的 .png/.jpg 伪装分片(主播放器和进度条预览)不能进缓存;
+    //    destination 是 undefined(老浏览器不支持)才退回按扩展名认。[adult] 成人站没有直播,跨域图片都是资源站海报:整条不缓存
     if (!ADULT_SITE && url.origin !== self.location.origin &&
-        (event.request.destination === 'image' || /\.(png|jpe?g|webp|gif|svg)(\?|$)/i.test(url.pathname))) {
+        (_dest === 'image' || (_dest === undefined && /\.(png|jpe?g|webp|gif|svg)(\?|$)/i.test(url.pathname)))) {
         event.respondWith(handleLiveImage(event.request));
         return;
     }
