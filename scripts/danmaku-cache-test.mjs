@@ -123,7 +123,7 @@ async function startServer(extraEnv) {
     port = 20000 + Math.floor(Math.random() * 20000);
     srv = spawn(process.execPath, ['server.js'], {
         cwd: tmp,
-        env: Object.assign({}, process.env, { NODE_PATH, PORT: String(port), CACHE_TYPE: 'sqlite', DANMU_API_URL: 'http://127.0.0.1:' + upPort, DANMU_API_TOKEN: 'tk', ACCESS_PASSWORD: '', ADMIN_TOKEN: '', LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '' }, extraEnv || {}),
+        env: Object.assign({}, process.env, { NODE_PATH, PORT: String(port), CACHE_TYPE: 'sqlite', DANMU_API_URL: 'http://127.0.0.1:' + upPort, DANMU_API_TOKEN: 'tk', ACCESS_PASSWORD: '', ADMIN_TOKEN: '', LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '', PUSH_DISABLE: '', REQUESTS_DISABLE: '', INTRO_DISABLE: '', DANMAKU_DISABLE: '', SHARE_PAGE_DISABLE: '' /* [adult] 本分支默认关这几项,测原功能要显式打开 */, }, extraEnv || {}),
         stdio: ['ignore', 'pipe', 'pipe'],
     });
     log = '';

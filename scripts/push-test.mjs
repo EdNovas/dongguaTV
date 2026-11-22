@@ -479,7 +479,8 @@ async function startServer(extraEnv) {
         env: Object.assign({}, process.env, {
             NODE_PATH, PORT: String(port), CACHE_TYPE: 'sqlite', ACCESS_PASSWORD: 'mainpw,alice,bob', ADMIN_TOKEN: 'adm',
             LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '', TMDB_API_KEY: '', DANMU_API_URL: '', STATS_DISABLE: '', SITE_URL: '',
-            FAV_CHECK_DISABLE: '1', VAPID_PUBLIC_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: ''
+            FAV_CHECK_DISABLE: '1', VAPID_PUBLIC_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: '',
+            PUSH_DISABLE: '', REQUESTS_DISABLE: '', INTRO_DISABLE: '', DANMAKU_DISABLE: '', SHARE_PAGE_DISABLE: '' /* [adult] 本分支默认关这几项,测原功能要显式打开 */,
         }, extraEnv || {}),
         stdio: ['ignore', 'pipe', 'pipe'],
     });

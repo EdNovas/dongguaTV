@@ -1807,7 +1807,8 @@ async function startServer(extraEnv) {
         env: Object.assign({}, process.env, {
             NODE_PATH, PORT: String(port), CACHE_TYPE: 'sqlite', ACCESS_PASSWORD: 'mainpw,alice,bob', ADMIN_TOKEN: 'adm',
             LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '', TMDB_API_KEY: '', DANMU_API_URL: '', STATS_DISABLE: '', SITE_URL: '',
-            FAV_CHECK_DISABLE: '', VAPID_PUBLIC_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: ''
+            FAV_CHECK_DISABLE: '', VAPID_PUBLIC_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: '',
+            PUSH_DISABLE: '', REQUESTS_DISABLE: '', INTRO_DISABLE: '', DANMAKU_DISABLE: '', SHARE_PAGE_DISABLE: '' /* [adult] 本分支默认关这几项,测原功能要显式打开 */,
         }, extraEnv || {}),
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -1942,7 +1943,7 @@ try {
     await watch(E.bob, 'popbatch-b1', [{ k: 'vod', t: '大家剧', e: '第2集', s: 150 }, { k: 'vod', t: '探测剧', e: '第1集', s: 60 }, { k: 'vod', t: '两人剧', e: '第1集', s: 300 }]);
     await watch(E.main, 'popbatch-m1', [{ k: 'vod', t: '大家剧', e: '第1集', s: 400 }]);
     r = await api('GET', '/api/popular');
-    ok(r.status === 401 && r.j && r.j.error === 'auth', '私密站:/api/popular 不带令牌 → 401', r.j);
+    ok(r.status === 401 && r.j && (r.j.error === 'auth' || r.j.error === 'AUTH_REQUIRED' /* [adult] 内容接口统一服务端鉴权 */), '私密站:/api/popular 不带令牌 → 401', r.j);
     r = await api('GET', '/api/popular?token=' + E.bob);
     ok(r.j && r.j.window === '7d' && r.j.items.map(x => x.title).join() === '大家剧' && Object.keys(r.j.items[0]).sort().join() === 'kind,title', '/api/popular:除调用者外 ≥2 个别人(每人 ≥120s)才上榜,只给片名;bob 自己那票不算(两人剧只剩 alice 一个别人;探测剧 bob 只看 60s、独看剧只有 alice → 都不上榜)', r.j);
     r = await api('GET', '/api/popular?window=1d&token=' + E.main);
@@ -1981,7 +1982,7 @@ try {
     const watchRow = (s, v) => { const d = new Database(dbFile, { readonly: true }); try { return d.prepare('SELECT * FROM fav_watch WHERE site_key = ? AND vod_id = ?').get(s, v); } finally { d.close(); } };
 
     // S8:后台检查走 bg 分支 —— 慢站不做"代理对比"、直连失败的代理重试计入请求数、绝不写共享代理记忆;交互请求行为不变
-    await startServer({ CORS_PROXY_URL: M.base + '/proxy' });
+    await startServer({ CORS_PROXY_URL: M.base + '/proxy', ADULT_CORS_PROXY_URL: M.base + '/proxy' /* [adult] 成人分支只认 ADULT_CORS_PROXY_URL */ });
     dueOnly([['mock1', '1001'], ['mock2', '2001']]);
     M.slowSites.set('mock1', 1700); M.failSites.add('mock2');
     M.reset();
@@ -1990,10 +1991,10 @@ try {
     ok(r.j && r.j.requests === 3 && r.j.checked === 2 && r.j.failed === 0, '后台:2 批 + 1 次代理重试 = 3 个请求(重试计入预算)', r.j);
     ok(prox.length === 1 && prox[0].site === 'mock2' && !M.log.some(x => x.site === 'mock1' && x.proxied), '后台:慢站不做代理对比;只有直连失败的站走了一次代理', M.log.map(x => x.site + (x.proxied ? '(代理)' : '(直连)')));
     M.reset();
-    await api('GET', '/api/detail?id=2001&site_key=mock2&nocache=1');
+    await api('GET', '/api/detail?id=2001&site_key=mock2&nocache=1&token=' + E.alice);   // [adult] 详情要令牌
     ok(M.log.length >= 1 && M.log[0].site === 'mock2' && M.log[0].proxied === false, '后台没写代理记忆 → 用户请求 mock2 仍先直连', M.log.map(x => x.site + (x.proxied ? '(代理)' : '(直连)')));
     M.reset();
-    await api('GET', '/api/detail?id=1001&site_key=mock1&nocache=1');
+    await api('GET', '/api/detail?id=1001&site_key=mock1&nocache=1&token=' + E.alice);
     ok(M.log.some(x => x.site === 'mock1' && !x.proxied) && M.log.some(x => x.site === 'mock1' && x.proxied), '交互请求不变:慢站照旧直连 → 代理对比', M.log.map(x => x.site + (x.proxied ? '(代理)' : '(直连)')));
     // 两个站现在都被交互请求记成"要代理" → 后台只读这份记忆,直接走代理、不先直连
     dueOnly([['mock1', '1001'], ['mock2', '2001']]);
@@ -2026,10 +2027,10 @@ try {
         r = await api('POST', '/api/admin/favorites/check', { headers: ADM });
         ok(r.j && r.j.no_sites === true && r.j.skipped === 0 && r.j.requests === 0 && watchRow('mock1', '1001').next_check === 0 && watchRow('mock2', '2001').next_check === 0, '远程配置拉不到 → 本轮跳过、不推迟任何行', r.j);
         // /api/sites 行为不变:拉不到 → 回退本地 db.json
-        r = await api('GET', '/api/sites');
+        r = await api('GET', '/api/sites?token=' + E.alice);   // [adult] 站点表要令牌
         ok(r.j && Array.isArray(r.j.sites) && r.j.sites.some(s => s.key === 'tpl') && !r.j.sites.some(s => s.key === 'mock1'), '/api/sites 远程失败 → 回退本地', r.j && r.j.sites);
         M.remote.fail = false;
-        r = await api('GET', '/api/sites');
+        r = await api('GET', '/api/sites?token=' + E.alice);   // [adult] 站点表要令牌
         ok(r.j && r.j.sites && r.j.sites.some(s => s.key === 'mock1'), '/api/sites 远程恢复 → 用远程配置', r.j && r.j.sites && r.j.sites.map(s => s.key));
         await stopServer();
     } finally {
@@ -2038,7 +2039,7 @@ try {
 
     // 公开站(没配访问密码):/api/popular 与匿名 status 照旧不要令牌
     await startServer({ ACCESS_PASSWORD: '' });
-    r = await api('GET', '/api/popular');
+    r = await api('GET', '/api/popular', { headers: { 'x-dg-age': '1' } });   // [adult] 公开站的内容接口要年龄确认(不要令牌)
     ok(r.status === 200 && r.j && Array.isArray(r.j.items), '公开站 /api/popular 不要令牌', r.j);
     r = await api('POST', '/api/favorites/status', { json: { items: [{ site_key: 'mock1', vod_id: '1003' }] } });
     ok(r.status === 200 && r.j && r.j.enabled === true && r.j.status['mock1|1003'], '公开站匿名 status 不要令牌', r.j);

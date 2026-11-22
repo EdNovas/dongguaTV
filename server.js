@@ -2,6 +2,16 @@
 if (!process.env.VERCEL) {
     require('dotenv').config();
 }
+// [adult] 成人分支默认关的功能(只在 env 没设置时填;显式设成 0/空 = 运维明确要开):
+//   KAZUMI_DISABLE / LIVE_TV_DISABLED / FAV_CHECK_DISABLE / SHARE_TRIAL_MINUTES=0 / PUSH_DISABLE / REQUESTS_DISABLE / INTRO_DISABLE / DANMAKU_DISABLE
+//   必须在下面任何读这些 env 的常量之前执行。lib/adult-gate、lib/adult 都不包 try/catch:加载/自检失败 = 拒绝启动(fail-closed)
+const adultGateLib = require('./lib/adult-gate');
+const ADULT_ENV_APPLIED = adultGateLib.applyAdultEnvDefaults(process.env);
+// [adult] CORS 代理只用成人版自己的 Worker(ADULT_CORS_PROXY_URL);从主站拷来的 CORS_PROXY_URL 忽略(必须在下面读 CORS_PROXY_URL 之前)
+const ADULT_PROXY_NOTE = adultGateLib.applyAdultProxyEnv(process.env);
+if (ADULT_PROXY_NOTE) console.warn(ADULT_PROXY_NOTE);
+// [adult] 成人分支不调用 TMDB:在下面 [System] 启动日志之前就摘掉(否则日志先报"TMDB_API_KEY ✓ Configured"再说忽略,误导运维)
+if (process.env.TMDB_API_KEY || process.env.TMDB_PROXY_URL) { console.warn('[adult] 成人分支不调用 TMDB:已忽略配置的 TMDB_API_KEY / TMDB_PROXY_URL'); delete process.env.TMDB_API_KEY; delete process.env.TMDB_PROXY_URL; }
 
 const express = require('express');
 const axios = require('axios');
@@ -13,6 +23,9 @@ const crypto = require('crypto');
 const stream = require('stream');
 const { promisify } = require('util');
 const pipeline = promisify(stream.pipeline);
+// [adult] 内容层(分类体系/片名身份/内容硬过滤)。不包 try/catch:规则加载或自检失败 → 服务器拒绝启动
+const adult = require('./lib/adult');
+let catalog = null;   // [adult] 首页目录(lib/site-catalog),在下面限流之后创建;非 sqlite / 加载失败 = null
 
 // ========== 🔌 出网连接池硬限制(全站可用性的保命阀) ==========
 // 事故(2026-08,v1.1.174):Node 默认 globalAgent.maxSockets = Infinity。前端每开一部剧就对 50+ 资源站
@@ -25,6 +38,8 @@ const pipeline = promisify(stream.pipeline);
 const http = require('http');
 const https = require('https');
 const AGENT_OPTS = { keepAlive: true, keepAliveMsecs: 15000, maxSockets: 96, maxFreeSockets: 32, timeout: 30000, scheduling: 'lifo' };
+// maxSockets 是【每个源站】的上限(实测 maxSockets=2 × 5 个源站 = 10 条并发),对几十个资源站扇出等于没有总闸 → 再加全局总上限
+AGENT_OPTS.maxTotalSockets = Math.max(16, parseInt(process.env.OUTBOUND_MAX_TOTAL_SOCKETS, 10) || 256);
 http.globalAgent = new http.Agent(AGENT_OPTS);
 https.globalAgent = new https.Agent(AGENT_OPTS);
 axios.defaults.httpAgent = http.globalAgent;
@@ -34,7 +49,8 @@ setInterval(() => {
     try {
         const n = (https.globalAgent.sockets ? Object.values(https.globalAgent.sockets).reduce((a, b) => a + b.length, 0) : 0)
             + (http.globalAgent.sockets ? Object.values(http.globalAgent.sockets).reduce((a, b) => a + b.length, 0) : 0);
-        if (n >= AGENT_OPTS.maxSockets * 0.9) console.warn(`[出网告警] 活跃 socket ${n}/${AGENT_OPTS.maxSockets} 接近上限——上游普遍变慢或出网受阻`);
+        const cap = AGENT_OPTS.maxTotalSockets || AGENT_OPTS.maxSockets;   // n 是所有源站合计,跟总上限比
+        if (n >= cap * 0.9) console.warn(`[出网告警] 活跃 socket ${n}/${cap} 接近上限——上游普遍变慢或出网受阻`);
     } catch (e) { }
 }, 60000).unref();
 
@@ -62,7 +78,8 @@ function withSiteProfiles(sitesData) {
     } catch (e) { console.warn('[SiteProfiles] profileMap 失败,本次不带徽章:', e.message); return sitesData; }
 }
 // 站点全集 = db.json/远程配置的 maccms 站 + 内置 Kazumi 规则站(db.json 里同 key 的条目优先,便于覆盖/停用)
-function allSites() { return withKzSites(((getDB() || {}).sites) || []); }
+// active:false 的站点处处排除(搜索/详情/测速/收藏检查/目录);search:false 只是不参与搜索扇出(见 lib/adult-gate),目录照爬、详情照用
+function allSites() { return withKzSites(((getDB() || {}).sites) || []).filter(s => s && s.active !== false); }
 function withKzSites(base) {
     if (!kazumi) return base;
     let kz = [];
@@ -71,7 +88,7 @@ function withKzSites(base) {
     return base.concat(kz.filter(x => !have.has(x.key)));
 }
 const PORT = process.env.PORT || 3000;
-const DATA_FILE = path.join(__dirname, 'db.json');
+const DATA_FILE = process.env.DB_FILE ? path.resolve(process.env.DB_FILE) : path.join(__dirname, 'db.json');   // DB_FILE:换一份站点表(测试/多实例)
 const TEMPLATE_FILE = path.join(__dirname, 'db.template.json');
 
 // 图片缓存目录 (仅本地/Docker 环境)
@@ -630,7 +647,7 @@ const SEARCH_CACHE_JSON = path.join(__dirname, 'cache_search.json');
 const DETAIL_CACHE_JSON = path.join(__dirname, 'cache_detail.json');
 const INTRO_CACHE_JSON = path.join(__dirname, 'cache_intro.json');
 const INTRO_ENV_CACHE_JSON = path.join(__dirname, 'cache_intro_env.json');
-const CACHE_DB_FILE = path.join(__dirname, 'cache.db');
+const CACHE_DB_FILE = process.env.CACHE_DB_PATH ? path.resolve(process.env.CACHE_DB_PATH) : path.join(__dirname, 'cache.db');   // CACHE_DB_PATH:sqlite 放别处(独立卷/测试)
 
 console.log(`[System] Cache Type: ${CACHE_TYPE}`);
 
@@ -965,6 +982,58 @@ app.use(apiLimiter);
 
 // 对搜索 API 应用更严格的限流
 app.use('/api/search', searchLimiter);
+// ========== [adult] 成人站:首页目录 + 内容闸门(必须在所有业务路由之前挂:它的路由先应答,下面原有的搜索/详情实现不再执行) ==========
+// 首页目录(lib/site-catalog):只在 sqlite 缓存下开。加载/创建失败只是首页没有目录(/api/catalog/* 回 503),搜索/播放照常 ——
+//   内容安全不靠它(靠 lib/adult,fail-closed)。爬虫只调 maccms API,这里的 httpGet 再挡一道:媒体/图片地址一律拒绝。
+let _catalogRemoteKick = null;
+const catalogSites = () => {
+    // 配了 REMOTE_DB_URL 时远程表过期就后台续一次(没人打开首页时 /api/sites 不会去拉)
+    if (REMOTE_DB_URL && !_catalogRemoteKick && Date.now() - remoteDbLastFetch > REMOTE_DB_CACHE_TTL) {
+        _catalogRemoteKick = loadRemoteDb().catch(() => null).finally(() => { _catalogRemoteKick = null; });
+    }
+    return allSites().filter(s => s && s.api && !(kazumi && kazumi.isKzSite(s)));
+};
+const CATALOG_UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' };
+if (cacheManager.type === 'sqlite' && cacheManager.db && !process.env.VERCEL) {
+    try {
+        catalog = require('./lib/site-catalog').createCatalog({
+            db: cacheManager.db,
+            getSites: catalogSites,
+            adult,
+            httpGet: async (url, o) => {
+                const u = String(url || '');
+                if (!/^https?:\/\//i.test(u) || /\.(m3u8|ts|m4s|mp4|key|jpe?g|png|gif|webp|avif)$/i.test(u.split(/[?#]/)[0])) throw new Error('catalog: 只许调 API,拒绝 ' + u.slice(0, 80));
+                const { data } = await fetchWithProxyFallback(u, { timeout: (o && o.timeout) || 10000, maxContentLength: 16 * 1024 * 1024, headers: CATALOG_UA, bg: true }, (o && o.siteKey) || '');
+                if (data && typeof data === 'object') return data;
+                if (typeof data === 'string') return JSON.parse(data.replace(/^\uFEFF/, ''));   // 不是 JSON → 抛
+                throw new Error('catalog: 空响应');
+            },
+            log: (msg) => console.log('[Catalog] ' + msg),
+            env: process.env,
+        });
+        catalog.start();
+    } catch (e) { console.error('[Catalog] 首页目录不可用(/api/catalog/* 回 503,搜索/播放不受影响):', e.message); catalog = null; }
+}
+const adultGate = adultGateLib.createAdultGate({
+    adult,
+    allSites: () => allSites(),
+    profOf: (s) => profOf(s),
+    kazumi: () => kazumi,
+    fetchJson: async (site, url, timeout) => (await fetchWithProxyFallback(url, { timeout: timeout || 8000 }, site.key)).data,
+    cache: { get: (c, k) => cacheManager.get(c, k), set: (c, k, v, t) => cacheManager.set(c, k, v, t) },
+    catalog: () => catalog,
+    ownToken: (t) => ownToken(t),          // 下面才定义的 const:一律调用时再取
+    isBanned: (t) => isBanned(t),
+    // 机场(v2board)登录只出现在访问密码那道墙后面(前端 requirePassword 才弹登录),所以"配了鉴权" = 配了 ACCESS_PASSWORD
+    authConfigured: () => ACCESS_PASSWORDS.length > 0,
+    ipKey,
+    env: process.env,
+});
+adultGate.register(app);
+if (ADULT_ENV_APPLIED.length) console.log('[adult] 本分支默认关闭(env 未设置): ' + ADULT_ENV_APPLIED.join(', '));
+// 成人分支恒不调用 TMDB:各 TMDB 路由已被 adultGate 拦成 404;剩下读 env 的(分享卡片页搜海报等)靠这里把密钥摘掉
+if (process.env.TMDB_API_KEY) { console.warn('[adult] 成人分支不调用 TMDB:已忽略配置的 TMDB_API_KEY'); delete process.env.TMDB_API_KEY; }
+if (process.env.DANMU_API_URL && adultGate.off.danmaku) console.warn('[adult] DANMAKU_DISABLE:不取弹幕,已配置的 DANMU_API_URL 不生效');
 // 🎌 Kazumi 规则源的播放端点:/api/kz/ep(解析成 {type,url})、/api/kz/m3u8(同源清单)、/api/kz/mp4(302 签名直链)
 if (kazumi) { try { kazumi.registerRoutes(app); } catch (e) { console.warn('[Kazumi] 路由注册失败:', e.message); } }
 // ✂️ 剪掉插播后的清单托管(Safari 原生 HLS / AirPlay / 投屏用,见 lib/hls-cut):服务器只存客户端交上来的清单,自己不拉任何 m3u8。
@@ -1006,6 +1075,7 @@ try {
     });
     webPush.registerRoutes(app);
 } catch (e) { console.warn('[WebPush] 模块加载失败,推送已禁用:', e.message); webPush = null; }
+if (adultGate.off.push) webPush = null;   // [adult] PUSH_DISABLE(本分支默认):不发任何通知;/api/push/* 已被 adultGate 拦成 404
 // 求片状态变为 已履行/需补充/已拒绝 → 推送给提交人(单条:POST /api/requests/admin;批量:lib/user-stats 回调)。发完不等,失败只记日志
 const REQ_PUSH_BODY = { fulfilled: '有结果了,点开查看', need_info: '站长需要你补充一些信息', rejected: '暂时没能找到,点开查看说明' };
 function notifyRequestStatus(list) {
@@ -1203,7 +1273,8 @@ app.get(['/', '/index.html'], async (req, res) => {
     //    打开/预览由模块按 UA 自己判:isSocialCrawler 连微信/QQ/搜狗的真人浏览器都算(为了出卡片页),不能拿来区分。
     if (req.query.s && userStats) { try { userStats.recordShareOpen(req); } catch (e) { } }
     // 🔗 分享深链：社交爬虫请求 /?play=剧名 时返回富预览卡片；真实用户(无 bot UA 或带 _spa)照常拿 SPA
-    if (req.query.play && !req.query._spa && isSocialCrawler(req)) {
+    // [adult] SHARE_PAGE_DISABLE(本分支默认):不给爬虫出分享卡片(片名/海报会进聊天软件预览),一律回 SPA
+    if (!adultGate.off.sharePage && req.query.play && !req.query._spa && isSocialCrawler(req)) {
         try { return await renderSharePage(req, res, req.query.play); }
         catch (e) { console.error('[SharePage] error:', e.message); /* 失败则继续返回 SPA */ }
     }
@@ -1594,7 +1665,10 @@ app.get('/api/config', (req, res) => {
         push_enabled: !!(webPush && webPush.enabled()),
         favorites_enabled: !!(favorites && favorites.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
-        banned: isBanned(userToken)
+        banned: isBanned(userToken),
+        // [adult] 成人站标记 + 关掉的功能报关(放最后,覆盖上面同名键):adult/catalog/age_gate/site_name/auth_required/rules_version,
+        //   tmdb_api_key/tmdb_proxy_url 恒 null;推送/求片/弹幕/片头 按 *_DISABLE
+        ...adultGate.configFields()
     });
 });
 

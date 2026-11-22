@@ -1,0 +1,41 @@
+{
+    "_note": "[adult] scripts/adult-server-test.mjs 的假 maccms 站数据。片名全部合成(不含任何真人姓名);blocked 字段只给测试看,假站不下发。",
+    "classes": [
+        { "type_id": 1, "type_name": "日本有码", "type_pid": 0 },
+        { "type_id": 2, "type_name": "中文字幕", "type_pid": 0 },
+        { "type_id": 3, "type_name": "国产自拍", "type_pid": 0 },
+        { "type_id": 5, "type_name": "日本无码", "type_pid": 0 },
+        { "type_id": 9, "type_name": "自拍偷拍", "type_pid": 0 },
+        { "type_id": 20, "type_name": "国产剧", "type_pid": 0 },
+        { "type_id": 77, "type_name": "精品视频", "type_pid": 9 }
+    ],
+    "sites": {
+        "a": [
+            { "vod_id": 101, "vod_name": "SSIS-001 温泉旅馆的邂逅 中文字幕", "type_id": 2, "type_name": "中文字幕", "vod_duration": "02:00:10" },
+            { "vod_id": 102, "vod_name": "邻家姐姐的周末", "type_id": 3, "type_name": "国产自拍", "vod_duration": "25:30" },
+            { "vod_id": 103, "vod_name": "情侣自拍流出 周末合集", "type_id": 3, "type_name": "国产自拍", "blocked": "item:leak" },
+            { "vod_id": 104, "vod_name": "周末的普通标题", "type_id": 9, "type_name": "自拍偷拍", "blocked": "category" },
+            { "vod_id": 105, "vod_name": "JUL-123 夏日回忆", "type_id": 1, "type_name": "日本有码", "vod_duration": "120分钟" },
+            { "vod_id": 106, "vod_name": "周末的约会", "type_id": 77, "type_name": "精品视频", "blocked": "parent category (via catalog.classInfo)" },
+            { "vod_id": 107, "vod_name": "[换脸]某女星 周末合成", "type_id": 3, "type_name": "国产自拍", "blocked": "item:deepfake" },
+            { "vod_id": 108, "vod_name": "准高一少女 周末初恋", "type_id": 3, "type_name": "国产自拍", "blocked": "item:minor" },
+            { "vod_id": 109, "vod_name": "某部电视剧 周末篇 第1集", "type_id": 20, "type_name": "国产剧", "blocked": "bucket:x_mainstream" },
+            { "vod_id": 110, "vod_name": "周末凌辱剧情", "type_id": 3, "type_name": "国产自拍", "blocked": "review:code" }
+        ],
+        "b": [
+            { "vod_id": 201, "vod_name": "SSIS001 温泉旅馆的邂逅", "type_id": 1, "type_name": "日本有码", "vod_duration": "7212" },
+            { "vod_id": 202, "vod_name": "SSIS-001 温泉旅馆的邂逅 [无码流出]", "type_id": 5, "type_name": "日本无码" },
+            { "vod_id": 203, "vod_name": "SSIS-002 另一部作品", "type_id": 1, "type_name": "日本有码" },
+            { "vod_id": 204, "vod_name": "邻家姐姐的周末", "type_id": 3, "type_name": "国产自拍" },
+            { "vod_id": 205, "vod_name": "普通标题 某某", "type_id": 9, "type_name": "自拍偷拍", "blocked": "category" },
+            { "vod_id": 206, "vod_name": "私下曝光-某某大学生 周末", "type_id": 3, "type_name": "国产自拍", "blocked": "item:leak" },
+            { "vod_id": 207, "vod_name": "无关的作品", "type_id": 3, "type_name": "国产自拍" }
+        ],
+        "c": [
+            { "vod_id": 301, "vod_name": "邻家姐姐的周末", "type_id": 3, "type_name": "国产自拍" }
+        ],
+        "d": [
+            { "vod_id": 401, "vod_name": "邻家姐姐的周末", "type_id": 3, "type_name": "国产自拍" }
+        ]
+    }
+}

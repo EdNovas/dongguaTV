@@ -12,6 +12,12 @@ const crypto = require('crypto');
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
+// [adult] 成人分支:Vercel 无状态后端没有 sqlite 目录、没有服务端令牌表(机场令牌只活在 server.js 进程内存),
+//   鉴权与内容审核无法与 server.js 对齐 → 搜索/详情/目录/规则站一律 503、TMDB/预览 404,只留登录/配置/站点表等外壳(见 lib/adult-gate 的 vercelGuard)。
+//   lib/adult 不包 try/catch:规则加载或自检失败 → 函数起不来(全部 500),绝不在没有内容策略时出内容。
+//   弹幕按 DANMAKU_DISABLE(未设置 = 本分支默认关;只读视图,不改 process.env)。
+const adultGateLib = require('../lib/adult-gate');
+app.use(adultGateLib.vercelGuard({ adult: require('../lib/adult'), env: process.env }));
 
 // 🎌 Kazumi 规则源(七色番/动漫巴士):与 server.js 共用 lib/kazumi(同一份实现,勿在此另抄一份)。
 //    加载失败只禁用这批源;KAZUMI_DISABLE=1 整体关闭。Serverless 下模块内缓存按实例存活,冷启动会重抓(可接受)。

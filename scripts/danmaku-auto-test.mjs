@@ -836,7 +836,7 @@ console.log('④ 两个后端的来源字段');
     fs.mkdirSync(path.join(tmp, 'public'), { recursive: true });
     fs.copyFileSync(path.join(ROOT, 'public/index.html'), path.join(tmp, 'public/index.html'));
     const NODE_PATH = [path.join(ROOT, 'node_modules'), process.env.NODE_PATH || ''].filter(Boolean).join(path.delimiter);
-    const ENV = { NODE_PATH, DANMU_API_URL: 'http://127.0.0.1:' + upPort, DANMU_API_TOKEN: 'tk', ACCESS_PASSWORD: '', ADMIN_TOKEN: '', LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '', DANMU_API_SINGLE_INSTANCE: '' };
+    const ENV = { NODE_PATH, DANMU_API_URL: 'http://127.0.0.1:' + upPort, DANMU_API_TOKEN: 'tk', ACCESS_PASSWORD: '', ADMIN_TOKEN: '', LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '', DANMU_API_SINGLE_INSTANCE: '', PUSH_DISABLE: '', REQUESTS_DISABLE: '', INTRO_DISABLE: '', DANMAKU_DISABLE: '', SHARE_PAGE_DISABLE: '' /* [adult] 本分支默认关这几项,测原功能要显式打开 */, };
     let srv = null, port = 0, log = '';
     const start = async (args, extra, probe) => {
         port = 20000 + Math.floor(Math.random() * 20000);

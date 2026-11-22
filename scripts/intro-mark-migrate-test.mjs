@@ -598,7 +598,7 @@ try {
     const port = 20000 + Math.floor(Math.random() * 20000);
     srv = spawn(process.execPath, ['server.js'], {
         cwd: tmp,
-        env: Object.assign({}, process.env, { NODE_PATH, PORT: String(port), CACHE_TYPE: 'memory', ACCESS_PASSWORD: '', ADMIN_TOKEN: '', LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '', TMDB_API_KEY: '', DANMU_API_URL: '', STATS_DISABLE: '1', SITE_URL: '', FAV_CHECK_DISABLE: '1', V2BOARD_URL: '' }),
+        env: Object.assign({}, process.env, { NODE_PATH, PORT: String(port), CACHE_TYPE: 'memory', ACCESS_PASSWORD: '', ADMIN_TOKEN: '', LIVE_TV_DISABLED: '1', KAZUMI_DISABLE: '1', CORS_PROXY_URL: '', REMOTE_DB_URL: '', TMDB_API_KEY: '', DANMU_API_URL: '', STATS_DISABLE: '1', SITE_URL: '', FAV_CHECK_DISABLE: '1', V2BOARD_URL: '', PUSH_DISABLE: '', REQUESTS_DISABLE: '', INTRO_DISABLE: '', DANMAKU_DISABLE: '', SHARE_PAGE_DISABLE: '' /* [adult] 本分支默认关这几项,测原功能要显式打开 */, }),
         stdio: ['ignore', 'pipe', 'pipe'],
     });
     srv.stdout.on('data', d => { srvLog += d; }); srv.stderr.on('data', d => { srvLog += d; });
