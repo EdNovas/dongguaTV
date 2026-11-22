@@ -19,6 +19,13 @@
 //     suggest(empty/blocked/code+exact/alias/text,零上游)、beacon(不同上报者 3 个/24h 判死、成功复活、换地址复活、时长/宽高补全)、
 //     线路 _family/_dead/_res/_native/_same 与排序、_meta(分区名/标签/厂牌前缀/演员/兄弟/首见)、封面代理(改写、索引查地址、魔数、
 //     内网拒、LRU、负缓存)、薄分区回填(6h 后、每周、只拉叶子、≤10 页、每轮 ≤12)
+//  ⑧ 第三阶段(inline,AVDB 用 scripts/fixtures/catalog/avdb-stub.cjs):AVDB 可信度(白名单外命中 + 时长对得上 → 可信;占位番号时长对不上 → 不可信;
+//     冲突 → 不可信)、pol=block 入库就拦 / 后来拦了复核删掉、AVDB 认片段、片长 / 封面兜底、发行日 → 新片速递行与 released 排序、演员 / 片商、
+//     标签合并(AI 改写标题严格口径)、分面(析取、只 featured、review 进 more、时长 6 档、版本、片商、演员、排序可用性)、游标(快照换了也能接着翻)、
+//     标签云 / 标签页 / 片商榜 / 演员页
+//  ⑨ 第三阶段(worker):dbPath → 写线程入库 + 读线程快照 / 浏览;AVDB 住写线程;全量历史回填(每站游标、续跑重一页、同域名 ≥2.2s、
+//     首轮增量后自动开始、CATALOG_BACKFILL=0 关)
+//  ⑩ 20 万作品合成目录(scripts/fixtures/catalog/synth.cjs):浏览 / 分面 / 标签 / 联想 / 建快照全程主线程卡顿 < 50 ms
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -127,7 +134,7 @@ function mkNet(clock) {
         }
     };
     net.sitesCfg = () => [...net.hosts.values()].map((s) => ({ key: s.key, name: s.key.toUpperCase() + '站', api: s.api, search: !s.noSearch, active: s.active !== false, codeTrust: s.codeTrust !== false, family: s.family,
-        nativeHls: s.nativeHls, strict: s.strict, extHot: s.extHot, upstream: s.upstream }));
+        nativeHls: s.nativeHls, strict: s.strict, extHot: s.extHot, upstream: s.upstream, aiTitles: s.aiTitles }));
     return net;
 }
 function mkCat(db, net, clock, extra = {}) {
@@ -140,7 +147,10 @@ function mkCat(db, net, clock, extra = {}) {
     return cat;
 }
 const workRow = (db, wk) => db.prepare('SELECT * FROM adult_works WHERE wk=?').get(wk);
-const itemsBy = (db, where, ...a) => db.prepare('SELECT * FROM adult_items WHERE ' + where).all(...a);
+// 第三阶段:原始字段挪进了压缩旁表 adult_items_raw —— 测试照旧拿到 r.raw(JSON 字符串)
+const zlib = require('zlib');
+const withRaw = (r) => { if (r && r.rawz) { r.raw = zlib.inflateRawSync(r.rawz).toString('utf8'); delete r.rawz; } return r; };
+const itemsBy = (db, where, ...a) => db.prepare('SELECT *, (SELECT x.raw FROM adult_items_raw x WHERE x.id = adult_items.id) AS rawz FROM adult_items WHERE ' + where).all(...a).map(withRaw);
 const pacingOk = (log, gap) => {
     const by = new Map();
     for (const r of log) { if (!by.has(r.host)) by.set(r.host, []); by.get(r.host).push(r); }
@@ -397,8 +407,11 @@ console.log('④ 读:首页 / 浏览 / 作品 / 审查过滤');
     // 筛选
     const sh = cat.browse({ dur: 's' });
     ok(sh.results.length > 0 && sh.results.every((c) => c.dur > 0 && c.dur < 600), '时长 <10 分钟筛选');
-    const lg = cat.browse({ dur: 'l' });
-    ok(lg.results.length > 0 && lg.results.every((c) => c.dur > 3600), '时长 >60 分钟筛选');
+    // 第三阶段 6 档:s <10 分 / m 10-30 / l 30-60 / xl 1-2 小时 / xxl ≥2 小时 / unk 未知
+    const lg = cat.browse({ dur: 'xxl' });
+    ok(lg.results.length > 0 && lg.results.every((c) => c.dur >= 7200), '时长 ≥2 小时筛选');
+    const mid = cat.browse({ dur: 'l' });
+    ok(mid.results.length > 0 && mid.results.every((c) => c.dur >= 1800 && c.dur < 3600), '时长 30-60 分钟筛选', mid.results.map((c) => c.dur));
     const zh = cat.browse({ flag: 'zh' });
     ok(zh.results.length > 0 && zh.results.every((c) => c.badge === '中字'), '中字筛选');
     const unc = cat.browse({ flag: 'unc' });
@@ -471,32 +484,65 @@ console.log('⑥ 搜索回写 / 先片段后完整版 / 规则重扫 / 保留期
     ok(workRow(db, 'c:SSIS-610').name === 'SSIS-610 某合成丁' && workRow(db, 'c:SSIS-610#clip').name === 'SSIS-610 某合成丁 [解说]' && cat.stats().migrated >= 1, '迁移后两个作品名正确', [workRow(db, 'c:SSIS-610'), workRow(db, 'c:SSIS-610#clip')].map((w) => w && w.name));
 }
 {
-    // 规则版本变了:新实例启动 → 重扫完之前读接口回空;重扫删掉不合格的行、合格的不动
+    // 规则版本变了:新实例启动 → 代数 +1、旧代的行读不到;重扫逐块按新规则重跑(跑完一块亮一块,入库照常);删掉不合格的行、合格的不动
     const before = new Map(itemsBy(db, '1').map((r) => [r.site + '|' + r.vod_id, r.wk]));
     const good = itemsBy(db, "site='sb' AND name='某国产合成标题0号'")[0];
     const raw = JSON.parse(good.raw);
     raw.n = '某合成标题 偷拍 版';
-    db.prepare(`INSERT INTO adult_items (site, vod_id, wk, bucket, tags, review, code_ok, name, clean, code, ckey, tkey, pic, dur, vod_time, first_seen, last_seen,
-        type_id, type_name, play_from, play_url, play_at, variant, flags, family, src, raw)
+    const ins = db.prepare(`INSERT INTO adult_items (site, vod_id, wk, bucket, tags, review, code_ok, name, clean, code, ckey, tkey, pic, dur, vod_time, first_seen, last_seen,
+        type_id, type_name, play_from, play_url, play_at, variant, flags, family, src)
         SELECT site, 'fake-1', 't:fakebad', bucket, tags, review, code_ok, '某合成标题 偷拍 版', clean, code, ckey, 'fakebad', pic, dur, vod_time, first_seen, last_seen,
-        type_id, type_name, play_from, play_url, play_at, variant, flags, family, src, ? FROM adult_items WHERE site=? AND vod_id=?`).run(JSON.stringify(raw), good.site, good.vod_id);
-    db.prepare(`INSERT INTO adult_works (wk, name, bucket, tags, review, code_ok, pic, dur_med, n_sites, sites, first_site, first_seen, last_seen, rand)
-        VALUES ('t:fakebad', '某合成标题 偷拍 版', 'cn_amateur', '', NULL, 0, '', 0, 1, ',sb,', 'sb', ?, ?, 1)`).run(clock.t, clock.t);
-    db.prepare("UPDATE adult_meta SET v='p0-old' WHERE k='rules'").run();
-    // 站点配置还没加载(空列表)→ 不重扫、不删任何行,读接口回空
+        type_id, type_name, play_from, play_url, play_at, variant, flags, family, src FROM adult_items WHERE site=? AND vod_id=?`).run(good.site, good.vod_id);
+    db.prepare('INSERT INTO adult_items_raw (id, raw) VALUES (?, ?)').run(ins.lastInsertRowid, zlib.deflateRawSync(Buffer.from(JSON.stringify(raw))));
+    db.prepare(`INSERT INTO adult_works (wk, name, bucket, tags, review, code_ok, pic, dur_med, n_sites, sites, live_sites, first_site, first_seen, last_seen, rand, vis)
+        VALUES ('t:fakebad', '某合成标题 偷拍 版', 'cn_amateur', '', NULL, 0, '', 0, 1, ',sb,', ',sb,', 'sb', ?, ?, 1, 1)`).run(clock.t, clock.t);   // 旧规则下"可见"
+    // 作品名是冻结的:冻结它的那条线路后来没了,名字里还留着新规则要拦的词(催情)→ 线路都合格也不进快照(闸门按作品名本来就会丢)
+    const frozen = db.prepare("SELECT wk, name FROM adult_works WHERE vis=1 AND wk LIKE 't:%' ORDER BY id LIMIT 1 OFFSET 3").get();
+    db.prepare('UPDATE adult_works SET name=? WHERE wk=?').run(frozen.name + ' 催情版', frozen.wk);
+    // 模拟部署了新规则:库里记的(全库已重跑完的 'rules' 与当前代代表的 'rv:rules')都是旧规则
+    db.prepare("UPDATE adult_meta SET v='p0-old' WHERE k IN ('rules', 'rv:rules')").run();
+    // 站点配置还没加载(空列表)→ 不重扫、不删任何行;旧代的行读不到
     const nItems = itemsBy(db, '1').length;
     const cat0 = createCatalog({ db, getSites: () => [], adult, httpGet: net.httpGet, log: () => {}, now: clock.now, sleep: clock.sleep });
-    ok(cat0.home().rows.length === 0, '站点列表空 + 规则版本不一致 → 读接口回空');
+    ok(cat0.home().rows.length === 0, '站点列表空 + 规则版本不一致 → 旧代的行读不到(首页空)');
     await cat0.flush();
     ok(itemsBy(db, '1').length === nItems && cat0.stats().rescanPending === true && db.prepare("SELECT v FROM adult_meta WHERE k='rules'").get().v === 'p0-old', '…重扫推迟,一行都不删');
-    const cat2 = mkCat(db, net, clock, { referenced: () => keepRefs });
+    const genOf = () => Number((db.prepare("SELECT v FROM adult_meta WHERE k='rv:gen'").get() || {}).v) || 0;
+    const gen1 = genOf();
+    ok(gen1 >= 1 && itemsBy(db, '1').every((r) => r.rv < gen1), '规则变了:代数 +1,库里的行都是旧代', gen1);
+    // 重扫一块只跑 2 部作品(A 段按最新上架倒序):跑完一块那一块就可读,没跑到的读不到 —— 不再整库回空十几分钟
+    const cat2 = mkCat(db, net, clock, { referenced: () => keepRefs, opts: { rescanWorks: 2, rescanChunk: 3 } });
     const h0 = cat2.home();
-    ok(h0.rows.length === 0 && cat2.stats().rescanPending === true, '规则版本不一致:重扫完之前首页回空', h0.rows.length);
-    ok((await cat2.work('c:SSIS-600')) === null && cat2.browse({}).total_results === 0 && cat2.lookup('SSIS-600').length === 0, '…作品 / 浏览 / 查找也回空');
+    ok(h0.rows.length === 0 && cat2.browse({}).total_results === 0 && cat2.lookup('SSIS-600').length === 0 && cat2.stats().rescanPending === true,
+        '重扫还没跑到:首页 / 浏览 / 查找读不到旧代的行(没按新规则复查过的不露)', h0.rows.length);
+    ok(genOf() === gen1, '同一套新规则重启:不再加代(接着上次的重扫)');
+    await new Promise((r) => setImmediate(r));   // 让写端跑一块(块与块之间让出事件循环)
+    const verified = (wk) => { const w = db.prepare('SELECT rv FROM adult_works WHERE wk=?').get(wk); return !!w && w.rv >= gen1; };
+    const visN = (cond) => db.prepare('SELECT COUNT(*) n FROM adult_works WHERE vis=1 AND ' + cond).get(gen1).n;
+    const vDone = visN('rv >= ?'), vLeft = visN('rv < ?');
+    ok(vDone > 0 && vLeft > 0 && cat2.stats().rescanPending === true, '重扫进行中:已有作品重跑完、还有没跑到的', [vDone, vLeft]);
+    ok(!workRow(db, 't:fakebad'), '最新上架的先跑:A 段第一块就把不合格的那条删了');
+    cat2.rebuild();
+    const bMid = cat2.browse({});
+    ok(bMid.total_results > 0 && bMid.total_results <= vDone && bMid.results.every((c) => verified(c.wk)) && !bMid.results.some((c) => c.wk === 't:fakebad'),
+        '重扫进行中:浏览只出已按新规则重跑过的作品(首页 / 浏览亮起来)', [bMid.total_results, vDone]);
+    const unv = db.prepare('SELECT wk FROM adult_works WHERE vis=1 AND rv < ? LIMIT 1').get(gen1);
+    ok(unv && (await cat2.work(unv.wk)) === null && cat2.picUrl(unv.wk, '') === null, '重扫进行中:还没跑到的作品,作品页 / 封面地址都读不到', unv);
+    const ver = bMid.results[0];
+    ok(ver && !!(await cat2.work(ver.wk)), '重扫进行中:跑完的作品作品页照常', ver && ver.wk);
+    // 重扫期间搜索回写照常入库(新入库的就是新一代,马上可读;原来整段丢掉)
+    cat2.ingestSearchItems('sa', [mk('某合成重扫期间条目', '国产自拍', { dur: 900 })]);
     await cat2.flush();
-    ok(cat2.stats().rescanPending === false && db.prepare("SELECT v FROM adult_meta WHERE k='rules'").get().v === adult.RULES_VERSION, '重扫完成、记下新规则版本');
+    const dur = itemsBy(db, "name='某合成重扫期间条目'")[0];
+    ok(dur && dur.rv === gen1 && !('rescan' in (cat2.stats().rejected || {})), '重扫期间的搜索回写照常入库(rv = 新一代)', dur && dur.rv);
+    ok(cat2.stats().rescan && cat2.stats().rescan.running === false && cat2.stats().rescan.checked > 0, 'stats().rescan:进度 / 结果', cat2.stats().rescan);
+    ok(cat2.stats().rescanPending === false && String(db.prepare("SELECT v FROM adult_meta WHERE k='rules'").get().v).startsWith(adult.RULES_VERSION + '|'), '重扫完成、记下新规则版本(policy 指纹 + writer 入库修订)');
     ok(!itemsBy(db, "vod_id='fake-1'").length && !workRow(db, 't:fakebad'), '重扫删掉不合格的行和它的作品');
-    const after = new Map(itemsBy(db, '1').map((r) => [r.site + '|' + r.vod_id, r.wk]));
+    ok(itemsBy(db, '1').every((r) => r.rv === gen1) && db.prepare('SELECT COUNT(*) n FROM adult_works WHERE vis=1 AND rv < ?').get(gen1).n === 0, '重扫完:全部行 / 可见作品都是新一代');
+    const fz = workRow(db, frozen.wk);
+    ok(fz && fz.vis === 0 && fz.rv === gen1 && itemsBy(db, 'wk=?', frozen.wk).length > 0 && !cat2.browse({ facets: 1 }).results.some((c) => c.wk === frozen.wk),
+        '冻结的作品名过不了新规则(催情)→ vis=0、不进快照(线路照留)', fz && { vis: fz.vis, name: fz.name });
+    const after = new Map(itemsBy(db, "name<>'某合成重扫期间条目'").map((r) => [r.site + '|' + r.vod_id, r.wk]));
     const abpKeys = new Set(itemsBy(db, "ckey='ABP-777'").map((r) => r.site + '|' + r.vod_id));
     const changed = [...before].filter(([k, wk]) => !abpKeys.has(k) && after.get(k) !== wk);
     ok(after.size === before.size && changed.length === 0, '合格的行全部保留、作品键不变(同站假番号的除外)', { before: before.size, after: after.size, changed: changed.slice(0, 5) });
@@ -509,13 +555,27 @@ console.log('⑥ 搜索回写 / 先片段后完整版 / 规则重扫 / 保留期
     const g = await cat.work('c:SSIS-600');
     ok(g && g.sources.length === 2 && g.sources.every((s) => !('vod_play_url' in s) && !('vod_play_from' in s)), '播放地址超过 3 天 → 不给(前端走 /api/detail)', g && g.sources);
     clock.t += 28 * DAY;
+    // 第三阶段全量历史:很久没再见到的线路照样留着,作品永远保留;线路按健康过期(判死超过 30 天才删)
     keepRefs = ['SSIS-600 某合成标题', 'c:SSIS-601'];
+    const nW = db.prepare('SELECT COUNT(*) n FROM adult_works').get().n, nI = itemsBy(db, '1').length;
+    const sdN = itemsBy(db, "site='sd'").length;
+    db.prepare("UPDATE adult_items SET dead=1, dead_at=? WHERE site='sd'").run(clock.t - 31 * DAY);
+    db.prepare("UPDATE adult_items SET dead=1, dead_at=? WHERE site='sa' AND wk='c:SSIS-601'").run(clock.t - 10 * DAY);
     const n = cat.retention();
     const left = itemsBy(db, '1');
-    ok(n > 0 && left.length > 0 && left.every((r) => r.wk === 'c:SSIS-600' || r.wk === 'c:SSIS-601'), '30 天没再见到的删掉,被引用的作品(按名字 / wk)保留', left.map((r) => r.wk));
-    ok(db.prepare('SELECT COUNT(*) n FROM adult_works').get().n === 2, '没有线路的作品一起删');
+    ok(n === sdN && left.length === nI - sdN && !left.some((r) => r.site === 'sd') && left.some((r) => r.site === 'sa' && r.wk === 'c:SSIS-601'), '判死 >30 天的线路删掉;没判死 / 判死不到 30 天的照留(不按"多久没见到"删)', [n, sdN, nI, left.length]);
+    ok(db.prepare('SELECT COUNT(*) n FROM adult_works').get().n === nW && db.prepare("SELECT COUNT(*) n FROM adult_works WHERE n_sites=0 AND vis=0").get().n > 0, '作品永远保留(线路没了 → n_sites=0、vis=0)');
+    // 站点表里删掉的站:连续 7 天不在才删它的线路;站点表拉不到(空)什么都不动
+    const scN = itemsBy(db, "site='sc'").length;
+    const catGone = createCatalog({ db, getSites: () => net.sitesCfg().filter((s) => s.key !== 'sc'), adult, httpGet: net.httpGet, log: () => {}, now: clock.now, sleep: clock.sleep });
+    const catEmpty = createCatalog({ db, getSites: () => [], adult, httpGet: net.httpGet, log: () => {}, now: clock.now, sleep: clock.sleep });
+    ok(catGone.retention() === 0 && itemsBy(db, "site='sc'").length === scN && scN > 0, '站点刚从站点表消失:先记下,不删');
+    clock.t += 8 * DAY;
+    ok(catEmpty.retention() === 0 && itemsBy(db, "site='sc'").length === scN, '站点表空(没拉到):不删');
+    ok(catGone.retention() === scN && itemsBy(db, "site='sc'").length === 0, '站点消失满 7 天:删它的线路', itemsBy(db, "site='sc'").length);
     keepRefs = { [Symbol.iterator]() { throw new Error('boom'); } };
-    ok(cat.retention() === 0 && itemsBy(db, '1').length === left.length, 'referenced() 出错 → 这轮一条都不删');
+    const before2 = itemsBy(db, '1').length;
+    ok(cat.retention() === 0 && itemsBy(db, '1').length === before2, 'referenced() 出错 → 这轮一条都不删');
 }
 
 // =====================================================================
@@ -538,6 +598,7 @@ console.log('① 爬虫预算 / 游标续爬 / pagesize / 不认 h / 调度');
     const st1 = cat3.stats().sites;
     const resuming = st1.filter((s) => s.resuming);
     ok(resuming.length >= 1, '预算用完的站存了游标', st1);
+    ok(r1.more === true, '爬虫自己把这一轮额度用完(还有站没爬完)→ lastTick.more:下一轮 tickBusyMs 后就来', r1);
     const b5d = n2.log.filter((x) => x.host === 'b5.test' && x.ac === 'detail');
     ok(b5d.length === 1 && st1.find((s) => s.site === 'b5').ignores_h === 1, '不认 h 的站一页就停', b5d.length);
     const b4s = st1.find((s) => s.site === 'b4');
@@ -560,7 +621,7 @@ console.log('① 爬虫预算 / 游标续爬 / pagesize / 不认 h / 调度');
     const m2 = n2.log.length;
     c2.t += MIN;
     const r3 = await cat3.tick();
-    ok(r3.requests === 0 && n2.log.length === m2, '都爬完后不到期的站不请求', r3);
+    ok(r3.requests === 0 && n2.log.length === m2 && r3.more === false, '都爬完后不到期的站不请求(lastTick.more = false:回到 tickMs)', r3);
     const modes = Object.fromEntries(cat3.stats().sites.map((s) => [s.site, s.mode]));
     ok(modes.b1 === 'continuous' && modes.b4 === 'batch', '持续上新 / 每天一批 分档', modes);
     c2.t += 61 * MIN;
@@ -769,8 +830,10 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
     await cat7.tick();
     const dead = (site, wk) => !!db7.prepare('SELECT dead FROM adult_items WHERE site=? AND wk=?').get(site, wk || 'c:SSIS-900').dead;
     {
-        // 站点标志传进 policy.checkItem
-        const pd = calls.filter((c) => /严格站/.test(c.n)), pe = calls.filter((c) => c.n === 'SSIS-910 某合成标题'), oth = calls.filter((c) => /热门作品/.test(c.n));
+        // 站点标志传进 policy.checkItem(只看线路入库那一次;作品名复查 workNameOk 只带分区,和闸门 nameOk 同口径)
+        const lineCalls = calls.filter((c) => 'siteTrust' in c.ctx);
+        ok(calls.some((c) => !('siteTrust' in c.ctx) && c.ctx.cls && typeof c.ctx.cls.bucket === 'string'), '作品名也按闸门口径(带分区)过一遍片名政策');
+        const pd = lineCalls.filter((c) => /严格站/.test(c.n)), pe = lineCalls.filter((c) => c.n === 'SSIS-910 某合成标题'), oth = lineCalls.filter((c) => /热门作品/.test(c.n));
         ok(pd.length >= 3 && pd.every((c) => c.ctx.strict === true && c.ctx.siteTrust === true), 'strict:true 的站:checkItem 收到 ctx.strict=true', pd.map((c) => c.ctx.strict));
         ok(pe.length >= 1 && pe.every((c) => c.ctx.siteTrust === false && c.ctx.strict === false && c.ctx.codeOk === false), 'codeTrust:false 的站:ctx.siteTrust=false、codeOk=false', pe.map((c) => [c.ctx.siteTrust, c.ctx.codeOk]));
         ok(oth.length >= 40 && oth.every((c) => c.ctx.strict === false && c.ctx.siteTrust === true), '其他站 ctx.strict=false、siteTrust=true');
@@ -860,32 +923,36 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         cat7.rebuild();
     }
     {
-        // 标签
+        // 标签(第三阶段词表 lib/adult/tags:featured 才进标签云;审查级只能筛选;旧 &tag= 经 LEGACY 映射)
         const tg = cat7.tags('');
-        ok(tg.tags.length > 0 && tg.tags.length <= 24 && tg.tags.every((t, i) => typeof t.id === 'string' && t.label && t.count > 0 && typeof t.featured === 'boolean' && (i === 0 || t.count <= tg.tags[i - 1].count)),
-            'tags():{id,label,count,featured},按数量降序、≤24', tg.tags);
+        ok(Array.isArray(tg.groups) && tg.groups.length > 0 && tg.tags.length > 0 && tg.tags.every((t, i) => typeof t.id === 'string' && t.label && t.count > 0 && t.featured === true
+            && typeof t.group === 'string' && tg.groups.some((g) => g.id === t.group) && (i === 0 || t.count <= tg.tags[i - 1].count)), 'tags():{groups, tags:[{id,label,count,featured:true,group}]},按数量降序', tg);
         const byId = Object.fromEntries(tg.tags.map((t) => [t.id, t]));
-        ok(byId.incest && byId.noncon && byId.incest.featured === false && byId.noncon.featured === false && byId.incest.count === 3, '审查级标签(乱伦/强制凌辱)featured:false', [byId.incest, byId.noncon]);
-        ok(byId.milf && byId.milf.featured === true && byId.milf.count === 8, '普通标签 featured:true、计数对', byId.milf);
+        ok(!byId.incest && !byId.noncon && !tg.tags.some((t) => adult.tags.isReview(t.id)), '审查级标签(乱伦/强制凌辱)不进标签云', tg.tags.map((t) => t.id));
+        ok(byId.wife && byId.wife.count === 8 && byId.wife.label === '人妻' && byId.wife.group === 'persona', '普通标签计数对(人妻 8 = 5 番号 + 3 无番号)', byId.wife);
         const tj = cat7.tags('jp_censored').tags;
-        ok(tj.length > 0 && tj.find((t) => t.id === 'milf').count === 5, '按分区计数(日本有码里的人妻 = 5)', tj);
+        ok(tj.length > 0 && tj.find((t) => t.id === 'wife').count === 5, '按分区计数(日本有码里的人妻 = 5)', tj);
         ok(cat7.tags('nope').tags.length === 0 && cat7.tags('!bad').tags.length === 0, '未知分区 → 空');
-        // 浏览 &tag= 与 b/sort/dur/flag/page 组合
+        // 浏览 t= / 旧 &tag= 与 b/sort/dur/v/page 组合
         const has = (c, id) => String(workRow(db7, c.wk).tags).includes(',' + id + ',');
         const b1 = cat7.browse({ tag: 'milf' });
-        ok(b1.total_results === 8 && b1.results.every((c) => has(c, 'milf')), '浏览 tag=milf', b1.results.map((c) => c.name));
-        const b2 = cat7.browse({ tag: 'milf', b: 'jp_censored', sort: 'dur', dur: 'l', page: 1 });
-        ok(b2.total_results === 5 && b2.results.every((c, i) => has(c, 'milf') && c.bucket === 'jp_censored' && c.dur > 3600 && (i === 0 || c.dur <= b2.results[i - 1].dur)), 'tag + 分区 + 时长排序 + 时长筛选', b2.results.map((c) => [c.name, c.dur]));
-        ok(cat7.browse({ tag: 'milf', dur: 's' }).total_results === 0 && cat7.browse({ tag: 'milf', flag: 'zh' }).total_results === 0 && cat7.browse({ tag: 'milf', page: 2 }).results.length === 0, 'tag + 其他筛选 / 翻过头 → 空');
-        ok(cat7.browse({ tag: 'incest', b: 'jp_censored' }).total_results === 3, '审查级标签只在浏览筛选里可用');
-        // 厂牌 / 无码 / 中字 不进标签行(没筛选意义 / 和「标记」筛选重复)
-        const noChip = ['studio', 'uncensored', 'subbed'];
-        ok(['', 'jp_censored', 'jp_uncensored', 'jp_subbed'].every((b) => !cat7.tags(b).tags.some((t) => noChip.includes(t.id))), 'tags():厂牌/无码/中字 不在标签行里');
+        ok(b1.total_results === 8 && b1.results.every((c) => has(c, 'wife')) && cat7.browse({ t: 'wife' }).total_results === 8, '浏览 t=wife;旧 tag=milf 经 LEGACY 映射成 wife', b1.results.map((c) => c.name));
+        const b2 = cat7.browse({ t: 'wife', b: 'jp_censored', sort: 'dur', page: 1 });
+        ok(b2.total_results === 5 && b2.results.every((c, i) => has(c, 'wife') && c.bucket === 'jp_censored' && (i === 0 || c.dur <= b2.results[i - 1].dur)), '标签 + 分区 + 时长排序', b2.results.map((c) => [c.name, c.dur]));
+        ok(cat7.browse({ t: 'wife', b: 'jp_censored', dur: 'xxl' }).total_results === 3 && cat7.browse({ t: 'wife', b: 'jp_censored', dur: 'xl' }).total_results === 2, '标签 + 时长档(≥2 小时 3 部 / 1-2 小时 2 部)');
+        ok(cat7.browse({ t: 'wife', dur: 's' }).total_results === 0 && cat7.browse({ t: 'wife', v: 'zh' }).total_results === 0 && cat7.browse({ t: 'wife', page: 2 }).results.length === 0, '标签 + 其他筛选 / 翻过头 → 空');
+        ok(cat7.browse({ t: 'incest', b: 'jp_censored' }).total_results === 3 && cat7.browse({ tag: 'incest' }).total_results === 3, '审查级标签只在浏览筛选里可用');
+        ok(cat7.browse({ t: 'x_minor' }).total_results === 0 && cat7.browse({ t: 'x_school' }).total_results === 0 && cat7.browse({ t: 'nope' }).total_results === 0
+            && cat7.browse({ t: 'wife', x: 'x_voyeur' }).total_results === 0 && cat7.browse({ t: 'a,b,c,d' }).total_results === 0, 'blocked / 未知 / 超过 3 个标签 → 空结果');
+        const jpAll = cat7.browse({ b: 'jp_censored' }).total_results;
+        const ex = cat7.browse({ b: 'jp_censored', x: 'wife' });
+        ok(ex.total_results === jpAll - 5 && ex.results.every((c) => !has(c, 'wife')), '排除标签 x=', [jpAll, ex.total_results]);
+        ok(!['', 'jp_censored'].some((b) => cat7.tags(b).tags.some((t) => t.id === 'studio')), '「厂牌」伪标签不在标签云里(片商走 studio 分面)');
         // 厂牌前缀 lp(作品页「SSIS」按钮)
         const bl = cat7.browse({ lp: 'ssis' });
         ok(bl.total_results > 0 && bl.results.every((c) => /^c:SSIS-/.test(c.wk)), '浏览 lp=SSIS:只出 SSIS 番号作品', bl.results.map((c) => c.wk));
         const blm = cat7.browse({ lp: 'SSIS', tag: 'milf' });
-        ok(blm.results.every((c) => /^c:SSIS-/.test(c.wk) && has(c, 'milf')), 'lp + tag 组合', blm.results.map((c) => c.wk));
+        ok(blm.total_results === 5 && blm.results.every((c) => /^c:SSIS-/.test(c.wk) && has(c, 'wife')), 'lp + tag 组合(旧 tag=milf → wife)', blm.results.map((c) => c.wk));
         ok(cat7.browse({ lp: 'SS%' }).total_results === 0 && cat7.browse({ lp: '!bad' }).total_results === 0 && cat7.browse({ lp: 'ZZZZ' }).total_results === 0, 'lp 非法 / 没有这个厂牌 → 空');
     }
     {
@@ -899,18 +966,18 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         ok(s1.kind === 'code' && s1.exact === 'c:SSIS-900' && s1.items[0].wk === 'c:SSIS-900' && s1.items.some((c) => c.wk === 'c:SSIS-900#U') && s1.items.some((c) => c.wk === 'c:SSIS-900#clip'),
             '番号:恰好一部正片 → exact(#U / #clip 兄弟不算),正片排第一', s1);
         const s2 = sg('SSIS-903');
-        ok(s2.kind === 'code' && s2.exact === 'c:SSIS-903' && s2.items.length === 2 && s2.items.some((c) => c.wk === 'c:SSIS-903~2'),
-            '番号:本体 + 时长拆出的 ~2 → exact 指本体(作品页列着 ~2)', s2);
+        ok(s2.kind === 'code' && s2.exact === null && s2.items.length === 2 && s2.items.some((c) => c.wk === 'c:SSIS-903~2') && s2.items.some((c) => c.wk === 'c:SSIS-903'),
+            '番号:本体 + 时长拆出的 ~2 是两部正片 → exact 为 null(让用户选;第二阶段的小 bug)', s2);
         ok(sg('SSIS-999').kind === 'code' && sg('SSIS-999').items.length === 0 && sg('SSIS-999').exact === null, '番号:本地没有 → 空');
         const sa = sg('无码'), sm = sg('人妻'), sl = sg('乱伦');
         ok(sa.kind === 'alias' && sa.alias.b === 'jp_uncensored' && sa.alias.label === '日本无码' && !('tag' in sa.alias), '别名:无码 → 分区 jp_uncensored', sa.alias);
-        ok(sm.kind === 'alias' && sm.alias.tag === 'milf' && sm.items.length > 0, '别名:人妻 → 标签 milf(同时给片名匹配)', sm);
+        ok(sm.kind === 'alias' && sm.alias.tag === 'wife' && sm.alias.label === '人妻' && sm.items.length > 0, '别名:人妻 → 标签 wife(同时给片名匹配)', sm);
         ok(sl.kind === 'text' && sl.alias === null, '审查级标签不做别名(乱伦 → 普通文字)', sl);
         ok(sg('日本无码').alias.b === 'jp_uncensored' && sg('中字').alias.b === 'jp_subbed' && sg('探花').alias.b === 'cn_hookup' && sg('里番').alias.b === 'anime' && sg('欧美').alias.b === 'western', '分区名 / 常用词别名');
         const t3 = sg('合成热门');
         ok(t3.kind === 'text' && t3.items.length === 8 && t3.items.every((c) => c.name.includes('合成热门')), '文字 ≥3 字:FTS trigram,最多 8 张', t3.items.length);
         const t2 = sg('热门');
-        ok(t2.kind === 'text' && t2.items.length === 8 && t2.items.every((c) => c.name.includes('热门')), '文字 ≤2 字:LIKE', t2.items.length);
+        ok(t2.kind === 'text' && t2.items.length === 8 && t2.items.every((c) => c.name.includes('热门')), '文字 2 字:bigram 旁路索引(不再全表 LIKE)', t2.items.length);
         cat7.tags('');
         ok(n7.log.length === m, '联想 / 标签零上游请求');
     }
@@ -1005,7 +1072,7 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         ok(gU && gU._meta.siblings.some((s) => s.wk === 'c:SSIS-900' && s.kind === 'main'), "#U 作品的兄弟里正片 kind 'main'", gU && gU._meta.siblings);
         const g903 = await cat7.work('c:SSIS-903');
         ok(g903 && g903._meta.siblings.length === 1 && g903._meta.siblings[0].kind === 'main', "~2 第二部正片也是 'main'", g903 && g903._meta.siblings);
-        ok(M.actress.includes('テスト花子') && M.actress.includes('架空ユメ'), '演员:vod_actor + title.js 有把握的解析', M.actress);
+        ok(M.actress.some((a) => a.name === 'テスト花子' && a.aid === null) && M.actress.some((a) => a.name === '架空ユメ'), '演员:vod_actor + title.js 有把握的解析(第三阶段 [{aid,name}],对不上 AVDB 的 aid=null)', M.actress);
         const g902 = await cat7.work('c:SSIS-902');
         ok(g902 && g902._meta.actress.length === 0, '演员:纯汉字的解析结果不要', g902 && g902._meta.actress);
         const wwe = db7.prepare("SELECT wk, bucket FROM adult_works WHERE name LIKE '某合成欧美长标题%'").get();
@@ -1136,6 +1203,386 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
     c8.t += 7 * DAY;
     await cat8.tick();
     ok(n8b.log.slice(m0).some((x) => x.t != null), '一周后再回填一轮');
+}
+
+// =====================================================================
+console.log('⑦b 审查级 code 只认白名单番号(和闸门 checkRaw 同一条规则;AVDB 证实只管分组)');
+{
+    const AVS = require(path.join(ROOT, 'scripts/fixtures/catalog/avdb-stub.cjs'));
+    const cR = mkClock(T0), nR = mkNet(cR);
+    const dbR = new Database(':memory:');
+    dbR.exec('CREATE TABLE IF NOT EXISTS avdb_stub (key TEXT PRIMARY KEY, j TEXT NOT NULL)');
+    const avS = (key, a) => dbR.prepare('INSERT OR REPLACE INTO avdb_stub (key, j) VALUES (?, ?)').run(key, JSON.stringify(a));
+    const RA = nR.site('ra');
+    avS('QWER-124', { pol: 'review_code', runtime: 7200 });   // 不在白名单:AVDB 时长对得上也只是"证实"
+    avS('SSIS-760', { pol: 'review_code', runtime: 7200 });   // 白名单番号
+    avS('QWER-125', { runtime: 7200 });                       // 不在白名单、无审查级:照常按 AVDB 证实上架
+    RA.items.push(mk('QWER-124 某合成审查甲', '日本有码', { t: T0 - HOUR, dur: 7200 }));
+    RA.items.push(mk('SSIS-760 某合成审查乙', '日本有码', { t: T0 - HOUR - MIN, dur: 7200 }));
+    RA.items.push(mk('QWER-125 某合成普通', '日本有码', { t: T0 - HOUR - 2 * MIN, dur: 7200 }));
+    const catR = createCatalog({ db: dbR, getSites: () => nR.sitesCfg(), adult, httpGet: nR.httpGet, log: () => {}, now: cR.now, sleep: cR.sleep,
+        avdbFactory: (db) => AVS.createAvdb({ db }) });
+    await catR.tick();
+    const nm = (n) => itemsBy(dbR, "name=?", n)[0];
+    ok(!nm('QWER-124 某合成审查甲') && catR.stats().rejected.review >= 1, 'AVDB review_code + 番号只被 AVDB 证实(不在白名单)→ 不入库(闸门同样不放,免得卡片点开 404)', catR.stats().rejected);
+    ok(nm('SSIS-760 某合成审查乙') && nm('SSIS-760 某合成审查乙').review === 'code', 'AVDB review_code + 白名单番号 → 入库(review=code)');
+    const q125 = nm('QWER-125 某合成普通');
+    ok(q125 && q125.code_ok === 1 && q125.code_src === 'avdb' && q125.wk === 'c:QWER-125', '没有审查级的线路:AVDB 证实照常用于分组(c: 键)', q125);
+    await catR.close();
+}
+
+console.log('⑧ 第三阶段(inline):AVDB 可信度 / 拦截 / 片段 / 片长 / 封面 / 发行日 / 演员 / 标签合并 / 分面 / 排序 / 游标 / 标签页 / 片商 / 新片速递');
+const AVSTUB = require(path.join(ROOT, 'scripts/fixtures/catalog/avdb-stub.cjs'));
+{
+    const c9 = mkClock(T0), n9 = mkNet(c9);
+    n9.latency = 20;
+    const db9 = new Database(':memory:');
+    db9.exec('CREATE TABLE IF NOT EXISTS avdb_stub (key TEXT PRIMARY KEY, j TEXT NOT NULL)');
+    const avSet = (key, a) => db9.prepare('INSERT OR REPLACE INTO avdb_stub (key, j) VALUES (?, ?)').run(key, JSON.stringify(a));
+    const QA = n9.site('qa', { family: 'fq' }), QB = n9.site('qb'), QAI = n9.site('qai', { aiTitles: true });
+    const recent = (d) => new Date(T0 - d * DAY + 8 * HOUR).toISOString().slice(0, 10);
+    avSet('SSIS-700', { pol: 'block', runtime: 7200 });
+    avSet('QWER-123', { runtime: 7200, released: recent(11), actors: [{ aid: 501, name: 'Kakuu Hanako' }], tags: [{ id: 'busty', src: 'avdb' }], maker: '合成片商A', label: 'QWER Label', poster: 'https://poster.example/qwer123.jpg' });
+    avSet('JUL-123', { runtime: 7155 });
+    avSet('SSIS-702', { runtime: 7200 });
+    avSet('SSIS-703', { runtime: 7200 });
+    avSet('SSIS-704', { runtime: 7300, poster: 'https://poster.example/704.jpg' });
+    avSet('SSIS-705', { runtime: 7000, poster: 'https://poster.example/705.jpg' });
+    for (let i = 0; i < 13; i++) avSet(`SSIS-${710 + i}`, { runtime: 7100 + i, released: recent(2 + i * 3) });
+    avSet('SSIS-731', { runtime: 7000, released: '2020-01-01' });
+    QA.items.push(mk('SSIS-700 某合成被拦', '日本有码', { t: T0 - HOUR, dur: 7200 }));
+    QA.items.push(mk('QWER-123 某合成新人', '日本有码', { t: T0 - HOUR - MIN, dur: 7210 }));
+    QA.items.push(mk('JUL-123 某合成甲', '日本有码', { t: T0 - 2 * HOUR, dur: 3600 }));
+    QB.items.push(mk('JUL-123 某合成乙', '日本有码', { t: T0 - 2 * HOUR - MIN, dur: 7160 }));
+    QA.items.push(mk('SSIS-702 某合成丙', '日本有码', { t: T0 - 3 * HOUR, dur: 900 }));
+    QB.items.push(mk('SSIS-702 某合成丙', '日本有码', { t: T0 - 3 * HOUR - MIN, dur: 7200 }));
+    QA.items.push(mk('SSIS-703 某合成丁', '日本有码', { t: T0 - 4 * HOUR, dur: 4000 }));
+    QA.items.push(mk('SSIS-704 某合成戊', '日本有码', { t: T0 - 4 * HOUR - MIN }));
+    QA.items.push(Object.assign(mk('SSIS-705 某合成己', '日本有码', { t: T0 - 4 * HOUR - 2 * MIN, dur: 7000 }), { vod_pic: '' }));
+    for (let i = 0; i < 13; i++) (i % 2 ? QA : QB).items.push(mk(`SSIS-${710 + i} 某合成新片${i}`, '日本有码', { t: T0 - 5 * HOUR - i * MIN, dur: 7100 + i }));
+    QA.items.push(mk('SSIS-731 某合成旧片', '日本有码', { t: T0 - 5 * HOUR - 30 * MIN, dur: 7000 }));
+    // AI 改写标题站:只有它的片名给的标签要别的线路 / AVDB 证实
+    QAI.items.push(mk('SSIS-740 某合成 巨乳 黑丝', '日本有码', { t: T0 - 6 * HOUR, dur: 7200 }));
+    QA.items.push(mk('SSIS-740 某合成巨乳', '日本有码', { t: T0 - 6 * HOUR - MIN, dur: 7200 }));
+    QAI.items.push(mk('SSIS-741 某合成 黑丝', '日本有码', { t: T0 - 6 * HOUR - 2 * MIN, dur: 7200 }));
+    for (let i = 0; i < 30; i++) (i % 2 ? QA : QB).items.push(mk(`SSIS-${800 + i} 某合成填充${i}`, '日本有码', { t: T0 - 7 * HOUR - i * MIN, dur: i % 3 ? 7000 + i : 0, extra: i % 5 ? {} : { vod_name: `[中文字幕] SSIS-${800 + i} 某合成填充${i}` } }));
+    QB.items.push(mk('SSIS-750 某合成后来被拦', '日本有码', { t: T0 - 8 * HOUR, dur: 7200 }));
+    for (let i = 0; i < 2; i++) QB.items.push(mk(`某合成国产作品${i}`, '国产自拍', { t: T0 - 9 * HOUR - i * MIN, dur: 600 + i }));
+    let pop = [];
+    const cat9 = createCatalog({ db: db9, getSites: () => n9.sitesCfg(), adult, httpGet: n9.httpGet, log: () => {}, now: c9.now, sleep: c9.sleep,
+        avdbFactory: (db) => AVSTUB.createAvdb({ db }), popularTitles: () => pop });
+    await cat9.tick();
+    const wr = (wk) => workRow(db9, wk);
+    const ir = (where, ...a) => itemsBy(db9, where, ...a);
+    // —— 番号可信度 / 拦截 ——
+    ok(!ir("name LIKE 'SSIS-700%'").length && cat9.stats().rejected['avdb-block'] === 1, 'AVDB pol=block:入库就拦(一行都不写)', cat9.stats().rejected);
+    ok(cat9.avdbPol('SSIS-700') === 'block' && cat9.avdbPol('QWER-123') === null && cat9.avdbPol('NOPE-1') === null, 'avdbPol(闸门搜索出口用)');
+    ok(cat9.suggest('SSIS-700').kind === 'blocked' && cat9.lookup('SSIS-700').length === 0, 'AVDB 拦截的番号:联想 blocked、本地查找空');
+    const q123 = ir("name='QWER-123 某合成新人'")[0];
+    ok(q123 && q123.wk === 'c:QWER-123' && q123.code_ok === 1 && q123.code_src === 'avdb' && !adult.title.codeOk(adult.title.parseTitle(q123.name, '日本有码'), {}),
+        '不在白名单的番号:AVDB 命中 + 时长 3%+60s 内对得上 → 可信(code_src=avdb)', q123);
+    const jA = ir("name='JUL-123 某合成甲'")[0], jB = ir("name='JUL-123 某合成乙'")[0];
+    ok(jA && jA.wk.startsWith('t:') && jA.code_ok === 0 && jB && jB.wk === 'c:JUL-123' && jB.code_ok === 1, '占位番号 JUL-123:时长和 AVDB 对不上 → 不可信(按片名);对得上 → 就是那部片', [jA && jA.wk, jB && jB.wk]);
+    ok(ir("name='SSIS-702 某合成丙' AND site='qa'")[0].wk === 'c:SSIS-702#clip' && ir("name='SSIS-702 某合成丙' AND site='qb'")[0].wk === 'c:SSIS-702', 'AVDB 片长认片段:< 50% → #clip(单独一张卡)');
+    const s703 = ir("name='SSIS-703 某合成丁'")[0];
+    ok(s703.wk.startsWith('t:') && s703.code_ok === 0 && cat9.stats().flags['avdb-conflict'] >= 2, '白名单番号但时长和 AVDB 冲突(不是片段)→ 不可信', [s703.wk, cat9.stats().flags]);
+    // —— 片长兜底 / 封面兜底 / 发行日 / 演员 / 片商 ——
+    const w704 = wr('c:SSIS-704');
+    ok(w704.dur_med === 0 && w704.dur === 7300, '线路都没时长 → 展示时长用 AVDB 片长(作品键的时长闸不用它)', [w704.dur_med, w704.dur]);
+    const card704 = cat9.browse({ b: 'jp_censored', dur: 'xxl' }).results.find((c) => c.wk === 'c:SSIS-704');
+    ok(card704 && card704.dur === 7300, '卡片时长 / 时长筛选也用 AVDB 片长', card704);
+    const all9 = [];
+    for (let p = 1; p <= 5; p++) all9.push(...cat9.browse({ b: 'jp_censored', page: p }).results);
+    const c705 = all9.find((c) => c.wk === 'c:SSIS-705');
+    ok(c705 && c705.pic === 'https://poster.example/705.jpg', '线路都没封面 → 卡片用 AVDB 封面', c705);
+    const pu = cat9.picUrl('c:SSIS-704', '', { meta: true });
+    ok(pu && pu.urls.length === 2 && /img\.example/.test(pu.urls[0]) && pu.urls[1] === 'https://poster.example/704.jpg' && pu.url === pu.urls[0], '封面代理候选:线路封面在前、AVDB 封面兜底(线路封面死了换下一个)', pu);
+    ok(JSON.stringify(cat9.picUrl('c:SSIS-705', '', { meta: true }).urls) === JSON.stringify(['https://poster.example/705.jpg']), '没有线路封面:代理只有 AVDB 封面');
+    const g123 = await cat9.work('c:QWER-123');
+    const M = g123 && g123._meta;
+    ok(M && M.released === recent(11) && M.maker === '合成片商A' && M.label === 'QWER Label' && M.avdb === true && M.studio === '合成片商A', '作品 _meta:released / maker / label / avdb / studio(没有片商前缀时用 AVDB 片商)', M);
+    ok(M && JSON.stringify(M.actress) === JSON.stringify([{ aid: 501, name: 'Kakuu Hanako' }]), '作品 _meta.actress:AVDB 演员带 aid', M && M.actress);
+    ok(M && M.tags.some((t) => t.id === 'busty' && t.label === '巨乳' && t.group === 'body' && t.featured === true), '作品标签合并 AVDB 标签({id,label,group,featured})', M && M.tags);
+    ok(g123.pic && /img\.example/.test(g123.pic), '有线路封面时作品封面还是线路封面');
+    // —— AI 改写标题的严格口径 ——
+    ok(String(wr('c:SSIS-740').tags).includes(',busty,') && !String(wr('c:SSIS-741').tags).includes(',black_stockings,') && !String(wr('c:SSIS-741').tags).includes(',stockings,'),
+        'AI 改写标题站的片名标签:有别的线路证实才算(SSIS-740 巨乳留下;SSIS-741 只有 AI 标题的 黑丝 丢掉)', [wr('c:SSIS-740').tags, wr('c:SSIS-741').tags]);
+    // —— 首页:新片速递 ——
+    let h9 = cat9.home();
+    const ids9 = h9.rows.map((r) => r.id);
+    const fr = h9.rows.find((r) => r.id === 'fresh');
+    ok(fr && fr.title === '新片速递' && JSON.stringify(fr.more) === JSON.stringify({ sort: 'released' }) && fr.items.length === 14 && ids9.indexOf('fresh') === ids9.indexOf('new') + 1,
+        '新片速递:AVDB 发行日 60 天内、能播、≥12 部才出,紧跟新上架(没有热门行时)', [ids9, fr && fr.items.length]);
+    ok(fr.items.every((c) => c.released && c.released >= recent(60)) && !fr.items.some((c) => c.wk === 'c:SSIS-731'), '新片速递只收 60 天内(2020 年的不收);卡片带 released', fr.items.map((c) => c.released));
+    // 热门行出现后新片速递排在它后面
+    pop = all9.filter((c) => /某合成填充/.test(c.name)).slice(0, 12).map((c) => c.name);
+    cat9.rebuild();
+    h9 = cat9.home();
+    const ids9b = h9.rows.map((r) => r.id);
+    ok(ids9b[0] === 'new' && ids9b[1] === 'hot' && ids9b[2] === 'fresh', '行序:新上架 → 热门 → 新片速递', ids9b);
+    // —— 浏览:排序 / 分面 / 游标 ——
+    const rel = cat9.browse({ b: 'jp_censored', sort: 'released' }).results;
+    const relDates = rel.filter((c) => c.released).map((c) => c.released);
+    ok(relDates.length >= 14 && relDates.every((x, i) => i === 0 || x <= relDates[i - 1]) && rel.findIndex((c) => !c.released) > rel.findIndex((c) => c.wk === 'c:SSIS-731'), '排序 released:发行日倒序,没有日期的排后面', relDates);
+    const hot = cat9.browse({ sort: 'hot' }).results;
+    ok(hot.slice(0, 12).map((c) => c.name).join() === pop.join(), '排序 hot:按本站热门(lib/popular)排名', hot.slice(0, 3).map((c) => c.name));
+    const F = cat9.browse({ b: 'jp_censored', facets: 1 });
+    const fc = F.facets;
+    ok(fc && ['buckets', 'groups', 'more', 'dur', 'variant', 'studio', 'actress', 'sorts'].every((k) => Array.isArray(fc[k])), 'facets=1:buckets/groups/more/dur/variant/studio/actress/sorts', fc && Object.keys(fc));
+    ok(fc.groups.every((g) => g.label && g.tags.every((t) => adult.tags.isFeatured(t.id) && typeof t.count === 'number')) && fc.more.every((t) => adult.tags.isReview(t.id) && !('count' in t)), '分面:标签组只有 featured(带计数),审查级只在 more 里、不给计数', fc.more);
+    ok(fc.dur.length === 6 && fc.dur.map((d) => d.id).join() === 's,m,l,xl,xxl,unk' && fc.dur.find((d) => d.id === 'unk').count >= 10, '分面:时长 6 档(含 未知)', fc.dur);
+    ok(fc.variant.some((v) => v.id === 'zh' && v.count === 6) && fc.studio.some((s) => s.id === 'S1' && s.label === 'S1') && fc.studio.some((s) => s.id === '合成片商A'), '分面:版本(中字 6)/ 片商(S1、AVDB 片商)', [fc.variant, fc.studio]);
+    ok(fc.actress.length === 1 && fc.actress[0].aid === 501 && fc.actress[0].name === 'Kakuu Hanako' && fc.actress[0].count === 1, '分面:演员(AVDB)', fc.actress);
+    const fcn = cat9.browse({ b: 'cn_amateur', facets: 1 }).facets;
+    ok(fc.sorts.find((s) => s.id === 'released').available === true && fc.sorts.find((s) => s.id === 'hot').available === true && fc.sorts.find((s) => s.id === 'new').available === true
+        && fcn.sorts.find((s) => s.id === 'released').available === false && fcn.sorts.find((s) => s.id === 'hot').available === false,
+        '分面:排序可用性(released / hot 要这个筛选里有 ≥12 部有数据)', [fc.sorts, fcn.sorts]);
+    ok(fc.buckets.some((b) => b.id === 'jp_censored' && b.count === F.total_results) && fc.buckets.some((b) => b.id === 'cn_amateur' && b.count === 2), '分面:分区计数(不套分区这一维)', fc.buckets);
+    // 标签计数 = 点进去的结果数:选了 巨乳 之后,同组(身材)兄弟标签的计数也按 巨乳 筛过(t= 同组也是"且");已选的 = 当前总数
+    const Fb = cat9.browse({ b: 'jp_censored', t: 'busty', facets: 1 });
+    const body0 = fc.groups.find((g) => g.id === 'body'), body1 = Fb.facets.groups.find((g) => g.id === 'body');
+    ok(Fb.total_results === 2 && body1 && body0 && body1.tags.find((t) => t.id === 'busty').count === Fb.total_results, '标签分面:已选标签的计数 = 当前总数', [Fb.total_results, body0, body1]);
+    ok(body1.tags.filter((t) => t.id !== 'busty').every((t) => t.count === cat9.browse({ b: 'jp_censored', t: 'busty,' + t.id }).total_results), '标签分面:同组兄弟标签的计数 = 两个一起选的结果数(不再按析取多报)', body1.tags);
+    ok(Fb.facets.dur.reduce((a, d) => a + d.count, 0) === 2, '别的维度按已选标签筛过');
+    // 筛选:片商 / 演员 / 版本 / 时长未知 / 排除
+    ok(cat9.browse({ studio: 'S1' }).results.every((c) => /^c:SSIS-/.test(c.wk)) && cat9.browse({ studio: '合成片商A' }).results.map((c) => c.wk).join() === 'c:QWER-123' && cat9.browse({ studio: 'nope' }).total_results === 0, '片商筛选;不认识的片商 → 空');
+    ok(cat9.browse({ actress: '501' }).results.map((c) => c.wk).join() === 'c:QWER-123' && cat9.browse({ actress: '999' }).total_results === 0, '演员筛选;不认识的演员 → 空');
+    ok(cat9.browse({ v: 'zh' }).results.every((c) => c.badge === '中字') && cat9.browse({ dur: 'unk' }).results.every((c) => !c.dur) && cat9.browse({ dur: 'unk' }).total_results >= 10, '版本 / 时长未知筛选');
+    ok(cat9.browse({ dur: 'zz' }).total_results === 0 && cat9.browse({ v: 'zz' }).total_results === 0 && cat9.browse({ dur: 'zz', facets: 1 }).results.length === 0, '不认识的 dur / v → 空页(和未知标签一样,不再悄悄当"不筛")');
+    // 游标:第 1 页的 cursor_next = 第 2 页;快照换了也从上一页最后一部之后接着翻
+    const p1 = cat9.browse({ b: 'jp_censored' });
+    const p2 = cat9.browse({ b: 'jp_censored', page: 2 });
+    ok(p1.results.length === 24 && typeof p1.cursor_next === 'string' && p2.results.length > 0, '第 1 页满 24 张、给 cursor_next');
+    const pc = cat9.browse({ b: 'jp_censored', cursor: p1.cursor_next });
+    ok(pc.page === 2 && pc.results.map((c) => c.wk).join() === p2.results.map((c) => c.wk).join(), 'cursor 翻页 = page=2', [pc.page, pc.results.length]);
+    c9.t += 11 * MIN;
+    cat9.rebuild();
+    const pc2 = cat9.browse({ b: 'jp_censored', cursor: p1.cursor_next });
+    ok(pc2.results.map((c) => c.wk).join() === p2.results.map((c) => c.wk).join(), '快照换了:按上一页最后一部作品接着翻');
+    ok(cat9.browse({ b: 'jp_censored', cursor: 'garbage!!' }).results.length === 24, '坏游标当没有(从头)');
+    // —— 标签云 / 标签页 / 片商 / 演员 ——
+    const tg9 = cat9.tags('jp_censored');
+    ok(tg9.tags.some((t) => t.id === 'busty' && t.group === 'body') && tg9.groups.some((g) => g.id === 'body' && g.label) && tg9.tags.every((t) => t.featured === true), '标签云:{groups, tags} 只 featured');
+    const tp = cat9.tagPage('busty');
+    ok(tp && tp.tag.id === 'busty' && tp.tag.label === '巨乳' && tp.tag.group === 'body' && !tp.tag.review && tp.count === 2 && tp.buckets.some((b) => b.id === 'jp_censored' && b.count === 2)
+        && tp.items.length === 2 && tp.related.every((r) => adult.tags.isFeatured(r.id) && r.lift > 0), '标签页:{tag, count, buckets, related(只 featured), items}', tp);
+    const tpl = cat9.tagPage('milf');
+    ok(tpl && tpl.tag.id === 'wife', '标签页:旧 id 经 LEGACY');
+    const tpr = cat9.tagPage('incest');
+    ok(tpr && tpr.tag.review === true && tpr.buckets.length === 0 && tpr.related.length === 0, '标签页:审查级标签 review:true、没有分区高亮 / 相关', tpr);
+    ok(cat9.tagPage('x_minor') === null && cat9.tagPage('x_school') === null && cat9.tagPage('nope') === null && cat9.tagPage('../x') === null, '标签页:blocked / 未知 → null(闸门 404)');
+    const st9 = cat9.studios('jp_censored');
+    ok(st9.length >= 2 && st9[0].count >= st9[st9.length - 1].count && st9.some((s) => s.id === 'S1'), '片商榜', st9);
+    ok(cat9.studios('nope').length === 0, '片商榜:未知分区 → 空');
+    const ac = cat9.actress('501');
+    ok(ac && ac.actress.aid === 501 && ac.actress.name === 'Kakuu Hanako' && ac.results.map((c) => c.wk).join() === 'c:QWER-123' && ac.total_pages === 1, '演员页 {actress, page, total_pages, results}', ac);
+    ok(cat9.actress('999') === null && cat9.actress('a b') === null, '演员页:没有 / 非法 → null');
+    avSet('ZZZZ-901', { actors: [{ aid: 902, name: 'Kakuu Nowork' }] });
+    ok(cat9.actress('902') === null, '演员页:AVDB 有这个人但目录里她一部可见作品都没有 → null(闸门 404,不能拿 aid 枚举名字)');
+    ok(JSON.stringify(cat9.actressSearch('kakuu')) === JSON.stringify([{ aid: 501, name: 'Kakuu Hanako', n: 1 }]) && cat9.actressSearch('迷奸').length === 0, '演员搜索;被拦的查询 → 空');
+    // —— 入库之后 AVDB 才拦:复核把线路和作品都删掉 ——
+    ok(wr('c:SSIS-750') && (await cat9.work('c:SSIS-750')), '先入库(AVDB 还没收录)');
+    const has750 = (list) => (Array.isArray(list) ? list : []).some((c) => c && c.wk === 'c:SSIS-750');
+    const pages750 = () => { const a = []; for (let p = 1; p <= 5; p++) a.push(...cat9.browse({ b: 'jp_censored', page: p }).results); return a; };
+    const home750 = () => cat9.home().rows.some((r) => has750(r.items));
+    ok(has750(pages750()) && home750() && has750(cat9.lookup('某合成后来被拦')) && has750(cat9.suggest('某合成后来被拦').items), '拦之前:浏览 / 首页 / 查找 / 联想里都有它');
+    avSet('SSIS-750', { pol: 'block' });
+    // 写线程复核、快照重建之前:主线程出口复查已经不让它出现(作品行还在库里)
+    ok(wr('c:SSIS-750') && !has750(pages750()) && !home750() && !has750(cat9.lookup('某合成后来被拦')) && !has750(cat9.suggest('某合成后来被拦').items)
+        && (await cat9.work('c:SSIS-750')) === null && cat9.picUrl('c:SSIS-750') === null && cat9.avdbPol('SSIS-750') === 'block',
+        'AVDB 新拦的番号:复核前浏览 / 首页 / 查找 / 联想 / 作品页 / 封面代理就都不出');
+    const av = await cat9.avdbSync({});
+    ok(av && av.ran && av.changed >= 1 && !wr('c:SSIS-750') && !ir("name LIKE 'SSIS-750%'").length && (await cat9.work('c:SSIS-750')) === null, 'AVDB 后来拦了:复核删掉线路 + 作品', av);
+    ok(!(await cat9.avdbSync({})).ran, 'AVDB 没变化:不复核');
+    avSet('__meta', { polv: 'stub-v2' });
+    ok((await cat9.avdbSync({})).ran && !(await cat9.avdbSync({})).ran, 'AVDB 政策规则版本变了(行数 / 时间都没变)→ 复核一次');
+    avSet('__meta', { polv: 'stub-v2', polchg: 5 });
+    ok((await cat9.avdbSync({})).ran, 'AVDB 政策戳变了(有带等级的行进来)→ 复核');
+    // 封面代理开着:没有线路封面的卡片走 /api/img?k=(不带站)
+    const cat9p = createCatalog({ db: db9, getSites: () => n9.sitesCfg(), adult, httpGet: n9.httpGet, log: () => {}, env: { ADULT_IMG_PROXY: '1' }, now: c9.now, sleep: c9.sleep, avdbFactory: (db) => AVSTUB.createAvdb({ db }) });
+    const all9p = [];
+    for (let p = 1; p <= 5; p++) all9p.push(...cat9p.browse({ b: 'jp_censored', page: p }).results);
+    ok(all9p.find((c) => c.wk === 'c:SSIS-705').pic === '/api/img?k=' + encodeURIComponent('c:SSIS-705') && all9p.find((c) => c.wk === 'c:QWER-123').pic === '/api/img?k=' + encodeURIComponent('c:QWER-123') + '&s=qa',
+        '封面代理:线路封面 /api/img?k=&s=,只有 AVDB 封面 /api/img?k=');
+    ok(n9.log.every((x) => /^https:\/\/q[a-z]+\.test\/api\.php\/provide\/vod\?ac=(?:list|detail)/.test(x.url)), '第三阶段也只调 maccms API(AVDB 在本地表,零上游)');
+    // 游标续翻不受页号上限(maxPages)限制
+    const cat9m = createCatalog({ db: db9, getSites: () => n9.sitesCfg(), adult, httpGet: n9.httpGet, log: () => {}, now: c9.now, sleep: c9.sleep, avdbFactory: (db) => AVSTUB.createAvdb({ db }), opts: { maxPages: 2 } });
+    let bm = cat9m.browse({ b: 'jp_censored' });
+    const totM = bm.total_results, seenM = new Set(bm.results.map((c) => c.wk));
+    let pgM = 1;
+    ok(bm.total_pages === 2 && totM > 48 && typeof bm.cursor_next === 'string', '按页号最多 maxPages 页', [bm.total_pages, totM]);
+    while (bm.cursor_next && pgM < 20) { bm = cat9m.browse({ b: 'jp_censored', cursor: bm.cursor_next }); pgM++; for (const c of bm.results) seenM.add(c.wk); }
+    ok(pgM === Math.ceil(totM / 24) && pgM > 2 && bm.page === pgM && bm.total_pages === pgM && bm.cursor_next === null && seenM.size === totM, '游标续翻过 maxPages 一直到底(不重不漏)', [pgM, bm.page, bm.total_pages, seenM.size, totM]);
+    // AVDB 配了但主线程实例建不起来:番号一律当被拦(fail-closed),列表里的番号作品不出,纯片名作品照常
+    const cat9f = createCatalog({ db: db9, getSites: () => n9.sitesCfg(), adult, httpGet: n9.httpGet, log: () => {}, now: c9.now, sleep: c9.sleep,
+        avdbFactory: () => { throw new Error('simulated'); }, opts: { avdbRetryMs: 3600e3 } });
+    const lf = cat9f.browse({ b: 'jp_censored' }).results, lt = cat9f.lookup('某合成国产作品');
+    ok(cat9f.avdbPol('QWER-123') === 'block' && cat9f.stats().avdb.failClosed === true && cat9f.suggest('QWER-123').kind === 'blocked' && cat9f.lookup('QWER-123').length === 0
+        && (await cat9f.work('c:QWER-123')) === null && lf.length === 0 && lt.length > 0 && lt.every((c) => !c.wk.startsWith('c:')),
+        'AVDB 主线程实例建不起来 → 番号一律当被拦(闸门搜索 / 列表 / 作品页 / 联想),纯片名作品照常', [lf.length, lt.map((c) => c.wk)]);
+    ok(cat9f.avdbPol('QWER-123') === 'block', '重试间隔内不反复建(主线程不卡)');
+}
+
+// =====================================================================
+console.log('⑨ 第三阶段(worker):写线程入库 / 读线程浏览 / AVDB 住写线程 / 全量历史回填(可续、同域名 ≥2.2s、CATALOG_BACKFILL=0)');
+{
+    const tmpW = fs.mkdtempSync(path.join(os.tmpdir(), 'catw-'));
+    const file = path.join(tmpW, 'catalog.db');
+    const cw = mkClock(T0), nw = mkNet(cw);
+    nw.latency = 30;
+    const WA = nw.site('wa'), WB = nw.site('wb'), WC = nw.site('wc');
+    for (let i = 0; i < 300; i++) WA.items.push(mk(`SSIS-${100 + i} 某合成历史作品${i}`, '日本有码', { t: i < 40 ? T0 - i * HOUR - MIN : T0 - 80 * HOUR - i * HOUR, dur: 7000 + i }));
+    for (let i = 0; i < 150; i++) WB.items.push(mk(`某合成国产历史${i}`, '国产自拍', { t: i < 20 ? T0 - i * HOUR - MIN : T0 - 100 * HOUR - i * HOUR, dur: 600 + i }));
+    WC.items.push(mk('SSIS-990 某合成被拦', '日本有码', { t: T0 - HOUR, dur: 7200 }));
+    {
+        const d0 = new Database(file);
+        d0.exec('CREATE TABLE avdb_stub (key TEXT PRIMARY KEY, j TEXT NOT NULL)');
+        d0.prepare('INSERT INTO avdb_stub VALUES (?, ?)').run('SSIS-990', JSON.stringify({ pol: 'block' }));
+        d0.prepare('INSERT INTO avdb_stub VALUES (?, ?)').run('SSIS-101', JSON.stringify({ runtime: 7001, actors: [{ aid: 900, name: 'Kakuu Worker' }] }));
+        d0.close();
+    }
+    const logsW = [];
+    const mkW = (env, f) => createCatalog({ dbPath: f || file, getSites: () => nw.sitesCfg(), adult, httpGet: nw.httpGet, log: (m) => logsW.push(m), env: Object.assign({}, env || {}), now: cw.now, sleep: cw.sleep,
+        avdbFactory: (db) => AVSTUB.createAvdb({ db }), avdbModule: path.join(ROOT, 'scripts/fixtures/catalog/avdb-stub.cjs') });
+    const cw1 = mkW();
+    ok((await cw1.ready()) === true && cw1.mode === 'worker', 'dbPath → 写线程 + 两个读线程', logsW);
+    const r1 = await cw1.tick();
+    const ro = new Database(file, { readonly: true });
+    const nItems = () => ro.prepare('SELECT COUNT(*) n FROM adult_items').get().n;
+    ok(r1.requests > 0 && r1.ingested === 60 && nItems() === 60, '增量爬取(h=72):主线程出网、写线程入库', [r1, nItems()]);
+    const s1 = await cw1.statsAsync();
+    ok(!ro.prepare("SELECT 1 FROM adult_items WHERE name LIKE 'SSIS-990%'").get() && s1.rejected['avdb-block'] === 1 && cw1.avdbPol('SSIS-990') === 'block', 'AVDB 住写线程:pol=block 入库就拦;主线程只读实例(闸门用)看得到同一份', s1.rejected);
+    const h1 = await cw1.home();
+    ok(h1.rows.some((r) => r.id === 'new' && r.items.length === 24), '读线程建快照 → 首页');
+    const b1 = await cw1.browse({ b: 'jp_censored', facets: 1 });
+    ok(b1.total_results === 40 && b1.results.length === 24 && b1.facets && Array.isArray(b1.facets.groups) && typeof b1.cursor_next === 'string', '读线程:浏览 + 分面 + 游标', [b1.total_results, b1.facets && Object.keys(b1.facets)]);
+    const b1c = await cw1.browse({ b: 'jp_censored', cursor: b1.cursor_next });
+    ok(b1c.page === 2 && b1c.results.length === 16, '读线程:游标翻页(两个读线程共用同一个快照)', [b1c.page, b1c.results.length]);
+    const g1 = await cw1.work('c:SSIS-100');
+    ok(g1 && g1.sources.length === 1 && g1.sources[0].site_key === 'wa', '作品页(主线程点查)');
+    const vid = ro.prepare("SELECT vod_id FROM adult_items WHERE wk='c:SSIS-100'").get().vod_id;
+    const bk = await cw1.beacon({ site_key: 'wa', vod_id: vid, ok: true, w: 1920, h: 1080 }, 'w1');
+    ok(bk && bk.ok === true && ro.prepare("SELECT res FROM adult_items WHERE wk='c:SSIS-100'").get().res === '1920x1080', '上报 → 写线程');
+    const sg = await cw1.suggest('SSIS-101');
+    ok(sg.kind === 'code' && sg.exact === 'c:SSIS-101' && (await cw1.suggest('SSIS-990')).kind === 'blocked', '联想(读线程);AVDB 拦截 → blocked');
+    ok((await cw1.lookup('某合成国产历史1')).length > 0 && (await cw1.tags('')).tags !== undefined && Array.isArray(await cw1.studios('')), '查找 / 标签云 / 片商榜');
+    const asw = await cw1.actressSearch('kakuu');
+    const apw = await cw1.actress('900');
+    ok(asw.length === 1 && asw[0].aid === 900 && apw && apw.results.map((c) => c.wk).join() === 'c:SSIS-101' && (await cw1.browse({ actress: '900' })).total_results === 1,
+        'AVDB 演员:搜索在写线程跑(主线程不做 LIKE 扫描)、演员页 / 演员筛选', [asw, apw && apw.results.length]);
+    // —— 全量历史回填 ——
+    const m0 = nw.log.length;
+    const lastEnd = new Map();
+    for (const x of nw.log) lastEnd.set(x.host, x.end);
+    const hs1 = await cw1.historyStep({ maxPages: 2 });
+    const bf1 = nw.log.slice(m0);
+    ok(hs1.requests === 5 && bf1.length === 5 && bf1.every((x) => x.ac === 'detail' && !x.h && x.ps === 60 && x.t == null && x.wd == null && x.ids == null), '回填:ac=detail&pagesize=60&pg=N(不带 h),这一轮每站最多 2 页', bf1.map((x) => x.host + ':' + x.pg));
+    ok(pacingOk(bf1, 2200).length === 0 && bf1.every((x) => !lastEnd.has(x.host) || x.start - lastEnd.get(x.host) >= 2200), '回填:同域名一次一个、间隔 ≥2.2s(和增量爬虫共用同域名队列)', pacingOk(bf1, 2200));
+    const bs1 = Object.fromEntries((await cw1.statsAsync()).historySites.map((r) => [r.site, r]));
+    ok(bs1.wa.pg === 3 && !bs1.wa.done && bs1.wb.pg === 3 && bs1.wc.done === 1, '回填进度存在 adult_backfill(每站一条游标)', bs1);
+    await cw1.close();
+    // 重启:从上次那页的前一页接着翻(新上架会把旧条目往后挤)
+    const cw2 = mkW();
+    await cw2.ready();
+    const m1 = nw.log.length;
+    const hs2 = await cw2.historyStep({ maxPages: 10 });
+    const bf2 = nw.log.slice(m1);
+    const firstPg = (h) => (bf2.find((x) => x.host === h) || {}).pg;
+    ok(firstPg('wa.test') === 2 && firstPg('wb.test') === 2 && !bf2.some((x) => x.host === 'wc.test'), '续跑:从上次那页的前一页开始;已完成的站不再请求', bf2.map((x) => x.host + ':' + x.pg));
+    const bs2 = Object.fromEntries((await cw2.statsAsync()).historySites.map((r) => [r.site, r]));
+    ok(bs2.wa.done === 1 && bs2.wb.done === 1 && nItems() === 450 && hs2.sitesDone === 2, '回填完:全部历史入库(300 + 150;被拦的 1 条不收)', [bs2, nItems()]);
+    ok(pacingOk(bf2, 2200).length === 0, '续跑也守 2.2s 间隔');
+    const b2 = await cw2.browse({ b: 'jp_censored' });
+    ok(b2.total_results === 300 || (await (async () => { await cw2.rebuild(); return (await cw2.browse({ b: 'jp_censored' })).total_results === 300; })()), '回填的旧作品进浏览');
+    ok((await cw2.historyStep({})).pending === 0, '全部完成:没有待回填的站');
+    await cw2.close();
+    // 自动开始 / CATALOG_BACKFILL=0
+    const f3 = path.join(tmpW, 'auto.db'), f4 = path.join(tmpW, 'off.db');
+    const cw3 = mkW({ CATALOG_FIRST_DELAY_MS: '0' }, f3), cw4 = mkW({ CATALOG_FIRST_DELAY_MS: '0', CATALOG_BACKFILL: '0' }, f4);
+    cw3.start(); cw4.start();
+    for (let i = 0; i < 100 && !(cw3.stats().lastTick && cw4.stats().lastTick); i++) await new Promise((r) => setTimeout(r, 50));
+    await new Promise((r) => setTimeout(r, 100));
+    ok(cw3.stats().history.enabled === true && cw3.stats().history.running === true, '首轮增量爬完 → 全量回填自动开始', cw3.stats().history);
+    ok(cw4.stats().history.enabled === false && cw4.stats().history.running === false && cw4.stats().history.requests === 0, 'CATALOG_BACKFILL=0:不回填', cw4.stats().history);
+    await cw3.close(); await cw4.close();
+    // 重启:上次没回填完(第一轮增量已爬完)→ start() 就接着回填,不等哪一轮爬虫真发出请求
+    const f5 = path.join(tmpW, 'resume.db');
+    const cw5 = mkW({}, f5);
+    await cw5.ready();
+    await cw5.tick();
+    ok(cw5.stats().history.running === false, '没 start:只爬增量,不回填');
+    // 回填和增量爬虫同时在同一批域名上跑:回填碰过的域名,爬虫请求也按 ≥2.2s 排(原来回填一页后紧跟的爬虫请求只隔 2.0s)
+    cw.t += 2 * HOUR;
+    const m5 = nw.log.length;
+    const [hs5, rt5] = await Promise.all([cw5.historyStep({ maxPages: 2 }), cw5.tick()]);
+    const mixed = nw.log.slice(m5);
+    ok(hs5.requests > 0 && rt5.requests > 0 && mixed.some((x) => x.h) && pacingOk(mixed, 2200).length === 0, '回填 + 增量爬虫同域名交错:间隔都 ≥2.2s(共用下限)', [hs5.requests, rt5.requests, pacingOk(mixed, 2200)]);
+    await cw5.close();
+    const cw6 = mkW({ CATALOG_FIRST_DELAY_MS: '3600000' }, f5);
+    const m6 = nw.log.length;
+    cw6.start();
+    for (let i = 0; i < 100 && !(cw6.stats().history.requests > 0); i++) await new Promise((r) => setTimeout(r, 50));
+    const h6 = cw6.stats();
+    ok(h6.lastTick == null && h6.history.running === true && h6.history.requests > 0 && nw.log.slice(m6).length > 0 && nw.log.slice(m6).every((x) => x.ac === 'detail' && !x.h),
+        '重启后直接接着回填(爬虫一轮都没跑)', [h6.lastTick, h6.history]);
+    await cw6.close();
+    ro.close();
+    try { fs.rmSync(tmpW, { recursive: true, force: true }); } catch (_) { /* Windows 上 WAL 文件偶尔晚一点释放 */ }
+}
+
+// =====================================================================
+console.log('⑩ 第三阶段:20 万作品合成目录 —— 浏览 / 分面 / 标签 / 联想调用时主线程卡顿 < 50 ms');
+{
+    const { synth } = require(path.join(ROOT, 'scripts/fixtures/catalog/synth.cjs'));
+    const { performance } = await import('node:perf_hooks');
+    const tmpS = fs.mkdtempSync(path.join(os.tmpdir(), 'cat200k-'));
+    const file = path.join(tmpS, 'catalog.db');
+    let t = performance.now();
+    synth(file, { n: 200000, adult, now: T0 });
+    const genMs = performance.now() - t;
+    const sites = [{ key: 's1', name: 'S1', api: 'https://s1.test/api.php/provide/vod' }, { key: 's2', name: 'S2', api: 'https://s2.test/api.php/provide/vod' }];
+    let maxLag = 0, last = performance.now();
+    const lags = [];
+    const iv = setInterval(() => { const n = performance.now(); const lag = n - last - 2; if (lag > maxLag) maxLag = lag; lags.push(lag); last = n; }, 2);
+    const catS = createCatalog({ dbPath: file, getSites: () => sites, adult, env: { CATALOG_DISABLE: '1' }, httpGet: async () => { throw new Error('offline'); }, log: () => {}, now: () => T0 });
+    await catS.ready();
+    t = performance.now();
+    const hS = await catS.home();
+    const firstMs = performance.now() - t;
+    const feats = adult.tags.VOCAB.filter((x) => adult.tags.isFeatured(x.id)).map((x) => x.id);
+    const qs = [];
+    for (let i = 0; i < 300; i++) {
+        const p = { b: ['', 'jp_censored', 'cn_amateur', 'western', 'anime'][i % 5], sort: ['new', 'updated', 'released', 'hot', 'dur', 'lines', 'rand'][i % 7], page: 1 + (i % 40) };
+        if (i % 2) p.facets = 1;
+        if (i % 3 === 0) p.t = feats.slice(i % 25, i % 25 + 1 + (i % 3)).join(',');
+        if (i % 4 === 0) p.x = feats[(i * 7) % feats.length];
+        if (i % 5 === 0) p.dur = ['s', 'm', 'l', 'xl', 'xxl', 'unk'][i % 6];
+        if (i % 6 === 0) p.v = ['zh', 'unc', 'leak', 'vr', '4k', 'vertical'][i % 6];
+        qs.push(p);
+    }
+    const lat = [];
+    t = performance.now();
+    const res = await Promise.all(qs.map(async (p) => { const s = performance.now(); const r = await catS.browse(p); lat.push(performance.now() - s); return r; }));
+    const wall = performance.now() - t;
+    lat.sort((a, b) => a - b);
+    const okShape = res.every((r) => r && Array.isArray(r.results) && typeof r.total_results === 'number');
+    const big = await catS.browse({ facets: 1 });
+    t = performance.now();
+    for (let i = 0; i < 20; i++) { await catS.tags(i % 2 ? 'jp_censored' : ''); await catS.studios(''); await catS.tagPage(feats[i]); await catS.suggest('合成作品标题' + (100 + i)); await catS.lookup('ZZT-' + (300 + i)); }
+    const miscMs = performance.now() - t;
+    t = performance.now();
+    const rb = await catS.rebuild();
+    const rebuildMs = performance.now() - t;
+    clearInterval(iv);
+    lags.sort((a, b) => a - b);
+    const snapS = catS.stats().snapshot;
+    console.log(`  (20 万作品:生成 ${Math.round(genMs)} ms;首个快照 ${Math.round(firstMs)} ms(读线程建 ${snapS.buildMs} ms);浏览 ×300 并发 ${Math.round(wall)} ms,p50 ${lat[150].toFixed(1)} / p95 ${lat[285].toFixed(1)} ms;` +
+        `标签/片商/标签页/联想/查找 ×20 ${Math.round(miscMs)} ms;重建 ${Math.round(rebuildMs)} ms;主线程最大卡顿 ${maxLag.toFixed(1)} ms(p99 ${lags[Math.floor(lags.length * 0.99)].toFixed(1)},${lags.length} 次采样))`);
+    ok(snapS.works === 200000 && hS.rows.length >= 10 && okShape && big.total_results > 150000 && big.facets.groups.length >= 8, '20 万作品:快照 / 首页 / 浏览 / 分面都正常', [snapS, hS.rows.length, big.total_results]);
+    ok(maxLag < 50, '主线程卡顿 < 50 ms(浏览 / 分面 / 标签 / 联想 / 建快照全程)', maxLag);
+    ok(rb && rb.N === 200000, '重建快照(读线程)');
+    await catS.close();
+    try { fs.rmSync(tmpS, { recursive: true, force: true }); } catch (_) { /* */ }
 }
 
 console.log(`\nsite-catalog-test: ${pass} passed, ${fail} failed`);

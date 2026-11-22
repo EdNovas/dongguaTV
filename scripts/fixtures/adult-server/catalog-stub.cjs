@@ -12,6 +12,8 @@ function createCatalog(deps) {
     rec({
         ev: 'create', keys: Object.keys(deps).sort(), sites,
         hasDb: !!(deps.db && typeof deps.db.prepare === 'function'),
+        dbPath: typeof deps.dbPath === 'string' ? deps.dbPath : null,                 // 第三阶段:目录自己的 catalog.db
+        avdbFactory: typeof deps.avdbFactory, tagsOk: !!(deps.tags && Array.isArray(deps.tags.VOCAB)),
         adultOk: !!(deps.adult && typeof deps.adult.RULES_VERSION === 'string' && deps.adult.policy),
         httpGet: typeof deps.httpGet, log: typeof deps.log, env: !!deps.env,
     });
@@ -37,11 +39,12 @@ function createCatalog(deps) {
                 try { titles = typeof deps.popularTitles === 'function' ? deps.popularTitles() : 'missing'; } catch (e) { titles = 'ERR:' + e.message; }
                 rec({ ev: 'popular', titles });
             }
-            return { tags: [
-                { id: 'milf', label: '人妻熟女', count: 9, featured: true },
-                { id: 'incest', label: '乱伦剧情', count: 5, featured: false },
+            // 第三阶段形状:{groups, tags:[{id,label,count,featured:true,group}]};闸门只放 featured === true、字段对的
+            return { groups: [{ id: 'persona', label: '身份·职业' }, { id: 5, label: 'x' }], tags: [
+                { id: 'wife', label: '人妻', count: 9, featured: true, group: 'persona' },
+                { id: 'incest', label: '乱伦剧情', count: 5, featured: false, group: 'story' },   // 审查级 → 闸门丢掉
                 { id: 'bad', label: 7, count: 1, featured: true },          // label 不是字符串 → 闸门丢掉
-                { id: 'noncon', label: '强制凌辱', count: '3', featured: 'yes' },   // featured 不是 true → 闸门当 false
+                { id: 'noncon', label: '强制凌辱', count: '3', featured: 'yes' },   // featured 不是 true → 闸门丢掉
             ] };
         },
         suggest(q) {
@@ -77,7 +80,8 @@ function createCatalog(deps) {
                 name: 'SSIS-001 温泉旅馆的邂逅', pic: '', _wk: wk,
                 _meta: {
                     code: 'SSIS-001', dur: 7210, bucket: 'jp_subbed', bucket_label: '中文字幕', tags: [{ id: 'subbed', label: '中字', featured: true }], n_sites: 4, variants: ['中字'],
-                    label_prefix: 'SSIS', actress: ['テスト花子', '迷奸'], first_seen: 1700000000000,                      // 第二个是硬拦词 → 闸门滤掉
+                    label_prefix: 'SSIS', actress: [{ aid: 7, name: 'テスト花子' }, { aid: null, name: '迷奸' }, 'テスト二号'], first_seen: 1700000000000,   // 第二个是硬拦词 → 闸门滤掉;旧形状字符串也认
+                    released: '2024-09-28', maker: 'S1 NO.1 STYLE', label: 'S1', studio: 'S1', avdb: true,
                     siblings: [{ wk: 'c:SSIS-001#U', name: 'SSIS-001 温泉旅馆的邂逅 [无码流出]', kind: 'U' }, { wk: 't:blocked1', name: '准高一少女 初恋', kind: 'main' }],
                 },
                 sources: [
@@ -94,6 +98,25 @@ function createCatalog(deps) {
             return null;
         },
         ingestSearchItems(siteKey, items) { rec({ ev: 'ingest', site: siteKey, ids: (items || []).map(i => i && i.vod_id) }); },
+        // ---- 第三阶段 ----
+        // AVDB 政策:SSIS-002 被 AVDB 拦(搜索出口 / 详情 / 作品线路都不能出)
+        avdbPol(key) { return key === 'SSIS-002' ? 'block' : null; },
+        // 封面代理:搜索结果里已经在索引的条目(a 站 101 = c:SSIS-001)
+        indexedWks(siteKey, ids) { rec({ ev: 'indexed', site: siteKey, n: (ids || []).length }); const m = new Map(); if (siteKey === 'a' && (ids || []).map(String).includes('101')) m.set('101', 'c:SSIS-001'); return m; },
+        async tagPage(id) {
+            rec({ ev: 'tagPage', id });
+            if (id !== 'wife') return null;
+            return { tag: { id: 'wife', label: '人妻', group: 'persona' }, count: 9, buckets: [{ id: 'jp_censored', label: '日本有码', count: 5 }], related: [{ id: 'mature', label: '熟女', lift: 3.5 }],
+                items: [card('t:ok1', '邻家姐姐的周末'), card('t:blocked2', '情侣自拍流出 合集')] };
+        },
+        async actress(aid, o) {
+            rec({ ev: 'actress', aid, page: o && o.page });
+            if (aid === '7') return { actress: { aid: 7, name: 'テスト花子', aliases: ['Test Hanako', '迷奸'] }, page: (o && o.page) || 1, total_pages: 1, results: [card('t:ok1', '邻家姐姐的周末'), card('t:blocked2', '情侣自拍流出 合集')] };
+            if (aid === '8') return { actress: { aid: 8, name: '迷奸', aliases: [] }, page: 1, total_pages: 1, results: [] };   // 名字被拦 → 闸门 404
+            return null;
+        },
+        actressSearch(q) { rec({ ev: 'actressSearch', q }); return [{ aid: 7, name: 'テスト花子', n: 3 }, { aid: 8, name: '迷奸', n: 1 }]; },
+        studios(b) { rec({ ev: 'studios', b }); return [{ id: 'S1', label: 'S1', count: 4 }, { id: 'x', label: '迷奸传媒', count: 1 }, { id: 3, label: 'bad', count: 1 }]; },
         stats() { return { stub: true }; },
     };
 }

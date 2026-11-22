@@ -997,22 +997,35 @@ const catalogSites = () => {
 const CATALOG_UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' };
 if (cacheManager.type === 'sqlite' && cacheManager.db && !process.env.VERCEL) {
     try {
+        const catalogHttpGet = async (url, o) => {
+            const u = String(url || '');
+            if (!/^https?:\/\//i.test(u) || /\.(m3u8|ts|m4s|mp4|key|jpe?g|png|gif|webp|avif)$/i.test(u.split(/[?#]/)[0])) throw new Error('catalog: 只许调 API,拒绝 ' + u.slice(0, 80));
+            const { data } = await fetchWithProxyFallback(u, { timeout: (o && o.timeout) || 10000, maxContentLength: 16 * 1024 * 1024, headers: CATALOG_UA, bg: true }, (o && o.siteKey) || '');
+            if (data && typeof data === 'object') return data;
+            if (typeof data === 'string') return JSON.parse(data.replace(/^\uFEFF/, ''));   // 不是 JSON → 抛
+            throw new Error('catalog: 空响应');
+        };
         catalog = require('./lib/site-catalog').createCatalog({
-            db: cacheManager.db,
+            // [adult] 第三阶段:目录自己一个 catalog.db(写在写线程、读在读线程;cache.db 里的旧 adult_* 表不再读),默认放在 cache.db 旁边
+            dbPath: process.env.CATALOG_DB_PATH ? path.resolve(process.env.CATALOG_DB_PATH) : path.join(path.dirname(CACHE_DB_FILE), 'catalog.db'),
             getSites: catalogSites,
             adult,
-            httpGet: async (url, o) => {
-                const u = String(url || '');
-                if (!/^https?:\/\//i.test(u) || /\.(m3u8|ts|m4s|mp4|key|jpe?g|png|gif|webp|avif)$/i.test(u.split(/[?#]/)[0])) throw new Error('catalog: 只许调 API,拒绝 ' + u.slice(0, 80));
-                const { data } = await fetchWithProxyFallback(u, { timeout: (o && o.timeout) || 10000, maxContentLength: 16 * 1024 * 1024, headers: CATALOG_UA, bg: true }, (o && o.siteKey) || '');
-                if (data && typeof data === 'object') return data;
-                if (typeof data === 'string') return JSON.parse(data.replace(/^\uFEFF/, ''));   // 不是 JSON → 抛
-                throw new Error('catalog: 空响应');
-            },
+            tags: adult.tags,
+            httpGet: catalogHttpGet,
             log: (msg) => console.log('[Catalog] ' + msg),
             env: process.env,
-            // [adult] 本站热门行:lib/popular 的片名(快照所有人共用 → 按匿名调用者口径,即至少 minUsers+1 人);popular 在下面才建,调用时再取
-            popularTitles: () => { try { return (popular && popular.enabled()) ? (popular.get('').items || []).map(x => x.title) : []; } catch (e) { return []; } },
+            // [adult] 本站热门行:lib/popular 的片名(快照所有人共用 → 按匿名调用者口径,即至少 minUsers+1 人);popular 在下面才建,调用时再取。
+            //   取完把 popular 的 10 分钟候选缓存作废:目录启动就建快照,不能让它把开机那一刻(还没有观看数据)的空榜钉住 /api/popular 10 分钟
+            popularTitles: () => {
+                try {
+                    if (!(popular && popular.enabled())) return [];
+                    const titles = (popular.get('').items || []).map(x => x.title);
+                    if (typeof popular.invalidate === 'function') popular.invalidate();
+                    return titles;
+                } catch (e) { return []; }
+            },
+            // [adult] 第三阶段:AVDB 元数据(和目录同一个 catalog.db;爬取跑在目录写线程里,这里建的是主线程只读实例)
+            avdbFactory: (db) => require('./lib/adult-avdb').createAvdb({ db, httpGet: catalogHttpGet, log: (msg) => console.log(msg), env: process.env, adult }),
         });
         catalog.start();
     } catch (e) { console.error('[Catalog] 首页目录不可用(/api/catalog/* 回 503,搜索/播放不受影响):', e.message); catalog = null; }

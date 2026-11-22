@@ -263,8 +263,10 @@ try {
     ok(/本分支默认关闭/.test(srvLog) && /PUSH_DISABLE/.test(srvLog) && /SHARE_PAGE_DISABLE/.test(srvLog), '启动日志列出默认关闭的功能', srvLog.slice(0, 800));
     ok(/已忽略配置的 TMDB_API_KEY/.test(srvLog), '配了 TMDB_API_KEY 也不用(启动时摘掉并告警)');
     const create = readLines(CAT_LOG).find(x => x.ev === 'create');
-    ok(create && create.hasDb && create.adultOk && create.httpGet === 'function' && create.log === 'function' && create.env
-        && JSON.stringify(create.keys) === JSON.stringify(['adult', 'db', 'env', 'getSites', 'httpGet', 'log', 'popularTitles']), 'createCatalog 拿到约定的依赖(db 实例 / adult / httpGet / log / env / getSites / popularTitles)', create);
+    ok(create && !create.hasDb && create.adultOk && create.httpGet === 'function' && create.log === 'function' && create.env && create.avdbFactory === 'function' && create.tagsOk
+        && create.dbPath === path.join(path.dirname(CACHE_DB), 'catalog.db')
+        && JSON.stringify(create.keys) === JSON.stringify(['adult', 'avdbFactory', 'dbPath', 'env', 'getSites', 'httpGet', 'log', 'popularTitles', 'tags']),
+        'createCatalog 拿到约定的依赖(第三阶段:dbPath = cache.db 旁边的 catalog.db、avdbFactory、tags;不再给 cache.db 连接)', create);
     ok(create && JSON.stringify(create.sites) === JSON.stringify(['a', 'b', 'c']), 'getSites:不含 active:false 的站,含 search:false 的站(目录照爬)', create && create.sites);
     ok(readLines(CAT_LOG).some(x => x.ev === 'start'), 'catalog.start() 被调用');
 
@@ -279,6 +281,7 @@ try {
         ['GET', '/api/sites'], ['GET', '/api/check?key=a'], ['GET', '/api/popular'],
         ['GET', '/api/catalog/home'], ['GET', '/api/catalog/browse?b=jp_censored'], ['GET', '/api/catalog/buckets'], ['GET', '/api/catalog/work?k=c:SSIS-001'], ['GET', '/api/catalog/lookup?q=SSIS-001'],
         ['GET', '/api/catalog/tags'], ['GET', '/api/catalog/suggest?q=SSIS-001'], ['POST', '/api/catalog/beacon', { wk: 'c:SSIS-001', site_key: 'a', vod_id: '101', ok: false }], ['GET', '/api/img?k=c:SSIS-001&s=a'],
+        ['GET', '/api/catalog/tag/wife'], ['GET', '/api/catalog/actress?q=x'], ['GET', '/api/catalog/actress/7'], ['GET', '/api/catalog/studios'],
         ['GET', '/api/kz/ep/x/y'],
     ];
     for (const [m, p, json] of unauth) {
@@ -380,6 +383,13 @@ try {
     ok(r.status === 404, 'POST 单站搜索:停用站 404');
     s = await sse('/api/search?wd=' + encodeURIComponent('合集') + '&stream=true', CK);
     ok(s.items.length === 0, '只命中被拦条目的查询 → 空', s.items.map(keyOf));
+    // 第三阶段:AVDB 拦截的番号(替身 avdbPol('SSIS-002') = block)—— 搜索出口、单站搜索、详情都不出
+    s = await sse('/api/search?wd=' + encodeURIComponent('SSIS-002') + '&stream=true', CK);
+    ok(s.items.length === 0, 'AVDB pol=block 的番号:搜索不出(b 站 203 原本会出)', s.items.map(keyOf));
+    r = await api('POST', '/api/search', { cookie: CK, json: { keyword: 'SSIS-002', siteKey: 'b' } });
+    ok(r.j && r.j.list.length === 0, 'AVDB 拦截:POST 单站搜索也不出', r.j);
+    r = await api('GET', '/api/detail?id=203&site_key=b', { cookie: CK });
+    ok(r.status === 404, 'AVDB 拦截:详情 404', r.status);
     s = await sse('/api/search?wd=' + encodeURIComponent('JUL-123') + '&stream=true', CK);
     ok(s.items.length === 1 && s.items[0].vod_id === 105 && s.items[0]._wk === 't:夏日回忆' && s.items[0]._dur === 7200, '占位番号(JUL-123):不按番号并组(_wk 用片名)', s.items.map(it => [keyOf(it), it._wk, it._dur]));
 
@@ -430,7 +440,7 @@ try {
     r = await api('GET', '/api/catalog/browse?b=jp_censored&sort=bogus&dur=zz&flag=unc&page=0&tag=' + encodeURIComponent('<x>'), { cookie: CK });
     const bq = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
     ok(r.status === 200 && r.j && r.j.results.length === 1 && r.j.results[0].name === '邻家姐姐的周末' && /max-age=60/.test(r.h.get('cache-control') || ''), '目录浏览:结果再过滤', r.j);
-    ok(bq && JSON.stringify(bq.q) === JSON.stringify({ b: 'jp_censored', tag: '!bad', sort: 'new', dur: '', flag: 'unc', page: 1 }), '目录浏览:参数清洗(非法 sort/dur 回默认,page≥1;给了但非法的 tag 标成 !bad 交给目录回空页)', bq && bq.q);
+    ok(bq && JSON.stringify(bq.q) === JSON.stringify({ b: 'jp_censored', tag: '!bad', sort: 'new', dur: '!bad', flag: 'unc', page: 1 }), '目录浏览:参数清洗(非法 sort 回默认,page≥1;给了但非法的 tag / dur 标成 !bad 交给目录回空页)', bq && bq.q);
     r = await api('GET', '/api/catalog/browse?b=' + encodeURIComponent('../../etc') + '&page=abc', { cookie: CK });
     const bq2 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
     ok(r.status === 200 && bq2 && bq2.q.b === '!bad' && bq2.q.tag === '' && bq2.q.page === 1, '目录浏览:非法分区不悄悄变成 ""(=全部分区),标成 !bad', bq2 && bq2.q);
@@ -476,15 +486,45 @@ try {
         ok(by.a && by.b && by.a._family === 'famA' && by.b._family === 'famB' && by.a._native === 'ok' && by.b._native === 'risky', '作品线路:_family / _native 按站点表重算(目录给的旧值不算)', [by.a, by.b]);
         ok(by.a._res === '1920x1080' && by.a._dead === false && by.b._dead === true && by.a._same === 'g1' && by.b._same === 'g1', '作品线路:_dead / _res / _same 照目录给的', [by.a, by.b]);
         const M = (r.j && r.j._meta) || {};
-        ok(JSON.stringify(M.actress) === JSON.stringify(['テスト花子']) && M.siblings.length === 1 && M.siblings[0].wk === 'c:SSIS-001#U' && M.label_prefix === 'SSIS' && M.bucket_label === '中文字幕',
-            '作品 _meta:演员过一遍查询硬拦词、兄弟作品按片名再过滤', M);
+        ok(JSON.stringify(M.actress) === JSON.stringify([{ aid: 7, name: 'テスト花子' }, { aid: null, name: 'テスト二号' }]) && M.siblings.length === 1 && M.siblings[0].wk === 'c:SSIS-001#U' && M.label_prefix === 'SSIS' && M.bucket_label === '中文字幕',
+            '作品 _meta:演员 {aid,name} 过一遍查询硬拦词(旧字符串形状也认)、兄弟作品按片名再过滤', M);
+        ok(M.released === '2024-09-28' && M.maker === 'S1 NO.1 STYLE' && M.label === 'S1' && M.avdb === true, '作品 _meta:第三阶段 released / maker / label / avdb 透传', M);
     }
     n0 = stubCount();
     r = await api('GET', '/api/catalog/tags?b=jp_censored', { cookie: CK });
     let tl = readLines(CAT_LOG).filter(x => x.ev === 'tags').pop();
-    ok(r.status === 200 && tl && tl.b === 'jp_censored' && JSON.stringify(r.j) === JSON.stringify({ tags: [
-        { id: 'milf', label: '人妻熟女', count: 9, featured: true }, { id: 'incest', label: '乱伦剧情', count: 5, featured: false }, { id: 'noncon', label: '强制凌辱', count: 3, featured: false }] })
-        && /max-age=60/.test(r.h.get('cache-control') || ''), '/api/catalog/tags:{tags:[{id,label,count,featured}]},featured 只认 true、坏条目丢掉', [r.status, r.j, tl]);
+    ok(r.status === 200 && tl && tl.b === 'jp_censored' && JSON.stringify(r.j) === JSON.stringify({ groups: [{ id: 'persona', label: '身份·职业' }], tags: [
+        { id: 'wife', label: '人妻', count: 9, featured: true, group: 'persona' }] })
+        && /max-age=60/.test(r.h.get('cache-control') || ''), '/api/catalog/tags:{groups, tags:[{id,label,count,featured:true,group}]},只放 featured === true、坏条目丢掉', [r.status, r.j, tl]);
+    // 第三阶段新路由:标签页 / 演员 / 片商
+    r = await api('GET', '/api/catalog/tag/wife', { cookie: CK });
+    ok(r.status === 200 && r.j.tag.id === 'wife' && JSON.stringify(r.j.items.map(c => c.name)) === JSON.stringify(['邻家姐姐的周末']) && r.j.related.length === 1 && /max-age=60/.test(r.h.get('cache-control') || ''),
+        '/api/catalog/tag/:id:卡片按片名再过滤', r.j);
+    const r404 = [await api('GET', '/api/catalog/tag/x_minor', { cookie: CK }), await api('GET', '/api/catalog/tag/' + encodeURIComponent('<x>'), { cookie: CK })];
+    ok(r404.every(x => x.status === 404 && x.j && x.j.error === 'NOT_FOUND' && !/x_minor|<x>/.test(x.text)), '/api/catalog/tag/:id:blocked / 非法 → 404(不回显)', r404.map(x => [x.status, x.text]));
+    r = await api('GET', '/api/catalog/actress?q=' + encodeURIComponent('テスト'), { cookie: CK });
+    ok(r.status === 200 && JSON.stringify(r.j) === JSON.stringify([{ aid: 7, name: 'テスト花子', n: 3 }]) && /no-store/.test(r.h.get('cache-control') || ''), '/api/catalog/actress?q=:名字被拦的不出', r.j);
+    const nAs = readLines(CAT_LOG).filter(x => x.ev === 'actressSearch').length;
+    r = await api('GET', '/api/catalog/actress?q=' + encodeURIComponent('迷奸'), { cookie: CK });
+    ok(r.status === 200 && r.j.length === 0 && readLines(CAT_LOG).filter(x => x.ev === 'actressSearch').length === nAs, '/api/catalog/actress?q=:被拦的查询不进目录', r.j);
+    r = await api('GET', '/api/catalog/actress/7?page=2', { cookie: CK });
+    ok(r.status === 200 && r.j.actress.name === 'テスト花子' && JSON.stringify(r.j.actress.aliases) === JSON.stringify(['Test Hanako']) && r.j.results.length === 1 && r.j.page === 2,
+        '/api/catalog/actress/:aid:别名 / 卡片过滤、page 透传', r.j);
+    ok((await api('GET', '/api/catalog/actress/8', { cookie: CK })).status === 404 && (await api('GET', '/api/catalog/actress/999', { cookie: CK })).status === 404
+        && (await api('GET', '/api/catalog/actress/' + encodeURIComponent('a b'), { cookie: CK })).status === 404, '/api/catalog/actress/:aid:名字被拦 / 没有 / 非法 → 404');
+    r = await api('GET', '/api/catalog/studios?b=jp_censored', { cookie: CK });
+    const stq = readLines(CAT_LOG).filter(x => x.ev === 'studios').pop();
+    ok(r.status === 200 && JSON.stringify(r.j) === JSON.stringify([{ id: 'S1', label: 'S1', count: 4 }]) && stq && stq.b === 'jp_censored', '/api/catalog/studios:被拦 / 坏条目丢掉', [r.j, stq]);
+    await api('GET', '/api/catalog/browse?b=jp_censored&t=wife,busty&x=subbed&v=zh&dur=xxl&sort=released&studio=S1&actress=7&cursor=abc_-1&facets=1', { cookie: CK });
+    const bq5 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
+    ok(bq5 && JSON.stringify(bq5.q) === JSON.stringify({ b: 'jp_censored', tag: '', sort: 'released', dur: 'xxl', flag: '', page: 1, t: 'wife,busty', x: 'subbed', v: 'zh', studio: 'S1', actress: '7', cursor: 'abc_-1', facets: true }),
+        '目录浏览:第三阶段参数 t/x/v/dur/sort/studio/actress/cursor/facets 透传', bq5 && bq5.q);
+    await api('GET', '/api/catalog/browse?t=a,b,c,d&x=' + encodeURIComponent('<x>') + '&v=bogus&studio=' + encodeURIComponent('a<b') + '&actress=' + encodeURIComponent('a b') + '&cursor=' + encodeURIComponent('!!'), { cookie: CK });
+    const bq6 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
+    ok(bq6 && bq6.q.t === '!bad' && bq6.q.x === '!bad' && bq6.q.v === '!bad' && bq6.q.studio === '!bad' && bq6.q.actress === '!bad' && bq6.q.cursor === '' && !('facets' in bq6.q), '目录浏览:非法的第三阶段参数 → !bad(目录回空页)', bq6 && bq6.q);
+    await api('GET', '/api/catalog/browse?studio=' + encodeURIComponent("M's video"), { cookie: CK });
+    const bq7 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
+    ok(bq7 && bq7.q.studio === "M's video", "目录浏览:片商名带单引号(M's video)照常透传", bq7 && bq7.q);
     r = await api('GET', '/api/catalog/tags?b=' + encodeURIComponent('../x'), { cookie: CK });
     tl = readLines(CAT_LOG).filter(x => x.ev === 'tags').pop();
     ok(r.status === 200 && tl && tl.b === '!bad', '/api/catalog/tags:非法分区标成 !bad 交给目录', tl);
@@ -572,17 +612,21 @@ try {
     ] } });
     ok(r.j && r.j.saved === 1, '历史上报:片名/线路被拦的不入库', r.j);
     db.prepare('INSERT OR REPLACE INTO user_history (user_token, item_id, item_data, updated_at) VALUES (?, ?, ?, ?)').run(ALICE, 'h3', JSON.stringify({ name: '情侣自拍流出 合集' }), Date.now());
+    // 存下之后 AVDB 才拦掉的番号(替身 SSIS-002 = block):作品名 / 线路片名里有它的,历史下发也不出
+    db.prepare('INSERT OR REPLACE INTO user_history (user_token, item_id, item_data, updated_at) VALUES (?, ?, ?, ?)').run(ALICE, 'h7', JSON.stringify({ name: 'SSIS-002 温泉旅馆的邂逅' }), Date.now());
+    db.prepare('INSERT OR REPLACE INTO user_history (user_token, item_id, item_data, updated_at) VALUES (?, ?, ?, ?)').run(ALICE, 'h8', JSON.stringify({ name: '某作品', groupData: { name: '某作品', sources: [{ site_key: 'a', vod_id: '9', vod_name: '[SSIS-002] 温泉' }] } }), Date.now());
     r = await api('GET', '/api/history/pull?token=' + ALICE);
-    ok(r.j && r.j.sync_enabled && JSON.stringify(r.j.history.map(h => h.id)) === JSON.stringify(['h1']), '历史下发:库里被拦的条目不下发', r.j && r.j.history.map(h => h.id));
+    ok(r.j && r.j.sync_enabled && JSON.stringify(r.j.history.map(h => h.id)) === JSON.stringify(['h1']), '历史下发:库里被拦的条目(含 AVDB 后来拦掉的番号)不下发', r.j && r.j.history.map(h => h.id));
     db.exec(`CREATE TABLE IF NOT EXISTS watch_stats (
         user_token TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, episode TEXT NOT NULL DEFAULT '',
         seconds INTEGER NOT NULL DEFAULT 0, completed INTEGER NOT NULL DEFAULT 0, first_at INTEGER, last_at INTEGER,
         PRIMARY KEY (user_token, kind, title, episode)) WITHOUT ROWID`);
     const ins = db.prepare("INSERT OR REPLACE INTO watch_stats (user_token, kind, title, episode, seconds, completed, first_at, last_at) VALUES (?, 'vod', ?, '1', 600, 0, ?, ?)");
-    for (const u of ['u1', 'u2', 'u3']) for (const t of ['邻家姐姐的周末', '准高一少女 初恋']) ins.run(u, t, Date.now(), Date.now());
+    for (const u of ['u1', 'u2', 'u3']) for (const t of ['邻家姐姐的周末', '准高一少女 初恋', 'SSIS-002 温泉旅馆的邂逅']) ins.run(u, t, Date.now(), Date.now());
     r = await api('GET', '/api/popular?token=' + TOK, { cookie: CK });
     const titles = (r.j && r.j.items || []).map(x => x.title);
     ok(r.status === 200 && titles.includes('邻家姐姐的周末') && !titles.includes('准高一少女 初恋'), '热门:被拦片名不上榜', r.j);
+    ok(!titles.includes('SSIS-002 温泉旅馆的邂逅'), '热门:片名里的番号被 AVDB 拦了(替身 SSIS-002 = block)也不上榜', titles);
     r = await api('GET', '/api/popular', { cookie: CK });
     ok(r.status === 200 && Array.isArray(r.j && r.j.items) && r.j.items.some(x => x.title === '邻家姐姐的周末') && /Cookie/i.test(r.h.get('vary') || ''), '/api/popular:只带 dg_t Cookie(不带 ?token=)也认,回包 Vary: Cookie', [r.status, r.j, r.h.get('vary')]);
     r = await api('GET', '/api/popular', { headers: { 'x-dg-token': TOK } });
@@ -597,8 +641,11 @@ try {
     r = await api('POST', '/api/favorites/add', { json: { token: ALICE, item: { name: '邻家姐姐的周末' } } });
     ok(r.j && r.j.ok, '收藏:正常片名照常', r.j);
     db.prepare('INSERT OR REPLACE INTO user_favorites (user_token, fav_id, data, added_at, updated_at, seen_count) VALUES (?, ?, ?, ?, ?, 0)').run(ALICE, 'fx', JSON.stringify({ name: '情侣自拍流出 合集', sources: [] }), Date.now(), Date.now());
+    db.prepare('INSERT OR REPLACE INTO user_favorites (user_token, fav_id, data, added_at, updated_at, seen_count) VALUES (?, ?, ?, ?, ?, 0)').run(ALICE, 'fy', JSON.stringify({ name: 'SSIS-002 温泉旅馆的邂逅', sources: [] }), Date.now(), Date.now());
     r = await api('GET', '/api/favorites?token=' + ALICE);
-    ok(r.j && JSON.stringify(r.j.items.map(x => x.data.name)) === JSON.stringify(['邻家姐姐的周末']), '收藏列表:库里被拦的不下发', r.j && r.j.items.map(x => x.data.name));
+    ok(r.j && JSON.stringify(r.j.items.map(x => x.data.name)) === JSON.stringify(['邻家姐姐的周末']), '收藏列表:库里被拦的(含 AVDB 后来拦掉的番号)不下发', r.j && r.j.items.map(x => x.data.name));
+    r = await api('POST', '/api/favorites/add', { json: { token: ALICE, item: { name: 'SSIS-002 温泉旅馆的邂逅' } } });
+    ok(r.status === 400, '收藏:AVDB 拦掉的番号加不进去', [r.status, r.j]);
     db.close();
 } catch (e) {
     ok(false, '② 异常: ' + (e && e.stack || e), srvLog.slice(-2000));
@@ -627,6 +674,14 @@ try {
     ok(r.status === 404, '/api/img:索引里没有 → 404', r.status);
     r = await api('GET', '/api/img?url=' + encodeURIComponent('https://img.example/a.jpg'), { cookie: CK });
     ok(r.status === 400, '/api/img:只给 url= → 400', r.status);
+    // 第三阶段:搜索结果里已经在目录索引的条目,封面也改写成 /api/img(没入索引的照旧直链)
+    {
+        const sj = await api('GET', '/api/search?wd=' + encodeURIComponent('ssis 001'), { cookie: CK });
+        const L = (sj.j && sj.j.list) || [];
+        const a101 = L.find(x => x.site_key === 'a' && String(x.vod_id) === '101'), b201 = L.find(x => x.site_key === 'b' && String(x.vod_id) === '201');
+        ok(a101 && a101.vod_pic === '/api/img?k=' + encodeURIComponent('c:SSIS-001') + '&s=a' && b201 && !/^\/api\/img/.test(String(b201.vod_pic || '')),
+            '封面代理开着:搜索结果里已入索引的条目封面也走 /api/img(没入索引的照旧)', [a101 && a101.vod_pic, b201 && b201.vod_pic]);
+    }
     r = await api('GET', '/cache/adult-img/x.jpg', { cookie: CK });
     ok(r.status === 404, '/cache/adult-img 直接访问 → 404', r.status);
     // 旧缓存位置的路径归一化绕过(//、/./、x/../、%2f、\、结尾点、大小写)也拦;新缓存目录不在 public/ 下
@@ -731,11 +786,16 @@ if (!fs.existsSync(path.join(ROOT, 'lib/site-catalog/index.js'))) {
             ok(typeof M.bucket_label === 'string' && Array.isArray(M.tags) && Array.isArray(M.actress) && Array.isArray(M.siblings) && typeof M.label_prefix === 'string' && typeof M.first_seen === 'number', '真目录:_meta 第二阶段字段', M);
         }
         r = await api('GET', '/api/catalog/tags', { cookie: CK });
-        ok(r.status === 200 && r.j && Array.isArray(r.j.tags) && r.j.tags.every(t => typeof t.id === 'string' && typeof t.featured === 'boolean' && t.count > 0), '真目录:/api/catalog/tags 形状', r.j);
+        ok(r.status === 200 && r.j && Array.isArray(r.j.tags) && Array.isArray(r.j.groups) && r.j.tags.every(t => typeof t.id === 'string' && t.featured === true && t.count > 0 && typeof t.group === 'string'), '真目录:/api/catalog/tags 形状', r.j);
         r = await api('GET', '/api/catalog/suggest?q=' + encodeURIComponent('ssis001'), { cookie: CK });
         ok(r.status === 200 && r.j && r.j.kind === 'code' && Array.isArray(r.j.items) && ('exact' in r.j) && ('alias' in r.j), '真目录:/api/catalog/suggest 形状', r.j);
         r = await api('GET', '/api/catalog/suggest?q=' + encodeURIComponent('人妻'), { cookie: CK });
-        ok(r.status === 200 && r.j && r.j.kind === 'alias' && r.j.alias && r.j.alias.tag === 'milf', '真目录:联想别名', r.j);
+        ok(r.status === 200 && r.j && r.j.kind === 'alias' && r.j.alias && r.j.alias.tag === 'wife', '真目录:联想别名(第三阶段词表:人妻 → wife)', r.j);
+        r = await api('GET', '/api/catalog/browse?b=cn_amateur&facets=1', { cookie: CK });
+        ok(r.status === 200 && r.j && r.j.facets && Array.isArray(r.j.facets.groups) && Array.isArray(r.j.facets.sorts) && r.j.facets.sorts.some(x => x.id === 'released') && 'cursor_next' in r.j, '真目录:browse facets=1 形状', r.j && r.j.facets);
+        r = await api('GET', '/api/catalog/tag/x_minor', { cookie: CK });
+        ok(r.status === 404, '真目录:blocked 标签页 404', r.status);
+        ok(fs.existsSync(path.join(tmp, 'catalog.db')), '真目录:catalog.db 建在 cache.db 旁边');
         const nb = stubCount();
         r = await api('POST', '/api/catalog/beacon', { cookie: CK, json: { wk: 'c:SSIS-001', site_key: 'a', vod_id: '101', ok: true, dur: 7210, w: 1280, h: 720 } });
         ok(r.status === 204 && stubCount() === nb, '真目录:上报 204、零上游', r.status);

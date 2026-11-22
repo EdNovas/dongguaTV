@@ -6,3 +6,9 @@ npm-debug.log
 
 # 宣传片工程(HyperFrames)不进镜像
 promo
+cache.db
+cache.db-wal
+cache.db-shm
+catalog.db
+catalog.db-wal
+catalog.db-shm
