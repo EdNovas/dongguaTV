@@ -36,12 +36,13 @@
 // v42: 弹幕 /api/danmaku/ 一律直达不缓存。策略4 把空弹幕(服务器发的是 no-store,Cache API 不认)也存了,之后再开这一集,
 //      服务器 4 秒内没回(慢平台现抓要几十秒)就回这份旧的空弹幕 —— 服务器早抓到了也看不到(《嫁金钗》实锤)。
 //      弹幕自带 HTTP 缓存头(非空 7 天、空 no-store),交给浏览器缓存;升版顺带清掉旧缓存里存着的空弹幕。
-// [adult] v42-adult1 起(成人站分支自己的升版,缓存名换成 donggua-*-v42 + ADULT_REV,现为 -adult2;CACHE_VERSION 字面保持与主线一致,合并主线升版时只改这一处):
+// [adult] v42-adult1 起(成人站分支自己的升版,缓存名换成 donggua-*-v42 + ADULT_REV,现为 -adult3;CACHE_VERSION 字面保持与主线一致,合并主线升版时只改这一处):
 //      ① 跨域图片(资源站海报)一律不进缓存(策略1b 只给主站直播台标用,成人站关掉),旧的台标缓存随升版清掉;
 //      ② 目录/搜索/详情(/api/catalog、/api/search、/api/detail)直达不缓存 —— 片名不落在设备的 Cache Storage 里;
 //      ③ 预缓存 adult/adult.js(年龄确认门/站名/目录首页,页面同步加载它,弱网要能秒出)。
+//      -adult3:adult.js?v=3(phase 2:搜索建议/线路家族/线路反馈/信息条);/api/sites 与 /api/img(海报代理)也直达不缓存。
 const CACHE_VERSION = 'v42';
-const ADULT_REV = '-adult2';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult3';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -65,7 +66,7 @@ const STATIC_URLS = [
     './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
     './libs/js/DPlayer.min.js',
-    './adult/adult.js?v=2'   // [adult] v42-adult2:与 index.html 引用同一个 ?v=
+    './adult/adult.js?v=3'   // [adult] v42-adult3:与 index.html 引用同一个 ?v=
 ];
 
 // 图片缓存配置
@@ -138,8 +139,9 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && /^\/api\/(admin|requests|history|settings|stats|auth|favorites|push)(\/|$)/.test(url.pathname)) return;
     //    带 token 参数的请求(config?token=…)同理:按用户的,不缓存
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/') && url.searchParams.has('token')) return;
-    // ⑨ [adult] 成人站的内容接口(目录/搜索/详情)直达:片名/海报地址不写进 Cache Storage(v42-adult1)
-    if (ADULT_SITE && url.origin === self.location.origin && /^\/api\/(catalog|search|detail)(\/|$)/.test(url.pathname)) return;
+    // ⑨ [adult] 成人站的内容接口(目录/搜索/详情)直达:片名/海报地址不写进 Cache Storage(v42-adult1);
+    //    v42-adult3:线路列表 /api/sites(各站档案/失效标记要是这一次的)、海报代理 /api/img(服务器自己有磁盘 LRU,设备上不再存一份)同样直达
+    if (ADULT_SITE && url.origin === self.location.origin && /^\/api\/(catalog|search|detail|sites|img)(\/|$)/.test(url.pathname)) return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {

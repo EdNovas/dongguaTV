@@ -15,7 +15,7 @@
     }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this), function (root) {
     'use strict';
-    const VERSION = 1;
+    const VERSION = 2;
     const DEFAULT_NAME = 'DGX';
 
     // ---------- 安全的存储读写(隐私模式/被禁用时 localStorage 会抛) ----------
@@ -29,6 +29,30 @@
         anime: '动漫·里番', softcore: '三级·伦理', ai_drama: 'AI短剧', commentary: 'AV解说', fetish: 'SM·重口', lgbt: '同性·TS',
     };
     const NAV_BUCKETS = Object.keys(BUCKET_LABEL);
+    // 标签(与 lib/adult/taxonomy.json 的 tags 一致;服务器 /api/catalog/tags 给的 label 优先,这里只是兜底名)
+    const TAG_LABEL = {
+        milf: '人妻熟女', busty: '巨乳美乳', uniform: '制服诱惑', legs: '丝袜美腿', cosplay: 'Cosplay', incest: '乱伦剧情', noncon: '强制凌辱',
+        group: '群交多P', ntr: '绿帽NTR', oral: '口交颜射', solo: '自慰', squirt: '潮吹', bdsm: 'SM调教', extreme: '重口猎奇', outdoor: '野外露出',
+        lesbian: '女同', gay: '男同', trans: '跨性别', vr: 'VR', amateur: '素人', pornstar: '女优明星', bbc: '黑人', massage: '按摩技师',
+        story: '剧情', uncensored: '无码', subbed: '中字', hktw: '港台', korea: '韩国', beauty: '高颜值', studio: '厂牌',
+    };
+    // 审查类标签:服务器说 featured 也绝不做成导航/作品页的标签按钮(只在浏览页里作为已选条件出现)。fail-closed:服务器漏标时这里兜住
+    const NEVER_FEATURE = new Set(['noncon', 'rape', 'rape-play', 'incest', 'hypnosis', 'time-stop', 'timestop', 'sleep', 'drunk', 'aphrodisiac', 'drug', 'voyeur', 'teen', 'schoolgirl']);
+    // 这些分类的人多是素人/主播/网红本人:作品页不出演员名(服务器也不该给,两头都拦)
+    const NO_ACTRESS_BUCKETS = new Set(['cn_amateur', 'cn_hookup', 'live', 'creators']);
+    const TAG_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
+    const validTag = (t) => typeof t === 'string' && TAG_ID_RE.test(t);
+    const tagLabels = Object.create(null);   // 运行时从 /api/catalog/tags、搜索建议、作品信息里学到的标签名
+    const tagLabel = (id) => (validTag(id) ? (tagLabels[id] || TAG_LABEL[id] || id) : '');
+    const learnTag = (id, label) => { const l = cleanText(label, 20); if (validTag(id) && l) tagLabels[id] = l; };
+    function cleanText(s, max) { return String(s == null ? '' : s).replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, max || 40); }
+    function fmtDur(sec) {
+        sec = Math.round(Number(sec) || 0);
+        if (!(sec > 0)) return '';
+        const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+        const p2 = (x) => String(x).padStart(2, '0');
+        return h ? h + ':' + p2(m) + ':' + p2(s) : m + ':' + p2(s);
+    }
     // 首页分类栏 / 浏览页大类:国产 · 日本 · 欧美 · 动漫 · 更多 · 全部(全部 = 不限分类,首页「新上架」「随机发现」的「全部」进这里)
     const TYPES = [
         { k: 'cn', l: '国产', icon: 'fa-video', sort: 'new', buckets: [['cn_amateur', '自拍'], ['cn_studio', '传媒'], ['cn_hookup', '探花'], ['creators', '网红'], ['live', '主播'], ['short', '短视频']] },
@@ -53,25 +77,34 @@
         if (!bs.length) b = '';
         else if (bs.indexOf(b) < 0) b = bs[0];   // 大类里不给「全部」:服务器一次只按一个分类筛
         const pick = (v, arr, d) => { const x = v == null ? '' : String(v); return arr.some(o => o.k === x) ? x : d; };
-        return { b, dur: pick(s.dur, DURS, ''), flag: pick(s.flag, FLAGS, ''), sort: pick(s.sort, SORTS, T.sort || 'new') };
+        const out = { b, dur: pick(s.dur, DURS, ''), flag: pick(s.flag, FLAGS, ''), sort: pick(s.sort, SORTS, T.sort || 'new') };
+        if (validTag(s.tag)) out.tag = s.tag;   // 标签筛选(phase 2):没选时不带这个键(与旧选择逐字相同)
+        if (typeof s.lp === 'string' && /^[A-Z0-9]{2,10}$/i.test(s.lp)) out.lp = s.lp.toUpperCase();   // 厂牌前缀(作品页「SSIS」按钮);同上,没有不带键
+        return out;
     }
     function browseUrl(tk, sel, page) {
         const s = normSel(tk, sel);
         const p = Math.max(1, Math.min(500, parseInt(page, 10) || 1));
-        const q = [['b', s.b], ['sort', s.sort], ['dur', s.dur], ['flag', s.flag], ['page', String(p)]]
+        const q = [['b', s.b], ['tag', s.tag || ''], ['lp', s.lp || ''], ['sort', s.sort], ['dur', s.dur], ['flag', s.flag], ['page', String(p)]]
             .filter(([k, v]) => v !== '' || k === 'page')
             .map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
         return '/api/catalog/browse?' + q;
     }
     // 目录卡片 → 首页行 / 浏览页卡片用的对象(沿用模板的字段名:id / title / poster_path,另带 _wk/_sub/_badge)
+    //   海报上叠 N线(≥2)/ 时长 / 番号:副行里就不再重复这两段(服务器的 sub = '3小时前 · 2:01:33 · 6线')
+    const SUB_DUR_RE = /^\d{1,3}:\d{2}(:\d{2})?$/, SUB_N_RE = /^\d+线$/;
     function cardToItem(c) {
         if (!c || typeof c !== 'object' || typeof c.wk !== 'string' || !c.wk) return null;
         const name = String(c.name || '');
+        const dur = Math.max(0, Number(c.dur) || 0), n = Math.max(0, Number(c.n_sites) || 0);
+        const durText = fmtDur(dur);
+        const sub = String(c.sub || '').split(' · ').filter(p => p && !(durText && SUB_DUR_RE.test(p)) && !SUB_N_RE.test(p)).join(' · ');
+        const variant = cleanText(c.variant, 8);
         return {
             id: c.wk, _wk: c.wk, title: name, name: name,
             poster_path: typeof c.pic === 'string' ? c.pic : '',
-            _sub: String(c.sub || ''), _badge: String(c.badge || ''), _code: String(c.code || ''),
-            _dur: Number(c.dur) || 0, _bucket: String(c.bucket || ''), _n: Number(c.n_sites) || 0,
+            _sub: sub, _badge: cleanText(c.badge, 8) || variant, _code: cleanText(c.code, 24),
+            _dur: dur, _durText: durText, _bucket: String(c.bucket || ''), _n: n, _variant: variant,
         };
     }
     function groupsOf(tk, sel) {
@@ -95,8 +128,9 @@
         const T = typeOf(tk);
         if (!T) return '';
         const s = normSel(tk, sel);
-        if (T.buckets.length > 1) { const x = T.buckets.find(b => b[0] === s.b); return T.l + ' · ' + (x ? x[1] : ''); }
-        return T.l;
+        const tg = (s.lp ? ' · ' + s.lp : '') + (s.tag ? ' · ' + tagLabel(s.tag) : '');
+        if (T.buckets.length > 1) { const x = T.buckets.find(b => b[0] === s.b); return T.l + ' · ' + (x ? x[1] : '') + tg; }
+        return T.l + tg;
     }
     function summary(tk, sel) {
         const s = normSel(tk, sel), parts = [title(tk, s)];
@@ -175,7 +209,12 @@
     };
 
     // ========== 首页 ==========
-    const ROW_ICON = { new: 'fa-clock', random: 'fa-dice' };
+    const ROW_ICON = { new: 'fa-clock', random: 'fa-dice', hot: 'fa-fire' };
+    // 热门行的来源角标(本站观看统计 / 外站一周点击);行标题统一叫「热门」,来源写在角标上
+    const HOT_SRC = {
+        local: { l: '本站热门', tip: '按本站用户最近 7 天的观看统计' },
+        ext: { l: '外站热门', tip: '按外部站点一周点击数(本站观看数据还不够时)' },
+    };
     // /api/catalog/home → { configs, lists, order }(键:ad_<行 id>;随机发现也是普通一行,排在最后,不占首页布局里「随机盲盒」的位置)
     function homeToRows(home) {
         const configs = {}, lists = {}, order = [];
@@ -187,11 +226,13 @@
             if (!items.length) continue;
             const key = 'ad_' + r.id;
             if (configs[key]) continue;
+            const hs = r.id === 'hot' ? (HOT_SRC[r.source] || (r.title === HOT_SRC.local.l ? HOT_SRC.local : r.title === HOT_SRC.ext.l ? HOT_SRC.ext : null)) : null;
             configs[key] = {
-                title: String(r.title || BUCKET_LABEL[r.id] || ''), icon: ROW_ICON[r.id] || ((TILE[r.id] || [])[2]) || 'fa-film',
+                title: hs ? '热门' : String(r.title || BUCKET_LABEL[r.id] || ''), icon: ROW_ICON[r.id] || ((TILE[r.id] || [])[2]) || 'fa-film',
                 path: 'ADULT', params: '', page: 1, totalPages: 1, adult: true,
                 more: (r.more && typeof r.more === 'object') ? Object.assign({}, r.more) : null,
                 today: Math.max(0, Number(r.today) || 0),
+                srcLabel: hs ? hs.l : '', srcTip: hs ? hs.tip : '',
             };
             lists[key] = items;
             order.push(key);
@@ -223,7 +264,199 @@
             site_profile: s.site_profile || null, _variant: String(s._variant || ''), _dur: Number(s._dur) || 0,
         };
         if (s.vod_play_from) o.vod_play_from = String(s.vod_play_from);
+        return Object.assign(o, srcFlags(s));
+    }
+    // 线路的 phase-2 标记(/api/catalog/work 下发):_family 同一后端的镜像(一张卡「+N 备用」、自动换源先试它们)/
+    //   _dead 多人反馈失效(排最后、置灰)/ _native 'risky' 原生 HLS(iOS)可能放不了 / _same 同一上游不同 CDN(标「同源」)/
+    //   _res 别人实测的宽高 → _realRes(分辨率角标;本机测到的会覆盖它)。没有就不带这些键(与旧对象逐字相同)
+    function srcFlags(s) {
+        const o = {};
+        if (!s || typeof s !== 'object') return o;
+        const fam = cleanText(s._family, 40), same = cleanText(s._same, 80);
+        if (fam) o._family = fam;
+        if (same) o._same = same;
+        if (s._dead === true) o._dead = true;
+        if (s._native === 'risky') o._native = 'risky';
+        const m = /^(\d{2,5})x(\d{2,5})$/.exec(String(s._res || ''));
+        if (m && +m[1] >= 64 && +m[2] >= 64) o._realRes = { w: +m[1], h: +m[2], from: 'beacon', ts: 0 };
+        else {
+            // 已经是 workSource 转过的线路(refreshSources 拿 _adWorkList 的结果重建):上报的分辨率在 _realRes 里,别丢;本机实测的不当上报的带
+            const r = s._realRes;
+            if (r && r.from === 'beacon' && +r.w >= 64 && +r.h >= 64 && +r.w <= 16384 && +r.h <= 16384) o._realRes = { w: +r.w, h: +r.h, from: 'beacon', ts: 0 };
+        }
         return o;
+    }
+    // refreshSources 重建线路对象时补回的成人字段(变体/时长 + 上面的标记)
+    function srcExtra(s) {
+        if (!s || typeof s !== 'object') return {};
+        const o = srcFlags(s);
+        if (s._variant) o._variant = String(s._variant);
+        if (Number(s._dur) > 0) o._dur = Number(s._dur);
+        return o;
+    }
+    const famOf = (s) => (s && typeof s._family === 'string' ? s._family : '');
+    const sameOf = (s) => (s && typeof s._same === 'string' ? s._same : '');
+    const varKind = (s) => (s && s._variant === '中字' ? 'zh' : 'raw');
+    // 收成一张卡的键:同一家 + 同一版本(中字/原版是两份片子,不互为备用)+ 同为失效/非失效
+    const famKey = (s) => { const f = famOf(s); return f ? f + '|' + varKind(s) + (s._dead === true ? '|x' : '') : ''; };
+    // 线路列表组内次序(sourceGroups 每组排好后再过一遍,显示顺序 = 自动换源顺序):
+    //   ① 多人反馈失效的垫底 ② 本机走原生 HLS 时,标了 risky 的往后挪(不藏)③ 选了「中字 / 原版」时,选中的那种在前;
+    //   其余保持原顺序(稳定);最后把同一 _family 的镜像收到第一条后面紧挨着 —— 换源时先试同家的备用线路。失效的成员不被拉上来
+    function orderSources(items, opt) {
+        const o = opt || {};
+        const arr = Array.isArray(items) ? items.filter(Boolean) : [];
+        const idx = new Map(arr.map((s, i) => [s, i]));
+        const key = (s) => [s._dead === true ? 1 : 0, (o.native && s._native === 'risky') ? 1 : 0, (o.pref && varKind(s) !== o.pref) ? 1 : 0];
+        const sorted = arr.slice().sort((a, b) => {
+            const ka = key(a), kb = key(b);
+            for (let i = 0; i < ka.length; i++) if (ka[i] !== kb[i]) return ka[i] - kb[i];
+            return idx.get(a) - idx.get(b);
+        });
+        const out = [], used = new Set();
+        sorted.forEach((s, i) => {
+            if (used.has(s)) return;
+            used.add(s); out.push(s);
+            const k = famKey(s);
+            if (!k) return;
+            for (let j = i + 1; j < sorted.length; j++) {
+                const t = sorted[j];
+                if (!used.has(t) && famKey(t) === k) { used.add(t); out.push(t); }
+            }
+        });
+        return out;
+    }
+    // 线路列表每条的显示信息(Map:线路对象 → 视图)。同一组里同 _family 的第一条是「领头」(带「+N 备用」),其余是成员:
+    //   没展开时藏起来(正在播的那条除外);同源 = 同一个 _same 在这部作品里出现 ≥2 次;risky 只在本机走原生 HLS 时标
+    const NOV = Object.freeze({ lead: false, mem: false, more: 0, hide: false, open: false, same: false, risky: false, dead: false });
+    function srcView(groups, opt) {
+        const o = opt || {};
+        const out = new Map();
+        const cnt = Object.create(null);
+        (o.all || []).forEach(s => { const k = sameOf(s); if (k) cnt[k] = (cnt[k] || 0) + 1; });
+        const cur = o.cur || null;
+        const isCur = (s) => !!cur && (cur === s || (cur.site_key === s.site_key && String(cur.vod_id) === String(s.vod_id)));
+        (groups || []).forEach(g => {
+            const lead = Object.create(null);
+            ((g && g.items) || []).forEach(s => {
+                if (!s) return;
+                const k = sameOf(s);
+                const v = { lead: false, mem: false, more: 0, hide: false, open: false, same: !!(k && cnt[k] > 1), risky: !!(o.native && s._native === 'risky'), dead: s._dead === true };
+                const fk = famKey(s);
+                if (fk) {
+                    const L = lead[fk];
+                    if (!L) { lead[fk] = v; v.lead = true; v.open = !!(o.expandAll || (o.open && o.open[famOf(s)])); }
+                    else { v.mem = true; L.more++; v.open = L.open; v.hide = !L.open && !isCur(s); }
+                }
+                out.set(s, v);
+            });
+        });
+        return out;
+    }
+    // 本机是不是走浏览器原生 HLS(iOS/iPadOS/Safari,或 hls.js 不可用):与 _dgHlsCustomType 同一判断
+    function nativeDev() {
+        try { return !!(root._dgPreferNativeHls || !(root.Hls && typeof root.Hls.isSupported === 'function' && root.Hls.isSupported())); }
+        catch (e) { return false; }
+    }
+
+    // ========== 作品信息条(_meta) ==========
+    //   兼容 phase 1 的形状(tags 是 id 字符串、siblings.kind 'alt'),也认契约里的 {id,label,featured} / 'main'
+    function metaTags(tags) {
+        const out = [], seen = new Set();
+        for (const t of Array.isArray(tags) ? tags : []) {
+            let id = '', label = '', featured = false;
+            if (typeof t === 'string') { id = t; label = TAG_LABEL[t] || ''; featured = !!label; }
+            else if (t && typeof t === 'object') { id = String(t.id || ''); label = cleanText(t.label, 20) || TAG_LABEL[id] || ''; featured = t.featured === true; }
+            if (!validTag(id) || !label || seen.has(id)) continue;
+            learnTag(id, label);
+            if (!featured || NEVER_FEATURE.has(id)) continue;
+            seen.add(id);
+            out.push({ id, label });
+            if (out.length >= 8) break;
+        }
+        return out;
+    }
+    const WK_RE = /^[ct]:./;
+    function metaView(m, g) {
+        if (!m || typeof m !== 'object') return null;
+        const wk = (g && typeof g._wk === 'string') ? g._wk : '';
+        const code = cleanText(m.code, 40);
+        const dur = Math.max(0, Math.round(Number(m.dur) || 0));
+        const bucket = (typeof m.bucket === 'string' && BUCKET_LABEL[m.bucket]) ? m.bucket : '';
+        const bucketLabel = bucket ? (cleanText(m.bucket_label, 20) || BUCKET_LABEL[bucket]) : '';
+        let prefix = '';
+        if (typeof m.label_prefix === 'string') prefix = m.label_prefix.trim();
+        else if (code && wk.indexOf('c:') === 0) { const x = /^([A-Z]{2,8})-\d{2,6}$/i.exec(code); prefix = x ? x[1].toUpperCase() : ''; }
+        if (!/^[A-Z0-9]{2,10}$/i.test(prefix)) prefix = '';
+        const actress = (bucket && NO_ACTRESS_BUCKETS.has(bucket)) ? [] :
+            (Array.isArray(m.actress) ? m.actress : []).map(a => cleanText(a, 30)).filter(Boolean).filter((a, i, arr) => arr.indexOf(a) === i).slice(0, 8);
+        const sites = new Set(((g && g.sources) || []).map(s => s && s.site_key).filter(Boolean));
+        const nSites = Math.max(Number(m.n_sites) || 0, sites.size);
+        const curSub = /#(U|clip)(?=$|[#~])/.test(wk);
+        const sib = [], clips = [];
+        for (const s of Array.isArray(m.siblings) ? m.siblings : []) {
+            if (!s || typeof s.wk !== 'string' || !WK_RE.test(s.wk) || s.wk.length > 300 || s.wk === wk) continue;
+            const name = cleanText(s.name, 120);
+            const kind = s.kind === 'clip' || s.wk.indexOf('#clip') >= 0 ? 'clip' : (s.kind === 'U' || /#U(?=$|[#~])/.test(s.wk)) ? 'U' : 'main';
+            if (kind === 'clip') { clips.push({ wk: s.wk, name, kind }); continue; }
+            const label = kind === 'U' ? '另有无码流出版' : (curSub && s.wk.indexOf('#') < 0) ? '正片' : '同番号另一版本';
+            sib.push({ wk: s.wk, name, kind, label });
+        }
+        // 无码流出版在前,其余正片随后
+        sib.sort((a, b) => (a.kind === 'U' ? 0 : 1) - (b.kind === 'U' ? 0 : 1));
+        // 分类已经说明了的标签不再重复(中文字幕分类的「中字」、日本无码分类的「无码」)
+        const dupTag = { jp_subbed: 'subbed', jp_uncensored: 'uncensored' }[bucket] || '';
+        return {
+            code, dur, durText: fmtDur(dur), nSites, bucket, bucketLabel, tags: metaTags(m.tags).filter(t => t.id !== dupTag), prefix, actress,
+            sib: sib.slice(0, 6), clips: clips.slice(0, 12), firstSeen: Number(m.first_seen) || 0,
+        };
+    }
+
+    // ========== 标签 / 搜索建议 ==========
+    const tagsUrl = (b) => '/api/catalog/tags?b=' + encodeURIComponent(b && BUCKET_LABEL[b] ? b : '');
+    // /api/catalog/tags → 只留可做按钮的(featured 且不是审查类),按数量降序,最多 24 个
+    function normTags(d) {
+        const list = (d && Array.isArray(d.tags)) ? d.tags : [];
+        const out = [], seen = new Set();
+        for (const t of list) {
+            if (!t || typeof t !== 'object' || !validTag(t.id) || seen.has(t.id)) continue;
+            const label = cleanText(t.label, 20) || TAG_LABEL[t.id] || '';
+            if (!label) continue;
+            learnTag(t.id, label);
+            if (t.featured !== true || NEVER_FEATURE.has(t.id)) continue;
+            seen.add(t.id);
+            out.push({ id: t.id, label, count: Math.max(0, Number(t.count) || 0) });
+        }
+        out.sort((a, b) => b.count - a.count);
+        return out.slice(0, 24);
+    }
+    const suggestUrl = (q) => '/api/catalog/suggest?q=' + encodeURIComponent(String(q || '').trim().slice(0, 100));
+    const SUG_KINDS = ['blocked', 'code', 'alias', 'text', 'empty'];
+    // /api/catalog/suggest → { kind, alias, exact, items }(items 已是卡片对象);被拦的查询什么都不给(不提示为什么)
+    function normSuggest(d) {
+        if (!d || typeof d !== 'object') return null;
+        const kind = SUG_KINDS.indexOf(d.kind) >= 0 ? d.kind : 'text';
+        if (kind === 'blocked') return { kind, alias: null, exact: null, items: [] };
+        let alias = null;
+        if (d.alias && typeof d.alias === 'object') {
+            const b = (typeof d.alias.b === 'string' && BUCKET_LABEL[d.alias.b]) ? d.alias.b : '';
+            const tag = validTag(d.alias.tag) ? d.alias.tag : '';
+            if (tag && d.alias.label) learnTag(tag, d.alias.label);
+            if (b || tag) alias = { b, tag, label: cleanText(d.alias.label, 20) || (tag ? tagLabel(tag) : BUCKET_LABEL[b]) };
+        }
+        const items = (Array.isArray(d.items) ? d.items : []).map(cardToItem).filter(Boolean).slice(0, 8).map(Object.freeze);
+        const exact = (typeof d.exact === 'string' && WK_RE.test(d.exact) && d.exact.length <= 300) ? d.exact : null;
+        return { kind, alias, exact, items };
+    }
+    // 分类/标签词 → 浏览页预设(搜索建议的 alias)
+    function aliasPreset(a) {
+        if (!a || typeof a !== 'object') return null;
+        const b = (typeof a.b === 'string' && BUCKET_LABEL[a.b]) ? a.b : '';
+        const tag = validTag(a.tag) ? a.tag : '';
+        if (!b && !tag) return null;
+        const sel = {};
+        if (b) sel.b = b;
+        if (tag) sel.tag = tag;
+        return { type: b ? typeOfBucket(b) : 'all', sel };
     }
     function workToGroup(w) {
         if (!w || typeof w !== 'object' || typeof w.name !== 'string' || !w.name) return null;
@@ -238,13 +471,15 @@
         }
         if (!sources.length) return null;
         let pic = typeof w.pic === 'string' ? w.pic : '';
-        if (!pic) { const p = sources.find(s => /^https?:\/\//i.test(s.vod_pic)); pic = p ? p.vod_pic : ''; }
+        if (!pic) { const p = sources.find(s => PIC_OK_RE.test(s.vod_pic)); pic = p ? p.vod_pic : ''; }
         return { name: w.name, pic, _wk: wk, _meta: (w._meta && typeof w._meta === 'object') ? w._meta : null, sources };
     }
     function workToList(w) {
         const g = workToGroup(w);
         return { list: g ? g.sources.map(s => { const o = Object.assign({}, s); delete o.latency; return o; }) : [], _adult: true, name: g ? g.name : '' };
     }
+    // 能当海报用的地址:完整 http(s),或开了 ADULT_IMG_PROXY 时服务器改写成的同源 /api/img?k=&s=
+    const PIC_OK_RE = /^(https?:\/\/|\/api\/img\?)/i;
     // 搜索结果分组键/卡片名:有作品键按作品并(各站片名常不同),名字用规范名
     const groupKeyOf = (it) => (it && typeof it._wk === 'string' && it._wk) ? it._wk : (it ? it.vod_name : '');
     const groupNameOf = (it) => (it && typeof it._wt === 'string' && it._wt) ? it._wt : (it ? it.vod_name : '');
@@ -252,7 +487,7 @@
     const isLandscape = (w, h) => w > 0 && h > 0 && (w / h) > 1.3;
     // 海报坏了:换这一组里另一条线路的海报(没试过的、不是 mac_default/nopic 占位);都试过 → ''(显示中性占位)
     function pickFallbackPic(group, tried) {
-        const bad = (u) => !u || !/^https?:\/\//i.test(u) || /mac_default|nopic/i.test(u);
+        const bad = (u) => !u || !PIC_OK_RE.test(u) || /mac_default|nopic/i.test(u);
         const t = tried || new Set();
         for (const s of (group && Array.isArray(group.sources)) ? group.sources : []) {
             const u = s && String(s.vod_pic || '').trim();
@@ -263,7 +498,7 @@
     const PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450'%3E%3Crect fill='%23262626' width='300' height='450'/%3E%3Cpath d='M120 190h60v70h-60z' fill='%23444'/%3E%3C/svg%3E";
 
     // ========== 内容接口鉴权(401 → 补核验 → 重试一次 → 登录框) ==========
-    const CONTENT_RE = /^\/api\/(search|detail|check|sites|catalog|popular|kz)(\/|$)/;
+    const CONTENT_RE = /^\/api\/(search|detail|check|sites|catalog|popular|kz|img)(\/|$)/;
     function sameOriginPath(url, base) {
         try {
             const U = new URL(String(url), base);
@@ -361,7 +596,41 @@
             } catch (e) { }
             return v;
         }
-        return { KEY, name, apply, clean };
+        // 登录框的「购买套餐」按钮 / 套餐到期的续费链接:成人站默认不出(主站的购买地址不能出现在这里);
+        //   /api/config 给了 purchase_url(http/https)才显示,并指向它。上次的值记在本机,登录框先按它显示(config 回来再校正)
+        const BUY_KEY = 'dg_buy_url';
+        const safeUrl = (u) => {
+            const s = String(u == null ? '' : u).trim();
+            if (!s || s.length > 300 || !/^https?:\/\//i.test(s)) return '';
+            try { const U = new URL(s); return /^https?:$/.test(U.protocol) ? U.href : ''; } catch (e) { return ''; }
+        };
+        function buyUrl() { return safeUrl(lsGet(BUY_KEY)); }
+        function applyBuy(u) {
+            const v = safeUrl(u);
+            if (v) lsSet(BUY_KEY, v); else { try { if (root.localStorage) root.localStorage.removeItem(BUY_KEY); } catch (e) { } }
+            showBuy();
+            return v;
+        }
+        function showBuy() {
+            const d = root.document, v = buyUrl();
+            if (!d || !d.documentElement) return;
+            try {
+                d.documentElement.classList.toggle('dg-buy', !!v);
+                const a = d.querySelector('#register-link a');
+                if (a) { if (v) a.setAttribute('href', v); else a.removeAttribute('href'); }
+            } catch (e) { }
+        }
+        const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        // 续费提示(登录框里的 HTML 片段 / alert 文本);没配 purchase_url → 空(不提续费地址)
+        function renewHtml() {
+            const v = buyUrl();
+            if (!v) return '';
+            let host = v;
+            try { host = new URL(v).host; } catch (e) { }
+            return '<br>请前往 <a href="' + escHtml(v) + '" target="_blank" rel="noopener noreferrer" style="color:#ff6b6b;text-decoration:underline;">' + escHtml(host) + '</a> 续费';
+        }
+        function renewText() { const v = buyUrl(); return v ? '\n\n前往续费: ' + v : ''; }
+        return { KEY, name, apply, clean, buyUrl, applyBuy, showBuy, renewHtml, renewText, safeUrl };
     })();
 
     // ========== fetch 包装 ==========
@@ -457,7 +726,22 @@
             try { return f('/api/auth/logout', { method: 'POST', credentials: 'same-origin', keepalive: true }).then(() => { }, () => { }); }
             catch (e) { return Promise.resolve(); }
         }
-        return { install, reauth, ensure, logout, loginRequired, isAuthRequired };
+        // 发了就不管的 JSON POST(线路反馈):自己带令牌/年龄头,不走上面的 401 补核验/登录框 —— 后台上报绝不弹登录框、不重试
+        function post(url, body) {
+            const f = origFetch || root.fetch;
+            if (typeof f !== 'function') return Promise.resolve(null);
+            try {
+                const h = typeof Headers !== 'undefined' ? new Headers() : null;
+                const set = (k, v) => { if (h) h.set(k, v); };
+                set('Content-Type', 'application/json');
+                set('x-dg-age', '1');
+                const tok = tokenOf();
+                if (tok) set('x-dg-token', tok);
+                return Promise.resolve(f(url, { method: 'POST', credentials: 'same-origin', keepalive: true, headers: h || { 'Content-Type': 'application/json', 'x-dg-age': '1' }, body: JSON.stringify(body) }))
+                    .then(r => r, () => null);
+            } catch (e) { return Promise.resolve(null); }
+        }
+        return { install, reauth, ensure, logout, loginRequired, isAuthRequired, post };
     })();
 
     // ========== 作品请求(浏览器里用) ==========
@@ -471,6 +755,51 @@
     }
     // 作品 → openDetail 用的 group;expand=true 时服务器现搜各站补线路(最多 ~20s)
     const fetchWork = (wk, expand) => fetchJson(workUrl(wk, expand), expand ? 25000 : 10000).then(workToGroup);
+
+    // ========== 线路反馈(POST /api/catalog/beacon) ==========
+    //   同一部作品的同一条线路,一个会话里「失败」「起播」各最多报一次(sessionStorage 记着,刷新也不重报);发了就不管,绝不挡播放
+    const beacon = (function () {
+        const KEY = 'dg_bc_sent', MAX = 500;
+        let sent = null;
+        function load() {
+            if (sent) return sent;
+            sent = new Set();
+            try {
+                const raw = root.sessionStorage ? root.sessionStorage.getItem(KEY) : null;
+                const arr = JSON.parse(raw || '[]');
+                if (Array.isArray(arr)) arr.slice(-MAX).forEach(k => sent.add(String(k)));
+            } catch (e) { }
+            return sent;
+        }
+        function save() { try { if (root.sessionStorage) root.sessionStorage.setItem(KEY, JSON.stringify([...sent].slice(-MAX))); } catch (e) { } }
+        const int = (v, lo, hi) => { const n = Math.round(Number(v)); return (Number.isFinite(n) && n >= lo && n <= hi) ? n : 0; };
+        // 契约:{ wk, site_key, vod_id, ok, err?, dur?, w?, h? };不合法 → null
+        function payload(o) {
+            if (!o || typeof o !== 'object' || typeof o.ok !== 'boolean') return null;
+            if (typeof o.wk !== 'string' || !WK_RE.test(o.wk) || o.wk.length > 300) return null;
+            if (typeof o.site_key !== 'string' || !o.site_key || o.site_key.length > 64) return null;
+            if (o.vod_id == null || (typeof o.vod_id !== 'string' && typeof o.vod_id !== 'number') || String(o.vod_id).length > 64 || String(o.vod_id) === '') return null;
+            const p = { wk: o.wk, site_key: o.site_key, vod_id: o.vod_id, ok: o.ok };
+            if (!o.ok) { const e = cleanText(o.err, 60); if (e) p.err = e; return p; }
+            const dur = int(o.dur, 1, 86400);
+            if (dur) p.dur = dur;
+            const w = int(o.w, 16, 16384), h = int(o.h, 16, 16384);
+            if (w && h) { p.w = w; p.h = h; }
+            return p;
+        }
+        const keyOf = (p) => (p.ok ? 'ok' : 'x') + '|' + p.wk + '|' + p.site_key + '|' + p.vod_id;
+        function send(o) {
+            const p = payload(o);
+            if (!p) return false;
+            const s = load(), k = keyOf(p);
+            if (s.has(k)) return false;
+            s.add(k);
+            save();
+            try { auth.post('/api/catalog/beacon', p); } catch (e) { }
+            return true;
+        }
+        return { send, payload, keyOf, _reset() { sent = new Set(); save(); } };
+    })();
 
     // ========== 样式 ==========
     const CSS = [
@@ -494,6 +823,50 @@
         '.dg-today-row { margin-left: 10px; font-size: 12px; font-weight: 600; color: #46d369; white-space: nowrap; }',
         '.poster-wrap img.dg-land { object-position: right center; }',
         '.movie-date.dg-ad-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+        // 登录框的购买引导:没配 purchase_url 不出(见 brand.showBuy;切登录方式时的行内 display 也压得住)
+        'html:not(.dg-buy) #register-link { display: none !important; }',
+        // 卡片角标:右上 N线、右下时长、左下番号(等宽)
+        '.dg-ov-n, .dg-ov-dur, .dg-ov-code { position: absolute; z-index: 2; background: rgba(0, 0, 0, 0.74); color: #fff; font-size: 10px; line-height: 1.6; padding: 0 5px; border-radius: 4px; pointer-events: none; white-space: nowrap; }',
+        '.dg-ov-n { top: 6px; right: 6px; font-weight: 600; }',
+        '.dg-ov-dur { right: 6px; bottom: 6px; font-variant-numeric: tabular-nums; }',
+        '.dg-ov-code { left: 6px; bottom: 6px; max-width: calc(100% - 66px); overflow: hidden; text-overflow: ellipsis; color: #ffd479; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; font-weight: 600; }',
+        '.dg-row-src { margin-left: 8px; font-size: 11px; font-weight: 600; color: #ffb347; border: 1px solid rgba(255, 179, 71, 0.45); border-radius: 10px; padding: 0 7px; line-height: 1.6; white-space: nowrap; cursor: help; }',
+        // 模糊封面(设置里开):悬停 / 键盘焦点 / 按住时看清
+        'html.dg-blur .poster-wrap img, html.dg-blur .dg-sug-row img { filter: blur(16px); transition: filter 0.2s; }',
+        'html.dg-blur .hot-card:hover .poster-wrap img, html.dg-blur .browse-card:hover .poster-wrap img, html.dg-blur .history-card:hover .poster-wrap img, html.dg-blur .result-card:hover .poster-wrap img,'
+        + ' html.dg-blur .browse-card:focus .poster-wrap img, html.dg-blur .hot-card:focus-within .poster-wrap img, html.dg-blur .poster-wrap:active img, html.dg-blur .dg-sug-row:hover img, html.dg-blur .dg-sug-row.hi img, html.dg-blur .dg-sug-row:focus img { filter: none; }',
+        // 播放页作品信息条
+        '.dg-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: #aaa; }',
+        '.dg-meta-t { white-space: nowrap; }',
+        '.dg-meta-code { display: inline-flex; align-items: center; gap: 2px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; color: #ffd479; background: rgba(255, 212, 121, 0.1); border: 1px solid rgba(255, 212, 121, 0.35); border-radius: 4px; padding: 0 2px 0 6px; line-height: 22px; }',
+        '.dg-meta-copy { background: none; border: none; color: inherit; opacity: 0.75; cursor: pointer; padding: 0 5px; min-height: 22px; }',
+        '.dg-meta-copy:hover, .dg-meta-copy:focus { opacity: 1; }',
+        '.dg-meta-chip { background: #2a2a2a; border: 1px solid #3a3a3a; color: #ddd; border-radius: 12px; padding: 0 10px; font-size: 12px; line-height: 22px; cursor: pointer; white-space: nowrap; }',
+        '.dg-meta-chip:hover, .dg-meta-chip:focus { border-color: #888; color: #fff; }',
+        '.dg-meta-chip.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }',
+        '.dg-meta-sib { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; }',
+        '.dg-meta-link { background: none; border: none; color: #ff8a80; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; font-size: 12px; }',
+        '.dg-meta-clips { color: #999; }',
+        '.dg-meta-clips summary { cursor: pointer; }',
+        '.dg-meta-clips .dg-meta-link { color: #bbb; margin: 4px 10px 0 0; text-align: left; }',
+        // 线路:同家镜像收成一张卡(+N 备用)、失效置灰、中字 / 原版 切换
+        '.source-pill.dg-src-dead { opacity: 0.45; }',
+        '.source-pill.dg-src-mem { border-style: dashed; }',
+        '.dg-src-fam { background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.25); color: inherit; border-radius: 10px; font-size: 10px; line-height: 1.5; padding: 0 6px; cursor: pointer; white-space: nowrap; }',
+        '.dg-var-seg { display: inline-flex; margin-left: 10px; border: 1px solid #444; border-radius: 12px; overflow: hidden; font-size: 12px; font-weight: normal; }',
+        '.dg-var-seg button { background: transparent; border: none; color: #999; padding: 1px 10px; cursor: pointer; }',
+        '.dg-var-seg button.active { background: var(--accent, #e50914); color: #fff; }',
+        // 搜索建议
+        '.dg-sug { pointer-events: auto; position: absolute; top: 100%; left: 4%; right: 4%; margin-top: 6px; max-height: min(70vh, 560px); overflow-y: auto; background: #181818; border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6); padding: 6px; z-index: 5; }',
+        '.dg-sug.compact { left: auto; width: min(440px, 92%); }',
+        '.dg-sug-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; background: transparent; border: none; border-radius: 8px; color: #ddd; text-align: left; padding: 4px 8px; cursor: pointer; font-size: 13px; }',
+        '.dg-sug-row:hover, .dg-sug-row.hi, .dg-sug-row:focus { background: rgba(255, 255, 255, 0.08); color: #fff; outline: none; }',
+        '.dg-sug-row img { width: 34px; height: 48px; object-fit: cover; object-position: right center; border-radius: 4px; flex: none; background: #262626; }',
+        '.dg-sug-row > i { width: 34px; text-align: center; color: #888; flex: none; }',
+        '.dg-sug-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }',
+        '.dg-sug-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+        '.dg-sug-sub { font-size: 11px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+        '.dg-sug-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #ffd479; margin-right: 6px; }',
     ].join('\n');
     function injectCss() {
         const d = root.document;
@@ -506,7 +879,7 @@
     // 首页行 / 浏览页的海报:加载完按宽高比放横版封面;坏图换中性占位(不走 TMDB)
     function hookImages() {
         const d = root.document;
-        const inCard = (img) => img && img.tagName === 'IMG' && img.closest && img.closest('.hot-card .poster-wrap, .browse-card .poster-wrap');
+        const inCard = (img) => img && img.tagName === 'IMG' && img.closest && img.closest('.hot-card .poster-wrap, .browse-card .poster-wrap, .dg-sug-row');
         d.addEventListener('load', (e) => {
             const img = e.target;
             if (!inCard(img)) return;
@@ -520,24 +893,100 @@
             img.src = PLACEHOLDER;
         }, true);
     }
+    // 模糊封面(本机设置,默认关):<html> 上的 dg-blur 类
+    const BLUR_KEY = 'dg_blur_cover';
+    const blurOn = () => lsGet(BLUR_KEY) === '1';
+    function applyBlur(on) { try { root.document.documentElement.classList.toggle('dg-blur', !!on); } catch (e) { } }
     function boot() {
         injectCss();
         brand.apply(brand.name());
+        applyBlur(blurOn());
+        brand.showBuy();
         // loader / 登录框里的站名节点在 <head> 之后才解析出来:DOM 就绪时按上次缓存的站名再写一遍(/api/config 回来后 adultApplyConfig 再更新)
-        try { root.document.addEventListener('DOMContentLoaded', () => brand.apply(brand.name()), { once: true }); } catch (e) { }
+        try { root.document.addEventListener('DOMContentLoaded', () => { brand.apply(brand.name()); brand.showBuy(); }, { once: true }); } catch (e) { }
         auth.install();
         hookImages();
+        // 登录框比 Vue 应用先出来:年龄确认之后单独拿一次 /api/config(站名、购买地址),不等应用启动
+        ageGate.whenAccepted().then(() => fetchJson('/api/config', 8000)).then(c => {
+            if (!c || typeof c !== 'object') return;
+            if (c.site_name) brand.apply(c.site_name);
+            brand.applyBuy(c.purchase_url);
+        }).catch(() => { });
     }
 
     // ========== Vue mixin(index.html 的 createApp 里 mixins: [DgAdult.mixin]) ==========
     //   方法名都带 ad 前缀(openWork 除外),scripts/adult-frontend-test.mjs 校验不与主组件的 methods/computed/data 重名
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const tagCache = new Map();        // 浏览页标签行:分类 → { at, list }(10 分钟)
+    const enriched = new WeakSet();    // 已经补拉过作品信息的 group(每个只拉一次)
     const mixin = {
         data() {
             return {
                 adultMode: true,
-                adult: { catalog: false, intro: false, siteName: brand.name(), today: {}, home: 'idle' },
+                adult: {
+                    catalog: false, intro: false, siteName: brand.name(), today: {}, home: 'idle',
+                    blur: blurOn(),                       // 模糊封面
+                    tags: { key: null, list: [] },        // 浏览页标签行(当前分类的 featured 标签)
+                    famOpen: {},                          // 展开了「+N 备用」的线路家族
+                    varPref: { wk: '', kind: '' },        // 这部作品选了「中字 / 原版」哪种
+                    sug: { q: '', open: false, hi: -1, kind: '', alias: null, exact: null, items: [] },   // 搜索建议
+                },
             };
+        },
+        computed: {
+            // 播放页作品信息条(currentGroup._meta 的展示版;没有 _meta 不出)
+            adMeta() {
+                const g = this.currentGroup;
+                return (this.adultMode && g && g._meta && typeof g._meta === 'object' && !g._isLive) ? metaView(g._meta, g) : null;
+            },
+            // 线路列表每条的显示信息(家族领头/成员、同源、risky)。电视/遥控器模式全部展开(「+N 备用」按钮遥控器够不着)
+            adSrcView() {
+                if (!this.adultMode) return new Map();
+                return srcView(this.sourceGroups, {
+                    cur: this.currentSource, open: this.adult.famOpen, native: nativeDev(), expandAll: !!this.isTVMode,
+                    all: (this.currentGroup && this.currentGroup.sources) || [],
+                });
+            },
+            // 这部作品既有中字线路又有原版线路 → 线路标题旁出「中字 / 原版」切换
+            adVarBoth() {
+                const ss = (this.adultMode && this.currentGroup && this.currentGroup.sources) || [];
+                let z = false, r = false;
+                ss.forEach(s => { if (varKind(s) === 'zh') z = true; else r = true; });
+                return z && r;
+            },
+            adVarCur() {
+                const g = this.currentGroup, p = this.adult && this.adult.varPref;
+                if (p && p.kind && g && p.wk === (g._wk || '')) return p.kind;
+                return this.currentSource ? varKind(this.currentSource) : '';
+            },
+            // 浏览页标签行:当前分类(或全部)的 featured 标签;从搜索词进来的非 featured 标签也挂上,能看见、能取消
+            adTagKey() {
+                const b = this.browse;
+                if (!this.adultMode || !this.adult.catalog || !b || !b.open) return '';
+                const T = typeOf(b.type);
+                return 't|' + ((T && T.buckets.length && b.sel && b.sel.b) || '');
+            },
+            adTagOpts() {
+                const b = this.browse;
+                if (!this.adultMode || !b || !b.open) return [];
+                const T = typeOf(b.type);
+                const bucket = (T && T.buckets.length && b.sel && b.sel.b) || '';
+                const t = this.adult.tags;
+                const list = (t && t.key === bucket) ? t.list : [];
+                const cur = b.sel && b.sel.tag;
+                if (cur && !list.some(x => x.id === cur)) return list.concat([{ id: cur, label: tagLabel(cur), count: 0 }]);
+                return list;
+            },
+            // 搜索建议下拉的各行:分类词 → 「按分类浏览」;作品卡片(≤8);最后一行「搜索全部站点」
+            adSugRows() {
+                const S = this.adult && this.adult.sug;
+                if (!S || !S.open) return [];
+                const rows = [];
+                if (S.alias) rows.push({ t: 'alias', k: 'a', label: S.alias.label, alias: S.alias });
+                (S.items || []).forEach(it => rows.push({ t: 'item', k: 'i:' + it.id, it }));
+                rows.push({ t: 'all', k: 'all', q: S.q });
+                return rows;
+            },
         },
         // 主组件 data 之后、第一次渲染之前:首页榜单起步为空(不先渲染一排 TMDB 榜单标题,adultLoadHome 整个换掉);
         //   分类栏默认大类换成目录版的(主组件按 localStorage 记的 TMDB 大类起步)
@@ -554,6 +1003,16 @@
                 this._adReturnY = null;
                 this.$nextTick(() => { try { this._jumpTo(y); } catch (e) { } });
             },
+            // 换了一部:收起展开的备用线路、清掉「中字 / 原版」选择;从搜索结果/历史打开的(没有 _meta)补拉作品信息和线路标记
+            currentGroup(g, old) {
+                if (!this.adultMode) return;
+                if (g !== old) {
+                    if (Object.keys(this.adult.famOpen || {}).length) this.adult.famOpen = {};
+                    if (this.adult.varPref && this.adult.varPref.kind && (!g || this.adult.varPref.wk !== (g._wk || ''))) this.adult.varPref = { wk: '', kind: '' };
+                }
+                this._adEnrich(g);
+            },
+            adTagKey(k) { if (k) this._adLoadTags(); },
         },
         methods: {
             adultApplyConfig(config) {
@@ -561,6 +1020,7 @@
                 this.adult.catalog = c.catalog === true;
                 this.adult.intro = c.intro_enabled === true;   // 站长显式开了片头学习(INTRO_DISABLE=0)才显示那两行设置
                 this.adult.siteName = brand.apply(c.site_name);
+                brand.applyBuy(c.purchase_url);
             },
             // 首页:目录各行(最多等 6s,与原来的 Hero 一样不挂死 loader);分类栏的「今日」数后台拉
             async adultLoadHome() {
@@ -619,16 +1079,275 @@
                 Promise.resolve(this.openDetail(best)).catch(e => console.warn('[adult] openDetail', e));
                 if (!ex) this._adExpandLater(wk, best.sources.length, exP);
             },
-            // 搜索框回车:先查本地目录(/api/catalog/lookup,零上游)。番号查询恰好命中一部作品 → 直接开作品页(线路由 expand 现搜补齐),
-            //   返回 true,调用方不再全站扇出;其余情况(文字查询 / 没命中 / 多个变体 / 目录不可用 / 1.5s 没回)返回 false,照常搜索
+            // 搜索框回车(返回 true = 已处理,调用方不再全站扇出;false = 照常搜索):
+            //   ① 下拉里用方向键选中了一行 → 就开那一行;
+            //   ② 本地搜索建议(/api/catalog/suggest,零上游):番号查询给了 exact(恰好一部正片;#clip/#U 不算)→ 直接开作品页;
+            //      分类/标签词(alias)→ 开浏览页(带「按片名搜索」);文字 / 没命中 / 被拦 → false;
+            //   ③ suggest 不可用(旧服务器 / 1.5s 没回)→ 退回 /api/catalog/lookup:番号恰好命中一部作品才开
             async adLookupOpen(kw) {
                 const q = String(kw == null ? '' : kw).trim();
+                const S = this.adult && this.adult.sug;
+                if (S && S.open && S.hi >= 0 && S.q === q) {
+                    const row = this.adSugRows[S.hi];
+                    if (row) { this.adSugPick(row); return true; }
+                }
+                this.adSugClose();
                 if (!this.adult.catalog || !q || q.length > 100) return false;
-                const d = await fetchJson('/api/catalog/lookup?q=' + encodeURIComponent(q) + '&limit=2', 1500);
-                const r = d && d.kind === 'code' && Array.isArray(d.results) && d.results.length === 1 ? d.results[0] : null;
+                const c = this._adSugLast;
+                const d = (c && c.q === q && c.r && Date.now() - c.at < 30000) ? c.r : normSuggest(await fetchJson(suggestUrl(q), 1500));
+                if (d) {
+                    if (d.kind === 'code' && d.exact) {
+                        const card = d.items.find(it => it._wk === d.exact) || { _wk: d.exact, title: '', poster_path: '' };
+                        this.openWork(card);
+                        return true;
+                    }
+                    if (d.kind === 'alias' && this._adOpenAlias(d.alias, q)) return true;
+                    return false;
+                }
+                const L = await fetchJson('/api/catalog/lookup?q=' + encodeURIComponent(q) + '&limit=2', 1500);
+                const r = L && L.kind === 'code' && Array.isArray(L.results) && L.results.length === 1 ? L.results[0] : null;
                 if (!r || typeof r.wk !== 'string' || r.wk.indexOf('c:') !== 0) return false;
                 this.openWork(cardToItem(r));
                 return true;
+            },
+            // ---------- 搜索建议(输入停顿 200ms → /api/catalog/suggest;输入停顿不再全站扇出,回车/放大镜才搜) ----------
+            // debouncedSearch 最前面调:返回 true = 这次输入由建议接管(关键词非空且目录可用);false = 照旧(清空关键词等)
+            adSuggestInput(kw) {
+                clearTimeout(this._adSugT);
+                const q = String(kw == null ? '' : kw).trim();
+                if (!this.adult || !this.adult.catalog || !q) { this.adSugClose(); return false; }
+                if (q.length > 100) { this.adSugClose(); return true; }
+                this._adSugT = setTimeout(() => { this._adSuggest(q); }, 200);
+                return true;
+            },
+            async _adSuggest(q) {
+                const seq = (this._adSugSeq = (this._adSugSeq || 0) + 1);
+                const r = normSuggest(await fetchJson(suggestUrl(q), 4000));
+                if (seq !== this._adSugSeq || String(this.keyword == null ? '' : this.keyword).trim() !== q) return;
+                this._adSugLast = { q, r, at: Date.now() };
+                const S = this.adult.sug;
+                S.q = q; S.hi = -1;
+                // 被拦的查询 / 没有任何东西:不出下拉,也不说为什么
+                if (!r || r.kind === 'blocked' || (!r.items.length && !r.alias)) { S.open = false; S.items = []; S.alias = null; S.exact = null; S.kind = r ? r.kind : ''; return; }
+                S.kind = r.kind; S.alias = r.alias; S.exact = r.exact; S.items = r.items;
+                S.open = this._adSugFocused();
+            },
+            _adSugFocused() {
+                try { const ae = root.document.activeElement; return !!(ae && ae.classList && ae.classList.contains('search-input')); } catch (e) { return false; }
+            },
+            adSugClose() {
+                clearTimeout(this._adSugT);
+                this._adSugSeq = (this._adSugSeq || 0) + 1;
+                const S = this.adult && this.adult.sug;
+                if (S && (S.open || S.hi !== -1)) { S.open = false; S.hi = -1; }
+            },
+            // 搜索框重新获得焦点:关键词没变、上次有结果 → 再打开下拉
+            adSugFocus() {
+                const S = this.adult && this.adult.sug, c = this._adSugLast;
+                const q = String(this.keyword == null ? '' : this.keyword).trim();
+                if (S && q && c && c.q === q && c.r && c.r.kind !== 'blocked' && (c.r.items.length || c.r.alias) && !this.searched) { S.open = true; S.hi = -1; }
+            },
+            // 焦点离开搜索区(输入框 + 下拉)才收起;下拉的行 @mousedown.prevent,点它不会先失焦
+            adSugBlur(e) {
+                const to = e && e.relatedTarget, box = e && e.currentTarget;
+                if (to && box && box.contains && box.contains(to)) return;
+                this.adSugClose();
+            },
+            // 方向键选行、Esc 收起(电视遥控器的方向键留给焦点导航;回车由 @keyup.enter → submitSearch → adLookupOpen 处理)
+            adSugKey(e) {
+                const S = this.adult && this.adult.sug;
+                if (!S || !S.open || !e || e.isComposing || this.isTVMode) return;
+                const n = this.adSugRows.length;
+                if (!n) return;
+                if (e.key === 'ArrowDown') { e.preventDefault(); S.hi = S.hi >= n - 1 ? 0 : S.hi + 1; }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); S.hi = S.hi <= 0 ? n - 1 : S.hi - 1; }
+                else if (e.key === 'Escape') { e.preventDefault(); this.adSugClose(); }
+            },
+            adSugPick(row) {
+                if (!row) return;
+                const q = (this.adult.sug && this.adult.sug.q) || String(this.keyword || '').trim();
+                this.adSugClose();
+                try { const ae = root.document.activeElement; if (ae && ae.blur && /^input$/i.test(ae.tagName || '')) ae.blur(); } catch (e) { }
+                if (row.t === 'item' && row.it) { this.openWork(row.it); return; }
+                if (row.t === 'alias') { this._adOpenAlias(row.alias, q); return; }
+                // 搜索全部站点:与回车一样走全站搜索(不再查本地)
+                clearTimeout(this.searchTimer);
+                if (!this.keyword) this.keyword = q;
+                this._browsePickId = null;
+                this.doSearch();
+            },
+            _adOpenAlias(alias, kw) {
+                const p = aliasPreset(alias);
+                if (!p || typeof this.openBrowse !== 'function') return false;
+                if (alias && alias.tag && alias.label) learnTag(alias.tag, alias.label);
+                this.openBrowse(p, { keyword: String(kw || '') });
+                return true;
+            },
+            // ---------- 浏览页标签行 ----------
+            _adLoadTags() {
+                const b = this.browse;
+                if (!b || !b.open) return;
+                const T = typeOf(b.type);
+                const key = (T && T.buckets.length && b.sel && b.sel.b) || '';
+                const hit = tagCache.get(key);
+                if (hit && Date.now() - hit.at < 600000) { this.adult.tags = { key, list: hit.list }; return; }
+                const seq = (this._adTagSeq = (this._adTagSeq || 0) + 1);
+                fetchJson(tagsUrl(key), 8000).then(d => {
+                    const list = d ? Object.freeze(normTags(d)) : null;
+                    if (list) tagCache.set(key, { at: Date.now(), list });
+                    if (seq === this._adTagSeq) this.adult.tags = { key, list: list || [] };
+                });
+            },
+            // ---------- 播放页作品信息条 ----------
+            adCopyCode() {
+                const m = this.adMeta, code = m && m.code;
+                if (!code) return;
+                const done = (ok) => { if (this.showMiniToast) this.showMiniToast(ok ? '已复制番号 ' + code : '复制失败,请手动选择'); };
+                const legacy = () => {
+                    try {
+                        const d = root.document, ta = d.createElement('textarea');
+                        ta.value = code; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+                        d.body.appendChild(ta); ta.select();
+                        const ok = d.execCommand('copy');
+                        d.body.removeChild(ta);
+                        done(ok);
+                    } catch (e) { done(false); }
+                };
+                try {
+                    if (root.navigator && root.navigator.clipboard && root.navigator.clipboard.writeText) root.navigator.clipboard.writeText(code).then(() => done(true), legacy);
+                    else legacy();
+                } catch (e) { legacy(); }
+            },
+            // 分类 / 标签按钮 → 关掉播放页,打开分类浏览页(标签按这部作品的分类筛)
+            adMetaGo(sel) {
+                const s = sel || {};
+                const b = (typeof s.b === 'string' && BUCKET_LABEL[s.b]) ? s.b : '';
+                const p = aliasPreset({ b, tag: validTag(s.tag) ? s.tag : '' });
+                if (!p) return;
+                this._adLeaveDetail(() => this.openBrowse(p));
+            },
+            // 厂牌前缀 → 关掉播放页,打开「全部」浏览页按厂牌筛(本地目录,零上游;不再全站扇出)
+            adMetaPrefix(lp) {
+                const k = typeof lp === 'string' ? lp.trim().toUpperCase() : '';
+                if (!/^[A-Z0-9]{2,10}$/.test(k) || typeof this.openBrowse !== 'function') return;
+                this._adLeaveDetail(() => this.openBrowse({ type: 'all', sel: { lp: k } }));
+            },
+            // 演员 → 关掉播放页按这个词全站搜
+            adMetaSearch(kw) {
+                const k = cleanText(kw, 60);
+                if (!k) return;
+                this._adLeaveDetail(() => {
+                    if (this.browse && this.browse.open && typeof this.closeBrowse === 'function') this.closeBrowse(true);
+                    this.keyword = k;
+                    this._browsePickId = null;
+                    this.doSearch();
+                });
+            },
+            adOpenSibling(s) {
+                if (!s || typeof s.wk !== 'string' || !WK_RE.test(s.wk)) return;
+                this.openWork({ _wk: s.wk, title: s.name || '', poster_path: '' });
+            },
+            _adLeaveDetail(then) {
+                const y = this._adReturnY;
+                this._adReturnY = null;
+                if (this.showDetail && typeof this.closeDetail === 'function') this.closeDetail();
+                this.$nextTick(() => {
+                    if (y != null && !this.searched && !(this.browse && this.browse.open)) { try { this._jumpTo(y); } catch (e) { } }
+                    then();
+                });
+            },
+            // ---------- 线路列表 ----------
+            // sourceGroups 每组排好后再过一遍(见 orderSources):失效垫底、原生 HLS 设备上 risky 往后、选中的中字/原版在前、同家镜像挨着
+            _adSrcOrder(items) {
+                const g = this.currentGroup, p = this.adult && this.adult.varPref;
+                const pref = (p && p.kind && g && p.wk === (g._wk || '')) ? p.kind : '';
+                return orderSources(items, { native: nativeDev(), pref });
+            },
+            adSrcV(s) { return (this.adSrcView && this.adSrcView.get(s)) || NOV; },
+            adFamToggle(s) {
+                const f = famOf(s);
+                if (!f) return;
+                const o = Object.assign({}, this.adult.famOpen);
+                if (o[f]) delete o[f]; else o[f] = true;
+                this.adult.famOpen = o;
+            },
+            // 「中字 / 原版」:记下这部作品的选择(组内排序、自动换源跟着它),当前线路不是这种就换到这种里排最前的一条
+            adVarPick(kind) {
+                if (kind !== 'zh' && kind !== 'raw') return;
+                const g = this.currentGroup;
+                if (!g) return;
+                this.adult.varPref = { wk: g._wk || '', kind };
+                const cur = this.currentSource;
+                if (cur && varKind(cur) === kind) return;
+                const next = (this.availableSources || []).find(s => varKind(s) === kind && s._dead !== true) || (this.availableSources || []).find(s => varKind(s) === kind);
+                if (next && typeof this.pickSourceManual === 'function') this.pickSourceManual(next);
+                else if (this.showMiniToast) this.showMiniToast(kind === 'zh' ? '暂时没有可用的中字线路' : '暂时没有可用的原版线路');
+            },
+            // refreshSources 重建线路对象时补回成人字段
+            _adSrcExtra(item) { return srcExtra(item); },
+            // 从搜索结果 / 历史打开的作品(有 _wk、没有 _meta):补拉一次作品(不扩线,60s 缓存),挂上信息条和线路标记
+            async _adEnrich(g) {
+                if (!g || typeof g._wk !== 'string' || !WK_RE.test(g._wk) || g._meta || g._isLive || g._offlineCtx) return;
+                if (!this.adult.catalog || !Array.isArray(g.sources) || !g.sources.length || enriched.has(g)) return;
+                enriched.add(g);
+                const d = await fetchJson(workUrl(g._wk, false), 10000);
+                if (!d || this.currentGroup !== g) return;
+                if (d._meta && typeof d._meta === 'object' && !g._meta) g._meta = d._meta;
+                const by = new Map();
+                (Array.isArray(d.sources) ? d.sources : []).forEach(s => { if (s && s.site_key && s.vod_id != null) by.set(s.site_key + '|' + s.vod_id, srcExtra(s)); });
+                (g.sources || []).forEach(s => {
+                    const x = s && by.get(s.site_key + '|' + s.vod_id);
+                    if (!x) return;
+                    Object.keys(x).forEach(k => { if (k === '_realRes' && s._realRes) return; if (s[k] !== x[k]) s[k] = x[k]; });
+                });
+            },
+            // ---------- 线路反馈 ----------
+            // 自动换源确认这条线路放不了(handlePlaybackError 换下一条 / 全部试完的那一刻)调。只有 hls.js 设备报失败:
+            //   原生 HLS(iOS)放不了常是设备问题,不能拿来给所有人判「失效」;断网、离线缓存、直播不报
+            _adBeaconFail(s, v) {
+                const g = this.currentGroup;
+                if (!this.adultMode || !g || typeof g._wk !== 'string' || !s || !s.site_key || g._isLive || g._offlineCtx || this._activeOffCached) return;
+                try { if (root.navigator && root.navigator.onLine === false) return; } catch (e) { }
+                if (nativeDev()) return;
+                const code = v && v.error && v.error.code;
+                beacon.send({ wk: g._wk, site_key: s.site_key, vod_id: s.vod_id, ok: false, err: 'hls:' + (code ? 'media' + code : 'nostart') });
+            },
+            // 播放器 timeupdate 里调(index.html):这条线路真的连续播了一段 → 报一次起播(单集作品带实测时长,另带画面宽高)。
+            //   等 30 秒(短片按时长的一半,至少 3 秒)再报:片头常有 20 多秒别的分辨率的贴片广告(实测 1920x1080 贴片 → 1280x720 正片),
+            //   宽高只在画面尺寸稳定 ≥3 秒时才带;本机已从主清单 / 播放补测量到的分辨率优先(更准)
+            _adBeaconTick(v) {
+                const g = this.currentGroup, s = this.currentSource;
+                if (!v || !g || typeof g._wk !== 'string' || !g._wk || !s || g._isLive || g._offlineCtx) return;
+                const t = Number(v.currentTime) || 0;
+                let st = this._adBc;
+                if (!st || st.tok !== this._playToken || st.s !== s) { this._adBc = { tok: this._playToken, s, last: t, acc: 0, done: false, dims: '', dimsAt: 0 }; return; }
+                if (st.done) return;
+                const d = t - st.last;
+                st.last = t;
+                if (v.paused || v.error || !(d > 0 && d < 4)) return;   // 暂停/拖动/切后台回来的大跳不算
+                st.acc += d;
+                const dims = v.videoWidth > 0 && v.videoHeight > 0 ? v.videoWidth + 'x' + v.videoHeight : '';
+                if (dims !== st.dims) { st.dims = dims; st.dimsAt = st.acc; }
+                const total = (Number.isFinite(v.duration) && v.duration > 0) ? v.duration : 0;
+                const need = total ? Math.max(3, Math.min(30, total / 2)) : 30;
+                if (st.acc < need || !dims) return;
+                st.done = true;
+                if (s._dead === true) s._dead = false;   // 本机放得了:不再按失效置灰(服务器收到起播也会清掉)
+                if (this._activeOffCached) return;
+                const one = (this.episodeList || []).length <= 1;
+                const o = { wk: g._wk, site_key: s.site_key, vod_id: s.vod_id, ok: true, dur: (one && total) ? Math.round(total) : 0 };
+                let real = null;
+                try { real = typeof this._srcRealRes === 'function' ? this._srcRealRes(s) : null; } catch (e) { }
+                if (real && real.w && real.h && real.from !== 'beacon') { o.w = real.w; o.h = real.h; }
+                else if (st.acc - st.dimsAt >= 3) { o.w = v.videoWidth; o.h = v.videoHeight; }
+                beacon.send(o);
+            },
+            // ---------- 模糊封面 ----------
+            adSetBlur(on) {
+                const v = !!on;
+                this.adult.blur = v;
+                lsSet(BLUR_KEY, v ? '1' : '0');
+                applyBlur(v);
             },
             // 加载帧(与已登录深链同一个播放页框架)
             _adShowFrame(wk, name, pic, n) {
@@ -694,6 +1413,8 @@
         catalog, cardToItem, browseUrl, homeToRows, todayMap, todayOf,
         workUrl, workSource, workToGroup, workToList, groupKeyOf, groupNameOf, isLandscape, pickFallbackPic, PLACEHOLDER,
         isContentPath, sameOriginPath,
+        TAG_LABEL, NEVER_FEATURE, NO_ACTRESS_BUCKETS, tagLabel, fmtDur, srcFlags, srcExtra, varKind, orderSources, srcView, nativeDev,
+        metaView, tagsUrl, normTags, suggestUrl, normSuggest, aliasPreset, beacon,
         ageGate, brand, auth, fetchWork, mixin, boot,
     };
 });

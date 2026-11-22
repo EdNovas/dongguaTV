@@ -81,7 +81,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=2"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=3"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -5096,12 +5096,25 @@
         </div>
 
         <!-- 2. Search -->
-        <div class="search-section"
-            :style="{ marginTop: offHome ? (isTVMode ? '20px' : '60px') : (adultMode ? '72px' : '-35px'), position: offHome ? 'relative' : 'sticky' }">   <!-- [adult] 没有轮播:首页搜索框让出导航栏 -->
+        <div class="search-section" @focusout="adultMode && adSugBlur($event)"
+            :style="{ marginTop: offHome ? (isTVMode ? '20px' : '60px') : (adultMode ? '72px' : '-35px'), position: offHome ? 'relative' : 'sticky' }">   <!-- [adult] 没有轮播:首页搜索框让出导航栏;焦点离开搜索区收起建议 -->
             <div class="search-box-wrapper" :class="{ 'compact': !offHome && pastCompactThreshold }">
                 <i class="fas fa-search search-icon" @click="submitSearch(true)"></i>
                 <input type="text" v-model="keyword" @keyup.enter="submitSearch(true)" @input="debouncedSearch"
-                    class="search-input" :placeholder="adultMode ? '输入番号、片名或分类（如 无码、探花）' : '输入片名或分类（如 泰剧、韩综）'">   <!-- [adult] -->
+                    @keydown="adultMode && adSugKey($event)" @focus="adultMode && adSugFocus()"
+                    class="search-input" :placeholder="adultMode ? '输入番号、片名或分类（如 无码、探花）' : '输入片名或分类（如 泰剧、韩综）'">   <!-- [adult] 方向键/Esc 操作搜索建议 -->
+            </div>
+            <!-- [adult] 搜索建议(本地目录,零上游):分类/标签词 → 按分类浏览;作品卡片 ≤8;最后一行搜全部站点。被拦的词什么都不出 -->
+            <div v-if="adultMode && adult.sug.open && adSugRows.length" class="dg-sug" :class="{ compact: !offHome && pastCompactThreshold }" role="listbox" aria-label="搜索建议">
+                <button v-for="(r, i) in adSugRows" :key="r.k" type="button" class="dg-sug-row" :class="{ hi: adult.sug.hi === i }"
+                    role="option" :aria-selected="adult.sug.hi === i ? 'true' : 'false'" @mousedown.prevent @click="adSugPick(r)">
+                    <template v-if="r.t === 'item'">
+                        <img :src="getPosterUrl(r.it.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="">
+                        <span class="dg-sug-main"><span class="dg-sug-name">{{ r.it.title }}</span><span class="dg-sug-sub"><span v-if="r.it._code" class="dg-sug-code">{{ r.it._code }}</span>{{ [r.it._durText, r.it._n >= 2 ? r.it._n + '线' : '', r.it._badge].filter(Boolean).join(' · ') }}</span></span>
+                    </template>
+                    <template v-else-if="r.t === 'alias'"><i class="fas fa-folder-open" aria-hidden="true"></i><span class="dg-sug-main">按分类浏览「{{ r.label }}」</span></template>
+                    <template v-else><i class="fas fa-search" aria-hidden="true"></i><span class="dg-sug-main">搜索全部站点「{{ r.q }}」</span></template>
+                </button>
             </div>
         </div>
 
@@ -5408,6 +5421,7 @@
                             :title="config.sortMode ? '点击切换排序 (当前: ' + (config.sortMode === 'newest' ? '最新' : '热门') + ')' : ''"></i>
                         <span class="section-title-text">{{ config.title }}</span>
                         <span v-if="config.adult && config.today" class="dg-today-row">+{{ config.today }} 今日</span>   <!-- [adult] 目录行:今日新增 -->
+                        <span v-if="config.adult && config.srcLabel" class="dg-row-src" :title="config.srcTip">{{ config.srcLabel }}</span>   <!-- [adult] 热门行:本站热门 / 外站热门 -->
                         <!-- 仅对 discover 分类显示排序角标 -->
                         <span v-if="config.sortMode && config.path.includes('/discover/')" class="sort-indicator">
                             {{ config.sortMode === 'newest' ? 'NEW' : 'HOT' }}
@@ -5418,7 +5432,8 @@
                         <i class="fas fa-spinner fa-spin"></i> 加载中...
                     </span>
                     <!-- 🗂️ 进分类浏览页看这一类的全部(可再按地区/年份/评分筛) -->
-                    <button v-if="key !== 'randomRow'" type="button" class="expand-toggle row-all" @click="rowBrowse(key)"
+                    <!-- [adult] 目录行没有 more(热门)就不给「全部」 -->
+                    <button v-if="key !== 'randomRow'" v-show="!(config.adult && !config.more)" type="button" class="expand-toggle row-all" @click="rowBrowse(key)"
                         :aria-label="'查看全部：' + config.title">全部 <i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                     <span class="expand-toggle" :class="{ expanded: expandedRows[key] }" @click="toggleRowExpand(key)"
                         v-show="rowLists[key] && rowLists[key].length > 0">
@@ -5442,7 +5457,7 @@
                                     <div v-if="!item._wk" class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                         item.vote_average
                                         ? item.vote_average.toFixed(1) : 'N/A' }}</div>
-                                    <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div>
+                                    <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div> <template v-if="item._wk"><span v-if="item._n >= 2" class="dg-ov-n">{{ item._n }}线</span><span v-if="item._durText" class="dg-ov-dur">{{ item._durText }}</span><span v-if="item._code" class="dg-ov-code">{{ item._code }}</span></template>   <!-- [adult] 角标:N线 / 时长 / 番号 -->
                                 </div>
                                 <div class="movie-name">{{ item.title || item.name }}</div>
                                 <div class="movie-date" :class="{ 'dg-ad-sub': item._wk }">{{ item._wk ? item._sub : (item.release_date || item.first_air_date ||
@@ -5462,7 +5477,7 @@
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                 <div v-if="!item._wk" class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average
                                     ? item.vote_average.toFixed(1) : 'N/A' }}</div>
-                                <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div>
+                                <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div> <template v-if="item._wk"><span v-if="item._n >= 2" class="dg-ov-n">{{ item._n }}线</span><span v-if="item._durText" class="dg-ov-dur">{{ item._durText }}</span><span v-if="item._code" class="dg-ov-code">{{ item._code }}</span></template>   <!-- [adult] 同上 -->
                             </div>
                             <div class="movie-name">{{ item.title || item.name }}</div>
                             <div class="movie-date" :class="{ 'dg-ad-sub': item._wk }">{{ item._wk ? item._sub : (item.release_date || item.first_air_date || '').split('-')[0] }}
@@ -5554,6 +5569,24 @@
                                 @click="setBrowseFilter(g.k, op.k)">{{ op.l }}</button>
                         </div>
                     </div>
+                    <!-- [adult] 厂牌行:从作品页「SSIS」按钮进来时按厂牌前缀筛(lp),点一下取消 -->
+                    <div class="browse-frow" v-if="adultMode && browse.sel.lp" role="group" aria-label="厂牌">
+                        <span class="browse-flabel">厂牌</span>
+                        <div class="browse-fopts">
+                            <button type="button" class="browse-fopt active" aria-pressed="true" :title="'取消厂牌 ' + browse.sel.lp" @click="setBrowseFilter('lp', '')">{{ browse.sel.lp }} <i class="fas fa-xmark" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                    <!-- [adult] 标签行:当前分类数量最多的标签(/api/catalog/tags,只给 featured 的;审查类标签永远不做按钮) -->
+                    <div class="browse-frow" v-if="adultMode && adTagOpts.length" role="group" aria-label="标签">
+                        <span class="browse-flabel">标签</span>
+                        <div class="browse-fopts">
+                            <button type="button" class="browse-fopt" :class="{ active: !browse.sel.tag }" :aria-pressed="!browse.sel.tag ? 'true' : 'false'"
+                                @click="browse.sel.tag && setBrowseFilter('tag', '')">全部</button>
+                            <button v-for="t in adTagOpts" :key="'tg-' + t.id" type="button" class="browse-fopt"
+                                :class="{ active: browse.sel.tag === t.id }" :aria-pressed="browse.sel.tag === t.id ? 'true' : 'false'"
+                                @click="setBrowseFilter('tag', t.id)">{{ t.label }}</button>
+                        </div>
+                    </div>
                 </div>
                 <div v-if="browse.keyword" class="browse-kwhint">
                     已按分类「{{ browse.keyword }}」显示，要找叫这个名字的片？
@@ -5569,7 +5602,7 @@
                             @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                         <div class="rating-badge" v-if="item.vote_average"><i class="fas fa-star text-warning"></i> {{
                             item.vote_average.toFixed(1) }}</div>
-                        <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div>   <!-- [adult] -->
+                        <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div> <template v-if="item._wk"><span v-if="item._n >= 2" class="dg-ov-n">{{ item._n }}线</span><span v-if="item._durText" class="dg-ov-dur">{{ item._durText }}</span><span v-if="item._code" class="dg-ov-code">{{ item._code }}</span></template>   <!-- [adult] 角标:中字/无码/竖屏 + N线 / 时长 / 番号 -->
                     </div>
                     <div class="movie-name">{{ item.title || item.name }}</div>
                     <div class="movie-date" :class="{ 'dg-ad-sub': item._wk }">{{ item._wk ? item._sub : (item.release_date || item.first_air_date || '').split('-')[0] }}</div>   <!-- [adult] 目录卡片:副行 -->
@@ -5787,6 +5820,17 @@
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" v-model="filterNsfw" @change="saveSettings('filterNsfw')">
+                            <span class="settings-slider"></span>
+                        </label>
+                    </div>
+                    <!-- [adult] 模糊封面(只存本机):海报模糊显示,悬停 / 按住时看清 -->
+                    <div class="set-row" v-if="adultMode">
+                        <div>
+                            <div class="set-title">模糊封面</div>
+                            <div class="set-desc">首页、分类和搜索里的封面模糊显示，鼠标悬停或按住时看清（只对这台设备生效）</div>
+                        </div>
+                        <label class="settings-switch">
+                            <input type="checkbox" :checked="adult.blur" @change="adSetBlur($event.target.checked)" aria-label="模糊封面">
                             <span class="settings-slider"></span>
                         </label>
                     </div>
@@ -6131,6 +6175,26 @@
                             <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
                             <template v-else><i class="fas fa-spinner fa-spin"></i> 正在加载…</template>
                         </div>
+                        <!-- [adult] 作品信息条:番号(可复制)· 时长 · 上架 N 站 · 分类 / 标签(点开分类浏览)· 厂牌前缀 / 演员(只出已确认的,点了搜索);
+                             同番号的无码流出版 / 正片链接,解说/片段收在折叠里(不算线路) -->
+                        <template v-if="adultMode && adMeta && !previewLocked">
+                            <div class="dg-meta">
+                                <span v-if="adMeta.code" class="dg-meta-code">{{ adMeta.code }}<button type="button" class="dg-meta-copy" tabindex="2" @click="adCopyCode" :aria-label="'复制番号 ' + adMeta.code" title="复制番号"><i class="far fa-copy" aria-hidden="true"></i></button></span>
+                                <span v-if="adMeta.durText" class="dg-meta-t"><i class="far fa-clock" aria-hidden="true"></i> {{ adMeta.durText }}</span>
+                                <span v-if="adMeta.nSites" class="dg-meta-t">上架 {{ adMeta.nSites }} 站</span>
+                                <button v-if="adMeta.bucket" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaGo({ b: adMeta.bucket })">{{ adMeta.bucketLabel }}</button>
+                                <button v-for="t in adMeta.tags" :key="'mt-' + t.id" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaGo({ b: adMeta.bucket, tag: t.id })">#{{ t.label }}</button>
+                                <button v-if="adMeta.prefix" type="button" class="dg-meta-chip mono" tabindex="2" @click="adMetaPrefix(adMeta.prefix)" :title="'浏览 ' + adMeta.prefix + ' 的其他作品'">{{ adMeta.prefix }}</button>
+                                <button v-for="a in adMeta.actress" :key="'ma-' + a" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaSearch(a)"><i class="fas fa-user" aria-hidden="true"></i> {{ a }}</button>
+                            </div>
+                            <div v-if="adMeta.sib.length || adMeta.clips.length" class="dg-meta-sib">
+                                <button v-for="s in adMeta.sib" :key="'ms-' + s.wk" type="button" class="dg-meta-link" tabindex="2" :title="s.name" @click="adOpenSibling(s)">{{ s.label }}</button>
+                                <details v-if="adMeta.clips.length" class="dg-meta-clips">
+                                    <summary tabindex="2">解说/片段（{{ adMeta.clips.length }}）</summary>
+                                    <button v-for="s in adMeta.clips" :key="'mc-' + s.wk" type="button" class="dg-meta-link" tabindex="2" @click="adOpenSibling(s)">{{ s.name || s.wk }}</button>
+                                </details>
+                            </div>
+                        </template>
                         <!-- 🎟️ 分享链接试看(没登录):剩余时间 + 登录入口 -->
                         <div v-if="trial.on" class="trial-bar">
                             <i class="fas fa-hourglass-half" aria-hidden="true"></i>
@@ -6222,6 +6286,11 @@
                                     style="margin-right: 4px;"></i>
                                 {{ refreshingSources ? '刷新中...' : '刷新线路' }}
                             </span>
+                            <!-- [adult] 同一部既有中字又有原版线路:切换(换到选中那种里排最前的一条,自动换源也先试它们) -->
+                            <span v-if="adultMode && adVarBoth && !previewLocked" class="dg-var-seg" role="group" aria-label="字幕版本">
+                                <button type="button" :class="{ active: adVarCur === 'zh' }" :aria-pressed="adVarCur === 'zh' ? 'true' : 'false'" @click="adVarPick('zh')">中字</button>
+                                <button type="button" :class="{ active: adVarCur === 'raw' }" :aria-pressed="adVarCur === 'raw' ? 'true' : 'false'" @click="adVarPick('raw')">原版</button>
+                            </span>
                         </div>
 
                         <!-- 🔒 未登录预览：锁定线路 -->
@@ -6242,8 +6311,10 @@
                                     <span class="src-group-count">{{ g.items.length }} 条</span>
                                 </div>
                                 <!-- tabindex 封顶 98:与 TV 全屏控制栏的 99~102/200+/300+ 不撞号;同号时按文档顺序,遥控器遍历顺序不变 -->
-                                <div v-for="(source, i) in g.items" class="source-pill"
-                                    :class="{ active: currentSource && currentSource.site_key === source.site_key, slow: source.latency >= 600 }"
+                                <!-- [adult] 同一 _family 的镜像收成一张(领头带「+N 备用」,点开才列出成员;正在播的成员照常显示),
+                                     失效的置灰、同源/本设备可能无法播放 标出来。顺序见 _adSrcOrder(组内重排,自动换源先试同家备用) -->
+                                <div v-for="(source, i) in g.items" class="source-pill" v-show="!(adultMode && adSrcV(source).hide)"
+                                    :class="{ active: currentSource && currentSource.site_key === source.site_key, slow: source.latency >= 600, 'dg-src-dead': adultMode && source._dead === true, 'dg-src-mem': adultMode && adSrcV(source).mem }"
                                     :tabindex="Math.min(10 + g.offset + i, 98)" :title="srcTitle(source)"
                                     @click="pickSourceManual(source)" @keydown.enter="pickSourceManual(source)">
                                     <span>{{ source.site_name }}</span>
@@ -6253,6 +6324,14 @@
                                     <span class="src-tag" :class="'t-' + srcGroupOf(source)">{{ srcTierLabel(source) }}</span>
                                     <span v-if="g.tier === 'unreach' && srcProfile(source).geo" class="src-geo">海外受限</span>
                                     <span v-if="srcLongSec(source)" class="src-geo">可能有广告</span>
+                                    <template v-if="adultMode">
+                                        <span v-if="source._dead === true" class="src-geo" title="最近多位用户反馈这条线路放不了">可能失效</span>
+                                        <span v-if="adSrcV(source).risky" class="src-geo" title="这条线路在 iPhone / iPad / Safari 上可能放不了">本设备可能无法播放</span>
+                                        <span v-if="adSrcV(source).same" class="src-geo" title="与另一条线路是同一个来源(不同 CDN)">同源</span>
+                                        <button v-if="adSrcV(source).lead && adSrcV(source).more" type="button" class="dg-src-fam" tabindex="-1"
+                                            :aria-expanded="adSrcV(source).open ? 'true' : 'false'" :title="adSrcV(source).open ? '收起备用线路' : '同一来源的备用线路,这条放不了会自动先试它们'"
+                                            @click.stop="adFamToggle(source)" @keydown.enter.stop>{{ adSrcV(source).open ? '收起' : '+' + adSrcV(source).more + ' 备用' }}</button>
+                                    </template>
                                 </div>
                             </template>
                             <div v-if="srcLenNote()" class="src-len-note">标「可能有广告」的线路，这一集比其他线路长，多出来的可能是广告，也可能是片头或花絮。部分线路没有比过，没标不代表没有。</div>
@@ -6362,7 +6441,8 @@
                                     class="fas fa-spinner fa-spin"></i>
                                 加载中...</div>
                             <!-- 集名普遍很长(综艺"第20260703期上纯享版"这类)时给 ep-grid-long:加宽格子+允许折两行 -->
-                            <div v-else class="ep-grid"
+                            <!-- [adult] 单集作品不出选集格子(只有一个「正片」按钮):v-show 藏起来 -->
+                            <div v-else class="ep-grid" v-show="!(adultMode && episodeList.length === 1)"
                                 :class="{ 'ep-grid-long': episodeList.some(e => String(e.name || '').length > 7) }">
                                 <div v-for="ep in episodeList" class="ep-btn" :class="{ active: currentUrl === ep.url }"
                                     :title="ep.name" @click="play(ep.url)">
@@ -6520,7 +6600,7 @@
                     //   换了别的账号登录时,推送由 _pushRefreshState 的归属检查退掉、收藏缓存按账号认,不会串)
                     console.log('[V2Board] API 确认套餐已过期，自动登出');
                     clearAuthState();
-                    alert('您的机场套餐已到期，请续费后重新登录。\n\n前往续费: domain.ednovas.xyz');
+                    alert('您的机场套餐已到期，请续费后重新登录。' + ((window.DgAdult && window.DgAdult.ON === true) ? window.DgAdult.brand.renewText() : '\n\n前往续费: domain.ednovas.xyz'));   // [adult] 续费地址用站长配的 purchase_url(没配不提)
                     location.reload();
                 }
             }, 2 * 60 * 60 * 1000); // 每2小时检查
@@ -6841,7 +6921,7 @@
                     // 显示具体错误
                     let errorMsg = data.message || '登录失败';
                     if (data.expired) {
-                        errorMsg = '⚠️ ' + errorMsg + '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:#ff6b6b;text-decoration:underline;">domain.ednovas.xyz</a> 续费';
+                        errorMsg = '⚠️ ' + errorMsg + ((window.DgAdult && window.DgAdult.ON === true) ? window.DgAdult.brand.renewHtml() : '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:#ff6b6b;text-decoration:underline;">domain.ednovas.xyz</a> 续费');   // [adult] 同上
                     }
                     if (data.trafficExhausted) {
                         errorMsg = '⚠️ ' + errorMsg;
@@ -7042,7 +7122,7 @@
                             setTimeout(() => {
                                 let msg = renewResult.message;
                                 if (renewResult.expired) {
-                                    msg += '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:#ff6b6b;text-decoration:underline;">domain.ednovas.xyz</a> 续费';
+                                    msg += (window.DgAdult && window.DgAdult.ON === true) ? window.DgAdult.brand.renewHtml() : '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:#ff6b6b;text-decoration:underline;">domain.ednovas.xyz</a> 续费';   // [adult] 同上
                                 }
                                 showPasswordError('⚠️ 登录已过期: ' + msg);
                             }, 200);
@@ -11733,7 +11813,7 @@
                 const byUrl = new Map(), result = [];
                 keep.forEach(it => {
                     const u = firstUrl(it);
-                    if (!u) { result.push(it); return; }
+                    if (!u || it._family) { result.push(it); return; }   // [adult] 目录标了 _family 的镜像不在这里去重:线路列表收成一张「+N 备用」,换源时当备用
                     const prev = byUrl.get(u);
                     if (!prev) { byUrl.set(u, it); result.push(it); return; }
                     const de = sigs.get(it).eps - sigs.get(prev).eps;
@@ -12472,7 +12552,7 @@
                     this.playableSources.forEach(s => {
                         const p = this.srcProfile(s);
                         metaOf.set(s, [SRC_TIER_RANK[p.tier], this._srcResRankOf(this._srcResOf(s, p))]);
-                        const gid = (this._srcUnreach(s) || p.tier === 'unknown') ? 'unreach' : SRC_TIER_GROUP[p.tier];
+                        const gid = (this._srcUnreach(s) || p.tier === 'unknown' || s._dead === true) ? 'unreach' : SRC_TIER_GROUP[p.tier];   // [adult] 多人反馈失效(目录线路才有 _dead)→ 可能无法播放组
                         (by[gid] = by[gid] || []).push(s);
                     });
                     let off = 0;
@@ -12487,7 +12567,9 @@
                                 (unreach ? 0 : ((a.latency >= 600) - (b.latency >= 600))) || (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
                         });
                         // 🎚️ 有判定结果时把偏长线路挪到替代后面(没人判长时与原顺序逐条相同)
-                        const items = (lenPub && !unreach) ? this._srcLenDem(sorted, lenPub, metaOf) : sorted;
+                        const items0 = (lenPub && !unreach) ? this._srcLenDem(sorted, lenPub, metaOf) : sorted;
+                        // [adult] 组内再排:失效垫底、原生 HLS 设备上 risky 往后、选了中字/原版的在前、同一 _family 的镜像紧挨着(自动换源先试同家备用)
+                        const items = (this.adultMode && typeof this._adSrcOrder === 'function') ? this._adSrcOrder(items0) : items0;
                         const g = { tier: t.tier, label: t.label, desc: t.desc, items: items, offset: off };
                         off += items.length;
                         return g;
@@ -14566,6 +14648,8 @@
                 // 防抖搜索 - 输入时实时搜索
                 debouncedSearch() {
                     clearTimeout(this.searchTimer);
+                    // [adult] 有目录时输入停顿只出本地搜索建议(200ms,零上游),不再自动全站扇出;回车/放大镜才搜。清空关键词照旧走下面
+                    if (this.adultMode && typeof this.adSuggestInput === 'function' && this.adSuggestInput(this.keyword)) return;
                     if (!this.keyword || this.keyword.length < 2) {
                         // 关键词太短时不搜索，清除结果
                         if (!this.keyword) {
@@ -14792,10 +14876,11 @@
                 },
                 _srcRealRes(s) {
                     if (!s) return null;
-                    if (s._realRes && s._realRes.w) return s._realRes;
-                    if (!s.site_key || s.vod_id == null) return null;
+                    const beacon = !!(s._realRes && s._realRes.from === 'beacon');   // [adult] 别人上报的分辨率排在本机实测(内存 + localStorage)之后
+                    if (s._realRes && s._realRes.w && !beacon) return s._realRes;
+                    if (!s.site_key || s.vod_id == null) return beacon && s._realRes.w ? s._realRes : null;
                     const r = this._srcResMemo()[s.site_key + '|' + s.vod_id];
-                    return (r && r.w && r.h) ? r : null;
+                    return (r && r.w && r.h) ? r : ((beacon && s._realRes.w) ? s._realRes : null);
                 },
                 _srcResOf(s, p) {
                     const r = this._srcRealRes(s);
@@ -15137,6 +15222,9 @@
                 //  -1 = 不可自动选(未测完/不可用/年份对不上的 kz)
                 _srcReachClass(s) {
                     if (!s || typeof s.latency !== 'number' || s.latency >= 9000) return -1;
+                    // [adult] 多人反馈失效的目录线路:本机直连测通也不进第 0 档(降到代理档,同档里 _pickPreferred 再把它排最后);
+                    //   只有服务器能通的照旧第 2 档。不一律打成第 2 档:整部作品的线路都被判失效时(过滤 DNS 用户多报),3s 提前起播还能挑到它
+                    if (s._dead === true) return (s._testType === 'direct' || s._testType === 'proxy') ? 1 : 2;
                     if (s._testType === 'kz' || this._isKzSource(s)) {
                         if (s._kzMismatch) return -1;
                         const p = this.srcProfile(s);
@@ -15172,7 +15260,8 @@
                     pool.forEach(s => { const p = this.srcProfile(s); meta.set(s, [SRC_TIER_RANK[p.tier], Math.min(2, this._srcResRankOf(this._srcResOf(s, p)))]); });
                     return pool.slice().sort((a, b) => {
                         const ma = meta.get(a), mb = meta.get(b);
-                        return (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
+                        return ((a._dead === true ? 1 : 0) - (b._dead === true ? 1 : 0))   // [adult] 同档里多人反馈失效的排最后
+                            || (ma[0] - mb[0]) || (mb[1] - ma[1]) || (a.latency - b.latency);
                     })[0];
                 },
                 // 按可达档从 0 往 maxClass 找第一个非空档,档内 _pickPreferred。maxLatency:历史回放只认 <3000ms 的旧测速
@@ -18575,7 +18664,8 @@
                             _testType: undefined,
                             _cachedDetail: undefined,
                             _useProxy: false,
-                            _proxyUrl: null
+                            _proxyUrl: null,
+                            ...((data._adult && this.adultMode) ? this._adSrcExtra(item) : {})   // [adult] 目录线路的 中字/时长/家族/失效/同源/risky 标记
                         }));
 
                         console.log(`[刷新线路] 重新搜索完成，找到 ${this.currentGroup.sources.length} 个资源站`);
@@ -21432,6 +21522,7 @@
                                     this._maybePreloadNext();  // ⏭️ 临近结尾时预加载下一集(内部有节流/守卫)
                                     this._srcResSniffPlay();   // 📐 主清单没写分辨率的线路:按播放画面补测
                                     this._srcLenTick();        // 🎚️ 播放稳定后比本集各线路时长(内部没事做时第一行就返回)
+                                    if (this.adultMode && dp.video) { try { this._adBeaconTick(dp.video); } catch (e) { } }   // [adult] 线路反馈:真的连续播了 30 秒(短片一半)→ 报一次起播(时长/宽高)
                                 });
 
                                 dp.on('canplay', () => {
@@ -22914,6 +23005,7 @@
                             this.autoRetryMessage = `${failingSource?.site_name} 播放失败，正在尝试 ${nextSource.site_name}`;
                             console.log(`[Auto-Failover] ${this.autoRetryMessage}`);
                             if (failingSource) {
+                                if (this.adultMode) { try { this._adBeaconFail(failingSource, v); } catch (e) { } }   // [adult] 线路反馈:这条确认放不了(发了就不管)
                                 failingSource.latency = 9998;      // 标记为用户端不可用
                                 failingSource._failNav = mySeq;    // 🔁 本次导航已试过(绕圈扫描不再回到它)
                             }
@@ -22923,6 +23015,10 @@
                         }, 1500);
                     } else {
                         // 没有更多可用线路
+                        // [adult] 线路反馈:最后一条也放不了(画面已就绪/有缓冲的不算)
+                        if (this.adultMode && failingSource) {
+                            try { const v0 = dp && dp.video; if (!(v0 && !v0.error && (v0.readyState >= 2 || (v0.buffered && v0.buffered.length > 0)))) this._adBeaconFail(failingSource, v0); } catch (e) { }
+                        }
                         this._offMarkBadCache();
                         // ⬇️ 弱网/假在线(onLine=true 但外网断)兜底:线路全试尽,但本剧有【未被判坏的】离线缓存
                         //    → 转入离线上下文播缓存。这是"网不好时播不了下载内容"最常见变体的最后防线。
