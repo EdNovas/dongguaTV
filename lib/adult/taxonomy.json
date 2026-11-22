@@ -1,0 +1,760 @@
+{
+ "_note": "[adult] 成人站分类体系(调研 analysis/out/taxonomy.json 移植)。改规则后必跑 node scripts/adult-policy-test.mjs,并 bump lib/adult/policy.js 的 POLICY_REV。block/blockPolicy 不可配置关闭;lib/adult/taxonomy.js 加载时校验结构,坏了服务器拒绝启动。",
+ "version": "2026-11-21",
+ "normalize": {
+  "steps": [
+   "String.normalize(\"NFKC\")",
+   "map traditional->simplified via t2s",
+   "toLowerCase()",
+   "remove all whitespace (handles \"A I 换脸\", \"V R 视角\", \"NTR 绿帽\")"
+  ],
+  "t2s": {
+   "倫": "伦",
+   "縱": "纵",
+   "風": "风",
+   "國": "国",
+   "產": "产",
+   "無": "无",
+   "碼": "码",
+   "亂": "乱",
+   "學": "学",
+   "蘿": "萝",
+   "換": "换",
+   "臉": "脸",
+   "窺": "窥",
+   "攝": "摄",
+   "視": "视",
+   "頻": "频",
+   "傳": "传",
+   "動": "动",
+   "獸": "兽",
+   "姦": "奸",
+   "藥": "药",
+   "盜": "盗",
+   "針": "针",
+   "監": "监",
+   "錄": "录",
+   "門": "门",
+   "網": "网",
+   "紅": "红",
+   "師": "师",
+   "齒": "齿",
+   "熱": "热",
+   "東": "东",
+   "劇": "剧",
+   "級": "级",
+   "與": "与",
+   "偽": "伪",
+   "變": "变",
+   "會": "会",
+   "約": "约",
+   "現": "现",
+   "專": "专",
+   "區": "区",
+   "類": "类"
+  },
+  "flags": "iu"
+ },
+ "semantics": {
+  "order": "1) block (own name OR parent name) -> drop, non-configurable; 2) bucket = first matching rule (parent/siteKind conditions must hold); 3) tags = rule.tags ∪ every matching tagRule; 4) review = flag + default (does not change bucket)",
+  "siteKind": "mixed = site has >=3 classes matching MAINSTREAM_STRICT (电视剧/国产剧/综艺/纪录片/…): 聚合采集 150.109.94.44, 艾旦 ddmf.net, 看看 f-1.cc",
+  "container": "a class that is the pid of another class is a container; containers with 0 own items are excluded from coverage",
+  "idsArePerEndpoint": "category ids differ between mirrors of the same brand (搜AV .vip/.com vs .net; 老色逼 apilsbzy1 vs laosebizy*): always key by api URL, never by brand, and map by NAME at runtime"
+ },
+ "buckets": [
+  {
+   "id": "cn_amateur",
+   "label": "国产自拍",
+   "nav": true,
+   "desc": "国产/港台 业余自拍、国产精品/国产视频/国产一区等综合国产、情侣自拍、海角/91 等 UGC"
+  },
+  {
+   "id": "cn_studio",
+   "label": "国产传媒",
+   "nav": true,
+   "desc": "有厂牌的国产/台湾制作:麻豆/天美/蜜桃/精东/皇家华人/星空/果冻/SA国际/糖心/杏吧/乌鸦/大象/91制片厂/JVID/SWAG 等,含国产AV/华语AV/国产综艺"
+  },
+  {
+   "id": "cn_hookup",
+   "label": "探花约炮",
+   "nav": true,
+   "desc": "探花/约炮/嫖娼/会所技师/足浴 类国产实录。item 级偷拍过滤必须开启(见 review)"
+  },
+  {
+   "id": "live",
+   "label": "主播直播",
+   "nav": true,
+   "desc": "国产/韩国主播、直播录屏、大秀、裸聊"
+  },
+  {
+   "id": "creators",
+   "label": "网红·福利姬",
+   "nav": true,
+   "desc": "网红/网黄/福利姬/OnlyFans/Cosplay/写真/私房、以创作者署名的分类(靠父分类 网黄/网红/明星网黄 归入;规则里不写真人艺名)"
+  },
+  {
+   "id": "short",
+   "label": "短视频",
+   "nav": true,
+   "desc": "抖阴/抖音体短视频、精选短片"
+  },
+  {
+   "id": "jp_censored",
+   "label": "日本有码",
+   "nav": true,
+   "desc": "日本AV(有码)、女优/AV明星、日韩精品、亚洲有码、素人/搭讪、DMM/GIGA 等片商"
+  },
+  {
+   "id": "jp_uncensored",
+   "label": "日本无码",
+   "nav": true,
+   "desc": "日本无码/无码流出(厂商无码化,非私密泄露)/东京热/一本道/HEYZO/加勒比/FC2/骑兵破解"
+  },
+  {
+   "id": "jp_subbed",
+   "label": "中文字幕",
+   "nav": true,
+   "desc": "带中文字幕的日本AV(中字有码/中字无码)"
+  },
+  {
+   "id": "western",
+   "label": "欧美",
+   "nav": true,
+   "desc": "欧美/西方 AV、欧美无码/有码/中字、黑人/媚黑、欧美明星"
+  },
+  {
+   "id": "asia",
+   "label": "韩国·东南亚",
+   "nav": true,
+   "desc": "韩国(非主播/非伦理)、东南亚、泰国、越南、阿拉伯/印巴拉丁 等其他地区"
+  },
+  {
+   "id": "anime",
+   "label": "动漫·里番",
+   "nav": true,
+   "desc": "成人动漫/里番/H漫/3D/同人/禁漫"
+  },
+  {
+   "id": "softcore",
+   "label": "三级·伦理",
+   "nav": true,
+   "desc": "三级片/伦理片(韩/港/台/日/西方)、视频伦理 —— 叙事型影片"
+  },
+  {
+   "id": "ai_drama",
+   "label": "AI短剧",
+   "nav": true,
+   "desc": "AI 生成的成人短剧/漫剧(虚构人物;真人换脸另行 hard-block)"
+  },
+  {
+   "id": "commentary",
+   "label": "AV解说",
+   "nav": true,
+   "desc": "AV 解说/水果派解说/剧情介绍"
+  },
+  {
+   "id": "fetish",
+   "label": "SM·重口",
+   "nav": true,
+   "desc": "SM/调教/主奴/重口/猎奇/另类/凌辱"
+  },
+  {
+   "id": "lgbt",
+   "label": "同性·TS",
+   "nav": true,
+   "desc": "女同/百合、男同/GAY、人妖/TS/伪娘(UI 内用 tag 再分)"
+  },
+  {
+   "id": "mixed",
+   "label": "主题综合",
+   "nav": false,
+   "desc": "只有主题、没有来源的分类(制服诱惑/巨乳/人妻/强奸乱伦/群交…):不单独成栏,靠 tags 出现在主题页;item 级按番号/日文假名判 jp_*,否则判 cn_amateur"
+  },
+  {
+   "id": "uncat",
+   "label": "未分类",
+   "nav": false,
+   "desc": "站点级大杂烩(爱播资源 28万/视频二区/精品推荐/其他)与无 class 列表的站:只进搜索/最新流,item 级路由"
+  },
+  {
+   "id": "x_mainstream",
+   "label": "(丢弃)非成人",
+   "nav": false,
+   "desc": "混合站里的电影/电视剧/综艺/纪录片/体育/普通短剧等主流分类"
+  },
+  {
+   "id": "x_nonvideo",
+   "label": "(丢弃)非视频",
+   "nav": false,
+   "desc": "小说/图片/套图/教程/广告/资讯"
+  },
+  {
+   "id": "x_container",
+   "label": "(结构)父分类",
+   "nav": false,
+   "desc": "有子分类的父节点(视频一区/国产区/精品日韩…),本身无条目"
+  }
+ ],
+ "tags": [
+  {
+   "id": "milf",
+   "label": "人妻熟女"
+  },
+  {
+   "id": "busty",
+   "label": "巨乳美乳"
+  },
+  {
+   "id": "uniform",
+   "label": "制服诱惑"
+  },
+  {
+   "id": "legs",
+   "label": "丝袜美腿"
+  },
+  {
+   "id": "cosplay",
+   "label": "Cosplay"
+  },
+  {
+   "id": "incest",
+   "label": "乱伦剧情"
+  },
+  {
+   "id": "noncon",
+   "label": "强制凌辱"
+  },
+  {
+   "id": "group",
+   "label": "群交多P"
+  },
+  {
+   "id": "ntr",
+   "label": "绿帽NTR"
+  },
+  {
+   "id": "oral",
+   "label": "口交颜射"
+  },
+  {
+   "id": "solo",
+   "label": "自慰"
+  },
+  {
+   "id": "squirt",
+   "label": "潮吹"
+  },
+  {
+   "id": "bdsm",
+   "label": "SM调教"
+  },
+  {
+   "id": "extreme",
+   "label": "重口猎奇"
+  },
+  {
+   "id": "outdoor",
+   "label": "野外露出"
+  },
+  {
+   "id": "lesbian",
+   "label": "女同"
+  },
+  {
+   "id": "gay",
+   "label": "男同"
+  },
+  {
+   "id": "trans",
+   "label": "跨性别"
+  },
+  {
+   "id": "vr",
+   "label": "VR"
+  },
+  {
+   "id": "amateur",
+   "label": "素人"
+  },
+  {
+   "id": "pornstar",
+   "label": "女优明星"
+  },
+  {
+   "id": "bbc",
+   "label": "黑人"
+  },
+  {
+   "id": "massage",
+   "label": "按摩技师"
+  },
+  {
+   "id": "story",
+   "label": "剧情"
+  },
+  {
+   "id": "uncensored",
+   "label": "无码"
+  },
+  {
+   "id": "subbed",
+   "label": "中字"
+  },
+  {
+   "id": "hktw",
+   "label": "港台"
+  },
+  {
+   "id": "korea",
+   "label": "韩国"
+  },
+  {
+   "id": "beauty",
+   "label": "高颜值"
+  },
+  {
+   "id": "studio",
+   "label": "厂牌"
+  }
+ ],
+ "rules": [
+  {
+   "match": "电视剧|国产剧|欧美剧|日韩剧|韩剧|日剧|港剧|台剧|泰国剧|海外剧|港台剧|香港剧|台湾剧|(大陆|日韩|港台|欧美|其他)综艺|^综艺$|纪录片|记录片|^体育$|netflix|布袋戏|^少儿$|预告片|^央视$|^卫视$|网络电影|动画电影|(动作|喜剧|爱情|科幻|恐怖|战争|犯罪|悬疑|剧情)片$|影视解说|电影资讯|娱乐新闻|新闻资讯|^电影$|^搞笑$|^动画片$",
+   "bucket": "x_mainstream"
+  },
+  {
+   "match": ".*",
+   "parent": "^(电影|电视剧|综艺|动漫|新闻资讯|netflix)$",
+   "siteKind": "mixed",
+   "bucket": "x_mainstream"
+  },
+  {
+   "match": "^(动漫|短剧|直播|明星|4k|(国产|日韩|欧美|海外|大陆|港台)动漫)$",
+   "siteKind": "mixed",
+   "bucket": "x_mainstream"
+  },
+  {
+   "match": ".*",
+   "parent": "小说|图片|美图|贴图|写真集",
+   "bucket": "x_nonvideo"
+  },
+  {
+   "match": "小说|图片|贴图|套图|美图|漫画连载|教程|云转码|入库勿删|^广告$|成人笑话|情色幽默|长篇连载|武侠古典|古典武侠|都市言情|^(都市激情|现代激情|风俗伦理|清纯唯美)$|^(爱蜜社|头条女神|美媛馆|嗲囡囡|波萝社|魅妍社|爱尤物|秀人网|尤果网|推女神|dgc套图|尤蜜荟|模范学院|尤物馆|优星馆|蜜桃社|影私荟|顽味生活|星乐园|花の颜|御女郎|糖果画报|花漾|星颜社|画语界)$",
+   "bucket": "x_nonvideo"
+  },
+  {
+   "match": "解说|水果派|剧情介绍",
+   "bucket": "commentary"
+  },
+  {
+   "match": "^ai(短剧|漫剧|剧情|剧集|制作|真人)|^ai$",
+   "bucket": "ai_drama"
+  },
+  {
+   "match": "三级|伦理片|伦理影片|伦理电影|伦理精选|视频伦理|^(国产|香港|台湾|韩国|日本|西方|港台|日韩|欧美|东南亚)伦理$|(?<!道德|风俗)伦理$",
+   "bucket": "softcore"
+  },
+  {
+   "match": ".*",
+   "parent": "三级|伦理$",
+   "bucket": "softcore"
+  },
+  {
+   "match": "动漫|动画|卡通|h漫|黄漫|里番|^3d|同人|禁漫|漫画|hentai|anime",
+   "bucket": "anime"
+  },
+  {
+   "match": ".*",
+   "parent": "动漫|动画|卡通",
+   "bucket": "anime"
+  },
+  {
+   "match": "主播|直播|大秀|裸聊|秀色|视讯",
+   "bucket": "live"
+  },
+  {
+   "match": "女同|百合|蕾丝|男同|gay|同性|人妖|^ts|ts人妖|伪娘|变性|跨性别|shemale|tranny",
+   "bucket": "lgbt"
+  },
+  {
+   "match": "(^|[^a-z])sm([^a-z]|$)|调教|重口|重咸|猎奇|变态|另类|虐|主奴|拳交|扩阴|吃屎|喝尿|孕妇|巨物|性癖|恐怖色情|凌辱|欺辱|bdsm",
+   "bucket": "fetish"
+  },
+  {
+   "match": ".*",
+   "parent": "欧美|西方",
+   "bucket": "western"
+  },
+  {
+   "match": "欧美|西方|黑人|媚黑|白人|洋屌|俄罗斯|捷克|为国争光|西洋",
+   "bucket": "western"
+  },
+  {
+   "match": ".*",
+   "parent": "异族|异国",
+   "bucket": "asia"
+  },
+  {
+   "match": "韩国|东南亚|泰国|越南|菲律宾|马来|印尼|阿拉伯|印巴|拉丁",
+   "bucket": "asia"
+  },
+  {
+   "match": "字幕|中字|^日本中文$",
+   "bucket": "jp_subbed"
+  },
+  {
+   "match": "无码|东京热|一本道|人妻斩|heyzo|hey诱惑|加勒比|carib|pacopacomama|10musume|骑兵破解|破解|fc2",
+   "bucket": "jp_uncensored"
+  },
+  {
+   "match": ".*",
+   "parent": "传媒|厂商|厂牌|影业",
+   "bucket": "cn_studio",
+   "tags": [
+    "studio"
+   ]
+  },
+  {
+   "match": "传媒|影业|影像|制片厂|^麻豆|天美|蜜桃|精东|皇家华人|星空|果冻|sa国际|糖心|乌鸦|大象|mini|兔子先生|性视界|扣扣|渡边|起点|葫芦|红斯灯|爱豆|乌托邦|爱神|香蕉|psychoporn|成人头条|辣椒原创|ccav|国产厂牌|国产厂商|国产大制作|国产av|华语av|华语原创|原创短剧|^原创$|杏吧原创|jvid|台湾swag|情欲国潮|节目企划|(色情|国产)综艺|萝莉社",
+   "bucket": "cn_studio",
+   "tags": [
+    "studio"
+   ]
+  },
+  {
+   "match": ".*",
+   "parent": "网黄|网红|明星网黄",
+   "bucket": "creators"
+  },
+  {
+   "match": "网红|网黄|福利姬|onlyfans|cosplay|coser|二次元|写真|私拍|私房|模特|嫩模|国模|兽耳|地雷系",
+   "bucket": "creators"
+  },
+  {
+   "match": "探花|约炮|嫖|寻花|会所|技师|足浴|外围",
+   "bucket": "cn_hookup"
+  },
+  {
+   "match": "抖阴|抖音|短视频|短片",
+   "bucket": "short"
+  },
+  {
+   "match": ".*",
+   "parent": "日本|日韩|^av区$|岛国|jav|^亚洲",
+   "bucket": "jp_censored"
+  },
+  {
+   "match": "日本|日韩|有码|女优|av明星|岛国|jav|亚洲情色|骑兵|dmm|giga|首次亮相|素人搭讪|素人特摄|^素人(?!自拍)|魔镜|时间停止|催眠|电车痴汉|痴女|泡泡浴|漫改|^av$|^亚洲",
+   "bucket": "jp_censored"
+  },
+  {
+   "match": ".*",
+   "parent": "国产|^华语|精品国产|^国产区$|国产专题|国产系列",
+   "bucket": "cn_amateur"
+  },
+  {
+   "match": "国产|国模|自拍|网友|情侣|海角|^91视频$|^swag$|港台|台湾|港姐|华语|大陆|^中国",
+   "bucket": "cn_amateur"
+  },
+  {
+   "match": "人妻|熟女|少妇|淫妻|岳母|巨乳|美乳|爆乳|大奶|尤物|童颜|制服|丝袜|黑丝|白丝|美腿|长腿|恋腿|美脚|丝足|过膝|瑜伽|(^|[^a-z])ol([^a-z]|$)|护士|空姐|女仆|旗袍|情趣内衣|角色|扮演|乱伦|母子|父女|兄妹|姐弟|兄弟姐妹|嫂|小姨|儿媳|公媳|叔嫂|姐夫|岳父|家庭|家族|鬼父|淫母|爷爷|禁忌|伦理之爱|毁三观|强奸|强暴|侵犯|强制|暴力|群交|群p|多p|3p|多人|淫趴|换妻|换夫|绿帽|ntr|口交|颜射|口爆|自慰|撸管|潮吹|喷吹|喷水|高潮|野外|露出|户外|野战|车震|搭讪|勾搭|学生|校园|师生|少女|嫩妹|萌妹|vr|颜值|绝色|佳人|剧情|故事|反差|母狗|偷情",
+   "bucket": "mixed"
+  },
+  {
+   "match": "^视频[一二三四五六七八九十\\d]*区$|^分类\\d*$|^子类\\d*$|^\\d+$|^爱播资源$|^(精品|站长)推荐$|^其他|^综合|^精品专区$|^成人$|^深夜|^独家|^pa$|^(情色av|女性向系列?|精品综合|精品日韩|精品国产)$",
+   "bucket": "uncat"
+  }
+ ],
+ "tagRules": [
+  {
+   "match": "人妻|熟女|少妇|淫妻|岳母|邻家",
+   "tag": "milf"
+  },
+  {
+   "match": "巨乳|美乳|爆乳|大奶|童颜巨乳|尤物",
+   "tag": "busty"
+  },
+  {
+   "match": "制服|(^|[^a-z])ol([^a-z]|$)|护士|空姐|女仆|旗袍|情趣内衣|角色扮演|古装|师生",
+   "tag": "uniform"
+  },
+  {
+   "match": "丝袜|黑丝|白丝|美腿|长腿|恋腿|美脚|丝足|过膝|瑜伽",
+   "tag": "legs"
+  },
+  {
+   "match": "cosplay|coser|二次元|兽耳|角色扮演",
+   "tag": "cosplay"
+  },
+  {
+   "match": "乱伦|母子|父女|兄妹|姐弟|兄弟姐妹|嫂|小姨|儿媳|公媳|叔嫂|姐夫|岳父|岳母|家庭|家族|鬼父|淫母|爷爷|禁忌|伦理之爱|毁三观",
+   "tag": "incest"
+  },
+  {
+   "match": "强奸|强暴|侵犯|强制|暴力|凌辱|欺辱",
+   "tag": "noncon"
+  },
+  {
+   "match": "群交|群p|多p|3p|多人|淫趴|换妻|换夫",
+   "tag": "group"
+  },
+  {
+   "match": "绿帽|ntr|换妻|换夫|淫妻",
+   "tag": "ntr"
+  },
+  {
+   "match": "口交|颜射|口爆",
+   "tag": "oral"
+  },
+  {
+   "match": "自慰|撸管",
+   "tag": "solo"
+  },
+  {
+   "match": "潮吹|喷吹|喷水|高潮",
+   "tag": "squirt"
+  },
+  {
+   "match": "(^|[^a-z])sm([^a-z]|$)|调教|主奴|虐|bdsm",
+   "tag": "bdsm"
+  },
+  {
+   "match": "重口|重咸|猎奇|变态|另类|拳交|扩阴|吃屎|喝尿|孕妇|巨物|性癖|恐怖色情",
+   "tag": "extreme"
+  },
+  {
+   "match": "野外|露出|户外|野战|车震",
+   "tag": "outdoor"
+  },
+  {
+   "match": "女同|百合|蕾丝",
+   "tag": "lesbian"
+  },
+  {
+   "match": "男同|gay",
+   "tag": "gay"
+  },
+  {
+   "match": "人妖|^ts|ts人妖|伪娘|变性|跨性别",
+   "tag": "trans"
+  },
+  {
+   "match": "vr",
+   "tag": "vr"
+  },
+  {
+   "match": "素人|搭讪|fc2",
+   "tag": "amateur"
+  },
+  {
+   "match": "女优|av明星|明星$|热门女优",
+   "tag": "pornstar"
+  },
+  {
+   "match": "黑人|媚黑|bbc",
+   "tag": "bbc"
+  },
+  {
+   "match": "按摩|技师|足浴|会所|泡泡浴|spa",
+   "tag": "massage"
+  },
+  {
+   "match": "剧情|故事|企划",
+   "tag": "story"
+  },
+  {
+   "match": "无码|東京熱|东京热|一本道|heyzo|加勒比|破解|fc2",
+   "tag": "uncensored"
+  },
+  {
+   "match": "字幕|中字",
+   "tag": "subbed"
+  },
+  {
+   "match": "港台|台湾|香港|港姐",
+   "tag": "hktw"
+  },
+  {
+   "match": "韩国",
+   "tag": "korea"
+  },
+  {
+   "match": "颜值|绝色|佳人|绝美|女神",
+   "tag": "beauty"
+  }
+ ],
+ "block": [
+  "萝莉|loli|幼女|幼齿|幼幼|未成年|学生妹|中学生|小学生|初中|高中|中小学|儿童|童交|恋童|正太|shota|jailbait|underage|preteen|(^|[^a-z])jk([^a-z]|$)",
+  "偷拍|偷窥|盗摄|针孔|监控|偷录|隐拍|厕拍|摄像头",
+  "迷奸|下药|迷药|药奸|捡尸|醉奸|昏迷",
+  "换脸|ai魔改|明星淫梦|明星合成|deepfake|^ai$",
+  "黑料|吃瓜|网曝|网爆|门事件|^网曝门|大瓜|猛料|曝光|泄密|(?<!无码)流出|裸贷|领导官员|抓奸|婚闹|明星黑料",
+  "人兽|兽交|人畜|兽奸|暗网"
+ ],
+ "blockPolicy": [
+  {
+   "match": "萝莉|loli|幼女|幼齿|幼幼|未成年|学生妹|中学生|小学生|初中|高中|中小学|儿童|童交|恋童|正太|shota|jailbait|underage|preteen|(^|[^a-z])jk([^a-z]|$)",
+   "reason": "minors (policy)"
+  },
+  {
+   "match": "偷拍|偷窥|盗摄|针孔|监控|偷录|隐拍|厕拍|摄像头",
+   "reason": "hidden-camera / voyeur (policy)"
+  },
+  {
+   "match": "迷奸|下药|迷药|药奸|捡尸|醉奸|昏迷",
+   "reason": "drugging / incapacitation (policy)"
+  },
+  {
+   "match": "换脸|ai魔改|明星淫梦|明星合成|deepfake|^ai$",
+   "reason": "deepfakes of real people (policy); bare \"AI\" class on 看看 holds celebrity deepfakes"
+  },
+  {
+   "match": "黑料|吃瓜|网曝|网爆|门事件|^网曝门|大瓜|猛料|曝光|泄密|(?<!无码)流出|裸贷|领导官员|抓奸|婚闹|明星黑料",
+   "reason": "leaked private content / exposure of real non-performers (policy); 无码流出 (JAV decensor) excluded"
+  },
+  {
+   "match": "人兽|兽交|人畜|兽奸|暗网",
+   "reason": "bestiality / dark-web material: not legal adult content in most jurisdictions (policy: \"other LEGAL adult content\")"
+  }
+ ],
+ "review": [
+  "教师学生|制服师生|^绝美少女$",
+  "童颜",
+  "(?<!留)学生|校园|学妹|少女|嫩妹|萌妹|嫩模|破处",
+  "父女|鬼父|操女",
+  "teens?|schoolgirl|barelylegal|18yo|young",
+  "强奸|强暴|侵犯|暴力|凌辱|欺辱|强制",
+  "催眠|时间停止|睡奸|昏睡|醉酒|媚药|春药",
+  "反差",
+  "探花|嫖|寻花|会所|技师|足浴|外围",
+  "情侣自拍|海角|私房|私拍",
+  "恐怖色情",
+  "^ai(短剧|漫剧|剧情|剧集|制作)|^ai真人"
+ ],
+ "reviewPolicy": [
+  {
+   "match": "教师学生|制服师生|^绝美少女$",
+   "default": "show-if-fanhao",
+   "reason": "teacher-student / 少女 labels where sampled items are 59/60 and 10/20 JAV-coded fiction"
+  },
+  {
+   "match": "童颜",
+   "default": "show-if-fanhao",
+   "reason": "童颜巨乳 = JAV genre (23/30 JAV-coded); 国产 童颜 items hidden"
+  },
+  {
+   "match": "(?<!留)学生|校园|学妹|少女|嫩妹|萌妹|嫩模|破处",
+   "default": "hide",
+   "reason": "minor-adjacent label (学生/校园/少女/嫩妹): 国产 items cite real schools/birth years (\"05后\", \"高三\")"
+  },
+  {
+   "match": "父女|鬼父|操女",
+   "default": "hide",
+   "reason": "father-daughter incest labels: high risk of minor framing"
+  },
+  {
+   "match": "teens?|schoolgirl|barelylegal|18yo|young",
+   "default": "hide",
+   "reason": "English teen-style labels (none live today; future-proof)"
+  },
+  {
+   "match": "强奸|强暴|侵犯|暴力|凌辱|欺辱|强制",
+   "default": "show-if-fanhao",
+   "reason": "rape-play: JAV fiction OK, 国产 \"真实强奸\" claims unverifiable"
+  },
+  {
+   "match": "催眠|时间停止|睡奸|昏睡|醉酒|媚药|春药",
+   "default": "show-if-fanhao",
+   "reason": "incapacitation-adjacent JAV fantasy tropes (迷奸/下药 itself is blocked)"
+  },
+  {
+   "match": "反差",
+   "default": "show",
+   "reason": "反差 genre often = exposure of real women; keep, but item filter on 流出/曝光/前女友/真名 must be on"
+  },
+  {
+   "match": "探花|嫖|寻花|会所|技师|足浴|外围",
+   "default": "show",
+   "reason": "探花 recordings are frequently covert (escort unaware): item filter on 偷拍/偷录/隐藏/针孔 mandatory"
+  },
+  {
+   "match": "情侣自拍|海角|私房|私拍",
+   "default": "show",
+   "reason": "amateur/private material: consent/leak unverifiable; item filter on"
+  },
+  {
+   "match": "恐怖色情",
+   "default": "hide",
+   "reason": "horror-porn: gore/snuff ambiguity (the 变态暗网 copy is hard-blocked via parent)"
+  },
+  {
+   "match": "^ai(短剧|漫剧|剧情|剧集|制作)|^ai真人",
+   "default": "show",
+   "reason": "AI-generated content: not a deepfake of a real person, but synthetic minors must be caught item-level; Ai真人 (photoreal) -> consider hide"
+  }
+ ],
+ "siteOverrides": {
+  "ddmf.net": {
+   "aggregateParents": [
+    1,
+    2,
+    3,
+    4,
+    5
+   ],
+   "note": "艾旦: 电影/电视剧/综艺/动漫/福利视频 counts are SUMS of their (flat-listed) children; treat as containers to avoid double counting"
+  },
+  "ckbh1.xyz": {
+   "aggregateParents": [
+    20,
+    31,
+    46,
+    55,
+    64,
+    72,
+    80,
+    90,
+    93
+   ],
+   "pidFix": {
+    "1": 20,
+    "36": 31,
+    "42": 37,
+    "43": 37,
+    "47": 46,
+    "48": 46,
+    "49": 46,
+    "50": 46,
+    "51": 46,
+    "52": 46,
+    "53": 46,
+    "56": 55,
+    "57": 55,
+    "63": 55,
+    "71": 64,
+    "73": 72,
+    "78": 72,
+    "81": 80,
+    "82": 80,
+    "83": 80,
+    "84": 80,
+    "85": 80,
+    "87": 80,
+    "91": 90,
+    "92": 90,
+    "94": 93,
+    "95": 93,
+    "96": 93,
+    "97": 93,
+    "98": 93,
+    "99": 93,
+    "102": 55,
+    "103": 90
+   },
+   "note": "CK百货 class list is flat (pid=0) but &t=20/31/37/46/55/64/72/80/90/93 return CHILD items (verified live 2026-11-21): 制服诱惑(46) lists JK少女 items, 重口猎奇(80) listed 11/20 人兽性交 items. Never list a parent id; post-filter every item by its own type_id"
+  },
+  "aosikazy.com": {
+   "note": "奥斯卡 .com returns HTML (WAF) for &t= list calls -> catCounts 0; use aosikazy.me (same backend, same ids)"
+  }
+ }
+}
