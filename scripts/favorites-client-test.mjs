@@ -330,7 +330,7 @@ console.log('② 推送辅助');
 console.log('③ sw.js');
 {
     const src = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
-    ok(/const CACHE_VERSION = 'v42'/.test(src), 'CACHE_VERSION v42');
+    ok(/const CACHE_VERSION = 'v43'/.test(src), 'CACHE_VERSION v43');
     const handlers = {};
     const shown = [];
     const wins = [];
