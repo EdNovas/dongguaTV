@@ -32,7 +32,7 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
 
 // ============ 1. 接口 ============
 {
-    eq(Object.keys(A).sort(), ['RULES_VERSION', 'policy', 'taxonomy', 'title'], 'index: 导出 {policy, taxonomy, title, RULES_VERSION}');
+    eq(Object.keys(A).sort(), ['RULES_VERSION', 'policy', 'tags', 'taxonomy', 'title'], 'index: 导出 {policy, taxonomy, title, tags, RULES_VERSION}');   // [adult] phase 3:+tags
     for (const f of ['checkQuery', 'checkItem', 'filterItems']) ok(typeof A.policy[f] === 'function', 'policy.' + f);
     for (const f of ['classify', 'buildClassMap']) ok(typeof A.taxonomy[f] === 'function', 'taxonomy.' + f);
     for (const f of ['parseTitle', 'codeOk', 'searchVariants', 'workKey']) ok(typeof A.title[f] === 'function', 'title.' + f);
@@ -162,10 +162,25 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
 // ============ 5. 条目级金丝雀 ============
 {
     const chk = A.policy.checkItem;
+    // p7:睡眠 / 媚药 题材从审查级 code 升成硬拦 drugging —— 原来期望 review:code 的样例现在拦得更严也算对(只认这一种升级)
     for (const c of CAN.block) {
         const r = chk(c.item, c.ctx || {});
-        ok(!r.ok && String(r.reason).startsWith(c.want), '必拦: ' + c.item.vod_name + ' [' + c.item.type_name + ']', { got: r.reason, want: c.want });
+        ok(!r.ok && (String(r.reason).startsWith(c.want)), '必拦: ' + c.item.vod_name + ' [' + c.item.type_name + ']', { got: r.reason, want: c.want });
     }
+    // p7:下药 / 失去意识题材(与 AVDB Aphrodisiac / Sleeping / Coma 同口径)硬拦;简介里的剧情叙述(趁丈夫熟睡 / 重伤昏迷)不拦
+    for (const [n, tn] of [['媚药调教美少女', '国产传媒'], ['睡奸熟睡的继母', '日本有码'], ['TMW-083 变身密药', '国产传媒'], ['某某春药实验', '国产自拍'], ['夜袭寡妇', '国产传媒'],
+        ['趁老婆睡着', '国产自拍'], ['ABCD-105 媚薬で痙攣', '日本有码'], ['ABCD-106 寝込みを襲う', '日本有码'], ['Sleeping Stepsister', '欧美'], ['She Fell Asleep On The Couch', '欧美'], ['Aphrodisiac Massage', '欧美']]) {
+        const r = chk({ vod_name: n, type_name: tn }, {});
+        ok(!r.ok && r.reason === 'item:drugging', 'p7 必拦 drugging: ' + n, r.reason);
+    }
+    ok(chk({ vod_name: '某某睡奸', type_name: '国产传媒', vod_tag: '' }, {}).reason === 'item:drugging' && chk({ vod_name: '普通标题', type_name: '国产传媒', vod_tag: '熟睡,人妻' }, {}).reason === 'item:drugging', 'p7:标签字段里的 熟睡 也拦');
+    {
+        const r = chk({ vod_name: 'ABCD-201 普通の人妻', type_name: '日本有码', vod_content: '趁丈夫熟睡后出门,公公重伤昏迷住院' }, {});
+        ok(r.ok, 'p7:简介里的 熟睡 / 昏迷 剧情叙述不拦(只查标签性字段)', r);
+    }
+    for (const n of ['Sleeping Bag Adventure', '秘书的诱惑', '神秘人妻', '美女午睡']) ok(chk({ vod_name: n, type_name: '国产自拍' }, {}).reason !== 'item:drugging', 'p7 不误拦为 drugging: ' + n);
+    for (const q of ['媚药', '春药', '睡奸', '熟睡', '夜袭', 'asleep', 'aphrodisiac']) ok(A.policy.checkQuery(q) === true, 'p7 搜索词拦: ' + q);
+    ok(A.policy.checkQuery('秘书') === false && A.policy.checkQuery('人妻 睡衣') === false, 'p7 搜索词不误拦(秘书 / 睡衣)');
     for (const c of CAN.allow) {
         const r = chk(c.item, c.ctx || {});
         ok(r.ok, '放行: ' + c.item.vod_name + ' [' + c.item.type_name + ']', r);
