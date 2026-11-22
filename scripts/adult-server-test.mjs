@@ -132,6 +132,31 @@ console.log('① lib/adult-gate 纯函数');
     ok(threw, 'vercelGuard 缺 lib/adult → 抛错(fail-closed)');
     const c2 = g.configFields();
     ok(c2.adult === true && c2.age_gate === true && c2.site_name === 'DGX' && c2.tmdb_api_key === null && c2.push_enabled === false && c2.rules_version === RV && c2.img_proxy === false, 'configFields(img_proxy 默认 false)', c2);
+    ok(Array.isArray(c2.cover_dead_hosts) && c2.cover_dead_hosts.length === 0, 'configFields:没有目录 → cover_dead_hosts []', c2.cover_dead_hosts);
+    ok(c2.purchase_url === 'https://ednovas.me', 'configFields:没配 PURCHASE_URL → 购买链接沿用主站 ednovas.me', c2.purchase_url);
+    {
+        const pu = (v) => gate.createAdultGate({ adult, allSites: () => [], authConfigured: () => true, ownToken: () => false, env: { PURCHASE_URL: v } }).configFields().purchase_url;
+        ok(pu('https://shop.example.test/buy?a=1') === 'https://shop.example.test/buy?a=1' && pu('  https://x.example.test  ') === 'https://x.example.test', 'PURCHASE_URL 配了 http(s) 地址 → 用它', [pu('https://shop.example.test/buy?a=1')]);
+        ok(['0', 'off', 'OFF', 'none', 'false', 'no'].every(v => pu(v) === ''), 'PURCHASE_URL=0/off/none/false/no → 不显示购买链接');
+        ok(pu('javascript:alert(1)') === 'https://ednovas.me' && pu('https://a b') === 'https://ednovas.me' && pu('https://x.example.test/' + 'a'.repeat(400)) === 'https://ednovas.me', 'PURCHASE_URL 配错(非 http(s)/带空格/超长)→ 回到主站地址');
+    }
+    {
+        const big = Array.from({ length: 260 }, (_, i) => 'h' + i + '.example');
+        const okTok = (t) => t === 'good' || t === 'bannedtok';
+        const gBig = gate.createAdultGate({ adult, allSites: () => [], authConfigured: () => true, ownToken: okTok, isBanned: (t) => t === 'bannedtok', env: {}, catalog: () => ({ coverDeadHosts: () => big }) });
+        const gThrow = gate.createAdultGate({ adult, allSites: () => [], authConfigured: () => true, ownToken: okTok, env: {}, catalog: () => ({ coverDeadHosts: () => { throw new Error('x'); } }) });
+        const authed = { headers: { 'x-dg-token': 'good' }, query: {} };
+        ok(gBig.configFields(authed).cover_dead_hosts.length === 200 && JSON.stringify(gThrow.configFields(authed).cover_dead_hosts) === '[]', 'configFields:cover_dead_hosts ≤200;目录出错 → []');
+        // 只给能看目录的请求(和 requireAuth 同口径):要登录的站 = 自己的有效令牌、没被封;公开站 = 确认过年龄;没给 req = 不给
+        const n = (gg, req) => gg.configFields(req).cover_dead_hosts.length;
+        ok(n(gBig, undefined) === 0 && n(gBig, { headers: {}, query: {} }) === 0 && n(gBig, { headers: { 'x-dg-token': 'nope' }, query: {} }) === 0
+            && n(gBig, { headers: { cookie: 'dg_age=1' }, query: {} }) === 0 && n(gBig, { headers: { 'x-dg-token': 'bannedtok' }, query: {} }) === 0
+            && n(gBig, { headers: { cookie: 'dg_t=good' }, query: {} }) === 200 && n(gBig, { headers: {}, query: { token: 'good' } }) === 200,
+        'configFields:要登录的站 —— 没令牌 / 令牌不对 / 只有年龄 Cookie / 被封的令牌 → [];Cookie 或 ?token= 的有效令牌 → 给');
+        const gPub = gate.createAdultGate({ adult, allSites: () => [], authConfigured: () => false, ownToken: () => false, env: {}, catalog: () => ({ coverDeadHosts: () => ['a.example'] }) });
+        ok(n(gPub, { headers: { cookie: 'dg_age=1' }, query: {} }) === 1 && n(gPub, { headers: { 'x-dg-age': '1' }, query: {} }) === 1 && n(gPub, { headers: {}, query: {} }) === 0,
+            'configFields:公开站 —— 确认过年龄才给');
+    }
     // 上报者身份:只信直连的公网对端,或运维声明的反代头;客户端自己写的转发头造不出新身份
     const rq = (peer, headers) => ({ headers: headers || {}, socket: { remoteAddress: peer } });
     const T = gate.trustedClientNet;
@@ -725,6 +750,15 @@ try {
     ok(cfg.adult === true && cfg.catalog === true && cfg.age_gate === true && cfg.site_name === 'DGX' && cfg.auth_required === true && cfg.rules_version === RV, '/api/config 成人站字段', cfg);
     ok(cfg.tmdb_api_key === null && cfg.tmdb_proxy_url === null && cfg.danmaku_enabled === false && cfg.requests_enabled === false && cfg.push_enabled === false
         && cfg.intro_enabled === false && cfg.live_enabled === false && cfg.img_proxy === false, '/api/config:TMDB/弹幕/求片/推送/片头/直播 都报关,img_proxy:false', cfg);
+    ok(JSON.stringify(cfg.cover_dead_hosts) === JSON.stringify(['img-gone.example', 'pic.gone2.example']), '/api/config cover_dead_hosts:目录的死封面域名(只放像域名的、去重)', cfg.cover_dead_hosts);
+    {
+        // 未登录(登录框之前也要拿站名的那次)/ 令牌不对:不给上游图床名单;带 dg_t Cookie(登录后应用启动那次)照常给
+        const anon = (await api('GET', '/api/config')).j || {};
+        const bad = (await api('GET', '/api/config?token=not-a-token')).j || {};
+        const ck = (await api('GET', '/api/config', { cookie: CK })).j || {};
+        ok(anon.site_name === 'DGX' && JSON.stringify(anon.cover_dead_hosts) === '[]' && JSON.stringify(bad.cover_dead_hosts) === '[]' && ck.cover_dead_hosts && ck.cover_dead_hosts.length === 2,
+            '/api/config cover_dead_hosts:未登录 / 令牌不对 → [];带登录 Cookie → 给', [anon.cover_dead_hosts, bad.cover_dead_hosts, ck.cover_dead_hosts]);
+    }
     r = await api('GET', '/api/auth/check');
     ok(r.j && r.j.shareTrial === 0 && r.j.requirePassword === true, '分享试看默认关(SHARE_TRIAL_MINUTES=0)', r.j);
     for (const p of ['/api/tmdb-proxy?path=/trending/all/week', '/api/tmdb-image/w300/abc.jpg', '/api/preview?name=x', '/sitemap.xml', '/movie/1', '/tv/1']) {

@@ -73,6 +73,8 @@ function createCatalog(deps) {
             return { kind: 'weird', alias: null, exact: null, items: [card('t:ok1', '邻家姐姐的周末'), card('t:blocked3', '情侣自拍流出 合集')] };
         },
         beacon(r, who) { rec({ ev: 'beacon', r, who }); return { ok: true, dead: false }; },
+        // 封面域名健康:死域名表(闸门只放像域名的、去重、≤200)
+        coverDeadHosts() { return ['img-gone.example', 'Bad Host!', 'img-gone.example', 'pic.gone2.example', 42]; },
         picUrl(k, s, o) {
             rec({ ev: 'picUrl', k, s, meta: !!(o && o.meta) });
             const base = process.env.ADULT_TEST_IMG_BASE || 'http://127.0.0.1:9';

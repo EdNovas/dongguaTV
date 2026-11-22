@@ -1744,8 +1744,8 @@ app.get('/api/config', (req, res) => {
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken),
         // [adult] 成人站标记 + 关掉的功能报关(放最后,覆盖上面同名键):adult/catalog/age_gate/site_name/auth_required/rules_version,
-        //   tmdb_api_key/tmdb_proxy_url 恒 null;推送/求片/弹幕/片头 按 *_DISABLE
-        ...adultGate.configFields()
+        //   tmdb_api_key/tmdb_proxy_url 恒 null;推送/求片/弹幕/片头 按 *_DISABLE;cover_dead_hosts 只给能看目录的请求(所以传 req)
+        ...adultGate.configFields(req)
     });
 });
 

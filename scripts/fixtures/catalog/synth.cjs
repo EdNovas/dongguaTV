@@ -5,6 +5,7 @@
 //   (另一个随机序列,不影响原来那些作品的分布)
 const SCH = require('../../../lib/site-catalog/schema');
 const { INGEST_REV } = require('../../../lib/site-catalog/writer');
+const { COVER_REV } = require('../../../lib/site-catalog/cover-health');
 
 function synth(file, o) {
     const n = o.n;
@@ -15,6 +16,8 @@ function synth(file, o) {
     const rk = adult.RULES_VERSION + '|' + INGEST_REV;
     db.prepare("INSERT OR REPLACE INTO adult_meta (k, v) VALUES ('rules', ?)").run(rk);
     db.prepare("INSERT OR REPLACE INTO adult_meta (k, v) VALUES ('rv:rules', ?)").run(rk);
+    // 封面域名健康:合成作品的封面已按"没有死域名"挑好(线路封面 = 作品封面),写线程不用再全量重挑一遍
+    db.prepare("INSERT OR REPLACE INTO adult_meta (k, v) VALUES ('cover:applied', ?)").run(JSON.stringify({ rev: COVER_REV, dead: '' }));
     const vocab = adult.tags.VOCAB.filter((t) => t.kind !== 'blocked').map((t) => t.id);
     const featured = vocab.filter((id) => adult.tags.isFeatured(id));
     const buckets = adult.taxonomy.NAV_BUCKETS;
@@ -24,8 +27,8 @@ function synth(file, o) {
     const ins = db.prepare(`INSERT INTO adult_works (wk, name, code, ckey, clean, bucket, tags, review, code_ok, pic, pic_item, dur_med, dur, n_sites, sites, live_sites, first_site,
         variants, flags, is_clip, first_seen, last_seen, line_at, rand, hot, vis, released, studio, maker, label, avdb, actress, orient)
         VALUES (?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,'',?,?,?,?,?,?,?,1,?,?,'','',?,?,?)`);
-    const insItem = db.prepare(`INSERT INTO adult_items (site, vod_id, wk, bucket, name, first_seen, last_seen, play_from, play_url, play_at, dur, orient)
-        VALUES (?,?,?,?,?,?,?,'m3u8',?,?,?,?)`);
+    const insItem = db.prepare(`INSERT INTO adult_items (site, vod_id, wk, bucket, name, first_seen, last_seen, play_from, play_url, play_at, dur, orient, pic)
+        VALUES (?,?,?,?,?,?,?,'m3u8',?,?,?,?,?)`);
     let seed2 = 777;
     const rnd2 = () => { seed2 = (Math.imul(seed2, 1103515245) + 12345) >>> 0; return seed2 / 4294967296; };
     const FEEDB = new Set(['short', 'live', 'creators']);
@@ -50,7 +53,7 @@ function synth(file, o) {
                 bucket, ',' + [...tags].join(',') + ',', 1, 'https://img.example/' + i + '.jpg', 's1|' + i,
                 du, du, sites === ',s1,' ? 1 : 2, sites, sites, 's' + (1 + (i % 2)), rnd() < 0.1 ? 1 : 0, rnd() < 0.03 ? 1 : 0, fs, fs, fs + Math.floor(rnd() * 86400e3),
                 Math.floor(rnd() * 2147483647), i < 60 ? 1000 - i : 0, rel, code ? '合成片商' + Math.floor(Math.pow(rnd(), 2) * 300) : '', code ? 1 : 0, act, orient);
-            if (feedish) insItem.run('s1', String(i), wk, bucket, '合成作品标题' + i, fs, fs, '第1集$https://media.example/s/' + i + '/index.m3u8', t0 - Math.floor(rnd2() * 5 * 86400e3), du, orient);
+            if (feedish) insItem.run('s1', String(i), wk, bucket, '合成作品标题' + i, fs, fs, '第1集$https://media.example/s/' + i + '/index.m3u8', t0 - Math.floor(rnd2() * 5 * 86400e3), du, orient, 'https://img.example/' + i + '.jpg');
         }
     })();
     db.close();

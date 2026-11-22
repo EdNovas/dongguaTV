@@ -1129,6 +1129,15 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         ok(catImg.picUrl('c:SSIS-900', 'pa') === pa && /^https:\/\/img\.example\//.test(pa), 'picUrl:按 (作品, 站) 从索引查地址');
         const meta = catImg.picUrl('c:SSIS-900', '', { meta: true });
         ok(meta && /^https:\/\/img\.example\//.test(meta.url) && meta.name === 'SSIS-900 某合成标题' && meta.bucket === 'jp_censored', 'picUrl 不给站 → 用作品封面那一条;meta:true 带片名 / 分区', meta);
+        {
+            // 复核:卡片的 /api/img?s= 是 pic_item 的站 —— 代理按 pic_item 取挑中的那一条(= 作品封面),不是"那个站最新的一条"
+            const wi = db7.prepare("SELECT pic, pic_item FROM adult_works WHERE wk='c:SSIS-900'").get();
+            const s0 = String(wi.pic_item || '').split('|')[0];
+            const cardImg = catImg.home().rows.flatMap((r) => r.items).find((c) => c.wk === 'c:SSIS-900');
+            const viaCard = catImg.picUrl('c:SSIS-900', s0, { meta: true });
+            ok(s0 && viaCard && viaCard.url === wi.pic && meta.url === wi.pic && (!cardImg || cardImg.pic === '/api/img?k=' + encodeURIComponent('c:SSIS-900') + '&s=' + s0),
+                'picUrl(作品, pic_item 的站) = 作品封面(pic_item 那一条)', { wi, viaCard, card: cardImg && cardImg.pic });
+        }
         ok(catImg.picUrl('c:SSIS-900', 'zz') === null && catImg.picUrl('c:NOPE-001', 'pa') === null && catImg.picUrl('', 'pa') === null && catImg.picUrl('c:SSIS-900', 'pd') === null, 'picUrl:没有 / 不相干的站 → null');
         db7.prepare("UPDATE adult_works SET review='hide' WHERE wk='c:SSIS-906'").run();
         ok(catImg.picUrl('c:SSIS-906', 'pa') === null, 'picUrl:审查过滤藏起来的作品 → null');
