@@ -1,21 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- 允许所有明文 HTTP 流量（内网使用） -->
-    <base-config cleartextTrafficPermitted="true">
+    <!-- [adult] 隐私加固:
+         ① 只允许 HTTPS(明文 HTTP 一律拒绝;服务器、图片、视频分片都要走 https)。
+         ② 只信任系统证书:不信任用户自己装的 CA —— 否则装一个抓包证书就能看到全部请求(观看记录、令牌)。
+         需要临时用 http 内网服务器调试时,另建 debug 构建自己改,别改这里。 -->
+    <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
         </trust-anchors>
     </base-config>
-    
-    <!-- 可选：仅允许特定域名的 HTTP 流量 -->
-    <!-- 如果您想更安全，可以取消下面的注释并添加您的内网 IP -->
-    <!--
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">192.168.1.100</domain>
-        <domain includeSubdomains="true">10.0.0.0</domain>
-        <domain includeSubdomains="true">myserver</domain>
-        <domain includeSubdomains="true">localhost</domain>
-    </domain-config>
-    -->
 </network-security-config>

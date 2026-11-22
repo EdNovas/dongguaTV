@@ -1,5 +1,24 @@
 apply plugin: 'com.android.application'
 
+// [adult] 私有签名(可选):只从本机用户目录的 gradle.properties 读(GRADLE_USER_HOME 或 ~/.gradle/gradle.properties),
+//   绝不从仓库里的 android/gradle.properties / -P 读。四项都设了、密钥文件存在、且不在仓库目录里,release 才签名;
+//   缺一项 = 不配签名,assembleRelease 照旧出 app-release-unsigned.apk(手动 zipalign + apksigner)。
+//   DGX_STORE_FILE / DGX_STORE_PASSWORD / DGX_KEY_ALIAS / DGX_KEY_PASSWORD;步骤见 .adult-research/impl/p4/android-build.md
+def dgxSigning = { ->
+    def home = System.getenv('GRADLE_USER_HOME') ?: new File(System.getProperty('user.home'), '.gradle').path
+    def f = new File(home, 'gradle.properties')
+    if (!f.isFile()) return null
+    def p = new Properties()
+    f.withInputStream { p.load(it) }
+    def keys = ['DGX_STORE_FILE', 'DGX_STORE_PASSWORD', 'DGX_KEY_ALIAS', 'DGX_KEY_PASSWORD']
+    if (!keys.every { (p.getProperty(it) ?: '').trim() }) return null
+    def store = new File(p.getProperty('DGX_STORE_FILE').trim())
+    if (!store.isFile()) { logger.warn("[dgx] DGX_STORE_FILE 不存在: ${store} —— 不签名"); return null }
+    def repo = rootProject.projectDir.parentFile.canonicalFile
+    if (store.canonicalPath.startsWith(repo.canonicalPath + File.separator)) { logger.warn('[dgx] 签名密钥在仓库目录里 —— 拒绝使用,挪到仓库外'); return null }
+    return [store: store, storePassword: p.getProperty('DGX_STORE_PASSWORD'), alias: p.getProperty('DGX_KEY_ALIAS').trim(), keyPassword: p.getProperty('DGX_KEY_PASSWORD')]
+}()
+
 android {
     namespace = "com.ednovas.donguatv"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -20,10 +39,21 @@ android {
             abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86', 'x86_64'
         }
     }
+    if (dgxSigning) {
+        signingConfigs {
+            release {
+                storeFile dgxSigning.store
+                storePassword dgxSigning.storePassword
+                keyAlias dgxSigning.alias
+                keyPassword dgxSigning.keyPassword
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (dgxSigning) signingConfig signingConfigs.release
         }
     }
     

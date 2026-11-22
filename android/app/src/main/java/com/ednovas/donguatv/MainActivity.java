@@ -6,6 +6,7 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
@@ -16,10 +17,15 @@ public class MainActivity extends BridgeActivity {
     private ViewGroup webViewParent = null;
     // 📱 Android 15 (API 35) 及以上版本强制 Edge-to-Edge，需要手动添加 padding
     private boolean needsManualPadding = false;
+    // [adult] 防截屏 / 录屏(FLAG_SECURE),默认开;网页「隐私」设置里可关(AndroidPrivacy.setSecure)
+    private volatile boolean secureOn = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // [adult] 隐私:一启动就防截屏,最近任务里也不显示画面(网页加载前就生效,网页再按设置改)
+        applySecure(true);
 
         Window window = getWindow();
         
@@ -67,6 +73,8 @@ public class MainActivity extends BridgeActivity {
             
             // 添加 JavaScript 接口用于全屏控制（所有版本都需要）
             webView.addJavascriptInterface(new FullscreenInterface(), "AndroidFullscreen");
+            // [adult] 隐私:public/adult/privacy.js 用它开关防截屏
+            webView.addJavascriptInterface(new PrivacyInterface(), "AndroidPrivacy");
         }
     }
     
@@ -134,6 +142,30 @@ public class MainActivity extends BridgeActivity {
         });
     }
     
+    // [adult] 防截屏:FLAG_SECURE 挡截屏、录屏、投屏和最近任务缩略图;Android 13+ 另外一直关掉最近任务截图(关了防截屏也不露画面)
+    private void applySecure(boolean on) {
+        secureOn = on;
+        runOnUiThread(() -> {
+            Window w = getWindow();
+            if (on) w.addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            else w.clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false);
+        });
+    }
+
+    // [adult] JavaScript 接口:window.AndroidPrivacy.setSecure(true/false) / isSecure()
+    public class PrivacyInterface {
+        @JavascriptInterface
+        public void setSecure(boolean on) {
+            applySecure(on);
+        }
+
+        @JavascriptInterface
+        public boolean isSecure() {
+            return secureOn;
+        }
+    }
+
     // JavaScript 接口类
     public class FullscreenInterface {
         @JavascriptInterface
