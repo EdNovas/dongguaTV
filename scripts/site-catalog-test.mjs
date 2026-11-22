@@ -25,7 +25,11 @@
 //     标签云 / 标签页 / 片商榜 / 演员页
 //  ⑨ 第三阶段(worker):dbPath → 写线程入库 + 读线程快照 / 浏览;AVDB 住写线程;全量历史回填(每站游标、续跑重一页、同域名 ≥2.2s、
 //     首轮增量后自动开始、CATALOG_BACKFILL=0 关)
-//  ⑩ 20 万作品合成目录(scripts/fixtures/catalog/synth.cjs):浏览 / 分面 / 标签 / 联想 / 建快照全程主线程卡顿 < 50 ms
+//  ⑩ 20 万作品合成目录(scripts/fixtures/catalog/synth.cjs):浏览 / 分面 / 标签 / 联想 / 建快照 / 相关 / 刷一刷 / 热度 全程主线程卡顿 < 50 ms
+//  ⑪ 第四阶段(inline):刷一刷(入选 / 线路 / 去重 / 家族轮流 / 竖屏在前 / vert=1 / 审查级不进)、beacon 方向学习、相关推荐(打分 / 排除自己和同一部片 /
+//     审查级不当种子也不出 / 演员行 / 片商行)、热度(k-匿名 / 每天去重 / 归一 / 去重键 2 天过期 / 只有聚合)、后台隐藏(每条读路径)、站点停用、
+//     追加屏蔽词(入库拦 / 出口拦 / 加一代重扫 / 永远放松不了内置规则)、短视频分类慢速补库(6h 后 / 每天 ≤10 页 / 每轮 ≤6 / ≥2.2s)
+//  ⑫ 第四阶段(worker):上面这些跨写 / 读线程,重启后隐藏 / 停用 / 追加词都还在(构造时同步预读)
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -947,6 +951,13 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         const jpAll = cat7.browse({ b: 'jp_censored' }).total_results;
         const ex = cat7.browse({ b: 'jp_censored', x: 'wife' });
         ok(ex.total_results === jpAll - 5 && ex.results.every((c) => !has(c, 'wife')), '排除标签 x=', [jpAll, ex.total_results]);
+        // 复核 r3:nr=1(「猜你喜欢」推荐位)→ 审查级作品(code / 审查级标签 / 分类 filter)整个不出;普通浏览不受影响
+        const rvlOf = (c) => { const w = workRow(db7, c.wk); return w.review === 'code' || w.review === 'filter' || String(w.tags || '').split(',').some((t) => t && adult.tags.isReview(t)); };
+        const nrJp = cat7.browse({ b: 'jp_censored', nr: 1 }), nrAll = cat7.browse({ nr: '1' }), nrWife = cat7.browse({ t: 'wife', nr: true, sort: 'hot' });
+        ok(cat7.browse({ t: 'incest', b: 'jp_censored', nr: 1 }).total_results === 0 && nrJp.total_results > 0 && nrJp.total_results <= jpAll - 3
+            && [nrJp, nrAll, nrWife].every((r) => r.results.every((c) => !rvlOf(c))) && nrAll.total_results < cat7.browse({}).total_results
+            && cat7.browse({ b: 'jp_censored', nr: '0' }).total_results === jpAll && cat7.browse({ b: 'jp_censored', facets: 1, nr: 1 }).facets.more.length === 0,
+        '浏览 nr=1:审查级作品整个不出(分面里也没有审查级标签);nr 没给 / 0 → 照常', [jpAll, nrJp.total_results, nrAll.total_results, nrWife.total_results]);
         ok(!['', 'jp_censored'].some((b) => cat7.tags(b).tags.some((t) => t.id === 'studio')), '「厂牌」伪标签不在标签云里(片商走 studio 分面)');
         // 厂牌前缀 lp(作品页「SSIS」按钮)
         const bl = cat7.browse({ lp: 'ssis' });
@@ -1169,7 +1180,8 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
     const B1 = n8b.site('bf1');
     for (let i = 0; i < 20; i++) B1.items.push(mk('某合成国产回填' + i, '国产自拍', { t: T0 - i * 10 * MIN - MIN, dur: 600 + i }));
     for (let i = 0; i < 700; i++) B1.items.push(mk('某合成欧美旧片 ' + i, '欧美精品', { parent: '欧美', t: T0 - 100 * DAY - i * HOUR, dur: 1500 + i }));
-    const cat8 = createCatalog({ db: db8, getSites: () => n8b.sitesCfg(), adult, httpGet: n8b.httpGet, log: () => {}, now: c8.now, sleep: c8.sleep });
+    // 第四阶段的短视频分类慢速补库也用 &t=:这里只测薄分区回填,把它关掉(它自己的测试在 ⑪)
+    const cat8 = createCatalog({ db: db8, getSites: () => n8b.sitesCfg(), adult, httpGet: n8b.httpGet, log: () => {}, now: c8.now, sleep: c8.sleep, env: { CATALOG_SHORT_BACKFILL: '0' } });
     await cat8.tick();
     ok(!n8b.log.some((x) => x.t != null), '首次爬取 6h 内不回填');
     const western = () => db8.prepare("SELECT COUNT(*) n FROM adult_works WHERE bucket='western'").get().n;
@@ -1531,7 +1543,7 @@ console.log('⑨ 第三阶段(worker):写线程入库 / 读线程浏览 / AVDB �
 }
 
 // =====================================================================
-console.log('⑩ 第三阶段:20 万作品合成目录 —— 浏览 / 分面 / 标签 / 联想调用时主线程卡顿 < 50 ms');
+console.log('⑩ 第三 / 四阶段:20 万作品合成目录 —— 浏览 / 分面 / 标签 / 联想 / 相关 / 刷一刷 / 热度调用时主线程卡顿 < 50 ms');
 {
     const { synth } = require(path.join(ROOT, 'scripts/fixtures/catalog/synth.cjs'));
     const { performance } = await import('node:perf_hooks');
@@ -1541,6 +1553,15 @@ console.log('⑩ 第三阶段:20 万作品合成目录 —— 浏览 / 分面 / 
     synth(file, { n: 200000, adult, now: T0 });
     const genMs = performance.now() - t;
     const sites = [{ key: 's1', name: 'S1', api: 'https://s1.test/api.php/provide/vod' }, { key: 's2', name: 'S2', api: 'https://s2.test/api.php/provide/vod' }];
+    // 第四阶段要用的作品键 / 时长(卡顿采样开始前先查好)
+    const wkOfS = (i) => (i % 3 === 0 ? 'c:ZZT' + (i % 997) + '-' + String(i).padStart(6, '0') : 't:合成作品' + i);
+    const heatWks = [];
+    {
+        const ro0 = new Database(file, { readonly: true });
+        const qd = ro0.prepare('SELECT dur FROM adult_works WHERE wk=?');
+        for (let k = 0; k < 40; k++) { const wk = wkOfS(k * 101 + 1); const r = qd.get(wk); if (r) heatWks.push([wk, r.dur > 0 ? r.dur : 600]); }
+        ro0.close();
+    }
     let maxLag = 0, last = performance.now();
     const lags = [];
     const iv = setInterval(() => { const n = performance.now(); const lag = n - last - 2; if (lag > maxLag) maxLag = lag; lags.push(lag); last = n; }, 2);
@@ -1573,16 +1594,556 @@ console.log('⑩ 第三阶段:20 万作品合成目录 —— 浏览 / 分面 / 
     t = performance.now();
     const rb = await catS.rebuild();
     const rebuildMs = performance.now() - t;
+    // 第四阶段:相关推荐(读线程打分)/ 刷一刷(读线程翻预算好的序列 + 查线路)/ 热度(写线程攒、主线程点查)—— 主线程只收发
+    t = performance.now();
+    const relRes = await Promise.all(Array.from({ length: 60 }, (_, k) => catS.related(wkOfS(k * 3331 + 7))));
+    const relMs = performance.now() - t;
+    t = performance.now();
+    const seenF = new Set();
+    let fc = null, fItems = 0, dupF = 0, fPages = 0;
+    for (let k = 0; k < 20; k++) { const r = await catS.feed({ cursor: fc }); fPages++; for (const it of r.items) { if (seenF.has(it.wk)) dupF++; seenF.add(it.wk); } fItems += r.items.length; fc = r.cursor_next; if (!fc) break; }
+    let vc = null, vItems = 0, vBad = 0;
+    for (let k = 0; k < 10; k++) { const r = await catS.feed({ cursor: vc, vert: true }); vItems += r.items.length; vBad += r.items.filter((x) => x.orient !== 'v' || !x.lines.length || !/m3u8/.test(x.lines[0].url)).length; vc = r.cursor_next; if (!vc) break; }
+    const feedMs = performance.now() - t;
+    t = performance.now();
+    const hbS = Array.from({ length: 100 }, (_, k) => (k * 7) % 256);
+    let hOk = 0;
+    for (const [wk, du] of heatWks) for (const who of ['ha', 'hb', 'hc']) if (await catS.heatAdd(wk, { bins: hbS, dur: du }, who)) hOk++;
+    const heatHit = heatWks.filter(([wk]) => { const h = catS.heat(wk); return h && h.users === 3 && h.bins.length === 100; }).length;
+    const heatMs = performance.now() - t;
     clearInterval(iv);
     lags.sort((a, b) => a - b);
     const snapS = catS.stats().snapshot;
     console.log(`  (20 万作品:生成 ${Math.round(genMs)} ms;首个快照 ${Math.round(firstMs)} ms(读线程建 ${snapS.buildMs} ms);浏览 ×300 并发 ${Math.round(wall)} ms,p50 ${lat[150].toFixed(1)} / p95 ${lat[285].toFixed(1)} ms;` +
-        `标签/片商/标签页/联想/查找 ×20 ${Math.round(miscMs)} ms;重建 ${Math.round(rebuildMs)} ms;主线程最大卡顿 ${maxLag.toFixed(1)} ms(p99 ${lags[Math.floor(lags.length * 0.99)].toFixed(1)},${lags.length} 次采样))`);
+        `标签/片商/标签页/联想/查找 ×20 ${Math.round(miscMs)} ms;重建 ${Math.round(rebuildMs)} ms;相关 ×60 并发 ${Math.round(relMs)} ms;刷一刷 ${fPages}+${vc ? 10 : '≤10'} 页 ${Math.round(feedMs)} ms;` +
+        `热度 ${hOk} 次写 + ${heatWks.length} 次读 ${Math.round(heatMs)} ms;主线程最大卡顿 ${maxLag.toFixed(1)} ms(p99 ${lags[Math.floor(lags.length * 0.99)].toFixed(1)},${lags.length} 次采样))`);
     ok(snapS.works === 200000 && hS.rows.length >= 10 && okShape && big.total_results > 150000 && big.facets.groups.length >= 8, '20 万作品:快照 / 首页 / 浏览 / 分面都正常', [snapS, hS.rows.length, big.total_results]);
-    ok(maxLag < 50, '主线程卡顿 < 50 ms(浏览 / 分面 / 标签 / 联想 / 建快照全程)', maxLag);
+    ok(maxLag < 50, '主线程卡顿 < 50 ms(浏览 / 分面 / 标签 / 联想 / 建快照 / 相关 / 刷一刷 / 热度全程)', maxLag);
+    const relOk = relRes.filter((r) => r && Array.isArray(r.items));
+    ok(relOk.length >= 50 && relOk.filter((r) => r.items.length > 0).length >= 40 && relRes.every((r, k) => !r || !r.items.some((c) => c.wk === wkOfS(k * 3331 + 7))), '20 万作品:相关推荐有结果、从不含自己', [relOk.length, relOk.filter((r) => r.items.length > 0).length]);
+    ok(fItems >= 150 && dupF === 0 && vItems > 0 && vBad === 0, '20 万作品:刷一刷翻页不重复、竖屏模式只出竖屏且都有 m3u8 线路', [fItems, dupF, vItems, vBad]);
+    ok(hOk === heatWks.length * 3 && heatWks.length >= 30 && heatHit === heatWks.length, '20 万作品:热度写 / 读', [hOk, heatHit, heatWks.length]);
     ok(rb && rb.N === 200000, '重建快照(读线程)');
     await catS.close();
     try { fs.rmSync(tmpS, { recursive: true, force: true }); } catch (_) { /* */ }
+}
+
+// =====================================================================
+console.log('⑪ 第四阶段(inline):刷一刷 / 方向学习 / 相关推荐 / 热度 / 后台隐藏 / 站点停用 / 追加屏蔽词');
+{
+    const P = adult.policy;
+    const cA = mkClock(T0), nA = mkNet(cA);
+    nA.latency = 20;
+    const dbA = new Database(':memory:');
+    const RA = nA.site('ra', { family: 'fra' }), RB = nA.site('rb', { family: 'frb' }), RC = nA.site('rc', { family: 'frc' });
+    nA.site('rx', { active: false });
+    for (let i = 0; i < 12; i++) RA.items.push(mk(`某合成竖屏短片甲${i}`, '抖音短视频', { t: T0 - i * 10 * MIN - MIN, dur: 15 + i * 5 }));
+    for (let i = 0; i < 8; i++) RB.items.push(mk(`某合成竖屏短片乙${i}`, '抖音短视频', { t: T0 - i * 10 * MIN - 2 * MIN }));   // 时长未知 → 也收
+    RA.items.push(mk('某合成超长短片', '抖音短视频', { t: T0 - 3 * MIN, dur: 400 }));
+    RA.items.push(mk('某合成超短片', '抖音短视频', { t: T0 - 4 * MIN, dur: 5 }));
+    RB.items.push(mk('某合成只有MP4的短片', '抖音短视频', { t: T0 - 5 * MIN, dur: 30, extra: { vod_play_url: '正片$https://media.example/x/1.mp4' } }));
+    for (let i = 0; i < 3; i++) RC.items.push(mk(`某合成主播片段${i}`, '主播', { t: T0 - i * 7 * MIN - 6 * MIN, dur: 120 }));
+    RC.items.push(mk('某合成网红长片', '网红', { t: T0 - 8 * MIN, dur: 600 }));
+    const catA = createCatalog({ db: dbA, getSites: () => nA.sitesCfg(), adult, httpGet: nA.httpGet, log: () => {}, now: cA.now, sleep: cA.sleep });
+    await catA.tick();
+    const wkOf = (name) => (dbA.prepare('SELECT wk FROM adult_items WHERE name=?').get(name) || {}).wk;
+    const lineOf = (wk) => dbA.prepare('SELECT site, vod_id FROM adult_items WHERE wk=?').get(wk);
+    const gen = () => Number((dbA.prepare("SELECT v FROM adult_meta WHERE k='rv:gen'").get() || {}).v) || 0;
+    const allFeed = (o) => { const out = []; let c = null, n = 0; do { const r = catA.feed(Object.assign({}, o, c ? { cursor: c } : {})); out.push(...r.items); c = r.cursor_next; n++; } while (c && n < 60); return out; };
+    const famOf = (x) => ({ ra: 'fra', rb: 'frb', rc: 'frc' })[x.lines[0].site];
+    // —— 刷一刷:入选 / 线路 / 去重 / 家族轮流 ——
+    const okNames = [...Array.from({ length: 12 }, (_, i) => `某合成竖屏短片甲${i}`), ...Array.from({ length: 8 }, (_, i) => `某合成竖屏短片乙${i}`)];
+    const F1 = allFeed({ limit: 5 });
+    ok(F1.length === 20 && new Set(F1.map((x) => x.wk)).size === 20 && okNames.every((n) => F1.some((x) => x.wk === wkOf(n))), '刷一刷:short(8..300s 或时长未知)全进、游标翻页不重不漏', F1.map((x) => x.name));
+    ok(!F1.some((x) => [wkOf('某合成超长短片'), wkOf('某合成超短片'), wkOf('某合成只有MP4的短片'), wkOf('某合成网红长片')].includes(x.wk)) && !F1.some((x) => x.bucket === 'live'),
+        '刷一刷:>300s / <8s / 没有 m3u8 线路 / 方向未知的主播 / 太长的网红 都不进');
+    ok(F1.every((x) => x.lines.length >= 1 && x.lines.every((l) => /^https:\/\/media\.example\/\d+\/index\.m3u8$/.test(l.url) && typeof l.site === 'string' && typeof l.dur === 'number' && 'vod_id' in l && 'orient' in l
+        && /^某合成竖屏短片/.test(l.vod_name) && l.type_name === '抖音短视频')),
+        'FeedItem.lines:[{site, vod_id, vod_name, type_name, url(第一集 m3u8), dur, orient}]', F1[0] && F1[0].lines);
+    ok(['wk', 'name', 'pic', 'sub', 'badge', 'bucket', 'code', 'dur', 'n_sites', 'first_seen', 'orient', 'lines'].every((k) => k in F1[0]), 'FeedItem = Card + {orient, dur, lines}', Object.keys(F1[0]));
+    ok(U.maxRunOf(F1.slice(0, 16), famOf) <= 2, '刷一刷:同一天里按家族轮流(同家族连续 ≤2)', F1.slice(0, 16).map(famOf).join(','));
+    ok(catA.feed({ cursor: 'garbage!!' }).items.length === 10 && catA.feed({ limit: 99 }).items.length === 20, '坏游标 = 从头;limit 上限 30');
+    // —— 方向学习(播放上报 videoWidth/Height)——
+    const live0 = wkOf('某合成主播片段0'), live1 = wkOf('某合成主播片段1'), sA0 = wkOf('某合成竖屏短片甲0'), sA1 = wkOf('某合成竖屏短片甲1'), sB0 = wkOf('某合成竖屏短片乙0'), cr = wkOf('某合成网红长片');
+    for (const wk of [live0, live1, cr]) { const l = lineOf(wk); catA.beacon({ site_key: l.site, vod_id: l.vod_id, ok: true, w: 720, h: 1280 }, 'u1'); }
+    { const l = lineOf(sA0); catA.beacon({ site_key: l.site, vod_id: l.vod_id, ok: true, orient: 'v' }, 'u1'); }
+    { const l = lineOf(sA1); catA.beacon({ site_key: l.site, vod_id: l.vod_id, ok: true, w: 1920, h: 1080, orient: 'v' }, 'u1'); }   // 宽高为准
+    { const l = lineOf(sB0); catA.beacon({ site_key: l.site, vod_id: l.vod_id, ok: true, w: 1080, h: 1080 }, 'u1'); }
+    { const l = lineOf(wkOf('某合成竖屏短片乙1')); catA.beacon({ site_key: l.site, vod_id: l.vod_id, ok: true, orient: 'tall' }, 'u1'); catA.beacon({ site_key: l.site, vod_id: l.vod_id, ok: false, w: 720, h: 1280 }, 'u2'); }
+    const ori = (wk) => [dbA.prepare('SELECT orient FROM adult_items WHERE wk=?').get(wk).orient, workRow(dbA, wk).orient];
+    ok(JSON.stringify([ori(live0), ori(sA0), ori(sA1), ori(sB0), ori(wkOf('某合成竖屏短片乙1'))]) === JSON.stringify([['v', 'v'], ['v', 'v'], ['h', 'h'], ['sq', 'sq'], ['', '']]),
+        'beacon 方向:宽高 → v/h/sq(宽高优先于 orient);只给 orient 也收;不认识的 orient / 失败上报不记', [ori(live0), ori(sA0), ori(sA1), ori(sB0)]);
+    ok(catA.stats().beacon.orient >= 5, 'beacon 方向计数', catA.stats().beacon);
+    catA.rebuild();
+    const F2 = allFeed({});
+    const tierOf = (x) => (x.orient === 'v' ? 0 : x.orient === 'h' ? 2 : 1);
+    ok(F2.length === 22 && F2.some((x) => x.wk === live0) && F2.some((x) => x.wk === live1) && !F2.some((x) => x.wk === cr) && !F2.some((x) => x.wk === wkOf('某合成主播片段2')),
+        '刷一刷:主播学到竖屏后进(≤180s);网红竖屏但 600s 不进;没学到方向的主播不进', F2.length);
+    ok(F2.every((x, k) => k === 0 || tierOf(F2[k - 1]) <= tierOf(x)) && F2.slice(0, 3).every((x) => x.orient === 'v') && F2[F2.length - 1].wk === sA1, '刷一刷 vert=false:已知竖屏在前、横屏最后', F2.map((x) => x.orient || '-').join(''));
+    const FV = allFeed({ vert: true });
+    ok(FV.length === 3 && FV.every((x) => x.orient === 'v') && FV.some((x) => x.wk === sA0), '刷一刷 vert=1:只出已知竖屏', FV.map((x) => x.name));
+    ok(catA.feed({ vert: '1' }).items.length === 3, 'vert 也认 "1"');
+    // 快照换了:游标按上一个作品接着走;不在新快照里 → 到底
+    const p1 = catA.feed({ limit: 5 });
+    cA.t += 11 * MIN;
+    catA.rebuild();
+    const p2 = catA.feed({ limit: 30, cursor: p1.cursor_next });
+    ok(p2.items.length === 17 && !p2.items.some((x) => p1.items.some((y) => y.wk === x.wk)), '刷一刷:快照换了按上一个作品接着翻', [p2.items.length]);
+    // 审查级(审查级标签 / 分类审查级)一律不进
+    const sA2 = wkOf('某合成竖屏短片甲2'), sA3 = wkOf('某合成竖屏短片甲3');
+    const tags2 = workRow(dbA, sA2).tags;
+    dbA.prepare("UPDATE adult_works SET tags=',drunk,' WHERE wk=?").run(sA2);
+    dbA.prepare("UPDATE adult_works SET review='filter' WHERE wk=?").run(sA3);
+    catA.rebuild();
+    const F3 = allFeed({});
+    ok(F3.length === 20 && !F3.some((x) => x.wk === sA2 || x.wk === sA3), '刷一刷:带审查级标签 / 分类审查级的作品不进', F3.length);
+    dbA.prepare('UPDATE adult_works SET tags=? WHERE wk=?').run(tags2, sA2);
+    dbA.prepare('UPDATE adult_works SET review=NULL WHERE wk=?').run(sA3);
+    catA.rebuild();
+    // 修订:快照之后才变成审查级的(爬虫 / 回填加了带审查级标签的线路、分类审查级)→ 不等重建快照,刷一刷马上不出
+    dbA.prepare("UPDATE adult_works SET tags=',drunk,' WHERE wk=?").run(sA2);
+    dbA.prepare("UPDATE adult_works SET review='filter' WHERE wk=?").run(sA3);
+    const F3b = allFeed({});
+    ok(F3b.length === 20 && !F3b.some((x) => x.wk === sA2 || x.wk === sA3), '刷一刷:快照之后才变成审查级的,不等重建快照就不出', F3b.length);
+    dbA.prepare('UPDATE adult_works SET tags=? WHERE wk=?').run(tags2, sA2);
+    dbA.prepare('UPDATE adult_works SET review=NULL WHERE wk=?').run(sA3);
+
+    // —— 相关推荐(直接灌作品:精确控制标签 / 片商 / 演员)——
+    let nid = 90000;
+    const insW = (wk, o) => {
+        const id = ++nid, site = o.site || 'ra', fsw = o.fs || T0 - DAY;
+        dbA.prepare(`INSERT INTO adult_works (wk, name, code, ckey, clean, bucket, tags, review, code_ok, pic, pic_item, dur_med, dur, n_sites, sites, live_sites, first_site, flags, is_clip,
+                first_seen, last_seen, line_at, vis, studio, actress, released, rv) VALUES (?,?,?,?,?,?,?,?,1,?,?,7200,7200,1,?,?,?,0,?,?,?,?,1,?,?,?,?)`)
+            .run(wk, o.name, o.ckey || null, o.ckey || null, o.name, o.bucket || 'jp_censored', o.tags || '', o.review || null, 'https://img.example/r/' + id + '.jpg', site + '|r' + id,
+                ',' + site + ',', ',' + site + ',', site, o.clip ? 1 : 0, fsw, fsw, fsw, o.studio || '', o.actress ? JSON.stringify(o.actress) : '', o.released || '', gen());
+        dbA.prepare(`INSERT INTO adult_items (site, vod_id, wk, bucket, name, ckey, first_seen, last_seen, play_from, play_url, play_at, dur, rv) VALUES (?,?,?,?,?,?,?,?,'m3u8',?,?,7200,?)`)
+            .run(site, 'r' + id, wk, o.bucket || 'jp_censored', o.name, o.ckey || null, fsw, fsw, '正片$https://media.example/r/' + id + '/index.m3u8', cA.t, gen());
+    };
+    const SEED_ACT = [[701, 'Kakuu Seed']];
+    insW('c:QWZ-100', { name: 'QWZ-100 某合成种子', ckey: 'QWZ-100', tags: ',busty,uniform,office,drunk,', studio: '合成片商Q', actress: SEED_ACT, fs: T0 - 10 * DAY });
+    insW('c:QWZ-100~2', { name: 'QWZ-100 某合成种子 · 2', ckey: 'QWZ-100', tags: ',busty,uniform,office,', studio: '合成片商Q', actress: SEED_ACT, fs: T0 - 10 * DAY });
+    insW('c:QWZ-100#clip', { name: 'QWZ-100 某合成种子 [解说]', ckey: 'QWZ-100', tags: ',busty,uniform,office,', studio: '合成片商Q', actress: SEED_ACT, clip: true, fs: T0 - 10 * DAY });
+    insW('c:QWZ-100#U', { name: 'QWZ-100 某合成种子 [无码流出]', ckey: 'QWZ-100', tags: ',busty,uniform,office,', studio: '合成片商Q', actress: SEED_ACT, fs: T0 - 10 * DAY });
+    insW('c:QWZ-101', { name: 'QWZ-101 某合成同片商同演员', ckey: 'QWZ-101', tags: ',busty,', studio: '合成片商Q', actress: SEED_ACT, fs: T0 - 9 * DAY });
+    insW('c:QWZ-102', { name: 'QWZ-102 某合成只同片商', ckey: 'QWZ-102', tags: ',cosplay,', studio: '合成片商Q', fs: T0 - 8 * DAY });
+    insW('c:RTY-200', { name: 'RTY-200 某合成同演员', ckey: 'RTY-200', tags: ',office,', studio: '合成片商R', actress: SEED_ACT, fs: T0 - 7 * DAY, released: '2026-10-01' });
+    insW('c:RTY-201', { name: 'RTY-201 某合成只靠标签', ckey: 'RTY-201', tags: ',busty,uniform,', studio: '合成片商R', fs: T0 - 6 * DAY });
+    insW('c:RTY-202', { name: 'RTY-202 某合成带审查级标签', ckey: 'RTY-202', tags: ',busty,uniform,office,incest,', studio: '合成片商R', actress: SEED_ACT, fs: T0 - 5 * DAY });
+    insW('c:RTY-203', { name: 'RTY-203 某合成审查级', ckey: 'RTY-203', tags: ',busty,uniform,office,', review: 'code', studio: '合成片商R', fs: T0 - 4 * DAY });
+    insW('c:RTY-204', { name: 'RTY-204 某合成只同审查级标签', ckey: 'RTY-204', tags: ',drunk,', studio: '合成片商S', fs: T0 - 4 * DAY });
+    insW('c:ZXC-205', { name: 'ZXC-205 某合成毫无关系', ckey: 'ZXC-205', tags: ',legs,', studio: '合成片商T', bucket: 'western', fs: T0 - 4 * DAY });
+    insW('c:RTY-206', { name: 'RTY-206 某合成同演员新片', ckey: 'RTY-206', tags: ',busty,', studio: '合成片商S', actress: SEED_ACT, fs: T0 - 3 * DAY });
+    catA.rebuild();
+    const R1 = catA.related('c:QWZ-100');
+    const ids = (l) => (l || []).map((c) => c.wk).join(',');
+    ok(R1 && ids(R1.items) === 'c:QWZ-101,c:RTY-206,c:RTY-200,c:QWZ-102,c:RTY-201', '相关:演员 ×3 + 片商/厂牌 ×2 + 标签 Jaccard + 同分区 打分排序', R1 && ids(R1.items));
+    ok(R1.items.every((c) => !/^c:QWZ-100/.test(c.wk)), '相关:从不含自己和同一部片的 ~N / #clip / #U');
+    ok(!/RTY-20[234]|ZXC-205/.test(ids(R1.items)), '相关:带审查级标签 / 审查级 code 的不出;只靠审查级标签的"关联"不算(审查级不当种子);毫无关系的不出');
+    ok(R1.actress && R1.actress.aid === 701 && R1.actress.name === 'Kakuu Seed' && ids(R1.actress.items) === 'c:RTY-200,c:RTY-206,c:QWZ-101', '相关.actress:{aid,name,items}(按发行日期,排除同一部片 / 审查级)', R1.actress);
+    ok(R1.studio && R1.studio.id === '合成片商Q' && R1.studio.label === '合成片商Q' && ids(R1.studio.items) === 'c:QWZ-102,c:QWZ-101', '相关.studio:{id,label,items}(按首见)', R1.studio);
+    ok(R1.items[0].wk && R1.items[0].name && 'pic' in R1.items[0] && 'sub' in R1.items[0], '相关 items 是卡片');
+    ok(catA.related('c:QWZ-100', { limit: 2 }).items.length === 2 && catA.related('t:nope') === null && catA.related('garbage') === null, '相关:limit;不存在 → null');
+    const R2 = catA.related('c:ZXC-205');
+    ok(R2 && R2.items.length === 0 && R2.actress === null && R2.studio === null, '相关:没有任何关联 → 空列表(不是 null)', R2);
+    // 修订:快照之后才变成审查级的(新加了审查级标签 / review 变成 code)→ 不等下一个快照,相关 / 演员行 / 片商行马上不出
+    dbA.prepare("UPDATE adult_works SET tags=',busty,incest,' WHERE wk='c:RTY-206'").run();
+    dbA.prepare("UPDATE adult_works SET review='code' WHERE wk='c:QWZ-102'").run();
+    const R3 = catA.related('c:QWZ-100');
+    const all3 = R3 ? [ids(R3.items), ids(R3.actress && R3.actress.items), ids(R3.studio && R3.studio.items)] : null;
+    ok(R3 && !/RTY-206|QWZ-102/.test(all3.join(',')) && /QWZ-101/.test(all3[0]) && /RTY-200/.test(all3[1]),
+        '快照之后才变成审查级的 → 相关 / 演员行 / 片商行马上不出(别的照常)', all3);
+    dbA.prepare("UPDATE adult_works SET tags=',busty,' WHERE wk='c:RTY-206'").run();
+    dbA.prepare("UPDATE adult_works SET review=NULL WHERE wk='c:QWZ-102'").run();
+
+    // —— 热度 ——
+    const hw = wkOf('某合成竖屏短片甲4');   // 35s
+    const zero = () => new Array(100).fill(0);
+    const b1 = zero(); b1[10] = 10;
+    const b2 = zero(); b2[10] = 255; b2[50] = 255;
+    const b3 = zero(); b3[50] = 100; b3[60] = 50;
+    ok(catA.heatAdd(hw, { bins: b1, dur: 35 }, 'h1') === true && catA.heatAdd(hw, { bins: b1, dur: 35 }, 'h1') === false, '热度:同一个人同一作品同一天只算一次');
+    ok(catA.heat(hw) === null, '热度:1 个贡献 → null');
+    ok(catA.heatAdd(hw, { bins: Uint8Array.from(b2), dur: 35 }, 'h2') === true && catA.heat(hw) === null, '热度:2 个贡献 → 还是 null(k-匿名 ≥3)');
+    ok(catA.heatAdd(hw, { bins: b3, dur: 36 }, 'h3') === true, '第 3 个贡献');
+    const hh = catA.heat(hw);
+    ok(hh && hh.users === 3 && hh.bins.length === 100 && hh.bins[10] === 100 && hh.bins[50] === 100 && hh.bins[60] === 25 && hh.bins[0] === 0 && hh.dur === 36,
+        '热度:每个贡献先按自己最大值归一(权重相同),累加后归一到 0..100', hh);
+    ok(catA.heatAdd(hw, { bins: b1.slice(0, 99), dur: 35 }, 'h4') === false && catA.heatAdd(hw, { bins: b1.map((x, k) => (k === 3 ? 256 : x)), dur: 35 }, 'h4') === false
+        && catA.heatAdd(hw, { bins: zero(), dur: 35 }, 'h4') === false && catA.heatAdd(hw, { bins: b1, dur: 3600 }, 'h4') === false && catA.heatAdd(hw, { bins: b1.map((x) => x + 0.5), dur: 35 }, 'h4') === false
+        && catA.heatAdd('t:nope', { bins: b1, dur: 35 }, 'h4') === false && catA.heatAdd(hw, { bins: b1, dur: 35 }, '') === false && catA.heatAdd(hw, null, 'h4') === false,
+        '热度:不收 长度≠100 / >255 / 小数 / 全 0 / 时长对不上 / 不存在的作品 / 没有上报者');
+    const seen = dbA.prepare('SELECT * FROM adult_heat_seen').all();
+    ok(seen.length === 3 && seen.every((r) => /^[0-9a-f]{32}$/.test(r.k) && Object.keys(r).join() === 'k,day') && !JSON.stringify(dbA.prepare('SELECT * FROM adult_heat').all()).includes('h1'),
+        '热度:库里只有聚合 + 去重键(哈希,不含上报者)', seen);
+    cA.t += 3 * DAY;
+    ok(catA.heatAdd(hw, { bins: b1, dur: 35 }, 'h1') === true, '热度:过了一天同一个人可以再贡献');
+    const today = Math.floor(cA.t / DAY);
+    ok(dbA.prepare('SELECT COUNT(*) n FROM adult_heat_seen WHERE day < ?').get(today - 1).n === 0 && dbA.prepare('SELECT COUNT(*) n FROM adult_heat_seen').get().n === 1 && catA.heat(hw).users === 4,
+        '热度:去重键 2 天后删掉(只剩今天的)', dbA.prepare('SELECT day FROM adult_heat_seen').all());
+
+    // —— 后台隐藏:每条读路径 ——
+    const hv = wkOf('某合成竖屏短片乙3');
+    const hvName = workRow(dbA, hv).name;
+    for (const who of ['k1', 'k2', 'k3']) catA.heatAdd(hv, { bins: b2, dur: 30 }, who);
+    const inHome = (wk) => catA.home().rows.some((r) => r.items.some((c) => c.wk === wk));
+    const inBrowse = (wk) => { const a = []; for (let p = 1; p <= 3; p++) a.push(...catA.browse({ b: 'short', page: p }).results); return a.some((c) => c.wk === wk); };
+    const paths = async (wk, name) => ({
+        home: inHome(wk), browse: inBrowse(wk), lookup: catA.lookup(name).some((c) => c.wk === wk), suggest: catA.suggest(name).items.some((c) => c.wk === wk),
+        work: !!(await catA.work(wk)), pic: !!catA.picUrl(wk), heat: !!catA.heat(wk), feed: allFeed({}).some((x) => x.wk === wk), related: !!catA.related(wk),
+    });
+    const before = await paths(hv, hvName);
+    ok(Object.values(before).every(Boolean), '隐藏前:首页 / 浏览 / 查找 / 联想 / 作品页 / 封面 / 热度 / 刷一刷 / 相关 都有', before);
+    const rh = await catA.adminHide(hv, true);
+    ok(rh && rh.ok === true && rh.hidden === true && rh.known === true && catA.isHidden(hv) && workRow(dbA, hv).hid === 1, 'adminHide:{ok, wk, hidden, known}', rh);
+    const after = await paths(hv, hvName);
+    ok(Object.values(after).every((v) => v === false), '隐藏后:每条读路径都不出(作品页 / 封面 / 热度 / 相关 → null)', after);
+    ok(catA.heatAdd(hv, { bins: b2, dur: 30 }, 'k4') === false, '隐藏的作品不收热度');
+    const relHid = await catA.adminHide('c:RTY-206', true);
+    ok(relHid.ok && !ids(catA.related('c:QWZ-100').items).includes('RTY-206') && !ids(catA.related('c:QWZ-100').actress.items).includes('RTY-206'), '隐藏的作品不出现在别人的相关 / 演员行里');
+    const hl = catA.adminHidden();
+    ok(hl.length === 2 && hl.some((r) => r.wk === hv && r.name === hvName && r.at > 0) && hl.every((r) => Object.keys(r).join() === 'wk,name,at'), 'adminHidden() → [{wk,name,at}]', hl);
+    ok((await catA.adminHide('nope', true)).ok === false && (await catA.adminHide('t:未知作品', true)).known === false, 'adminHide:非法键拒;不存在的作品也能先藏(known:false)');
+    await catA.adminHide('t:未知作品', false);
+    // 作品行被删了重建(片段迁移 / 重扫)也还是藏着
+    const catA2 = createCatalog({ db: dbA, getSites: () => nA.sitesCfg(), adult, httpGet: nA.httpGet, log: () => {}, now: cA.now, sleep: cA.sleep });
+    ok(catA2.isHidden(hv) && catA2.browse({ b: 'short' }).results.every((c) => c.wk !== hv), '新实例从库里读回隐藏列表');
+    const un = await catA.adminHide(hv, false);
+    const back = await paths(hv, hvName);
+    ok(un.ok && un.hidden === false && !catA.isHidden(hv) && Object.values(back).every(Boolean), '取消隐藏:全部回来', back);
+    await catA.adminHide('c:RTY-206', false);
+
+    // —— 站点停用(只能停用配置里启用的站)——
+    const s1 = await catA.adminSite('rb', false);
+    ok(s1.ok && s1.key === 'rb' && s1.active === false && s1.overrideActive === false && catA.siteOverrides().rb === false && catA.siteActive('rb') === false && catA.siteActive('ra') === true, 'adminSite(rb,false)', s1);
+    const F4 = allFeed({});
+    ok(F4.length > 0 && F4.every((x) => x.lines.every((l) => l.site !== 'rb')) && !F4.some((x) => /乙/.test(x.name)), '停用的站:刷一刷不出它的线路(只在它上面的作品没了)');
+    ok(dbA.prepare("SELECT v FROM adult_meta WHERE k='admin:sites'").get().v === '{"rb":false}', '停用存在 adult_meta admin:sites');
+    const m4 = nA.log.length;
+    cA.t += 2 * HOUR;
+    await catA.tick();
+    ok(nA.log.length > m4 && !nA.log.slice(m4).some((x) => x.host === 'rb.test'), '停用的站不爬');
+    ok((await catA.adminSite('rx', true)).active === false && (await catA.adminSite('nope', false)).ok === false && (await catA.adminSite('ra', 'yes')).ok === false, '配置里停用的站开不了;不认识的站 / 非布尔 → 拒');
+    const st = await catA.adminStats();
+    const sRb = st.sites.find((x) => x.key === 'rb'), sRx = st.sites.find((x) => x.key === 'rx');
+    ok(st.works > 0 && st.lines > 0 && typeof st.rejected === 'object' && 'rescan' in st && st.avdb && st.extraBlock && st.extraBlock.n === 0 && sRb.active === false && sRb.overrideActive === false
+        && sRx.active === false && sRx.overrideActive === null && st.sites.find((x) => x.key === 'ra').lastOk > 0 && ['key', 'name', 'lastOk', 'fails', 'active', 'overrideActive'].every((k) => k in sRb),
+        'adminStats:{works, lines, sites:[{key,name,lastOk,fails,active,overrideActive}], rejected, rescan, avdb, extraBlock:{n,rev}}', st);
+    const s2 = await catA.adminSite('rb', true);
+    ok(s2.ok && s2.active === true && s2.overrideActive === null && allFeed({}).some((x) => /乙/.test(x.name)), 'adminSite(rb,true):删掉覆盖,恢复');
+
+    // —— 追加屏蔽词:入库拦 / 出口拦 / 加一代重扫 / 永远放松不了内置规则 ——
+    const canReasons = () => CAN.block.map((c) => P.checkItem(c.item, c.ctx || {}).reason);
+    const canBefore = canReasons();
+    const target = wkOf('某合成竖屏短片甲5');
+    const shortTotal = () => catA.browse({ b: 'short' }).total_results;
+    const tot0 = shortTotal();
+    const g0 = gen();
+    ok(inBrowse(target) && tot0 >= 20 && (await catA.related(target)) !== null, '加词之前在(相关推荐也认它)');
+    const other6 = wkOf('某合成竖屏短片甲6');
+    const nOld = dbA.prepare('SELECT COUNT(*) n FROM adult_items').get().n;
+    const rx = await catA.setExtraBlock(['竖屏短片甲5', '迷奸']);
+    // 修订:改追加词不加规则代数(以前加一代 = 没重扫到的作品整段读不到:作品页 404、浏览缩水;清空词表也一样)
+    ok(rx.ok && rx.n === 2 && /^[0-9a-f]{8}$/.test(rx.rev) && rx.rescan === false && rx.purge === true && gen() === g0 && catA.rulesKey() === P.RULES_VERSION + '+x' + rx.rev,
+        'setExtraBlock → {ok,n,rev,rulesKey,rescan:false,purge:true,gen};不加规则代数(缓存键 = RULES_VERSION + 哈希)', rx);
+    ok(JSON.stringify(catA.extraBlock()) === JSON.stringify({ words: ['竖屏短片甲5', '迷奸'], n: 2, rev: rx.rev }) && dbA.prepare("SELECT v FROM adult_meta WHERE k='admin:block'").get().v === JSON.stringify(['竖屏短片甲5', '迷奸']),
+        '追加词存在 adult_meta admin:block');
+    ok(P.checkQuery('某合成竖屏短片甲5') && catA.suggest('竖屏短片甲5').kind === 'blocked' && catA.lookup('竖屏短片甲5').length === 0, '查询:命中追加词 → 拦');
+    ok(!inHome(target) && !inBrowse(target) && (await catA.work(target)) === null && !allFeed({}).some((x) => x.wk === target) && catA.heat(target) === null && (await catA.related(target)) === null,
+        '删除扫描跑完之前:列表 / 作品页 / 刷一刷 / 热度 / 以它为种子的相关推荐就都不出了(出口按片名拦)');
+    const w6 = await catA.work(other6);
+    ok(!!w6 && inBrowse(other6) && dbA.prepare('SELECT COUNT(*) n FROM adult_items WHERE rv < ?').get(gen()).n === 0 && !!dbA.prepare('SELECT 1 FROM adult_items WHERE wk=?').get(other6),
+        '改词的那一刻:别的作品一部都不消失(作品页照常、浏览照常、没有旧一代的行)', [!!w6, inBrowse(other6)]);
+    await catA.flush();
+    ok(!dbA.prepare('SELECT 1 FROM adult_items WHERE wk=?').get(target) && catA.stats().rejected['item:admin'] >= 1 && !catA.stats().rescanPending && gen() === g0
+        && dbA.prepare("SELECT v FROM adult_meta WHERE k='admin:purge'").get().v == null && catA.stats().purge && catA.stats().purge.running === false && catA.stats().purge.dropped >= 1,
+        '删除扫描:命中的线路删掉(item:admin),不重扫、不加代;进度清掉', [catA.stats().rejected, catA.stats().purge]);
+    ok(dbA.prepare('SELECT COUNT(*) n FROM adult_items').get().n === nOld - catA.stats().purge.dropped && catA.stats().purge.checked >= nOld, '只删了命中的那几条(全部线路都查过)', [nOld, catA.stats().purge]);
+    catA.rebuild();
+    ok(shortTotal() === tot0 - 1 && inBrowse(other6), '扫完重建快照:计数跟上,别的作品一直都在', [shortTotal(), tot0]);
+    const rej0 = catA.stats().rejected['item:admin'] || 0;
+    RA.items.push(mk('某合成竖屏短片甲5 新上架', '抖音短视频', { t: cA.t - MIN, dur: 30 }));
+    RA.items.push(mk('某合成另一部新短片', '抖音短视频', { t: cA.t - 2 * MIN, dur: 30 }));
+    cA.t += 2 * HOUR;
+    await catA.tick();
+    ok(!wkOf('某合成竖屏短片甲5 新上架') && !!wkOf('某合成另一部新短片') && catA.stats().rejected['item:admin'] >= rej0 + 1, '入库:命中追加词的新条目不收');
+    ok(JSON.stringify(canReasons()) === JSON.stringify(canBefore) && canBefore.every((r) => r && r !== 'item:admin'), '追加词永远放松不了内置规则(金丝雀全拦、理由一字不变)');
+    const bad = await catA.setExtraBlock(['x']), bad2 = await catA.setExtraBlock('迷奸'), bad3 = await catA.setExtraBlock(Array.from({ length: 501 }, (_, i) => '合成词' + i));
+    ok(!bad.ok && !bad2.ok && !bad3.ok && catA.extraBlock().n === 2 && gen() === g0, '不合法的词表 → {ok:false},什么都不改', [bad, bad2]);
+    const same = await catA.setExtraBlock(['迷奸', '竖屏短片甲5']);
+    ok(same.ok && same.rescan === false && same.purge === false && gen() === g0, '同一套词(顺序不同)→ 不扫、不加代', same);
+    const nBefore = dbA.prepare('SELECT COUNT(*) n FROM adult_items').get().n;
+    const clr = await catA.setExtraBlock([]);
+    await catA.flush();
+    ok(clr.ok && clr.n === 0 && clr.purge === false && catA.rulesKey() === P.RULES_VERSION && gen() === g0 && !P.checkQuery('竖屏短片甲5')
+        && dbA.prepare('SELECT COUNT(*) n FROM adult_items').get().n === nBefore && !!(await catA.work(other6)),
+        '清空追加词:规则键回到 RULES_VERSION;不加代、不扫,别的作品照常(之前删掉的线路不会自己回来)', clr);
+}
+{
+    // 修订:删除扫描进行中又改了追加词 → 按新词表从头扫;不加代、没有任何行读不到;扫的中途浏览照常
+    const cR = mkClock(T0), nR = mkNet(cR);
+    nR.latency = 20;
+    const dbR = new Database(':memory:');
+    const SR = nR.site('rs1');
+    for (let i = 0; i < 30; i++) SR.items.push(mk('某合成重扫片' + i, '国产自拍', { t: T0 - i * 10 * MIN - MIN, dur: 600 + i }));
+    const catR = createCatalog({ db: dbR, getSites: () => nR.sitesCfg(), adult, httpGet: nR.httpGet, log: () => {}, now: cR.now, sleep: cR.sleep, opts: { rescanWorks: 2, rescanChunk: 3, rescanSnapMs: 0, purgeChunk: 3 } });
+    await catR.tick();
+    catR.rebuild();
+    const genR = () => Number((dbR.prepare("SELECT v FROM adult_meta WHERE k='rv:gen'").get() || {}).v) || 0;
+    const g0 = genR();
+    const tot0 = catR.browse({ b: 'cn_amateur' }).total_results;
+    await catR.setExtraBlock(['某合成重扫片29']);
+    await tick();
+    await tick();
+    const mid = catR.stats().purge;
+    const midTotal = catR.browse({ b: 'cn_amateur' }).total_results;
+    const r2 = await catR.setExtraBlock(['某合成重扫片29', '某合成重扫片3']);
+    await catR.flush();
+    const stale = dbR.prepare('SELECT COUNT(*) n FROM adult_items WHERE rv < ?').get(genR()).n;
+    const left = dbR.prepare("SELECT name FROM adult_items WHERE name LIKE '某合成重扫片%'").all().map((r) => r.name);
+    ok((mid == null || mid.running === true) && midTotal >= tot0 - 1 && r2.purge === true && genR() === g0 && stale === 0 && !left.includes('某合成重扫片3') && !left.includes('某合成重扫片29') && left.length === 28
+        && dbR.prepare("SELECT v FROM adult_meta WHERE k='admin:purge'").get().v == null,
+        '删除扫描进行中又加词:按新词表从头扫(两个词的都删掉),不加代,扫的中途浏览照常', [mid, midTotal, tot0, genR() - g0, stale, left.length]);
+    catR.rebuild();
+    ok(catR.browse({ b: 'cn_amateur' }).total_results === left.length, '扫完重建:计数对得上', [catR.browse({ b: 'cn_amateur' }).total_results, left.length]);
+    {
+        // 词表刚在主线程生效、目录还没删到它的窗口(作品仍 vis=1):以命中词的作品为种子,相关推荐也回 null(与作品页 / 热度一致)
+        const seedWk = (dbR.prepare("SELECT wk FROM adult_works WHERE name LIKE '%重扫片12' AND vis=1").get() || {}).wk;
+        const before = seedWk ? await catR.related(seedWk) : undefined;
+        adult.policy.setExtraBlock(['某合成重扫片29', '某合成重扫片3', '某合成重扫片12']);
+        const during = seedWk ? await catR.related(seedWk) : undefined;
+        const w12 = seedWk ? await catR.work(seedWk) : undefined;
+        const stillVis = seedWk ? !!dbR.prepare('SELECT 1 FROM adult_works WHERE wk=? AND vis=1').get(seedWk) : false;
+        adult.policy.setExtraBlock(['某合成重扫片29', '某合成重扫片3']);
+        ok(!!seedWk && before !== null && stillVis && during === null && w12 === null,
+            '追加词生效、目录还没删(作品仍可见):related(命中作品) → null,作品页也 null', [seedWk, before, stillVis, during]);
+    }
+    // 重启续扫:'admin:purge' 留着进度 → 新实例 init 时接着扫
+    adult.policy.setExtraBlock(['某合成重扫片29', '某合成重扫片3', '某合成重扫片7']);
+    dbR.prepare("INSERT OR REPLACE INTO adult_meta (k, v) VALUES ('admin:block', ?)").run(JSON.stringify(['某合成重扫片29', '某合成重扫片3', '某合成重扫片7']));
+    dbR.prepare("INSERT OR REPLACE INTO adult_meta (k, v) VALUES ('admin:purge', ?)").run(JSON.stringify({ rev: 'x', p: 'i', id: 0 }));
+    const catR2 = createCatalog({ db: dbR, getSites: () => nR.sitesCfg(), adult, httpGet: nR.httpGet, log: () => {}, now: cR.now, sleep: cR.sleep, opts: { rescanSnapMs: 0, purgeChunk: 3 } });
+    catR2.stats();   // inline:第一次用时 init → 发现没扫完 → 接着扫
+    await catR2.flush();
+    ok(!dbR.prepare("SELECT 1 FROM adult_items WHERE name = '某合成重扫片7'").get() && dbR.prepare("SELECT v FROM adult_meta WHERE k='admin:purge'").get().v == null && genR() === g0,
+        '重启:没扫完的删除扫描接着扫完(不加代)');
+    // 旧版库(词表哈希进过规则键)升级:去掉哈希是同一套规则 → 不加代、不重扫,记录改成新写法
+    const rr = dbR.prepare("SELECT v FROM adult_meta WHERE k='rv:rules'").get().v;
+    const withX = rr.replace(/\|([^|]*)$/, '+xdeadbeef|$1');
+    dbR.prepare("INSERT OR REPLACE INTO adult_meta (k, v) VALUES ('rv:rules', ?), ('rules', ?)").run(withX, withX);
+    const catR3 = createCatalog({ db: dbR, getSites: () => nR.sitesCfg(), adult, httpGet: nR.httpGet, log: () => {}, now: cR.now, sleep: cR.sleep, opts: { rescanSnapMs: 0 } });
+    const st3 = catR3.stats();
+    ok(withX !== rr && genR() === g0 && st3.rescanPending === false && dbR.prepare("SELECT v FROM adult_meta WHERE k='rv:rules'").get().v === rr && dbR.prepare("SELECT v FROM adult_meta WHERE k='rules'").get().v === rr,
+        '旧写法的规则键(带 +x 哈希)→ 同一套规则,不加代不重扫,记录改成新写法', [withX, st3.rescanPending, genR() - g0]);
+    await catR.setExtraBlock([]);
+    await catR.flush();
+}
+{
+    // 修订:方向是客户端报的、服务器核实不了 → 每个上报者每 UTC 天最多改 orientBudget 条线路的方向(挡一个人批量把横屏片报成竖屏)
+    const cO = mkClock(T0), nO = mkNet(cO);
+    nO.latency = 20;
+    const dbO = new Database(':memory:');
+    const SO = nO.site('os1');
+    for (let i = 0; i < 4; i++) SO.items.push(mk('某合成方向额度片' + i, '抖音短视频', { t: T0 - i * 10 * MIN - MIN, dur: 30 + i }));
+    const catO = createCatalog({ db: dbO, getSites: () => nO.sitesCfg(), adult, httpGet: nO.httpGet, log: () => {}, now: cO.now, sleep: cO.sleep, opts: { rescanSnapMs: 0, orientBudget: 2 } });
+    await catO.tick();
+    const L = dbO.prepare("SELECT site, vod_id FROM adult_items WHERE name LIKE '某合成方向额度片%' ORDER BY vod_id").all();
+    const oriO = () => dbO.prepare("SELECT orient FROM adult_items WHERE name LIKE '某合成方向额度片%' ORDER BY vod_id").all().map((r) => r.orient || '-').join('');
+    for (const l of L.slice(0, 3)) catO.beacon({ site_key: l.site, vod_id: l.vod_id, ok: true, w: 720, h: 1280 }, 'evil');
+    ok(L.length === 4 && oriO() === 'vv--' && catO.stats().beacon.orientCapped >= 1, '同一个上报者一天最多改 2 条(第 3 条不收)', oriO());
+    catO.beacon({ site_key: L[2].site, vod_id: L[2].vod_id, ok: true, w: 720, h: 1280 }, 'other');
+    ok(oriO() === 'vvv-', '别的上报者不受影响');
+    cO.t += 1 * DAY;
+    catO.beacon({ site_key: L[0].site, vod_id: L[0].vod_id, ok: true, w: 1920, h: 1080 }, 'evil');
+    ok(oriO() === 'hvv-', '第二天额度重来(真实客户端量到的宽高照样能纠正)', oriO());
+}
+{
+    // —— 短视频分类慢速补库(刷一刷候选池):首轮 6h 后、每 (站,分类) 每天 ≤10 页、每轮 ≤6 页、同域名 ≥2.2s、从第 1 页往深处翻 ——
+    const cS = mkClock(T0), nS = mkNet(cS);
+    nS.latency = 20;
+    const dbS = new Database(':memory:');
+    const SS = nS.site('ss1');
+    for (let i = 0; i < 20; i++) SS.items.push(mk('某合成近期短片' + i, '抖音短视频', { t: T0 - i * 10 * MIN - MIN, dur: 30 }));
+    for (let i = 0; i < 1500; i++) SS.items.push(mk('某合成旧短片' + i, '抖音短视频', { t: T0 - 30 * DAY - i * HOUR, dur: 40 }));
+    for (let i = 0; i < 30; i++) SS.items.push(mk('某合成国产短补' + i, '国产自拍', { t: T0 - i * 10 * MIN - 3 * MIN, dur: 600 }));
+    const shortTid = String(tidOf('抖音短视频'));
+    const catS = createCatalog({ db: dbS, getSites: () => nS.sitesCfg(), adult, httpGet: nS.httpGet, log: () => {}, now: cS.now, sleep: cS.sleep, opts: { backfillThin: 0 } });
+    await catS.tick();
+    ok(!nS.log.some((x) => x.t != null), '短视频补库:首轮之后 6h 内不做');
+    cS.t += 7 * HOUR;
+    let m0 = nS.log.length;
+    await catS.tick();
+    const firstIdx = nS.log.findIndex((x) => x.t != null);
+    const sh = nS.log.slice(m0).filter((x) => x.t != null);
+    const cmapS = adult.taxonomy.buildClassMap(classes, { host: SS.api });
+    const isShortLeaf = (t) => { const r = cmapS.get(Number(t)); return !!r && r.bucket === 'short' && !r.container && !r.block; };
+    ok(sh.length > 0 && sh.length <= 6 && sh.some((x) => x.t === shortTid) && sh.every((x) => isShortLeaf(x.t) && x.ac === 'detail' && !x.h && x.ps === 60), '每轮 ≤6 页,只拉 short 叶子分类(&t=,不带 h)', sh.map((x) => x.t + ':' + x.pg));
+    for (let g = 0; g < 20; g++) { cS.t += 10 * MIN; await catS.tick(); }
+    const day1 = nS.log.filter((x) => x.t === shortTid);
+    const perCls = new Map();
+    for (const x of nS.log.filter((y) => y.t != null)) perCls.set(x.t, (perCls.get(x.t) || 0) + 1);
+    ok(day1.length === 10 && day1.map((x) => x.pg).join() === '1,2,3,4,5,6,7,8,9,10' && [...perCls.values()].every((n) => n <= 10), '每个 (站,分类) 每天 ≤10 页、从第 1 页往深处翻', [day1.map((x) => x.pg), [...perCls]]);
+    ok(pacingOk(nS.log.slice(firstIdx), 2200).length === 0 && nS.maxHost === 1, '同域名一次一个、间隔 ≥2.2s(和增量爬虫共用)', pacingOk(nS.log.slice(firstIdx), 2200));
+    cS.t += DAY;
+    await catS.tick();
+    const d2 = nS.log.filter((x) => x.t === shortTid).slice(10);
+    ok(d2.length > 0 && d2[0].pg === 11, '第二天接着翻(进度存 adult_meta shortbf)', d2.map((x) => x.pg));
+    ok(dbS.prepare("SELECT COUNT(*) n FROM adult_items WHERE name LIKE '某合成旧短片%'").get().n >= 600 && catS.stats().short.requests >= 11 && catS.stats().short.enabled === true, '旧短视频补进库(刷一刷候选池)', catS.stats().short);
+    const cS0 = mkClock(T0), nS0 = mkNet(cS0);
+    nS0.latency = 20;
+    nS0.site('ss2').items.push(...SS.items.slice(0, 40).map((x) => Object.assign({}, x)));
+    const catS0 = createCatalog({ db: new Database(':memory:'), getSites: () => nS0.sitesCfg(), adult, httpGet: nS0.httpGet, log: () => {}, now: cS0.now, sleep: cS0.sleep, env: { CATALOG_SHORT_BACKFILL: '0' }, opts: { backfillThin: 0 } });
+    await catS0.tick();
+    cS0.t += 7 * HOUR;
+    await catS0.tick();
+    ok(!nS0.log.some((x) => x.t != null) && catS0.stats().short.enabled === false, 'CATALOG_SHORT_BACKFILL=0:不补');
+}
+{
+    // [integ] server.js catalogSites 把后台停用的站标成 active:false 交给目录(不是从站点表里删掉):
+    //   重扫(规则版本变了)不删它的线路、停用期间不出、撤销停用原样回来;对照:从站点表里删掉的站,重扫时线路全删(所以不能 filter 掉)
+    const cD = mkClock(T0), nD = mkNet(cD);
+    nD.latency = 20;
+    const dbD = new Database(':memory:');
+    const D1 = nD.site('dz1'), D2 = nD.site('dz2'), D3 = nD.site('dz3');
+    for (let i = 0; i < 4; i++) {
+        D1.items.push(mk('某合成一号站自拍片段' + i, '国产自拍', { t: T0 - i * 10 * MIN - MIN, dur: 600 + i * 13 }));
+        D2.items.push(mk('另一部乙站合成作品' + i, '国产自拍', { t: T0 - i * 10 * MIN - 2 * MIN, dur: 1500 + i * 17 }));
+        D3.items.push(mk('第三个丙站合成视频' + i, '国产自拍', { t: T0 - i * 10 * MIN - 3 * MIN, dur: 2400 + i * 19 }));
+    }
+    const off = new Set(), gone = new Set();
+    const catD = createCatalog({ db: dbD, getSites: () => nD.sitesCfg().filter((s) => !gone.has(s.key)).map((s) => (off.has(s.key) ? Object.assign({}, s, { active: false }) : s)),
+        adult, httpGet: nD.httpGet, log: () => {}, now: cD.now, sleep: cD.sleep, opts: { rescanSnapMs: 0 } });
+    await catD.tick();
+    const nOf = (k) => dbD.prepare('SELECT COUNT(*) n FROM adult_items WHERE site=?').get(k).n;
+    const tot = () => { catD.rebuild(); return catD.browse({ b: 'cn_amateur' }).total_results; };
+    ok(nOf('dz1') === 4 && nOf('dz2') === 4 && nOf('dz3') === 4 && tot() === 12, '对照:三个站各 4 条', [nOf('dz1'), nOf('dz2'), nOf('dz3'), tot()]);
+    off.add('dz2'); gone.add('dz3');
+    // 修订:改追加屏蔽词不再触发重扫 → 用"规则版本变了"(部署了新规则)来触发:库里记的规则改成别的,再开一个实例(init 时加一代、重扫)
+    dbD.prepare("INSERT OR REPLACE INTO adult_meta (k, v) VALUES ('rv:rules', 'p0-old|i0'), ('rules', 'p0-old|i0')").run();
+    const catD2 = createCatalog({ db: dbD, getSites: () => nD.sitesCfg().filter((s) => !gone.has(s.key)).map((s) => (off.has(s.key) ? Object.assign({}, s, { active: false }) : s)),
+        adult, httpGet: nD.httpGet, log: () => {}, now: cD.now, sleep: cD.sleep, opts: { rescanSnapMs: 0 } });
+    ok(catD2.stats().rescanPending === true, '规则版本变了 → 新实例 init 时重扫');
+    await catD2.flush();
+    ok(nOf('dz2') === 4 && nOf('dz3') === 0 && catD2.stats().rescanPending === false, '重扫:标成 active:false 的站线路全留着;从表里删掉的站线路全删', [nOf('dz2'), nOf('dz3')]);
+    ok(tot() === 4, '停用期间:停用站的作品不出', tot());
+    cD.t += 8 * DAY;
+    const rr = catD.retention();
+    if (rr && typeof rr.then === 'function') await rr;
+    cD.t += 8 * DAY;
+    const rr2 = catD.retention();
+    if (rr2 && typeof rr2.then === 'function') await rr2;
+    ok(nOf('dz2') === 4, '保留期(>7 天):active:false 的站不当成"站点已删除"', nOf('dz2'));
+    off.delete('dz2');
+    ok(tot() === 8, '撤销停用:原样回来(不用重爬)', tot());
+    await catD.setExtraBlock([]);
+    await catD.flush();
+}
+
+// =====================================================================
+console.log('⑫ 第四阶段(worker):相关 / 刷一刷 / 热度 / 方向 / 隐藏 / 站点停用 / 追加屏蔽词 跨线程,重启后都还在');
+{
+    const tmpX = fs.mkdtempSync(path.join(os.tmpdir(), 'catx-'));
+    const file = path.join(tmpX, 'catalog.db');
+    const cx = mkClock(T0), nx = mkNet(cx);
+    nx.latency = 30;
+    const XA = nx.site('xa', { family: 'fxa' }), XB = nx.site('xb', { family: 'fxb' });
+    for (let i = 0; i < 14; i++) (i % 2 ? XA : XB).items.push(mk(`某合成线程短片${i}`, '抖音短视频', { t: T0 - i * 10 * MIN - MIN, dur: 20 + i }));
+    for (let i = 0; i < 6; i++) XA.items.push(mk(`SSIS-${950 + i} 某合成线程作品${i}`, '日本有码', { t: T0 - HOUR - i * MIN, dur: 7200 + i }));
+    {
+        const d0 = new Database(file);
+        d0.exec('CREATE TABLE avdb_stub (key TEXT PRIMARY KEY, j TEXT NOT NULL)');
+        for (let i = 0; i < 6; i++) d0.prepare('INSERT INTO avdb_stub VALUES (?, ?)').run('SSIS-' + (950 + i), JSON.stringify({ runtime: 7200 + i, actors: [{ aid: 960, name: 'Kakuu Thread' }] }));
+        d0.close();
+    }
+    const mkX = () => createCatalog({ dbPath: file, getSites: () => nx.sitesCfg(), adult, httpGet: nx.httpGet, log: () => {}, env: {}, now: cx.now, sleep: cx.sleep,
+        avdbFactory: (db) => AVSTUB.createAvdb({ db }), avdbModule: path.join(ROOT, 'scripts/fixtures/catalog/avdb-stub.cjs') });
+    const x1 = mkX();
+    ok((await x1.ready()) === true && x1.mode === 'worker', 'worker 模式就绪');
+    await x1.tick();
+    await x1.rebuild();
+    const ro = new Database(file, { readonly: true });
+    const wkX = (name) => (ro.prepare('SELECT wk FROM adult_items WHERE name=?').get(name) || {}).wk;
+    const genX = () => Number((ro.prepare("SELECT v FROM adult_meta WHERE k='rv:gen'").get() || {}).v) || 0;
+    const fx = await x1.feed({ limit: 30 });
+    ok(fx.items.length === 14 && fx.items.every((it) => it.lines.length && /m3u8/.test(it.lines[0].url)) && fx.cursor_next === null, '读线程:刷一刷', fx.items.length);
+    const rs = await x1.related('c:SSIS-950');
+    ok(rs && rs.actress && rs.actress.aid === 960 && rs.actress.items.length === 5 && rs.items.some((c) => c.wk === 'c:SSIS-951') && !rs.items.some((c) => c.wk === 'c:SSIS-950'), '读线程:相关推荐(AVDB 演员行)', rs && rs.actress);
+    ok((await x1.related('t:nope')) === null, '读线程:不存在 → null');
+    const s0 = wkX('某合成线程短片0');
+    const l0 = ro.prepare('SELECT site, vod_id FROM adult_items WHERE wk=?').get(s0);
+    await x1.beacon({ site_key: l0.site, vod_id: l0.vod_id, ok: true, w: 720, h: 1280 }, 'bx');
+    ok(ro.prepare('SELECT orient FROM adult_works WHERE wk=?').get(s0).orient === 'v', '写线程:方向学习');
+    await x1.rebuild();
+    const fv = await x1.feed({ vert: true });
+    ok(fv.items.length === 1 && fv.items[0].wk === s0 && fv.items[0].orient === 'v', '读线程:竖屏模式', fv.items.map((x) => x.wk));
+    const hb = new Array(100).fill(0);
+    hb[3] = 9;
+    ok((await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w1')) === true && (await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w1')) === false, '写线程:热度去重');
+    await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w2');
+    ok(x1.heat(s0) === null, '热度 2 人 → null');
+    await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w3');
+    const hx3 = x1.heat(s0);
+    ok(hx3 && hx3.users === 3 && hx3.bins[3] === 100 && hx3.bins[4] === 0, '热度 3 人 → 主线程点查', hx3);
+    const hx = wkX('某合成线程短片1');
+    ok((await x1.adminHide(hx, true)).ok && !(await x1.feed({ limit: 30 })).items.some((x) => x.wk === hx) && (await x1.work(hx)) === null && x1.adminHidden().some((r) => r.wk === hx), '隐藏(写线程存、主线程马上生效)');
+    ok((await x1.adminSite('xb', false)).ok && (await x1.feed({ limit: 30 })).items.every((it) => it.lines.every((l) => l.site !== 'xb')), '站点停用');
+    const g0 = genX();
+    const rxw = await x1.setExtraBlock(['线程短片4']);
+    ok(rxw.ok && rxw.rescan === false && rxw.purge === true && genX() === g0, '追加屏蔽词:写线程存;不加代,有新词 → 删除扫描', rxw);
+    // 读线程也换了词表:先把主线程的词表清掉,联想(读线程里也查一遍查询词)照样 blocked
+    adult.policy.setExtraBlock([]);
+    ok((await x1.suggest('线程短片4')).kind === 'blocked', '读线程也换了词表');
+    adult.policy.setExtraBlock(['线程短片4']);
+    await x1.flush();
+    ok(!ro.prepare("SELECT 1 FROM adult_items WHERE name='某合成线程短片4'").get() && !!ro.prepare("SELECT 1 FROM adult_items WHERE name='某合成线程短片5'").get(), '写线程删除扫描:命中的删掉、别的留着');
+    const sx = await x1.adminStats();
+    ok(sx.works > 0 && sx.lines > 0 && sx.extraBlock.n === 1 && sx.extraBlock.rev === rxw.rev && sx.sites.find((x) => x.key === 'xb').overrideActive === false && sx.hidden === 1 && sx.heatRows === 1 && sx.rejected['item:admin'] >= 1,
+        'adminStats(worker)', sx);
+    await x1.close();
+    // 重启(模拟新进程:主线程 policy 词表是空的)→ 启动时同步预读:追加词 / 隐藏 / 站点停用 都在;规则键没变不加代
+    adult.policy.setExtraBlock([]);
+    const x2 = mkX();
+    ok(x2.extraBlock().n === 1 && x2.isHidden(hx) && x2.siteOverrides().xb === false && x2.siteActive('xb') === false, '重启:构造时就同步读回(线程起来之前闸门就能用)');
+    await x2.ready();
+    ok((await x2.work(hx)) === null && x2.adminHidden().length === 1 && genX() === g0, '重启:隐藏还在、不加代');
+    const clr = await x2.setExtraBlock([]);
+    await x2.flush();
+    ok(clr.ok && x2.rulesKey() === adult.policy.RULES_VERSION, '清空追加词');
+    await x2.close();
+    adult.policy.setExtraBlock([]);
+    ro.close();
+    try { fs.rmSync(tmpX, { recursive: true, force: true }); } catch (_) { /* Windows 上 WAL 文件偶尔晚一点释放 */ }
+}
+
+// =====================================================================
+console.log('⑬ 第四阶段复核:审查级标签不吃严格口径 / 政策补召回乱伦框架 / 社区名不当片商 / 外力致昏硬拦');
+{
+    const cR = mkClock(T0), nR = mkNet(cR);
+    nR.latency = 20;
+    const dbR = new Database(':memory:');
+    const RA = nR.site('ra'), RI = nR.site('rai', { aiTitles: true });
+    RI.items.push(mk('[合成片商] 某合成继母酒店同床 被继子狂干', '欧美精品', { parent: '欧美', t: T0 - HOUR, dur: 1800 }));
+    RA.items.push(mk('某合成一小时打桩内射妈妈', '国产自拍', { t: T0 - HOUR - MIN, dur: 900 }));
+    RA.items.push(mk('海角社区.某合成日常记录', '国产自拍', { t: T0 - HOUR - 2 * MIN, dur: 901 }));
+    RA.items.push(mk('某合成夫妇被跟踪闯入家中并被打晕 妻子喷水', '国产自拍', { t: T0 - HOUR - 3 * MIN, dur: 902 }));
+    RA.items.push(mk('某合成普通的酒店约会内射', '国产自拍', { t: T0 - HOUR - 4 * MIN, dur: 903 }));
+    RA.items.push(mk('某合成另一次酒店内射', '国产自拍', { t: T0 - HOUR - 5 * MIN, dur: 1203 }));
+    const catR = createCatalog({ db: dbR, getSites: () => nR.sitesCfg(), adult, httpGet: nR.httpGet, log: () => {}, now: cR.now, sleep: cR.sleep, env: { CATALOG_SHORT_BACKFILL: '0' } });
+    await catR.tick();
+    const byName = (s) => dbR.prepare('SELECT * FROM adult_works WHERE name LIKE ?').get('%' + s + '%');
+    const wAi = byName('继母酒店同床');
+    ok(wAi && /,incest,/.test(wAi.tags) && !/,hotel,/.test(wAi.tags), '只来自 AI 改写标题的审查级标签(incest)照样留在作品上;featured 标签(hotel)仍要证实', wAi && wAi.tags);
+    const wMom = byName('打桩内射妈妈');
+    ok(wMom && /,incest,/.test(wMom.tags), '政策补召回:内射妈妈 → incest 审查级标签', wMom && wMom.tags);
+    const wHj = byName('某合成日常记录');
+    ok(wHj && !wHj.studio, '海角社区 不当片商(tags.js NOT_STUDIO 同表,writer 不再从 parseTitle 捡回来)', wHj && wHj.studio);
+    ok(!byName('被打晕') && dbR.prepare("SELECT COUNT(*) n FROM adult_items WHERE name LIKE '%被打晕%'").get().n === 0, '外力致昏(被打晕)入库就拦');
+    catR.rebuild();
+    const seed = byName('普通的酒店约会内射'), ctl = byName('另一次酒店内射');
+    let rel = seed ? catR.related(seed.wk) : null;
+    if (rel && typeof rel.then === 'function') rel = await rel;
+    const rwk = rel ? (rel.items || []).map((c) => c.wk) : [];
+    ok(seed && ctl && wMom && /,creampie,/.test(wMom.tags) && rwk.includes(ctl.wk) && !rwk.includes(wMom.wk), '相关推荐:同标签的对照作品出、补了审查级标签的 内射妈妈 不出', [rwk, wMom && wMom.tags]);
+    if (typeof catR.close === 'function') { const z = catR.close(); if (z && typeof z.then === 'function') await z; }
 }
 
 console.log(`\nsite-catalog-test: ${pass} passed, ${fail} failed`);

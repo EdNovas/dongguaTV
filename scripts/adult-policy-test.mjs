@@ -181,6 +181,36 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     for (const n of ['Sleeping Bag Adventure', '秘书的诱惑', '神秘人妻', '美女午睡']) ok(chk({ vod_name: n, type_name: '国产自拍' }, {}).reason !== 'item:drugging', 'p7 不误拦为 drugging: ' + n);
     for (const q of ['媚药', '春药', '睡奸', '熟睡', '夜袭', 'asleep', 'aphrodisiac']) ok(A.policy.checkQuery(q) === true, 'p7 搜索词拦: ' + q);
     ok(A.policy.checkQuery('秘书') === false && A.policy.checkQuery('人妻 睡衣') === false, 'p7 搜索词不误拦(秘书 / 睡衣)');
+    // p8(第四阶段复核):外力致昏 / 饮料加料 / 嗑药 / 昏迷 的同义说法硬拦(标签性字段);紧跟性行为的失去意识 → 审查级 code;比喻(被金钱砸晕)不拦
+    for (const [n, tn] of [['一对夫妇在上班途中被跟踪闯入家中并被打晕 荡妇妻子喷水', '日本有码'], ['被打晕后侵犯', '国产自拍'], ['把隔壁女大学生弄昏当作性处理对象', '日本有码'],
+        ['女教师下班水杯中加料晕倒', '国产自拍'], ['ABCD-107 欢迎会上晕倒了被同事带回家', '日本有码'], ['ABCD-108 失去意识后被强', '日本有码'], ['公司团建少妇醉酒不省人事', '国产自拍'],
+        ['被灌醉后干到不省人事', '国产自拍'], ['人妻遭伏击 昏厥锁喉', '日本有码'], ['夜店嗑药3p', '国产自拍'], ['被下兴奋剂发情', '日本有码'], ['趁她意识不清醒时上了她', '国产自拍']]) {
+        const r = chk({ vod_name: n, type_name: tn }, {});
+        ok(!r.ok && r.reason === 'item:drugging', 'p8 必拦 drugging: ' + n, r.reason);
+    }
+    for (const n of ['被操到高潮晕倒好几次', '酒店客房内射长发美女被操到神志不清', '痉挛高潮到失去意识']) {
+        const r = chk({ vod_name: n, type_name: '国产自拍' }, {});
+        ok(!r.ok && r.reason === 'review:code' && r.review === 'code', 'p8 性行为导致的失去意识 = 审查级 code(没可信番号就藏): ' + n, r);
+    }
+    {
+        const r = chk({ vod_name: 'SSIS-305 高潮到失去意识', type_name: '日本有码' }, {});
+        ok(r.ok && r.review === 'code', 'p8 可信番号的 高潮到失去意识:放行但审查级 code(不做精选)', r);
+    }
+    for (const n of ['极品女大学生被金钱砸晕', '小主播被礼物砸晕', '差点被西瓜奶敲晕', '打飞机', '晕车的美女', '普通人妻']) {
+        const r = chk({ vod_name: n, type_name: '国产自拍' }, {});
+        ok(r.reason !== 'item:drugging', 'p8 不误拦为 drugging: ' + n, r.reason);
+    }
+    ok(chk({ vod_name: 'ABCD-202 普通の人妻', type_name: '日本有码', vod_content: '丈夫被人打晕后她独自出门' }, {}).ok, 'p8:简介里的 打晕 剧情叙述不拦(只查标签性字段)');
+    for (const q of ['打晕', '被打晕', '晕倒', '不省人事', '嗑药']) ok(A.policy.checkQuery(q) === true, 'p8 搜索词拦: ' + q);
+    ok(A.policy.checkQuery('操到晕倒') === false && A.policy.checkQuery('晕车') === false, 'p8 搜索词不误拦(性行为导致 / 晕车)');
+    // p8:reviewTagHints —— 乱伦框架片名补 incest 审查级标签(只会更不露出)
+    const H = A.policy.reviewTagHints;
+    ok(typeof H === 'function', 'policy.reviewTagHints 存在');
+    for (const n of ['一小时打桩内射妈妈', '小姨欲望好强', '表姐替女友满足我', '我妹的秘密', '继妹用脚诱惑我', '骚姐姐想吃弟弟的大鸡巴', '坏公公偷看媳妇', 'ABCD-109 義母と二人きり'])
+        ok(JSON.stringify(H({ vod_name: n })) === '["incest"]', 'p8 reviewTagHints → incest: ' + n, H({ vod_name: n }));
+    for (const n of ['隔壁姐姐', '小姐姐自慰', '我刚来完姨妈下面特别紧', '大姨妈期间', '被小哥哥操的小妹妹', '普通人妻', '继续努力'])
+        ok(JSON.stringify(H({ vod_name: n })) === '[]', 'p8 reviewTagHints 不误标: ' + n, H({ vod_name: n }));
+    ok(JSON.stringify(H({ vod_name: '普通标题', vod_content: '内射妈妈' })) === '[]' && JSON.stringify(H(null)) === '[]', 'p8 reviewTagHints 只看标签性字段;坏输入 → []');
     for (const c of CAN.allow) {
         const r = chk(c.item, c.ctx || {});
         ok(r.ok, '放行: ' + c.item.vod_name + ' [' + c.item.type_name + ']', r);
@@ -295,6 +325,59 @@ const eq = (a, b, name) => ok(JSON.stringify(a) === JSON.stringify(b), name, { g
     const t0 = Date.now();
     for (let i = 0; i < 3000; i++) chk({ vod_name: `某作品标题第${i}集 中文字幕`, type_name: '爱播资源', vod_class: i % 2 ? '国产精品,主播直播' : '强奸乱伦', vod_tag: '高清AV,麻豆傳媒,素人', vod_content: '一段普通的简介文字'.repeat(20) }, S);
     ok(Date.now() - t0 < 3000, 'perf: 3000 次严格站 checkItem < 3s', Date.now() - t0);
+}
+
+// ============ 10. 站长追加屏蔽词 setExtraBlock(第四阶段:只会更严、永远放松不了内置规则) ============
+{
+    const P = A.policy;
+    for (const f of ['setExtraBlock', 'extraBlock', 'rulesKey', 'extraHit']) ok(typeof P[f] === 'function', 'policy.' + f);
+    eq(P.extraBlock(), { words: [], n: 0, rev: '' }, 'extra: 默认没有追加词');
+    eq(P.rulesKey(), A.RULES_VERSION, 'extra: 没追加词时 rulesKey() === RULES_VERSION');
+    const reasons = (list) => list.map((c) => P.checkItem(c.item, c.ctx || {}).reason || 'ok');
+    const blockBefore = reasons(CAN.block), allowBefore = reasons(CAN.allow);
+    const qs = ['迷奸', '人妻 温泉', 'SSIS-001 流出', 'l0li', '某某 合成', 'foo bar baz'];
+    const qBefore = qs.map((q) => P.checkQuery(q));
+    // 归一化和内置规则同一套:繁简 / 全半角 / 空白标点;纯字母数字按词边界
+    const x = P.setExtraBlock(['合成屏蔽词', '  Foo Bar  ', '合成屏蔽詞', 'ＺＺ９']);
+    eq([x.n, x.words], [3, ['合成屏蔽词', 'Foo Bar', 'ＺＺ９']], 'extra: 去重(繁简归一后同一个词只留一个)、保留原写法');
+    ok(/^[0-9a-f]{8}$/.test(x.rev) && P.rulesKey() === A.RULES_VERSION + '+x' + x.rev, 'extra: rulesKey = RULES_VERSION + "+x" + 词表哈希', P.rulesKey());
+    ok(P.checkQuery('某某合成屏蔽词某某') && P.checkQuery('合 成 屏-蔽 词') && P.checkQuery('合成屏蔽詞') && P.checkQuery('foo-bar') && P.checkQuery('FOOBAR clips') && P.checkQuery('Foo  Bar') && P.checkQuery('zz9'),
+        'extra: 查询命中(子串 / 拆字 / 繁体 / 词边界 / 粘连 / 全角)');
+    ok(!P.checkQuery('foobarbaz') && !P.checkQuery('xfoo bar') && !P.checkQuery('zz90') && !P.checkQuery('人妻 温泉'), 'extra: 英文词不跨词边界误中;别的查询不受影响');
+    eq(P.checkItem({ vod_name: '某合成作品 合成屏蔽词', type_name: '国产自拍' }).reason, 'item:admin', 'extra: 片名命中 → item:admin');
+    eq(P.checkItem({ vod_name: '某合成作品', type_name: '国产自拍', vod_tag: 'Foo Bar' }).reason, 'item:admin', 'extra: 标签字段命中 → item:admin');
+    eq(P.checkItem({ vod_name: '某合成作品', type_name: '国产自拍', vod_remarks: 'zz9' }).reason, 'item:admin', 'extra: 备注命中 → item:admin');
+    ok(P.checkItem({ vod_name: '某合成作品', type_name: '国产自拍', vod_content: '合成屏蔽词' }).ok && P.checkItem({ vod_name: '某合成作品', type_name: '国产自拍', vod_actor: '合成屏蔽词' }).ok,
+        'extra: 只查标签性字段(简介 / 演员栏不查)');
+    ok(P.extraHit('有合成屏蔽词的片名') && !P.extraHit('普通片名') && P.extraHit('FOO BAR'), 'extra: extraHit(出口复查用)');
+    // 只会更严:内置拦的照拦、理由一字不变;放行的里面最多多出 item:admin
+    eq(reasons(CAN.block), blockBefore, 'extra: 内置硬拦金丝雀全部照拦、理由不变');
+    ok(reasons(CAN.allow).every((r, i) => r === allowBefore[i] || r === 'item:admin'), 'extra: 放行金丝雀只可能多出 item:admin');
+    ok(qs.every((q, i) => !qBefore[i] || P.checkQuery(q)), 'extra: 原来拦的查询照拦');
+    // 追加和内置重复的词 / 空表:也放松不了任何东西
+    P.setExtraBlock(['迷奸', '萝莉']);
+    eq(reasons(CAN.block), blockBefore, 'extra: 追加和内置重复的词 → 内置理由照旧');
+    P.setExtraBlock([]);
+    eq(reasons(CAN.block), blockBefore, 'extra: 空表 → 内置照拦');
+    eq(reasons(CAN.allow), allowBefore, 'extra: 空表 → 放行的照旧放行');
+    eq(P.rulesKey(), A.RULES_VERSION, 'extra: 清空后 rulesKey 回到 RULES_VERSION');
+    // 不合法 → 抛错、旧词表不变
+    P.setExtraBlock(['合成屏蔽词']);
+    const keep = P.extraBlock();
+    for (const bad of [null, '合成屏蔽词', [1], ['a'], ['x'.repeat(41)], Array.from({ length: 501 }, (_, i) => '合成词' + i), ['!!'], ['合成屏蔽词', null]]) {
+        let threw = false;
+        try { P.setExtraBlock(bad); } catch (_) { threw = true; }
+        ok(threw, 'extra: 不合法 → 抛错 ' + JSON.stringify(bad).slice(0, 40));
+    }
+    eq(P.extraBlock(), keep, 'extra: 不合法的词表不改旧词表');
+    ok(P.setExtraBlock(Array.from({ length: 500 }, (_, i) => '合成词' + String(i).padStart(3, '0'))).n === 500, 'extra: 500 个词可以');
+    // 性能:500 个追加词下 3000 次 checkItem
+    P.setExtraBlock(Array.from({ length: 500 }, (_, i) => (i % 2 ? '合成词' + i : 'kakuu' + i)));
+    const t0 = Date.now();
+    for (let i = 0; i < 3000; i++) P.checkItem({ vod_name: `某作品标题第${i}集 中文字幕`, type_name: '国产自拍', vod_tag: '高清,素人', vod_content: '一段普通的简介文字'.repeat(20) });
+    ok(Date.now() - t0 < 3000, 'perf: 500 个追加词下 3000 次 checkItem < 3s', Date.now() - t0);
+    P.setExtraBlock([]);
+    eq(P.extraBlock(), { words: [], n: 0, rev: '' }, 'extra: 测试结束清空');
 }
 
 console.log(`adult-policy-test: ${pass} passed, ${fail} failed`);
