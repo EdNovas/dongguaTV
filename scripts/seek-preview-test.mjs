@@ -2,12 +2,14 @@
 // 进度条缩略图预览回归(离线、零网络、无浏览器):
 //   node scripts/seek-preview-test.mjs
 //  ① 纯逻辑:按时间找分片、取哪一帧、LRU(条数 + 字节)、拖动时顶上的最近一张、缓冲判定、带宽让路闸门、不启用条件、框位置、时间格式(对照 DPlayer)
-//  ② 预览 loader:清单只拉一次(startLoad 重载走内存)、分片/密钥照常走网络、abort/destroy 后迟到回调丢掉、直播清单不缓存
+//  ② 预览 loader:清单只拉一次(startLoad 重载走内存)、分片/密钥照常走网络、abort/destroy 后迟到回调丢掉、直播清单不缓存;
+//     【真】index.html OfflineLoader 还在查 IndexedDB 时 abort → 查完不发请求、不回调;父类不认标志时 loadInternal 也挡住
 //  ③ 控制器(假时钟 + 假 DOM + 假 hls.js,行为按 1.1.5):停手 150ms 才取、同时最多 1 个分片、主视频 waiting/seeking 立刻中止、
-//     起播/卡顿/缓冲不足不取、换令牌/reset/销毁即拆、任何时刻最多一个实例、失败静默且计满停用、剪过插播的时间轴换算、触屏拖动、
-//     预算、页面后台、清缓冲与下一张不打架、不碰主播放器的 plugins
-//  ④ 接线(index.html 静态):hls.js 分支 bind 在 loadSource/attachMedia 之前、原生分支 unbind、play() 两处令牌递增后 reset、closeDetail reset、
-//     模块不碰 dp.plugins.hls/_dpSwitchHls/_proxyRetrying;hls.min.js 1.1.5 的前提(换版本先报)
+//     起播/卡顿/缓冲不足不取、暂停时只在这次播放真播起来过(本令牌的 playing)且 readyState≥3 才取、换令牌/reset/销毁即拆、
+//     任何时刻最多一个实例、失败静默且计满停用、剪过插播的时间轴换算、触屏拖动、预算、页面后台、清缓冲与下一张不打架、
+//     分离音轨只取目标段、离线库查询中被中止不再发请求、不碰主播放器的 plugins
+//  ④ 接线(index.html 静态):hls.js 分支 bind 在 loadSource/attachMedia 之前、原生分支 unbind、play() 两处令牌递增后 reset、closeDetail / goHome reset、
+//     收起播放页(showDetail = false)的每一处都审过、模块不碰 dp.plugins.hls/_dpSwitchHls/_proxyRetrying;hls.min.js 1.1.5 的前提(换版本先报)
 //  ⑤ sw.js:hls.js 的 XHR 分片(含 .png/.jpg 伪装)不进缓存;<img> 台标照常;预缓存同一个 ?v=
 //  ⑥ 浏览器引导:有 document 时自动建 window.dgSeekPreview,入口给什么垃圾参数都不抛
 // 改 seek-preview.js、播放器 hls 接线、sw.js 后必跑。
@@ -43,6 +45,23 @@ class R {   // TimeRanges
     end(i) { return this.a[i][1]; }
 }
 const mkFrags = (n, d, sn0) => Array.from({ length: n }, (_, i) => ({ sn: (sn0 || 0) + i, start: i * d, duration: d }));
+const tickIO = () => new Promise(r => setImmediate(r));   // 跑完所有微任务(离线库查询的 .then 链)
+
+// index.html 里真正的离线 loader(OfflineLoader)原文:预览 loader 继承它,中止在它查 IndexedDB 期间也要生效
+const OFFLINE_SRC = (() => {
+    const a = HTML.indexOf('class OfflineLoader extends Base {');
+    const b = a > 0 ? HTML.indexOf('window._OfflineHlsLoader = OfflineLoader;', a) : -1;
+    return b > a ? HTML.slice(a, b) : '';
+})();
+// 查库结果由测试手动放出(模拟 IndexedDB 慢)
+function mkDb() {
+    const pend = [];
+    return { pend, get: (store, key) => new Promise(res => pend.push({ key, res })), settle(rec) { pend.splice(0).forEach(p => p.res(rec)); } };
+}
+function mkOffline(Base, db) {
+    return vm.runInNewContext('(function () {\n' + OFFLINE_SRC + '\nreturn OfflineLoader;\n})()',
+        { Base, offlineDB: db, offlineKey: u => String(u), _navSeq: 1, performance: { now: () => 7 }, window: {}, console, Promise });
+}
 
 // ======================= ① 纯逻辑 =======================
 console.log('① 纯逻辑');
@@ -101,8 +120,14 @@ console.log('① 纯逻辑');
     ok(isBuffered(br, 5) && !isBuffered(br, 15) && !isBuffered(br, 9.99) && isBuffered(br, 20) && !isBuffered(new R([]), 1), 'isBuffered');
     ok(Math.abs(pointIn(new R([[12.3, 20]]), 12, 18) - 12.6) < 1e-9 && pointIn(new R([[30, 40]]), 12, 18) === null && pointIn(new R([[12, 12.03]]), 12, 18) === null, 'pointIn:片内有缓冲的点(时间戳晚一点的情况)');
 
+    const { fragOverlaps } = Core;
+    const fo = (a, d) => fragOverlaps({ start: a, duration: d }, 1200, 1206);
+    ok(fo(1200, 4) && fo(1204, 4) && fo(1196, 6) && fo(1201, 1) && fo(1203, 0.06), 'fragOverlaps:和目标段 [1200,1206) 有真重叠的音频片放行(含被目标段整个盖住的短片)');
+    ok(!fo(1206, 4) && !fo(1196, 4) && !fo(1208, 4) && !fo(1205.97, 4) && !fo(1192.03, 7.98) &&!fo(1100, 4), 'fragOverlaps:只碰到边 / 浮点误差级的重叠 / 目标段以外 → 不放行');
+    ok(!fragOverlaps({ start: NaN, duration: 4 }, 1200, 1206) && !fragOverlaps({ start: 1200, duration: 0 }, 1200, 1206) && !fragOverlaps({ start: 1200, duration: 4 }, 0, 0) && !fragOverlaps(null, 1200, 1206), 'fragOverlaps:时间不明 / 目标段没定 → 不放行');
+
     const { gate, keepJob } = Core;
-    const base = { hidden: false, paused: false, ended: false, seeking: false, readyState: 4, ahead: 30, remain: 1000, sinceStall: Infinity, sincePlaying: 60000 };
+    const base = { hidden: false, paused: false, ended: false, seeking: false, readyState: 4, ahead: 30, remain: 1000, sinceStall: Infinity, sincePlaying: 60000, played: true };
     const g = o => gate(Object.assign({}, base, o));
     ok(g({}).ok && g({}).why === 'ahead', '闸门:播放中、前方 30s → 可以取');
     ok(!g({ ahead: 19.9 }).ok && g({ ahead: 19.9 }).why === 'buffer', '闸门:前方不足 20s 不取');
@@ -112,11 +137,15 @@ console.log('① 纯逻辑');
     ok(!g({ readyState: 2 }).ok && g({ readyState: 2 }).why === 'stall', '闸门:播放中 readyState<3(卡着)不取');
     ok(!g({ sincePlaying: 3999 }).ok && !g({ sincePlaying: -1 }).ok && g({ sincePlaying: -1 }).why === 'startup', '闸门:开播 4s 内 / 还没播过不取');
     ok(!g({ sinceStall: 1999 }).ok && g({ sinceStall: 1999 }).why === 'settle' && g({ sinceStall: 2001 }).ok, '闸门:waiting/seeking 之后 2s 内不取');
-    ok(g({ paused: true, ahead: 0, sincePlaying: -1, readyState: 2 }).ok && g({ ended: true, ahead: 0, readyState: 2 }).ok, '闸门:暂停 / 结束时可以取(不抢播放)');
+    ok(g({ paused: true, ahead: 0, readyState: 3 }).ok && g({ paused: true, ahead: 0, readyState: 4 }).why === 'paused' && g({ ended: true, ahead: 0, readyState: 2 }).ok, '闸门:这次播放真播起来过 → 暂停(readyState≥3)/ 结束时可以取');
+    ok(!g({ paused: true, played: false, readyState: 4 }).ok && g({ paused: true, played: false, readyState: 4 }).why === 'unplayed' && !g({ ended: true, played: false }).ok && !g({ paused: true, played: undefined }).ok, '闸门:暂停但这次播放还没真播起来过(自动播放被拦、停在起播点拉首屏)→ 不取');
+    ok(!g({ paused: true, readyState: 2 }).ok && g({ paused: true, readyState: 2 }).why === 'stall', '闸门:暂停但 readyState<3(主播放器还在等当前这一段)→ 不取');
     ok(!g({ paused: true, seeking: true }).ok && !g({ paused: true, readyState: 1 }).ok && !g({ paused: true, sinceStall: 500 }).ok, '闸门:暂停时 seek 中 / 没首帧 / 刚卡过照样不取');
+    ok(g({ played: false }).ok, '闸门:播放分支不看 played(起播 4s + readyState≥3 + 前方 20s 已经够严)');
     ok(!g({ hidden: true }).ok && g({ hidden: true }).why === 'hidden' && !gate(null).ok, '闸门:页面在后台 / 没有主视频不取');
     const k = o => keepJob(Object.assign({}, base, o));
     ok(k({}) && k({ ahead: 8 }) && !k({ ahead: 7.9 }) && k({ ahead: 2, remain: 2.5 }) && !k({ seeking: true }) && !k({ hidden: true }) && !k({ readyState: 2 }) && k({ paused: true, ahead: 0 }) && !keepJob(null), 'keepJob:取的过程中前方掉到 8s 以下 / seek / 卡 / 后台就中止,暂停照常');
+    ok(!k({ paused: true, readyState: 2 }) && k({ ended: true, readyState: 2 }), 'keepJob:暂停着 readyState 掉到 3 以下也中止(播完的不算)');
 
     const { disabledReason } = Core;
     const env = { off: false, saveData: false, effectiveType: '4g', tv: false, hls: true, preferNative: false, mse: true, live: false, casting: false, pointer: true, locked: false, trialEnded: false };
@@ -201,8 +230,76 @@ console.log('② 预览 loader');
     ok(!threw && g1._spDead, 'loader 闸:挂着的 abort / destroy 是空操作');
     const g3 = new G({}); g3.load({ url: 's7.ts', frag: { sn: 7, type: 'main' } }, {}, cb);
     const g4 = new G({}); g4.load({ url: 'init.mp4', frag: { sn: 'initSegment', type: 'main' } }, {}, cb);
+    const g6 = new G({}); g6.load({ url: 'ainit.mp4', frag: { sn: 'initSegment', type: 'audio' } }, {}, cb);
+    ok(net.length === n1 + 3, 'loader 闸:目标片、fMP4 初始化段(视频 / 分离音轨)照常发');
     const g5 = new G({}); g5.load({ url: 'a8.aac', frag: { sn: 8, type: 'audio' } }, {}, cb);
-    ok(net.length === n1 + 3, 'loader 闸:目标片、fMP4 初始化段、分离音轨的片照常发');
+    const g7 = new G({}); g7.load({ url: 's8.vtt', frag: { sn: 8, type: 'subtitle' } }, {}, cb);
+    ok(net.length === n1 + 3 && g5._spHeld && g7._spHeld, 'loader 闸:分离音轨 / 字幕的片也过闸(闸说不要就挂着,不再一律放行)');
+    const g8 = new G({}); g8.load({ url: 'a7.aac', frag: { sn: 7, type: 'audio' } }, {}, cb);
+    ok(net.length === n1 + 4, 'loader 闸:闸放行的音轨片照常发');
+    const g9 = new G({}); g9.abort();
+    g9.load({ url: 's7.ts', frag: { sn: 7, type: 'main' } }, {}, cb);
+    ok(net.length === n1 + 4, 'loader:已 abort 的 loader 再 load 不发请求');
+}
+
+// 中止在任何阶段都生效:预览 loader 继承 index.html 的【真】OfflineLoader(先 await IndexedDB 才决定走不走网络)
+{
+    ok(!!OFFLINE_SRC && /\.then\(rec => \{\s*if \(this\._offDestroyed\) return;/.test(OFFLINE_SRC), 'index.html 的 OfflineLoader 还在、查完库先看 _offDestroyed 再决定回调 / 走网络');
+    const xhr = [], xhrAborted = [];
+    class Xhr {   // hls.js 1.1.5 XhrLoader 的骨架:load 记下参数后调 this.loadInternal(),那里才真 new XMLHttpRequest(失败重试也走它)
+        constructor() { this.stats = { loading: {}, loaded: 0, total: 0, aborted: false }; this.callbacks = null; this.config = null; this.loader = null; }
+        load(ctx, cfg, cb) { if (this.stats.loading.start) throw new Error('Loader can only be used once.'); this.stats.loading.start = 1; this.context = ctx; this.config = cfg; this.callbacks = cb; this.loadInternal(); }
+        loadInternal() { if (!this.config) return; this.loader = { url: this.context.url }; xhr.push(this.context.url); }
+        abort() { if (this.loader) { this.stats.aborted = true; xhrAborted.push(this.context.url); } if (this.callbacks && this.callbacks.onAbort) this.callbacks.onAbort(this.stats, this.context, this.loader); }
+        destroy() { this.callbacks = null; this.loader = null; this.config = null; }
+    }
+    const db = mkDb();
+    const Off = mkOffline(Xhr, db);
+    const P = Core.makeLoader(Off, new Map(), () => 0, f => f(), fr => fr.sn === 7);
+    const got = [];
+    const cb = { onSuccess: r => got.push(r.url), onError: () => got.push('err'), onTimeout: () => got.push('timeout'), onAbort: () => got.push('abort') };
+    const fctx = sn => ({ url: 'seg' + sn + '.ts', frag: { sn, type: 'main', start: 0, duration: 6 }, responseType: 'arraybuffer' });
+
+    const p0 = new P({}); p0.load(fctx(7), {}, cb);
+    ok(xhr.length === 0 && db.pend.length === 1, '离线 loader:先查库(此时还没发请求)');
+    db.settle(null); await tickIO();
+    ok(xhr.length === 1 && xhr[0] === 'seg7.ts', '对照:没中止、库里没有 → 走网络');
+
+    const p1 = new P({}); p1.load(fctx(7), {}, cb);
+    p1.abort();   // stopLoad / 主视频 waiting·seeking / 停手换位置:正赶上还在查库
+    db.settle(null); await tickIO();
+    ok(xhr.length === 1 && got.length === 0, '查库期间 abort → 查完库没有也不发请求、不回调', { xhr, got });
+
+    const p2 = new P({}); p2.load(fctx(7), {}, cb);
+    p2.abort();
+    db.settle({ data: new ArrayBuffer(8), size: 8 }); await tickIO();
+    ok(xhr.length === 1 && got.length === 0, '查库期间 abort → 查完库命中了也不回调(迟到结果丢掉)', { xhr, got });
+
+    const p3 = new P({}); p3.load(fctx(7), {}, cb);
+    p3.destroy();
+    db.settle(null); await tickIO();
+    ok(xhr.length === 1 && got.length === 0, '查库期间 destroy(实例销毁)→ 不发请求');
+
+    const p4 = new P({}); p4.load(fctx(7), {}, cb);
+    db.settle({ data: new ArrayBuffer(8), size: 8 }); await tickIO();
+    ok(got.length === 1 && got[0] === 'seg7.ts' && xhr.length === 1, '对照:没中止的离线命中照常回调、不走网络');
+
+    const p5 = new P({}); p5.load(fctx(7), {}, cb);
+    db.settle(null); await tickIO();
+    p5.abort();
+    ok(xhr.length === 2 && xhrAborted.length === 1 && xhrAborted[0] === 'seg7.ts', '对照:已经发出去的请求 abort 照常掐掉 xhr');
+
+    const n0 = db.pend.length;
+    const p6 = new P({}); p6.load(fctx(8), {}, cb);
+    ok(db.pend.length === n0 && p6._spHeld && xhr.length === 2, '闸说不要的片连离线库都不查(挂着)');
+
+    // 父类将来不认 _offDestroyed:查完库照样调 XhrLoader.load → loadInternal 这一道挡住,不 new XMLHttpRequest
+    class Off2 extends Xhr { load(ctx, cfg, cbs) { Promise.resolve().then(() => super.load(ctx, cfg, cbs)); } }
+    const P2 = Core.makeLoader(Off2, new Map(), () => 0, f => f(), fr => fr.sn === 7);
+    const q = new P2({}); q.load(fctx(7), {}, cb); q.abort(); await tickIO();
+    ok(xhr.length === 2, 'loadInternal 兜底:父类不认中止标志也发不出请求', xhr);
+    const q2 = new P2({}); q2.load(fctx(7), {}, cb); await tickIO();
+    ok(xhr.length === 3, '对照:没中止的 loadInternal 照常放行');
 }
 
 // ======================= ③ 控制器 =======================
@@ -248,7 +345,9 @@ function setup(opt) {
     let dataN = 0;
     const env = { mode: opt.mode || 'ok', supported: opt.supported !== false, frags: opt.frags || mkFrags(400, 6, 1000), fragMs: opt.fragMs || 50, fragBytes: opt.fragBytes || 1e6,
         flushMs: opt.flushMs == null ? 3 : opt.flushMs, levels: opt.levels || null, blank: !!opt.blank,
-        instances: [], alive: 0, maxAlive: 0, inflight: 0, maxInflight: 0, fragLoads: [], net: [], netAborted: 0, pluginTouches: [], draws: [], previewPlays: 0 };
+        // 分离音轨(EXT-X-MEDIA TYPE=AUDIO):音频片表、单片耗时、音轨控制器一口气往后要几片(1.1.5 新实例取片位置 = 刚取完那片的片尾,会连着要)
+        audioFrags: opt.audioFrags || null, audioMs: opt.audioMs || 10, audioGreedy: opt.audioGreedy || 4,
+        instances: [], alive: 0, maxAlive: 0, inflight: 0, maxInflight: 0, fragLoads: [], audioLoads: [], net: [], netAborted: 0, pluginTouches: [], draws: [], previewPlays: 0 };
     class El extends T {
         constructor(tag) { super(); this.tagName = tag; this.classList = new CL(); this.style = {}; this.children = []; this.parentNode = null; this.attrs = {}; this.textContent = ''; this.rect = { left: 0, top: 0, width: 0, height: 0, bottom: 0 }; this.id = ''; }
         set className(v) { String(v).split(/\s+/).filter(Boolean).forEach(c => this.classList.add(c)); }
@@ -296,7 +395,8 @@ function setup(opt) {
         load(ctx, cfg, cb) {
             env.net.push(ctx.frag ? ctx.frag.sn : ctx.url);
             env.inflight++; env.maxInflight = Math.max(env.maxInflight, env.inflight);
-            this._t = env.mode === 'hang' ? -1 : clock.setTimeout(() => { this._t = 0; env.inflight--; cb.onSuccess({ url: ctx.url, data: new ArrayBuffer(8) }, this.stats, ctx, null); }, env.fragMs);
+            const ms = ctx.frag && ctx.frag.type === 'audio' ? env.audioMs : env.fragMs;
+            this._t = env.mode === 'hang' ? -1 : clock.setTimeout(() => { this._t = 0; env.inflight--; cb.onSuccess({ url: ctx.url, data: new ArrayBuffer(8) }, this.stats, ctx, null); }, ms);
         }
         abort() { if (this._t) { if (this._t > 0) clock.clearTimeout(this._t); this._t = 0; env.inflight--; env.netAborted++; } }
         destroy() { this.abort(); }
@@ -308,7 +408,7 @@ function setup(opt) {
         emit(e, d) { if (this.dead) return; (this.h[e] || []).slice().forEach(f => { try { f(e, d); } catch (er) { errors.push(er); } }); }
         trigger(e, d) {
             this.calls.push(['trigger', e, d]);
-            if (e === E.BUFFER_FLUSHING) { const v = this.media; clock.setTimeout(() => { if (v) v.buffered = new R([]); }, env.flushMs); }
+            if (e === E.BUFFER_FLUSHING) { const v = this.media; clock.setTimeout(() => { this._vr = this._ar = null; if (v) v.buffered = new R([]); }, env.flushMs); }
         }
         set loadLevel(x) { this.calls.push(['loadLevel', x]); }
         loadSource(u) {
@@ -332,7 +432,38 @@ function setup(opt) {
                 this.emit(E.LEVEL_LOADED, { details: { live: env.mode === 'live', fragments: env.frags } });
                 if (!hadMedia || g !== this.gen || !this.loading || env.mode === 'live') return;
                 this._loadFrag(Core.fragIndexAt(env.frags, pos));
+                if (env.audioFrags) this._loadAudio(Core.fragIndexAt(env.audioFrags, pos), env.audioGreedy);   // 音轨控制器(没有 media 也不取)
             }, 5);
+        }
+        // 音轨控制器:从 pos 所在的音频片起,一片取完立刻要下一片(最多 left 片);经同一个 config.loader
+        _loadAudio(k, left) {
+            const a = env.audioFrags[k];
+            if (!a || !(left > 0)) return;
+            const L = this.cfg.loader, ld = this._ald = new L(this.cfg), g = this.gen;
+            ld.load({ url: 'aud' + k, frag: { sn: a.sn, type: 'audio', start: a.start, duration: a.duration }, responseType: 'arraybuffer' }, {}, {
+                onSuccess: () => {
+                    if (this._ald === ld) this._ald = null;
+                    if (this.dead || !this.loading || g !== this.gen) return;
+                    env.audioLoads.push(k);
+                    this.emit(E.FRAG_LOADED, { frag: a, payload: { byteLength: 1000 } });
+                    const r = this._ar;
+                    this._ar = r && a.start <= r[1] + 1e-6 && a.start + a.duration >= r[0] - 1e-6 ? [Math.min(r[0], a.start), Math.max(r[1], a.start + a.duration)] : [a.start, a.start + a.duration];
+                    this._updBuf();
+                    this.emit(E.FRAG_BUFFERED, { frag: { sn: a.sn, type: 'audio', start: a.start } });
+                    if (this.media) this.media._settle();
+                    this._loadAudio(k + 1, left - 1);
+                }, onError: () => { }, onTimeout: () => { }
+            });
+        }
+        // video.buffered = 各 SourceBuffer 的交集(有分离音轨时视频段 ∩ 音频段)
+        _updBuf() {
+            const v = this.media;
+            if (!v) return;
+            const vr = this._vr, ar = this._ar;
+            if (!vr) { v.buffered = new R([]); return; }
+            if (!env.audioFrags) { v.buffered = new R([vr]); return; }
+            const s0 = ar ? Math.max(vr[0], ar[0]) : 0, e0 = ar ? Math.min(vr[1], ar[1]) : 0;
+            v.buffered = new R(e0 > s0 ? [[s0, e0]] : []);
         }
         // 分片经 config.loader 取(预览的 SeekPreviewLoader → 这里的 BaseLoader = 网络)
         _loadFrag(i) {
@@ -343,7 +474,10 @@ function setup(opt) {
                 onSuccess: () => { if (this._ld === ld) this._ld = null; this._fragDone(i); }, onError: () => { }, onTimeout: () => { }
             });
         }
-        _cancelFrag() { if (this._ld) { try { this._ld.abort(); } catch (e) { errors.push(e); } this._ld = null; } }
+        _cancelFrag() {
+            if (this._ld) { try { this._ld.abort(); } catch (e) { errors.push(e); } this._ld = null; }
+            if (this._ald) { try { this._ald.abort(); } catch (e) { errors.push(e); } this._ald = null; }
+        }
         _fragDone(i) {
             if (this.dead || !this.loading) return;
             const f = env.frags[i];
@@ -351,7 +485,8 @@ function setup(opt) {
             env.fragLoads.push(i);
             this.emit(E.FRAG_LOADED, { frag: f, payload: { byteLength: env.fragBytes } });
             const v = this.media;
-            v.buffered = new R([[f.start + (opt.ptsLag || 0), f.start + f.duration]]);
+            this._vr = [f.start + (opt.ptsLag || 0), f.start + f.duration];
+            this._updBuf();
             if (v.readyState < 1) v.readyState = 1;
             // stream-controller 的监听排在外面的前面:目标片缓冲完那一拍就决定要不要取下一片 —— 新实例内部 loadedmetadata 还没置位
             //   (取片位置 = 这片的片尾),或片内剩余不足 maxBufferLength,都会同步发出下一片的请求(1.1.5 实测如此)
@@ -384,6 +519,7 @@ function setup(opt) {
     const store = Object.assign({}, opt.ls || {});
     const win = Object.assign({ Hls: FakeHls, vueApp: vue, navigator: { connection: { saveData: false, effectiveType: '4g' } }, PointerEvent: function () { }, devicePixelRatio: 1,
         localStorage: { getItem: k => (Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null) } }, opt.win || {});
+    if (opt.offline) win._OfflineHlsLoader = mkOffline(BaseLoader, opt.offline);   // 【真】index.html OfflineLoader 垫在网络 loader 上(查库结果由测试放出)
     const ctl = Core.createController({ win, doc, now: clock.now, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, raf: f => clock.setTimeout(f, 0), getHls: () => win.Hls, getVue: () => win.vueApp });
     const URL0 = 'https://cdn.example.com/vod/ep1/index.m3u8';
     const s = {
@@ -524,13 +660,53 @@ for (const evName of ['waiting', 'seeking']) {
     ok(s.env.instances.length === 1, 'D:…4s 后照常取');
 }
 {
+    // 自动播放被拦:主视频停在起播点(paused),主播放器还在拉首屏 —— readyState 已经到 4 也一个字节都不抢
     const s = setup();
-    Object.assign(s.main, { paused: true, buffered: new R([]) });
+    Object.assign(s.main, { paused: true, readyState: 4, buffered: new R([[100, 112]]) });
+    s.hover(1200); s.clock.advance(3000);
+    ok(s.env.instances.length === 0 && s.env.net.length === 0 && s.ctl.status().last === 'unplayed', 'D:暂停但这次播放还没真播起来过(自动播放被拦)→ 不取、不建实例', s.ctl.status().last);
+    s.main.paused = false; s.main.dispatch('playing');   // 用户点了播放:真播起来了
+    s.clock.advance(1000);
+    ok(s.env.instances.length === 0, 'D:…播起来后 4s 起播期内照样不取');
+    s.main.paused = true;   // 又暂停(当前位置往后有数据,readyState 4)
     s.hover(1200); s.clock.advance(400);
-    ok(s.env.instances.length === 1, 'D:暂停时(没播过、没缓冲也行)可以取');
+    ok(s.env.instances.length === 1 && s.ctl.status().cached === 1, 'D:这次播放播起来过、暂停着且 readyState≥3 → 可以取(前方缓冲不够 20s 也行)');
+    s.main.readyState = 2;   // 暂停着,主播放器在等当前这一段
+    s.hover(1800); s.clock.advance(3000);
+    ok(s.env.fragLoads.length === 1 && s.ctl.status().last === 'stall', 'D:暂停但 readyState<3 → 不取下一张', s.ctl.status().last);
     s.main.readyState = 1;
-    s.clock.advance(400); s.hover(600); s.clock.advance(400);
-    ok(s.env.fragLoads.length === 1, 'D:暂停但主视频没首帧(readyState<2)不取下一张');
+    s.clock.advance(1000);
+    ok(s.env.fragLoads.length === 1 && s.ctl.status().last === 'startup', 'D:暂停但主视频没首帧(readyState<2)不取');
+    s.main.readyState = 3;
+    s.clock.advance(600);
+    ok(s.env.fragLoads.length === 2, 'D:readyState 回到 3,指针还在 → 接着取');
+}
+{
+    // 上一次播放(旧令牌)播起来过不算:换集后新一集自动播放被拦,照样不取
+    const s = setup();
+    s.start();
+    s.vue._playToken = 2; s.ctl.reset('play');   // play() 递增令牌 → reset
+    Object.assign(s.main, { paused: true, readyState: 4 });
+    s.ctl.bind(s.player, s.main, s.URL0);   // _dgHlsCustomType 重新 bind
+    s.hover(1200); s.clock.advance(3000);
+    ok(s.env.instances.length === 0 && s.ctl.status().last === 'unplayed', 'D:旧令牌的 playing 不带到新一集(新一集自动播放被拦 → 不取)', s.ctl.status().last);
+    s.main.dispatch('playing'); s.main.paused = true;
+    s.hover(1200); s.clock.advance(400);
+    ok(s.env.instances.length === 1 && s.ctl.status().cached === 1, 'D:新一集真播起来过之后暂停 → 可以取');
+}
+{
+    const s = setup();
+    s.vue._playToken = 2;            // play() 已递增令牌,旧绑定还没拆(下一次指针移动才拆)
+    s.main.dispatch('playing');      // 这是新一次播放的 playing
+    const b = s.S().bound;
+    ok(b && b.played === false && b.playingAt === 0, 'D:令牌已变时的 playing 不记到旧绑定上', b && { played: b.played, playingAt: b.playingAt });
+}
+{
+    const s = setup();
+    s.start();
+    Object.assign(s.main, { paused: true, ended: true, readyState: 2, _ct: 2400 });
+    s.hover(1200); s.clock.advance(400);
+    ok(s.ctl.status().cached === 1, 'D:这次播放播完了(ended,readyState 2)→ 可以取');
 }
 {
     const s = setup({ fragMs: 3000 });
@@ -729,6 +905,52 @@ for (const evName of ['waiting', 'seeking']) {
     ok(s.ctl.status().cached === 1 && s.env.draws[0] > 1201.5 && s.env.draws[0] < 1206, 'H:缓冲段没盖住预定点 → 改到本片里有数据的地方再画', s.env.draws);
 }
 
+// --- L 分离音轨(EXT-X-MEDIA TYPE=AUDIO):音轨控制器连着往后要,只放行和目标分片同一段的音频片 ---
+{
+    // 视频 6s 一片(sn 1000+),音频 4s 一片(sn 5000+);1200s → 视频 [1200,1206),同段音频 = [1200,1204) [1204,1208)
+    const s = setup({ audioFrags: mkFrags(600, 4, 5000), audioMs: 10, audioGreedy: 6 });
+    s.start(); s.hover(1200); s.clock.advance(400);
+    const aud = s.env.net.filter(x => x >= 5000), vid = s.env.net.filter(x => x < 5000);
+    ok(s.ctl.status().cached === 1 && s.env.draws[0] === 1201, 'L:目标片 + 同段音频到齐就画(video.buffered 是各 SourceBuffer 的交集)', { st: s.ctl.status(), draws: s.env.draws });
+    ok(aud.length === 2 && aud[0] === 5300 && aud[1] === 5301, 'L:音轨控制器一口气往后要 6 片 → 只有和目标段重叠的 2 片发出去,目标段以外一个都不取', s.env.net);
+    ok(vid.length === 1 && vid[0] === 1200, 'L:视频仍只取目标那一片', s.env.net);
+    s.hover(1800); s.clock.advance(400);
+    const aud2 = s.env.net.filter(x => x >= 5000);
+    ok(s.ctl.status().cached === 2 && aud2.length === 4 && aud2[2] === 5450 && aud2[3] === 5451, 'L:下一张同样只取同段音频', s.env.net);
+    ok(s.errors.length === 0, 'L:无异常', s.errors.map(String));
+}
+{
+    // 音频片比视频长(10s):只要盖住目标段的那一片
+    const s = setup({ audioFrags: mkFrags(300, 10, 7000), audioMs: 10, audioGreedy: 5 });
+    s.start(); s.hover(1200); s.clock.advance(400);
+    const aud = s.env.net.filter(x => x >= 7000);
+    ok(s.ctl.status().cached === 1 && aud.length === 1 && aud[0] === 7120, 'L:长音频片 → 只取盖住目标段的那一片', s.env.net);
+}
+
+// --- M 离线库还在查的时候任务被中止:查完库也不再发请求(预览 loader 继承【真】OfflineLoader) ---
+{
+    const db = mkDb();
+    const s = setup({ offline: db });
+    s.start(); s.hover(1200); s.clock.advance(170);
+    ok(s.S().job && s.S().job.idx === 200 && db.pend.length === 1 && s.env.net.length === 0, 'M:目标片先去离线库查(还没发请求)', { pend: db.pend.length, net: s.env.net });
+    s.main.dispatch('waiting');   // 主视频卡了 → 立刻中止(stopLoad → loader.abort)
+    ok(s.S().job === null && s.ctl.status().last === 'abort:waiting', 'M:主视频 waiting → 任务中止');
+    db.settle(null); await tickIO(); s.clock.advance(100);
+    ok(s.env.net.length === 0 && s.env.inflight === 0, 'M:库里没有,查完也不再发请求(中止没丢)', s.env.net);
+    // 过了 2s 指针还在 → 重取:新 loader 照常查库、走网络、出图
+    s.clock.advance(2500);
+    ok(db.pend.length === 1, 'M:过了 2s 重取,新 loader 照常先查库');
+    db.settle(null); await tickIO(); s.clock.advance(100);
+    ok(s.env.net.length === 1 && s.env.net[0] === 1200 && s.ctl.status().cached === 1, 'M:没中止的照常走网络、出图', { net: s.env.net, st: s.ctl.status() });
+    // reset(换集)正赶上查库:同样不发
+    s.hover(1800); s.clock.advance(170);
+    ok(db.pend.length === 1, 'M:下一张在查库');
+    s.ctl.reset('play');
+    db.settle(null); await tickIO(); s.clock.advance(100);
+    ok(s.env.net.length === 1 && s.env.alive === 0, 'M:查库期间 reset(实例销毁)→ 不发请求', s.env.net);
+    ok(s.errors.length === 0, 'M:无异常', s.errors.map(String));
+}
+
 // --- K 小播放器(手机竖屏只有 ~190px 高):框不顶出播放器上沿 ---
 {
     const s = setup({ fragMs: 50 });
@@ -841,7 +1063,19 @@ console.log('④ 接线');
     ok(/const playToken = \(this\._playToken = \(this\._playToken \|\| 0\) \+ 1\);\s*\n\s*try \{ if \(window\.adClipSkip\) window\.adClipSkip\.vue = this;/.test(HTML), '不挤开 adclip-test 守着的"递增令牌后立刻交 vue"');
     const cd = HTML.indexOf('                closeDetail() {');
     ok(cd > 0 && /window\.dgSeekPreview\.reset\('close'\)/.test(HTML.slice(cd, cd + 1500)), 'closeDetail 调 reset(close)');
-    ok((HTML.match(/window\.dgSeekPreview\./g) || []).length === 4, 'index.html 里只有 4 处接线(bind / reset×3)', (HTML.match(/window\.dgSeekPreview\./g) || []).length);
+    // goHome 也会直接收起播放页(搜索结果页返回、TV 遥控返回、安卓 App 返回键注入的 JS、回首页),不走 closeDetail
+    const gh = HTML.indexOf('                goHome() {');
+    const ghBody = gh > 0 ? HTML.slice(gh, HTML.indexOf('\n                },', gh)) : '';
+    const iGhReset = ghBody.indexOf("window.dgSeekPreview.reset('home')"), iGhHide = ghBody.indexOf('this.showDetail = false;'), iGhTv = ghBody.indexOf("window.location.href = '/'");
+    ok(iGhReset > 0 && iGhHide > iGhReset && iGhTv > 0 && iGhTv < iGhReset, 'goHome 收起播放页前调 reset(home)(TV 模式那支整页刷新,不用)', { iGhTv, iGhReset, iGhHide });
+    ok(/try \{ if \(window\.dgSeekPreview\) window\.dgSeekPreview\.reset\('home'\); \} catch \(e\) \{ \}/.test(ghBody), 'goHome 的 reset 包在 try/catch 里');
+    // 收起播放页(showDetail = false)的每一处都审过:closeDetail / goHome 先 reset;只有深链加载帧那两处(帧下面还没起播放器)不用。新加一处这里就报,先审再改白名单
+    const hides = [...HTML.matchAll(/this\.showDetail = false;/g)].map(m => {
+        const pre = HTML.slice(0, m.index).split('\n').slice(-12).join('\n');
+        return /window\.dgSeekPreview\.reset\(/.test(pre) ? 'reset' : (/deepLinkLoading/.test(pre) ? 'frame' : 'UNAUDITED@' + HTML.slice(0, m.index).split('\n').length);
+    });
+    ok(hides.length === 4 && hides.filter(x => x === 'reset').length === 2 && hides.filter(x => x === 'frame').length === 2, '收起播放页的每一处:closeDetail / goHome 先 reset,其余只有深链加载帧两处', hides);
+    ok((HTML.match(/window\.dgSeekPreview\./g) || []).length === 5, 'index.html 里只有 5 处接线(bind / reset×4)', (HTML.match(/window\.dgSeekPreview\./g) || []).length);
     // 模块不碰主播放器的状态
     const code = SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
     ok(!/plugins|_dpSwitchHls|_proxyRetrying|_errDiagTok|handlePlaybackError|_offHandlePlayError|_startWatchdog|adClipSkip|\badCut\b/.test(code), 'seek-preview.js 不碰 dp.plugins.hls / _dpSwitchHls / _proxyRetrying / 错误链 / 看门狗 / 去插播');
