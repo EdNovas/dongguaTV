@@ -538,6 +538,22 @@ function markSiteNeedsProxy(siteKey, reason = '') {
  * @param {string} siteKey - 站点标识（用于记忆）
  * @returns {Promise<object>} - { data, usedProxy, latency }
  */
+// [adult] p4:请求的是换上去的镜像源站(lib/adult-mirror 发现 / 配置的新域名)→ 静态再查一遍地址(协议 / 账号密码 / 内网字面 IP),
+//   并让连接那一刻按 ssrf.safeLookup 解析(任何一个地址不是公网 = 拒):探测时公网、换上去之后把 DNS 改到内网的域名打不进来。
+//   只管直连;走 CORS 代理的请求由代理去连。镜像模块没开 / 还没建好 = 原样
+function adultMirrorGuard(url, opts) {
+    let mir = null, lib = null;
+    try { mir = adultMirror; lib = adultMirrorLib; } catch (e) { return opts; }
+    if (!mir || typeof mir.isMirrorUrl !== 'function') return opts;
+    let on = false;
+    try { on = !!mir.isMirrorUrl(url); } catch (e) { on = false; }
+    if (!on) return opts;
+    const ss = (lib && lib.ssrf) || require('./lib/adult-mirror/ssrf');
+    const chk = ss.checkUrlStatic(url);
+    if (!chk.ok) throw Object.assign(new Error('mirror url refused: ' + chk.reason), { code: 'EPRIVATE' });
+    // 跟随跳转时每一跳都再判(IP 字面量主机 Node 不调 lookup:302 到 127.0.0.1 / 169.254.169.254 只有 beforeRedirect 拦得住);旧版 ssrf 没有 axiosGuard = 不跟跳转
+    return typeof ss.axiosGuard === 'function' ? ss.axiosGuard(opts) : Object.assign({}, opts, { lookup: ss.safeLookup, maxRedirects: 0 });
+}
 async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
     // 后台任务(收藏更新检查)走单独的分支;交互请求(/api/search、/api/detail…)下面的逻辑一字未改
     if (options && options.bg) return fetchWithProxyFallbackBg(url, options, siteKey);
@@ -562,7 +578,7 @@ async function fetchWithProxyFallback(url, options = {}, siteKey = '') {
     // 尝试直接请求
     const startTime = Date.now();
     try {
-        const response = await axios.get(url, { ...options, timeout });
+        const response = await axios.get(url, adultMirrorGuard(url, { ...options, timeout }));   // [adult] p4
         const directLatency = Date.now() - startTime;
 
         // 检查是否太慢，如果配置了代理，尝试代理看是否更快
@@ -632,7 +648,7 @@ async function fetchWithProxyFallbackBg(url, options, siteKey) {
         return { data: r.data, usedProxy: true };
     }
     try {
-        const r = await axios.get(url, { ...opts, timeout });
+        const r = await axios.get(url, adultMirrorGuard(url, { ...opts, timeout }));   // [adult] p4
         return { data: r.data, usedProxy: false };
     } catch (directError) {
         if (!CORS_PROXY_URL || (typeof extra === 'function' && !extra())) throw directError;
@@ -986,24 +1002,65 @@ app.use('/api/search', searchLimiter);
 // ========== [adult] 成人站:首页目录 + 内容闸门(必须在所有业务路由之前挂:它的路由先应答,下面原有的搜索/详情实现不再执行) ==========
 // 首页目录(lib/site-catalog):只在 sqlite 缓存下开。加载/创建失败只是首页没有目录(/api/catalog/* 回 503),搜索/播放照常 ——
 //   内容安全不靠它(靠 lib/adult,fail-closed)。爬虫只调 maccms API,这里的 httpGet 再挡一道:媒体/图片地址一律拒绝。
+// [adult] p4:后台持久状态(站点停用 / 追加屏蔽词 / 热度盐)+ 资源站换域名自动跟随(lib/adult-mirror)。文件都在 cache.db 旁边(已 gitignore)。
+//   ADULT_MIRROR_DISABLE=1 关掉跟随(各站永远用站点表里的地址)。闸门搜索/详情经 apiFor() 取当前地址;目录爬虫的站点表留主地址,
+//   真正打出去时(catalogHttpGet → catalogFetchUrl)换成 apiFor() 的当前地址
+const adultAdminState = require('./lib/adult-gate/admin-state').createAdminState({ file: path.join(path.dirname(CACHE_DB_FILE), 'adult-admin.json'), log: (m) => console.warn(m) });
+let adultMirrorLib = null, adultMirror = null;
+if (!process.env.VERCEL && !envFlag('ADULT_MIRROR_DISABLE')) {
+    try {
+        adultMirrorLib = require('./lib/adult-mirror');
+        adultMirror = adultMirrorLib.createMirror({
+            sites: () => (((getDB() || {}).sites) || []).filter(s => s && s.active !== false && s.api),
+            store: adultMirrorLib.fileStore(path.join(path.dirname(CACHE_DB_FILE), 'adult-mirror.json')),
+            log: (m) => console.log(m),
+        });
+        adultMirror.start();
+    } catch (e) { console.warn('[Mirror] 换域名跟随不可用(各站用站点表里的地址):', e.message); adultMirror = null; }
+}
+const adultMirrorReport = (siteKey, ok, err, url, data) => {   // [adult] p4
+    if (!adultMirror || !siteKey) return;
+    try { adultMirror.report(siteKey, ok, ok ? 'ok' : adultMirrorLib.classifyError(err), { url, data: ok ? data : undefined }); } catch (e) { }
+};
 let _catalogRemoteKick = null;
 const catalogSites = () => {
     // 配了 REMOTE_DB_URL 时远程表过期就后台续一次(没人打开首页时 /api/sites 不会去拉)
     if (REMOTE_DB_URL && !_catalogRemoteKick && Date.now() - remoteDbLastFetch > REMOTE_DB_CACHE_TTL) {
         _catalogRemoteKick = loadRemoteDb().catch(() => null).finally(() => { _catalogRemoteKick = null; });
     }
-    return allSites().filter(s => s && s.api && !(kazumi && kazumi.isKzSite(s)));
+    return allSites().filter(s => s && s.api && !(kazumi && kazumi.isKzSite(s)))
+        // [adult] p4:后台停用的站标成 active:false(不爬、不出线路),但留在表里 —— 从表里删掉 = 目录当"站点已删除":
+        //   规则重扫(部署了新规则)立刻删光它的线路、7 天后保留期也删,撤销停用后回不来。
+        //   api 一直给主地址(目录的增量 / 全量回填进度、分类图都按 api 记,换成镜像地址 = 回填从第 1 页重来,换回来又重来一次);
+        //   有镜像在用的站在 catalogHttpGet 里把主地址前缀换成当前地址再打(catalogFetchUrl)
+        .map(s => (adultAdminState.siteOff(s.key) ? Object.assign({}, s, { active: false }) : s));
+};
+// [adult] p4:目录按主地址拼的 URL → 镜像在用时换成当前地址(查询串原样;主 / 镜像地址带不带 '?' 都按目录的拼法重拼)
+const catalogFetchUrl = (u, siteKey) => {
+    if (!adultMirror || !siteKey) return u;
+    let cur = null;
+    try { cur = adultMirror.apiFor(siteKey); } catch (e) { cur = null; }
+    const prim = ((allSites().find(s => s && s.key === siteKey) || {}).api) || '';
+    if (!cur || !prim || cur === prim || !/^https?:\/\//i.test(cur)) return u;
+    const pre = prim + (prim.indexOf('?') >= 0 ? '&' : '?');
+    if (u.indexOf(pre) !== 0) return u;
+    return cur + (cur.indexOf('?') >= 0 ? '&' : '?') + u.slice(pre.length);
 };
 const CATALOG_UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' };
 if (cacheManager.type === 'sqlite' && cacheManager.db && !process.env.VERCEL) {
     try {
         const catalogHttpGet = async (url, o) => {
-            const u = String(url || '');
+            const sk = (o && o.siteKey) || '';
+            const u = catalogFetchUrl(String(url || ''), sk);   // [adult] p4:镜像在用 → 换成当前地址
             if (!/^https?:\/\//i.test(u) || /\.(m3u8|ts|m4s|mp4|key|jpe?g|png|gif|webp|avif)$/i.test(u.split(/[?#]/)[0])) throw new Error('catalog: 只许调 API,拒绝 ' + u.slice(0, 80));
-            const { data } = await fetchWithProxyFallback(u, { timeout: (o && o.timeout) || 10000, maxContentLength: 16 * 1024 * 1024, headers: CATALOG_UA, bg: true }, (o && o.siteKey) || '');
-            if (data && typeof data === 'object') return data;
-            if (typeof data === 'string') return JSON.parse(data.replace(/^\uFEFF/, ''));   // 不是 JSON → 抛
-            throw new Error('catalog: 空响应');
+            let data;
+            try {   // [adult] p4:结果报给换域名跟随(失败计数 / 成功样本做指纹快照)
+                ({ data } = await fetchWithProxyFallback(u, { timeout: (o && o.timeout) || 10000, maxContentLength: 16 * 1024 * 1024, headers: CATALOG_UA, bg: true }, sk));
+                if (typeof data === 'string') data = JSON.parse(data.replace(/^\uFEFF/, ''));   // 不是 JSON → 抛
+                if (!data || typeof data !== 'object') throw new Error('catalog: 空响应');
+            } catch (e) { adultMirrorReport(sk, false, e, u); throw e; }
+            adultMirrorReport(sk, true, null, u, data);
+            return data;
         };
         catalog = require('./lib/site-catalog').createCatalog({
             // [adult] 第三阶段:目录自己一个 catalog.db(写在写线程、读在读线程;cache.db 里的旧 adult_* 表不再读),默认放在 cache.db 旁边
@@ -1044,6 +1101,10 @@ const adultGate = adultGateLib.createAdultGate({
     authConfigured: () => ACCESS_PASSWORDS.length > 0,
     ipKey,
     env: process.env,
+    // [adult] p4:后台停用 / 追加屏蔽词 / 热度盐;换域名跟随;站点表原样(后台列站点用,含 active:false)
+    adminState: adultAdminState,
+    mirror: () => adultMirror,
+    configuredSites: () => ((getDB() || {}).sites) || [],
 });
 adultGate.register(app);
 if (ADULT_ENV_APPLIED.length) console.log('[adult] 本分支默认关闭(env 未设置): ' + ADULT_ENV_APPLIED.join(', '));
@@ -1142,7 +1203,7 @@ try {
 //    需 sqlite;FAV_CHECK_DISABLE=1 只关后台检查(收藏本身照常可用)。匿名 /api/favorites/status 每 IP 30 次/分;
 //    配了访问密码时它也要有效令牌(新登记预算按令牌算)。
 const FAV_CHECK_ENABLED = !envFlag('FAV_CHECK_DISABLE');
-const favSites = () => allSites().filter(s => !(kazumi && kazumi.isKzSite(s)));
+const favSites = () => adultGate.sitesOf().filter(s => !(kazumi && kazumi.isKzSite(s)));   // [adult] p4:后台停用的站不查;有镜像在用的站查当前地址
 let favorites = null;
 try {
     favorites = require('./lib/favorites').createFavorites({
@@ -2431,7 +2492,7 @@ app.get('/api/check', async (req, res) => {
 });
 async function runSiteCheck(key) {
     try {
-        const sites = allSites();
+        const sites = adultGate.sitesOf();   // [adult] p4:后台停用的站不测(9999);有镜像在用的站测当前地址
         const site = sites.find(s => s.key === key);
         // 🎌 规则站没有 maccms API:只测站点首页可达(绝不拉媒体,同下方铁律)
         if (site && kazumi && kazumi.isKzSite(site)) return await kazumi.check(site.key);
@@ -2448,13 +2509,13 @@ async function runSiteCheck(key) {
             const UA_HDRS = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36', 'Accept': 'application/json' };
             let list = null, timedOut = false;
             try {
-                const r = await axios.get(`${site.api}?ac=videolist&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS });
+                const r = await axios.get(`${site.api}?ac=videolist&pg=1`, adultMirrorGuard(`${site.api}?ac=videolist&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS }));   // [adult] p4
                 list = r.data && Array.isArray(r.data.list) ? r.data.list : null;
             } catch (e) { timedOut = isTimeoutErr(e); }
             if (!list || !list.length) {
                 // 部分 CMS 变体对 ac=videolist 返回空/不支持 → 退回 ac=detail 再试一次(资源站验活的既定铁律)
                 try {
-                    const r2 = await axios.get(`${site.api}?ac=detail&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS });
+                    const r2 = await axios.get(`${site.api}?ac=detail&pg=1`, adultMirrorGuard(`${site.api}?ac=detail&pg=1`, { timeout: 4000, responseType: 'json', headers: UA_HDRS }));   // [adult] p4
                     list = r2.data && Array.isArray(r2.data.list) ? r2.data.list : null;
                     timedOut = false;
                 } catch (e) { timedOut = timedOut || isTimeoutErr(e); }

@@ -12,3 +12,8 @@ cache.db-shm
 catalog.db
 catalog.db-wal
 catalog.db-shm
+# [adult] p4:换域名跟随状态 / 成人站后台状态(cache.db 旁边)
+adult-mirror.json
+adult-mirror.json.*.tmp
+adult-admin.json
+adult-admin.json.*.tmp

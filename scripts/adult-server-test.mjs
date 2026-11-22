@@ -15,6 +15,10 @@
 //     作品线路 _family/_native 按站点表重算、_meta.actress/siblings 再过滤、/api/img 默认 404 + /cache/adult-img 直接访问 404、
 //     ADULT_IMG_PROXY=1:地址只从索引查(url= 不看、回环地址拒、被拦片名不取)、/api/config img_proxy、/api/popular 认 dg_t Cookie、
 //     server.js 把 lib/popular 的片名交给目录(popularTitles)、站点表 strict/codeTrust 传进 policy.checkItem
+//  ⑥ 第四阶段(目录 / 镜像 = 替身,scripts/fixtures/adult-server/mirror-stub.cjs):/api/catalog/related、/feed、GET|POST /heat 的出口过滤 / 校验 / 限流 /
+//     上报者哈希(dev 原文不落地);beacon orient;换域名跟随接线(搜索 / 爬虫 / /api/sites 走 apiFor,闸门与 catalogHttpGet 的结果 report 回去);
+//     后台:没配 ADMIN_TOKEN 全 404、错令牌 401 + 锁定、测试台、追加屏蔽词只会更严 + 持久化 + 重启并集、隐藏作品处处不出、站点停用持久化、镜像状态 / 探测
+//  (换域名跟随本身的逻辑见 scripts/adult-mirror-test.mjs)
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -164,11 +168,12 @@ console.log('① lib/adult-gate 纯函数');
 const stubLog = [];
 const stub = http.createServer((req, res) => {
     const u = new URL(req.url, 'http://x');
-    const m = /^\/([a-d])\/api\.php\/provide\/vod\/?$/.exec(u.pathname);
+    const m = /^\/(a2|[a-d])\/api\.php\/provide\/vod\/?$/.exec(u.pathname);   // a2:第四阶段"站 a 的镜像地址"(同一份片库)
     const q = Object.fromEntries(u.searchParams);
-    stubLog.push({ path: u.pathname, site: m ? m[1] : '', q, url: req.url });
+    stubLog.push({ path: u.pathname, site: m ? m[1] : (u.pathname.startsWith('/html/') ? 'html' : ''), q, url: req.url });
+    if (u.pathname.startsWith('/html/')) { res.writeHead(200, { 'Content-Type': 'text/html' }); return res.end('<html><body>This domain may be for sale</body></html>'); }   // 第四阶段:停放页
     if (!m) { res.writeHead(404); return res.end('no'); }
-    const site = m[1], base = `http://127.0.0.1:${stub.address().port}`;
+    const site = m[1] === 'a2' ? 'a' : m[1], base = `http://127.0.0.1:${stub.address().port}`;
     const all = DATA.sites[site].map(({ blocked, ...it }) => Object.assign({
         vod_pic: `${base}/img/${it.vod_id}.jpg`, vod_play_from: 'dgm3u8', vod_play_url: `第1集$${base}/media/${it.vod_id}.m3u8`,
         vod_remarks: 'HD', vod_year: '2026', vod_content: '<p>合成简介</p>', vod_time: '2026-11-21 10:00:00', vod_tag: '', vod_class: '', vod_actor: '',
@@ -202,13 +207,14 @@ function childEnv(extra) {
     for (const k of ['STATS_DISABLE', 'CATALOG_DISABLE', 'CATALOG_MAX_SITES', 'CATALOG_FIRST_DELAY_MS', 'ADULT_TEST_CATALOG_STUB', 'ADULT_TEST_CATALOG_LOG', 'VERCEL', 'SITES_JSON', 'OUTBOUND_MAX_TOTAL_SOCKETS', 'SITE_NAME',
         'ADULT_IMG_PROXY', 'ADULT_IMG_CACHE_DIR', 'ADULT_IMG_CACHE_MB', 'ADULT_CLIENT_IP_HEADER']) delete e[k];
     return Object.assign(e, {
-        TMDB_API_KEY: '', TMDB_PROXY_URL: '', CORS_PROXY_URL: '', DANMU_API_URL: '', DANMU_API_TOKEN: '', ADMIN_TOKEN: '', REMOTE_DB_URL: '',
+        TMDB_API_KEY: '', TMDB_PROXY_URL: '', CORS_PROXY_URL: '', DANMU_API_URL: '', DANMU_API_TOKEN: '', ADMIN_TOKEN: '', ADULT_ADMIN_TOKEN: '', REMOTE_DB_URL: '',
         LIVE_M3U_ADULT: '', SITE_URL: '', VAPID_PUBLIC_KEY: '', VAPID_PRIVATE_KEY: '', VAPID_SUBJECT: '', DB_FILE,
     }, extra || {});
 }
 let srv = null, port = 0, srvLog = '';
+const freePort = () => new Promise((resolve, reject) => { const s = http.createServer(); s.once('error', reject); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); }); });
 async function startServer(extra, args) {
-    port = 20000 + Math.floor(Math.random() * 20000);
+    port = await freePort();   // 第四阶段:随机端口会撞上并行跑的别的服务(非 HTTP 回包让 fetch 直接抛),改成先向系统要一个空闲端口
     srvLog = '';
     srv = spawn(process.execPath, (args || []).concat([path.join(ROOT, 'server.js')]), { cwd: tmp, env: childEnv(Object.assign({ PORT: String(port) }, extra)), stdio: ['ignore', 'pipe', 'pipe'] });
     srv.stdout.on('data', d => { srvLog += d; });
@@ -525,6 +531,12 @@ try {
     await api('GET', '/api/catalog/browse?studio=' + encodeURIComponent("M's video"), { cookie: CK });
     const bq7 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
     ok(bq7 && bq7.q.studio === "M's video", "目录浏览:片商名带单引号(M's video)照常透传", bq7 && bq7.q);
+    // 复核 r3:nr=1(推荐位不要审查级作品)透传成 nr:true;别的值 / 没给 → 不带这个键
+    await api('GET', '/api/catalog/browse?t=wife&sort=hot&page=1&nr=1', { cookie: CK });
+    const bq8 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
+    await api('GET', '/api/catalog/browse?t=wife&sort=hot&page=1&nr=yes', { cookie: CK });
+    const bq9 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
+    ok(bq8 && bq8.q.nr === true && bq9 && !('nr' in bq9.q) && !('nr' in bq7.q), '目录浏览:nr=1 → nr:true(去掉审查级);其它值 / 没给不带', [bq8 && bq8.q, bq9 && bq9.q]);
     r = await api('GET', '/api/catalog/tags?b=' + encodeURIComponent('../x'), { cookie: CK });
     tl = readLines(CAT_LOG).filter(x => x.ev === 'tags').pop();
     ok(r.status === 200 && tl && tl.b === '!bad', '/api/catalog/tags:非法分区标成 !bad 交给目录', tl);
@@ -814,7 +826,7 @@ if (!fs.existsSync(path.join(ROOT, 'lib/site-catalog/index.js'))) {
 // ---------------------------------------------------------------- ⑤ api/index.js(Vercel)
 console.log('⑤ api/index.js(Vercel)');
 {
-    const vport = 20000 + Math.floor(Math.random() * 20000);
+    const vport = await freePort();
     const env = childEnv({ SITES_JSON: JSON.stringify({ sites: SITES }), ACCESS_PASSWORD: 'test' });
     delete env.DB_FILE;
     const p = spawn(process.execPath, ['-e', `require(${JSON.stringify(path.join(ROOT, 'api/index.js'))}).listen(${vport})`], { cwd: tmp, env, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -841,6 +853,435 @@ console.log('⑤ api/index.js(Vercel)');
         r = await V('/api/sites');
         ok(r.status === 200 && r.j && Array.isArray(r.j.sites), 'Vercel /api/sites 照常(外壳)', r.status);
     } finally { const e = new Promise(res => p.once('exit', res)); p.kill(); await e; }
+}
+
+// ---------------------------------------------------------------- ⑥ 第四阶段(目录 / 镜像 = 替身)
+//   相关推荐 / 竖屏短片流 / 热度条 的出口过滤、热度上报校验与限流、上报者哈希;换域名跟随接线(搜索 / 爬虫走 apiFor、结果报给 report);
+//   后台:没配 ADMIN_TOKEN 全 404、错令牌 401 + 锁定、各接口校验、追加屏蔽词只会更严且持久化、站点停用持久化、隐藏作品处处不出
+console.log('⑥ 第四阶段:相关 / 短片流 / 热度 / 换域名接线 / 后台');
+{
+    // 修订:adult-admin.json 里不合口径的词(手改 / 损坏 / 旧版的 1 字、>40 字、控制字符、非字符串)单独丢掉,其余照样恢复
+    const AS = require(path.join(ROOT, 'lib/adult-gate/admin-state.js'));
+    const f = path.join(tmp, 'admin-state-bad.json');
+    fs.writeFileSync(f, JSON.stringify({ v: 1, blockWords: ['x', '合成好词甲', '  合成好词乙  ', 'y'.repeat(41), 'bad' + String.fromCharCode(1) + 'word', 42, null] }));
+    const ast = AS.createAdminState({ file: f, log: () => { } });
+    ok(JSON.stringify(ast.blockWords()) === JSON.stringify(['合成好词甲', '合成好词乙']), 'admin-state:坏词单独丢掉(和 PUT / policy 同口径 2..40 字),好词照样恢复', ast.blockWords());
+    const P0 = require(path.join(ROOT, 'lib/adult/policy.js'));
+    ok(P0.extraWordOk('合成好词甲') && !P0.extraWordOk('x') && !P0.extraWordOk('y'.repeat(41)) && !P0.extraWordOk(42), 'policy.extraWordOk:单个词的合法性');
+}
+{
+    const DB4 = path.join(tmp, 'db4.json');
+    const A2 = `${STUB}/a2/api.php/provide/vod/`;
+    const SITES4 = SITES.concat([{ key: 'e', name: '站E', api: `${STUB}/html/api.php/provide/vod/`, active: true, mirrors: ['https://e-mirror-zy.com/api.php/provide/vod'] }]);
+    fs.writeFileSync(DB4, JSON.stringify({ sites: SITES4 }, null, 2));
+    const MLOG = path.join(tmp, 'mirror.log');
+    const P4DIR = path.join(tmp, 'p4');
+    fs.mkdirSync(P4DIR, { recursive: true });
+    const C4 = path.join(P4DIR, 'cache-p4.db');
+    const ADMIN = 'p4-admin-token-0123456789abcdef';
+    const base = {
+        ACCESS_PASSWORD: 'test', CACHE_TYPE: 'sqlite', CACHE_DB_PATH: C4, DB_FILE: DB4,
+        ADULT_TEST_CATALOG_STUB: path.join(FIX, 'catalog-stub.cjs'), ADULT_TEST_CATALOG_LOG: CAT_LOG,
+        ADULT_TEST_MIRROR_STUB: path.join(FIX, 'mirror-stub.cjs'), ADULT_TEST_MIRROR_LOG: MLOG, ADULT_TEST_MIRROR_MAP: JSON.stringify({ a: A2 }),
+        ADULT_CLIENT_IP_HEADER: 'x-real-ip', ADULT_TEST_PROBE_URLS: `${A2}?ac=list ${STUB}/html/api.php/provide/vod/?ac=list ${SITES[0].api}?ac=list&pg=1`, ADULT_TEST_PROBE_SITE: 'a',
+    };
+    const hooks = ['-r', path.join(FIX, 'catalog-hook.cjs'), '-r', path.join(FIX, 'v2b-stub.cjs')];   // v2b-stub:复核 r3 测机场个人令牌的热度扇出上限
+    const CK = 'dg_t=' + sha('test');
+    const AH = (ip, tok) => ({ 'X-Admin-Token': tok === undefined ? ADMIN : tok, 'X-Real-IP': ip || '198.51.100.20' });
+    const last = (ev) => readLines(CAT_LOG).filter((x) => x.ev === ev).pop();
+    const mlog = () => readLines(MLOG);
+    const b64 = (arr) => Buffer.from(arr).toString('base64');
+    const BINS = b64(Array.from({ length: 100 }, (_, i) => i * 2));
+    const heat = (json, ip, extra) => api('POST', '/api/catalog/heat', Object.assign({ cookie: CK, json, headers: { 'X-Real-IP': ip || '198.51.100.31' } }, extra || {}));
+    const devs = [];
+    // —— 服务器 1:成人后台关着(复核修订:契约是 ADMIN_TOKEN 开后台;只想要主站求片后台 → ADULT_ADMIN_TOKEN=off)——
+    try {
+        await startServer(Object.assign({}, base, { ADMIN_TOKEN: 'main-site-qiupian-admin-token-0123', ADULT_ADMIN_TOKEN: 'off' }), hooks);
+        // 后台整体关
+        for (const [m, p] of [['GET', '/api/adult/admin/stats'], ['POST', '/api/adult/admin/hide'], ['GET', '/api/adult/admin/mirrors'], ['PUT', '/api/adult/admin/block-words']]) {
+            const r = await api(m, p, { headers: AH(), json: m === 'GET' ? undefined : {} });
+            ok(r.status === 404 && r.j && r.j.error === 'NOT_AVAILABLE', `ADULT_ADMIN_TOKEN=off(配了 ADMIN_TOKEN 也不开):${m} ${p} → 404`, [r.status, r.text.slice(0, 100)]);
+        }
+        let r = await api('GET', '/admin/adult');
+        ok(r.status === 404, 'ADULT_ADMIN_TOKEN=off:/admin/adult 页面也 404', r.status);
+        ok((await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.52', 'main-site-qiupian-admin-token-0123') })).status === 404, 'ADULT_ADMIN_TOKEN=off:ADMIN_TOKEN 也开不了成人后台');
+        r = await api('GET', '/adult/admin.html');
+        ok(r.status === 404, '后台关着:静态目录里的 /adult/admin.html 也 404(不由 express.static 直接给)', r.status);
+        // 换域名跟随接线
+        const mc = mlog().find((x) => x.ev === 'create');
+        ok(mc && JSON.stringify(mc.keys) === JSON.stringify(['log', 'sites', 'store']) && mc.storeFile === 'adult-mirror.json' && mc.storeDir === P4DIR
+            && JSON.stringify(mc.sites) === JSON.stringify(['a', 'b', 'c', 'e']) && mc.mirrorsOf.e === 1 && mlog().some((x) => x.ev === 'start'),
+        'server.js 建镜像模块:站点表(不含 active:false)+ mirrors、状态文件 = cache.db 旁边的 adult-mirror.json、start()', mc);
+        const cc = readLines(CAT_LOG).filter((x) => x.ev === 'create').pop();
+        ok(cc && cc.apis && cc.apis.a === SITES[0].api && cc.apis.b === SITES[1].api,
+            '目录爬虫拿到的站点表:一直是主地址(回填进度 / 分类图按 api 记,换镜像不能让它们从头来);打出去时才换(见下面 probe_http)', cc && cc.apis);
+        r = await api('GET', '/api/sites', { cookie: CK });
+        const sa = (r.j && r.j.sites || []).find((s) => s.key === 'a'), se = (r.j && r.j.sites || []).find((s) => s.key === 'e');
+        ok(sa && sa.api === A2 && se && !('mirrors' in se), '/api/sites:镜像在用的站报当前地址;备用域名表不下发', [sa, se]);
+        let n0 = stubCount();
+        const s4 = await sse('/api/search?wd=' + encodeURIComponent('周末') + '&stream=true', CK);
+        const hit = stubLog.slice(n0);
+        ok(s4.items.some((it) => keyOf(it) === 'a_102') && hit.some((x) => x.site === 'a2') && !hit.some((x) => x.site === 'a'), '闸门搜索:站 a 打的是镜像地址(a2),不再打主地址', hit.map((x) => x.site + ':' + x.q.ac));
+        await sleep(50);
+        ok(mlog().some((x) => x.ev === 'report' && x.k === 'a' && x.ok === true && x.kind === 'ok' && String(x.url).startsWith(A2) && x.hasData), '闸门搜索结果报给镜像模块:成功 + 样本数据', mlog().filter((x) => x.ev === 'report').slice(-6));
+        ok(mlog().some((x) => x.ev === 'report' && x.k === 'e' && x.ok === false && x.kind === 'body' && !x.hasData), '闸门:停放页(HTML)→ report(e, false, body)', mlog().filter((x) => x.ev === 'report' && x.k === 'e'));
+        n0 = stubCount();
+        await api('GET', '/api/catalog/tags?b=probe_http', { cookie: CK });
+        const ph = last('probe_http');
+        const hitP = stubLog.slice(n0);
+        const reps = mlog().filter((x) => x.ev === 'report' && x.k === 'a');
+        ok(ph && ph.out[0].ok && !ph.out[1].ok && reps.some((x) => x.ok && x.url === `${A2}?ac=list` && x.hasData) && reps.some((x) => !x.ok && x.kind === 'body' && /\/html\//.test(x.url)),
+            '目录 httpGet(catalogHttpGet):成功 / 非 JSON 都报给镜像模块(带 url,成功带样本)', [ph, reps.slice(-3)]);
+        ok(ph && ph.out[2] && ph.out[2].ok && !hitP.some((x) => x.site === 'a') && hitP.filter((x) => x.site === 'a2').length >= 2 && reps.some((x) => x.ok && x.url === `${A2}?ac=list&pg=1`),
+            '目录按主地址拼的 URL:镜像在用时换成当前地址再打(查询串原样),主地址一个请求都不打', [ph && ph.out[2], hitP.map((x) => x.site), reps.slice(-2)]);
+        // —— 相关推荐 ——
+        n0 = stubCount();
+        ok((await api('GET', '/api/catalog/related/' + encodeURIComponent('c:SSIS-001'))).status === 401 && (await api('GET', '/api/catalog/feed')).status === 401
+            && (await api('GET', '/api/catalog/heat/' + encodeURIComponent('c:SSIS-001'))).status === 401 && (await api('POST', '/api/catalog/heat', { json: {} })).status === 401, '相关 / 短片流 / 热度 没令牌 → 401');
+        r = await api('GET', '/api/catalog/related/' + encodeURIComponent('c:SSIS-001'), { cookie: CK });
+        ok(r.status === 200 && JSON.stringify(r.j.items.map((c) => c.wk)) === JSON.stringify(['t:ok1', 't:hid1', 'c:REL-001']) && /max-age=60/.test(r.h.get('cache-control') || ''),
+            '/api/catalog/related/:wk:自己 / 被拦片名 / AVDB 拦的番号 都滤掉', r.j && r.j.items.map((c) => c.wk));
+        ok(r.j.actress && r.j.actress.aid === 7 && r.j.actress.name === 'テスト花子' && JSON.stringify(r.j.actress.items.map((c) => c.wk)) === JSON.stringify(['c:REL-002']) && r.j.studio === null,
+            'related:演员行卡片再过滤;片商名被拦 → studio:null', [r.j.actress, r.j.studio]);
+        ok(last('related').limit === 24, 'related:limit 默认 24', last('related'));
+        r = await api('GET', '/api/catalog/related?k=' + encodeURIComponent('c:REL-001') + '&limit=999', { cookie: CK });
+        ok(r.status === 200 && r.j.actress === null && r.j.studio && r.j.studio.label === 'S1' && r.j.studio.items.length === 1 && last('related').limit === 48, 'related ?k=:演员名被拦 → actress:null;limit 上限 48', [r.j, last('related')]);
+        ok((await api('GET', '/api/catalog/related/' + encodeURIComponent('c:NOPE-001'), { cookie: CK })).status === 404 && (await api('GET', '/api/catalog/related/xyz', { cookie: CK })).status === 400, 'related:没有 → 404;非法键 → 400');
+        // —— 短片流 ——
+        r = await api('GET', '/api/catalog/feed?vert=1&cursor=abc_1', { cookie: CK });
+        const fq = last('feed');
+        ok(fq && JSON.stringify(fq.o) === JSON.stringify({ cursor: 'abc_1', vert: true, limit: 10 }) && /no-store/.test(r.h.get('cache-control') || ''), 'feed:cursor / vert / limit 透传', fq);
+        const fi = (r.j && r.j.items) || [];
+        ok(r.status === 200 && JSON.stringify(fi.map((x) => x.wk)) === JSON.stringify(['t:feed1', 't:hid1']) && r.j.cursor_next === 'nx_1',
+            'feed vert=1:被拦片名 / AVDB 拦的番号 / 横屏 / 一条线路都不剩的 都不出', fi.map((x) => x.wk));
+        const f1 = fi[0] || {};
+        ok(f1.orient === 'v' && f1.dur === 45 && JSON.stringify((f1.lines || []).map((l) => l.site + ':' + l.url.split('/').pop())) === JSON.stringify(['a:f1.m3u8', 'b:f1b2.m3u8'])
+            && f1.lines[0].site_name === '站A' && f1.lines[0]._native === 'ok' && f1.lines[1]._native === 'risky' && f1.lines[1]._family === 'famB',
+        'feed 线路:停用站 / 未知站 / 非 http(s) / 片名被拦的线路丢掉;站名、_family、_native 按站点表', f1.lines);
+        ok(f1.lines && f1.lines[0].vod_id === '101' && f1.lines[1].vod_id === '', 'feed 线路带 vod_id(刷短片报画面方向用;目录没给 → 空串)', f1.lines);
+        r = await api('GET', '/api/catalog/feed?cursor=' + encodeURIComponent('!!') + '&limit=99', { cookie: CK });
+        ok(last('feed').o.cursor === '' && last('feed').o.vert === false && last('feed').o.limit === 20 && (r.j.items || []).some((x) => x.wk === 't:feed4'), 'feed:非法 cursor → 空;limit 上限 20;不要竖屏时横屏照出', [last('feed').o, (r.j.items || []).map((x) => x.wk)]);
+        // —— 热度 ——
+        r = await api('GET', '/api/catalog/heat/' + encodeURIComponent('c:SSIS-001'), { cookie: CK });
+        ok(r.status === 200 && r.j.bins.length === 100 && r.j.bins[0] === 100 && r.j.bins[1] === 0 && r.j.bins[50] === 50 && r.j.users === 5 && /max-age=300/.test(r.h.get('cache-control') || ''), 'GET heat:bins 夹到 0..100', r.j);
+        const hf = await api('GET', '/api/catalog/heat/' + encodeURIComponent('c:FEW-001'), { cookie: CK });
+        const hn = await api('GET', '/api/catalog/heat?k=' + encodeURIComponent('c:NOPE-001'), { cookie: CK });
+        const hb = await api('GET', '/api/catalog/heat/x', { cookie: CK });
+        ok(hf.status === 204 && hn.status === 204 && hb.status === 400, 'GET heat:不到 3 人 / 没有 → 204;非法键 → 400', [hf.status, hn.status, hb.status]);
+        const DEV1 = 'devAAAA1111bbbbZZ', DEV2 = 'devCCCC2222ddddYY';
+        devs.push(DEV1, DEV2);
+        r = await heat({ wk: 'c:SSIS-001', dur: 7210.4, bins: BINS, dev: DEV1 });
+        const h1 = last('heatAdd');
+        ok(r.status === 204 && h1 && h1.wk === 'c:SSIS-001' && h1.n === 100 && h1.b0 === 0 && h1.b99 === 198 && h1.dur === 7210 && /^[0-9a-f]{32}$/.test(h1.who) && !h1.who.includes(DEV1),
+            'POST heat → 204;目录收到 bins[100] / dur / who(哈希,不是 dev 原文)', [r.status, h1]);
+        await heat({ wk: 'c:SSIS-001', dur: 100, bins: BINS, dev: DEV1 });
+        const h1b = last('heatAdd');
+        // 复核修订(回到契约):who = sha256(dev + 当天的盐);认得出网络(这里 X-Real-IP 是声明过的可信头)时同一网络同一部片当天只收第一台设备
+        const nHeat = () => readLines(CAT_LOG).filter((x) => x.ev === 'heatAdd').length;
+        const nA0 = nHeat();
+        const r2s = (await heat({ wk: 'c:SSIS-001', dur: 100, bins: BINS, dev: DEV2 })).status;
+        const nA = nHeat();
+        await heat({ wk: 'c:SSIS-001', dur: 100, bins: BINS, dev: DEV2 }, '198.51.100.35');
+        const h3 = last('heatAdd');
+        const nB = nHeat();
+        ok(h1b.who === h1.who && r2s === 204 && nA === nA0 && nB === nA0 + 1 && h3.who !== h1.who && /^[0-9a-f]{32}$/.test(h3.who),
+            'who:同一设备当天不变;同一可信网络同一部片的第二台设备照回 204 但不计(假设备号凑不出人数);它从别的网络来就算一份(按设备)', [h1.who, h1b.who, h3.who, r2s, nA0, nA, nB]);
+        // 认不出网络(反代后面没配头:请求不带声明的 X-Real-IP → 对端是本机)→ 按设备算,不设网络上限(否则全站每部片每天只 1 份,热度条永远出不来)
+        const whoP = [];
+        for (const d of ['devPROXY0001aa', 'devPROXY0002bb', 'devPROXY0003cc']) {
+            devs.push(d);
+            const n1 = readLines(CAT_LOG).filter((x) => x.ev === 'heatAdd').length;
+            const rp = await api('POST', '/api/catalog/heat', { cookie: CK, json: { wk: 'c:FEW-001', dur: 300, bins: BINS, dev: d } });
+            const evs = readLines(CAT_LOG).filter((x) => x.ev === 'heatAdd');
+            whoP.push(rp.status === 204 && evs.length === n1 + 1 ? evs[evs.length - 1].who : null);
+        }
+        ok(whoP.every((w) => /^[0-9a-f]{32}$/.test(w || '')) && new Set(whoP).size === 3, '认不出客户端网络(同一个本机对端):3 台设备 = 3 份(热度条凑得到 3 人)', whoP);
+        // 复核 r3:一人一个的令牌(机场用户)认不出网络时也按人算 —— 同一个人造 3 个设备号只计第一份(照回 204)
+        const lv = await api('POST', '/api/auth/v2board', { json: { email: 'viewer@example.test', password: 'pw' } });
+        const CKV = 'dg_t=' + (lv.j && lv.j.userToken);
+        const v2c = [];
+        for (const d of ['devV2BU0001aa', 'devV2BU0002bb', 'devV2BU0003cc']) {
+            devs.push(d);
+            const n1 = nHeat();
+            const rp = await api('POST', '/api/catalog/heat', { cookie: CKV, json: { wk: 'c:FEW-002', dur: 300, bins: BINS, dev: d } });
+            v2c.push(rp.status + ':' + (nHeat() - n1));
+        }
+        const rpw = await api('POST', '/api/catalog/heat', { cookie: CK, json: { wk: 'c:FEW-002', dur: 300, bins: BINS, dev: 'devPROXY0004dd' } });
+        devs.push('devPROXY0004dd');
+        const v2o = readLines(CAT_LOG).filter((x) => x.ev === 'heatAdd' && x.wk === 'c:FEW-002').length;
+        ok(lv.j && lv.j.success === true && /^v2board_/.test(lv.j.userToken) && v2c.join() === '204:1,204:0,204:0' && rpw.status === 204 && v2o === 2,
+            '机场个人令牌 + 认不出网络:同一个人 3 个设备号当天同一部片只计 1 份;共享密码令牌不受影响', [lv.j && lv.j.success, v2c, rpw.status, v2o]);
+        const nH = readLines(CAT_LOG).filter((x) => x.ev === 'heatAdd').length;
+        const bad = [
+            ['99 字节', { wk: 'c:SSIS-001', dur: 100, bins: b64(new Array(99).fill(1)), dev: DEV1 }],
+            ['101 字节', { wk: 'c:SSIS-001', dur: 100, bins: b64(new Array(101).fill(1)), dev: DEV1 }],
+            ['非 base64 字符', { wk: 'c:SSIS-001', dur: 100, bins: '!'.repeat(136), dev: DEV1 }],
+            ['base64url 字符', { wk: 'c:SSIS-001', dur: 100, bins: BINS.replace(/[A]/g, '-').slice(0, 136), dev: DEV1 }],
+            ['数组', { wk: 'c:SSIS-001', dur: 100, bins: new Array(100).fill(1), dev: DEV1 }],
+            ['没 dev', { wk: 'c:SSIS-001', dur: 100, bins: BINS }],
+            ['dev 太短', { wk: 'c:SSIS-001', dur: 100, bins: BINS, dev: 'short' }],
+            ['dev 带怪字符', { wk: 'c:SSIS-001', dur: 100, bins: BINS, dev: 'dev<script>xx' }],
+            ['坏 wk', { wk: 'x', dur: 100, bins: BINS, dev: DEV1 }],
+            ['dur 0', { wk: 'c:SSIS-001', dur: 0, bins: BINS, dev: DEV1 }],
+            ['dur 字符串', { wk: 'c:SSIS-001', dur: 'abc', bins: BINS, dev: DEV1 }],
+            ['dur 超 12h', { wk: 'c:SSIS-001', dur: 50000, bins: BINS, dev: DEV1 }],
+        ];
+        const codes = [];
+        for (const [, j] of bad) codes.push((await heat(j, '198.51.100.32')).status);
+        ok(codes.every((c) => c === 400) && readLines(CAT_LOG).filter((x) => x.ev === 'heatAdd').length === nH, 'POST heat 校验:长度 / 字符集 / dev / wk / dur 不对 → 400,不进目录', bad.map(([n], i) => n + ':' + codes[i]));
+        const rt = await fetch(B() + '/api/catalog/heat', { method: 'POST', headers: { cookie: CK, 'Content-Type': 'text/plain;charset=UTF-8', 'X-Real-IP': '198.51.100.33' }, body: JSON.stringify({ wk: 'c:SSIS-001', dur: 60, bins: BINS, dev: 'devBEACON0001xx' }) });
+        devs.push('devBEACON0001xx');
+        ok(rt.status === 204, 'POST heat:sendBeacon 的 text/plain JSON 也认', rt.status);
+        // 限流:每设备每分钟 6 次;每 IP 每分钟 30 次(伪造的 X-Real-IP 在这里是声明过的可信头,所以按它分 IP)
+        const DEVR = 'devRATE000001aa';
+        devs.push(DEVR);
+        const dc = [];
+        for (let i = 0; i < 7; i++) dc.push((await heat({ wk: 'c:SSIS-001', dur: 60, bins: BINS, dev: DEVR }, '198.51.100.40')).status);
+        ok(dc.slice(0, 6).every((c) => c === 204) && dc[6] === 429, 'POST heat:每设备每分钟 6 次,超了 429', dc);
+        const ic = [];
+        for (let i = 0; i < 31; i++) { const d = 'devIP' + String(i).padStart(10, '0'); devs.push(d); ic.push((await heat({ wk: 'c:SSIS-001', dur: 60, bins: BINS, dev: d }, '198.51.100.41')).status); }
+        const other = (await heat({ wk: 'c:SSIS-001', dur: 60, bins: BINS, dev: 'devOTHERIP00001' }, '198.51.100.42')).status;
+        devs.push('devOTHERIP00001');
+        ok(ic.slice(0, 30).every((c) => c === 204) && ic[30] === 429 && other === 204, 'POST heat:每 IP 每分钟 30 次(换设备号开不出新配额),别的 IP 不受影响', [ic.slice(28), other]);
+        // 上报 orient
+        r = await api('POST', '/api/catalog/beacon', { cookie: CK, json: { site_key: 'a', vod_id: '101', ok: true, orient: 'v', w: 720, h: 1280 } });
+        const bo = last('beacon');
+        const r2 = await api('POST', '/api/catalog/beacon', { cookie: CK, json: { site_key: 'a', vod_id: '101', ok: true, orient: 'diag' } });
+        ok(r.status === 204 && bo.r.orient === 'v' && bo.r.w === 720 && bo.r.h === 1280 && r2.status === 204 && last('beacon').r.orient === '', 'beacon:orient(v/h/sq)/ w / h 透传;别的 orient → 空', [bo.r, last('beacon').r]);
+        ok(stubCount() === n0, '相关 / 短片流 / 热度 / 上报 一个资源站都没打', stubLog.slice(n0).map((x) => x.url));
+    } catch (e) {
+        ok(false, '⑥ 服务器 1 异常: ' + (e && e.stack || e), srvLog.slice(-2000));
+    } finally { await stopServer(); }
+
+    // —— 服务器 2:配了 ADULT_ADMIN_TOKEN ——
+    const ADMIN_FILE = path.join(P4DIR, 'adult-admin.json');
+    let wk102 = '';
+    try {
+        await startServer(Object.assign({}, base, { ADULT_ADMIN_TOKEN: ADMIN }), hooks);
+        let r = await api('GET', '/admin/adult');
+        const hasPage = fs.existsSync(path.join(ROOT, 'public', 'adult', 'admin.html'));
+        ok(hasPage ? (r.status === 200 && r.h.get('x-frame-options') === 'DENY' && /no-store/.test(r.h.get('cache-control') || '') && /text\/html/.test(r.h.get('content-type') || '')) : r.status === 404,
+            '/admin/adult:页面不要令牌(' + (hasPage ? '有 admin.html → 200 + DENY 嵌入 + no-store' : '还没有 admin.html → 404') + ')', [r.status, r.h.get('x-frame-options')]);
+        r = await api('GET', '/adult/admin.html');
+        ok(r.status === 302 && r.h.get('location') === '/admin/adult' && /no-store/.test(r.h.get('cache-control') || ''), '静态 /adult/admin.html → 302 到 /admin/adult(那里才带 DENY / no-store)', [r.status, r.h.get('location')]);
+        r = await api('GET', '/api/adult/admin/stats', { headers: { 'X-Real-IP': '198.51.100.50' } });
+        const r1 = await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.50', 'wrong-token') });
+        const r1b = await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.50', ADMIN + 'x') });
+        ok(r.status === 401 && r.j.error === 'NO_TOKEN' && r1.status === 401 && r1b.status === 401 && r1.j.error === 'BAD_TOKEN' && /no-store/.test(r1.h.get('cache-control') || ''), '后台:没令牌 → 401 NO_TOKEN;错令牌 / 多一位 → 401 BAD_TOKEN', [r.status, r1.status, r1b.status]);
+        ok((await api('GET', '/api/adult/admin/stats?token=' + ADMIN, { headers: { 'X-Real-IP': '198.51.100.51' } })).status === 401, '后台:令牌只认 X-Admin-Token 头(?token= 不认)');
+        r = await api('GET', '/api/adult/admin/stats', { headers: AH() });
+        const sb = (r.j && r.j.sites || []).find((x) => x.key === 'b'), se = (r.j && r.j.sites || []).find((x) => x.key === 'e');
+        ok(r.status === 200 && r.j.works === 3 && r.j.catalog === true && r.j.rejected['category:x'] === 2 && r.j.extraBlock && r.j.extraBlock.n === 0
+            && sb && sb.fails === 2 && sb.overrideActive === null && sb.active === true && se && se.active === true, 'GET stats:目录 adminStats + 闸门这边的站点覆盖 / 追加词', r.j);
+        // —— 规则测试台 ——
+        const T = (j) => api('POST', '/api/adult/admin/test', { headers: AH(), json: j });
+        r = await T({ title: '准高一少女 初恋' });
+        ok(r.status === 200 && r.j.query === true && r.j.item.ok === false && typeof r.j.item.reason === 'string' && r.j.item.reason, '测试台:被拦片名 → query:true、item.ok:false + 原因', r.j);
+        r = await T({ title: 'SSIS-001 温泉旅馆的邂逅', type_name: '日本有码' });
+        ok(r.status === 200 && r.j.query === false && r.j.item.ok === true && r.j.item.bucket && r.j.parsed.code === 'SSIS-001' && r.j.parsed.key === 'SSIS-001' && r.j.parsed.codeOk === true
+            && Array.isArray(r.j.tags) && r.j.tags.every((t) => typeof t.id === 'string' && typeof t.kind === 'string') && r.j.avdb === null, '测试台:正常番号 → item / parsed / tags / avdb', r.j);
+        r = await T({ title: 'SSIS-002 某作品', type_name: '日本有码' });
+        ok(r.status === 200 && r.j.avdb === 'block' && r.j.item.ok === false && r.j.item.reason === 'avdb:block', '测试台:AVDB 拦的番号 → avdb:block', r.j);
+        const tv = [await T({}), await T({ title: '' }), await T({ title: 'x'.repeat(401) }), await T({ title: 'ok', type_name: 5 }), await T({ title: 'ok', type_name: 'x'.repeat(61) })];
+        ok(tv.every((x) => x.status === 400), '测试台:缺标题 / 空 / 超长 / type_name 不是字符串或超长 → 400', tv.map((x) => x.status));
+        // —— 追加屏蔽词(只会更严) ——
+        const BW = (j) => api('PUT', '/api/adult/admin/block-words', { headers: AH(), json: j });
+        r = await api('GET', '/api/adult/admin/block-words', { headers: AH() });
+        ok(r.status === 200 && Array.isArray(r.j.words) && r.j.words.length === 0 && r.j.n === 0, 'GET block-words:初始空', r.j);
+        const bv = [await BW({}), await BW({ words: 'x' }), await BW({ words: new Array(501).fill(0).map((_, i) => '词' + i) }), await BW({ words: ['好词', 'a'] }),
+            await BW({ words: ['好词', 'x'.repeat(41)] }), await BW({ words: ['好词', 5] }), await BW({ words: ['好词', 'ab\u0001'] })];
+        r = await api('GET', '/api/adult/admin/block-words', { headers: AH() });
+        ok(bv.every((x) => x.status === 400) && r.j.n === 0, 'PUT block-words 校验:不是数组 / >500 / 1 字 / >40 字 / 非字符串 / 控制字符 → 400,词表不变', bv.map((x) => x.status));
+        let home = await api('GET', '/api/catalog/home', { cookie: CK });
+        ok((home.j.rows[0].items || []).some((c) => c.name === '邻家姐姐的周末'), '对照:加词之前首页有「邻家姐姐的周末」');
+        r = await BW({ words: ['姐姐的周', 'Zz Probe', '姐姐的周'] });
+        ok(r.status === 200 && r.j.n === 2 && r.j.applied.main === true && r.j.applied.catalog === true && JSON.stringify(last('setExtraBlock').words) === JSON.stringify(['姐姐的周', 'Zz Probe']),
+            'PUT block-words:去重、设到主线程 policy + 目录(setExtraBlock)', [r.j, last('setExtraBlock')]);
+        home = await api('GET', '/api/catalog/home', { cookie: CK });
+        let n0 = stubCount();
+        const sq = await sse('/api/search?wd=' + encodeURIComponent('姐姐的周') + '&stream=true', CK);
+        const sq2 = await api('GET', '/api/search?wd=' + encodeURIComponent('zz-probe'), { cookie: CK });
+        ok(!(home.j.rows[0].items || []).some((c) => c.name === '邻家姐姐的周末') && sq.items.length === 0 && sq2.j.list.length === 0 && stubCount() === n0,
+            '追加词立即生效:首页卡片出口被滤;命中追加词的查询空结果、一个资源站都不打', [home.j.rows[0].items.map((c) => c.name), stubLog.slice(n0).map((x) => x.url)]);
+        const af = JSON.parse(fs.readFileSync(ADMIN_FILE, 'utf8'));
+        ok(JSON.stringify(af.blockWords) === JSON.stringify(['姐姐的周', 'Zz Probe']), '追加词持久化到 cache.db 旁边的 adult-admin.json', af);
+        r = await BW({ words: [] });
+        home = await api('GET', '/api/catalog/home', { cookie: CK });
+        n0 = stubCount();
+        const sb2 = await sse('/api/search?wd=' + encodeURIComponent('迷奸') + '&stream=true', CK);
+        ok(r.status === 200 && r.j.n === 0 && (home.j.rows[0].items || []).some((c) => c.name === '邻家姐姐的周末') && !(home.j.rows[0].items || []).some((c) => c.name === '准高一少女 初恋')
+            && sb2.items.length === 0 && stubCount() === n0, 'PUT []:只清空追加词;内置规则一条不动(被拦片名仍不出、硬拦查询仍不打上游)', [r.j, home.j.rows[0].items.map((c) => c.name)]);
+        // [integ] 目录没设上(setExtraBlock 回 {ok:false}):闸门等它的结果 → 503 CATALOG_FAILED;主线程已生效且落盘(只会更严,重启再推给目录)
+        r = await BW({ words: ['ZzCatFail'] });
+        const afx = JSON.parse(fs.readFileSync(ADMIN_FILE, 'utf8'));
+        const sqx = await api('GET', '/api/search?wd=' + encodeURIComponent('zzcatfail'), { cookie: CK });
+        ok(r.status === 503 && r.j.error === 'CATALOG_FAILED' && r.j.applied && r.j.applied.main === true && r.j.applied.catalog === false && r.j.n === 1
+            && JSON.stringify(afx.blockWords) === JSON.stringify(['ZzCatFail']) && sqx.j.list.length === 0, 'PUT block-words:目录回 {ok:false} → 503(主线程照样生效并落盘)', [r.status, r.j, afx.blockWords]);
+        r = await BW({ words: [] });
+        ok(r.status === 200 && r.j.n === 0, '清空追加词(接着测)', r.j);
+        // —— 隐藏作品 ——
+        const H = (j, ip) => api('POST', '/api/adult/admin/hide', { headers: AH(ip), json: j });
+        r = await api('GET', '/api/adult/admin/hidden', { headers: AH() });
+        ok(r.status === 200 && Array.isArray(r.j) && r.j.length === 0, 'GET hidden:初始空', r.j);
+        r = await H({ wk: 't:hid1', on: true });
+        ok(r.status === 200 && r.j.ok && r.j.hidden === true && last('adminHide').wk === 't:hid1' && last('adminHide').on === true, 'POST hide:交给目录 adminHide、闸门的隐藏表立刻刷新', [r.j, last('adminHide')]);
+        r = await H({ wk: 't:catdown1', on: true });
+        ok(r.status === 503 && r.j.ok === false && r.j.error === 'CATALOG_UNAVAILABLE' && r.j.detail === 'unavailable', 'POST hide:目录回 {ok:false} → 503(不再当成功)', [r.status, r.j]);
+        await H({ wk: 't:blocked1', on: true });
+        r = await api('GET', '/api/adult/admin/hidden', { headers: AH() });
+        ok(JSON.stringify(r.j.map((x) => [x.wk, x.name])) === JSON.stringify([['t:hid1', '被隐藏的合成作品']]), 'GET hidden:片名被拦的条目不列(被拦的本来就哪儿都不出)', r.j);
+        const rel = await api('GET', '/api/catalog/related/' + encodeURIComponent('c:SSIS-001'), { cookie: CK });
+        const fd = await api('GET', '/api/catalog/feed?vert=1', { cookie: CK });
+        ok(!rel.j.items.some((c) => c.wk === 't:hid1') && !fd.j.items.some((x) => x.wk === 't:hid1'), '隐藏的作品:相关推荐 / 短片流都不出', [rel.j.items.map((c) => c.wk), fd.j.items.map((x) => x.wk)]);
+        ok((await api('GET', '/api/catalog/related/' + encodeURIComponent('t:hid1'), { cookie: CK })).status === 404 && (await api('GET', '/api/catalog/heat/' + encodeURIComponent('t:hid1'), { cookie: CK })).status === 204,
+            '隐藏的作品:自己的相关页 404、热度 204');
+        // 复核 r3:隐藏主作品 → 它的 ~N / #clip 兄弟在作品页也 404(直链 / 继续观看 / 分享链接都开不了);撤销后照常
+        const WK = (k) => api('GET', '/api/catalog/work?k=' + encodeURIComponent(k), { cookie: CK });
+        const sibPre = [(await WK('c:SSIS-001~2')).status, (await WK('c:SSIS-001#clip')).status];
+        await H({ wk: 'c:SSIS-001', on: true });
+        const sibMid = [(await WK('c:SSIS-001')).status, (await WK('c:SSIS-001~2')).status, (await WK('c:SSIS-001#clip')).status];
+        const nWork = readLines(CAT_LOG).filter((x) => x.ev === 'work').length;
+        await WK('c:SSIS-001~3');
+        const sibAsk = readLines(CAT_LOG).filter((x) => x.ev === 'work').length - nWork;
+        await H({ wk: 'c:SSIS-001', on: false });
+        const sibPost = (await WK('c:SSIS-001~2')).status;
+        ok(sibPre.join() === '200,200' && sibMid.join() === '404,404,404' && sibAsk === 0 && sibPost === 200,
+            '隐藏主作品:它的 ~N / #clip 兄弟作品页也 404(不去问目录);撤销隐藏后照常 200', [sibPre, sibMid, sibAsk, sibPost]);
+        // 兄弟单独被隐藏:主作品照开,_meta.siblings 不再列它
+        await H({ wk: 'c:SSIS-001#U', on: true });
+        const wsib = await WK('c:SSIS-001');
+        await H({ wk: 'c:SSIS-001#U', on: false });
+        const wsib2 = await WK('c:SSIS-001');
+        ok(wsib.status === 200 && wsib.j._meta.siblings.length === 0 && wsib2.j._meta.siblings.length === 1 && wsib2.j._meta.siblings[0].wk === 'c:SSIS-001#U',
+            '兄弟单独隐藏:主作品照开,作品页的同番号版本里不再列它', [wsib.j && wsib.j._meta.siblings, wsib2.j && wsib2.j._meta.siblings]);
+        let js = await api('GET', '/api/search?wd=' + encodeURIComponent('周末'), { cookie: CK });
+        const it102 = (js.j.list || []).find((x) => keyOf(x) === 'a_102');
+        wk102 = it102 ? it102._wk : '';
+        ok(!!wk102, '对照:隐藏前搜得到 a_102', js.j.list.map(keyOf));
+        await H({ wk: wk102, on: true });
+        js = await api('GET', '/api/search?wd=' + encodeURIComponent('周末'), { cookie: CK });
+        const sse2 = await sse('/api/search?wd=' + encodeURIComponent('周末') + '&stream=true', CK);
+        const dt = await api('GET', '/api/detail?id=102&site_key=a', { cookie: CK });
+        const dp = await api('POST', '/api/detail', { cookie: CK, json: { id: 102, siteKey: 'a' } });
+        ok(!(js.j.list || []).some((x) => keyOf(x) === 'a_102') && !sse2.items.some((x) => keyOf(x) === 'a_102') && dt.status === 404 && dp.status === 404,
+            '隐藏的作品:现搜结果(JSON / SSE)不出、详情 GET / POST 404', [js.j.list.map(keyOf), dt.status, dp.status]);
+        await H({ wk: wk102, on: false });
+        js = await api('GET', '/api/search?wd=' + encodeURIComponent('周末'), { cookie: CK });
+        ok((js.j.list || []).some((x) => keyOf(x) === 'a_102') && (await api('GET', '/api/detail?id=102&site_key=a', { cookie: CK })).status === 200, '取消隐藏:搜索 / 详情恢复');
+        const hv = [await H({ wk: 'bad', on: true }), await H({ wk: 't:x', on: 'yes' }), await H({ on: true }), await H({ wk: 't:' + 'x'.repeat(300), on: true })];
+        ok(hv.every((x) => x.status === 400), 'POST hide 校验 → 400', hv.map((x) => x.status));
+        // —— 站点停用(运行时覆盖,持久化)——
+        r = await api('GET', '/api/adult/admin/sites', { headers: AH() });
+        const rows = Object.fromEntries((r.j || []).map((x) => [x.key, x]));
+        ok(r.status === 200 && JSON.stringify(Object.keys(rows)) === JSON.stringify(['a', 'b', 'c', 'd', 'e']) && rows.d.configuredActive === false && rows.d.active === false
+            && rows.a.current === A2 && rows.a.api === SITES[0].api && rows.a.lastOk === 1700000000000 && rows.e.mirrors === 1 && rows.b.overrideActive === null, 'GET sites:站点表全部(含 active:false)+ 镜像当前地址 + 目录统计', r.j);
+        const SS = (j, ip) => api('POST', '/api/adult/admin/site', { headers: AH(ip), json: j });
+        r = await SS({ key: 'b', active: false });
+        ok(r.status === 200 && r.j.active === false && r.j.overrideActive === false && r.j.persisted === true, 'POST site b active:false → 停用(已落盘)', r.j);
+        const as1 = last('adminSite');
+        ok(r.j.catalog === true && as1 && as1.key === 'b' && as1.active === false && as1.known === true && as1.cfgActive === false,
+            'POST site:也交给目录 adminSite(目录的站点表里 b 已标成 active:false,不是删掉)', [r.j.catalog, as1]);
+        n0 = stubCount();
+        const sites2 = await api('GET', '/api/sites', { cookie: CK });
+        const sb3 = await sse('/api/search?wd=' + encodeURIComponent('周末') + '&stream=true', CK);
+        const db3 = await api('GET', '/api/detail?id=201&site_key=b', { cookie: CK });
+        await api('GET', '/api/catalog/tags?b=probe_sites', { cookie: CK });
+        const ps = last('probe_sites');
+        ok(!sites2.j.sites.some((s) => s.key === 'b') && !sb3.items.some((x) => x.site_key === 'b') && !stubLog.slice(n0).some((x) => x.site === 'b') && db3.status === 404
+            && Array.isArray(ps.sites) && !ps.sites.some((x) => x[0] === 'b' && x[2] !== false) && ps.sites.some((x) => x[0] === 'b' && x[2] === false) && ps.sites.some((x) => x[0] === 'a' && x[1] === SITES[0].api),
+        '停用的站:/api/sites 不列、搜索不扇出(一个请求都不打)、详情 404、目录的站点表里标成 active:false(不爬;留在表里 = 重扫 / 保留期不当成"站点已删除"删它的线路)', [sites2.j.sites.map((s) => s.key), ps]);
+        r = await work4(CK);
+        ok(r.status === 200 && !r.j.sources.some((s) => s.site_key === 'b'), '停用的站:作品页线路也不出', r.j && r.j.sources.map((s) => s.site_key));
+        const sv = [await SS({ key: 'zz', active: false }), await SS({ key: 'b', active: 'no' }), await SS({ active: false }), await SS({ key: 'x'.repeat(65), active: false })];
+        ok(sv[0].status === 404 && sv.slice(1).every((x) => x.status === 400), 'POST site:不认识的站 404;字段不对 400', sv.map((x) => x.status));
+        r = await SS({ key: 'd', active: true });
+        const sd = await api('GET', '/api/sites', { cookie: CK });
+        ok(r.status === 200 && r.j.active === false && r.j.configuredActive === false && !sd.j.sites.some((s) => s.key === 'd'), 'POST site d active:true:db 里 active:false 的站开不了(只能撤销后台停用)', r.j);
+        ok(JSON.parse(fs.readFileSync(ADMIN_FILE, 'utf8')).siteOff.b > 0, '站点停用持久化到 adult-admin.json');
+        // —— 镜像 ——
+        r = await api('GET', '/api/adult/admin/mirrors', { headers: AH() });
+        ok(r.status === 200 && Array.isArray(r.j) && r.j.some((x) => x.key === 'a' && x.current === A2), 'GET mirrors → mirror.status()', r.j);
+        r = await api('POST', '/api/adult/admin/mirror/probe', { headers: AH(), json: { key: 'a' } });
+        ok(r.status === 200 && r.j.reason === 'stub' && mlog().some((x) => x.ev === 'probe' && x.k === 'a'), 'POST mirror/probe → mirror.probe(key)', r.j);
+        const mv = [await api('POST', '/api/adult/admin/mirror/probe', { headers: AH(), json: { key: 'zz' } }), await api('POST', '/api/adult/admin/mirror/probe', { headers: AH(), json: {} })];
+        ok(mv[0].status === 404 && mv[1].status === 400, 'mirror/probe:不认识的站 404、缺 key 400', mv.map((x) => x.status));
+        ok((await api('GET', '/api/adult/admin/nope', { headers: AH() })).status === 404, '后台下未知路径 → 404');
+        await BW({ words: ['姐姐的周'] });   // 留一个,下面重启验持久化
+        // —— 锁定:同一 IP 10 分钟 5 次错令牌 → 429,锁着时对的令牌也不收;别的 IP 不受影响 ——
+        //    修订:不带令牌的请求只回 401、不算错(和站长共用客户端键的人发空请求锁不住站长)
+        const NT = [];
+        for (let i = 0; i < 12; i++) NT.push((await api('GET', '/api/adult/admin/stats', { headers: { 'X-Real-IP': '198.51.100.66' } })).status);
+        const goodAfterNt = (await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.66') })).status;
+        ok(NT.every((c) => c === 401) && goodAfterNt === 200, '后台:12 次不带令牌的请求不算错,对的令牌照常 200', [NT, goodAfterNt]);
+        const L = [];
+        for (let i = 0; i < 4; i++) L.push((await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.66', 'bad' + i) })).status);
+        const good = (await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.66') })).status;
+        const fifth = await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.66', 'bad5') });
+        const after = (await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.66') })).status;
+        const otherIp = (await api('GET', '/api/adult/admin/stats', { headers: AH('198.51.100.67') })).status;
+        ok(L.every((c) => c === 401) && good === 200 && fifth.status === 429 && fifth.j.error === 'LOCKED' && after === 429 && otherIp === 200,
+            '后台锁定:4 次错 → 401、对的仍 200;第 5 次错 → 429 LOCKED,之后对的令牌也 429;别的 IP 照常', [L, good, fifth.status, after, otherIp]);
+    } catch (e) {
+        ok(false, '⑥ 服务器 2 异常: ' + (e && e.stack || e), srvLog.slice(-2000));
+    } finally { await stopServer(); }
+
+    // —— 服务器 3:重启后持久化(停用的站、追加词;目录存的词并进来)——
+    try {
+        const nX = readLines(CAT_LOG).filter((x) => x.ev === 'setExtraBlock').length;
+        const nS = readLines(CAT_LOG).filter((x) => x.ev === 'adminSite').length;
+        // 复核修订:这台只配契约里的 ADMIN_TOKEN(没有 ADULT_ADMIN_TOKEN)→ 成人后台照样开、认它
+        await startServer(Object.assign({}, base, { ADMIN_TOKEN: ADMIN, ADULT_TEST_CAT_XWORDS: '合成目录词', ADULT_TEST_CAT_SITEOV: 'a' }), hooks);
+        await sleep(100);
+        let r = await api('GET', '/api/adult/admin/block-words', { headers: AH('198.51.100.70') });
+        ok(r.status === 200, '只配 ADMIN_TOKEN(契约):成人后台开、认这个令牌', [r.status, r.text.slice(0, 80)]);
+        const sx = readLines(CAT_LOG).filter((x) => x.ev === 'setExtraBlock').slice(nX);
+        ok(r.status === 200 && JSON.stringify(r.j.words.slice().sort()) === JSON.stringify(['合成目录词', '姐姐的周'].sort()) && sx.length >= 1 && sx[sx.length - 1].words.length === 2,
+            '重启:后台存的追加词 ∪ 目录存的追加词 → 主线程 + 目录都设上', [r.j, sx]);
+        ok(JSON.stringify(JSON.parse(fs.readFileSync(ADMIN_FILE, 'utf8')).blockWords.slice().sort()) === JSON.stringify(['合成目录词', '姐姐的周'].sort()), '重启:并集写回 adult-admin.json');
+        const home = await api('GET', '/api/catalog/home', { cookie: CK });
+        ok(!(home.j.rows[0].items || []).some((c) => c.name === '邻家姐姐的周末'), '重启:追加词在第一个请求之前就生效');
+        const s1 = await api('GET', '/api/sites', { cookie: CK });
+        ok(!s1.j.sites.some((s) => s.key === 'b'), '重启:停用的站仍停用', s1.j.sites.map((s) => s.key));
+        {
+            // 目录存着 a 停用(以前"启用"没存上留下的),adult-admin.json 只停 b → 启动对齐:目录 a 撤销、b 补上停用
+            const ev = readLines(CAT_LOG).filter((x) => x.ev === 'adminSite').slice(nS);
+            ok(ev.some((x) => x.key === 'a' && x.active === true) && ev.some((x) => x.key === 'b' && x.active === false) && ev.length === 2,
+                '重启:目录的站点停用覆盖按 adult-admin.json 对齐(多的撤销、少的补上)', ev);
+            ok(s1.j.sites.some((s) => s.key === 'a'), '重启:a 没被后台停用 → 照常出现在 /api/sites', s1.j.sites.map((s) => s.key));
+        }
+        r = await api('POST', '/api/adult/admin/site', { headers: AH('198.51.100.70'), json: { key: 'b', active: true } });
+        const s2 = await api('GET', '/api/sites', { cookie: CK });
+        ok(r.status === 200 && r.j.active === true && r.j.overrideActive === null && s2.j.sites.some((s) => s.key === 'b'), 'POST site b active:true → 撤销停用', r.j);
+        const as2 = last('adminSite');
+        ok(r.j.catalog === true && as2 && as2.key === 'b' && as2.active === true && as2.cfgActive === true, 'POST site active:true:目录的覆盖也撤销', as2);
+        await api('PUT', '/api/adult/admin/block-words', { headers: AH('198.51.100.70'), json: { words: [] } });
+        // dev 原文绝不落地:临时目录里的文件、服务器日志都没有
+        const files = [];
+        const walk = (d) => { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); const st = fs.statSync(p); if (st.isDirectory()) walk(p); else if (st.size < 64 * 1024 * 1024) files.push(p); } };
+        walk(tmp);
+        const leaks = [];
+        for (const f of files) { const buf = fs.readFileSync(f).toString('latin1'); for (const d of devs) if (buf.includes(d)) leaks.push(path.basename(f) + ':' + d); }
+        ok(devs.length > 30 && !leaks.length && !devs.some((d) => srvLog.includes(d)), '热度上报的 dev 原文不落任何文件 / 日志(只存按天加盐的哈希)', leaks.slice(0, 5));
+        const af = JSON.parse(fs.readFileSync(ADMIN_FILE, 'utf8'));
+        ok(/^[0-9a-f]{64}$/.test(af.heatSecret || ''), 'adult-admin.json 存着热度盐的种子(重启后同一设备当天哈希不变)');
+    } catch (e) {
+        ok(false, '⑥ 服务器 3 异常: ' + (e && e.stack || e), srvLog.slice(-2000));
+    } finally { await stopServer(); }
+    // —— 服务器 4(修订):换上去的镜像源站,出网时再判地址(静态 + 连接那一刻 safeLookup):镜像指到内网(这里 = 本机替身 127.0.0.1)→ 直连拒、一个请求都不打 ——
+    try {
+        await startServer(Object.assign({}, base, { ADULT_TEST_MIRROR_GUARDED: '1' }), hooks);
+        const n0 = stubCount();
+        const nRep = mlog().filter((x) => x.ev === 'report' && x.k === 'a' && x.ok === false).length;
+        const r = await api('GET', '/api/search?wd=' + encodeURIComponent('合成镜像防护'), { cookie: CK });   // 没搜过的词(别吃到前面的搜索缓存)
+        const ck = await api('GET', '/api/check?key=a', { cookie: CK });
+        const hit = stubLog.slice(n0);
+        ok(r.status === 200 && !hit.some((x) => x.site === 'a2') && hit.some((x) => x.site === 'b') && mlog().filter((x) => x.ev === 'report' && x.k === 'a' && x.ok === false).length > nRep
+            && ck.j && ck.j.latency >= 9000,
+            '镜像源站解析到内网:搜索 / 测速都不直连它(报失败给镜像模块),别的站照常', [hit.map((x) => x.url), ck.j]);
+    } catch (e) {
+        ok(false, '⑥ 服务器 4 异常: ' + (e && e.stack || e), srvLog.slice(-2000));
+    } finally { await stopServer(); }
+    async function work4(cookie) { return api('GET', '/api/catalog/work?k=' + encodeURIComponent('c:SSIS-001'), { cookie }); }
 }
 
 stub.close();

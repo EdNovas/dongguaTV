@@ -1,0 +1,59 @@
+{
+    "_note": "[adult] scripts/adult-mirror-test.mjs 的假 maccms 片库(ac=list 回包形状)。片名全部合成,不含任何真人姓名。A = 被跟随的站;A_fresh = 同一个站过了很久(全是更新的条目、分类表相同);A_fresh_otherclass = 更新的条目但分类表不同(被抢注的域名换了别家片库);B = 别家片库(条目时间与 A 重叠、片名全不同、分类表相同 —— 抢注域名套了同一个模板)。",
+    "classes_a": [
+        { "type_id": 1, "type_name": "日本有码", "type_pid": 0 },
+        { "type_id": 2, "type_name": "中文字幕", "type_pid": 0 },
+        { "type_id": 3, "type_name": "国产自拍", "type_pid": 0 },
+        { "type_id": 5, "type_name": "日本无码", "type_pid": 0 },
+        { "type_id": 6, "type_name": "欧美精品", "type_pid": 0 },
+        { "type_id": 7, "type_name": "动漫番剧", "type_pid": 0 }
+    ],
+    "classes_other": [
+        { "type_id": 11, "type_name": "电影", "type_pid": 0 },
+        { "type_id": 12, "type_name": "连续剧", "type_pid": 0 },
+        { "type_id": 13, "type_name": "综艺", "type_pid": 0 },
+        { "type_id": 14, "type_name": "动漫", "type_pid": 0 }
+    ],
+    "A": [
+        { "vod_id": 1010, "vod_name": "合成作品甲 第十号 温泉旅馆", "vod_time": "2026-11-20 10:10:00", "type_id": 1 },
+        { "vod_id": 1009, "vod_name": "合成作品甲 第九号 夏日回忆", "vod_time": "2026-11-20 10:09:00", "type_id": 2 },
+        { "vod_id": 1008, "vod_name": "合成作品甲 第八号 周末约会", "vod_time": "2026-11-20 10:08:00", "type_id": 3 },
+        { "vod_id": 1007, "vod_name": "合成作品甲 第七号 邻家姐姐", "vod_time": "2026-11-20 10:07:00", "type_id": 1 },
+        { "vod_id": 1006, "vod_name": "合成作品甲 第六号 雨夜车站", "vod_time": "2026-11-20 10:06:00", "type_id": 5 },
+        { "vod_id": 1005, "vod_name": "合成作品甲 第五号 海边小屋", "vod_time": "2026-11-20 10:05:00", "type_id": 6 },
+        { "vod_id": 1004, "vod_name": "合成作品甲 第四号 山间民宿", "vod_time": "2026-11-20 10:04:00", "type_id": 1 },
+        { "vod_id": 1003, "vod_name": "合成作品甲 第三号 城市夜景", "vod_time": "2026-11-20 10:03:00", "type_id": 2 },
+        { "vod_id": 1002, "vod_name": "合成作品甲 第二号 午后咖啡", "vod_time": "2026-11-20 10:02:00", "type_id": 3 },
+        { "vod_id": 1001, "vod_name": "合成作品甲 第一号 初次见面", "vod_time": "2026-11-20 10:01:00", "type_id": 7 }
+    ],
+    "A_shift2": [
+        { "vod_id": 1012, "vod_name": "合成作品甲 第十二号 秋日长廊", "vod_time": "2026-11-20 10:12:00", "type_id": 1 },
+        { "vod_id": 1011, "vod_name": "合成作品甲 第十一号 林间小路", "vod_time": "2026-11-20 10:11:00", "type_id": 2 },
+        { "vod_id": 1010, "vod_name": "合成作品甲 第十号 温泉旅馆", "vod_time": "2026-11-20 10:10:00", "type_id": 1 },
+        { "vod_id": 1009, "vod_name": "合成作品甲 第九号 夏日回忆", "vod_time": "2026-11-20 10:09:00", "type_id": 2 },
+        { "vod_id": 1008, "vod_name": "合成作品甲 第八号 周末约会", "vod_time": "2026-11-20 10:08:00", "type_id": 3 },
+        { "vod_id": 1007, "vod_name": "合成作品甲 第七号 邻家姐姐", "vod_time": "2026-11-20 10:07:00", "type_id": 1 },
+        { "vod_id": 1006, "vod_name": "合成作品甲 第六号 雨夜车站", "vod_time": "2026-11-20 10:06:00", "type_id": 5 },
+        { "vod_id": 1005, "vod_name": "合成作品甲 第五号 海边小屋", "vod_time": "2026-11-20 10:05:00", "type_id": 6 }
+    ],
+    "A_fresh": [
+        { "vod_id": 1108, "vod_name": "合成作品乙 第八号 冬夜暖炉", "vod_time": "2026-11-23 09:08:00", "type_id": 1 },
+        { "vod_id": 1107, "vod_name": "合成作品乙 第七号 港口灯塔", "vod_time": "2026-11-23 09:07:00", "type_id": 2 },
+        { "vod_id": 1106, "vod_name": "合成作品乙 第六号 樱花小道", "vod_time": "2026-11-23 09:06:00", "type_id": 3 },
+        { "vod_id": 1105, "vod_name": "合成作品乙 第五号 旧书店", "vod_time": "2026-11-23 09:05:00", "type_id": 1 },
+        { "vod_id": 1104, "vod_name": "合成作品乙 第四号 屋顶花园", "vod_time": "2026-11-23 09:04:00", "type_id": 5 },
+        { "vod_id": 1103, "vod_name": "合成作品乙 第三号 星空露营", "vod_time": "2026-11-23 09:03:00", "type_id": 6 },
+        { "vod_id": 1102, "vod_name": "合成作品乙 第二号 湖畔木屋", "vod_time": "2026-11-23 09:02:00", "type_id": 1 },
+        { "vod_id": 1101, "vod_name": "合成作品乙 第一号 清晨列车", "vod_time": "2026-11-23 09:01:00", "type_id": 7 }
+    ],
+    "B": [
+        { "vod_id": 501, "vod_name": "另一家片库 条目一 合成", "vod_time": "2026-11-20 10:10:30", "type_id": 1 },
+        { "vod_id": 502, "vod_name": "另一家片库 条目二 合成", "vod_time": "2026-11-20 10:09:30", "type_id": 2 },
+        { "vod_id": 503, "vod_name": "另一家片库 条目三 合成", "vod_time": "2026-11-20 10:08:30", "type_id": 3 },
+        { "vod_id": 504, "vod_name": "另一家片库 条目四 合成", "vod_time": "2026-11-20 10:07:30", "type_id": 1 },
+        { "vod_id": 505, "vod_name": "另一家片库 条目五 合成", "vod_time": "2026-11-20 10:06:30", "type_id": 5 },
+        { "vod_id": 506, "vod_name": "另一家片库 条目六 合成", "vod_time": "2026-11-20 10:05:30", "type_id": 6 },
+        { "vod_id": 507, "vod_name": "另一家片库 条目七 合成", "vod_time": "2026-11-20 10:04:30", "type_id": 1 },
+        { "vod_id": 508, "vod_name": "另一家片库 条目八 合成", "vod_time": "2026-11-20 10:03:30", "type_id": 7 }
+    ]
+}
