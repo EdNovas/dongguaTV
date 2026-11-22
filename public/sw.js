@@ -36,7 +36,10 @@
 // v42: 弹幕 /api/danmaku/ 一律直达不缓存。策略4 把空弹幕(服务器发的是 no-store,Cache API 不认)也存了,之后再开这一集,
 //      服务器 4 秒内没回(慢平台现抓要几十秒)就回这份旧的空弹幕 —— 服务器早抓到了也看不到(《嫁金钗》实锤)。
 //      弹幕自带 HTTP 缓存头(非空 7 天、空 no-store),交给浏览器缓存;升版顺带清掉旧缓存里存着的空弹幕。
-const CACHE_VERSION = 'v42';
+// v43: 进度条缩略图预览 libs/js/seek-preview.js?v=1(defer,预缓存走 SWR)。策略1b(跨域图片 Cache First)只认 <img>/CSS 图片(destination=image):
+//      hls.js 用 XHR 取分片(destination 为空),有的资源站把 TS 分片伪装成 .png/.jpg,以前按扩展名被当台标存进 LIVE_IMG_CACHE(Cache First,
+//      最多 600 个,几 MB 一个)—— 主播放器和进度条预览的分片都一样;现在 XHR/fetch 一律不碰。老浏览器没有 Request.destination 时才按扩展名认。
+const CACHE_VERSION = 'v43';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -58,6 +61,7 @@ const STATIC_URLS = [
     './libs/js/ad-clip-core.js?v=7',    // v30: 同上(defer);v31: 判定核心 v2(加时间戳信号);v33: v4(多组插播 + probeTs);v34: v5(播放前剪清单);v35: v6
     './libs/js/ad-filter.js?v=4.0',     // v33: 与页面引用同一个 ?v=(静态库改为先按完整 URL 匹配)
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
+    './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js'
 ];
 
@@ -139,8 +143,10 @@ self.addEventListener('fetch', event => {
     }
 
     // 📺 策略1b：直播台标等【跨域图片】- Cache First(台标在 tb.zbds.top/github 等多个域，按"图片请求"统一缓存)
+    //    v43:只认真正的图片请求。XHR/fetch(destination 为 '')一律不接 —— hls.js 取的 .png/.jpg 伪装分片(主播放器和进度条预览)不能进缓存;
+    //    destination 是 undefined(老浏览器不支持)才退回按扩展名认
     if (url.origin !== self.location.origin &&
-        (event.request.destination === 'image' || /\.(png|jpe?g|webp|gif|svg)(\?|$)/i.test(url.pathname))) {
+        (_dest === 'image' || (_dest === undefined && /\.(png|jpe?g|webp|gif|svg)(\?|$)/i.test(url.pathname)))) {
         event.respondWith(handleLiveImage(event.request));
         return;
     }
