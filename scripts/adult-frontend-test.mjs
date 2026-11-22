@@ -390,13 +390,15 @@ function makeApp(over) {
     // 首页:/api/catalog/home → rowConfigs/rowLists;homeBlocks 不占「随机盲盒」位、目录行排在后面;没有目录 → 没有分类栏
     const app = makeApp({ watchHistory: [{ name: 'x' }] });
     net.handler = (u) => {
-        if (u === '/api/catalog/home') return { body: { rows: [{ id: 'new', title: '新上架', more: { sort: 'new' }, items: [{ wk: 'c:A-001', name: 'A-001 x', pic: 'https://p/a.jpg' }] }, { id: 'random', title: '随机发现', more: { sort: 'random' }, items: [{ wk: 't:yy', name: 'y' }] }] } };
+        // 封面加载不出来就藏(2026-11-22):没有封面的卡片(pic 空)渲染之前就拿掉,一张不剩的行整行不出
+        if (u === '/api/catalog/home') return { body: { rows: [{ id: 'new', title: '新上架', more: { sort: 'new' }, items: [{ wk: 'c:A-001', name: 'A-001 x', pic: 'https://p/a.jpg' }, { wk: 't:nopic', name: '没封面', pic: '' }] }, { id: 'cn_live', title: '全是没封面的', items: [{ wk: 't:np2', name: 'z' }] }, { id: 'random', title: '随机发现', more: { sort: 'random' }, items: [{ wk: 't:yy', name: 'y', pic: 'https://p/y.jpg' }] }] } };
         if (u === '/api/catalog/buckets') return { body: [{ id: 'cn_amateur', label: '国产自拍', nav: true, today: 9 }] };
         return null;
     };
     await app.adultLoadHome();
     await sleep(5);
     ok(eq(Object.keys(app.rowConfigs), ['ad_new', 'ad_random']) && app.rowLists.ad_new[0]._wk === 'c:A-001' && app.adult.home === 'ok', 'adultLoadHome:目录各行进 rowConfigs/rowLists', Object.keys(app.rowConfigs));
+    ok(app.rowLists.ad_new.length === 1 && !app.rowConfigs.ad_cn_live, '没有封面的卡片渲染之前就拿掉;一张不剩的行(全是没封面的)整行不出', app.rowLists.ad_new.map(x => x._wk));
     ok(app.adToday('cn') === 9 && app.adToday('cn_amateur') === 9, '分类栏今日数(/api/catalog/buckets)');
     const ids = app.homeBlocks.map(b => b.id);
     ok(eq(ids, ['history', 'catnav', 'row:ad_new', 'row:ad_random']), 'homeBlocks:继续观看、分类栏,然后目录行(随机发现排最后,不占随机盲盒的位置)', ids);
@@ -553,7 +555,7 @@ function makeApp(over) {
     net.handler = (u) => (u.startsWith('/api/catalog/suggest') ? {
         body: {
             kind: 'text', alias: null, exact: null, items: [
-                { wk: 't:a1', name: '合成片名一', pic: 'https://p/a1.jpg', dur: 600, n_sites: 3, sub: '1天前 · 10:00 · 3线' }, { wk: 't:a2', name: '合成片名二' }],
+                { wk: 't:a1', name: '合成片名一', pic: 'https://p/a1.jpg', dur: 600, n_sites: 3, sub: '1天前 · 10:00 · 3线' }, { wk: 't:a2', name: '合成片名二', pic: 'https://p/a2.jpg' }, { wk: 't:a3', name: '合成片名三(没封面)' }],
         },
     } : null);
     app.keyword = '合成片';
@@ -567,6 +569,7 @@ function makeApp(over) {
     ok(searched === 0, '停顿后也不自动全站扇出(回车/放大镜才搜)');
     const rows = app.adSugRows;
     ok(app.adult.sug.open && eq(rows.map(x => x.t), ['item', 'item', 'all']) && rows[0].it._wk === 't:a1' && rows[0].it._durText === '10:00' && rows[0].it._n === 3, '下拉:作品卡片 + 最后一行「搜索全部站点」', rows.map(x => x.t));
+    ok(!rows.some(x => x.it && x.it._wk === 't:a3'), '下拉:没有封面的作品整行不出(封面加载不出来就藏)');
     const ev = (key) => ({ key, isComposing: false, preventDefault() { this.d = true; } });
     app.adSugKey(ev('ArrowDown')); app.adSugKey(ev('ArrowDown'));
     ok(app.adult.sug.hi === 1, '方向键下移选中行');
@@ -1482,8 +1485,14 @@ function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', na
     // ---- 模板接线 ----
     ok(/if \(this\.adultMode && typeof this\._adBrowseFetch === 'function'\) return this\._adBrowseFetch\(reset\);/.test(HTML), '_browseFetch 在成人站交给 _adBrowseFetch(游标 + facets)');
     ok(/b\.items\.length >= \(this\.adultMode \? 10000 : 600\)/.test(HTML), 'browseMore:成人站不按 600 张封顶');
-    ok(/<dg-ad-grid v-if="adultMode" v-show="!adNoList" :items="browse\.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse\.loading" @pick="browsePick"><\/dg-ad-grid>/.test(HTML)
-        && /<div class="browse-grid" v-if="!adultMode">/.test(HTML), '浏览页网格:成人站换成窗口化的 <dg-ad-grid>(点卡片照旧 browsePick),主站网格不动');
+    ok(/<dg-ad-grid v-if="adultMode" v-show="!adNoList" :cover="true" :items="browse\.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse\.loading" @pick="browsePick" @vis="adBrowseVis"><\/dg-ad-grid>/.test(HTML)
+        && /<div class="browse-grid" v-if="!adultMode">/.test(HTML), '浏览页网格:成人站换成窗口化的 <dg-ad-grid>(点卡片照旧 browsePick;报出了几张 / 藏了几张),主站网格不动');
+    // 封面加载不出来就藏:底栏「已经到底了 · 共 N 部」和空状态按网格出了几张算(藏掉的不算);收藏的封面用控制器换到的那张
+    ok(/<div v-else-if="browse\.done && !\(adultMode \? adBrowseN : browse\.items\.length\)" class="browse-empty">/.test(HTML) && /已经到底了 · 共 \{\{ adultMode \? adBrowseN : browse\.items\.length \}\} 部/.test(HTML)
+        && typeof A.mixin.computed.adBrowseN === 'function' && typeof A.mixin.methods.adBrowseVis === 'function', '浏览页底栏 / 空状态:按网格出了几张算(封面加载不出来藏掉的不算)');
+    ok(/this\.imageMap && this\.imageMap\[pk\]\) \|\| \(this\.adultMode && typeof this\.adOkPic === 'function' && this\.adOkPic\(g, pk\)\) \|\| \(g && g\.pic\)/.test(HTML) && typeof A.mixin.methods.adOkPic === 'function',
+        '收藏的封面:主封面坏了、封面控制器换到的备用地址真加载出来了 → 用那张');
+    ok(A.components.DgAdGrid.emits.indexOf('vis') >= 0 && typeof A.components.DgAdGrid.methods.revealBack === 'function', '网格:报 vis;「显示」补滚动 / 焦点');
     ok(/<dg-ad-cloud v-if="adultMode && adult\.view === 'tags'" :b="browse\.sel\.b \|\| ''" @go="adGo" @learn="adLearned"><\/dg-ad-cloud>/.test(HTML) && /<dg-ad-head v-if="adultMode" :view="adult\.view" :sel="browse\.sel" :total="browse\.total" @go="adGo" @learn="adLearned"><\/dg-ad-head>/.test(HTML),
         '标签云 / 标签页与女优页页头');
     ok(/<h2 class="browse-title">\{\{ adultMode \? adBrowseTitle : browseTitle \}\}<\/h2>/.test(HTML) && /\{\{ adultMode \? adBrowseSummary : browseSummary \}\}/.test(HTML) && /@click="\(adultMode && adOpenSheet\(\)\) \|\| browseToTop\(\)"/.test(HTML), '标题 / 顶上摘要条(点「筛选」直接开面板)');
@@ -1541,7 +1550,7 @@ console.log('⑤ 页面接线 / sw.js');
     ok(/if \(this\.adultMode\) \{ try \{ this\._adBeaconFail\(failingSource, v\); \} catch \(e\) \{ \} \}[^\n]*\n\s*failingSource\.latency = 9998;/.test(HTML) && /this\._adBeaconFail\(failingSource, v0\)/.test(HTML), '线路反馈:自动换源确认放不了 / 全部试完时报失败');
     ok(/if \(this\.adultMode && dp\.video\) \{ try \{ this\._adBeaconTick\(dp\.video\); \} catch \(e\) \{ \} \}/.test(HTML), '线路反馈:timeupdate 里报起播(出错也不影响播放器的其他 tick)');
     ok(/\.\.\.\(\(data\._adult && this\.adultMode\) \? this\._adSrcExtra\(item\) : \{\}\)/.test(HTML) && /if \(!u \|\| it\._family\) \{ result\.push\(it\); return; \}/.test(HTML), 'refreshSources 保留成人字段;同片源去重不吃同家镜像');
-    ok((HTML.match(/window\.DgAdult\.brand\.renew(Html|Text)\(\)/g) || []).length === 3, '三处续费提示:成人站用 purchase_url(没配不提主站地址)');
+    ok((HTML.match(/window\.DgAdult\.brand\.renew(Html|Text)\(\)/g) || []).length === 3, '三处续费提示:成人站用 /api/config 的 purchase_url(默认主站 ednovas.me,站长关掉就不提)');
     ok(/<div class="set-row" v-if="adultMode">[\s\S]{0,400}模糊封面[\s\S]{0,600}@change="adSetBlur\(\$event\.target\.checked\)"/.test(HTML), '设置里的「模糊封面」开关');
     // 标了 [adult] 的行里注释不在标签中间(浏览器会把它当属性,模板整个坏掉)
     const badCm = HTML.split('\n').filter(l => l.includes('<!-- [adult]')).filter(l => { const pre = l.split('<!--')[0]; return pre.lastIndexOf('<') > pre.lastIndexOf('>'); });
@@ -1579,12 +1588,15 @@ console.log('⑤ 页面接线 / sw.js');
         fetch: async () => new Response('x'), Response, URL, Promise, console, setTimeout, clearTimeout,
     };
     vm.runInNewContext(SW, swCtx);
-    const handled = (url, dest) => {
+    const handled = (url, dest, method, cache) => {
         let took = false;
-        const req = { url, destination: dest || '', headers: { has: () => false }, mode: dest === 'document' ? 'navigate' : 'cors', method: 'GET' };
+        const req = { url, destination: dest || '', headers: { has: () => false }, mode: dest === 'document' ? 'navigate' : 'cors', method: method || 'GET', cache: cache || 'default' };
         handlers.fetch({ request: req, respondWith() { took = true; }, waitUntil() { } });
         return took;
     };
+    // 封面探测(跨域 HEAD、no-store,no-cors)必须真的走网络:SW 一律直通(否则策略1 的 TMDB 图片缓存会拿缓存 / 占位图冒充「通了」)
+    ok(handled('https://image.tmdb.org/t/p/w300/a.jpg', 'image') && !handled('https://image.tmdb.org/t/p/w300/a.jpg', '', 'HEAD', 'no-store') && !handled('https://image.tmdb.org/t/p/w300/a.jpg', '', 'GET', 'no-store')
+        && !handled('https://img.other-cdn.test/a.jpg', '', 'HEAD', 'no-store'), 'sw.js:跨域的 HEAD / no-store 请求直通(封面探测不会被缓存 / 占位图冒充)');
     ok(!handled('https://img.other-cdn.test/upload/a.jpg', 'image') && !handled('https://img.other-cdn.test/b.webp'), '跨域海报不进 SW 缓存');
     ok(!handled('https://site.test/api/catalog/home') && !handled('https://site.test/api/catalog/browse?b=x&page=1') && !handled('https://site.test/api/detail?site_key=a&id=1') && !handled('https://site.test/api/search?wd=x'), '目录/详情/搜索接口直达不缓存');
     ok(!handled('https://site.test/api/sites') && !handled('https://site.test/api/check?key=a') && !handled('https://site.test/api/catalog/suggest?q=a') && !handled('https://site.test/api/img?k=c%3AA-1&s=s1', 'image'),
@@ -1925,11 +1937,10 @@ function fakeVideo() {
     const s1 = items0.find(i => i._wk === 'c:S-1'), s0 = items0.find(i => !i._wk);
     const items = [s1];
     ok(items0.length === 2 && s1 && s1._n === 2 && s1.title === '合成搜到' && Object.isFrozen(s1) && s1._g.sources.length === 2 && s0 && s0.title === '没有作品键', '搜索结果 → 窗口化网格的卡片(_g = 原分组)', items0.map(i => [i.title, i._n]));
-    let od = null, he = null;
+    let od = null;
     app.openDetail = (g) => { od = g; };
-    app.handleImgError = (k, nm) => { he = [k, nm]; };
-    app.adSearchPick(items[0]); app.adSearchImgErr(items[0]);
-    ok(od === items[0]._g && he && he[0] === items[0]._pk && he[1] === '合成搜到', '点卡片 = openDetail(分组);坏图走原来的回退');
+    app.adSearchPick(items[0]);
+    ok(od === items[0]._g && typeof A.mixin.methods.adSearchImgErr === 'undefined', '点卡片 = openDetail(分组);坏图交给封面控制器(换同组别的线路的海报 / 藏),原来的回退方法删掉了');
     const Gd = A.components.DgAdGrid;
     ok(Gd.props.keep && /@error="\$emit\('imgerr', item\)"/.test(Gd.template) && /:data-wk="item\._wk \|\| null"/.test(Gd.template), '网格:keep / imgerr / data-wk');
     const gi = { dead: { 0: 100 }, keep: true, _resets: 0 };
@@ -2407,9 +2418,20 @@ async function feedWorld(o) {
     ok(/if \(this\.adultMode && !this\.showDetail && typeof this\.adFeedBack === 'function' && this\.adFeedBack\(\)\) return;/.test(HTML) && /window\.dgAdultFeed\.isOpen\(\)\)\) : Reflect\.get\(t, k\)\)/.test(HTML), '返回键:刷短片开着先关它(goHome / 安卓 App 的 searched 探测)');
     ok(/<dg-ad-rails v-if="adultMode && adult\.relWk && !previewLocked" :wk="adult\.relWk" :poster="getPosterUrl" :tv="isTVMode" @pick="adRelPick" @go="adGo"><\/dg-ad-rails>/.test(HTML), '播放页:相关推荐(首帧之后才有 relWk)');
     ok(/<dg-ad-actresses v-if="adultMode && adult\.view === 'actresses'" @go="adGo" @learn="adLearned"><\/dg-ad-actresses>/.test(HTML), '浏览页:女优索引');
-    ok(/<dg-ad-grid v-if="adultMode && groupedList\.length > 0" :keep="true" :items="adSearchItems" :tv="isTVMode" @pick="adSearchPick" @imgerr="adSearchImgErr"><\/dg-ad-grid>/.test(HTML)
-        && /<div class="result-grid" v-if="groupedList\.length > 0 && !adultMode">/.test(HTML), '搜索结果:成人站走窗口化网格,主站照旧');
-    const called = ['adPlayerReady', 'adPlayerGone', 'adHistoryOk', 'adSetPv', 'adSetCell', 'adOpenFeed', 'adFeedBack', 'adRelPick', 'adSearchPick', 'adSearchImgErr'];
+    // 封面加载不出来就藏(2026-11-22):搜索网格也 :cover(坏封面网格自己换同组别的线路的海报,不再走 handleImgError)
+    ok(/<dg-ad-grid v-if="adultMode && groupedList\.length > 0" :keep="true" :cover="true" :items="adSearchItems" :tv="isTVMode" @pick="adSearchPick"><\/dg-ad-grid>/.test(HTML)
+        && /<div class="result-grid" v-if="groupedList\.length > 0 && !adultMode">/.test(HTML), '搜索结果:成人站走窗口化网格(:cover),主站照旧');
+    // 封面加载不出来就藏:首页行(横排 + 展开网格)的封面走 v-dg-cv + adCvSrc;搜索联想出不来换图标;网格 / 相关推荐组件里也登记;继续观看 / 收藏不登记
+    ok((HTML.match(/<img v-dg-cv="item" :src="item\._wk && adultMode \? adCvSrc\(item\) : getPosterUrl\(item\.poster_path\)"/g) || []).length === 2, '首页行两处封面:<img v-dg-cv="item" :src="adCvSrc(item)">');
+    // 复核 r2:搜索联想里封面加载不出来的作品整行不出(adSugRows 按 covers.visible 筛;方向键选中的那行按键跟着走),不再换图标留着
+    ok(/<img v-dg-cv="r\.it" :src="adCvSrc\(r\.it\)"[^>]*>/.test(HTML) && !/dg-sug-noimg/.test(HTML) && /covers\.visible\(it\)\) rows\.push\(\{ t: 'item'/.test(A.mixin.computed.adSugRows.toString()),
+        '搜索联想:封面出不来的作品整行不出(不再换成图标留着)');
+    const histTpl = HTML.slice(HTML.indexOf('<div class="history-card" v-for="(item, index) in watchHistory"'), HTML.indexOf('<div class="history-card" v-for="(item, index) in watchHistory"') + 3000);
+    ok(histTpl.length > 100 && !/v-dg-cv/.test(histTpl) && !/v-dg-cv/.test(HTML.slice(HTML.indexOf('v-for="item in favSorted"'), HTML.indexOf('v-for="item in favSorted"') + 1500)), '继续观看 / 收藏的封面不登记(从来不藏)');
+    ok(/<img v-dg-cv="cover \? item : null" :src="cover \? cvSrc\(item\) : src\(item\.poster_path\)"/.test(A.components.DgAdGrid.template) && /<img v-dg-cv="it" :src="cvSrc\(it\)"/.test(A.components.DgAdRails.template)
+        && A.components.DgAdGrid.directives.dgCv === A.cvDirective && A.components.DgAdRails.directives.dgCv === A.cvDirective && A.mixin.directives.dgCv === A.cvDirective, '网格 / 相关推荐 / 根组件都注册了 v-dg-cv');
+    ok(/已隐藏 \{\{ hiddenN \}\} 部封面加载不出来的作品 · <button type="button" class="dg-cv-show" @click="showAll\(\)">显示<\/button>/.test(A.components.DgAdGrid.template), '网格底下「已隐藏 N 部封面加载不出来的作品 · 显示」');
+    const called = ['adPlayerReady', 'adPlayerGone', 'adHistoryOk', 'adSetPv', 'adSetCell', 'adOpenFeed', 'adFeedBack', 'adRelPick', 'adSearchPick', 'adCvSrc'];
     ok(called.every(nm => typeof A.mixin.methods[nm] === 'function'), 'index.html 调的 p4 mixin 方法都在', called.filter(nm => typeof A.mixin.methods[nm] !== 'function'));
     ok(['adNoList', 'adFeedOn', 'adSearchItems'].every(nm => typeof A.mixin.computed[nm] === 'function'), 'p4 computed 都在');
 }

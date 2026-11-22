@@ -192,6 +192,9 @@
         // phase 3:番号作品有发行日期(AVDB)→ 副行先写发行日,再跟上架时间;没有就不带这个键(与旧对象逐字相同)
         const rel = relDate(c.released);
         if (rel && c.wk.indexOf('c:') === 0) { o._rel = rel; o._sub = rel + (sub ? ' · ' + sub : ''); }
+        // 封面备用地址(服务器的 alt:同一作品别的图床的封面,≤2;封面代理模式不给)。没有就不带这个键
+        const alt = cleanAlt(c.alt, o.poster_path);
+        if (alt.length) o._alt = alt;
         indexCard(o);   // [adult] p4:悬停预览 / 刷短片按 wk 找回卡片(不改输出)
         return o;
     }
@@ -612,7 +615,8 @@
 
     // ========== 首页 ==========
     const ROW_ICON = { new: 'fa-clock', random: 'fa-dice', hot: 'fa-fire', fresh: 'fa-calendar-check' };
-    const FRESH_MIN = 12;   // 新片速递(AVDB 发行 ≤60 天且能播):不足 12 部整行不出(服务器也这么判,两头都拦)
+    const FRESH_MIN = 12;   // 新片速递(AVDB 发行 ≤60 天且能播):不足 12 部整行不出(服务器也这么判,两头都拦;前端拿掉封面加载不出来的之后再判一次)
+    const rowMin = (key) => (key === 'ad_fresh' ? FRESH_MIN : 1);
     // 热门行的来源角标(本站观看统计 / 外站一周点击);行标题统一叫「热门」,来源写在角标上
     const HOT_SRC = {
         local: { l: '本站热门', tip: '按本站用户最近 7 天的观看统计' },
@@ -936,6 +940,1118 @@
     }
     const PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180'%3E%3Crect fill='%23262626' width='320' height='180'/%3E%3Cpath d='M140 62h40v56h-40z' fill='%23444'/%3E%3C/svg%3E";
 
+    // ========== 封面加载不出来的卡片藏起来(资源站图床被墙 / 挂了 / 文件坏了);弱网下只是慢的永远不藏 ==========
+    //   只管目录卡片(首页行 / 浏览网格 / 搜索结果 / 播放页相关推荐 / 搜索联想);继续观看 / 收藏 / 播放页 / 刷短片从来不藏。
+    //   失败 = error,或 load 了但宽高 <16(1×1 占位、7 字节坏图)。失败了先换下一个地址(pic → alt…;已知死图床上的渲染前就跳过)。
+    //   网络好不好不再从加载耗时去猜(没有 Resource Timing、没有「弱」成功、没有毫秒门槛、不探 /sw.js),而是直接问一声:
+    //     probe(地址) = HEAD、no-cors、no-store(不走 HTTP 缓存;SW 对跨域 HEAD 直通)、20 秒:回了 = up(404 / 405 也算)/ 20 秒内报错 = down / 没回 = slow;
+    //     成对探测 = 失败的图床 H 那一张 + ≤2 张对照(本会话真加载出来过的别的图床的封面,新的在前;一张都没有 → 页面上别的卡片的封面)。
+    //   决策表(一张卡所有地址都失败了):
+    //     断网 / 页面在后台                  → 不探;online / 切回前台从头再试(不算次数)
+    //     H up                               → 图床通、是这个文件坏了(404 / 403 / 防盗链 / 坏图):3 秒后重试一次,还失败 → 藏(不给图床记失败)
+    //     H down,对照有 up                   → 这台设备连不上 H、别的图床通:藏,给 H 记一次失败
+    //     H slow,对照有 up                   → 说不清:30 秒后再探一轮;还是 slow / down → 本会话藏(down 才记失败);up → 留着(只是慢)
+    //     对照一个都没 up(或者没有对照)      → 网络问题:不藏;之后有别的图加载出来 / online 时再试
+    //     2 分钟内 ≥3 个图床 down、看到 up 的图床不比它多 → 多半是本机的问题(新域名 DNS 坏了 / 代理节点挂了 / 分流规则坏了):先不藏(日志只打一次);
+    //       只压 2 分钟(从这张卡第一次被它压着算):到点重新成对探测,还是 down(或 slow 两轮)、对照通 → 照表藏(真被屏蔽的图床不会永远留白卡);对照都不通照旧不藏
+    //   卡住(没 load 也没 error):<img> 在视口附近(±200px)待满 30 秒才探它的图床:H up = 只是慢,不动、2 分钟内不再探;否则按上表(slow 也要第二轮)。别的都不计时。
+    //   本机记死(localStorage dg_cover_hosts,6 小时;无痕只在内存里):≥2 次 down、不同的图、相隔 ≥60 秒,每次对照都有 up、不在「本机的问题」里、
+    //     这个图床本会话一次没成功过;10 分钟最多新记 4 个。已知死 = 服务器的 cover_dead_hosts ∪ 本机记死:地址渲染前跳过,一个能用的都没有的卡片不出。
+    //     本机记死的图床:第一次用到后 1 分钟、之后每 10 分钟在后台探一次(no-store,缓存冒充不了),up → 复活、卡片放回来。本会话成功过的图床本会话不当死。
+    //   封面代理(同源 /api/img):只按单张判:失败 → 3 秒后重试一次 → 还失败就 HEAD 它:404 / 410 → 藏;5xx / 断网 → 网络或服务器的问题,不藏、以后再试。
+    //   页面冻过 >5 秒(睡眠 / 后台)、断网 / 联网、切前后台:在路上的探测作废重来;窗口化网格换块(卡片卸载 / 重挂)不吃重试次数、不按过时的结论藏。
+    const CV_MIN = 16, CV_TTL_MS = 6 * 3600 * 1000, CV_KEY = 'dg_cover_hosts', CV_ALT_MAX = 2, CV_MEM_MAX = 200;
+    const CV_PROBE_MS = 20000, CV_RETRY_MS = 3000, CV_ROUND2_MS = 30000, CV_STALL_MS = 30000, CV_STALL_OK_MS = 120000;
+    const CV_REUSE_MS = 30000, CV_GUARD_MS = 120000, CV_GUARD_N = 3, CV_FREEZE_MS = 5000, CV_BEAT_MS = 1000, CV_KICK_MS = 15000, CV_PAR = 6;
+    const CV_STRIKE_SPAN = 60000, CV_STRIKE_TTL = 30 * 60000, CV_NEW_MAX = 4, CV_NEW_WIN = 600000, CV_RECHECK_FIRST = 60000, CV_RECHECK_MS = 600000;
+    const BAD_PIC_RE = /mac_default|nopic/i;
+    // 和服务器 cover-health.js hostOf / /api/config cover_dead_hosts 的过滤同一套字符(含 '_':有的 CDN 子域名带下划线)
+    const CV_HOST_RE = /^(?:[a-z0-9_-]{1,63}\.)*[a-z0-9_-]{1,63}$|^\[[0-9a-f:.]{2,45}\]$/i;
+    // 封面地址的来源:http(s) 绝对地址 → 主机名(小写);同源 / 相对地址(封面代理 /api/img)→ 'self';data: / 别的 → ''
+    function coverHost(url, selfHost) {
+        const u = typeof url === 'string' ? url.trim() : '';
+        if (!u || /^data:/i.test(u)) return '';
+        if (u[0] === '/' && u[1] !== '/') return 'self';
+        const m = /^(?:https?:)?\/\/(?:[^/?#@]*@)?(\[[^\]]*\]|[^/?#:]+)/i.exec(u);
+        if (!m) return '';
+        const h = m[1].toLowerCase().replace(/\.$/, '');
+        if (!h || h.length > 253 || !CV_HOST_RE.test(h)) return '';
+        const me = typeof selfHost === 'string' ? selfHost.toLowerCase() : '';
+        return me && h === me ? 'self' : h;
+    }
+    // 卡片的候选封面:poster_path → _alt…(能当海报的地址、不是 mac_default/nopic 占位、去重);deadUrl(url) 为真的(已知死图床)跳过
+    function coverCands(it, deadUrl) {
+        const out = [];
+        if (!it || typeof it !== 'object') return out;
+        const add = (u) => {
+            if (typeof u !== 'string' || !u || u.length > 1000 || !PIC_OK_RE.test(u) || BAD_PIC_RE.test(u) || out.indexOf(u) >= 0) return;
+            if (deadUrl && deadUrl(u)) return;
+            out.push(u);
+        };
+        add(it.poster_path);
+        if (Array.isArray(it._alt)) it._alt.forEach(add);
+        return out;
+    }
+    // 服务器卡片的 alt → 干净的备用地址(http(s)、≤2、去重、不等于 pic);没有 → []
+    function cleanAlt(alt, pic) {
+        const out = [];
+        for (const u of Array.isArray(alt) ? alt : []) {
+            if (typeof u !== 'string' || !/^https?:\/\//i.test(u) || u.length > 500 || BAD_PIC_RE.test(u) || u === pic || out.indexOf(u) >= 0) continue;
+            out.push(u);
+            if (out.length >= CV_ALT_MAX) break;
+        }
+        return out;
+    }
+    // 搜索结果一组的备用封面:别的线路的 vod_pic(能用、不是占位、不等于主封面),先挑不同图床的,最多 3 个
+    function searchAlts(group, primary, max) {
+        const n = max || 3, all = [];
+        for (const s of (group && Array.isArray(group.sources)) ? group.sources : []) {
+            const u = s && typeof s.vod_pic === 'string' ? s.vod_pic : '';
+            if (!u || u === primary || u.length > 1000 || !PIC_OK_RE.test(u) || BAD_PIC_RE.test(u) || all.indexOf(u) >= 0) continue;
+            all.push(u);
+        }
+        const used = new Set([coverHost(primary, '')]), out = [];
+        all.forEach(u => { const h = coverHost(u, ''); if (out.length < n && !used.has(h)) { used.add(h); out.push(u); } });
+        all.forEach(u => { if (out.length < n && out.indexOf(u) < 0) out.push(u); });
+        return out;
+    }
+    // 探测地址:https 页面上的 http 封面按 https 问(浏览器加载 http 封面时也是自动升级成 https 的;直接 fetch http 会被当混合内容拦掉)
+    function coverProbeUrl(url, https) {
+        const u = String(url || '');
+        return (https && /^http:\/\//i.test(u)) ? 'https://' + u.slice(7) : u;
+    }
+    // 探一个地址(网络原语):HEAD、no-cors(跨域拿到的是不透明响应,回了就算,405 也算)、no-store(不进 HTTP 缓存)、不带 cookie / Referer。
+    //   cb('up' 回了 / 'down' ms 之内就报错了(DNS 失败、拒绝连接、被重置)/ 'slow' ms 内没回(中止))。没有 fetch 的老 WebView → 'slow'(说不清 = 不藏)
+    function coverProbe(url, ms, cb) {
+        let https = false;
+        try { https = !!(root.location && root.location.protocol === 'https:'); } catch (e) { https = false; }
+        const u = coverProbeUrl(url, https), F = root.fetch;
+        let done = false, ctl = null;
+        const fin = (v) => { if (!done) { done = true; cb(v); } };
+        if (typeof F !== 'function' || !u) { fin('slow'); return; }
+        try { ctl = typeof root.AbortController === 'function' ? new root.AbortController() : null; } catch (e) { ctl = null; }
+        const tm = setTimeout(() => { fin('slow'); try { if (ctl) ctl.abort(); } catch (e) { } }, ms > 0 ? ms : CV_PROBE_MS);
+        try {
+            const o = { method: 'HEAD', mode: 'no-cors', cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer' };
+            if (ctl) o.signal = ctl.signal;
+            F.call(root, u, o).then(() => { clearTimeout(tm); fin('up'); }, () => { clearTimeout(tm); fin('down'); });
+        } catch (e) { clearTimeout(tm); fin('slow'); }
+    }
+    // 封面代理(同源 /api/img)那一张:HEAD、no-store、带同源 cookie(鉴权)。cb(状态码;断网 / 超时 / 报错 = 0)
+    function coverHead(url, ms, cb) {
+        const F = root.fetch;
+        let done = false, ctl = null;
+        const fin = (v) => { if (!done) { done = true; cb(v); } };
+        if (typeof F !== 'function') { fin(0); return; }
+        try { ctl = typeof root.AbortController === 'function' ? new root.AbortController() : null; } catch (e) { ctl = null; }
+        const tm = setTimeout(() => { fin(0); try { if (ctl) ctl.abort(); } catch (e) { } }, ms > 0 ? ms : CV_PROBE_MS);
+        try {
+            const o = { method: 'HEAD', cache: 'no-store', credentials: 'same-origin' };
+            if (ctl) o.signal = ctl.signal;
+            F.call(root, String(url || ''), o).then((r) => { clearTimeout(tm); fin((r && Number(r.status)) || 0); }, () => { clearTimeout(tm); fin(0); });
+        } catch (e) { clearTimeout(tm); fin(0); }
+    }
+    // 一次成对探测 → 这个图床这一轮的结论(纯函数)。res = { target:'up'|'down'|'slow', controlUp };round = 1 / 2(30 秒后的第二轮)
+    //   'file' 图床通、文件坏 / 'keep' 第二轮通了:只是慢 / 'net' 对照一个都没 up:网络问题 / 'host' down、对照通:连不上 /
+    //   'amb' 第一轮 slow、对照通:30 秒后再探 / 'host2' 第二轮还 slow:本会话藏(不记失败)
+    function coverClass(res, round) {
+        const t = res && res.target;
+        if (t === 'up') return round === 2 ? 'keep' : 'file';
+        if (!(res && res.controlUp)) return 'net';
+        if (t === 'down') return 'host';
+        return round === 2 ? 'host2' : 'amb';
+    }
+    // 一张卡所有地址都失败了怎么办(纯函数)。c = { online, hidden, vs:[它失败过的各图床的结论;'pend' = 还在探], guard(本机的问题), retried(文件坏的那次重试用过了) }
+    //   'off' 等 online / 切回前台 / 'pend' 等探测 / 'net' 'guard' 'keep' 先不藏、以后再试 / 'retry' 3 秒后重试一次 / 'hide'
+    function coverVerdict(c) {
+        const x = c || {}, vs = Array.isArray(x.vs) ? x.vs : [];
+        if (x.online === false || x.hidden) return 'off';
+        if (!vs.length || vs.some(v => v === 'pend' || v === 'amb')) return 'pend';
+        if (vs.indexOf('net') >= 0) return 'net';
+        if (x.guard) return 'guard';
+        if (vs.indexOf('keep') >= 0) return 'keep';
+        if (vs.indexOf('file') >= 0 && !x.retried) return 'retry';
+        return 'hide';
+    }
+    // 本机的问题(纯函数):log = [{ t, h, up }](成对探测里目标 down 记 up:false;目标 / 对照 up 记 up:true)。
+    //   2 分钟内 down 的图床 ≥3 个、up 的图床不比它多 → true(新域名 DNS 坏了 / 代理节点挂了 / 分流规则坏了,不是这些图床的错)
+    function coverGuard(log, t) {
+        const dn = new Set(), up = new Set();
+        (Array.isArray(log) ? log : []).forEach(e => { if (e && e.t <= t && t - e.t <= CV_GUARD_MS) (e.up ? up : dn).add(e.h); });
+        return dn.size >= CV_GUARD_N && up.size <= dn.size;
+    }
+    // 挑对照(纯函数):ok = [{ h, u, t }](每个图床一张,t = 加载成功的时刻);skip(h) 为真的不要(目标自己 / 已知死 / 同源 / 刚 down 过);
+    //   新的在前,但 2 分钟内已经探到 up 的图床(recentUp)排后 —— 对照多覆盖几个图床,「本机的问题」才分得清;≤n 个、图床不重复
+    function coverControls(ok, skip, recentUp, n) {
+        const L = (Array.isArray(ok) ? ok : []).filter(x => x && x.h && x.u && !(skip && skip(x.h))).sort((a, b) => (b.t || 0) - (a.t || 0));
+        const R = recentUp || new Set(), out = [], hs = new Set(), max = n || 2;
+        const take = (x) => { if (out.length < max && !hs.has(x.h)) { hs.add(x.h); out.push(x); } };
+        L.forEach(x => { if (!R.has(x.h)) take(x); });
+        L.forEach(take);
+        return out;
+    }
+    // 图床记忆:本会话真加载成功过的图床;记过的失败(down + 对照通,30 分钟内);本机记死(到期时间,localStorage,6 小时;无痕不写)+ 服务器给的死图床
+    function makeCoverHosts(opt) {
+        const o = opt || {};
+        const now = o.now || (() => Date.now());
+        const key = o.key || CV_KEY;
+        let mem = null, server = new Set(), marks = [];
+        const okN = Object.create(null), strikes = Object.create(null);
+        const store = () => { try { return o.store ? o.store() : null; } catch (e) { return null; } };
+        function load() {
+            if (mem) return mem;
+            mem = Object.create(null);
+            let d = null;
+            try { const s = store(); d = s ? JSON.parse(s.getItem(key) || 'null') : null; } catch (e) { d = null; }
+            const t = now();
+            if (d && d.v === 1 && d.d && typeof d.d === 'object') {
+                for (const h of Object.keys(d.d)) { const until = Number(d.d[h]); if (CV_HOST_RE.test(h) && until > t && until <= t + CV_TTL_MS + 60000) mem[h.toLowerCase()] = until; }
+            }
+            return mem;
+        }
+        function save() {
+            try { if (o.incognito && o.incognito()) return false; } catch (e) { return false; }   // 无痕:只在内存里
+            try { if (o.register) o.register(key); } catch (e) { }
+            const s = store();
+            if (!s) return false;
+            const t = now();
+            const hs = Object.keys(mem).filter(h => mem[h] > t).sort((a, b) => mem[b] - mem[a]).slice(0, CV_MEM_MAX);
+            try {
+                if (!hs.length) { s.removeItem(key); return true; }
+                const d = {};
+                hs.forEach(h => { d[h] = mem[h]; });
+                s.setItem(key, JSON.stringify({ v: 1, d }));
+                return true;
+            } catch (e) { return false; }
+        }
+        const live = (h) => !h || h === 'self' || okN[h] > 0;
+        return {
+            // 这个图床有一张目录封面真加载出来了 → 本会话不当它死。返回 true = 原来当它死(服务器 / 本机记的;只在第一次成功时报)。
+            //   本机的记录不在这里删(可能是缓存里出来的):由后台 no-store 探测确认了再删(revive)
+            ok(h) {
+                if (!h) return false;
+                const first = !(okN[h] > 0);
+                okN[h] = (okN[h] || 0) + 1;
+                delete strikes[h];
+                if (h === 'self' || !first) return false;
+                return server.has(h) || load()[h] > now();
+            },
+            hostOk: (h) => !!h && okN[h] > 0,
+            // 记一次失败(成对探测:目标 down、对照通、不在「本机的问题」里 —— 调用方保证)。返回 true = 这一下把它记死了。
+            //   要 ≥2 张不同的图、最早和最晚相隔 ≥60 秒(一阵子的 DNS 抽风哪怕连着十几秒也只算一次);30 分钟前的忘掉;本会话成功过的不记。
+            //   保险丝:10 分钟内最多新记死 4 个
+            strike(h, url, t) {
+                if (live(h)) return false;
+                const tt = t > 0 ? t : now();
+                const f = strikes[h] || (strikes[h] = new Map());
+                f.forEach((x, u) => { if (tt - x > CV_STRIKE_TTL || x - tt > CV_STRIKE_TTL) f.delete(u); });
+                const u = String(url);
+                if (!f.has(u) && f.size < 16) f.set(u, tt);
+                if (f.size < 2) return false;
+                let lo = Infinity, hi = -Infinity;
+                f.forEach((x) => { if (x < lo) lo = x; if (x > hi) hi = x; });
+                if (hi - lo < CV_STRIKE_SPAN) return false;
+                const m = load(), tn = now();
+                if (m[h] > tn) return false;
+                marks = marks.filter(x => tn - x < CV_NEW_WIN);
+                if (marks.length >= CV_NEW_MAX) return false;
+                marks.push(tn);
+                m[h] = tn + CV_TTL_MS;
+                save();
+                return true;
+            },
+            // 后台探测确认图床活了:删掉本机记录。返回 true = 原来记着
+            revive(h) {
+                const m = load();
+                if (!(m[h] > now())) return false;
+                delete m[h];
+                delete strikes[h];
+                save();
+                return true;
+            },
+            isDead(h) { if (live(h)) return false; if (server.has(h)) return true; const x = load()[h]; return !!x && x > now(); },
+            // 只是这台设备记死的(服务器没说死、本会话没成功过):后台定时再探
+            local(h) { if (live(h) || server.has(h)) return false; const x = load()[h]; return !!x && x > now(); },
+            // 本机记录里有它(不管本会话有没有成功过)
+            marked(h) { const x = load()[h]; return !!x && x > now(); },
+            // 服务器的死图床表(/api/config cover_dead_hosts);返回 true = 有变化
+            setServer(list) {
+                const next = new Set();
+                for (const x of Array.isArray(list) ? list : []) {
+                    const h = typeof x === 'string' ? x.trim().toLowerCase() : '';
+                    if (h && h.length <= 253 && CV_HOST_RE.test(h)) next.add(h);
+                    if (next.size >= CV_MEM_MAX) break;
+                }
+                const same = next.size === server.size && Array.from(next).every(h => server.has(h));
+                server = next;
+                return !same;
+            },
+            dead() { const m = load(), t = now(); return Array.from(new Set(Array.from(server).concat(Object.keys(m).filter(h => m[h] > t)))).filter(h => !live(h)); },
+            mem: () => Object.assign({}, load()),
+        };
+    }
+    // 封面控制器(页面里一个:covers;测试可以 makeCovers(假时钟 / 假存储 / 假 IntersectionObserver / 假探测)另起)
+    //   模板:<img v-dg-cv="卡片" :src="covers.src(卡片)">(指令登记 <img> ↔ 卡片,load / error 由文档级捕获监听转给 onLoad / onError);
+    //   卡片还出不出:covers.visible(卡片)(计算属性里先读 covers.ver() 才会在判定变了之后重算)
+    function makeCovers(envOver) {
+        const C = {};
+        let E, hosts, st, recs, byKey, els, seenEls, probeSet, waitSet, pcache, selfH, io, T, dueAt, applyAt, epoch, lastBeat, lastLoad;
+        let hp, pq, purl, inflight, glog, guardOn, guardAt, okHosts, seenUrls, stallOk, retryQ, kickAt, hidBy, samples, recheckAt, okPics, nProbe, ctlUsed;
+        let ig = 0, rx = null;
+        const rxPlain = { v: 0 }, subs = new Set();
+        function init(over) {
+            if (T && E) { try { E.clearTimeout(T); } catch (e) { } }
+            if (io) { try { io.disconnect(); } catch (e) { } }
+            ig++;
+            E = Object.assign({
+                now: () => Date.now(),
+                online: () => { try { return !(root.navigator && root.navigator.onLine === false); } catch (e) { return true; } },
+                hidden: () => { try { return !!(root.document && root.document.hidden === true); } catch (e) { return false; } },
+                store: () => { try { return root.localStorage || null; } catch (e) { return null; } },
+                incognito: () => incognito(),
+                selfHost: () => { try { return (root.location && root.location.hostname) || ''; } catch (e) { return ''; } },
+                IO: () => (typeof root.IntersectionObserver === 'function' ? root.IntersectionObserver : null),
+                probe: (url, ms, cb) => coverProbe(url, ms, cb),   // 跨域探测 cb('up' / 'down' / 'slow');测试换成假的
+                head: (url, ms, cb) => coverHead(url, ms, cb),     // 封面代理那一张 cb(状态码 / 0);测试换成假的
+                setTimeout: (f, ms) => setTimeout(f, ms),
+                clearTimeout: (t) => clearTimeout(t),
+                // 一键清除 / 无痕拦截都认这个键(privacy.js 是 defer 加载的:写的时候它在就登记)
+                register: (k) => { const P = root.dgPrivacy; if (P && typeof P.registerKeys === 'function') P.registerKeys({ keys: [k] }); },
+                log: (m) => { try { console.info('[adult] 封面:' + m); } catch (e) { } },
+            }, envOver || {}, over || {});
+            hosts = makeCoverHosts({ now: E.now, store: E.store, incognito: E.incognito, register: E.register, key: CV_KEY });
+            st = new Map();            // 卡片键 → 状态(见 sOf)
+            recs = new WeakMap();      // <img> → { key, item, url, st(0 在加载 / 1 成功 / 2 失败), seen(进视口附近的时刻,0 = 不在), sp(卡住的探测在路上) }
+            byKey = new Map();         // 卡片键 → Set(<img>)
+            els = new Set();           // 挂着的 <img>
+            seenEls = new Set();       // 在视口附近、还在加载的 <img>(卡住判定)
+            probeSet = new Set();      // ph = 'probe' 的卡片键
+            waitSet = new Set();       // ph = 'wait' 的卡片键
+            pcache = new WeakMap();    // 卡片 → { p, a, L:[{u, h}] }(解析过的候选地址)
+            selfH = '';
+            try { selfH = String(E.selfHost() || ''); } catch (e) { selfH = ''; }
+            io = null; T = 0; dueAt = 0; applyAt = 0; epoch = 1; lastBeat = E.now(); lastLoad = 0;
+            hp = new Map();            // 图床 → 成对探测 { ep, st:'q'|'pend'|'wait2'|'done', round, t0, t1, url, res, cls, again, cards:Set(键), stalls:Set(<img>) }
+            pq = [];                   // 排队的图床(同时最多 CV_PAR 个成对探测在路上)
+            purl = new Map();          // 地址 → 探测(同一个地址在路上 / 5 秒内探过的合并)
+            inflight = 0; nProbe = 0;
+            glog = []; guardOn = false; // 最近 2 分钟的 up / down(「本机的问题」)
+            guardAt = 0;               // 被「本机的问题」压着的卡最早到 2 分钟的时刻(到点重新探)
+            ctlUsed = new Map();       // 图床 → 最近一次被挑去当对照的时刻(同时在探的错开)
+            okHosts = new Map();       // 图床 → { u, t }:本会话真加载出来过的跨域封面(对照从这里挑)
+            seenUrls = new Map();      // 图床 → 页面上见过的一个封面地址(还没有成功过的图时的对照)
+            stallOk = new Map();       // 图床 → 到这个时刻之前不再为卡住探它(回了 = 只是慢)
+            retryQ = new Map();        // 卡片键 → 3 秒后重试的时刻
+            kickAt = 0;
+            hidBy = new Map();         // 图床 → Set(卡片键):因为连不上它藏掉的(它后来有图加载出来 / 复活了 → 放回来)
+            samples = new Map();       // 本机记死的图床 → 一个封面地址(定时在后台探)
+            recheckAt = 0;
+            okPics = new Map();        // 'w:'作品键 / 'p:'海报键 → 真加载出来的那张(收藏的封面用)
+        }
+        init();
+        const hostOf = (u) => coverHost(u, selfH);
+        const keyOf = (it) => (it && typeof it === 'object' && typeof it.id === 'string' && it.id && it.id.length <= 600) ? it.id : '';
+        const attr = (el) => { try { return String((el.getAttribute ? el.getAttribute('src') : el.src) || ''); } catch (e) { return ''; } };
+        const isData = (u) => /^data:/i.test(u);
+        const deadH = (h) => !!h && hosts.isDead(h);
+        const guard = (t) => coverGuard(glog, t);
+        // 响应式版本号:Vue 在(adult.js 比 Vue 先加载,第一次用到时才建)
+        function rxs() {
+            if (rx) return rx;
+            const V = root.Vue;
+            if (V && typeof V.reactive === 'function') { try { rx = V.reactive({ v: rxPlain.v }); return rx; } catch (e) { } }
+            return rxPlain;
+        }
+        // 卡片状态:ph ''(在试 / 好了)/ 'probe'(地址都失败了,等探测的结论)/ 'file'(3 秒后重试)/ 'wait'(先不藏;why:off|net|guard|keep)/ 'hid'
+        //   failed(这一轮失败过的地址)/ kind(地址 → err|tiny|stall)/ last(最后失败的地址)/ ok(真加载出来的地址)/ fr(文件坏的那次重试用过了)/
+        //   pr、px(封面代理的那次重试用过了 / 排着的是代理的重试)/ vs(这一轮各图床的结论)/ hw、hh(藏的原因、因为哪些图床)/ at(上次从头试的时刻)/ wt(开始等的时刻)/
+        //   gw(第一次被「本机的问题」压着的时刻;从头再试也不清,加载出来 / 藏了才清)
+        function sOf(k, mk) {
+            let s = st.get(k);
+            if (!s && mk) {
+                if (st.size >= 5000) { for (const [kk, x] of st) { if (!x.ph) { st.delete(kk); break; } } }
+                s = { ph: '', why: '', failed: new Set(), kind: Object.create(null), last: '', ok: '', fr: false, pr: false, px: false, vs: null, hw: '', hh: [], at: E.now(), wt: 0, hg: 0, gw: 0 };
+                st.set(k, s);
+            }
+            return s || null;
+        }
+        function setPh(k, s, ph, why) {
+            s.ph = ph; s.why = why || '';
+            if (ph === 'probe') probeSet.add(k); else probeSet.delete(k);
+            if (ph === 'wait') { waitSet.add(k); s.wt = E.now(); } else waitSet.delete(k);
+            if (ph !== 'file') retryQ.delete(k);
+        }
+        // 卡片的候选地址(解析一次、按卡片缓存;网格每批判定要对上万张卡跑 visible)
+        function parsed(it) {
+            if (!it || typeof it !== 'object') return [];
+            let c = pcache.get(it);
+            if (c && c.p === it.poster_path && c.a === it._alt) return c.L;
+            c = { p: it.poster_path, a: it._alt, L: coverCands(it).map(u => ({ u, h: hostOf(u) })) };
+            try { pcache.set(it, c); } catch (e) { }
+            return c.L;
+        }
+        const cands = (it) => { const out = []; parsed(it).forEach(x => { if (!deadH(x.h)) out.push(x.u); }); return out; };
+        function current(it, s) { const L = parsed(it); for (let i = 0; i < L.length; i++) { const x = L[i]; if (!deadH(x.h) && (!s || !s.failed.has(x.u))) return x.u; } return ''; }
+        const attached = (k) => { const set = byKey.get(k); let on = false; if (set) set.forEach(el => { if (el.isConnected !== false) on = true; }); return on; };
+        // 本机记死的图床:记一个页面上遇到的地址,到点在后台探一下(1 分钟后,之后每 10 分钟)
+        function sample(h, u) {
+            if (samples.has(h) || samples.size >= 32) return;
+            samples.set(h, u);
+            if (!recheckAt) { recheckAt = E.now() + CV_RECHECK_FIRST; arm(recheckAt); }
+        }
+        // 卡片还该不该出现:判了藏 / 一个能用的地址都没有 → 不出;在等 / 在探的照常出(骨架闪烁)。
+        //   判了藏的卡片带来了没试过的地址(重新搜索换了线路、死图床活了)→ 放出来再试
+        function visible(it) {
+            const k = keyOf(it);
+            if (!k) return true;
+            const L = parsed(it), s = st.get(k);
+            let any = false, fresh = false;
+            for (let i = 0; i < L.length; i++) {
+                const x = L[i];
+                if (deadH(x.h)) { if (hosts.local(x.h)) sample(x.h, x.u); continue; }
+                any = true;
+                if (x.h && x.h !== 'self' && !seenUrls.has(x.h) && seenUrls.size < 300) seenUrls.set(x.h, x.u);
+                if (!s || !s.failed.has(x.u)) fresh = true;
+            }
+            if (!any) return false;
+            if (!s || s.ph !== 'hid') return true;
+            if (!fresh) return false;
+            restart(k, s);
+            changed();
+            return true;
+        }
+        // 模板的 src:该试的那个地址;判了藏(点了「显示」才看得到)/ 没有能用的地址 → 中性占位
+        function src(it) {
+            const k = keyOf(it), s = k ? st.get(k) : null;
+            if (s && s.ph === 'hid') return PLACEHOLDER;
+            if (s && s.ok && !deadH(hostOf(s.ok)) && parsed(it).some(x => x.u === s.ok)) return s.ok;
+            const u = current(it, s);
+            if (u) return u;
+            if (s && s.ph && s.last) return s.last;
+            return PLACEHOLDER;
+        }
+        // ---- 唯一的定时器:批量生效(150ms 攒一批)/ 3 秒后的重试 / 第二轮探测 / 卡住判定 / 再试等着的卡 / 记死图床复查 / 探测在路上时每秒的心跳(看页面冻没冻过) ----
+        function arm(at) {
+            if (T && dueAt <= at) return;
+            if (T) { try { E.clearTimeout(T); } catch (e) { } }
+            dueAt = at;
+            T = E.setTimeout(run, Math.max(0, at - E.now()));
+        }
+        function changed(soon) {
+            const at = E.now() + (soon ? 0 : 150);
+            if (!applyAt || at < applyAt) applyAt = at;
+            arm(applyAt);
+        }
+        function flush() {
+            const r = rxs();
+            r.v = (r.v || 0) + 1;
+            if (r !== rxPlain) rxPlain.v = r.v;
+            subs.forEach(f => { try { f(); } catch (e) { try { console.warn('[adult] 封面', e); } catch (x) { } } });
+            pvCheck();
+        }
+        function run() {
+            const t = E.now();
+            const late = dueAt > 0 && t - dueAt > CV_FREEZE_MS;
+            T = 0; dueAt = 0;
+            lastBeat = t;
+            if (late) freeze();   // 页面冻过 / 睡眠:在路上的探测作废重来,卡住的表从现在起
+            if (applyAt && t >= applyAt) { applyAt = 0; flush(); }
+            let next = 0;
+            const at = (x) => { if (x > 0) next = next ? Math.min(next, x) : x; };
+            retryQ.forEach((due, k) => { if (t >= due) { retryQ.delete(k); doRetry(k); } else at(due); });
+            let q = false;
+            hp.forEach((P, h) => {
+                if (P.st === 'wait2') { if (t >= P.again) { P.round = 2; P.st = 'q'; pq.push(h); q = true; } else at(P.again); }
+                else if (P.st === 'pend' && t - P.t0 > 2 * CV_PROBE_MS + CV_FREEZE_MS) lost(h, P);   // 探测一直不回(不该发生):当作废重来
+            });
+            if (q) pump();
+            if (!E.hidden()) {
+                seenEls.forEach(el => {
+                    const r = recs.get(el);
+                    if (!r || r.st || !r.seen) { seenEls.delete(el); return; }
+                    if (r.sp) return;
+                    const due = Math.max(r.seen + CV_STALL_MS, stallOk.get(hostOf(r.url)) || 0);
+                    if (t >= due) stallCheck(el, r); else at(due + 50);
+                });
+            }
+            if (kickAt && t >= kickAt) { kickAt = 0; kick(); }
+            if (recheckAt && t >= recheckAt) { recheckAt = 0; recheck(t); }
+            if (guardAt && t >= guardAt) { guardAt = 0; reGuard(t); }
+            at(applyAt); at(kickAt); at(recheckAt); at(guardAt);
+            if (inflight > 0) at(t + CV_BEAT_MS);
+            if (next) arm(next);
+        }
+        // ---- 作废:冻过 / 断网 / 联网 / 切前后台。在路上 / 等第二轮的探测不认了;卡住的表从现在重新起 ----
+        function bump() {
+            epoch++;
+            const t = E.now();
+            hp.clear(); pq = []; purl.clear();
+            lastBeat = t;
+            probeSet.forEach(k => { const s = st.get(k); if (s) s.vs = null; });
+            seenEls.forEach(el => { const r = recs.get(el); if (r) { r.sp = false; if (r.seen) r.seen = t; } });
+            if (seenEls.size) arm(t + CV_STALL_MS + 50);
+        }
+        function reDecide() { Array.from(probeSet).forEach(k => { const s = st.get(k); if (s && s.ph === 'probe') decide(k, s); }); }
+        function freeze() { bump(); reDecide(); }
+        function lost(h, P) {
+            if (hp.get(h) !== P || P.lost) return;
+            P.lost = true;
+            hp.delete(h);
+            inflight = Math.max(0, inflight - 1);
+            P.cards.forEach(k => { const s = st.get(k); if (s && s.vs) s.vs.delete(h); });
+            Array.from(P.cards).forEach(k => { const s = st.get(k); if (s && s.ph === 'probe') decide(k, s); });
+            P.stalls.forEach(el => { const r = recs.get(el); if (r) r.sp = false; });
+        }
+        // 从头再试(不算次数):失败记录清掉,挂着的 <img> 换回第一个能用的地址
+        function restart(k, s) {
+            setPh(k, s, '');
+            s.vs = null; s.failed.clear(); s.kind = Object.create(null); s.ok = ''; s.at = E.now(); s.hh = []; s.hw = '';
+            const set = byKey.get(k);
+            if (set) set.forEach(el => {
+                const r = recs.get(el);
+                if (!r || el.isConnected === false) return;
+                const u = current(r.item, s);
+                if (u) setSrc(el, r, u);
+            });
+        }
+        function restartWaiting(all) {
+            Array.from(waitSet).forEach(k => {
+                const s = st.get(k);
+                if (!s || s.ph !== 'wait') { waitSet.delete(k); return; }
+                if (all || s.why === 'off') restart(k, s);
+            });
+        }
+        // ---- 成对探测 ----
+        // 这个图床的结论:同一轮(没作废)30 秒内探过的直接用;在探 / 等第二轮 → 'pend'(探完回来再判 k / 再看卡住的 el);没有 → 排队去探
+        function verdict(h, u, k, el) {
+            const t = E.now();
+            let P = hp.get(h);
+            if (P && P.ep === epoch) {
+                if (P.st !== 'done') { if (k) P.cards.add(k); if (el) P.stalls.add(el); return 'pend'; }
+                if (t - P.t1 <= CV_REUSE_MS) return P.cls;
+            }
+            P = { ep: epoch, st: 'q', round: 1, t0: 0, t1: 0, url: u, res: null, cls: '', again: 0, cards: new Set(k ? [k] : []), stalls: new Set(el ? [el] : []) };
+            hp.set(h, P);
+            pq.push(h);
+            pump();
+            return P.st === 'done' ? P.cls : 'pend';   // 地址刚探过(5 秒内的结果直接用)→ 当场就有结论
+        }
+        function pump() {
+            while (inflight < CV_PAR && pq.length) {
+                const h = pq.shift(), P = hp.get(h);
+                if (P && P.st === 'q') start(h, P);
+            }
+        }
+        // 探一个地址;同一个地址在路上 / 5 秒内(同一轮)探过的合并成一次
+        function probeOnce(url, cb) {
+            const t = E.now();
+            let p = purl.get(url);
+            if (p && p.ep === epoch && (p.st === 'pend' || t - p.t <= 5000)) { if (p.st === 'pend') p.cbs.push(cb); else cb(p.v); return; }
+            p = { ep: epoch, st: 'pend', v: '', t: 0, cbs: [cb] };
+            purl.set(url, p);
+            if (purl.size > 300) purl.delete(purl.keys().next().value);
+            nProbe++;
+            const g0 = ig;
+            const done = (v) => {
+                if (p.st !== 'pend') return;
+                p.st = 'done'; p.v = (v === 'up' || v === 'down') ? v : 'slow'; p.t = E.now();
+                const cbs = p.cbs;
+                p.cbs = [];
+                if (g0 !== ig) return;
+                cbs.forEach(f => { try { f(p.v); } catch (e) { try { console.warn('[adult] 封面', e); } catch (x) { } } });
+            };
+            try { E.probe(url, CV_PROBE_MS, done); } catch (e) { done('slow'); }
+        }
+        // 对照:本会话真加载出来过的别的图床(新的在前、先挑 2 分钟内还没探到 up 的);一张都没有 → 页面上别的卡片的封面
+        //   (同时在探的几个图床也错开对照:几个图床一起坏的时候,对照覆盖的图床越多,「本机的问题」越不会误判)
+        function controlsFor(h) {
+            const t = E.now(), used = new Set(), dn = new Set();
+            glog.forEach(e => { if (t - e.t <= CV_GUARD_MS) (e.up ? used : dn).add(e.h); });
+            ctlUsed.forEach((t0, x) => { if (t - t0 <= CV_GUARD_MS) used.add(x); else ctlUsed.delete(x); });
+            const skip = (x) => !x || x === h || x === 'self' || deadH(x) || dn.has(x);
+            const ok = [];
+            okHosts.forEach((o, x) => ok.push({ h: x, u: o.u, t: o.t }));
+            let L = coverControls(ok, skip, used, 2);
+            if (!L.length) {
+                const F = [], fh = new Set();
+                const add = (x, u) => { if (!skip(x) && !fh.has(x) && u && !isData(u)) { fh.add(x); F.push({ h: x, u, t: 0 }); } };
+                els.forEach(el => { const r = recs.get(el); if (r && r.url) add(hostOf(r.url), r.url); });
+                seenUrls.forEach((u, x) => add(x, u));
+                L = coverControls(F, skip, used, 2);
+            }
+            L.forEach(c => { ctlUsed.delete(c.h); ctlUsed.set(c.h, t); });
+            while (ctlUsed.size > 200) ctlUsed.delete(ctlUsed.keys().next().value);
+            return L;
+        }
+        function start(h, P) {
+            P.st = 'pend'; P.t0 = E.now(); lastBeat = P.t0;
+            inflight++;
+            arm(P.t0 + CV_BEAT_MS);
+            const ctl = controlsFor(h), ep = epoch, g0 = ig;
+            const res = { target: '', controlUp: false, controlsTried: ctl.length, ups: [] };
+            let left = ctl.length, closed = false;
+            // 结论一定下来就收(目标 up / 有对照 up / 对照都回来了),不等慢的对照;收了之后回来的对照 up 照样记进「本机的问题」的账
+            const close = () => {
+                if (closed || !res.target || !(res.target === 'up' || res.controlUp || left === 0)) return;
+                closed = true;
+                if (g0 !== ig || P.lost) return;
+                inflight = Math.max(0, inflight - 1);
+                finish(h, P, res, ep);
+                pump();
+            };
+            ctl.forEach(c => probeOnce(c.u, (v) => {
+                left--;
+                if (v === 'up') { if (!closed) { res.controlUp = true; res.ups.push(c.h); } else if (g0 === ig && ep === epoch) glog.push({ t: E.now(), h: c.h, up: true }); }
+                close();
+            }));
+            probeOnce(P.url, (v) => { res.target = v; close(); });
+        }
+        function finish(h, P, res, ep) {
+            if (hp.get(h) !== P || P.st !== 'pend' || ep !== epoch) return;
+            const t = E.now();
+            // 页面冻过(心跳 >6 秒没跑 / 这一轮比超时还久 5 秒以上 —— 睡眠、后台冻结):结论作废,在等的全部重来
+            if (t - lastBeat > CV_FREEZE_MS + CV_BEAT_MS || t - P.t0 > CV_PROBE_MS + CV_FREEZE_MS) { freeze(); return; }
+            P.res = res; P.t1 = t;
+            if (res.target === 'down') glog.push({ t, h, up: false });
+            else if (res.target === 'up') glog.push({ t, h, up: true });
+            res.ups.forEach(x => glog.push({ t, h: x, up: true }));
+            while (glog.length && (t - glog[0].t > CV_GUARD_MS || glog.length > 400)) glog.shift();
+            const g = guard(t);
+            if (!g) guardOn = false;
+            const cls = coverClass(res, P.round);
+            if (cls === 'amb') { P.st = 'wait2'; P.again = t + CV_ROUND2_MS; arm(P.again); return; }
+            P.st = 'done'; P.cls = cls;
+            // 记失败:down、对照通、不在「本机的问题」里(hosts.strike 自己再看本会话有没有成功过、两次隔没隔 60 秒、保险丝)
+            if (res.target === 'down' && res.controlUp && !g && hosts.strike(h, P.url, t)) deadChanged();
+            const ks = Array.from(P.cards), ss = Array.from(P.stalls);
+            P.cards.clear(); P.stalls.clear();
+            ss.forEach(el => stallDone(el, h, cls));
+            ks.forEach(k => { const s = st.get(k); if (s && s.ph === 'probe') decide(k, s); });
+        }
+        // ---- 一张卡的地址这一轮都失败了(ph = 'probe'):按决策表走 ----
+        function failedHosts(s) {
+            const m = new Map();
+            s.failed.forEach(u => { const h = hostOf(u); if (h && h !== 'self' && !m.has(h)) m.set(h, u); });
+            return m;
+        }
+        function decide(k, s) {
+            if (!s || s.ph !== 'probe') return;
+            if (E.online() === false || E.hidden()) { setPh(k, s, 'wait', 'off'); return; }
+            const fh = failedHosts(s);
+            if (!fh.size) { pxDecide(k, s); return; }
+            if (!s.vs) s.vs = new Map();
+            let pend = false;
+            fh.forEach((u, h) => {
+                if (s.vs.has(h)) return;
+                if (deadH(h)) { s.vs.set(h, 'host'); return; }   // 期间被记死了(服务器的表 / 本机):不用再探
+                const v = verdict(h, u, k, null);
+                if (v === 'pend') pend = true; else s.vs.set(h, v);
+            });
+            if (s.ph !== 'probe' || !s.vs) return;   // 探测当场有了结论、里面已经替这张卡判完了
+            const vs = [];
+            s.vs.forEach(v => vs.push(v));
+            if (pend) vs.push('pend');
+            const t = E.now();
+            // 「本机的问题」只压 2 分钟(从这张卡第一次被它压着算;vs 是刚探的 / 30 秒内的结论):过了照表判(对照都不通 = 'net' 照旧不藏)
+            const gOn = !pend && guard(t), gx = gOn && s.gw > 0 && t - s.gw >= CV_GUARD_MS;
+            const v = coverVerdict({ online: true, hidden: false, vs, guard: gOn && !gx, retried: s.fr });
+            if (v === 'pend') return;
+            if (v === 'retry') { setPh(k, s, 'file'); s.px = false; retryQ.set(k, t + CV_RETRY_MS); arm(t + CV_RETRY_MS); return; }
+            if (v === 'hide') {
+                const hh = [];
+                s.vs.forEach((c, h) => { if (c === 'host' || c === 'host2') hh.push(h); });
+                hide(k, s, hh.length ? 'host' : 'file', hh);
+                return;
+            }
+            if (v === 'guard') {
+                if (!guardOn) { guardOn = true; E.log('2 分钟内 ≥' + CV_GUARD_N + ' 个图床连不上、连得上的不比它多 —— 像是本机网络(DNS / 代理)的问题,先不藏'); }
+                if (!s.gw) s.gw = t;
+                const due = s.gw + CV_GUARD_MS;
+                if (!guardAt || due < guardAt) { guardAt = due; arm(due); }
+            }
+            setPh(k, s, 'wait', v);
+        }
+        // 被「本机的问题」压满 2 分钟的卡:重新成对探测一次(页面上没有别的图再加载、没人来 kick,也会到点再判)
+        function reGuard(t) {
+            let next = 0;
+            Array.from(waitSet).forEach(k => {
+                const s = st.get(k);
+                if (!s || s.ph !== 'wait' || s.why !== 'guard' || !s.gw) return;
+                const due = s.gw + CV_GUARD_MS;
+                if (t < due) { if (!next || due < next) next = due; return; }
+                setPh(k, s, 'probe');
+                s.vs = null;
+                decide(k, s);
+            });
+            if (next && (!guardAt || next < guardAt)) { guardAt = next; arm(next); }
+        }
+        // 封面代理(同源):先 3 秒后重试一次;还失败 → HEAD 那一张:404 / 410(或 2xx 但加载出来的是 1×1)→ 藏;别的(5xx / 断网)→ 以后再试
+        function pxDecide(k, s) {
+            const t = E.now();
+            if (!s.pr) { setPh(k, s, 'file'); s.px = true; retryQ.set(k, t + CV_RETRY_MS); arm(t + CV_RETRY_MS); return; }
+            const u = s.last, ep = epoch, gen = ++s.hg, tiny = s.kind[u] === 'tiny';
+            if (!u || typeof E.head !== 'function') { setPh(k, s, 'wait', 'net'); return; }
+            try {
+                E.head(u, CV_PROBE_MS, (code) => {
+                    if (st.get(k) !== s || s.ph !== 'probe' || s.hg !== gen) return;
+                    if (ep !== epoch || E.now() - t > CV_PROBE_MS + CV_FREEZE_MS) { decide(k, s); return; }   // 中间冻过 / 断过网:重来
+                    const c = Number(code) || 0;
+                    if (c === 404 || c === 410 || (c >= 200 && c < 300 && tiny)) hide(k, s, 'proxy', []);
+                    else setPh(k, s, 'wait', 'net');
+                });
+            } catch (e) { setPh(k, s, 'wait', 'net'); }
+        }
+        // 3 秒后的重试:断网 / 后台 → 等(不吃次数);卡片这会儿不在页面上(窗口化网格换块卸载了)→ 不吃次数,重新挂上时从头试
+        function doRetry(k) {
+            const s = st.get(k);
+            if (!s || s.ph !== 'file') return;
+            if (E.online() === false || E.hidden()) { setPh(k, s, 'wait', 'off'); return; }
+            if (!attached(k)) { restart(k, s); return; }
+            if (s.px) s.pr = true; else s.fr = true;
+            restart(k, s);
+        }
+        // 等着的卡(网络问题 / 本机的问题 / 第二轮通了):之后有图加载出来就从头再试(每张卡至少隔 15 秒)
+        function kick() {
+            const t = E.now();
+            let next = 0;
+            Array.from(waitSet).forEach(k => {
+                const s = st.get(k);
+                if (!s || s.ph !== 'wait') { waitSet.delete(k); return; }
+                if (s.why === 'off' || !(lastLoad > s.wt)) return;
+                const due = s.at + CV_KICK_MS;
+                if (t >= due) restart(k, s); else if (!next || due < next) next = due;
+            });
+            if (next && (!kickAt || next < kickAt)) { kickAt = next; arm(next); }
+        }
+        // ---- 卡住:在视口附近待满 30 秒还没结果 → 探它的图床 ----
+        function stallCheck(el, r) {
+            const h = hostOf(r.url);
+            if (!h || h === 'self') { seenEls.delete(el); return; }
+            if (E.online() === false) return;
+            r.sp = true;
+            const v = verdict(h, r.url, null, el);
+            if (v !== 'pend') stallDone(el, h, v);
+        }
+        function stallDone(el, h, cls) {
+            const r = recs.get(el);
+            if (!r) return;
+            r.sp = false;
+            if (r.st || !r.url || hostOf(r.url) !== h) return;     // 这期间加载出来了 / 换了地址
+            if (cls === 'host' || cls === 'host2') { fail(el, r, r.url, 'stall'); return; }
+            // 'file' / 'keep'(图床回了 = 只是慢)/ 'net'(网络问题):不动它,2 分钟内不再为它探这个图床
+            const t = E.now();
+            stallOk.set(h, t + CV_STALL_OK_MS);
+            if (stallOk.size > 300) stallOk.delete(stallOk.keys().next().value);
+            arm(t + CV_STALL_OK_MS + 50);
+        }
+        // ---- 失败 / 成功 ----
+        function setSrc(el, r, u) {
+            r.url = u; r.st = 0; r.seen = 0; r.sp = false;
+            seenEls.delete(el);
+            try { if (el.setAttribute) el.setAttribute('src', u); else el.src = u; } catch (e) { }
+            watchEl(el);
+        }
+        // 一个地址失败了(kind:err / tiny / stall):还有下一个地址就换;都失败了 → 判
+        function fail(el, r, url, kind) {
+            r.st = 2; r.sp = false; r.seen = 0;
+            seenEls.delete(el);
+            const k = r.key, s = sOf(k, true);
+            if (s.ph === 'hid') return;
+            if (s.ph && s.failed.has(url)) return;          // 这一轮已经在判了(同一张卡的另一个 <img> / 重新挂上的又报一次)
+            if (s.ok === url) s.ok = '';
+            if (!s.failed.has(url)) { s.failed.add(url); s.kind[url] = kind; }
+            s.last = url;
+            const next = current(r.item, s);
+            if (next) { setSrc(el, r, next); return; }
+            if (s.ph) return;
+            setPh(k, s, 'probe');
+            s.vs = null;
+            decide(k, s);
+        }
+        function hide(k, s, why, hh) {
+            setPh(k, s, 'hid');
+            s.hw = why; s.hh = hh || []; s.vs = null; s.gw = 0;
+            s.hh.forEach(h => { let ks = hidBy.get(h); if (!ks) hidBy.set(h, ks = new Set()); if (ks.size < 2000) ks.add(k); });
+            stopPreview(k);
+            changed();
+        }
+        // 这个图床有图加载出来了 / 复活了:因为连不上它藏掉的卡放回来(从头试)
+        function reviveHost(h) {
+            const ks = hidBy.get(h);
+            if (!ks) return;
+            hidBy.delete(h);
+            let any = false;
+            ks.forEach(k => { const s = st.get(k); if (s && s.ph === 'hid' && s.hh.indexOf(h) >= 0) { restart(k, s); any = true; } });
+            if (any) changed();
+        }
+        function noteOkPic(it, url) {
+            const ks = [];
+            if (it && typeof it._wk === 'string' && it._wk) ks.push('w:' + it._wk);
+            if (it && typeof it._pk === 'string' && it._pk) ks.push('p:' + it._pk);
+            ks.forEach(x => { okPics.delete(x); okPics.set(x, url); });
+            while (okPics.size > 500) okPics.delete(okPics.keys().next().value);
+        }
+        // 一张图真加载出来了(item = 登记过的目录卡片;没登记的 —— 继续观看 / 收藏 —— 只当对照、只让等着的卡再试,
+        //   不算「图床成功过」:可能是缓存里出来的)
+        function noteSuccess(h, url, item) {
+            const t = E.now();
+            lastLoad = t;
+            if (h && h !== 'self') {
+                okHosts.delete(h); okHosts.set(h, { u: url, t });
+                if (okHosts.size > 100) okHosts.delete(okHosts.keys().next().value);
+            }
+            if (item && h) {
+                if (hosts.ok(h)) changed();             // 当它死了的图床本会话不当死了:用它的卡片重新出现
+                if (h !== 'self' && hosts.marked(h)) {  // 本机记过它死:后台 no-store 探一下,通了才删记录
+                    samples.set(h, url);
+                    if (!recheckAt || recheckAt > t + 1000) { recheckAt = t + 1000; arm(recheckAt); }
+                }
+                if (h !== 'self') reviveHost(h);
+                noteOkPic(item, url);
+            }
+            if (waitSet.size && (!kickAt || kickAt > t)) { kickAt = t; arm(t); }
+        }
+        // 到点在后台探一下本机记死的图床(一次最多 4 个;no-store,缓存冒充不了):up → 删记录,它的卡片放回来
+        function recheck(t) {
+            if (!samples.size) return;
+            if (E.online() === false || E.hidden()) { recheckAt = t + CV_RECHECK_FIRST; arm(recheckAt); return; }
+            let n = 0;
+            samples.forEach((u, h) => {
+                if (!hosts.marked(h)) { samples.delete(h); return; }
+                if (n >= 4) return;
+                n++;
+                const ep = epoch;
+                probeOnce(u, (v) => {
+                    if (ep !== epoch || v !== 'up' || !hosts.revive(h)) return;
+                    samples.delete(h);
+                    reviveHost(h);
+                    changed();
+                });
+            });
+            if (samples.size) { recheckAt = t + CV_RECHECK_MS; arm(recheckAt); }
+        }
+        // 正在预览(悬停 / 长按)的卡片要被拿掉:先停预览(卡片卸载之后 preview.js 收不到离开事件,视频会接着拉分片)
+        function stopPreview(k) {
+            const P = root.dgAdultPreview, set = byKey.get(k);
+            if (!P || typeof P.stop !== 'function' || !set) return;
+            set.forEach(el => {
+                try {
+                    const card = el.closest ? el.closest('[data-wk]') : null;
+                    if (!card) return;
+                    let on = !!(card.classList && card.classList.contains('dg-pv-on'));
+                    if (!on && card.matches) { try { on = card.matches(':hover'); } catch (e) { on = false; } }
+                    if (on) P.stop('cover-hidden');
+                } catch (e) { }
+            });
+        }
+        // 每批生效时:正在预览 / 悬停等着开预览的那张卡,作品这一批不出了(图床被记死 / 服务器的表变了也会让卡片消失,不经过 hide)→ 先停;
+        //   重渲染之后那张卡的元素脱离了文档(跨块挪位被重建)→ 也停(preview.js 在脱离文档的元素上收不到离开事件,视频会接着拉分片)
+        function pvCards(S) { return [S.cur && S.cur.el, S.hoverEl, S.pressEl].filter(Boolean); }
+        function pvCheck() {
+            const P = root.dgAdultPreview, S = P && P._state;
+            if (!P || typeof P.stop !== 'function' || !S || !(S.cur || S.timer)) return;
+            const cs = pvCards(S);
+            for (const c of cs) {
+                try {
+                    const im = c.querySelector ? c.querySelector('img') : null, r = im ? recs.get(im) : null;
+                    if (r && !visible(r.item)) { P.stop('cover-hidden'); return; }
+                } catch (e) { }
+            }
+            if (!cs.length) return;
+            setTimeout(() => {
+                try {
+                    const S2 = P._state;
+                    if (S2 && (S2.cur || S2.timer) && pvCards(S2).some(c => c.isConnected === false)) P.stop('cover-hidden');
+                } catch (e) { }
+            }, 0);
+        }
+        // 图床被记死 / 服务器的表变了:已挂着、还在加载的图当前地址在死图床上 → 就地换下一个(没有了 → 下一批生效时整张卡藏掉)
+        function deadChanged() {
+            for (const el of Array.from(els)) {
+                const r = recs.get(el);
+                if (!r || r.st === 1 || !r.url || isData(r.url) || !deadH(hostOf(r.url))) continue;
+                const u = current(r.item, st.get(r.key));
+                if (u && u !== r.url) setSrc(el, r, u);
+            }
+            changed();
+        }
+        // ---- 在视口附近(±200px,比浏览器懒加载的距离近:进来了就一定在加载)的时长 ----
+        function ensureIO() {
+            if (io) return io;
+            const Ctor = E.IO();
+            if (!Ctor) return null;
+            try { io = new Ctor((es) => onIO(es), { rootMargin: '200px 0px 200px 0px' }); } catch (e) { io = null; }
+            return io;
+        }
+        //   (已经在观察的元素再 observe 不会再回调:换了地址时按上次知道的「在不在视口附近」直接重新起表)
+        function watchEl(el) {
+            const r = recs.get(el), h = r ? hostOf(r.url) : '';
+            if (!r) return;
+            if (!h || h === 'self' || r.st) { r.seen = 0; seenEls.delete(el); return; }
+            if (r.obs) { if (r.vis && !r.seen) { r.seen = E.now(); seenEls.add(el); arm(r.seen + CV_STALL_MS + 50); } return; }
+            const I = ensureIO();
+            if (I) { try { I.observe(el); r.obs = true; } catch (e) { } }
+        }
+        function unwatch(el, r) {
+            if (r && r.obs && io) { try { io.unobserve(el); } catch (e) { } }
+            if (r) { r.obs = false; r.vis = false; r.seen = 0; r.sp = false; }
+            seenEls.delete(el);
+        }
+        function onIO(es) {
+            const t = E.now();
+            for (const en of es || []) {
+                const el = en && en.target, r = el ? recs.get(el) : null;
+                if (!r) { try { if (io && el) io.unobserve(el); } catch (e) { } continue; }
+                r.vis = !!en.isIntersecting;
+                if (r.st) continue;
+                if (r.vis) { if (!r.seen) { r.seen = t; seenEls.add(el); arm(t + CV_STALL_MS + 50); } }
+                else { r.seen = 0; r.sp = false; seenEls.delete(el); }
+            }
+        }
+        // 文档级 load(捕获阶段):返回 false = 太小(1×1 之类)当失败,调用方拦住事件(模板不加 loaded,不显示)
+        function onLoad(el) {
+            const url = attr(el);
+            if (!url || isData(url)) return true;
+            const h = hostOf(url);
+            const big = (Number(el.naturalWidth) || 0) >= CV_MIN && (Number(el.naturalHeight) || 0) >= CV_MIN;
+            const r = recs.get(el);
+            if (!r) { if (big && h) noteSuccess(h, url, null); return true; }
+            if (url !== r.url) { r.url = url; r.st = 0; }
+            if (!big) { fail(el, r, url, 'tiny'); return false; }
+            if (r.st === 1) return true;    // 同一张又报一次(Vue 重渲染把同一个 src 再设一遍,浏览器从缓存里再发 load)
+            r.st = 1;
+            unwatch(el, r);
+            // 加载出来的不是第一个地址(主封面在死图床上被跳过 / 换过 alt)→ 记下这张:图床后来复活了也不换回去(已经加载好的不再闪一次)
+            const L0 = parsed(r.item);
+            const s = st.get(r.key) || (L0.length && L0[0].u !== url ? sOf(r.key, true) : null);
+            if (s) {
+                const was = s.ph;
+                s.ok = url;
+                s.gw = 0;
+                s.failed.delete(url);
+                if (was) { setPh(r.key, s, ''); s.vs = null; s.hh = []; if (was === 'hid') changed(); }   // 判了藏还没生效它自己加载出来了:照常出
+            }
+            noteSuccess(h, url, r.item);
+            return true;
+        }
+        // 文档级 error:返回 true = 是登记过的目录封面(已处理)
+        function onError(el) {
+            const r = recs.get(el);
+            if (!r) return false;
+            const url = attr(el);
+            if (!url || isData(url)) return true;      // 占位图 / 清空 src 的那一下
+            if (r.st === 2 && r.url === url) return true;
+            if (url !== r.url) r.url = url;
+            fail(el, r, url, 'err');
+            return true;
+        }
+        // 指令:登记 / 更新 / 撤掉。卸载(窗口化网格换块)只撤 <img>,卡片的状态留着:重新挂上按最新状态出地址
+        function attach(el, it) {
+            if (!el) return;
+            const k = keyOf(it);
+            if (!k) { detach(el); return; }
+            const url = attr(el);
+            let r = recs.get(el);
+            if (!r || r.key !== k) {
+                if (r) detach(el);
+                r = { key: k, item: it, url, st: 0, seen: 0, sp: false, obs: false, vis: false };
+                recs.set(el, r); els.add(el);
+                let set = byKey.get(k);
+                if (!set) byKey.set(k, set = new Set());
+                set.add(el);
+                if (url && !isData(url)) watchEl(el);
+                return;
+            }
+            r.item = it;
+            if (url !== r.url) { r.url = url; r.st = 0; r.seen = 0; r.sp = false; seenEls.delete(el); if (url && !isData(url)) watchEl(el); }
+        }
+        function detach(el) {
+            const r = recs.get(el);
+            if (!r) return;
+            unwatch(el, r);
+            recs.delete(el); els.delete(el);
+            const set = byKey.get(r.key);
+            if (set) { set.delete(el); if (!set.size) byKey.delete(r.key); }
+        }
+        Object.assign(C, {
+            attach, detach, onLoad, onError, visible, src, cands,
+            // 网回来了:之前的探测作废,在等 / 在探的从头再试(不算次数)
+            online() { bump(); restartWaiting(true); Array.from(probeSet).forEach(k => { const s = st.get(k); if (s) restart(k, s); }); },
+            offline() { bump(); reDecide(); },
+            // 页面切到后台(在探的作废、等回来)/ 回到前台(等着回来的从头再试、在探的重新探);resume = bfcache 恢复 / 冻结后恢复
+            visibility(hiddenNow) { bump(); if (!hiddenNow) restartWaiting(false); reDecide(); },
+            resume() { bump(); restartWaiting(false); reDecide(); },
+            setServerDead(list) { if (hosts.setServer(list)) deadChanged(); },
+            deadHosts: () => hosts.dead(),
+            isDeadHost: (h) => hosts.isDead(String(h || '').toLowerCase()),
+            hostOk: (h) => hosts.hostOk(h),
+            // 收藏用:这部作品(作品键)/ 这组搜索结果(海报键)真加载出来的那张封面;没有 → ''
+            okPic(wk, pk) { return (wk && okPics.get('w:' + wk)) || (pk && okPics.get('p:' + pk)) || ''; },
+            ver: () => rxs().v,
+            listen(fn) { if (typeof fn !== 'function') return () => { }; subs.add(fn); return () => { subs.delete(fn); }; },
+            state(k) { const s = st.get(k); return s ? { ph: s.ph, why: s.why, failed: Array.from(s.failed), fr: s.fr, pr: s.pr, hw: s.hw, hh: s.hh.slice(), ok: s.ok, vs: s.vs ? Array.from(s.vs.entries()) : null } : null; },
+            stats() {
+                const H = {};
+                hp.forEach((P, h) => { H[h] = P.st === 'done' ? P.cls : P.st + (P.round === 2 ? '2' : ''); });
+                return { epoch, inflight, probes: nProbe, hp: H, queued: pq.length, probing: probeSet.size, waiting: waitSet.size, retry: retryQ.size, seen: seenEls.size, els: els.size,
+                    armed: !!T, dueAt, guard: guard(E.now()), okHosts: Array.from(okHosts.keys()), samples: samples.size, recheckAt, mem: hosts.mem() };
+            },
+            _run: run, _flush() { applyAt = 0; flush(); }, _rec: (el) => recs.get(el) || null,
+            _reset(over) { init(over); },
+        });
+        return C;
+    }
+    const covers = makeCovers();
+    // <img v-dg-cv="卡片">:根组件(首页行 / 搜索联想)、网格、相关推荐都注册这个指令
+    const cvDirective = {
+        mounted(el, b) { covers.attach(el, b.value); },
+        updated(el, b) { covers.attach(el, b.value); },
+        beforeUnmount(el) { covers.detach(el); },
+    };
+    // 焦点保持(遥控器 / 键盘):藏卡之前记下焦点在哪一组(groupSel 上的 groupAttr)的哪张卡(cardSel 上的 idAttr)、它后面 / 前面各几张是谁;
+    //   重渲染后焦点丢了(那张被拿掉 → 落回 body)→ 还给同一张卡;它没了 → 原来紧跟在它后面、还留着的那张(没有就往前找)
+    const FOCUS_NB = 60;
+    function neighborIds(ids, i) {
+        const out = [];
+        if (i < 0) return out;
+        for (let j = i + 1; j < ids.length && j <= i + FOCUS_NB; j++) out.push(ids[j]);
+        for (let j = i - 1; j >= 0 && j >= i - FOCUS_NB; j--) out.push(ids[j]);
+        return out;
+    }
+    function focusMark(scope, groupSel, groupAttr, cardSel, idAttr) {
+        try {
+            const d = root.document, ae = d && d.activeElement;
+            if (!ae || !scope || !scope.contains || !scope.contains(ae) || !ae.closest) return null;
+            const card = ae.closest(cardSel), grp = card && card.closest ? card.closest(groupSel) : null;
+            if (!card || !grp) return null;
+            const cards = Array.prototype.slice.call(grp.querySelectorAll(cardSel));
+            const i = cards.indexOf(card);
+            return { scope, groupSel, groupAttr, cardSel, idAttr, g: grp.getAttribute(groupAttr), id: card.getAttribute(idAttr), i, nb: neighborIds(cards.map(c => c.getAttribute(idAttr)), i) };
+        } catch (e) { return null; }
+    }
+    function focusBack(m) {
+        if (!m) return false;
+        try {
+            const d = root.document, ae = d.activeElement;
+            if (ae && ae !== d.body && ae.isConnected !== false) return false;   // 焦点还在(或者用户自己挪走了)
+            const grps = m.scope.querySelectorAll(m.groupSel);
+            let grp = null;
+            for (let j = 0; j < grps.length; j++) if (grps[j].getAttribute(m.groupAttr) === m.g) { grp = grps[j]; break; }
+            const cards = grp ? grp.querySelectorAll(m.cardSel) : [];
+            if (!cards.length) return false;
+            const byId = new Map();
+            for (let j = 0; j < cards.length; j++) { const id = cards[j].getAttribute(m.idAttr); if (id && !byId.has(id)) byId.set(id, cards[j]); }
+            let el = byId.get(m.id) || null;
+            for (let j = 0; !el && m.nb && j < m.nb.length; j++) el = byId.get(m.nb[j]) || null;
+            if (!el) el = cards[Math.max(0, Math.min(m.i, cards.length - 1))];
+            if (!el || typeof el.focus !== 'function') return false;
+            el.focus({ preventScroll: true });
+            return true;
+        } catch (e) { return false; }
+    }
+    // 拿掉卡片时不让正在看的内容跳(Safari / iPadOS / 老电视 WebView 没有浏览器自己的滚动锚定)。
+    //   网格(DgAdGrid)不滚:视口上面的改动先压着(见 hold);整段拿掉的(首页一整行 / 相关推荐一整排)改之前记下视口里最上面几块的位置,
+    //   改完找第一块还在的,量它挪了多少再滚回去(浏览器已经自己锚定过的话量出来是 0,不会滚两次)。
+    //   滚动容器:往上找第一个能滚的祖先(播放页覆盖层);没有 = 窗口。top / bottom = 它在视口里的上下沿
+    function scrollerOf(el) {
+        try {
+            let n = el && el.parentElement;
+            const d = root.document;
+            while (n && n !== d.body && n !== d.documentElement) {
+                const cs = root.getComputedStyle ? root.getComputedStyle(n) : null;
+                if (cs && /(auto|scroll)/.test(String(cs.overflowY || '')) && n.scrollHeight > n.clientHeight) { const rc = n.getBoundingClientRect(); return { el: n, top: rc.top, bottom: rc.bottom }; }
+                n = n.parentElement;
+            }
+        } catch (e) { }
+        let vh = 0;
+        try { vh = Number(root.innerHeight) || Number(root.document.documentElement.clientHeight) || 0; } catch (e) { vh = 0; }
+        return { el: null, top: 0, bottom: vh > 0 ? vh : 800 };
+    }
+    // 瞬间滚 dy(全站 html{scroll-behavior:smooth} 会把它拖成动画)
+    function jumpBy(sc, dy) {
+        try {
+            if (sc && sc.el) { const s = sc.el.style, prev = s.scrollBehavior; s.scrollBehavior = 'auto'; sc.el.scrollTop += dy; s.scrollBehavior = prev; return; }
+            const s = root.document.documentElement.style, prev = s.scrollBehavior;
+            s.scrollBehavior = 'auto';
+            root.scrollTo(0, Math.max(0, (Number(root.scrollY) || Number(root.pageYOffset) || 0) + dy));
+            s.scrollBehavior = prev;
+        } catch (e) { }
+    }
+    // 记:scope 里 cardSel 的块(idAttr 认),视口里最上面 ≤24 块的 top;scope 的顶在视口里 / 下面(前面没有能被拿掉的)→ null
+    function anchorMark(scope, cardSel, idAttr) {
+        try {
+            if (!scope || !scope.querySelectorAll || !scope.getBoundingClientRect) return null;
+            const sc = scrollerOf(scope);
+            const vt = sc.top;
+            if (!(scope.getBoundingClientRect().top < vt)) return null;
+            const cards = scope.querySelectorAll(cardSel), list = [];
+            for (let i = 0; i < cards.length && list.length < 24; i++) {
+                const rc = cards[i].getBoundingClientRect();
+                if (!(rc.height > 0 || rc.width > 0) || rc.bottom <= vt + 1) continue;
+                list.push({ id: cards[i].getAttribute(idAttr), top: rc.top });
+            }
+            return list.length ? { sc, scope, cardSel, idAttr, list } : null;
+        } catch (e) { return null; }
+    }
+    function anchorBack(a) {
+        if (!a) return 0;
+        try {
+            const cards = a.scope.querySelectorAll(a.cardSel), byId = new Map();
+            for (let i = 0; i < cards.length; i++) { const id = cards[i].getAttribute(a.idAttr); if (id && !byId.has(id)) byId.set(id, cards[i]); }
+            for (const x of a.list) {
+                const c = byId.get(x.id);
+                if (!c) continue;
+                const dy = c.getBoundingClientRect().top - x.top;
+                if (Math.abs(dy) >= 1) { jumpBy(a.sc, dy); return dy; }
+                return 0;
+            }
+        } catch (e) { }
+        return 0;
+    }
+    // 横排(首页收起状态的 .hot-row / 相关推荐的 .dg-rail-row)滚过了的:改之前记下每排最左边露出来的几张卡的 left;
+    //   改完(左边视口外的卡没了 → 后面的往左挪)找第一张还在的,补 scrollLeft,露出来的那几张不动
+    function rowMark(scope, groupSel, groupAttr, rowSel, cardSel, idAttr) {
+        const out = [];
+        try {
+            if (!scope || !scope.querySelectorAll) return null;
+            const gs = scope.querySelectorAll(groupSel);
+            for (let i = 0; i < gs.length; i++) {
+                const row = gs[i].querySelector(rowSel);
+                if (!row || !(row.scrollLeft > 0)) continue;
+                const left0 = row.getBoundingClientRect().left;
+                const cards = row.querySelectorAll(cardSel), list = [];
+                for (let j = 0; j < cards.length && list.length < 12; j++) {
+                    const rc = cards[j].getBoundingClientRect();
+                    if (rc.right <= left0 + 1) continue;
+                    list.push({ id: cards[j].getAttribute(idAttr), left: rc.left });
+                }
+                if (list.length) out.push({ g: gs[i].getAttribute(groupAttr), list });
+            }
+        } catch (e) { }
+        return out.length ? { scope, groupSel, groupAttr, rowSel, cardSel, idAttr, out } : null;
+    }
+    function rowBack(m) {
+        if (!m) return;
+        m.out.forEach(x => {
+            try {
+                let grp = null;
+                const gs = m.scope.querySelectorAll(m.groupSel);
+                for (let i = 0; i < gs.length; i++) if (gs[i].getAttribute(m.groupAttr) === x.g) { grp = gs[i]; break; }
+                const row = grp && grp.querySelector(m.rowSel);
+                if (!row) return;
+                const cards = row.querySelectorAll(m.cardSel), byId = new Map();
+                for (let j = 0; j < cards.length; j++) byId.set(cards[j].getAttribute(m.idAttr), cards[j]);
+                for (const a of x.list) {
+                    const c = byId.get(a.id);
+                    if (!c) continue;
+                    const dx = c.getBoundingClientRect().left - a.left;
+                    if (Math.abs(dx) >= 1) { const s = row.style, prev = s.scrollBehavior; s.scrollBehavior = 'auto'; row.scrollLeft += dx; s.scrollBehavior = prev; }
+                    break;
+                }
+            } catch (e) { }
+        });
+    }
+
     // ========== 内容接口鉴权(401 → 补核验 → 重试一次 → 登录框) ==========
     const CONTENT_RE = /^\/api\/(search|detail|check|sites|catalog|popular|kz|img)(\/|$)/;
     function sameOriginPath(url, base) {
@@ -1035,7 +2151,7 @@
             } catch (e) { }
             return v;
         }
-        // 登录框的「购买套餐」按钮 / 套餐到期的续费链接:成人站默认不出(主站的购买地址不能出现在这里);
+        // 登录框的「购买套餐」按钮 / 套餐到期的续费链接:地址由服务器 /api/config purchase_url 给(默认主站的 ednovas.me,站长可配 PURCHASE_URL 换掉或关掉);
         //   /api/config 给了 purchase_url(http/https)才显示,并指向它。上次的值记在本机,登录框先按它显示(config 回来再校正)
         const BUY_KEY = 'dg_buy_url';
         const safeUrl = (u) => {
@@ -1060,7 +2176,7 @@
             } catch (e) { }
         }
         const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        // 续费提示(登录框里的 HTML 片段 / alert 文本);没配 purchase_url → 空(不提续费地址)
+        // 续费提示(登录框里的 HTML 片段 / alert 文本);purchase_url 为空(站长关掉)→ 空(不提续费地址)
         function renewHtml() {
             const v = buyUrl();
             if (!v) return '';
@@ -1444,7 +2560,7 @@
         'html .poster-wrap img.dg-port { object-fit: contain; position: relative; z-index: 1; background: none; }',
         '.poster-wrap.dg-port-bg::before { content: ""; position: absolute; top: -12px; left: -12px; right: -12px; bottom: -12px; background: var(--dg-pbg, none) center / cover no-repeat; filter: blur(14px) brightness(0.5); z-index: 0; pointer-events: none; }',
         '.movie-date.dg-ad-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
-        // 登录框的购买引导:没配 purchase_url 不出(见 brand.showBuy;切登录方式时的行内 display 也压得住)
+        // 登录框的购买引导:purchase_url 为空(站长配了 PURCHASE_URL=off)就不出(见 brand.showBuy;切登录方式时的行内 display 也压得住)
         'html:not(.dg-buy) #register-link { display: none !important; }',
         // 卡片角标:右上 N线、右下时长、左下番号(等宽)
         '.dg-ov-n, .dg-ov-dur, .dg-ov-code { position: absolute; z-index: 2; background: rgba(0, 0, 0, 0.74); color: #fff; font-size: 10px; line-height: 1.6; padding: 0 5px; border-radius: 4px; pointer-events: none; white-space: nowrap; }',
@@ -1574,6 +2690,13 @@
         '.dg-set-ext:empty { display: none; }',
         // 封面上长按预览时不弹系统菜单(iOS 存图 / 安卓长按菜单)
         '.hot-card .poster-wrap img, .browse-card .poster-wrap img, .dg-rail-card .poster-wrap img { -webkit-touch-callout: none; }',
+        // 封面加载不出来藏掉的卡片:浏览 / 搜索网格底下一行「已隐藏 N 部 · 显示」(首页行 / 相关推荐不提示;搜索联想开着时不删行,下次重算才拿掉)。
+        //   点了「显示」焦点没地方去时落在网格本身(tabindex=-1),不画框
+        '.dg-cv-note { margin: 14px 0 4px; color: #888; font-size: 12px; text-align: center; }',
+        '.dg-grid:focus { outline: none; }',
+        '.dg-cv-show { background: none; border: 0; padding: 2px 6px; color: #ff8a80; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }',
+        '.dg-cv-show:hover, .dg-cv-show:focus { color: #fff; outline: none; }',
+        'body.tv-mode .dg-cv-show:focus { outline: 2px solid #fff; outline-offset: 2px; }',
     ].join('\n');
     function injectCss() {
         const d = root.document;
@@ -1599,7 +2722,7 @@
             wrap.style.removeProperty('--dg-pbg');
         }
     }
-    // 首页行 / 浏览页的海报:坏图换中性占位(不走 TMDB)
+    // 首页行 / 浏览页的海报:目录卡片(v-dg-cv 登记过的)交给封面控制器(换备用地址 / 藏 / 等网络);别的坏图换中性占位(不走 TMDB)
     function hookImages() {
         const d = root.document;
         const inCard = (img) => img && img.tagName === 'IMG' && img.closest && img.closest('.hot-card .poster-wrap, .browse-card .poster-wrap, .dg-sug-row');
@@ -1607,14 +2730,26 @@
         const shaped = (img) => img && img.tagName === 'IMG' && img.closest && img.closest('.poster-wrap, .dg-sug-row');
         d.addEventListener('load', (e) => {
             const img = e.target;
+            if (!img || img.tagName !== 'IMG') return;
+            // 1×1 之类的小图 = 失败:拦住事件,模板的 @load 不加 loaded(不显示),控制器换下一个地址 / 藏
+            if (covers.onLoad(img) === false) { try { e.stopPropagation(); } catch (x) { } return; }
             if (shaped(img)) shapeCover(img);
         }, true);
         d.addEventListener('error', (e) => {
             const img = e.target;
+            if (!img || img.tagName !== 'IMG' || covers.onError(img)) return;
             if (!inCard(img) || img.getAttribute('data-dg-fb') === '1') return;
             img.setAttribute('data-dg-fb', '1');
             img.src = PLACEHOLDER;
         }, true);
+        // 断网 / 页面在后台时不探、不藏;网回来了 / 切回前台从头再试。断网 / 联网 / 切前后台 / bfcache 恢复 / 冻结后恢复:在路上的探测作废重来,卡住的表重新起
+        try {
+            root.addEventListener('online', () => covers.online());
+            root.addEventListener('offline', () => covers.offline());
+            root.addEventListener('pageshow', (e) => { if (e && e.persisted) covers.resume(); });
+            d.addEventListener('visibilitychange', () => covers.visibility(d.hidden === true));
+            d.addEventListener('resume', () => covers.resume());
+        } catch (e) { }
     }
     // [adult] p4 目录卡片的悬停 / 按下 → dgAdultHooks.onCardHover(card, el, ev)。卡片带 data-wk(首页行 / 浏览网格 / 相关推荐);
     //   文档级委托(不给几百张卡各绑监听),鼠标在卡片内部移动不重复触发;没人订阅时什么都不做
@@ -1652,7 +2787,13 @@
         applyBlur(blurOn());
         brand.showBuy();
         // loader / 登录框里的站名节点在 <head> 之后才解析出来:DOM 就绪时按上次缓存的站名再写一遍(/api/config 回来后 adultApplyConfig 再更新)
-        try { root.document.addEventListener('DOMContentLoaded', () => { brand.apply(brand.name()); brand.showBuy(); }, { once: true }); } catch (e) { }
+        // DOMContentLoaded 时 defer 的 privacy.js 已经跑过:把本机记死图床的键登记给它(无痕拦截 / 一键清除都认,哪怕这次会话还没写过)
+        try {
+            root.document.addEventListener('DOMContentLoaded', () => {
+                brand.apply(brand.name()); brand.showBuy();
+                try { const P = root.dgPrivacy; if (P && typeof P.registerKeys === 'function') P.registerKeys({ keys: [CV_KEY] }); } catch (e) { }
+            }, { once: true });
+        } catch (e) { }
         auth.install();
         hookImages();
         hooks.install();      // [adult] p4:window.dgAdultHooks(先于 defer 的扩展模块)
@@ -1662,6 +2803,7 @@
             if (!c || typeof c !== 'object') return;
             if (c.site_name) brand.apply(c.site_name);
             brand.applyBuy(c.purchase_url);
+            covers.setServerDead(c.cover_dead_hosts);   // 死图床表尽早到(首页行到之前就能先筛)
         }).catch(() => { });
     }
 
@@ -1691,28 +2833,232 @@
     const DgAdGrid = {
         name: 'DgAdGrid',
         // p4:keep = 片单是「一直在长 / 重排」的同一份(搜索结果流式到达):换数组不重新分块,只有清空 / 从空到有才重来
-        props: { items: { type: Array, default: () => [] }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false }, loading: { type: Boolean, default: false }, keep: { type: Boolean, default: false } },
-        emits: ['pick', 'imgerr'],
-        data() { return { cols: guessCols(), dead: {} }; },
+        // cover = 封面加载不出来的卡片从片单里拿掉(不是 display:none —— 那样块边上会留洞);底下一行「已隐藏 N 部 · 显示」。
+        //   视口上面的卡片不动(见 hold):判了藏的先留着、要放回来的先不插 —— 拿掉 / 插进一张,后面每张都挪一格,整个视口里的卡都会跳
+        props: { items: { type: Array, default: () => [] }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false }, loading: { type: Boolean, default: false }, keep: { type: Boolean, default: false }, cover: { type: Boolean, default: false } },
+        // vis(出了几张, 藏了几张):变了才报(浏览页底栏的「共 N 部」/ 空状态按它)
+        emits: ['pick', 'imgerr', 'vis'],
+        data() { return { cols: guessCols(), dead: {}, reveal: false, hv: 0 }; },
+        directives: { dgCv: cvDirective },
+        // 侦听 shown 的 watcher 在 created 之前就把 shown 算了一遍(_rendered 已经有了):这里只补没有的
+        created() { if (!this._ho) this._ho = new Map(); if (!Array.isArray(this._rendered)) this._rendered = []; },
         computed: {
+            // 实际渲染的片单:藏掉封面加载不出来的(点了「显示」就全部出,坏的用中性占位);_ho 里压着的(视口上面的)按压着的状态出
+            shown() {
+                const a = this.items;
+                if (!this.cover) return a;
+                covers.ver();
+                void this.hv;
+                let out = a;
+                if (!this.reveal) {
+                    const ho = this._ho && this._ho.size ? this._ho : null;
+                    for (let i = 0; i < a.length; i++) {
+                        const it = a[i], o = ho ? ho.get(it.id) : undefined;
+                        const v = o !== undefined ? o : covers.visible(it);
+                        if (out === a) { if (!v) out = a.slice(0, i); }
+                        else if (v) out.push(it);
+                    }
+                }
+                this._rendered = out;
+                return out;
+            },
+            hiddenN() { return (this.cover && !this.reveal) ? this.items.length - this.shown.length : 0; },
+            visSig() { return this.cover ? this.shown.length + '/' + this.hiddenN : ''; },
             per() { return Math.max(1, this.cols | 0) * ROWS_PER_BLOCK; },
-            nBlocks() { return Math.ceil(this.items.length / this.per); },
+            nBlocks() { return Math.ceil(this.shown.length / this.per); },
         },
         watch: {
+            visSig: { immediate: true, handler(v) { if (v) { const p = v.split('/'); this.$emit('vis', +p[0], +p[1]); } } },
             items(nv, ov) { if (nv !== ov && !(this.keep && nv && nv.length && ov && ov.length)) this.reset(); },   // 换了筛选:整个新数组
             nBlocks(n, o) {
-                // 新的一页落在最后一块:它永远是活的(还在被填)
-                if (n > 0 && this.dead[n - 1] != null) { const d = Object.assign({}, this.dead); delete d[n - 1]; this.dead = d; }
-                if (n < o) this.reset();
+                // 片单变短(封面藏掉 / 流式结果重排):只丢掉超出的块的记录,不整个重来(全部块一下变活 = 渲染上千张卡)。
+                //   前面的块还是满的 6 排,量好的高度照样对;新的最后一块永远是活的(还在被填)
+                let d = null;
+                for (const k of Object.keys(this.dead)) if (+k >= n - 1) { d = d || Object.assign({}, this.dead); delete d[k]; }
+                if (d) this.dead = d;
+                void o;
             },
+            // 藏卡之前(这个侦听先于重渲染跑)记下焦点在哪张卡:被拿掉 / 跨块重建后在 updated 里还回去(遥控器 / 键盘不丢焦点)。
+            //   不滚动:视口上面的改动由 hold 压着,搜索结果流式重排(keep)也不该带着页面走
+            shown(nv, ov) { this.noteFocus(ov); },
         },
         methods: {
-            slice(bi) { return this.items.slice(bi * this.per, (bi + 1) * this.per); },
+            slice(bi) { return this.shown.slice(bi * this.per, (bi + 1) * this.per); },
             src(p) { return this.poster ? this.poster(p) : (p || PLACEHOLDER); },
+            cvSrc(it) { return covers.src(it); },
             pick(it) { this.$emit('pick', it); },
+            // 「显示」:藏掉的全部插回去。插在视口上面的会把正在看的内容往下顶(Safari / 老电视 WebView 没有滚动锚定)→ 改之前记下视口里的卡的位置,
+            //   改完补滚动;焦点原来在「显示」上(点完它就没了)→ 给视口里第一张放出来的卡(遥控器)/ 网格本身
+            showAll() { this._rv = this.revealMark(); this.reveal = true; },
+            revealMark() {
+                try {
+                    const el = this.$el, sc = scrollerOf(el), vt = sc.top, vb = sc.bottom, list = [];
+                    const cs = el.querySelectorAll('.browse-card[data-bid]');
+                    for (let i = 0; i < cs.length && list.length < 24; i++) {
+                        const rc = cs[i].getBoundingClientRect();
+                        if (rc.bottom <= vt + 1 || rc.top >= vb - 1) continue;
+                        list.push({ id: cs[i].getAttribute('data-bid'), top: rc.top });
+                    }
+                    const ae = root.document.activeElement;
+                    return { sc, list, bottom: el.getBoundingClientRect().bottom, prev: new Set((this._rendered || []).map(it => String(it.id))), foc: !!(ae && ae !== root.document.body && el.contains(ae)) };
+                } catch (e) { return null; }
+            },
+            revealBack(m) {
+                if (!m) return;
+                try {
+                    const el = this.$el, cs = el.querySelectorAll('.browse-card[data-bid]'), byId = new Map();
+                    for (let i = 0; i < cs.length; i++) { const id = cs[i].getAttribute('data-bid'); if (id && !byId.has(id)) byId.set(id, cs[i]); }
+                    let dy = null;
+                    for (const x of m.list) { const c = byId.get(x.id); if (c) { dy = c.getBoundingClientRect().top - x.top; break; } }
+                    if (dy === null) dy = el.getBoundingClientRect().bottom - m.bottom;   // 视口里原来没有卡(只看得见底下那行字):按网格底边对齐
+                    if (Math.abs(dy) >= 1) jumpBy(m.sc, dy);    // 浏览器自己锚定过的话量出来是 0,不会滚两次
+                    if (!m.foc) return;
+                    const d = root.document, ae = d.activeElement;
+                    if (ae && ae !== d.body && ae.isConnected !== false) return;
+                    const sc = scrollerOf(el), vt = sc.top, vb = sc.bottom;
+                    let first = null, any = null;
+                    for (let i = 0; i < cs.length && !first; i++) {
+                        const rc = cs[i].getBoundingClientRect();
+                        if (rc.bottom <= vt + 1 || rc.top >= vb - 1) continue;
+                        if (!any) any = cs[i];
+                        if (!m.prev.has(cs[i].getAttribute('data-bid'))) first = cs[i];
+                    }
+                    const tgt = first || any;
+                    if (tgt && tgt.hasAttribute && tgt.hasAttribute('tabindex')) { tgt.focus({ preventScroll: true }); return; }
+                    if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+                    el.focus({ preventScroll: true });
+                } catch (e) { }
+            },
             loaded: onImgLoad,
+            // 渲染出来的片单(按渲染下标)里:fvi = 第一张不整个在视口上面的,lvi = 第一张整个在视口下面的。
+            //   整块在上面的(含只剩空壳的块)整块算上面;跨着视口上沿的活块逐张量。
+            //   网格没排版(浏览页被 v-show 藏着、搜索页盖在上面)→ null:量不出视口在哪,什么都不能动
+            edges(n) {
+                let fvi = n, lvi = n;
+                try {
+                    const el = this.$el, gr = el.getBoundingClientRect();
+                    if (!(gr.width > 0 || gr.height > 0)) return null;
+                    const sc = scrollerOf(el), vt = sc.top, vb = sc.bottom, per = this.per;
+                    const blocks = el.querySelectorAll('.dg-blk');
+                    let gotF = false;
+                    for (let bi = 0; bi < blocks.length; bi++) {
+                        const b = blocks[bi], rc = b.getBoundingClientRect(), base = bi * per;
+                        const cards = this.dead[bi] == null ? b.querySelectorAll('.browse-card[data-bid]') : null;
+                        if (!gotF) {
+                            if (rc.bottom <= vt + 1) continue;
+                            gotF = true;
+                            if (rc.top >= vt - 1 || !cards) fvi = base;
+                            else { let k = 0; while (k < cards.length && cards[k].getBoundingClientRect().bottom <= vt + 1) k++; fvi = base + k; }
+                        }
+                        if (rc.top >= vb - 1) { lvi = base; break; }
+                        if (cards) {
+                            let k = 0;
+                            while (k < cards.length && cards[k].getBoundingClientRect().top < vb - 1) k++;
+                            if (k < cards.length) { lvi = base + k; break; }
+                        }
+                    }
+                } catch (e) { }
+                fvi = Math.min(fvi, n);
+                return { fvi, lvi: Math.max(fvi, Math.min(lvi, n)) };
+            },
+            // 一批封面判定生效之前(covers.listen;DOM 还是旧的)/ 块进出视口之后 / 有压着的卡时滚动停下来(hoWatch):
+            //   要变的卡(判了藏 / 放回来)在视口上面 → 先压着(_ho:id → 照旧出不出);视口里的照改(拿掉一张,后面的往前补一格 ——
+            //   卡片是懒加载的,失败多半就在视口附近);视口下面的照改(看不见)。压着的一到了视口里 / 下面(往回翻了、回到顶上、
+            //   从搜索页回来有了排版)就放开、照改 —— 和没压着的一样(不然首屏里的会一直是灰的占位卡);换了片单就全清。
+            //   上面永远不动 → 正在看的不跳,也不用滚回去(iOS 上程序滚动还会打断惯性滚动)
+            hold() {
+                if (!this.cover || this.reveal) return;
+                const el = this.$el, a = this.items, prev = this._rendered, ho = this._ho;
+                if (!el || !el.querySelectorAll || !Array.isArray(a) || !Array.isArray(prev) || !ho) return;
+                const on = new Map();
+                for (let i = 0; i < prev.length; i++) if (prev[i]) on.set(prev[i].id, i);
+                const ch = [];
+                let mod = false;
+                for (let i = 0; i < a.length; i++) {
+                    const it = a[i];
+                    if (!it) continue;
+                    const want = covers.visible(it), o = ho.get(it.id);
+                    if (o !== undefined) { if (want === o) { ho.delete(it.id); mod = true; } else ch.push(i); continue; }
+                    if (want !== on.has(it.id)) ch.push(i);
+                }
+                const E2 = ch.length ? this.edges(prev.length) : null;
+                if (ch.length && !E2) {
+                    // 网格没排版(浏览页藏在搜索页后面):全部压着、什么都不动 —— 回来时浏览页按存下的位置滚回去,这时上面要是少了 / 多了卡,
+                    //   回到的就不是原来那张了。等有了排版(块进出视口 / 下一批判定)再按视口放
+                    for (const i of ch) { const id = a[i].id; if (!ho.has(id)) { ho.set(id, on.has(id)); mod = true; } }
+                } else if (ch.length) {
+                    const fvi = E2.fvi;
+                    // 没渲染的卡的插入点 = 它后面第一张渲染了的卡的下标(后面没有了 = 末尾)
+                    const nxt = new Array(a.length);
+                    let nx = prev.length;
+                    for (let i = a.length - 1; i >= 0; i--) { const j = a[i] ? on.get(a[i].id) : undefined; nxt[i] = j !== undefined ? j : nx; if (j !== undefined) nx = j; }
+                    for (const i of ch) {
+                        const id = a[i].id, j = nxt[i];
+                        if (ho.has(id)) { if (j >= fvi) { ho.delete(id); mod = true; } }       // 压着的到了视口里 / 下面(视口在列表最顶上时 fvi = 0:全部):放开
+                        else if (j < fvi) { ho.set(id, on.has(id)); mod = true; }              // 视口上面:压着
+                    }
+                }
+                if (mod) this.hv++;
+                this.hoWatch();
+            },
+            // 有压着的卡:滚动停下来(200ms 没再滚)再按视口放一次 —— 块的 IntersectionObserver 只在块进出 ±1600px 时才回调,
+            //   翻回列表顶上 / 首屏里的不一定等得到。没有压着的了 / 卸载(off)→ 撤掉
+            hoWatch(off) {
+                const want = !off && !!(this.cover && !this.reveal && this._ho && this._ho.size);
+                if (want === !!this._hoFn) return;
+                if (want) {
+                    this._hoFn = () => {
+                        clearTimeout(this._hoT);
+                        this._hoT = setTimeout(() => { if (this.cover && !this.reveal && this._ho && this._ho.size) this.hold(); else this.hoWatch(); }, 200);
+                    };
+                    try { root.addEventListener('scroll', this._hoFn, { passive: true, capture: true }); } catch (e) { }
+                } else {
+                    try { root.removeEventListener('scroll', this._hoFn, { passive: true, capture: true }); } catch (e) { }
+                    clearTimeout(this._hoT);
+                    this._hoFn = null;
+                }
+            },
+            noteFocus(prev) {
+                this._fx = null;
+                try {
+                    const d = root.document, ae = d && d.activeElement, el = this.$el;
+                    if (!ae || !el || !el.contains || !el.contains(ae)) return;
+                    const card = ae.closest ? ae.closest('.browse-card') : null;
+                    const id = card ? card.getAttribute('data-bid') : '';
+                    if (!id) return;
+                    const list = Array.isArray(prev) ? prev : [];
+                    let i = -1;
+                    for (let j = 0; j < list.length; j++) if (list[j] && String(list[j].id) === id) { i = j; break; }
+                    // 它后面 / 前面各 60 张是谁:它被拿掉了就给紧跟在它后面、还留着的那张(不按原来的下标 —— 前面同时没了几张会跳过一张)
+                    const nb = [];
+                    if (i >= 0) {
+                        for (let j = i + 1; j < list.length && j <= i + FOCUS_NB; j++) if (list[j]) nb.push(String(list[j].id));
+                        for (let j = i - 1; j >= 0 && j >= i - FOCUS_NB; j--) if (list[j]) nb.push(String(list[j].id));
+                    }
+                    this._fx = { id, i, nb };
+                } catch (e) { }
+            },
+            keepFocus() {
+                const fx = this._fx;
+                this._fx = null;
+                if (!fx) return;
+                try {
+                    const d = root.document, ae = d.activeElement;
+                    if (ae && ae !== d.body && ae.isConnected !== false) return;   // 焦点还在(或者用户自己挪走了)
+                    const cards = this.$el.querySelectorAll('.browse-card[data-bid]'), byId = new Map();
+                    for (let j = 0; j < cards.length; j++) { const id = cards[j].getAttribute('data-bid'); if (id && !byId.has(id)) byId.set(id, cards[j]); }
+                    const want = [fx.id].concat(fx.nb || []);
+                    const s = this.shown;
+                    if (fx.i >= 0 && s.length) { const it = s[Math.min(fx.i, s.length - 1)]; if (it) want.push(String(it.id)); }
+                    for (const id of want) { const c = byId.get(id); if (c) { c.focus({ preventScroll: true }); return; } }
+                } catch (e) { }
+            },
             reset() {
                 this.dead = {};
+                this.reveal = false;
+                this._rv = undefined;
+                if (this._ho && this._ho.size) { this._ho.clear(); this.hv++; }
+                this.hoWatch();
                 this._needMeasure = true;
                 if (this._io) { this._io.disconnect(); this._obs = new WeakSet(); }
                 this.$nextTick(() => this.sync());
@@ -1736,6 +3082,7 @@
                         if (h > 0) { d = d || Object.assign({}, this.dead); d[bi] = h; }
                     }
                 }
+                if (this._ho && this._ho.size) this.hold();   // 翻动了:压着的卡到了视口下面就放开
                 if (d) this.dead = d;
             },
             // 渲染之后:新出现的块交给 IntersectionObserver;需要时量一次真实列数
@@ -1791,10 +3138,17 @@
                     this._ro.observe(this.$el);
                 }
             } catch (e) { }
+            this._cvOff = covers.listen(() => this.hold());   // 封面判定这一批生效之前(DOM 还是旧的):视口上面的改动先压着
             this.sync();
         },
-        updated() { this.sync(); },
+        updated() {
+            this.sync();
+            if (this._rv !== undefined && this.reveal) { const m = this._rv; this._rv = undefined; this.revealBack(m); }
+            this.keepFocus();
+        },
         beforeUnmount() {
+            if (this._cvOff) { this._cvOff(); this._cvOff = null; }
+            this.hoWatch(true);
             clearTimeout(this._rsT);
             try { root.removeEventListener('resize', this._onRs); } catch (e) { }
             if (this._ro) { try { this._ro.disconnect(); } catch (e) { } this._ro = null; }
@@ -1806,7 +3160,7 @@
     <template v-if="dead[bi - 1] == null">
       <div class="browse-card" v-for="item in slice(bi - 1)" :key="'b-' + item.id" :data-bid="item.id" :data-wk="item._wk || null" :tabindex="tv ? 0 : null" @click="pick(item)" @keydown.enter.prevent="pick(item)">
         <div class="poster-wrap">
-          <img :src="src(item.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded" @error="$emit('imgerr', item)">
+          <img v-dg-cv="cover ? item : null" :src="cover ? cvSrc(item) : src(item.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded" @error="$emit('imgerr', item)">
           <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div><span v-if="item._n >= 2" class="dg-ov-n">{{ item._n }}线</span><span v-if="item._durText" class="dg-ov-dur">{{ item._durText }}</span><span v-if="item._code" class="dg-ov-code">{{ item._code }}</span>
         </div>
         <div class="movie-name">{{ item.title || item.name }}</div>
@@ -1814,6 +3168,7 @@
       </div>
     </template>
   </div>
+  <div v-if="hiddenN > 0" class="dg-cv-note">已隐藏 {{ hiddenN }} 部封面加载不出来的作品 · <button type="button" class="dg-cv-show" @click="showAll()">显示</button></div>
 </div>`,
     };
 
@@ -2131,14 +3486,54 @@
 
     // [adult] p4 播放页的「相关推荐 / 同演员 / 同片商」(GET /api/catalog/related/:wk)。wk 由根组件在主播放器出了第一帧之后才给
     //   (不跟起播抢);每排横向滑动 ≤24 张;点卡片 @pick → openWork,点「全部」@go → 女优页 / 厂牌浏览
+    // 相关推荐现在能出的卡(按排):变了才算封面判定改了它
+    function railSig(rs) { let s = ''; (rs || []).forEach(r => { s += r.k + ':' + r.items.map(it => it.id).join(',') + ';'; }); return s; }
     const DgAdRails = {
         name: 'DgAdRails',
         props: { wk: { type: String, default: '' }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false } },
         emits: ['pick', 'go'],
         data() { return { rails: null }; },
-        watch: { wk: { immediate: true, handler() { this.load(); } } },
+        directives: { dgCv: cvDirective },
+        computed: {
+            // 封面加载不出来的卡片不出;一排全没了整排不出(不提示)
+            shownRails() {
+                const rs = this.rails;
+                if (!rs || !rs.length) { this._sig = ''; return []; }
+                covers.ver();
+                const out = [];
+                rs.forEach(r => {
+                    const items = r.items.filter(covers.visible);
+                    if (items.length) out.push(items.length === r.items.length ? r : Object.assign({}, r, { items }));
+                });
+                this._sig = railSig(out);
+                return out;
+            },
+        },
+        watch: {
+            wk: { immediate: true, handler() { this._cvm = null; this.load(); } },
+            shownRails() { this._fm = focusMark(this.$el, '.dg-rail', 'data-rk', '.dg-rail-card', 'data-wk'); },   // 先于重渲染:记下焦点
+        },
+        // 封面判定这一批要让卡片 / 整排消失(DOM 还是旧的):记下横排露出来的第一张卡的位置、视口里最上面那排的位置,重渲染后补回去
+        //   (只在封面判定改了能出的卡时记:换了一部 / 刚拉到推荐不动滚动)
+        mounted() { this._cvOff = covers.listen(() => this.onCv()); },
+        beforeUnmount() { if (this._cvOff) { this._cvOff(); this._cvOff = null; } },
+        updated() {
+            const m = this._fm, cm = this._cvm;
+            this._fm = null; this._cvm = null;
+            focusBack(m);
+            if (cm) { rowBack(cm.h); anchorBack(cm.v); }
+        },
         methods: {
+            onCv() {
+                const rs = this.rails, el = this.$el;
+                if (!rs || !rs.length || !el || !el.querySelectorAll) return;
+                const out = [];
+                rs.forEach(r => { const items = r.items.filter(covers.visible); if (items.length) out.push({ k: r.k, items }); });
+                if (railSig(out) === this._sig) return;
+                this._cvm = { h: rowMark(el, '.dg-rail', 'data-rk', '.dg-rail-row', '.dg-rail-card[data-wk]', 'data-wk'), v: anchorMark(el, '.dg-rail', 'data-rk') };
+            },
             src(p) { return this.poster ? this.poster(p) : (p || PLACEHOLDER); },
+            cvSrc(it) { return covers.src(it); },
             loaded: onImgLoad,
             load() {
                 const wk = this.wk;
@@ -2151,13 +3546,13 @@
             },
             pick(it) { this.$emit('pick', it); },
         },
-        template: `<div v-if="rails && rails.length" class="dg-rails">
-  <section v-for="r in rails" :key="r.k" class="dg-rail" :aria-label="r.title">
+        template: `<div v-if="shownRails.length" class="dg-rails">
+  <section v-for="r in shownRails" :key="r.k" class="dg-rail" :data-rk="r.k" :aria-label="r.title">
     <div class="dg-rail-t"><i :class="['fas', r.icon]" aria-hidden="true"></i><span>{{ r.title }}</span><button v-if="r.go" type="button" class="dg-rail-all" :tabindex="tv ? 2 : null" @click="$emit('go', r.go)">全部 <i class="fas fa-angle-right" aria-hidden="true"></i></button></div>
     <div class="dg-rail-row">
       <div v-for="it in r.items" :key="r.k + '-' + it.id" class="dg-rail-card" :data-wk="it._wk" :tabindex="tv ? 2 : null" @click="pick(it)" @keydown.enter.prevent="pick(it)">
         <div class="poster-wrap">
-          <img :src="src(it.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded">
+          <img v-dg-cv="it" :src="cvSrc(it)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded">
           <div v-if="it._badge" class="dg-ad-badge">{{ it._badge }}</div><span v-if="it._durText" class="dg-ov-dur">{{ it._durText }}</span><span v-if="it._code" class="dg-ov-code">{{ it._code }}</span>
         </div>
         <div class="movie-name">{{ it.title }}</div>
@@ -2248,6 +3643,7 @@
                     famOpen: {},                          // 展开了「+N 备用」的线路家族
                     varPref: { wk: '', kind: '' },        // 这部作品选了「中字 / 原版」哪种
                     sug: { q: '', open: false, hi: -1, kind: '', alias: null, exact: null, items: [] },   // 搜索建议
+                    bvis: { n: -1, h: 0 },                // 浏览网格现在出了几张 / 藏了几张(封面加载不出来的不算;-1 = 网格还没报)
                     // phase 3 浏览页:facets = 当前筛选的分面计数(冻结;第 1 页随结果下发);view = ''(浏览)/ 'tags'(标签云)/ 'tag'(标签页);
                     //   labv = 学到新名字(标签/厂牌/女优)时 +1,让标题重算;routeOn = 地址栏路由已接管(启动时先按地址栏开页,再开始写)
                     facets: null, view: '', labv: 0, routeOn: false,
@@ -2257,6 +3653,7 @@
             };
         },
         components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud, DgAdRails, DgAdActresses },
+        directives: { dgCv: cvDirective },   // 首页行 / 搜索联想的封面 <img v-dg-cv="item">
         computed: {
             // 播放页作品信息条(currentGroup._meta 的展示版;没有 _meta 不出)
             adMeta() {
@@ -2319,13 +3716,15 @@
                 if (noList(this.adult.view) || this.adult.view === 'tag') return this.adBrowseTitle;
                 return catalog.summary(this.browse.type, this.browse.sel);
             },
-            // 搜索建议下拉的各行:分类词 → 「按分类浏览」;作品卡片(≤8);最后一行「搜索全部站点」
+            // 搜索建议下拉的各行:分类词 → 「按分类浏览」;作品卡片(≤8,封面加载不出来的不出);最后一行「搜索全部站点」。
+            //   封面判定不让它重算(不读 covers.ver()):下拉开着时不删行(鼠标指着的 / 方向键选中的行不跳),
+            //   下次重算(打字出了新建议 / 重新打开)才把封面加载不出来的那几行筛掉
             adSugRows() {
                 const S = this.adult && this.adult.sug;
                 if (!S || !S.open) return [];
                 const rows = [];
                 if (S.alias) rows.push({ t: 'alias', k: 'a', label: S.alias.label, alias: S.alias });
-                (S.items || []).forEach(it => rows.push({ t: 'item', k: 'i:' + it.id, it }));
+                (S.items || []).forEach(it => { if (covers.visible(it)) rows.push({ t: 'item', k: 'i:' + it.id, it }); });
                 rows.push({ t: 'all', k: 'all', q: S.q });
                 return rows;
             },
@@ -2334,6 +3733,11 @@
             adNoList() { return !!(this.adultMode && this.adult && noList(this.adult.view)); },
             // 刷短片入口:有目录、不是电视、feed.js 加载了
             adFeedOn() { return !!(this.adultMode && this.adult && this.adult.catalog && !this.isTVMode && root.dgAdultFeed && typeof root.dgAdultFeed.open === 'function'); },
+            // 浏览页底栏「已经到底了 · 共 N 部」/ 空状态按网格现在出了几张算(封面加载不出来藏掉的不算;网格还没报 → 片单长度)
+            adBrowseN() {
+                const v = this.adult && this.adult.bvis, b = this.browse;
+                return (v && v.n >= 0) ? v.n : ((b && Array.isArray(b.items)) ? b.items.length : 0);
+            },
             // 搜索结果(全站扇出可到几百张)→ 窗口化网格的卡片:海报按主组件的 finalPoster / 回退规则,_g 是原来的分组(点了 openDetail)
             adSearchItems() {
                 if (!this.adultMode) return [];
@@ -2342,10 +3746,14 @@
                     if (!g || !g.name) continue;
                     let key = '', pic = '';
                     try { key = this.posterKey(g); pic = this.isFallback(key) ? '' : (this.finalPoster(g) || ''); } catch (e) { }
-                    out.push(Object.freeze({
+                    const o = {
                         id: g.name + '|' + (g._work || ''), _wk: typeof g._wk === 'string' ? g._wk : '', title: g.name, name: g.name, poster_path: pic,
                         _n: (g.sources || []).length, _sub: g._workLabel || '', _badge: '', _code: '', _durText: '', _pk: key, _g: g,
-                    }));
+                    };
+                    // 封面备用:同组别的线路的海报(先挑不同图床的,≤3);主封面坏了 / 在死图床上时网格挨个试,都不行就藏到「已隐藏 N 部」里
+                    const alt = searchAlts(g, pic, 3);
+                    if (alt.length) o._alt = alt;
+                    out.push(Object.freeze(o));
                 }
                 return out;
             },
@@ -2380,6 +3788,15 @@
             },
             // 浏览页的类型/筛选/开关一变 → 写地址栏(新的一条历史;从地址栏来的 / 面板开着时替换当前这条)
             adRouteHash(h) { this._adRouteSync(h); },
+            // 搜索联想的行变了(封面藏掉了几行):方向键选中的那行跟着它的键走,不落到别的行上(它自己没了 → 原位置,不越界)
+            adSugRows(rows) {
+                const S = this.adult && this.adult.sug;
+                if (!S || !(S.hi >= 0) || !Array.isArray(rows)) return;
+                let i = -1;
+                for (let j = 0; j < rows.length; j++) if (rows[j].k === this._adSugHiK) { i = j; break; }
+                const hi = i >= 0 ? i : Math.min(S.hi, rows.length - 1);
+                if (hi !== S.hi) S.hi = hi;
+            },
             // [adult] p4:历史整份换了(云同步合并 / 清空)→ 猜你喜欢按新历史重算(签名没变就什么都不做)
             watchHistory() { if (this.adultMode && this.adult && this.adult.home === 'ok') this._adForYouSoon(1500); },
             // [adult] p4:偏好设置打开 → onSettingsRender(空容器,订阅者自己往里放设置行)
@@ -2391,9 +3808,13 @@
         mounted() {
             if (!this.adultMode) return;
             bridge.app = this;   // [adult] p4:preview.js / feed.js 经 DgAdult 的桥用(去广告地址、开作品、主播放器忙不忙)
+            if (!this._adCvOff) this._adCvOff = covers.listen(() => this._adCvApply());   // 封面判了藏 / 图床死活变了 → 首页行跟着筛
             this._adHashFn = () => this._adOnHash();
             this._adPopFn = () => this._adOnPop();
             try { root.addEventListener('hashchange', this._adHashFn); root.addEventListener('popstate', this._adPopFn); } catch (e) { }
+        },
+        beforeUnmount() {
+            if (this._adCvOff) { this._adCvOff(); this._adCvOff = null; }
         },
         methods: {
             adultApplyConfig(config) {
@@ -2402,6 +3823,7 @@
                 this.adult.intro = c.intro_enabled === true;   // 站长显式开了片头学习(INTRO_DISABLE=0)才显示那两行设置
                 this.adult.siteName = brand.apply(c.site_name);
                 brand.applyBuy(c.purchase_url);
+                covers.setServerDead(c.cover_dead_hosts);   // 服务器 DNS 两次查无此域名的图床:这些地址的封面不请求
             },
             // 首页:目录各行(最多等 6s,与原来的 Hero 一样不挂死 loader);分类栏的「今日」数后台拉
             async adultLoadHome() {
@@ -2411,7 +3833,8 @@
                 const p = fetchJson('/api/catalog/home', 15000);
                 const d = await Promise.race([p, sleep(6000).then(() => 'slow')]);
                 const apply = (home) => {
-                    const r = homeToRows(home);
+                    this._adHomeAll = homeToRows(home);            // 原始的行(没筛过):每批封面判定生效时从它重新筛(活过来的卡片 / 行放回来)
+                    const r = this._adCvRows(this._adHomeAll);     // 没有能用封面的卡片(pic 空 / 只在死图床上)渲染之前就拿掉,不闪一下
                     this.rowLists = Object.assign({}, r.lists);
                     this.rowConfigs = Object.assign({}, r.configs);
                     this.adult.home = r.order.length ? 'ok' : 'empty';
@@ -2551,7 +3974,9 @@
                 if (!n) return;
                 if (e.key === 'ArrowDown') { e.preventDefault(); S.hi = S.hi >= n - 1 ? 0 : S.hi + 1; }
                 else if (e.key === 'ArrowUp') { e.preventDefault(); S.hi = S.hi <= 0 ? n - 1 : S.hi - 1; }
-                else if (e.key === 'Escape') { e.preventDefault(); this.adSugClose(); }
+                else if (e.key === 'Escape') { e.preventDefault(); this.adSugClose(); return; }
+                const row = this.adSugRows[S.hi];
+                this._adSugHiK = row ? row.k : '';   // 选中的是哪一行(按键认):前面的行因为封面藏掉时,高亮跟着这一行走
             },
             adSugPick(row) {
                 if (!row) return;
@@ -2586,6 +4011,7 @@
                     b.items = []; b.page = 0; b.totalPages = 0; b.total = 0;
                     b.done = false; b.error = false; b.idle = 0; b.loading = false;
                     this._browseSeen = new Set();
+                    this._adPrevPage = null;
                     this._browsePickId = null;
                     this._adCursor = '';
                     this._adPaged = false;
@@ -2624,7 +4050,12 @@
                     if (first) this._adPaged = !hasCur;
                     if (this._adPaged) b.done = page >= b.totalPages || (!fresh.length && !(d && d.results && d.results.length));
                     else { this._adCursor = (typeof d.cursor_next === 'string' && d.cursor_next.length <= 400) ? d.cursor_next : ''; b.done = !this._adCursor; }
-                    b.idle = fresh.length >= 4 ? 0 : b.idle + 1;
+                    // 「稀」按留下来能出的算:这一页渲染之前就能出的(没封面 / 死图床上的不算)不到 4 张,或者上一页到现在(封面判定已经出来了)
+                    //   能出的不到 4 张 → 稀。连着 4 页稀就不再自己往下翻(露出「加载更多」):整页被藏的片单不会一页接一页地狂拉
+                    const vis = fresh.filter(covers.visible).length;
+                    const prevVis = (!first && this._adPrevPage) ? this._adPrevPage.filter(covers.visible).length : Infinity;
+                    if (fresh.length) this._adPrevPage = fresh;
+                    b.idle = (vis >= 4 && prevVis >= 4) ? 0 : b.idle + 1;
                     if (first) {
                         const f = d && d.facets ? normFacets(d.facets) : null;
                         this.adult.facets = f ? Object.freeze(f) : null;
@@ -3028,9 +4459,94 @@
                 t = setTimeout(go, 20000);
             },
             adRelPick(item) { if (item && item._wk) this.openWork(item); },
-            // 搜索结果的窗口化网格:点卡片 = 原来的 openDetail(分组);海报坏了走原来的回退(换同组别的线路的海报 → 中性占位)
+            // 搜索结果的窗口化网格:点卡片 = 原来的 openDetail(分组)。海报坏了由封面控制器换同组别的线路的海报(_alt = searchAlts),都不行就藏
             adSearchPick(item) { if (item && item._g && typeof this.openDetail === 'function') this.openDetail(item._g); },
-            adSearchImgErr(item) { if (item && item._pk && typeof this.handleImgError === 'function') { try { this.handleImgError(item._pk, item.title); } catch (e) { } } },
+            // ---------- 封面加载不出来就藏(见 covers)----------
+            // 首页行 / 搜索联想的 <img :src>:该试的那个地址(主封面坏了换备用;不读响应式版本号 —— 根组件不跟着每批判定重渲染)
+            adCvSrc(item) { return covers.src(item); },
+            // 浏览网格报它现在出了几张 / 藏了几张(变了才报):底栏的「共 N 部」/ 空状态按这个
+            adBrowseVis(n, h) {
+                const v = this.adult.bvis, nn = Math.max(0, Number(n) || 0), hh = Math.max(0, Number(h) || 0);
+                if (!v || v.n !== nn || v.h !== hh) this.adult.bvis = { n: nn, h: hh };
+            },
+            // 收藏的封面:这部作品 / 这组搜索结果的封面控制器换到备用地址并且真加载出来了 → 用那张(主封面是坏的);没有 → ''
+            adOkPic(g, pk) { return covers.okPic(g && typeof g._wk === 'string' ? g._wk : '', String(pk || '')); },
+            // homeToRows 的结果 → 拿掉没有能用封面的卡片;一张都不剩的行整行不出(新片速递拿掉之后不足 12 部也整行不出)
+            _adCvRows(r) {
+                const lists = {}, configs = {}, order = [];
+                for (const k of (r && r.order) || []) {
+                    const L = (r.lists[k] || []).filter(covers.visible);
+                    if (L.length < rowMin(k)) continue;
+                    lists[k] = L; configs[k] = r.configs[k]; order.push(k);
+                }
+                return { configs, lists, order };
+            },
+            // 一批封面判定生效:首页目录行按 homeToRows 的原始结果(_adHomeAll)重新筛 —— 藏掉的卡片拿掉,图床活过来 / 判藏撤销了的放回来;
+            //   不够下限的行(新片速递:不足 12 部)整行拿掉,又够了就按原来的顺序整行放回来。猜你喜欢照旧只在现有片单上筛(放在第一行目录行后面)。
+            //   不让正在看的内容跳:以视口里第一个留下的行为锚,改完量一下它挪了多少再滚回去(上面有行没了 / 回来了时);横排滚过的行同样以第一张露出来的卡为锚补 scrollLeft;
+            //   播放页开着(首页各层还排着版、只是看不见)→ 不滚窗口,改的是关掉播放页时要回到的位置(_adReturnY),回来还是原来那张卡;
+            //   焦点在被拿掉的卡上 → 给同一行紧跟在它后面、还留着的那张。搜索联想不在这里动(开着时不删行,见 adSugRows)
+            _adCvApply() {
+                if (!this.adultMode) return;
+                const lists = this.rowLists || {}, cfgs = this.rowConfigs || {}, all = this._adHomeAll || null;
+                const vis = (it) => !it || typeof it !== 'object' || !it._wk || covers.visible(it);
+                const same = (a, b) => Array.isArray(a) && a.length === b.length && a.every((x, i) => x === b[i]);
+                const base = [], extra = [], drop = [];
+                let changed = false;
+                if (all) all.order.forEach(k => {
+                    const L = all.lists[k].filter(vis);
+                    if (L.length < rowMin(k)) { if (cfgs[k]) { changed = true; drop.push(k); } return; }
+                    if (!cfgs[k] || !same(lists[k], L)) { changed = true; base.push([k, L]); } else base.push([k, lists[k]]);
+                });
+                Object.keys(cfgs).forEach(k => {
+                    if (all && all.configs[k]) return;
+                    const L = lists[k];
+                    if (!Array.isArray(L) || !cfgs[k] || !cfgs[k].adult) { extra.push([k, L]); return; }
+                    const f = L.filter(vis);
+                    if (f.length === L.length) { extra.push([k, L]); return; }
+                    changed = true;
+                    if (f.length >= rowMin(k)) extra.push([k, f]); else drop.push(k);
+                });
+                if (!changed) return;
+                const nl = {}, nc = {};
+                base.slice(0, 1).concat(extra, base.slice(1)).forEach(x => { nl[x[0]] = x[1]; nc[x[0]] = x[0] in cfgs ? cfgs[x[0]] : all.configs[x[0]]; });
+                const d = root.document;
+                let anchor = null, top = 0;
+                try {
+                    const secs = d.querySelectorAll('[data-row-key]');
+                    for (let i = 0; i < secs.length; i++) {
+                        if (drop.indexOf(secs[i].getAttribute('data-row-key')) >= 0) continue;
+                        const rc = secs[i].getBoundingClientRect();
+                        if (rc.bottom > 0 && (rc.height > 0 || rc.width > 0)) { anchor = secs[i]; top = rc.top; break; }
+                    }
+                } catch (e) { anchor = null; }
+                // 收起状态的横排(.hot-row)滚过了的:记下行里最左边露出来的几张卡的 left
+                const hx = rowMark(d && d.body, '[data-row-key]', 'data-row-key', '.hot-row', '.hot-card[data-wk]', 'data-wk');
+                const fm = focusMark(d && d.body, '[data-row-key]', 'data-row-key', '.hot-card[data-wk]', 'data-wk');
+                if (Object.keys(nc).join('\n') !== Object.keys(cfgs).join('\n')) this.rowConfigs = nc;
+                this.rowLists = nl;
+                if (this.adult && this.adult.home === 'empty' && base.length) this.adult.home = 'ok';
+                // 展开网格的页码别停在已经不存在的页
+                try { Object.keys(nl).forEach(k => { const vp = this.viewPages && this.viewPages[k]; const n = Math.ceil(((nl[k] || []).length || 0) / 20) || 1; if (vp > n) this.viewPages[k] = n; }); } catch (e) { }
+                this.$nextTick(() => {
+                    try {
+                        if (anchor && anchor.isConnected !== false) {
+                            const dy = anchor.getBoundingClientRect().top - top;
+                            if (Math.abs(dy) >= 1) {
+                                if (this.showDetail) {
+                                    if (this._adReturnY != null) this._adReturnY = Math.max(0, this._adReturnY + dy);
+                                } else {
+                                    const y = Math.max(0, (typeof root.scrollY === 'number' ? root.scrollY : 0) + dy);
+                                    if (typeof this._jumpTo === 'function') this._jumpTo(y);   // 瞬间到位(全站 scroll-behavior:smooth)
+                                    else if (typeof root.scrollTo === 'function') root.scrollTo(0, y);
+                                }
+                            }
+                        }
+                    } catch (e) { }
+                    rowBack(hx);
+                    focusBack(fm);
+                });
+            },
             // ---------- [adult] p4 刷短片(#/feed;页面本身在 adult/feed.js 的 window.dgAdultFeed)----------
             //   入口按钮 → 压一条 #/feed(返回键关);刷短片里点片名 → 刷短片先收起(停掉视频),开播放页;关播放页回到刷短片原位
             adOpenFeed() {
@@ -3141,7 +4657,7 @@
                     if (seq !== this._adFySeq) return;
                     for (const c of (d && Array.isArray(d.results) ? d.results : [])) {
                         const it = cardToItem(c);
-                        if (!it || seen.has(it._wk)) continue;
+                        if (!it || seen.has(it._wk) || !covers.visible(it)) continue;   // 封面出不来的不推荐
                         seen.add(it._wk);
                         items.push(Object.freeze(it));
                         if (items.length >= 24) break;
@@ -3251,6 +4767,12 @@
         hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, isTV,
         openWork: openWorkExt, incognito, privLocked, netBlock, netNow, cellOk, pvOn, CELL_KEY, PV_KEY,
         normRelated, forYouTags, noList, actSections, actIndexUrls, isFeedHash, FEED_HASH,
+        // 封面加载不出来就藏(纯函数 + 控制器)
+        covers, makeCovers, makeCoverHosts, coverHost, coverCands, coverClass, coverVerdict, coverGuard, coverControls, coverProbe, coverProbeUrl, coverHead, cleanAlt, searchAlts, cvDirective,
+        focusMark, focusBack, rowMark, rowBack, anchorMark, anchorBack,
+        COVER: Object.freeze({ MIN: CV_MIN, TTL_MS: CV_TTL_MS, KEY: CV_KEY, ALT_MAX: CV_ALT_MAX, PROBE_MS: CV_PROBE_MS, RETRY_MS: CV_RETRY_MS, ROUND2_MS: CV_ROUND2_MS,
+            STALL_MS: CV_STALL_MS, STALL_OK_MS: CV_STALL_OK_MS, REUSE_MS: CV_REUSE_MS, GUARD_MS: CV_GUARD_MS, GUARD_N: CV_GUARD_N, FREEZE_MS: CV_FREEZE_MS, BEAT_MS: CV_BEAT_MS,
+            KICK_MS: CV_KICK_MS, PAR: CV_PAR, STRIKE_SPAN: CV_STRIKE_SPAN, STRIKE_TTL: CV_STRIKE_TTL, NEW_MAX: CV_NEW_MAX, NEW_WIN: CV_NEW_WIN, RECHECK_FIRST: CV_RECHECK_FIRST, RECHECK_MS: CV_RECHECK_MS }),
         _hooks: hooks, _bridge: bridge,
     };
 });

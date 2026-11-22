@@ -1161,6 +1161,9 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         const fetched = [];
         const big = (n) => Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(n, n % 7)]);
         const map = { 'c:A|pa': 'https://img.example/a.jpg', 'c:B|pa': 'https://img.example/b.bin', 'c:C|pa': 'https://img.example/c.html', 'c:D|pa': 'http://10.0.0.1/d.jpg', 'c:E|pa': 'https://img.example/e.jpg' };
+        // 确定取不到(404)/ 暂时取不到(502)的几种上游失败;一组里有一个暂时的就不算确定
+        Object.assign(map, { 'c:F|pa': 'https://img.example/f404.jpg', 'c:G|pa': 'https://img.example/g503.jpg', 'c:H|pa': 'https://nx.example/h.jpg', 'c:I|pa': 'https://img.example/i-timeout.jpg',
+            'c:J|pa': 'https://img.example/j-reset.jpg', 'c:K|pa': 'https://img.example/k429.jpg', 'c:M|pa': ['https://img.example/f404.jpg', 'https://img.example/i-timeout.jpg'], 'c:N|pa': ['http://10.0.0.1/n.jpg', 'https://img.example/f404.jpg'] });
         for (let i = 1; i <= 4; i++) map['c:L' + i + '|pa'] = 'https://img.example/l' + i + '.jpg';
         let tnow = T0;
         const px = IMG.createImgProxy({
@@ -1172,6 +1175,12 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
                 if (/c\.html$/.test(u)) return Buffer.from('<html><body>not an image at all</body></html>');
                 if (/e\.jpg$/.test(u)) return big(6 * 1024 * 1024);
                 if (/l\d\.jpg$/.test(u)) return big(400 * 1024);
+                if (/f404\.jpg$/.test(u)) throw new Error('status 404');
+                if (/g503\.jpg$/.test(u)) throw new Error('status 503');
+                if (/k429\.jpg$/.test(u)) throw new Error('status 429');
+                if (/nx\.example/.test(u)) throw Object.assign(new Error('getaddrinfo ENOTFOUND nx.example'), { code: 'ENOTFOUND' });
+                if (/i-timeout/.test(u)) throw new Error('timeout');
+                if (/j-reset/.test(u)) throw Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' });
                 throw new Error('boom');
             },
         });
@@ -1188,11 +1197,18 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         r = await call({ k: 'c:C', s: 'pa' });
         const n1 = fetched.length;
         const r2 = await call({ k: 'c:C', s: 'pa' });
-        ok(r.code === 502 && r2.code === 502 && fetched.length === n1, '不是图片 → 502,1 小时内不再试');
+        ok(r.code === 404 && r2.code === 404 && r2.h['cache-control'] === 'no-store' && fetched.length === n1, '不是图片 → 404(确定取不到,前端藏卡),1 小时内不再试、再问还是 404');
         r = await call({ k: 'c:D', s: 'pa' });
-        ok(r.code === 502 && !fetched.some((u) => /10\.0\.0\.1/.test(u)) && px.stats().refused >= 1, '索引里的地址是内网 → 拒,一次都不连');
+        ok(r.code === 404 && r.body && r.body.error === 'REFUSED' && !fetched.some((u) => /10\.0\.0\.1/.test(u)) && px.stats().refused >= 1, '索引里的地址是内网 → 拒(404),一次都不连');
         r = await call({ k: 'c:E', s: 'pa' });
-        ok(r.code === 502, '超过 5MB → 拒');
+        ok(r.code === 404, '超过 5MB → 拒(404)');
+        {
+            const codes = {};
+            for (const k of ['F', 'G', 'H', 'I', 'J', 'K', 'M', 'N']) codes[k] = (await call({ k: 'c:' + k, s: 'pa' })).code;
+            const n2 = fetched.length, again = { F: (await call({ k: 'c:F', s: 'pa' })).code, G: (await call({ k: 'c:G', s: 'pa' })).code };
+            ok(JSON.stringify(codes) === JSON.stringify({ F: 404, G: 502, H: 404, I: 502, J: 404, K: 502, M: 502, N: 404 }) && JSON.stringify(again) === JSON.stringify({ F: 404, G: 502 }) && fetched.length === n2,
+                '确定取不到(上游 404 / 域名不存在 / 连接被重置 / 内网 + 404)→ 404;超时 / 上游 5xx / 429 / 一组里有一个是超时 → 502;1 小时内再问同一个状态码(不再出网)', [codes, again]);
+        }
         ok((await call({ k: 'c:NOPE', s: 'pa' })).code === 404 && (await call({ k: 'x', s: 'pa' })).code === 400 && (await call({ k: 'c:A', s: '../x' })).code === 400 && (await call({ url: 'https://img.example/a.jpg' })).code === 400,
             '不认识的作品 404;参数不合法 400;只给 url= → 400');
         for (let i = 1; i <= 4; i++) { tnow += 1000; await call({ k: 'c:L' + i, s: 'pa' }); }

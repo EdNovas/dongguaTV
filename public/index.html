@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=8"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=9"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -5121,7 +5121,8 @@
                 <button v-for="(r, i) in adSugRows" :key="r.k" type="button" class="dg-sug-row" :class="{ hi: adult.sug.hi === i }"
                     role="option" :aria-selected="adult.sug.hi === i ? 'true' : 'false'" @mousedown.prevent @click="adSugPick(r)">
                     <template v-if="r.t === 'item'">
-                        <img :src="getPosterUrl(r.it.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="">
+                        <!-- [adult] 封面加载不出来 / 没有能用封面的作品整行不出(adSugRows 筛掉;方向键选中的那行跟着它自己走) -->
+                        <img v-dg-cv="r.it" :src="adCvSrc(r.it)" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="">
                         <span class="dg-sug-main"><span class="dg-sug-name">{{ r.it.title }}</span><span class="dg-sug-sub"><span v-if="r.it._code" class="dg-sug-code">{{ r.it._code }}</span>{{ [r.it._durText, r.it._n >= 2 ? r.it._n + '线' : '', r.it._badge].filter(Boolean).join(' · ') }}</span></span>
                     </template>
                     <template v-else-if="r.t === 'alias'"><i class="fas fa-folder-open" aria-hidden="true"></i><span class="dg-sug-main">按分类浏览「{{ r.label }}」</span></template>
@@ -5468,7 +5469,8 @@
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id" :data-wk="item._wk || null"
                                 @click="item._wk ? openWork(item) : autoSearch(item.title || item.name, item.original_title || item.original_name)">
                                 <div class="poster-wrap">
-                                    <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+                                    <!-- [adult] 目录卡片的封面交给 DgAdult.covers(坏了换备用地址,加载不出来整张卡从行里拿掉;弱网慢的不动) -->
+                                    <img v-dg-cv="item" :src="item._wk && adultMode ? adCvSrc(item) : getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
                                         @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                     <div v-if="!item._wk" class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                         item.vote_average
@@ -5489,7 +5491,7 @@
                         <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id" :data-wk="item._wk || null"
                             @click="item._wk ? openWork(item) : autoSearch(item.title || item.name, item.original_title || item.original_name)">   <!-- [adult] 同上 -->
                             <div class="poster-wrap">
-                                <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+                                <img v-dg-cv="item" :src="item._wk && adultMode ? adCvSrc(item) : getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                 <div v-if="!item._wk" class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average
                                     ? item.vote_average.toFixed(1) : 'N/A' }}</div>
@@ -5602,7 +5604,8 @@
             <dg-ad-cloud v-if="adultMode && adult.view === 'tags'" :b="browse.sel.b || ''" @go="adGo" @learn="adLearned"></dg-ad-cloud>
             <!-- [adult] p4 女优索引(#/actresses):热门女优(全部 / 日本各分类,按作品数)+ 按名字搜 -->
             <dg-ad-actresses v-if="adultMode && adult.view === 'actresses'" @go="adGo" @learn="adLearned"></dg-ad-actresses>
-            <dg-ad-grid v-if="adultMode" v-show="!adNoList" :items="browse.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse.loading" @pick="browsePick"></dg-ad-grid>
+            <!-- [adult] :cover = 封面加载不出来的卡片从网格里拿掉,底下「已隐藏 N 部 · 显示」 -->
+            <dg-ad-grid v-if="adultMode" v-show="!adNoList" :cover="true" :items="browse.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse.loading" @pick="browsePick" @vis="adBrowseVis"></dg-ad-grid>
             <div class="browse-grid" v-if="!adultMode">
                 <div class="browse-card" v-for="item in browse.items" :key="'b-' + item.id" :data-bid="item.id"
                     :tabindex="isTVMode ? 0 : null" @click="browsePick(item)" @keydown.enter.prevent="browsePick(item)">
@@ -5631,7 +5634,7 @@
                     加载失败，可能是网络不稳定
                     <button type="button" class="browse-btn" @click="browseRetry"><i class="fas fa-rotate-right" aria-hidden="true"></i> 重试</button>
                 </div>
-                <div v-else-if="browse.done && !browse.items.length" class="browse-empty">
+                <div v-else-if="browse.done && !(adultMode ? adBrowseN : browse.items.length)" class="browse-empty">   <!-- [adult] 按网格出了几张算:封面加载不出来全藏了也出空状态(网格自己底下还有「已隐藏 N 部 · 显示」) -->
                     <i class="fas fa-film" aria-hidden="true"></i>
                     <div class="browse-empty-t">没有符合条件的作品</div>
                     <div class="browse-empty-s">换个年份或排序试试，或者放宽筛选条件</div>
@@ -5640,7 +5643,7 @@
                         <button v-if="browse.keyword" type="button" class="browse-btn" @click="browseSearchKeyword">按片名搜索「{{ browse.keyword }}」</button>
                     </div>
                 </div>
-                <div v-else-if="browse.done" class="browse-state muted">已经到底了 · 共 {{ browse.items.length }} 部</div>
+                <div v-else-if="browse.done" class="browse-state muted">已经到底了 · 共 {{ adultMode ? adBrowseN : browse.items.length }} 部</div>   <!-- [adult] 封面藏掉的不算 -->
                 <button v-else-if="!browse.loading" type="button" class="browse-btn" @click="browseMore(true)">加载更多</button>
             </div>
         </div>
@@ -5675,7 +5678,8 @@
 
             <!-- 搜索结果网格 (即使在 loading 也可以显示) -->
             <!-- [adult] p4 成人站全站扇出能到几百张:换成窗口化网格(只渲染视口附近几块,滚动不写响应式状态);点卡片照旧 openDetail -->
-            <dg-ad-grid v-if="adultMode && groupedList.length > 0" :keep="true" :items="adSearchItems" :tv="isTVMode" @pick="adSearchPick" @imgerr="adSearchImgErr"></dg-ad-grid>
+            <!-- [adult] 封面坏了:网格自己换同组别的线路的海报(_alt),都不行就藏到「已隐藏 N 部 · 显示」里(不再走 handleImgError) -->
+            <dg-ad-grid v-if="adultMode && groupedList.length > 0" :keep="true" :cover="true" :items="adSearchItems" :tv="isTVMode" @pick="adSearchPick"></dg-ad-grid>
             <div class="result-grid" v-if="groupedList.length > 0 && !adultMode">
                 <div class="result-card" v-for="group in groupedList" :key="group.name + '|' + (group._work || '')" @click="openDetail(group)">
                     <div class="poster-wrap">
@@ -6643,7 +6647,7 @@
                     //   换了别的账号登录时,推送由 _pushRefreshState 的归属检查退掉、收藏缓存按账号认,不会串)
                     console.log('[V2Board] API 确认套餐已过期，自动登出');
                     clearAuthState();
-                    alert('您的机场套餐已到期，请续费后重新登录。' + ((window.DgAdult && window.DgAdult.ON === true) ? window.DgAdult.brand.renewText() : '\n\n前往续费: domain.ednovas.xyz'));   // [adult] 续费地址用站长配的 purchase_url(没配不提)
+                    alert('您的机场套餐已到期，请续费后重新登录。' + ((window.DgAdult && window.DgAdult.ON === true) ? window.DgAdult.brand.renewText() : '\n\n前往续费: domain.ednovas.xyz'));   // [adult] 续费地址用 /api/config 的 purchase_url(默认主站 ednovas.me;站长关掉就不提)
                     location.reload();
                 }
             }, 2 * 60 * 60 * 1000); // 每2小时检查
@@ -16764,7 +16768,7 @@
                     const n = check ? (this._favEpCountOf(check) || (check === cs ? ((eps && eps.length) || 0) : 0)) : 0;
                     const workSig = this._favWorkSig(g);
                     const pk = this.posterKey(g);
-                    const poster = String((this.imageMap && this.imageMap[pk]) || (g && g.pic) || '');
+                    const poster = String((this.imageMap && this.imageMap[pk]) || (this.adultMode && typeof this.adOkPic === 'function' && this.adOkPic(g, pk)) || (g && g.pic) || '');   // [adult] 主封面坏了、封面控制器换到的备用地址真加载出来了 → 收藏用那张
                     return {
                         name: String((g && g.name) || '').trim(), poster: poster.slice(0, 500),
                         workSig, workLabel: workSig ? String(g._workLabel || '') : '',

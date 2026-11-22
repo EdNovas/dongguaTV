@@ -843,8 +843,8 @@ try {
     const nPic = readLines(CAT_LOG).filter(x => x.ev === 'picUrl').length;
     r = await api('GET', '/api/img?k=' + encodeURIComponent('c:SSIS-001') + '&s=a&url=' + encodeURIComponent(STUB + '/img/evil.jpg'), { cookie: CK });
     const pq = readLines(CAT_LOG).filter(x => x.ev === 'picUrl');
-    ok(r.status === 502 && r.j && r.j.error === 'REFUSED' && pq.length === nPic + 1 && pq[pq.length - 1].k === 'c:SSIS-001' && pq[pq.length - 1].s === 'a' && pq[pq.length - 1].meta === true,
-        '/api/img:地址从目录索引查(按 k/s),请求里的 url= 不看', [r.status, r.j, pq.slice(-1)]);
+    ok(r.status === 404 && r.j && r.j.error === 'REFUSED' && pq.length === nPic + 1 && pq[pq.length - 1].k === 'c:SSIS-001' && pq[pq.length - 1].s === 'a' && pq[pq.length - 1].meta === true,
+        '/api/img:地址从目录索引查(按 k/s),请求里的 url= 不看;索引里的地址被拒 = 确定取不到 → 404(前端藏卡)', [r.status, r.j, pq.slice(-1)]);
     ok(stubCount() === n0, '/api/img:索引里的地址是回环地址 → 拒,一次都不连(SSRF)', stubLog.slice(n0).map(x => x.url));
     r = await api('GET', '/api/img?k=' + encodeURIComponent('t:blocked1'), { cookie: CK });
     ok(r.status === 404, '/api/img:片名被拦的作品 → 404(不取)', r.status);
