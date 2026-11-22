@@ -4,7 +4,7 @@ android {
     namespace = "com.ednovas.donguatv"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.ednovas.donguatv"
+        applicationId "com.private.dgx"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

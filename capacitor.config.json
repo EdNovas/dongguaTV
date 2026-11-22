@@ -1,9 +1,9 @@
 ﻿{
-    "appId": "com.ednovas.donguatv",
-    "appName": "E视界",
+    "appId": "com.private.dgx",
+    "appName": "DGX",
     "webDir": "public",
     "server": {
-        "url": "https://ednovas.video",
+        "url": "https://example.invalid",
         "cleartext": true
     },
     "plugins": {

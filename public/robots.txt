@@ -1,15 +1,3 @@
-# E视界 (DongguaTV) - 流媒体聚合播放器
-# https://ednovas.video
-
+# 成人版:全站禁止收录(搜索引擎/AI 爬虫一律不收)
 User-agent: *
-Allow: /
-
-# 不索引 API 端点
-Disallow: /api/
-Disallow: /libs/
-
-# 站点地图
-Sitemap: https://ednovas.video/sitemap.xml
-
-# 爬虫延迟（可选，防止过度请求）
-Crawl-delay: 1
+Disallow: /
