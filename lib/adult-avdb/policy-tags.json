@@ -1,0 +1,419 @@
+{
+ "_note": "[adult] AVDB 标签 → 内容政策(运行时副本,源自调研 impl/p34/avdb-policy-tags.json v1,去掉了样本统计和示例)。匹配:tag.split(\",\") ∪ category[] 解实体后小写精确匹配 lists(block > review_hide > review_code);不在 lists 里的先看 allow(永不进政策),再按 patterns(block > review_hide > review_code)。type_exceptions:这些标签在这些类型的行上不算(\"Leaked\" 在无码流出行 = 去码标记;\"AI\" 在日本片行多半是演员名碎片)。title_signals 与 title_block_patterns 作用在 AVDB 英文片名上(只升不降)。改这个文件 = 改 POLICY_VERSION(lib/adult-avdb/policy.js 指纹),启动时重算 avdb_tag 与行级 pol。",
+ "version": 1,
+ "lists": {
+  "block": {
+   "minor-school": [
+    "High School Girl",
+    "Schoolgirl",
+    "school girl",
+    "School Girls",
+    "Schoolgirls",
+    "School Girls Hentai",
+    "JK",
+    "JK uniform",
+    "JK Girl",
+    "jk student",
+    "Student Girl",
+    "Female High School Student"
+   ],
+   "minor-age": [
+    "Loli",
+    "Lolita",
+    "Lolita type",
+    "Lolita Face",
+    "Loli system",
+    "Lolicon",
+    "Shota",
+    "Shotacon",
+    "Cute Little Boy",
+    "Childlike Look",
+    "Infant discovered!",
+    "Minor",
+    "little girl",
+    "lustful little girl",
+    "Underage"
+   ],
+   "school-attire": [
+    "Sailor Suit",
+    "Sailor Uniform",
+    "School Uniform",
+    "Academy Uniform",
+    "School Swimsuits",
+    "School Swimsuit",
+    "School_mizugi",
+    "Gym Suit",
+    "Gym Clothes",
+    "Bloomers",
+    "Bloomer",
+    "Gym Clothes/Bloomers",
+    "Gym Uniform & Bloomers"
+   ],
+   "voyeur": [
+    "Voyeur",
+    "Voyeurism",
+    "Voyeurism And Peeping",
+    "Sneak Shots",
+    "Hidden Camera",
+    "Hidden Camera File",
+    "Hidden Cam",
+    "Taking pictures secretly",
+    "Peeping",
+    "Upskirt"
+   ],
+   "drugging-incapacitation": [
+    "Drugs And Aphrodisiacs",
+    "Drugs",
+    "Drug",
+    "Drug addict",
+    "Drug / Aphrodisiac",
+    "Drug Use",
+    "drug-induced sex",
+    "Drugged",
+    "Aphrodisiac",
+    "Sleeping Pills",
+    "Sleeping",
+    "Sleep",
+    "Sleeping Attack",
+    "Sleep R** Gallery",
+    "Coma",
+    "Unconscious"
+   ],
+   "real-leak": [
+    "Outflow"
+   ],
+   "deepfake": [],
+   "bestiality": []
+  },
+  "review_code": {
+   "noncon": [
+    "Rape",
+    "Gang Rape",
+    "Torture & Rape",
+    "reverse rape",
+    "Molester",
+    "Molestation",
+    "Chikan",
+    "Confinement",
+    "Imprisonment",
+    "Abduction",
+    "Kidnapping",
+    "Blackmail",
+    "threatened",
+    "RYONA",
+    "Violence",
+    "Humiliation",
+    "Shame And Humiliation"
+   ],
+   "incest": [
+    "Incest",
+    "Incest Hentai",
+    "Stepfamily",
+    "Stepmother",
+    "Stepmom",
+    "Mother",
+    "Mom",
+    "mother and son",
+    "brother and sister",
+    "mother and daughter",
+    "taboo family",
+    "Mother In Law",
+    "Mother-In-Law",
+    "sister-in-law",
+    "Daughter-in-law",
+    "Aunt",
+    "auntie",
+    "niece",
+    "cousin",
+    "uncle"
+   ],
+   "incap-fantasy": [
+    "Hypnosis",
+    "Hypnotism",
+    "Hypnotic Brainwashing",
+    "Jinkakusousa Brainwashing Hypnosis",
+    "Time Stops",
+    "Time Stop",
+    "Drunk",
+    "Drunk Girl",
+    "Fainting",
+    "Rolling Back Eyes&Fainting"
+   ],
+   "babyface": [
+    "Baby Face",
+    "Childlike Face"
+   ],
+   "teacher-student": [
+    "teachers and students"
+   ]
+  },
+  "review_hide": {
+   "school-setting": [
+    "School",
+    "School Life",
+    "Campus Story",
+    "campus",
+    "Students",
+    "student",
+    "Female Student",
+    "Female Students",
+    "Transfer Student",
+    "Club Activity Manager",
+    "Club Activities&Manager",
+    "Club Manager",
+    "school flower",
+    "School Teacher"
+   ],
+   "teen-labels": [
+    "Teen",
+    "Teens",
+    "Teen 18+",
+    "Teen Hentai",
+    "Young 18+",
+    "young",
+    "Young Girl",
+    "Youthful",
+    "Teenager",
+    "a teenager",
+    "Judai (Teen) With E Cup Or More",
+    "Teens With E-Cup Or Bigger",
+    "Eighteen years old",
+    "Barely"
+   ],
+   "family-minor": [
+    "father and daughter",
+    "Daughter",
+    "Adopted Daughter",
+    "Stepdaughter",
+    "stepdaughter"
+   ],
+   "synthetic-or-likeness": [
+    "Ai-Generated Works",
+    "AI-generated Artwork",
+    "AI Generated",
+    "AI-Generated",
+    "AI",
+    "Lookalike",
+    "Idol Lookalike"
+   ],
+   "leak-claim": [
+    "Leaked"
+   ]
+  }
+ },
+ "allow": [
+  "young woman",
+  "young wife",
+  "young lady",
+  "younger man",
+  "younger",
+  "bride&young wife",
+  "amateur daughter",
+  "anal sex male daughter",
+  "female college student",
+  "college student",
+  "college students",
+  "college girl",
+  "college girls",
+  "university student",
+  "job hunting students",
+  "amateur female college students only!",
+  "college students who",
+  "sleeping bag",
+  "childhood",
+  "childhood friend",
+  "young najimi",
+  "childminder",
+  "wife and child",
+  "elder sister",
+  "older sister",
+  "royal sister",
+  "older & younger sister",
+  "mother friend",
+  "uncensored leaked",
+  "uncensored leak",
+  "leak",
+  "leakage",
+  "petite",
+  "tiny",
+  "small breasts",
+  "petite breasts",
+  "flat chest small breasts",
+  "tiny breasts",
+  "pretty girl",
+  "beautiful girl",
+  "virgin",
+  "ai remastered",
+  "hmp ai remaster",
+  "gothic lolita fashion",
+  "school ancestors",
+  "junior college student",
+  "barely mosaic sex paradise",
+  "forced blowjob",
+  "meat toilet",
+  "flesh toilet",
+  "semen toilet",
+  "doggy style",
+  "doggystyle",
+  "female teacher",
+  "private teacher",
+  "private tutor",
+  "uniform",
+  "swimsuit",
+  "swimsuits"
+ ],
+ "type_exceptions": {
+  "leaked": [
+   "Uncensored Leaked"
+  ],
+  "ai": [
+   "Censored",
+   "Uncensored",
+   "Uncensored Leaked",
+   "English subtitle",
+   "Amateur"
+  ]
+ },
+ "patterns": {
+  "block": [
+   {
+    "group": "minor-school",
+    "regex": "(^|[^a-z])(jk|joshikousei|high ?school ?(girls?|students?)|school ?girls?|schoolgirls?|student girls?)([^a-z]|$)"
+   },
+   {
+    "group": "minor-age",
+    "regex": "(^|[^a-z])(loli|lolita|lolicon|lolikon|shota|shotacon|underage|under-age|minors?|infant|elementary|junior high|middle school|little girls?|pedo\\w*|child(ren)? (sex|porn))([^a-z]|$)"
+   },
+   {
+    "group": "school-attire",
+    "regex": "sailor (suit|uniform)|school (uniform|swimsuits?|mizugi)|school_mizugi|academy uniform|gym (suit|clothes|uniform)|bloomers?|buruma|randoseru"
+   },
+   {
+    "group": "voyeur",
+    "regex": "voyeur|(^|[^a-z])peep|hidden ?cam|sneak ?shots?|spy ?cam|upskirt|taking pictures secretly|secret(ly)? (camera|film|shoot|shot|record)|tosatsu"
+   },
+   {
+    "group": "drugging-incapacitation",
+    "regex": "(^|[^a-z])drugs?([^a-z]|$)|drugged|drug[- ]induced|aphrodisiac|chloroform|sleeping pills?|(^|[^a-z])(sleep|sleeping|asleep)(?! ?bag)([^a-z]|$)|(^|[^a-z])coma([^a-z]|$)|unconscious|knocked out"
+   },
+   {
+    "group": "real-leak",
+    "regex": "outflow|leaked (video|footage)|revenge porn|hacked|hidden camera leak|private video leak"
+   },
+   {
+    "group": "deepfake",
+    "regex": "deep ?fake|face ?swap|ai face|celebrity fake"
+   },
+   {
+    "group": "bestiality",
+    "regex": "bestiality|zoophil|zoo ?sex|animal sex|with (a )?(dog|horse)"
+   }
+  ],
+  "review_hide": [
+   {
+    "group": "school-setting",
+    "regex": "(^|[^a-z])(school|campus|classroom|homeroom|students?|transfer student|club (activity |activities&|activities )?manager|school flower)([^a-z]|$)"
+   },
+   {
+    "group": "teen-labels",
+    "regex": "(^|[^a-z])(teens?|teenager|youthful|young(?! (wife|wives|woman|women|lady|ladies|man|men|mother|mom|housewife|married|widow))|eighteen years old|18yo|barely legal|judai)([^a-z]|$)|young girl|young 18\\+|teen 18\\+"
+   },
+   {
+    "group": "family-minor",
+    "regex": "daughter|father and daughter"
+   },
+   {
+    "group": "synthetic-or-likeness",
+    "regex": "ai[- ]?generated|^ai$|ai art|lookalike"
+   },
+   {
+    "group": "leak-claim",
+    "regex": "^leaked$"
+   }
+  ],
+  "review_code": [
+   {
+    "group": "noncon",
+    "regex": "(^|[^a-z])(rape[ds]?|raping|r\\*\\*)([^a-z]|$)|molest|chikan|grop(e|ing)|confinement|imprison|abduct|kidnap|blackmail|threaten|ryona|(^|[^a-z])violence([^a-z]|$)|humiliation"
+   },
+   {
+    "group": "incest",
+    "regex": "incest|step ?(mother|mom|family|sister|brother|father|dad|aunt|son)|mother and (son|daughter)|brother and sister|taboo family|in[- ]law|(^|[^a-z])(mother|mom|aunt|auntie|uncle|niece|nephew|cousin)([^a-z]|$)"
+   },
+   {
+    "group": "incap-fantasy",
+    "regex": "hypno|brainwash|time stops?|stop(ping)? time|(^|[^a-z])drunk|fainting"
+   },
+   {
+    "group": "babyface",
+    "regex": "baby ?face|childlike face"
+   },
+   {
+    "group": "teacher-student",
+    "regex": "teachers? and students?"
+   }
+  ]
+ },
+ "title_signals": [
+  {
+   "id": "schoolgirl-starred",
+   "regex": "\\bS\\*{6,9}l\\b",
+   "flags": "",
+   "list": "block",
+   "group": "minor-school"
+  },
+  {
+   "id": "loli-starred",
+   "regex": "\\bL\\*\\*(?![A-Za-z*])|\\bL[o*]\\*{1,3}i(?:ta|con)?\\b",
+   "flags": "",
+   "list": "block",
+   "group": "minor-age",
+   "note": "调研原式 \\bL\\*\\*\\b 会命中 \"L**ked\"(Leaked);这里要求 L** 后面不跟字母"
+  },
+  {
+   "id": "jk-dotted",
+   "regex": "\\bJ\\s?[●○]|\\bK\\s?[●○]\\s?\\d",
+   "flags": "",
+   "list": "block",
+   "group": "minor-school"
+  },
+  {
+   "id": "age-scrubbed",
+   "regex": "\\(1\\s\\)|\\(1\\)\\s?\\/",
+   "flags": "",
+   "list": "block",
+   "group": "minor-age"
+  },
+  {
+   "id": "child-con",
+   "regex": "\\bplaycon\\b",
+   "flags": "i",
+   "list": "block",
+   "group": "minor-age",
+   "note": "AVDB 把 child 改写成 play:playcon = lolicon/shotacon"
+  },
+  {
+   "id": "child-to-play",
+   "regex": "\\bplay(hood|ren|-kun)\\b|\\bgrandplay\\b",
+   "flags": "i",
+   "list": "review_hide",
+   "group": "family-minor"
+  },
+  {
+   "id": "student-starred",
+   "regex": "\\bS\\*{4,6}ts?\\b",
+   "flags": "",
+   "list": "review_hide",
+   "group": "school-setting"
+  },
+  {
+   "id": "rape-starred",
+   "regex": "\\bR\\*\\*",
+   "flags": "",
+   "list": "review_code",
+   "group": "noncon"
+  }
+ ],
+ "title_block_patterns": true,
+ "title_sleep_exceptions": "sleep ?(?:over|less|walk|wear|ing bag|bag)|(?:sleep|sleeps|sleeping|slept) (?:with|together)|without (?:any )?sleep|(?:can't|cannot|couldn't|could not|unable to|trouble) sleep(?:ing)?|lack of sleep|sleep[- ]deprivation"
+}
