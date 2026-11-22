@@ -10,6 +10,11 @@
 // fixtures/worker/*.m3u8 是 2026-10 审计时抓的真实子清单(加拿大出口);"期望删除秒数"来自审计逐组核对 + 抽帧确认:
 //   ffzy/360/1080zyk/爱奇艺/ikun/暴风/电影天堂 = 同站 SSAI 棋牌插播;樱花 = 外站成人贴片;如意 = 尾部 720p 棋牌片尾;
 //   wsyzy = 同目录 12s 棋牌中插;模都黑袍 = 每 20 片切块 + 6 段 17.6s 棋牌插播;dytt(kz_dm84)= 每 5 片切块 + 19s 中插。
+// [adult] fixtures/worker/adult/*.m3u8 是 2026-11-21 成人站实抓清单(128 份里挑 11 份,只有分段地址、不含片名),
+//   放子目录是因为 adclip-test / src-len-test 会遍历 fixtures/worker/*.m3u8 并核对夹具总数。期望秒数来自逐组人工核对
+//   (同一素材重复插 = 贴片、AES 清单里的明文短组 = 贴片),每份都按真实 m3u8 地址做 base 解析相对路径。
+//   v2.5 规则 D/E/F/G 修的两类事故:短片(1-3 分钟)广告占 27-78% 被 20% 保险丝整份放行;极品两条贴片之间的正片被删。
+//   全部夹具(含主线)都额外断言:输出是原清单的有序子序列、每个保留分段的 #EXT-X-KEY(METHOD+URI+IV)不变。
 // 加载方式与审计脚本 sim.js 相同:把 worker 源码里的 `export default {` 换掉后用 new Function 取出内部函数。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -38,35 +43,57 @@ function ok(cond, name, extra) {
 }
 
 // ============ 清单解析(与 worker 无关的独立实现) ============
-function resolve(u) {
+function resolve(u, base = BASE) {
     if (/^https?:\/\//i.test(u)) return u;
     if (u.startsWith('//')) return 'https:' + u;
-    return new URL(u, BASE).href;
+    return new URL(u, base).href;
 }
-function segments(text) {
+// [adult] 分段的生效密钥:METHOD|绝对 URI|IV(worker 输出里的 URI 是 `${PROXY}/?url=<编码>`,还原后比较)
+function keyOf(tag, base) {
+    const method = (/METHOD=([A-Z0-9-]+)/.exec(tag) || [])[1] || '';
+    if (method === 'NONE') return 'NONE';
+    let uri = (/URI="([^"]+)"/.exec(tag) || [])[1] || '';
+    if (uri.startsWith(PROXY + '/?url=')) uri = decodeURIComponent(uri.slice(PROXY.length + 6));
+    if (uri) uri = new URL(resolve(uri, base)).href;
+    return `${method}|${uri}|${((/IV=(0x[0-9a-f]+)/i.exec(tag) || [])[1] || '').toLowerCase()}`;
+}
+function segments(text, base = BASE) {
     const out = [];
     const L = text.split(/\r?\n/);
+    let key = 'NONE';
     for (let i = 0; i < L.length; i++) {
         const t = L[i].trim();
+        if (t.startsWith('#EXT-X-KEY:')) { key = keyOf(t, base); continue; }
         if (!t.startsWith('#EXTINF:')) continue;
         const d = parseFloat(t.slice(8)) || 0;
         let j = i + 1;
-        while (j < L.length && (L[j].trim() === '' || L[j].trim().startsWith('#'))) j++;
-        if (j < L.length) out.push({ d, url: resolve(L[j].trim()) });
+        while (j < L.length && (L[j].trim() === '' || L[j].trim().startsWith('#'))) {
+            if (L[j].trim().startsWith('#EXT-X-KEY:')) key = keyOf(L[j].trim(), base);
+            j++;
+        }
+        if (j < L.length) out.push({ d, url: resolve(L[j].trim(), base), key });
+        i = j;
     }
     return out;
 }
 const sum = arr => arr.reduce((a, s) => a + s.d, 0);
 
-function run(text) {
+function run(text, base = BASE) {
     logs.length = 0;
     const t0 = process.hrtime.bigint();
-    const out = W.rewriteM3u8(text, BASE, PROXY);
+    const out = W.rewriteM3u8(text, base, PROXY);
     const ms = Number(process.hrtime.bigint() - t0) / 1e6;
-    const inS = segments(text), outS = segments(out);
-    const outSet = new Set(outS.map(s => s.url));
-    const removed = inS.filter(s => !outSet.has(s.url));
-    return { out, ms, inS, outS, removed, removedSec: sum(removed), log: logs.slice() };
+    const inS = segments(text, base), outS = segments(out, base);
+    // [adult] 按顺序对齐(贴片同一 URL 会出现多次,不能按 URL 集合算"被删了哪些"):输出必须是输入的有序子序列
+    let oi = 0;
+    const removed = [], keyDiff = [];
+    for (const s of inS) {
+        if (oi < outS.length && outS[oi].url === s.url) {
+            if (outS[oi].key !== s.key) keyDiff.push({ url: s.url.slice(-48), in: s.key.slice(0, 80), out: outS[oi].key.slice(0, 80) });
+            oi++;
+        } else removed.push(s);
+    }
+    return { out, ms, inS, outS, removed, removedSec: sum(removed), subseq: oi === outS.length, keyDiff, log: logs.slice() };
 }
 
 // ============ 真实清单 ============
@@ -102,18 +129,71 @@ const FIXTURES = [
     { f: 'mdzy_chunk20_e3.m3u8', removed: 105.4, segs: 54, keepRest: true, drop: s => s.url.includes('/20260917/CXADHDMP/'),
       why: '模都 黑袍 每 20 片切块:6 段 17.57s 棋牌插播,被打断的 7|13、4|16 两截正片保留(旧规则误删 91s 正片)' },
     { f: 'kz_dm84_5772_dytt.m3u8', removed: 19.07, segs: 5, keepRest: true, why: 'dytt 每 5 片切块:4 | 3,2 中插 19s' },
+
+    // [adult] —— 成人站(v2.5 确证贴片 D/E/F/G)。base = 实抓时的子清单地址;期望值逐组人工核对过 ——
+    // 短片:贴片占比远超 20%,旧 worker 走保险丝整份放行(一秒都没删)
+    { f: 'adult/2609_short_lebo.m3u8', base: 'https://lbpl26.com/20261121/AehO3lLM/1500kb/hls/index.m3u8',
+      removed: 51.52, segs: 18, outN: 11, keepRest: true, drop: s => s.url.includes('/20261009/RCP0FQBQ/'),
+      why: '2609 系(乐播)82.8s 短片:同一条 25.76s 贴片片头 + 片中(占 62%,规则 D)' },
+    { f: 'adult/2609_short_senlin.m3u8', base: 'https://2609.senlin2026.com/20261120/CXVJq4v3/1500kb/hls/index.m3u8',
+      removed: 51.52, segs: 18, keepRest: true, drop: s => s.url.includes('/20261009/RCP0FQBQ/'),
+      why: '2609 系(森林)191s:同上,占 27% 刚过保险丝' },
+    { f: 'adult/jkun_short.m3u8', base: 'https://sryndbsfvd.com/20261119/Uf8qwWGC/2000kb/hls/index.m3u8',
+      removed: 52.92, segs: 18, outN: 5, keepRest: true, drop: s => s.url.includes('/20261102/dM2Naznj/'),
+      why: 'JKUN 67.7s 短片:3 × 17.64s 同一素材 [3,3,5,3,3,0.64](占 78%),只剩 14.76s 正片' },
+    { f: 'adult/taohua_short.m3u8', base: 'https://thm3u8.co/20261120/6f8c8b38cf827611/index.m3u8',
+      removed: 30.00, segs: 8, outN: 8, keepRest: true, drop: s => s.url.startsWith('https://thm3u8.co/'),
+      why: '桃花 81s 短片:AES 正片(thts4.top)夹两条【不同】的 15s 明文贴片(规则 E,没有重复)' },
+    // 极品:14s 贴片插 6 次;两条贴片之间 39.34s/6 片的正片旧规则会被当广告删(规则 F)
+    { f: 'adult/jipin.m3u8', base: 'https://m2.jipinvipplay.com/20261122/g5qjEUdC/hls/index.m3u8',
+      removed: 84.00, segs: 18, keepRest: true, drop: s => s.url.includes('/20261011/9gWW64MM/'),
+      why: '极品:6 × 14s 贴片照删,中间 39.34s 正片一秒不少' },
+    // souav:场景切块(全 2.000s、54 个 DISCONTINUITY)+ 同目录 10.48s 内嵌插播 —— 没有确证贴片,走旧规则
+    { f: 'adult/souav_scenecut.m3u8', base: 'https://bf4.qrtuv.com/202511/21/BA40RvanzN2/video/2000k_1080/hls/index.m3u8',
+      removed: 10.48, segs: 6, keepRest: true, rmDurs: [2, 2, 2, 2, 2, 0.48],
+      why: 'souav 场景切块 + 同目录 10.48s 插播:只删插播,27 个短场景组保留' },
+    // jpg-seg 长片:正片 AES seg_*.jpg 在 .top CDN 上,贴片明文在清单 host;最后一片 0.47s .jpg 是正片余数(追踪像素豁免)
+    { f: 'adult/jpgseg_ckbh.m3u8', base: 'https://thm3u8.co/20261120/0550ab81d7335e40/index.m3u8',
+      removed: 74.90, segs: 20, keepRest: true, keepLast: true, drop: s => s.url.startsWith('https://thm3u8.co/'),
+      why: 'jpg-seg(CK百货)59 分钟:5 × 15s 明文贴片;末片 0.47s .jpg 正片保留' },
+    { f: 'adult/jpgseg_fanqie.m3u8', base: 'https://fqm3u8.cc/20261030/17b64825d1207f50/index.m3u8',
+      removed: 89.87, segs: 24, keepRest: true, drop: s => s.url.startsWith('https://fqm3u8.cc/'),
+      why: 'jpg-seg(番茄)78 分钟:片头独立 15.03s + 同一 14.97s 素材插 5 次' },
+    // AES 正片 + 明文贴片(fdc 系):片头一条独立素材 + 片中/片尾同一素材;密钥切换(NONE ↔ AES)必须原样跟着分段走
+    { f: 'adult/fdc_aes_doudou.m3u8', base: 'https://v.didibo2.com/20261118/44we0ibR/1000kb/hls/index.m3u8',
+      removed: 29.76, segs: 12, keepRest: true, drop: s => !s.url.includes('/20261118/44we0ibR/'),
+      why: 'fdc(豆豆)AES 正片 + 3 × 9.92s 明文贴片' },
+    // hsck:片头 20.48s + 片尾 19.16s 外站贴片;正片里有 40 个夹在 EXTINF 与 URL 之间的 DISCONTINUITY(worker 不当分组,原样输出)
+    { f: 'adult/hsck_prepost.m3u8', base: 'https://hsm3.hwzcfz.com/a3/20261121/eCFnUg6k/2000kb/hls/index.m3u8',
+      removed: 39.64, segs: 14, keepRest: true, disc: 40, drop: s => s.url.includes('://dpew.erlgnf.com/'),
+      why: 'hsck 片头 + 片尾贴片(AES,不同目录各一条)' },
+    // 干净源:无 DISCONTINUITY、.png 伪装分段(http)—— 一片都不能动
+    { f: 'adult/clean_honglou_png.m3u8', base: 'https://m3u8.doyinapi.com/play/d8a6162dd18119808411deee20909855.m3u8',
+      removed: 0, keepAll: true, why: '红楼 单组 .png 分段 → 零删除' },
 ];
 
 const table = [];
 for (const fx of FIXTURES) {
     const text = fs.readFileSync(path.join(FIX, fx.f), 'utf8');
-    const r = run(text);
+    const r = run(text, fx.base ? new URL(fx.base) : BASE);
     table.push({ f: fx.f, inSec: sum(r.inS), inN: r.inS.length, outN: r.outS.length, rm: r.removedSec, want: fx.removed, ms: r.ms });
     if (COMPARE_ONLY) continue;
     const n = fx.f;
     ok(Math.abs(r.removedSec - fx.removed) <= 0.15, `${n}: 删除 ${fx.removed}s(${fx.why})`, { got: +r.removedSec.toFixed(2) });
     ok(r.outS.length > 0, `${n}: 输出不得为 0 分片`);
     ok(r.outS.every(s => r.inS.some(x => x.url === s.url)), `${n}: 输出分段必须都来自原清单`);
+    // [adult] 全部夹具:有序子序列 + 每个保留分段的生效密钥不变(删掉的贴片组里常带 KEY 切换行)
+    ok(r.subseq, `${n}: 输出是原清单的有序子序列`);
+    ok(r.keyDiff.length === 0, `${n}: 保留分段的 #EXT-X-KEY 不变`, r.keyDiff.slice(0, 2));
+    if (fx.outN !== undefined) ok(r.outS.length === fx.outN, `${n}: 输出 ${fx.outN} 个分段`, { got: r.outS.length });
+    if (fx.keepLast) ok(r.outS.length > 0 && r.outS[r.outS.length - 1].url === r.inS[r.inS.length - 1].url,
+        `${n}: 最后一片(${r.inS[r.inS.length - 1].d}s 正片余数)保留`);
+    if (fx.disc !== undefined) {
+        const disc = r.out.split('\n').filter(l => l.trim() === '#EXT-X-DISCONTINUITY').length;
+        ok(disc === fx.disc, `${n}: 输出 ${fx.disc} 个 DISCONTINUITY`, { got: disc });
+    }
+    if (fx.rmDurs) ok(JSON.stringify(r.removed.map(s => +s.d.toFixed(3))) === JSON.stringify(fx.rmDurs),
+        `${n}: 删的是 ${fx.rmDurs.join(',')}`, r.removed.map(s => s.d));
     if (fx.segs !== undefined) ok(r.removed.length === fx.segs, `${n}: 删除 ${fx.segs} 个分段`, { got: r.removed.length });
     if (fx.keepAll) ok(r.outS.length === r.inS.length, `${n}: 全部分段保留`, { in: r.inS.length, out: r.outS.length });
     if (fx.keepRest) ok(r.outS.length === r.inS.length - (fx.segs || 0), `${n}: 除广告外全部保留`, { in: r.inS.length, out: r.outS.length });
@@ -313,6 +393,106 @@ if (!COMPARE_ONLY) {
         }
         const r = run(build(groups));
         ok(r.removedSec === 0 && r.outS.length === 1000, '复审: 分桶 CDN 每 5 片切块,末尾小桶全保留', { out: r.outS.length });
+    }
+}
+
+// ============ [adult] v2.5 确证贴片(D/E/F/G)+ 追踪像素豁免:合成边界 ============
+if (!COMPARE_ONLY) {
+    const CR = [[5, 'https://ad.cdn-b.com/c/a0.ts'], [5, 'https://ad.cdn-b.com/c/a1.ts'], [4.2, 'https://ad.cdn-b.com/c/a2.ts']];
+    // A1 "整份清单被重复列了两遍"(20 种不同的重复短组)→ 不像"同一条贴片反复插",D 不可信,走旧逻辑(这里保险丝整份放行)
+    {
+        const R = rng(25);
+        const longG = [];
+        for (let i = 0; i < 30; i++) longG.push([4, `https://v.cdn-a.com/m/x/L${i}.ts`]);
+        const shorts = [];
+        let n = 0;
+        for (let k = 0; k < 20; k++) {
+            const g = [];
+            const c = 3 + Math.floor(R() * 8);
+            for (let j = 0; j < c; j++) g.push([1 + R() * 3, `https://v.cdn-a.com/m/x/s${n++}.ts`]);
+            shorts.push(g);
+        }
+        const r = run(build([longG, ...shorts, ...shorts]));
+        ok(r.removed.length === 0 && r.outS.length === r.inS.length && !r.log.some(l => l.includes('confirmed creatives')),
+            'v2.5: 整份清单重复两遍(20 种重复短组)→ 不当贴片删', { out: r.outS.length, in: r.inS.length });
+    }
+    // A2 全清单只有同一条素材反复出现(没有非确证组)→ 认不出结构,整份放行,绝不出 0 片
+    {
+        const r = run(build([CR, CR, CR]));
+        ok(r.outS.length === 9 && r.removed.length === 0, 'v2.5: 全是同一素材 → 整份放行', { out: r.outS.length });
+    }
+    // A3 规则 G:确证贴片 + 第二个正片目录被切成 10 个 16s 短组(F 判外来,占 27% 触发保险丝)→ 只删确证贴片,其余全留
+    {
+        const A1 = [], A2 = [], Bs = [];
+        for (let i = 0; i < 50; i++) { A1.push([4, `https://v.cdn-y.com/m/A/a${i}.ts`]); A2.push([4, `https://v.cdn-y.com/m/A/b${i}.ts`]); }
+        for (let k = 0; k < 10; k++) { const g = []; for (let j = 0; j < 8; j++) g.push([2, `https://v.cdn-y.com/m/B/k${k}_${j}.ts`]); Bs.push(g); }
+        const r = run(build([CR, A1, CR, ...Bs, A2]));
+        ok(Math.abs(r.removedSec - 28.4) < 0.01 && r.removed.every(s => s.url.includes('ad.cdn-b.com')) && r.log.some(l => l.includes('fuse on unconfirmed')),
+            'v2.5 G: 未确证删除触发保险丝 → 只删确证贴片(不再整份放行)', { rm: +r.removedSec.toFixed(2), log: r.log });
+    }
+    // A4 D 只认短组:正片(≥15 片)被列了两遍不算贴片;中间那条独立短插播照旧规则删
+    {
+        const X = [];
+        for (let i = 0; i < 40; i++) X.push([4, `https://v.cdn-y.com/m/X/x${i}.ts`]);
+        const ad = [0, 1, 2, 3, 4].map(i => [3, `https://v.cdn-y.com/ad/z${i}.ts`]);
+        const r = run(build([X, ad, X]));
+        ok(Math.abs(r.removedSec - 15) < 0.01 && r.outS.length === 80 && !r.log.some(l => l.includes('confirmed creatives')),
+            'v2.5: 长组重复不算确证贴片', { rm: r.removedSec, out: r.outS.length });
+    }
+    // A5 F:有确证贴片时,正片目录里的短组(两条贴片之间 39.3s、分段时长不规则 —— 场景切块豁免认不出)保留;
+    //    整组在外来目录的短组照删
+    {
+        const c = (tag, n) => Array.from({ length: n }, (_, i) => [4, `https://v.cdn-y.com/m/A/${tag}${i}.ts`]);
+        const mid = [7.2, 10.4, 10.1, 4.3, 2.8, 4.5].map((d, i) => [d, `https://v.cdn-y.com/m/A/mid${i}.ts`]);
+        const foreign = [[5, 'https://x.cdn-k.com/p/f0.ts'], [5, 'https://x.cdn-k.com/p/f1.ts'], [2.5, 'https://x.cdn-k.com/p/f2.ts']];
+        const r = run(build([CR, c('a', 60), CR, mid, CR, c('c', 60), foreign, c('d', 40)]));
+        ok(Math.abs(r.removedSec - (3 * 14.2 + 12.5)) < 0.01 && r.outS.length === 166 && r.removed.every(s => !s.url.includes('/m/A/')),
+            'v2.5 F: 贴片之间 39.3s 正片保留,外来目录短组照删', { rm: +r.removedSec.toFixed(2), out: r.outS.length });
+    }
+    // A6 确证贴片不计入保险丝占比:81s 短片,同一贴片 ×2(28.4s)+ 外来目录 12.5s 插播(15%)→ 两样都删
+    //    (要是把确证贴片也算进占比,51% 会触发 G,外来插播就漏了)
+    {
+        const c1 = [4.1, 3.9, 4.2, 3.8, 4.0, 4.0].map((d, i) => [d, `https://v.cdn-y.com/m/A/p${i}.ts`]);
+        const c2 = [4.4, 3.6, 4.0, 4.0].map((d, i) => [d, `https://v.cdn-y.com/m/A/q${i}.ts`]);
+        const foreign = [[5, 'https://x.cdn-k.com/p/f0.ts'], [5, 'https://x.cdn-k.com/p/f1.ts'], [2.5, 'https://x.cdn-k.com/p/f2.ts']];
+        const r = run(build([CR, c1, foreign, CR, c2]));
+        ok(Math.abs(r.removedSec - (2 * 14.2 + 12.5)) < 0.01 && r.outS.length === 10 && !r.log.some(l => l.includes('fuse')),
+            'v2.5: 确证贴片不计入保险丝占比 → 短片里的外来插播也删', { rm: +r.removedSec.toFixed(2), out: r.outS.length, log: r.log });
+    }
+    // T1 追踪像素豁免(rewriteUrlsOnly 路径):.jpg 正片在 .top 主 host 上,最后一片 0.3s 余数保留
+    const jpg = [];
+    for (let i = 0; i < 100; i++) jpg.push([4, `https://img.cdn-z.top/v/seg_${i}.jpg`]);
+    jpg.push([0.3, 'https://img.cdn-z.top/v/seg_100.jpg']);
+    {
+        const r = run(build([jpg]));
+        ok(r.outS.length === 101 && r.removed.length === 0, '像素豁免: 主 host + 主导扩展名(.jpg)的 0.3s 末片保留', { out: r.outS.length });
+    }
+    // T2 同一份清单里外站 0.01s .jpg 追踪像素照删(扩展名一样也不行:host 不是主 host)
+    {
+        const g = jpg.slice();
+        g.splice(50, 0, [0.01, 'https://px.track-w.com/p.jpg']);
+        const r = run(build([g]));
+        ok(r.outS.length === 101 && r.removed.length === 1 && r.removed[0].url.includes('track-w'), '像素豁免: 外站 .jpg 像素照删', { rm: r.removed.map(s => s.url) });
+    }
+    // T3 主 host 上、扩展名不是主导扩展名的像素(.ts 清单里的 .gif)照删
+    {
+        const g = [];
+        for (let i = 0; i < 100; i++) g.push([3, `s${i}.ts`]);
+        g.push([0.01, 'https://example.com/a/b/t.gif']);
+        const r = run(build([g]));
+        ok(r.outS.length === 100 && r.removed.length === 1 && r.removed[0].url.endsWith('t.gif'), '像素豁免: 主 host 上的 .gif 像素照删');
+    }
+    // T4 过滤路径:确证贴片删掉后,主 host/主导扩展名按正片算;正片 .jpg 末片保留、外站像素照删
+    {
+        const cr = [0, 1, 2, 3].map(i => [3, `ad/c${i}.jpg`]).concat([[3.04, 'ad/c4.jpg']]);
+        const c1 = [], c2 = [];
+        for (let i = 0; i < 60; i++) c1.push([4, `https://v.cdn-q.top/20261120/abc/seg_${i}.jpg`]);
+        for (let i = 60; i < 120; i++) c2.push([4, `https://v.cdn-q.top/20261120/abc/seg_${i}.jpg`]);
+        c2.splice(30, 0, [0.01, 'https://px.track-w.com/p.jpg']);
+        c2.push([0.27, 'https://v.cdn-q.top/20261120/abc/seg_120.jpg']);
+        const r = run(build([cr, c1, cr, c2]));
+        ok(Math.abs(r.removedSec - (2 * 15.04 + 0.01)) < 0.01 && r.outS.length === 121 && r.outS[r.outS.length - 1].url.endsWith('seg_120.jpg'),
+            '像素豁免(过滤路径): 贴片 ×2 + 外站像素删,0.27s .jpg 末片保留', { rm: +r.removedSec.toFixed(2), out: r.outS.length });
     }
 }
 

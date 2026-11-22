@@ -235,6 +235,9 @@ async function handleProxyRequest(request, targetUrlParam, currentOrigin, noFilt
  *   - 广告域名后缀(.vip/.top…)只对【不在清单主域名上】的分段生效(比的是注册域 adfg8.vip,不是 v5.adfg8.vip 这种子域)
  *     —— 无尽(adfg8.vip)/稀饭(playxf.top)整片就在这类 CDN 上;且这类"组内单片删除"超过 20% 时一律不删(只删追踪像素)
  *   - ?nofilter=1 → 完全跳过广告判定，只做 CORS/URL 重写（前端兜底通道）
+ *   - [adult] v2.5「确证贴片」(成人站 2026-11 实测 128 份清单):D 同一清单里逐片 URL 完全相同、重复出现的短组;
+ *     E AES-128 清单里夹的明文短组 —— 这两类是确证贴片,照删且不计入 20% 保险丝(短片里贴片占 27-78%);
+ *     F 有确证贴片时,其余短组必须整组不在正片目录才删;G 未确证的删除触发保险丝时只删确证贴片,不再整份放行
  */
 function rewriteM3u8(content, baseUrl, proxyOrigin) {
     const baseOrigin = baseUrl.origin;
@@ -346,9 +349,44 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
     // 相对路径,那样会一个都删不掉,v1.1.74 踩过);下面的 A/B 只做"豁免"(把确定是正片包装的组排除在外),只会少删不会多删。
     const looksLikeAd = g => g.duration >= 3 && g.duration <= 120 && g.segCount < 15;
 
-    // 正片画像:主 host+目录(按分段数)与主导分段时长(按累计时长,toFixed(3) 归并 2.000000/2.0 之类写法)
-    const locCount = {}, hostCount = {}, durTotal = {};
+    // [adult] ===== v2.5「确证贴片」(成人站 2026-11 实测 128 份清单,规则 D/E/F/G;回归见 scripts/worker-test.mjs + fixtures/worker/adult/) =====
+    //    成人资源站几乎每部片都插同一条贴片素材(2609 系 25.76s ×2、tsbf:65 17.6s ×3、fdc 9.9s ×3、jpg-seg 15s 每 12-15 分钟、
+    //    极品 14s ×7-10…)。正片长时旧规则能删干净;但 1-3 分钟的短片里广告占 27-78%,上面的 20% 保险丝整份放行(短片照播
+    //    15-52s 广告);极品两条贴片之间的 30-40s 正片又会被时长规则当广告删掉。所以要"正面认出"贴片,认出来的不算保险丝:
+    // D 同一份清单里 URL 序列逐片完全相同的短组 = 同一条广告素材被插了多次(片头/片中/片尾);正片绝不会把同一分段播两遍。
+    // E 清单主体是 AES-128 加密、却夹着明文(METHOD=NONE)短组 = 插进来的素材(桃花/精品/番茄/CK/奶香香/豆豆/嘿嘿/性技…)。
+    //    保守闸(只会少删):D 的重复素材最多 2 种(真实数据都是同一条素材反复插;"整份清单被重复列了两遍"这种异常会冒出
+    //    一堆重复组,不能当贴片);至少要有一个非确证组(全是确证 = 认不出结构,走旧逻辑)。
+    const shortish = g => g.duration <= 120 && g.segCount < 15;
+    const sigCount = {};
     for (const g of groups) {
+        g.sig = g.segments.filter(l => { const t = l.trim(); return t && !t.startsWith('#'); }).map(l => l.trim()).join('\n');
+        sigCount[g.sig] = (sigCount[g.sig] || 0) + 1;
+    }
+    let curMethod = 'NONE';
+    for (const h of globalHeaders) { const m = h.trim().match(/^#EXT-X-KEY:.*METHOD=([A-Z0-9-]+)/); if (m) curMethod = m[1]; }
+    let encDur = 0, clearDur = 0;
+    for (const g of groups) {
+        let enc = 0, clear = 0;
+        for (const l of g.segments) {
+            const t = l.trim();
+            const m = t.match(/^#EXT-X-KEY:.*METHOD=([A-Z0-9-]+)/);
+            if (m) curMethod = m[1];
+            else if (t.startsWith('#EXTINF:')) { if (curMethod === 'NONE') clear++; else enc++; }
+        }
+        g.crypt = enc && !clear ? 'enc' : clear && !enc ? 'clear' : 'mixed';
+        if (g.crypt === 'enc') encDur += g.duration; else if (g.crypt === 'clear') clearDur += g.duration;
+    }
+    const dupSigs = new Set(groups.filter(g => g.sig && shortish(g) && sigCount[g.sig] >= 2).map(g => g.sig));
+    const dupTrusted = dupSigs.size > 0 && dupSigs.size <= 2;
+    const confirmedAd = groups.map(g => shortish(g) &&
+        ((dupTrusted && dupSigs.has(g.sig)) || (g.crypt === 'clear' && encDur > clearDur)));
+    const anyConfirmed = confirmedAd.some(Boolean) && confirmedAd.some(c => !c);
+
+    // 正片画像:主 host+目录(按分段数)与主导分段时长(按累计时长,toFixed(3) 归并 2.000000/2.0 之类写法)
+    // [adult] 有确证贴片时画像不算贴片组:短片里贴片的分段数可能比正片还多,主目录/主 host 会被贴片抢走
+    const locCount = {}, hostCount = {}, durTotal = {};
+    for (const g of groups.filter((_, gi) => !(anyConfirmed && confirmedAd[gi]))) {
         for (let k = 0; k < g.durs.length; k++) {
             const loc = g.locs[k];
             if (loc) {
@@ -431,8 +469,9 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         }
     }
 
-    const keptGroups = [];
+    let keptGroups = [];   // [adult] let:规则 G 要整份换掉
     let adsRemoved = 0;
+    let confirmedN = 0, confirmedDur = 0;   // [adult]
     let adDuration = 0;
     let totalDuration = 0;
     let exempted = 0;
@@ -441,7 +480,15 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         const g = groups[gi];
         totalDuration += g.duration;
         let isAd;
-        if (chunkMode) {
+        if (anyConfirmed && confirmedAd[gi]) {
+            // [adult] D/E 确证贴片:照删,且不计入 20% 保险丝
+            isAd = true; confirmedN++; confirmedDur += g.duration;
+        } else if (anyConfirmed && !chunkMode) {
+            // [adult] F 有确证贴片的清单:剩下的短组必须整组都不在正片目录才算广告(极品:两条贴片之间 30-40s 的正片
+            //    不能被时长规则删掉)。这是旧规则的子集 —— 只会少删
+            isAd = looksLikeAd(g) && !!mainDir && g.locs.every(l => l && l.dir !== mainDir);
+            if (!isAd && looksLikeAd(g)) exempted++;
+        } else if (chunkMode) {
             isAd = chunkAd[gi] || (looksLikeAd(g) && foreignGroup(g));
             if (!isAd && looksLikeAd(g)) exempted++;
         } else {
@@ -457,7 +504,7 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
         }
     }
     if (exempted > 0) {
-        console.log(`[AdFilter] ${chunkMode ? `chunk packaging (every ${chunkN} segs)` : `scene-cut packaging (${domDur}s segs)`}: ${exempted} short group(s) kept as content`);
+        console.log(`[AdFilter] ${chunkMode ? `chunk packaging (every ${chunkN} segs)` : anyConfirmed ? 'main-dir pieces between confirmed creatives' /* [adult] 规则 F */ : `scene-cut packaging (${domDur}s segs)`}: ${exempted} short group(s) kept as content`);
     }
 
     // 🚨 "均匀切块"不是广告 —— 事故根因(2026-08 生产实测):部分资源站(如 ryplay17 系)开始把整集按【每 5 个分段
@@ -470,8 +517,18 @@ function rewriteM3u8(content, baseUrl, proxyOrigin) {
     //    必须整份保留(宁可有广告也不能没画面)。
     //    v2.4:阈值 50% → 20%。2026-10 审计 80 份清单里真实插播最多 5%(其余 0.6-2.2%),而场景切块正好卡在 49-59%,
     //    50% 这条线等于让一半剧集被砍半;20% 留了 4 倍余量,上面的豁免没认出来的新打包方式也会被这里兜住。
-    const adShare = totalDuration > 0 ? adDuration / totalDuration : 0;
-    if (adsRemoved > 0 && (keptGroups.length === 0 || adShare > 0.2)) {
+    //    [adult] v2.5:确证贴片(D/E)不算进占比 —— 短片里贴片本来就能占 27-78%。
+    if (confirmedN > 0) {
+        console.log(`[AdFilter] confirmed creatives: ${confirmedN} group(s) (${confirmedDur.toFixed(1)}s; ${dupSigs.size} repeated creative(s), dup=${dupTrusted})`);
+    }
+    const adShare = totalDuration > 0 ? (adDuration - confirmedDur) / totalDuration : 0;
+    if (adsRemoved > confirmedN && (keptGroups.length === 0 || adShare > 0.2) && confirmedN > 0) {
+        // [adult] G 未确证的删除触发保险丝 → 不再整份放行,只删确证贴片(其余组全部保留)
+        console.log(`[AdFilter] fuse on unconfirmed groups; removing only ${confirmedN} confirmed creative(s) (${confirmedDur.toFixed(1)}s)`);
+        keptGroups = groups.filter((_, gi) => !confirmedAd[gi]);
+        adsRemoved = confirmedN; adDuration = confirmedDur;
+    }
+    if (adsRemoved > 0 && (keptGroups.length === 0 || adShare > 0.2) && !(confirmedN > 0 && adsRemoved === confirmedN && keptGroups.length > 0)) {
         console.log(`[AdFilter] SKIP: ${adsRemoved}/${groups.length} groups look like ads (${adDuration.toFixed(0)}s / ${totalDuration.toFixed(0)}s = ${(adShare * 100).toFixed(0)}%) → uniform chunking, not SSAI ads; passing playlist through unfiltered`);
         return rewriteUrlsOnly(lines, baseOrigin, basePath, proxyOrigin);
     }
@@ -743,16 +800,23 @@ function regDomain(host) {
 
 /**
  * 组内单片删除计划(过滤路径的第三步 B 与 rewriteUrlsOnly 共用)。segs:[{dur, url}] 按清单顺序;返回同长度的 bool 数组。
- *   ① 追踪像素:<0.5s、绝对 URL、不是 .ts → 删
+ *   ① 追踪像素:<0.5s、绝对 URL、不是 .ts → 删([adult] 主 host 上且是主导扩展名的不算:那是 .jpg 正片的最后一片余数)
  *   ② 外来广告域名分段(isOffHostAdDomain)→ 删;但这类删除若超过分段数或时长的 20%,说明"外来域名"其实是正片
  *      (正片分散在两个注册域的 .vip/.top CDN 上等)→ 一个都不删,只删追踪像素。这些单片删除发生在 20% 保险丝之后、
  *      也不会造成 0 片,别的闸门都兜不住 —— 用户只会看到一集"跳着播"。
  */
 function inlineDropPlan(segs, mainHost) {
     let total = 0, adN = 0, adDur = 0;
+    // [adult] ① 的豁免:jpg-seg 系(CK/伦理吧/CK百货…)正片是 seg_*.jpg,整集最后一片编码余数常 <0.5s(0.27-0.47s),
+    //    旧规则把它当追踪像素删掉。豁免条件取严(两条都要满足才保留):在清单主 host 上【且】扩展名等于全清单主导扩展名。
+    //    外站追踪像素(host 不同)、主 host 上扩展名不同的 .gif 像素照删。
+    const extCount = {};
+    for (const s of segs) { const e = segExt(s.url); extCount[e] = (extCount[e] || 0) + 1; }
+    const domExt = topKey(extCount);
+    const isContentTail = s => !!mainHost && !!domExt && segLocation(s.url).host === mainHost && segExt(s.url) === domExt;
     const kind = segs.map(s => {
         total += s.dur;
-        if (s.dur < 0.5 && /^https?:\/\//i.test(s.url) && !/\.ts(\?|$)/i.test(s.url)) return 1;
+        if (s.dur < 0.5 && /^https?:\/\//i.test(s.url) && !/\.ts(\?|$)/i.test(s.url) && !isContentTail(s)) return 1;
         if (isOffHostAdDomain(s.url, mainHost)) { adN++; adDur += s.dur; return 2; }
         return 0;
     });
@@ -761,6 +825,13 @@ function inlineDropPlan(segs, mainHost) {
         console.log(`[AdFilter] inline ad-domain removals would drop ${adN}/${segs.length} segs (${adDur.toFixed(0)}s / ${total.toFixed(0)}s) → treated as content, kept`);
     }
     return kind.map(k => k === 1 || (k === 2 && !tooMany));
+}
+
+/** [adult] 分段 URL 的扩展名(小写、带点,去掉 ?query/#hash;没有扩展名返回 '') */
+function segExt(url) {
+    const p = String(url || '').split(/[?#]/)[0];
+    const m = /\.([a-z0-9]{1,6})$/i.exec(p.substring(p.lastIndexOf('/') + 1));
+    return m ? '.' + m[1].toLowerCase() : '';
 }
 
 /**
