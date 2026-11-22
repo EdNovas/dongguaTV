@@ -1,0 +1,23 @@
+{
+  "_note": "[adult] site-catalog-test 用的合成 maccms ac=list 分类表(ac=list 的 class 字段原样形状)。内容政策金丝雀直接复用 scripts/fixtures/adult/canaries.json(全部合成标题,无真人姓名)。",
+  "class": [
+    { "type_id": 1, "type_pid": 0, "type_name": "日本有码" },
+    { "type_id": 2, "type_pid": 0, "type_name": "中文字幕" },
+    { "type_id": 3, "type_pid": 0, "type_name": "国产自拍" },
+    { "type_id": 4, "type_pid": 0, "type_name": "自拍偷拍" },
+    { "type_id": 5, "type_pid": 0, "type_name": "网曝黑料" },
+    { "type_id": 6, "type_pid": 0, "type_name": "国产剧" },
+    { "type_id": 7, "type_pid": 0, "type_name": "强奸乱伦" },
+    { "type_id": 8, "type_pid": 0, "type_name": "学生校园" },
+    { "type_id": 9, "type_pid": 0, "type_name": "91探花" },
+    { "type_id": 10, "type_pid": 0, "type_name": "变态暗网" },
+    { "type_id": 11, "type_pid": 10, "type_name": "日本" },
+    { "type_id": 12, "type_pid": 0, "type_name": "精品推荐" },
+    { "type_id": 13, "type_pid": 0, "type_name": "欧美系列" },
+    { "type_id": 14, "type_pid": 0, "type_name": "AV解说" },
+    { "type_id": 15, "type_pid": 0, "type_name": "国产传媒" },
+    { "type_id": 16, "type_pid": 0, "type_name": "日本无码" },
+    { "type_id": 17, "type_pid": 0, "type_name": "抖音短视频" },
+    { "type_id": 18, "type_pid": 0, "type_name": "动漫里番" }
+  ]
+}
