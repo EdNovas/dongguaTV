@@ -7,28 +7,10 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <!-- 核心：不发送 Referrer -->
     <meta name="referrer" content="no-referrer">
-    <title>E视界 - 免费在线观看电影电视剧 | 高清影视聚合播放器</title>
-
-    <!-- SEO Meta Tags -->
-    <meta name="description" content="E视界是一个现代化的流媒体聚合播放器，免费在线观看最新电影、电视剧、综艺、动漫。支持多线路切换、智能测速、4K高清播放。">
-    <meta name="keywords" content="在线观看,免费电影,电视剧,综艺,动漫,高清视频,流媒体,影视聚合,E视界">
-    <meta name="author" content="E视界">
-    <meta name="robots" content="index, follow">
-    <link rel="canonical" href="https://ednovas.video/">
-
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://ednovas.video/">
-    <meta property="og:title" content="E视界 - 免费在线观看电影电视剧">
-    <meta property="og:description" content="现代化流媒体聚合播放器，免费观看最新电影、电视剧、综艺、动漫。">
-    <meta property="og:image" content="https://ednovas.video/icons/icon-512.png">
-    <meta property="og:locale" content="zh_CN">
-
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="E视界 - 免费在线观看电影电视剧">
-    <meta name="twitter:description" content="现代化流媒体聚合播放器，免费观看最新电影、电视剧、综艺、动漫。">
-    <meta name="twitter:image" content="https://ednovas.video/icons/icon-512.png">
+    <!-- [adult] 成人站:标题只放站名(运行时按 /api/config 的 site_name 改,见 adult/adult.js),不收录、不出分享卡片。
+         主站的 description/keywords/canonical/Open Graph/Twitter 卡片标签已去掉(指向主站域名、带主站品牌,页面源码里也不留) -->
+    <title>DGX</title>
+    <meta name="robots" content="noindex, nofollow, noarchive">
 
     <!-- 兼容性检测 (必须在所有脚本之前) -->
     <script>
@@ -91,10 +73,15 @@
 
 
     <!-- 性能优化：DNS 预解析和预连接 -->
+    <!-- [adult] 成人站不连 TMDB(预连接也是一次对外请求),停用:
     <link rel="dns-prefetch" href="//api.themoviedb.org">
     <link rel="dns-prefetch" href="//image.tmdb.org">
     <link rel="preconnect" href="https://api.themoviedb.org" crossorigin>
     <link rel="preconnect" href="https://image.tmdb.org" crossorigin>
+    -->
+    <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
+         必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
+    <script data-cfasync="false" src="adult/adult.js?v=2"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -105,7 +92,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="E视界">
+    <meta name="apple-mobile-web-app-title" content="DGX">   <!-- [adult] 站名(运行时按 site_name 改) -->
     <link rel="apple-touch-icon" href="icon.png">
 
     <!-- 关键 CSS (优先加载) -->
@@ -4936,11 +4923,16 @@
 </head>
 
 <body>
+    <!-- [adult] 年龄确认门:最先盖住整页(登录框、首页都在它后面);没点「我已年满18岁」之前登录检查和内容请求都不启动。
+         adult/adult.js 没加载成功 = 直接拦下(fail-closed),不放行到应用 -->
+    <script data-cfasync="false">
+        try { window.DgAdult.ageGate.mount(); }
+        catch (e) { document.write('<div style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483647;background:#000;color:#ccc;display:flex;align-items:center;justify-content:center;font-size:15px;">页面加载不完整，请刷新重试</div>'); }
+    </script>
     <!-- Initial Loading Screen (Buffer) -->
     <div id="app-loader" class="app-loader">
         <div class="loader-logo" style="display: flex; align-items: center; justify-content: center;"><img
-                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;">视界
-            <span style="font-size:1.2rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span>
+                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;"><span data-dg-brand>DGX</span>   <!-- [adult] 站名(原:视界 MAX) -->
         </div>
         <div class="loader-spinner"></div>
         <div id="loader-status" style="margin-top: 20px; color: #666; font-size: 13px; text-align: center;">正在初始化...
@@ -4955,8 +4947,7 @@
         <div class="password-container">
             <div class="password-logo">
                 <div class="password-logo-text" style="display: flex; align-items: center; justify-content: center;">
-                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;">视界 <span
-                        style="font-size:1rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span>
+                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;"><span data-dg-brand>DGX</span>   <!-- [adult] 站名(原:视界 MAX) -->
                 </div>
                 <div class="password-logo-subtitle"><i class="fas fa-shield-alt"></i> <span id="login-subtitle-text">请登录以继续</span></div>
             </div>
@@ -5061,8 +5052,7 @@
 
         <nav class="navbar-custom" v-show="!offHome">
             <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
-                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">视界 <span
-                    style="font-size:12px; color:#666; font-weight:normal; margin-left: 2px;">MAX</span></div>
+                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">{{ (adult && adult.siteName) || 'DGX' }}</div>   <!-- [adult] 站名(原:视界 MAX) -->
         </nav>
 
         <!-- Back to Top Button -->
@@ -5107,11 +5097,11 @@
 
         <!-- 2. Search -->
         <div class="search-section"
-            :style="{ marginTop: offHome ? (isTVMode ? '20px' : '60px') : '-35px', position: offHome ? 'relative' : 'sticky' }">
+            :style="{ marginTop: offHome ? (isTVMode ? '20px' : '60px') : (adultMode ? '72px' : '-35px'), position: offHome ? 'relative' : 'sticky' }">   <!-- [adult] 没有轮播:首页搜索框让出导航栏 -->
             <div class="search-box-wrapper" :class="{ 'compact': !offHome && pastCompactThreshold }">
                 <i class="fas fa-search search-icon" @click="submitSearch(true)"></i>
                 <input type="text" v-model="keyword" @keyup.enter="submitSearch(true)" @input="debouncedSearch"
-                    class="search-input" placeholder="输入片名或分类（如 泰剧、韩综）">
+                    class="search-input" :placeholder="adultMode ? '输入番号、片名或分类（如 无码、探花）' : '输入片名或分类（如 泰剧、韩综）'">   <!-- [adult] -->
             </div>
         </div>
 
@@ -5380,7 +5370,7 @@
                             <i class="fas fa-table-cells-large" aria-hidden="true"></i><span class="cat-tab-all-l">全部分类</span></button>
                         <button v-for="t in catTypes" :key="t.k" type="button" class="cat-tab"
                             :class="{ active: catNavType === t.k }" :aria-pressed="catNavType === t.k ? 'true' : 'false'"
-                            @click="catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}</button>
+                            @click="catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}<span v-if="adultMode && adToday(t.k)" class="dg-today" :title="'今日新增 ' + adToday(t.k)">+{{ adToday(t.k) }}</span></button>   <!-- [adult] 今日新增 -->
                     </div>
                     <div class="catnav-quick">
                         <button v-if="!hideRandomRow" type="button" class="catnav-q is-random" @click="catNavJump('random')">
@@ -5394,12 +5384,12 @@
                         <span class="catnav-label">{{ row.l }}</span>
                         <div class="catnav-chips">
                             <button v-for="it in row.items" :key="it.l" type="button" class="cat-chip"
-                                @click="openBrowse({ type: catNavType, sel: it.sel })">{{ it.l }}</button>
+                                @click="openBrowse({ type: catNavType, sel: it.sel })">{{ it.l }}<span v-if="adultMode && it.sel && adToday(it.sel.b)" class="dg-today" :title="'今日新增 ' + adToday(it.sel.b)">+{{ adToday(it.sel.b) }}</span></button>   <!-- [adult] 今日新增 -->
                         </div>
                     </div>
                     <div class="catnav-foot">
                         <button type="button" class="catnav-all" @click="openBrowse({ type: catNavType, sel: {} })">
-                            全部{{ catNavLabel }}<span class="catnav-all-sub">按年份、评分筛选</span><i class="fas fa-arrow-right" aria-hidden="true"></i>
+                            {{ adultMode ? '浏览' : '全部' }}{{ catNavLabel }}<span class="catnav-all-sub">{{ adultMode ? '按时长、标记筛选' : '按年份、评分筛选' }}</span><i class="fas fa-arrow-right" aria-hidden="true"></i>
                         </button>
                     </div>
                 </div>
@@ -5417,6 +5407,7 @@
                             :style="{ cursor: config.sortMode ? 'pointer' : 'default' }"
                             :title="config.sortMode ? '点击切换排序 (当前: ' + (config.sortMode === 'newest' ? '最新' : '热门') + ')' : ''"></i>
                         <span class="section-title-text">{{ config.title }}</span>
+                        <span v-if="config.adult && config.today" class="dg-today-row">+{{ config.today }} 今日</span>   <!-- [adult] 目录行:今日新增 -->
                         <!-- 仅对 discover 分类显示排序角标 -->
                         <span v-if="config.sortMode && config.path.includes('/discover/')" class="sort-indicator">
                             {{ config.sortMode === 'newest' ? 'NEW' : 'HOT' }}
@@ -5442,17 +5433,19 @@
                         <button class="scroll-btn left" @click="scrollRow(key, -1)" v-show="rowLeftButtons[key]"
                             aria-label="向左滚动"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
                         <div class="hot-row" :ref="key" @scroll="onRowScroll(key)">
+                            <!-- [adult] 目录卡片(带 _wk):点开按作品键开播放页;角标 中字/无码/竖屏,副行「3小时前 · 时长 · N线」 -->
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
-                                @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
+                                @click="item._wk ? openWork(item) : autoSearch(item.title || item.name, item.original_title || item.original_name)">
                                 <div class="poster-wrap">
-                                    <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
+                                    <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
                                         @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
-                                    <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
+                                    <div v-if="!item._wk" class="rating-badge"><i class="fas fa-star text-warning"></i> {{
                                         item.vote_average
                                         ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                                    <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div>
                                 </div>
                                 <div class="movie-name">{{ item.title || item.name }}</div>
-                                <div class="movie-date">{{ (item.release_date || item.first_air_date ||
+                                <div class="movie-date" :class="{ 'dg-ad-sub': item._wk }">{{ item._wk ? item._sub : (item.release_date || item.first_air_date ||
                                     '').split('-')[0] }}
                                 </div>
                             </div>
@@ -5463,15 +5456,16 @@
                     <!-- 展开状态：分页网格布局 -->
                     <div class="grid-expanded" v-show="expandedRows[key]">
                         <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id"
-                            @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
+                            @click="item._wk ? openWork(item) : autoSearch(item.title || item.name, item.original_title || item.original_name)">   <!-- [adult] 同上 -->
                             <div class="poster-wrap">
-                                <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
+                                <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" referrerpolicy="no-referrer"
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
-                                <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average
+                                <div v-if="!item._wk" class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average
                                     ? item.vote_average.toFixed(1) : 'N/A' }}</div>
+                                <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div>
                             </div>
                             <div class="movie-name">{{ item.title || item.name }}</div>
-                            <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0] }}
+                            <div class="movie-date" :class="{ 'dg-ad-sub': item._wk }">{{ item._wk ? item._sub : (item.release_date || item.first_air_date || '').split('-')[0] }}
                             </div>
                         </div>
                         <!-- 分页控制区 -->
@@ -5571,13 +5565,14 @@
                 <div class="browse-card" v-for="item in browse.items" :key="'b-' + item.id" :data-bid="item.id"
                     :tabindex="isTVMode ? 0 : null" @click="browsePick(item)" @keydown.enter.prevent="browsePick(item)">
                     <div class="poster-wrap">
-                        <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" alt=""
+                        <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer"
                             @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                         <div class="rating-badge" v-if="item.vote_average"><i class="fas fa-star text-warning"></i> {{
                             item.vote_average.toFixed(1) }}</div>
+                        <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div>   <!-- [adult] -->
                     </div>
                     <div class="movie-name">{{ item.title || item.name }}</div>
-                    <div class="movie-date">{{ (item.release_date || item.first_air_date || '').split('-')[0] }}</div>
+                    <div class="movie-date" :class="{ 'dg-ad-sub': item._wk }">{{ item._wk ? item._sub : (item.release_date || item.first_air_date || '').split('-')[0] }}</div>   <!-- [adult] 目录卡片:副行 -->
                 </div>
                 <template v-if="browse.loading && !browse.items.length">
                     <div class="browse-card is-skel" v-for="n in 12" :key="'sk' + n" aria-hidden="true">
@@ -5716,7 +5711,7 @@
                     <span>退出登录</span>
                 </div>
             </div>
-            <div style="font-size:10px; margin-top:10px; opacity:0.5; user-select: none;">
+            <div v-if="!adultMode" style="font-size:10px; margin-top:10px; opacity:0.5; user-select: none;">   <!-- [adult] 不用 TMDB -->
                 Data provided by TMDb & Maccms APIs
             </div>
         </div>
@@ -5785,7 +5780,7 @@
                     </div>
 
                     <!-- NSFW 过滤开关 -->
-                    <div class="set-row">
+                    <div class="set-row" v-if="!adultMode">   <!-- [adult] 成人站不显示(只管 TMDB 片单) -->
                         <div>
                             <div class="set-title">过滤成人内容</div>
                             <div class="set-desc">过滤随机盲盒和分类浏览中的不适宜内容</div>
@@ -5797,7 +5792,7 @@
                     </div>
 
                     <!-- ⏭️ 跳过片头/片尾 -->
-                    <div class="set-row">
+                    <div class="set-row" v-if="!adultMode || adult.intro">   <!-- [adult] 成人站默认关了片头学习(INTRO_DISABLE) -->
                         <div>
                             <div class="set-title">跳过按钮</div>
                             <div class="set-desc">播到片头/片尾时弹出跳过按钮（本地自动学习 + 全站共享标记）</div>
@@ -5807,7 +5802,7 @@
                             <span class="settings-slider"></span>
                         </label>
                     </div>
-                    <div class="set-row">
+                    <div class="set-row" v-if="!adultMode || adult.intro">   <!-- [adult] 同上 -->
                         <div>
                             <div class="set-title">自动跳过片头/片尾</div>
                             <div class="set-desc">不弹按钮，识别到片头直接跳过；片尾还是显示按钮，自己点</div>
@@ -6146,7 +6141,7 @@
                     </div>
                     <!-- 分享 / 投屏:未登录预览与试看时不显示(投屏到电视上播不计试看时长) -->
                     <div v-if="!previewLocked && !trial.on" style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="分享">
+                        <button class="btn-cast" v-if="!adultMode" tabindex="2" @click="openSharePanel" aria-label="分享">   <!-- [adult] 不分享(分享链接会带片名) -->
                             <i class="fas fa-share-alt"></i> 分享
                         </button>
                         <button class="btn-cast" tabindex="2" @click="castVideo">
@@ -7269,8 +7264,10 @@
         window.showLoginScreen = showLoginScreen;
 
         // Run check when DOM is ready
+        // [adult] 先过年龄确认门(adult/adult.js),确认之后才做登录检查、启动应用;DgAdult 没加载 = 不启动(fail-closed)
         document.addEventListener('DOMContentLoaded', () => {
-            checkAuthStatus();
+            if (!window.DgAdult || !window.DgAdult.ageGate) return;
+            window.DgAdult.ageGate.whenAccepted().then(() => checkAuthStatus());
         });
     </script>
 
@@ -7322,6 +7319,8 @@
          * @returns {Promise<Response>}
          */
         function tmdbFetch(url, options = {}) {
+            // [adult] 成人站一律不调 TMDB:回一个空的 404(调用方都按"没结果"处理),请求根本不发出去
+            if (window.DgAdult && window.DgAdult.ON === true) return Promise.resolve(new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } }));
             const headers = new Headers(options.headers || {});
             if (clientPublicIP) {
                 headers.set('X-Client-Public-IP', clientPublicIP);
@@ -7570,7 +7569,8 @@
         // </dg-frame-share-core>
 
         // 页面加载时获取公网 IP（后台执行，不阻塞）
-        fetchClientPublicIP();
+        // [adult] 成人站不做(它只给 TMDB 反代判地区用,而且是年龄确认之前的一次第三方请求)
+        if (!(window.DgAdult && window.DgAdult.ON === true)) fetchClientPublicIP();
 
         let dp = null;
         // 🗨️ 弹幕读写后端(替换 DPlayer 自带的 axios 版,请求/响应格式完全一致),多一道"这份弹幕还要不要"的闸:
@@ -11094,7 +11094,9 @@
         //   · 成人过滤只排除 softcore / erotic movie / pink film / hentai / sexploitation 这几个关键词:adult animation、pornography、
         //     ecchi、erotic 也打在《辛普森一家》《出租车司机》《无职转生》这些正经作品上
         // <dg-catalog-core>
-        const DgCatalog = (() => {
+        // [adult] 成人站换成目录版(adult/adult.js 的 DgAdult.catalog:同名同参的接口,buildQuery 给出 /api/catalog/browse 地址);
+        //   下面这套 TMDB 分类原样保留不动(node 测试里没有 window → 走原来的)
+        const DgCatalog = (typeof window !== 'undefined' && window.DgAdult && window.DgAdult.ON === true && window.DgAdult.catalog) || (() => {
             const NSFW_KW = '155477|190370|159551|198385|10053';
             // 片名黑名单只管 200 票以下的(擦边片都是几票到几十票;《性爱自修室》八千多票)
             const NSFW_TITLE = /玉蒲团|蜜桃成熟|色欲|淫|情色|艳情|春宫|三级片|性爱|乱伦|走肾|裸体|恋欲|小姨子|嫂子的|继母的|姐姐的朋友|妈妈的朋友|朋友的(妈妈|母亲|姐姐|妹妹|妻子|老婆)|(年轻|漂亮|性感)的(妈妈|母亲|妻子|嫂子|阿姨|姐姐|妹妹)|拷问部/;
@@ -11807,6 +11809,8 @@
         }
 
         createApp({
+            // [adult] 成人站的首页目录 / openWork / 线路刷新 / 海报回退在 adult/adult.js 的 mixin 里(方法名不与本组件重名,scripts/adult-frontend-test.mjs 校验)
+            mixins: [(window.DgAdult && window.DgAdult.ON === true && window.DgAdult.mixin) || {}],
             data() {
                 return {
                     searchTimer: null,  // 防抖搜索定时器
@@ -12300,7 +12304,7 @@
                 offHome() { return this.searched || this.browse.open || this.catDirOpen; },
                 // 🧩 首页板块
                 homeOn() { const o = {}; for (const s of this.homeLayout) o[s.k] = s.on; return o; },
-                hideRandomRow() { return !this.homeOn.random; },
+                hideRandomRow() { return !this.homeOn.random || !!this.adultMode; },   // [adult] 成人站没有随机盲盒那一行(随机发现是普通目录行)
                 // 👥 大家都在看里不放自己历史记录里已有的剧(继续观看里就有);站内片名和 TMDB 显示名都比,忽略空格/大小写
                 popularShown() {
                     const k = s => String(s || '').replace(/\s+/g, '').toLowerCase();
@@ -12316,13 +12320,13 @@
                         recommend: this.recommendList.length > 0,
                         popular: this.popularShown.length >= 4,
                         live: this.liveEnabled && this.liveChannels.length > 0,
-                        catnav: true,
+                        catnav: !this.adultMode || !!(this.adult && this.adult.catalog),   // [adult] 没有目录就没有分类栏
                     };
                     const row = key => ({ id: 'row:' + key, k: 'row', key, config: this.rowConfigs[key] });
                     const out = [];
                     for (const s of this.homeLayout) {
                         if (!s.on) continue;
-                        if (s.k === 'random') out.push(row('randomRow'));
+                        if (s.k === 'random') { if (!this.adultMode) out.push(row('randomRow')); }   // [adult] 目录的「随机发现」是普通一行(排最后),不占这个位置
                         else if (has[s.k]) out.push({ id: s.k, k: s.k });
                     }
                     for (const key of Object.keys(this.rowConfigs)) if (key !== 'randomRow') out.push(row(key));
@@ -12332,6 +12336,7 @@
                 homeLayoutView() {
                     return this.homeLayout
                         .filter(s => !(s.k === 'live' && !this.liveEnabled) && !(s.k === 'fav' && !this.favoritesEnabled))
+                        .filter(s => !(this.adultMode && /^(recommend|popular|live|random)$/.test(s.k)))   // [adult] 这几块成人站没有(TMDB 推荐/海报、直播、随机盲盒)
                         .map(s => Object.assign({}, DgHome.info(s.k), { on: s.on }));
                 },
                 homeLayoutIsDefault() { return DgHome.isDefault(this.homeLayout); },
@@ -12419,7 +12424,15 @@
                     const groups = {};
                     const isDefault = (url) => !url || url.includes('mac_default') || url.includes('nopic');
                     this.rawList.forEach(item => {
-                        const name = item.vod_name;
+                        // [adult] 成人站的搜索结果带作品键 _wk(各站片名常不同,同一部按 _wk 并)和规范名 _wt(卡片/历史/收藏都用它);没有就照旧按片名
+                        //   两个作品键撞了同一个规范名(少见):后到的加「 · 2」—— 卡片 key、历史、收藏都按名字认,不能串
+                        const name = item._wk || item.vod_name;
+                        if (!groups[name] && item._wk) {
+                            const base = item._wt || item.vod_name, taken = (x) => Object.keys(groups).some(k => groups[k].name === x);
+                            let dn = base;
+                            for (let n = 2; taken(dn) && n < 50; n++) dn = base + ' · ' + n;
+                            groups[name] = { name: dn, pic: item.vod_pic, items: [], _wk: item._wk };
+                        }
                         if (!groups[name]) groups[name] = { name: name, pic: item.vod_pic, items: [] };
                         if (isDefault(groups[name].pic) && !isDefault(item.vod_pic)) groups[name].pic = item.vod_pic;
                         // 注：图片回退(handleImgError)已在搜索 onmessage 中按新到达的项处理，
@@ -12435,10 +12448,10 @@
                             let pic = g.pic;
                             // 拆开后每张卡(含主作品)只用自己作品条目里的海报:宁可空着走 TMDB 兜底,也不借另一部的海报
                             if (w.label) { const p = w.items.find(it => !isDefault(it.vod_pic)); pic = p ? p.vod_pic : ''; }
-                            out.push({
+                            out.push(Object.assign({
                                 name: g.name, pic: pic, _work: w.work, _workSig: w.sig, _workLabel: w.label,
                                 sources: w.items.map(item => ({ ...item, latency: item.latency || 999 }))
-                            });
+                            }, g._wk ? { _wk: g._wk } : null));   // [adult] 作品键跟着卡片走(刷新线路/历史按它认)
                         });
                     });
                     return this._kzSnapGroups(out).sort((a, b) => b.sources.length - a.sources.length);
@@ -12802,6 +12815,8 @@
                         this.liveEnabled = !!config.live_enabled;
                         // 🚫 封禁锁屏（站长在后台封了这个用户）
                         this.userBanned = !!config.banned;
+                        // [adult] 站名(document.title)、有没有目录首页
+                        if (this.adultMode) this.adultApplyConfig(config);
 
                         // Vercel 兼容性检测
                         if (config.enable_local_image_cache === false) {
@@ -12822,7 +12837,10 @@
                     }
 
                     // 2. 如果获取到了 Key，加载数据(试看时首页被播放页盖着,登录后再加载)
-                    if (TMDB_API_KEY && !trial) {
+                    // [adult] 成人站:首页来自 /api/catalog/home(最多等 6s,同 Hero),不碰 TMDB
+                    if (this.adultMode) {
+                        if (!trial) { updateStatus('正在加载首页内容...'); try { await this.adultLoadHome(); } catch (e) { console.error('[InitApp] 目录首页加载失败:', e); } }
+                    } else if (TMDB_API_KEY && !trial) {
                         updateStatus('正在加载首页内容...');
                         try {
                             // ⏱️ 最多等 6s:弱网时 Hero 慢到/拉不回来就先放行进应用(它完成后仍会自行填充),
@@ -13340,6 +13358,7 @@
                             name: g.name, pic: g.pic, _work: g._work || '', _workSig: g._workSig || '', _workLabel: g._workLabel || '',
                             sources: srcs.map((s, i) => slimSource(s, i === keep)).filter(Boolean),
                         };
+                        if (g._wk) out.groupData._wk = String(g._wk).slice(0, 300);   // [adult] 作品键(与 lib/history-slim 同规则)
                     }
                     return out;
                 },
@@ -13517,6 +13536,7 @@
                             _work: groupData._work || '',   // 🧩 同名多部作品里的哪一部(卡片 key)
                             _workSig: groupData._workSig || '',   // 与名次无关的作品签名(刷新线路/分享深链按它认)
                             _workLabel: groupData._workLabel || '',
+                            ...(groupData._wk ? { _wk: groupData._wk } : {}),   // [adult] 作品键(继续观看刷新线路按它取,不按片名重搜;不复用 _work)
                             sourcesTestedAt: groupData.sourcesTestedAt || null,  // 🕐 测速时间戳：历史回放据此决定是否需要重测(新鲜则用本地缓存)
                             sources: groupData.sources.map((s, idx) => ({
                                 vod_id: s.vod_id,  // 用于刷新集数
@@ -13675,6 +13695,8 @@
                         //    全量清 clearAccountLocalData —— 浏览器退订 + 带旧 token 通知服务器,否则换人登录后还会收到上个人的提醒
                         //    (被动登出 clearAuthState 不清,见 auth 脚本)
                         const cleanup = clearAccountLocalData(this.syncToken || storedToken);
+                        // [adult] 服务器清掉登录 cookie(dg_t);与上面的清理一起等(最多 2s)再刷新
+                        const _adLogout = (typeof window !== 'undefined' && window.DgAdult && window.DgAdult.ON === true) ? window.DgAdult.auth.logout() : null;
 
                         // 清除同步状态
                         this.syncEnabled = false;
@@ -13686,7 +13708,7 @@
                         console.log('[登录] 已退出，本地数据已清除');
 
                         // 刷新页面显示密码输入框(推送退订最多等 2s)
-                        reloadAfterCleanup(cleanup);
+                        reloadAfterCleanup(_adLogout ? Promise.all([cleanup, _adLogout]) : cleanup);
                     }
                 },
 
@@ -14214,7 +14236,7 @@
                 },
                 rowBrowse(key) {
                     const c = this.rowConfigs[key];
-                    const p = DgCatalog.rowPreset(key, c && c.sortMode);
+                    const p = DgCatalog.rowPreset(key, c && c.sortMode, c);   // [adult] 目录版按行上带的 more 认(TMDB 版不看第三个参数)
                     if (p) this.openBrowse(p);
                 },
                 // 程序滚动一律瞬间到位:全站 html{scroll-behavior:smooth} 会把 scrollTo 拖成一路滑过整个首页的动画(沿途还触发各行懒加载)
@@ -14426,12 +14448,14 @@
                     const timer = setTimeout(() => ctl.abort(), 15000);
                     b.loading = true;
                     try {
-                        const r = await tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent(q.path)}&${qs}`, { signal: ctl.signal });
+                        // [adult] 目录版的查询自带地址(q.url → /api/catalog/browse,同样的 {results,total_pages,total_results}),卡片经 q.map 换成模板字段
+                        const r = q.url ? await fetch(q.url, { signal: ctl.signal, credentials: 'same-origin' })
+                            : await tmdbFetch(`/api/tmdb-proxy?path=${encodeURIComponent(q.path)}&${qs}`, { signal: ctl.signal });
                         if (!r.ok) throw new Error('HTTP ' + r.status);
                         const d = await r.json();
                         if (seq !== b.seq) return;
                         const seen = this._browseSeen || (this._browseSeen = new Set()), nsfw = this.filterNsfw;
-                        const fresh = (d.results || []).filter(it => {
+                        const fresh = (q.map ? (d.results || []).map(q.map) : (d.results || [])).filter(it => {
                             if (!it || seen.has(it.id) || !DgCatalog.visible(it, nsfw)) return false;
                             seen.add(it.id);
                             return true;
@@ -14485,6 +14509,7 @@
                 browsePick(item) {
                     this.browse.auto = false;
                     this._browsePickId = item.id;
+                    if (item && item._wk && typeof this.openWork === 'function') return this.openWork(item);   // [adult] 目录卡片:按作品键开播放页,不按片名搜
                     this.autoSearch(item.title || item.name, item.original_title || item.original_name);
                 },
                 // 搜的分类词万一真是片名:照常按片名搜
@@ -14505,6 +14530,12 @@
                         // 停顿时按分类词自动打开的浏览页、用户其实在打片名(谍战 → 谍战深海之惊蛰):先收掉,返回时直接回首页
                         if (b.open && b.auto && !this.searched) this.closeBrowse(true);
                         this._browsePickId = null;
+                        // [adult] 回车搜番号:本地目录恰好一部作品 → 直接开作品页(adult.js 的 adLookupOpen),否则照常全站搜
+                        if (explicit && typeof this.adLookupOpen === 'function') {
+                            const kw = this.keyword;
+                            this.adLookupOpen(kw).then(hit => { if (!hit && this.keyword === kw) this.doSearch(); }, () => { if (this.keyword === kw) this.doSearch(); });
+                            return;
+                        }
                         this.doSearch();
                         return;
                     }
@@ -14525,6 +14556,8 @@
                     if (!path) {
                         return "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450'%3E%3Crect fill='%23333' width='300' height='450'/%3E%3Ctext fill='%23666' x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-size='20'%3ENo Image%3C/text%3E%3C/svg%3E";
                     }
+                    // [adult] 目录/资源站海报是完整地址(或同源 /api/、data:)→ 原样用,不拼 TMDB 前缀
+                    if (/^(https?:)?\/\//i.test(path) || /^(\/api\/|data:)/.test(path)) return path;
                     // 如果配置了本地缓存 URL，使用它 (注意去掉 size 部分因为已包含在 path 里? 不，path只是 /xxxx.jpg)
                     // TMDB_IMG_URL 格式可能是 "/api/tmdb-image/w342" 或 "https://image.tmdb.org/t/p/w342"
                     return this.TMDB_IMG_URL + path;
@@ -15203,6 +15236,7 @@
                 // 投屏功能：纯粹的原生实现
                 // 🔗 打开分享面板（可勾选"从当前进度开始"）
                 openSharePanel() {
+                    if (this.adultMode) return;   // [adult] 不分享:分享链接/卡片会带片名
                     if (!this.currentGroup || !this.currentGroup.name) return;
                     this.shareIncludeTime = false;
                     // ✂️ 分享原时间轴的秒数(收到的人可能走没剪的线路/设备;打开时再按自己的剪段换算)
@@ -15342,6 +15376,7 @@
                 //   卡片上的时间 = 进度条上显示的(剪后时间轴)。分享统计按渠道 'frame' 登记一个码(生成卡片就算一次分享:之后长按转发我们看不到)。
                 //   截图只读 <video> 当前帧,不暂停、不碰播放器;读不了(画布被跨域污染)就换 TMDB 剧照并在卡片上标明。纯函数在 DgFrameShare。
                 async shareFrame() {
+                    if (this.adultMode) { if (this.showMiniToast) this.showMiniToast('本站不提供分享'); return; }   // [adult] 截帧分享卡片带片名和二维码,不出
                     const g = this.currentGroup;
                     if (this.frameShare.show || !g || !g.name || g._isLive || this._liveActive || this.previewLocked) return;
                     if (this._frameShareBack && Date.now() - this._frameShareBack < 1500) return;   // 上一张刚关、退历史那一下还没落地
@@ -15693,6 +15728,7 @@
                 },
                 // 把当前剧/集写进地址栏（便于收藏/分享），用 replaceState 不污染历史
                 syncShareUrl() {
+                    if (this.adultMode) return;   // [adult] 地址栏不写片名(?play=片名 会进浏览器历史/书签/截图);刷新回首页
                     try {
                         if (this.currentGroup && this.currentGroup._isLive) { try { history.replaceState(history.state, '', '/?live=' + encodeURIComponent(this.currentGroup.name)); } catch (e) { } return; }  // 📺 直播写 ?live=频道名 深链(可分享)
                         if (!this.currentGroup || !this.currentGroup.name) return;
@@ -16262,6 +16298,7 @@
 
                 // 加载单个榜单数据
                 fetchRow(key, loadMore = false) {
+                    if (this.adultMode) return Promise.resolve();   // [adult] 目录行一次拿齐(每行 24 张,「全部」进浏览页翻页),不按 TMDB 翻页
                     if (key === 'randomRow') {
                         return this.fetchRandomMixed(loadMore);
                     }
@@ -16984,6 +17021,7 @@
                 //   ⚠️ 片名是各用户端上报的自由文本:只上 TMDB 认得出(有海报)的片,认不出的整条丢掉;不是精确同名的,显示 TMDB 的片名 ——
                 //      任意文字(广告/骚扰)刷进统计也到不了每个人的首页。只用 title(人数/时长/集数不读,也不显示)
                 async fetchPopular() {
+                    if (this.adultMode) return;   // [adult] 这一行靠 TMDB 补海报/认片,成人站不出
                     if (this._popLoaded) return;
                     this._popLoaded = true;
                     try {
@@ -17674,6 +17712,7 @@
                 isFallback(name) { return this.fallbackMap[name] === true; },
 
                 handleImgError(key, queryName) {
+                    if (this.adultMode) return this._adImgFallback(key, queryName);   // [adult] 换同组别的线路的海报,再不行中性占位;绝不查 TMDB
                     const name = queryName || key;
                     if (this.imageMap[key] || this.fallbackMap[key]) return;
                     this.fallbackMap[key] = true;
@@ -17795,6 +17834,12 @@
                         if (this._evtSource) {
                             this._evtSource.close();
                             this._evtSource = null;
+                        }
+                        // [adult] 搜索流拿不到状态码:一条结果都没有就探一次内容接口(401 → 补登录核验),通了按同一个词再搜一次(每个词只重试一次)
+                        if (this.adultMode && !(this.rawList || []).length && this._adSseRetryKw !== this.keyword && window.DgAdult) {
+                            const kw = this.keyword;
+                            this._adSseRetryKw = kw;
+                            window.DgAdult.auth.ensure().then(ok => { if (ok && this.searched && this.keyword === kw && !(this.rawList || []).length && !this._evtSource) this.doSearch(); });
                         }
                         // 🔗 深链：搜索连接中断也用已到的源尝试打开，避免一直卡在加载帧
                         if (this._deepLink && !this._deepLink.done) this.$nextTick(() => this.tryOpenDeepLink(true));
@@ -18350,7 +18395,14 @@
                         let vodId = source.vod_id;
 
                         // 如果 vod_id 不存在（旧版历史记录），通过搜索获取
-                        if (!vodId && this.currentGroup?.name) {
+                        // [adult] 成人站按作品键从目录取这一站的 vod_id(不按片名搜)
+                        if (!vodId && this.adultMode && this.currentGroup && this.currentGroup._wk) {
+                            try {
+                                const wl = await this._adWorkList(this.currentGroup._wk);
+                                const m = (wl.list || []).find(x => x.site_key === source.site_key);
+                                if (m) { vodId = m.vod_id; source.vod_id = vodId; }
+                            } catch (e) { }
+                        } else if (!vodId && this.currentGroup?.name) {
                             console.log('[刷新集数] vod_id 缺失，通过搜索获取...');
                             try {
                                 const searchRes = await fetchT(`/api/search?wd=${encodeURIComponent(this.currentGroup.name)}&site_key=${encodeURIComponent(source.site_key)}`, null, 20000);
@@ -18467,8 +18519,9 @@
                         const currentEpName = this.currentEpisodeName || this.episodeList?.find(ep => ep.url === this.currentUrl)?.name;
 
                         // 完整重新搜索(⏱️ 20s 超时:弱网挂起会让 isTestingSources/refreshingSources 卡 true 数分钟)
-                        const res = await fetchT(`/api/search?wd=${encodeURIComponent(searchName)}&nocache=1`, null, 20000);
-                        const data = await res.json();
+                        // [adult] 成人站按作品键 _wk 从目录取线路(/api/catalog/work?expand=1 现搜各站补线路),不按片名重搜;回来的 {list,_adult} 与搜索结果同形
+                        const data = (this.adultMode && this.currentGroup._wk) ? await this._adWorkList(this.currentGroup._wk)
+                            : await (await fetchT(`/api/search?wd=${encodeURIComponent(searchName)}&nocache=1`, null, 20000)).json();
 
                         // 🧭 await 期间用户可能已切换剧集：丢弃过期结果，避免覆盖新剧的线路列表（防串剧）
                         if (mySeq !== _navSeq || this.currentGroup !== reqGroup) {
@@ -18482,7 +18535,8 @@
                         }
 
                         // 找到同名影片的搜索结果
-                        const matched = data.list.filter(item =>
+                        // [adult] 作品键取回的线路就是这一部(各站片名不同,不再按名字筛);同站/同片源去重照常走 splitSameNameWorks
+                        const matched = data._adult ? data.list.slice() : data.list.filter(item =>
                             item.vod_name === searchName || item.vod_name?.trim() === searchName?.trim() ||
                             (this._isKzSource(item) && this._kzSameTitle(item, searchName))   // 🎌 kz 源原名与组名不同(见 _kzSnapGroups)
                         );
@@ -19797,7 +19851,7 @@
                             danmaku: danmakuOpt || undefined,  // 🗨️ 弹幕(借第三方聚合)；未开启则 undefined(DPlayer 不初始化弹幕)
                             apiBackend: _dmBackend,            // 🗨️ 晚到的旧弹幕不写进当前播放(见 _dmBackend)
                             contextmenu: [
-                                { text: '🎬 E视界MAX', link: '/' },
+                                { text: (window.DgAdult && window.DgAdult.ON === true) ? window.DgAdult.brand.name() : '🎬 E视界MAX', link: '/' },   // [adult] 播放器右键菜单:成人站只写站名
                                 { text: '⚡ 当前速度: 1x', click: () => { } }
                             ]
                         });
@@ -23430,6 +23484,7 @@
                 //    搜最近6条历史拿每部 genre_ids+original_language → 【按语言分组】(覆盖多口味:国产剧+美国电影各自一组)
                 //    → 每组取最常见2类型、/discover 同语言同类型按热度 → 按各组观看部数【加权配额】混合。全程走 tmdb-proxy(免费)。
                 async fetchRecommendations() {
+                    if (this.adultMode) return;   // [adult] TMDB 推荐,成人站不出
                     try {
                         if (this._recLoaded) return;
                         const names = (this.watchHistory || []).slice(0, 6).map(h => h && h.name).filter(Boolean);

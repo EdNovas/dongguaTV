@@ -1,7 +1,7 @@
 {
-    "name": "E视界 - 免费在线影视聚合播放器",
-    "short_name": "E视界",
-    "description": "现代化流媒体聚合播放器，免费在线观看电影、电视剧、综艺、动漫，支持多线路切换与智能测速。",
+    "name": "DGX",
+    "short_name": "DGX",
+    "description": "DGX",
     "start_url": "/index.html",
     "display": "standalone",
     "orientation": "any",
@@ -10,7 +10,7 @@
     "scope": "/",
     "lang": "zh-CN",
     "dir": "ltr",
-    "categories": ["entertainment", "video"],
+    "categories": ["entertainment"],
     "icons": [
         {
             "src": "icon.png",
