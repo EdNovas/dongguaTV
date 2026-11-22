@@ -3,7 +3,8 @@
 //   播放:同时只有 1 个在放的 hls.js 实例(autoStartLoad:false,翻到 ≥60% 可见才建、清单到了才 startLoad),maxBufferLength 10;
 //     静音自动播放、点一下开声音、循环;横屏片 object-fit: contain;地址走与播放页同一个去广告变换(DgAdult.playUrl:配了 Worker 就套,
 //     没配直连);没有 MSE 的 iPhone 走原生 HLS。量到画面宽高后按 beacon 报方向(无痕时不报)。
-//   流量:非计量网络本会话 300MB 封顶,之后改成「点一下才播」;省流量 / 2G·3G / 蜂窝(设置里没允许)一开始就是点一下才播。电视上不出。
+//   流量:非计量网络本会话 300MB 封顶,之后改成「点一下才播」(原生 HLS 量不到字节,按秒数 × 2 Mbps 估);省流量 / 2G·3G / 蜂窝(设置里没允许)/
+//     手机触屏上浏览器不报网络类型(iPhone / iPad 都是)一开始就是点一下才播。静音自动播也被浏览器拦 → 同样出「点一下播放」。电视上不出。
 //   点片名 → 交给 adult.js 开正常的播放页(刷短片先收起、停掉视频;关了播放页回到原位)。
 //   复核:不再预拉下一条的 m3u8 清单(除了正在放的这条,什么 m3u8 正文都不预拉),只给下一条的源站 <link rel=preconnect>;
 //   收起(播放页开着)、隐私锁着(含 head 预锁)时一个实例都不建、也不预连。
@@ -75,15 +76,26 @@
         const next = (d && typeof d.cursor_next === 'string' && d.cursor_next.length <= 400) ? d.cursor_next : '';
         return { items, next, done: !next };
     }
-    // 'auto' = 滑到就静音自动播;'tap' = 点一下才播(省流量 / 慢网 / 蜂窝没允许 / 本会话流量用完)
-    function netMode(conn, cellOk, bytes) {
-        if ((Number(bytes) || 0) >= SESSION_CAP) return 'tap';
+    // 为什么要「点一下才播」('' = 可以自动播):本会话流量用完 / 省流量 / 慢网 / 蜂窝没允许 /
+    //   网络未知 —— 修订:手机 / 触屏(mobile)上没有 navigator.connection(Safari、iOS WKWebView、Firefox 都没有)= 可能在用流量,
+    //   设置里没开「移动网络也自动播放」就点一下才播(以前当成不计量,iPhone / iPad 用流量也一路自动播)。电脑上没有照旧自动播
+    function netWhy(conn, cellOk, bytes, mobile) {
+        if ((Number(bytes) || 0) >= SESSION_CAP) return 'cap';
         const c = conn || null;
-        if (!c) return 'auto';
-        if (c.saveData) return 'tap';
-        if (/(^|\b)(slow-2g|2g|3g)$/.test(String(c.effectiveType || ''))) return 'tap';
-        if (c.type === 'cellular' && !cellOk) return 'tap';
-        return 'auto';
+        if (!c) return (mobile && !cellOk) ? 'unknown' : '';
+        if (c.saveData) return 'save-data';
+        if (/(^|\b)(slow-2g|2g|3g)$/.test(String(c.effectiveType || ''))) return 'slow';
+        if (c.type === 'cellular' && !cellOk) return 'cellular';
+        return '';
+    }
+    // 'auto' = 滑到就静音自动播;'tap' = 点一下才播
+    function netMode(conn, cellOk, bytes, mobile) { return netWhy(conn, cellOk, bytes, mobile) ? 'tap' : 'auto'; }
+    // 修订:原生 HLS(iPhone 没有 MSE,hls.js 1.1.5 不认 ManagedMediaSource)量不到分片字节 → 按「缓冲过的秒数 / 实际播过的秒数」里大的那个
+    //   × 估算码率记进本会话流量(2 Mbps,比各家族实测中位数 0.75–1.8 Mbps 都高,宁多算),300MB 封顶在 iPhone 上也生效
+    const NATIVE_BPS = 2e6;
+    function nativeBytes(bufSec, playSec, bps) {
+        const s = Math.max(Number(bufSec) || 0, Number(playSec) || 0);
+        return s > 0 ? Math.round(s * (Number(bps) || NATIVE_BPS) / 8) : 0;
     }
     function hlsConfig() {
         return {
@@ -115,11 +127,19 @@
         try { const de = root.document && root.document.documentElement; if (de && de.classList && de.classList.contains('dgp-prelock')) return true; } catch (e) { }
         return false;
     }
-    function mode() {
+    function why() {
         const a = A();
         let conn = null;
         try { conn = root.navigator && root.navigator.connection; } catch (e) { }
-        return netMode(conn, !!(a && a.cellOk && a.cellOk()), S.bytes);
+        return netWhy(conn, !!(a && a.cellOk && a.cellOk()), S.bytes, mobileDev());
+    }
+    function mode() { return why() ? 'tap' : 'auto'; }
+    // 手机 / 平板:没有 MSE(iPhone 走原生 HLS)、有粗指针(触屏)、或报了触点(iPadOS「桌面版网站」的 UA 是 Mac)
+    function mobileDev() {
+        if (!mse()) return true;
+        try { if (root.matchMedia && (root.matchMedia('(any-pointer: coarse)').matches || root.matchMedia('(pointer: coarse)').matches)) return true; } catch (e) { }
+        try { const n = root.navigator; if (n && (Number(n.maxTouchPoints) || 0) > 0) return true; } catch (e) { }
+        return false;
     }
     function mse() { try { return !!(root.Hls && typeof root.Hls.isSupported === 'function' && root.Hls.isSupported()); } catch (e) { return false; } }
     function nativeOk(v) { try { return !!(v && v.canPlayType && v.canPlayType('application/vnd.apple.mpegurl')); } catch (e) { return false; } }
@@ -245,6 +265,10 @@
         const tl = h('span');
         tl.textContent = '点一下播放';
         tap.appendChild(tl);
+        const hint = h('small', 'dg-fs-hint');
+        hint.textContent = '设置里打开「移动网络也自动播放」就能滑到即播';
+        hint.hidden = true;
+        tap.appendChild(hint);
         tap.hidden = true;
         sl.appendChild(tap);
         sl.appendChild(h('div', 'dg-fs-spin', { 'aria-hidden': 'true' }));
@@ -319,12 +343,13 @@
                 try { hls = new root.Hls(hlsConfig()); } catch (e) { return x; }
                 x.hls = hls;
                 const E = root.Hls.Events || {};
-                hls.on(E.MANIFEST_PARSED, () => { x.parsed = true; if (x.want && !x.started) { x.started = true; try { hls.startLoad(0); } catch (e) { } } });
+                const mine = () => S.inst[i] === x && x.hls === hls;
+                hls.on(E.MANIFEST_PARSED, () => { if (!mine()) return; x.parsed = true; if (x.want && !x.started) { x.started = true; try { hls.startLoad(loadPos(x)); } catch (e) { } } });
                 hls.on(E.FRAG_LOADED, (_, d) => {
                     const n = (d && d.frag && d.frag.stats && (d.frag.stats.loaded || d.frag.stats.total)) || 0;
                     S.bytes += n;
                 });
-                hls.on(E.ERROR, (_, d) => { if (d && d.fatal) failInst(i); });
+                hls.on(E.ERROR, (_, d) => { if (d && d.fatal && mine()) failInst(i); });
                 hls.loadSource(url);
                 hls.attachMedia(v);
             }
@@ -335,32 +360,72 @@
             showMsg(i, '这台设备放不了这种视频');
             return x;
         }
-        bindVideo(i, x);
+        bindVideo(i, v);
         if (start) startInst(x);
         return x;
     }
+    // 从哪儿开始 / 接着加载:第一次从 0;停过(往回翻 / 自动播被拦)再续上时从画面停的位置
+    function loadPos(x) { const t = x && x.video ? Number(x.video.currentTime) || 0 : 0; return t > 0 ? t : 0; }
     function startInst(x) {
         x.want = true;
-        if (x.hls && x.parsed && !x.started) { x.started = true; try { x.hls.startLoad(0); } catch (e) { } }
+        if (x.hls && x.parsed && !x.started) { x.started = true; try { x.hls.startLoad(loadPos(x)); } catch (e) { } }
         if (x.native && !x.video.getAttribute('src')) { x.video.src = playUrl(x.line); try { x.video.load(); } catch (e) { } }
         x.video.muted = S.muted;
-        playVideo(x.video);
+        playVideo(x.video, x.i);
     }
-    function playVideo(v) {
+    // 带声音自动播被浏览器拦 → 退回静音再播;修订:静音也被拦(iOS 低电量模式、Safari「不允许自动播放」、Firefox 拦音视频;
+    //   滑动不算用户手势)→ 以前什么都不做,一直转圈、hls.js 还照样下 10 秒缓冲 —— 现在出「点一下播放」、停止下载,点了再播
+    function playVideo(v, i) {
         let p;
         try { p = v.play(); } catch (e) { return; }
-        if (p && typeof p.catch === 'function') p.catch((err) => {
-            // 带声音自动播被浏览器拦 → 退回静音再播
-            if (err && err.name === 'NotAllowedError' && !v.muted) { S.muted = true; syncMute(); try { v.play().catch(() => { }); } catch (e) { } }
+        if (!p || typeof p.catch !== 'function') return;
+        p.catch((err) => {
+            if (!err || err.name !== 'NotAllowedError') return;
+            if (!v.muted) {
+                S.muted = true; syncMute();
+                let p2 = null;
+                try { p2 = v.play(); } catch (e) { p2 = null; }
+                if (p2 && typeof p2.catch === 'function') p2.catch((e2) => { if (e2 && e2.name === 'NotAllowedError') autoplayBlocked(i, v); });
+                return;
+            }
+            autoplayBlocked(i, v);
         });
     }
-    function bindVideo(i, x) {
-        if (x.bound) return;
-        x.bound = true;
-        const v = x.video, sl = S.slides[i];
-        v.addEventListener('playing', () => { if (sl) sl.classList.add('dg-fs-on'); measure(i, x); });
-        v.addEventListener('loadedmetadata', () => measure(i, x));
-        v.addEventListener('error', () => { if (x.native) failInst(i); });
+    function autoplayBlocked(i, v) {
+        const x = S.inst[i];
+        if (!x || x.video !== v || x.gen !== S.gen) return;
+        x.want = false;
+        if (x.hls && x.started) { try { x.hls.stopLoad(); } catch (e) { } x.started = false; }
+        if (x.native && v.getAttribute('src')) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { } x.nat = null; }
+        showTap(i, '');
+    }
+    // 修订:每个 <video> 只绑一次(以前按实例绑:翻走再翻回来重建实例时同一个元素再叠一套监听,原生 HLS 一次 error 连换好几条线路、
+    //   好线路也被拆掉);处理时现读这一条当前的实例,不是它的(旧实例 / 重新拉过的列表)不认
+    function bindVideo(i, v) {
+        if (!v || v.__dgFeedBound) return;
+        v.__dgFeedBound = true;
+        const cur = () => { const x = S.inst[i]; return (x && x.video === v && x.gen === S.gen) ? x : null; };
+        v.addEventListener('playing', () => { const x = cur(); if (!x) return; const sl = S.slides[i]; if (sl) sl.classList.add('dg-fs-on'); measure(i, x); });
+        v.addEventListener('loadedmetadata', () => { const x = cur(); if (x) measure(i, x); });
+        v.addEventListener('error', () => { const x = cur(); if (x && x.native && v.getAttribute('src')) failInst(i); });
+        const count = () => { const x = cur(); if (x && x.native) countNative(x); };
+        v.addEventListener('timeupdate', count);
+        v.addEventListener('progress', count);
+    }
+    // 原生 HLS 的流量估算(见 nativeBytes):播过的秒数按 timeupdate 累加(循环回开头 / 跳转不算),缓冲过的秒数取 buffered 的最大值;只往上加
+    function countNative(x) {
+        const v = x.video;
+        if (!v) return;
+        const t = Number(v.currentTime) || 0;
+        const n = x.nat || (x.nat = { last: t, play: 0, buf: 0, counted: 0 });
+        const d = t - n.last;
+        if (d > 0 && d <= 2) n.play += d;
+        n.last = t;
+        let b = 0;
+        try { const r = v.buffered; for (let k = 0; r && k < r.length; k++) b += Math.max(0, r.end(k) - r.start(k)); } catch (e) { }
+        if (b > n.buf) n.buf = b;
+        const est = nativeBytes(n.buf, n.play);
+        if (est > n.counted) { S.bytes += est - n.counted; n.counted = est; }
     }
     function measure(i, x) {
         const v = x.video, it = S.items[i], sl = S.slides[i];
@@ -409,6 +474,7 @@
         if (x.hls) { try { x.hls.destroy(); } catch (e) { } }
         const v = x.video;
         if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { } }
+        x.nat = null;   // 换线路 / 重建 = 重新下载,估算从头记(已记的流量不退)
     }
     function destroyInst(i) {
         const x = S.inst[i];
@@ -426,19 +492,38 @@
         S.cur = i;
         renderWindow();
         Object.keys(S.inst).forEach(k => { const n = +k; if (n !== i && n !== i + 1) destroyInst(n); });
-        // 离开的那条(如果还是预备 / 在放)先停
-        Object.keys(S.inst).forEach(k => { const n = +k; if (n !== i) { const x = S.inst[n]; if (x && x.video && !x.video.paused) { try { x.video.pause(); } catch (e) { } } } });
+        // 离开的那条(往回翻时留着的下一条)先停
+        Object.keys(S.inst).forEach(k => { const n = +k; if (n !== i) park(n); });
         activate(i);
         if (i >= S.items.length - MORE_AT) loadMore();
+    }
+    // 修订:留着的那条不只暂停,也不再缓冲(以前 hls.js 暂停着还接着下到 maxBufferLength,等于两个实例在跑):
+    //   hls.js stopLoad(清单和已有缓冲留着,翻回去从停的地方续上);原生 HLS 停不住下载,直接销毁
+    function park(n) {
+        const x = S.inst[n];
+        if (!x) return;
+        if (x.native) { destroyInst(n); return; }
+        x.want = false;
+        if (x.video && !x.video.paused) { try { x.video.pause(); } catch (e) { } }
+        if (x.hls && x.started) { try { x.hls.stopLoad(); } catch (e) { } x.started = false; }
+    }
+    function showTap(i, w) {
+        const sl = S.slides[i];
+        const tap = sl && sl.querySelector('.dg-fs-tap');
+        if (!tap) return;
+        const hint = tap.querySelector('.dg-fs-hint');
+        if (hint) hint.hidden = !(w === 'unknown' || w === 'cellular');
+        tap.hidden = false;
     }
     function activate(i) {
         if (!S.open || S.suspended) return;
         if (locked()) { S.lockHeld = true; destroyAll(); return; }
         const sl = S.slides[i];
         const tap = sl && sl.querySelector('.dg-fs-tap');
-        const m = mode();
+        const w = why();
+        const m = w ? 'tap' : 'auto';
         const x0 = S.inst[i];
-        if (m === 'tap' && !(x0 && x0.user)) { if (tap) tap.hidden = false; if (x0 && x0.video && !x0.video.paused) { try { x0.video.pause(); } catch (e) { } } return; }
+        if (m === 'tap' && !(x0 && x0.user)) { showTap(i, w); if (x0 && x0.video && !x0.video.paused) { try { x0.video.pause(); } catch (e) { } } return; }
         if (tap) tap.hidden = true;
         const x = makeInst(i, true);
         if (x && x0 && x0.user) x.user = true;
@@ -457,20 +542,24 @@
             if (o && typeof o.onPick === 'function') o.onPick(it.card);
             return;
         }
-        if (t.closest('.dg-fs-mute')) { S.muted = !S.muted; syncMute(); const x = S.inst[i]; if (x && x.video && x.video.paused && !S.muted) playVideo(x.video); return; }
-        if (t.closest('.dg-fs-tap')) {
-            if (i !== S.cur) return;
-            const x = makeInst(i, true);
-            if (x) x.user = true;
-            const tap = sl.querySelector('.dg-fs-tap');
-            if (tap) tap.hidden = true;
-            return;
-        }
+        if (t.closest('.dg-fs-mute')) { S.muted = !S.muted; syncMute(); const x = S.inst[i]; if (x && x.want && x.video && x.video.paused && !S.muted) playVideo(x.video, i); return; }
+        // 点「点一下播放」(出着这个按钮时点画面也算):现在才建实例 / 续上加载,在手势里播
+        const tapBtn = sl.querySelector('.dg-fs-tap');
+        if (t.closest('.dg-fs-tap') || (tapBtn && !tapBtn.hidden)) { if (i === S.cur) userPlay(i); return; }
         // 点画面:静音时 → 开声音;有声时 → 暂停 / 继续
         const x = S.inst[i];
         if (!x || !x.video) return;
-        if (S.muted) { S.muted = false; syncMute(); if (x.video.paused) playVideo(x.video); return; }
-        if (x.video.paused) playVideo(x.video); else { try { x.video.pause(); } catch (err) { } }
+        if (S.muted) { S.muted = false; syncMute(); if (x.video.paused) playVideo(x.video, i); return; }
+        if (x.video.paused) playVideo(x.video, i); else { try { x.video.pause(); } catch (err) { } }
+    }
+    function userPlay(i) {
+        const x = makeInst(i, true);
+        if (!x) return null;
+        x.user = true;
+        const sl = S.slides[i];
+        const tap = sl && sl.querySelector('.dg-fs-tap');
+        if (tap) tap.hidden = true;
+        return x;
     }
     function onIO(entries) {
         for (const en of entries) {
@@ -498,23 +587,55 @@
         const to = Math.max(0, Math.min(S.items.length - 1, S.cur + d));
         try { S.list.scrollTo({ top: to * H, behavior: 'smooth' }); } catch (e) { S.list.scrollTop = to * H; }
     }
+    // 修订:键盘只认刷短片自己的(以前文档捕获阶段谁的键都吃:刷短片开着时会话过期弹出的登录框里打不了 j / k / 空格、
+    //   方向键挪不了光标、Esc 把底下的刷短片关了;「只看竖屏」勾选框上按空格变成暂停)
+    const NOKEY_INPUT = /^(checkbox|button|submit|reset|image|file|color|hidden)$/i;
+    function typingIn(el) {
+        if (!el || !el.tagName) return false;
+        const tag = String(el.tagName).toLowerCase();
+        if (tag === 'textarea' || tag === 'select') return true;
+        if (tag === 'input') return !NOKEY_INPUT.test(String((el.getAttribute && el.getAttribute('type')) || el.type || 'text'));
+        if (el.isContentEditable) return true;
+        const ce = typeof el.getAttribute === 'function' ? el.getAttribute('contenteditable') : null;
+        return ce === '' || ce === 'true';
+    }
+    function inside(el, box) { let n = el; while (n) { if (n === box) return true; n = n.parentNode; } return false; }
+    // 登录框(#password-screen,z-index 10000)盖在刷短片(3000)上面:和 index.html 判断它亮着的口径一样
+    function loginShown() {
+        try {
+            const ps = root.document.getElementById('password-screen');
+            return !!(ps && ps.style && ps.style.display !== 'none' && !(ps.classList && ps.classList.contains('hidden')));
+        } catch (e) { return false; }
+    }
+    function keyMine(e) {
+        const d = root.document, t = e.target;
+        if (e.ctrlKey || e.metaKey || e.altKey) return false;
+        if (typingIn(t) || typingIn(d.activeElement)) return false;
+        if (t && t !== d && t !== d.body && t !== d.documentElement && !inside(t, S.el)) return false;   // 焦点在别的层上
+        return !loginShown();
+    }
     function onKey(e) {
-        if (!S.open || S.suspended) return;
+        if (!S.open || S.suspended || !keyMine(e)) return;
         const k = e.key;
         if (k === 'Escape' || k === 'Esc') { e.preventDefault(); e.stopPropagation(); close(true); return; }
         if (k === 'ArrowDown' || k === 'PageDown' || k === 'j') { e.preventDefault(); e.stopPropagation(); step(1); return; }
         if (k === 'ArrowUp' || k === 'PageUp' || k === 'k') { e.preventDefault(); e.stopPropagation(); step(-1); return; }
         if (k === 'm') { S.muted = !S.muted; syncMute(); return; }
         if (k === ' ') {
+            // 焦点在按钮 / 勾选框上:空格照旧是按那个按钮
+            const t = e.target;
+            if (t && t.closest && t.closest('button, a, label, input, select, textarea')) return;
             const x = S.inst[S.cur];
-            if (x && x.video) { e.preventDefault(); if (x.video.paused) playVideo(x.video); else x.video.pause(); }
+            const sl = S.slides[S.cur], tap = sl && sl.querySelector('.dg-fs-tap');
+            if (tap && !tap.hidden) { e.preventDefault(); userPlay(S.cur); return; }
+            if (x && x.video) { e.preventDefault(); if (x.video.paused) playVideo(x.video, S.cur); else x.video.pause(); }
         }
     }
     function onVis() {
         if (!S.open || S.suspended) return;
         const x = S.inst[S.cur];
         if (root.document.hidden) { if (x && x.video) { try { x.video.pause(); } catch (e) { } } }
-        else if (x && x.video && x.want && !locked()) playVideo(x.video);
+        else if (x && x.video && x.want && !locked()) playVideo(x.video, S.cur);
     }
 
     // ======================= 对外 =======================
@@ -615,6 +736,7 @@
         '@keyframes dg-fs-rot { to { transform: rotate(360deg); } }',
         '.dg-fs-tap { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; border: 0; background: rgba(0,0,0,.5); color: #fff; border-radius: 16px; padding: 16px 22px; font-size: 14px; cursor: pointer; }',
         '.dg-fs-tap i { font-size: 30px; }',
+        '.dg-fs-hint { max-width: 220px; font-size: 11px; line-height: 1.4; color: #bbb; }',
         '.dg-fs-info { position: absolute; left: 0; right: 64px; bottom: 0; z-index: 2; padding: 16px; padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to top, rgba(0,0,0,.75), transparent); }',
         '.dg-fs-title { display: block; max-width: 100%; background: none; border: 0; padding: 0; color: #fff; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }',
         '.dg-fs-title:hover, .dg-fs-title:focus { text-decoration: underline; text-underline-offset: 3px; outline: none; }',
@@ -635,12 +757,12 @@
         (d.head || d.documentElement).appendChild(s);
     }
     function status() {
-        return { open: S.open, suspended: S.suspended, cur: S.cur, items: S.items.length, inst: Object.keys(S.inst).map(Number), mode: mode(), mb: +(S.bytes / 1048576).toFixed(1), muted: S.muted, vert: S.vert, done: S.done };
+        return { open: S.open, suspended: S.suspended, cur: S.cur, items: S.items.length, inst: Object.keys(S.inst).map(Number), mode: mode(), why: why(), mb: +(S.bytes / 1048576).toFixed(1), muted: S.muted, vert: S.vert, done: S.done };
     }
     return {
-        feedUrl, orientOf, normItem, normFeed, netMode, hlsConfig, fitOf, fmtDur, SESSION_CAP, WINDOW_BEFORE, WINDOW_AFTER,
+        feedUrl, orientOf, normItem, normFeed, netMode, netWhy, nativeBytes, NATIVE_BPS, hlsConfig, fitOf, fmtDur, SESSION_CAP, WINDOW_BEFORE, WINDOW_AFTER,
         open, close, suspend, resume, boot, status,
         isOpen: () => S.open && !S.suspended, suspended: () => S.open && S.suspended,
-        _S: S, _setActive: setActive, _onIO: onIO, _click: onListClick,
+        _S: S, _setActive: setActive, _onIO: onIO, _click: onListClick, _onKey: onKey,
     };
 });

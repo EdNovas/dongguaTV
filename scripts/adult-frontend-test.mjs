@@ -2166,11 +2166,203 @@ function fakeVideo() {
     win.DgAdult.isTV = () => true;
     ok(FDw.open({}) === false && !FDw.isOpen(), '电视上不开');
 }
+// ---- 刷短片修订(p4 复审 F1–F4)用的假环境:iPhone(没有 MSE → 原生 HLS)/ iPad(触屏)/ 电脑;play() 可以被拦;可以有登录框 ----
+async function feedWorld(o) {
+    o = o || {};
+    const env = { cell: !!o.cell, play: o.play || 'ok' };
+    const byId = Object.create(null);
+    function El(tag) {
+        const e = {
+            tagName: String(tag).toUpperCase(), attrs: {}, children: [], parentNode: null, style: {}, hidden: false, _ls: {}, _text: '', _cls: new Set(),
+            get className() { return [...e._cls].join(' '); }, set className(v) { e._cls = new Set(String(v).split(/\s+/).filter(Boolean)); },
+            classList: { add: (...c) => c.forEach(x => e._cls.add(x)), remove: (...c) => c.forEach(x => e._cls.delete(x)), contains: (c) => e._cls.has(c), toggle: (c, on) => { if (on === undefined ? !e._cls.has(c) : on) e._cls.add(c); else e._cls.delete(c); } },
+            setAttribute(k, v) { e.attrs[k] = String(v); }, getAttribute(k) { return k in e.attrs ? e.attrs[k] : null; }, removeAttribute(k) { delete e.attrs[k]; },
+            get firstChild() { return e.children[0] || null; },
+            appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = e; e.children.push(c); return c; },
+            insertBefore(c, ref) { if (!ref) return e.appendChild(c); if (c.parentNode) c.parentNode.removeChild(c); const i = e.children.indexOf(ref); c.parentNode = e; e.children.splice(i < 0 ? e.children.length : i, 0, c); return c; },
+            removeChild(c) { e.children = e.children.filter(x => x !== c); c.parentNode = null; return c; },
+            set textContent(v) { e.children = []; e._text = String(v); }, get textContent() { return e._text + e.children.map(c => c.textContent).join(''); },
+            matches(sel) { return sel.split(',').some(s => { s = s.trim(); return s[0] === '.' ? s.slice(1).split('.').every(c => e._cls.has(c)) : e.tagName === s.toUpperCase(); }); },
+            closest(sel) { let n = e; while (n) { if (n.matches && n.matches(sel)) return n; n = n.parentNode; } return null; },
+            querySelectorAll(sel) { const out = []; const walk = (n) => n.children.forEach(c => { if (c.matches && c.matches(sel)) out.push(c); walk(c); }); walk(e); return out; },
+            querySelector(sel) { return e.querySelectorAll(sel)[0] || null; },
+            addEventListener(t, f) { (e._ls[t] = e._ls[t] || []).push(f); }, removeEventListener(t, f) { e._ls[t] = (e._ls[t] || []).filter(x => x !== f); },
+            dispatch(t, ev) { (e._ls[t] || []).slice().forEach(f => f(Object.assign({ type: t, target: e }, ev || {}))); },
+            focus() { }, scrollTo() { }, clientHeight: 800, scrollTop: 0,
+        };
+        if (e.tagName === 'VIDEO') {
+            Object.assign(e, {
+                paused: true, muted: false, currentTime: 0, videoWidth: 0, videoHeight: 0, _plays: 0, _loads: 0, _buf: [],
+                play() {
+                    e._plays++;
+                    if (env.play === 'reject' || (env.play === 'reject-unmuted' && !e.muted)) { const err = new Error('合成:自动播放被拦'); err.name = 'NotAllowedError'; return Promise.reject(err); }
+                    e.paused = false; return Promise.resolve();
+                },
+                pause() { e.paused = true; }, load() { e._loads++; if (!e.attrs.src) { e._buf = []; e.currentTime = 0; } },
+                canPlayType: () => (o.native ? 'maybe' : ''),
+            });
+            Object.defineProperty(e, 'src', { get() { return e.attrs.src || ''; }, set(v) { e.attrs.src = String(v); }, configurable: true });
+            Object.defineProperty(e, 'buffered', { get() { const b = e._buf; return { length: b.length, start: (k) => b[k][0], end: (k) => b[k][1] }; }, configurable: true });
+        }
+        return e;
+    }
+    const docL = {};
+    const doc = {
+        hidden: false, activeElement: null, body: El('body'), head: El('head'), documentElement: El('html'),
+        createElement: (t) => El(t), createTextNode: (t) => { const n = El('#text'); n.textContent = t; return n; },
+        getElementById: (id) => byId[id] || null,
+        addEventListener(t, f) { (docL[t] = docL[t] || []).push(f); }, removeEventListener(t, f) { docL[t] = (docL[t] || []).filter(x => x !== f); },
+    };
+    const hls = [];
+    class FakeHls {
+        static isSupported() { return !o.native; }
+        constructor(cfg) { this.cfg = cfg; this.h = {}; this.starts = 0; this.stops = 0; this.startAt = []; this.destroyed = false; hls.push(this); }
+        on(ev, f) { (this.h[ev] = this.h[ev] || []).push(f); } emit(ev, d) { if (!this.destroyed) (this.h[ev] || []).forEach(f => f(ev, d)); }
+        loadSource(u) { this.src = u; } attachMedia(v) { this.media = v; } startLoad(p) { this.starts++; this.startAt.push(p); } stopLoad() { this.stops++; } destroy() { this.destroyed = true; }
+    }
+    FakeHls.Events = { MANIFEST_PARSED: 'hlsManifestParsed', FRAG_LOADED: 'hlsFragLoaded', ERROR: 'hlsError' };
+    const nl = o.lines || 1;
+    const lineUrl = (i, k) => 'https://m.example/fw' + i + 'abcd'[k] + '/index.m3u8';
+    const fItem = (i) => ({ wk: 't:FW' + i, name: '合成短片 ' + i, pic: '', code: 'SYN-' + i, dur: 60, orient: '', lines: Array.from({ length: nl }, (_, k) => ({ site: 's' + k, url: lineUrl(i, k), dur: 60, vod_id: i * 10 + k })) });
+    const nav = {};
+    if (o.conn) nav.connection = o.conn;
+    const win = {
+        document: doc, Hls: FakeHls, navigator: nav, innerWidth: 390, innerHeight: 844,
+        matchMedia: (q) => ({ matches: !!o.coarse && /coarse/.test(q) }),
+        localStorage: { getItem: () => null, setItem() { } },
+        fetch: async (u) => (u === '/api/catalog/feed' ? new Response(JSON.stringify({ items: [0, 1, 2, 3, 4, 5].map(fItem), cursor_next: null }), { status: 200 }) : new Response('{}', { status: 404 })),
+        DgAdult: { cardToItem: A.cardToItem, playUrl: (u) => u, isTV: () => false, cellOk: () => env.cell, incognito: () => false, beacon: { send: () => true }, fetchWorkRaw: async () => null },
+        IntersectionObserver: function () { this.observe = () => { }; this.disconnect = () => { }; },
+        AbortController, Response, setTimeout, clearTimeout, console, Promise, JSON, Math, Date, Map, Set, Object, Array, String, Number, RegExp, Error, encodeURIComponent,
+    };
+    win.window = win;
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'public/adult/feed.js'), 'utf8'), vm.createContext(win), { filename: 'feed.js' });
+    const FDw = win.dgAdultFeed, S = FDw._S;
+    const ticks = async (n) => { for (let i = 0; i < (n || 10); i++) await tick(); };
+    const W = {
+        env, doc, win, hls, FDw, S, byId, El, lineUrl, ticks,
+        slide: (i) => S.slides[i], video: (i) => S.slides[i].querySelector('.dg-fs-v'), tap: (i) => S.slides[i].querySelector('.dg-fs-tap'), msg: (i) => S.slides[i].querySelector('.dg-fs-msg'),
+        fire: (t, ev) => (docL[t] || []).slice().forEach(f => f(ev)),
+        // 翻到第 i 条(IntersectionObserver:这条全露出、别的都看不见)
+        go: async (i) => { FDw._onIO(S.slides.map((sl, k) => ({ target: sl, isIntersecting: k === i, intersectionRatio: k === i ? 1 : 0 }))); await ticks(); },
+        // 新建的 hls 实例都给一次「清单到了」
+        parsed: () => hls.forEach(x => { if (!x.destroyed && !x._p) { x._p = true; x.emit('hlsManifestParsed'); } }),
+    };
+    FDw.open({ onClose() { }, onPick() { } });
+    await ticks();
+    return W;
+}
+{
+    // ---- F1:手机 / 触屏上网络未知 = 点一下才播;原生 HLS(iPhone)也记流量,300MB 封顶生效 ----
+    const FD = require(path.join(ROOT, 'public/adult/feed.js'));
+    ok(FD.netMode(null, false, 0) === 'auto' && FD.netMode(null, false, 0, true) === 'tap' && FD.netMode(null, true, 0, true) === 'auto'
+        && FD.netWhy(null, false, 0, true) === 'unknown' && FD.netWhy({ type: 'wifi' }, false, 0, true) === '' && FD.netWhy({ type: 'cellular' }, false, 0, true) === 'cellular' && FD.netWhy(null, true, FD.SESSION_CAP, true) === 'cap',
+        'F1 netMode:手机 / 触屏上没有 navigator.connection = 网络未知 → 点一下才播(开了「移动网络也自动播放」才自动);电脑上没有照旧自动播');
+    ok(FD.nativeBytes(80, 30) === 80 * FD.NATIVE_BPS / 8 && FD.nativeBytes(10, 200) === 200 * FD.NATIVE_BPS / 8 && FD.nativeBytes(0, 0) === 0 && FD.NATIVE_BPS >= 1.8e6, 'F1 原生 HLS 流量估算 = max(缓冲过的秒数, 播过的秒数) × 码率(≥ 各家族实测中位数)');
+    const P = await feedWorld({ native: true });   // iPhone:没有 MSE、没有 navigator.connection、设置没开
+    const pv0 = P.video(0);
+    ok(P.FDw.status().mode === 'tap' && P.FDw.status().why === 'unknown' && !P.tap(0).hidden && !P.tap(0).querySelector('.dg-fs-hint').hidden && !pv0.getAttribute('src') && pv0._plays === 0,
+        'F1 iPhone 上(网络类型未知、没开「移动网络也自动播放」):第一条就是「点一下播放」+ 设置提示,什么都不下', P.FDw.status());
+    P.FDw._click({ target: P.tap(0) });
+    ok(pv0.getAttribute('src') === P.lineUrl(0, 0) && pv0._plays === 1 && P.tap(0).hidden, '点了才设 src、才播');
+    const I = await feedWorld({ coarse: true });   // iPad:hls.js 能用,但触屏、没有 navigator.connection
+    ok(I.FDw.status().mode === 'tap' && I.hls.length === 0 && !I.tap(0).hidden, 'F1 iPad(触屏、没有 navigator.connection):同样点一下才播,清单都不拉', I.hls.length);
+    const Iw = await feedWorld({ coarse: true, conn: { type: 'wifi' } });
+    const Dk = await feedWorld({});
+    ok(Iw.FDw.status().mode === 'auto' && Iw.hls.length === 1 && Dk.FDw.status().mode === 'auto' && Dk.hls.length === 1, '报了 wifi 的触屏设备、电脑(不报网络类型)照常滑到就播');
+    const N = await feedWorld({ native: true, cell: true });   // iPhone,开了「移动网络也自动播放」
+    const nv0 = N.video(0);
+    ok(N.FDw.status().mode === 'auto' && nv0.getAttribute('src') === N.lineUrl(0, 0) && nv0._plays === 1, '开了「移动网络也自动播放」:iPhone 上滑到就播(原生 HLS)');
+    nv0._buf = [[0, 30]]; nv0.dispatch('progress');
+    ok(N.S.bytes === 30 * FD.NATIVE_BPS / 8, 'F1 原生 HLS:缓冲了 30 秒 → 按 30 秒 × 码率记进本会话流量', N.S.bytes);
+    for (let s = 0; s < 1500 * 4; s++) { nv0.currentTime = (s / 4) % 60; nv0.dispatch('timeupdate'); }   // 60 秒的片循环放 25 分钟
+    ok(N.S.bytes >= FD.SESSION_CAP, '循环放 25 分钟 → 估算过了 300MB(回到开头那一跳不算)', +(N.S.bytes / 1048576).toFixed(1));
+    await N.go(1);
+    ok(N.FDw.status().mode === 'tap' && N.FDw.status().why === 'cap' && !N.tap(1).hidden && !N.video(1).getAttribute('src'), 'F1 iPhone 上 300MB 封顶也生效:下一条改成点一下才播', N.FDw.status());
+}
+{
+    // ---- F2:每个 <video> 只绑一次监听;原生 HLS 一次 error 只换一条线路;往回翻时留着的下一条不再缓冲 ----
+    const W = await feedWorld({ native: true, cell: true, lines: 2 });
+    const v0 = W.video(0);
+    await W.go(1); await W.go(0);
+    ok(['error', 'playing', 'loadedmetadata', 'timeupdate'].every(t => (v0._ls[t] || []).length === 1), 'F2 翻走再翻回来(实例重建):同一个 <video> 上每种监听只有一个', Object.keys(v0._ls).map(t => t + ':' + v0._ls[t].length));
+    ok(v0.getAttribute('src') === W.lineUrl(0, 0), '翻回来:第一条线路重新设上');
+    v0.dispatch('error');
+    ok(v0.getAttribute('src') === W.lineUrl(0, 1) && W.S.inst[0] && W.S.inst[0].li === 1 && W.msg(0).hidden && !W.slide(0).classList.contains('dg-fs-err'),
+        'F2 原生 HLS 一次 error 只换一条线路(第二条好线路留着,不出「暂时放不了」)', { src: v0.getAttribute('src'), li: W.S.inst[0] && W.S.inst[0].li, msg: W.msg(0).textContent });
+    const H = await feedWorld({});
+    H.parsed();
+    await H.go(1); H.parsed();
+    const h1 = H.hls.find(x => x.src === H.lineUrl(1, 0));
+    ok(h1 && h1.starts === 1 && !h1.destroyed, '翻到第 2 条:清单到了才 startLoad');
+    H.video(1).currentTime = 7.5;
+    await H.go(0); H.parsed();
+    ok(!h1.destroyed && h1.stops === 1 && H.video(1).paused, 'F2 往回翻:留着的下一条暂停并 stopLoad(不再接着缓冲),实例和已有缓冲留着', { stops: h1.stops, destroyed: h1.destroyed });
+    await H.go(1);
+    ok(h1.starts === 2 && h1.startAt[1] === 7.5 && !h1.destroyed && !H.video(1).paused, '再翻回去:同一个实例从停的位置续上加载、接着播', h1.startAt);
+    for (let k = 0; k < 10; k++) { await H.go(k % 2); H.parsed(); }
+    const loading = H.hls.filter(x => !x.destroyed && x.starts > x.stops);
+    ok([0, 1].every(i => ['error', 'playing', 'loadedmetadata'].every(t => (H.video(i)._ls[t] || []).length === 1)) && loading.length === 1 && H.hls.filter(x => !x.destroyed).length <= 2,
+        '来回翻 10 次(hls.js):监听不叠加;同时只有 1 个实例在加载', { loading: loading.length, live: H.hls.filter(x => !x.destroyed).length, playing: H.video(0)._ls.playing.length });
+}
+{
+    // ---- F3:静音自动播也被浏览器拦 → 出「点一下播放」、停止下载,点了再播 ----
+    const W = await feedWorld({ play: 'reject' });
+    const h0 = W.hls[0];
+    ok(!W.tap(0).hidden && W.S.inst[0] && W.S.inst[0].want === false, 'F3 静音自动播也被拦(低电量模式 / 不允许自动播放):出「点一下播放」(不再一直转圈)');
+    W.parsed();
+    ok(h0.starts === 0, 'F3 被拦着时清单到了也不 startLoad(不白下缓冲)');
+    W.env.play = 'ok';
+    W.FDw._click({ target: W.video(0) });   // 出着按钮时点画面也算点了播放
+    ok(h0.starts === 1 && W.tap(0).hidden && !W.video(0).paused, '点一下:开始加载、播');
+    // 已经在加载时被拦(切回前台续播被拒)→ stopLoad
+    const L = await feedWorld({});
+    L.parsed();
+    const l0 = L.hls[0];
+    L.env.play = 'reject';
+    L.video(0).paused = true;
+    L.doc.hidden = true; L.fire('visibilitychange'); L.doc.hidden = false; L.fire('visibilitychange');
+    await L.ticks();
+    ok(l0.starts === 1 && l0.stops === 1 && !L.tap(0).hidden, 'F3 已在加载的这条续播被拒:stopLoad + 出「点一下播放」', { starts: l0.starts, stops: l0.stops });
+    // 带声音被拦 → 静音重试也被拦
+    const U = await feedWorld({});
+    U.parsed();
+    U.FDw._click({ target: U.video(0) });   // 点画面:开声音
+    U.env.play = 'reject';
+    await U.go(1);
+    ok(U.S.muted === true && !U.tap(1).hidden && U.video(1)._plays === 2, 'F3 带声音被拦 → 退回静音重试也被拦:出「点一下播放」', { muted: U.S.muted, plays: U.video(1)._plays });
+    // 原生 HLS:撤掉 src(不再下载),点了再设回去
+    const Nn = await feedWorld({ native: true, cell: true, play: 'reject' });
+    ok(!Nn.video(0).getAttribute('src') && !Nn.tap(0).hidden, 'F3 原生 HLS 被拦:撤掉 src(不再下载)+ 出「点一下播放」');
+    Nn.env.play = 'ok';
+    Nn.FDw._click({ target: Nn.tap(0) });
+    ok(Nn.video(0).getAttribute('src') === Nn.lineUrl(0, 0) && !Nn.video(0).paused && Nn.tap(0).hidden, '点了:重新设 src、播');
+}
+{
+    // ---- F4:键盘只认刷短片自己的(登录框的输入框 / 勾选框上的空格 / 登录框亮着时的 Esc 不吃)----
+    const W = await feedWorld({});
+    W.parsed();
+    const pw = W.El('div'); pw.setAttribute('id', 'password-screen'); pw.style.display = 'flex';
+    W.doc.body.appendChild(pw); W.byId['password-screen'] = pw;
+    const inp = W.El('input'); inp.setAttribute('type', 'password'); pw.appendChild(inp);
+    const key = (k, target) => { const ev = { key: k, target, defaultPrevented: false, stopped: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() { this.stopped = true; } }; W.fire('keydown', ev); return ev; };
+    const typed = ['j', 'k', ' ', 'ArrowDown', 'ArrowUp', 'PageUp', 'Escape'].map(k => key(k, inp));
+    ok(typed.every(e => !e.defaultPrevented && !e.stopped) && W.FDw.isOpen() && !W.video(0).paused, 'F4 登录框(盖在刷短片上)的密码框里:j / k / 空格 / 方向键 / Esc 都照常,刷短片不翻、不停、不关', typed.map(e => e.key + ':' + e.defaultPrevented));
+    const esc = key('Escape', W.doc.body);
+    ok(!esc.defaultPrevented && W.FDw.isOpen(), 'F4 登录框亮着时(焦点不在输入框)Esc 也不关底下的刷短片');
+    pw.style.display = 'none';
+    const sp = key(' ', W.S.vertBox), jj = key('j', W.S.vertBox);
+    ok(!sp.defaultPrevented && !W.video(0).paused && jj.defaultPrevented, 'F4 「只看竖屏」勾选框上:空格照旧勾选(不当暂停),j 照样翻页');
+    const sp2 = key(' ', W.S.list);
+    ok(sp2.defaultPrevented && W.video(0).paused, '焦点在列表上:空格暂停');
+    const ek = key('Escape', W.S.list);
+    ok(ek.defaultPrevented && !W.FDw.isOpen(), '登录框收起后:Esc 关刷短片');
+}
 {
     // ---- index.html 接线(p4)----
     const head = HTML.slice(0, HTML.indexOf('</head>'));
     const iSeek = head.indexOf('libs/js/seek-preview.js');
-    const tags = ['adult/player-x.js?v=3', 'adult/privacy.js?v=2', 'adult/preview.js?v=1', 'adult/feed.js?v=3'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
+    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=2', 'adult/feed.js?v=4'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
     // 修订:head 里的隐私预锁片段(设过 PIN 才加 dgp-prelock;privacy.js 10 秒没起来就撤掉),要在任何 body 内容之前
     const iPre = head.indexOf('dgp-prelock body > *:not(.dgp-layer)'), iPreJs = head.indexOf("localStorage.getItem('dgp_pin')");
     ok(iPre > 0 && iPreJs > iPre && iPreJs < head.indexOf('adult/adult.js?v=') && /if \(!window\.dgPrivacy\) d\.classList\.remove\('dgp-prelock'\); \}, 10000\)/.test(head), 'head:隐私预锁(CSS + 设过 PIN 才加类 + 10 秒兜底撤掉),在 adult.js 之前', [iPre, iPreJs]);

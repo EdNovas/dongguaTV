@@ -1,7 +1,7 @@
 // [adult] 过滤规则后台(public/adult/admin.html,GET /admin/adult)。
 //   令牌:输入后只放 sessionStorage(dgx_admin_token);每个请求带 X-Admin-Token。服务器:404 NOT_AVAILABLE = 后台关着(ADULT_ADMIN_TOKEN / ADMIN_TOKEN 都没设,或 ADULT_ADMIN_TOKEN=off)、
 //   401 BAD_TOKEN = 令牌不对、429 LOCKED = 10 分钟内错 5 次被锁。
-//   六个页签:概览(stats)/ 规则测试(test)/ 附加屏蔽词(block-words,只能更严)/ 隐藏作品(hidden、hide)/ 资源站(sites、site)/ 镜像(mirrors、mirror/probe)。
+//   六个页签:概览(stats)/ 规则测试(test)/ 附加屏蔽词(block-words,只能更严)/ 隐藏作品(hidden、hide)/ 资源站(sites、site)/ 镜像(mirrors、mirror/probe、mirror/reset)。
 //   所有服务器字符串一律 textContent / setAttribute(值),绝不拼 HTML;链接一律不做成 <a>(服务器给的地址只显示成文字)。
 //   纯函数与渲染在 node 里可 require(scripts/adult-privacy-test.mjs 用桩 DOM 测转义)。
 (function (root, factory) {
@@ -467,13 +467,29 @@
                                 out.textContent = str(JSON.stringify(x.data, null, 2), 6000);
                                 out.removeAttribute('hidden');
                             });
-                            return b;
+                            // 复核 SEC-2:回到主地址(POST /mirror/reset):换上去的地址不对时一键撤回;已经在主地址上时按钮不可点
+                            const onMirror = !!(s.primary && s.current && s.primary !== s.current);
+                            const rb = h('button', { type: 'button', class: 'adm-btn small danger', disabled: !onMirror, title: onMirror ? null : '已经在用主地址' }, '回到主地址');
+                            rb.addEventListener('click', async () => {
+                                let yes = true;
+                                try { if (W && typeof W.confirm === 'function') yes = !!W.confirm('把 ' + str(s.key, 64) + ' 切回主地址？\n' + str(s.primary, 200)); } catch (e) { yes = true; }
+                                if (!yes) return;
+                                rb.disabled = true; b.disabled = true;
+                                const x = await call('POST', '/mirror/reset', { key: s.key });
+                                if (!x.ok) { b.disabled = false; rb.disabled = false; if (x.status === 401 || x.status === 429) return failed(x, box); m.className = 'adm-msg err'; m.textContent = errText(x); return; }
+                                await VIEWS.mirrors(box, alive);
+                                let m2 = null;
+                                try { m2 = box.querySelector ? box.querySelector('[data-adm-mirror-msg]') : null; } catch (e) { m2 = null; }
+                                if (m2) { m2.className = 'adm-msg ok'; m2.textContent = str(s.key, 64) + (x.data && x.data.switched ? ' 已回到主地址' : ' 本来就在用主地址'); }
+                            });
+                            return h('div', { style: 'display: flex; gap: 6px; flex-wrap: wrap;' }, [b, rb]);
                         },
                     },
                 ];
+                m.setAttribute('data-adm-mirror-msg', '1');
                 box.appendChild(h('div', { class: 'adm-card' }, [
                     h('div', { class: 'adm-row' }, [h('h2', { class: 'adm-grow' }, '镜像'), refreshBtn(() => load('mirrors'))]),
-                    h('p', null, '资源站连续失败时自动换到同一后端的镜像域名（内容指纹要对得上），每 6 小时回头检查主地址。探测会立刻按同样的规则查一次（每站每小时最多 10 次）。'),
+                    h('p', null, '资源站连续失败时自动换到同一后端的镜像域名（内容指纹要对得上），每 6 小时回头检查主地址。探测会立刻按同样的规则查一次（每站每小时最多 10 次）。「回到主地址」立刻切回站点表里的主地址（不发请求）。'),
                     m,
                     list.length ? table(cols, list) : h('p', null, '没有镜像状态（镜像模块没在运行，或没有配置资源站）'),
                     out,

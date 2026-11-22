@@ -5,7 +5,9 @@
 //      再按一次恢复(设了 PIN 则要输 PIN)。可选「切走自动暂停」。
 //   ② 无痕:dgAdultHooks.onHistoryWrite 一律否决(历史/进度/观看统计),下面 INCOG_KEYS 列的本机键一律不写(Storage.setItem 拦截),
 //      观看统计 / 线路反馈 / 热度 / 历史推送的 POST 一律不发(fetch / sendBeacon 拦截);角落一直显示「无痕」小标。
-//   ③ PIN 锁:4–6 位数字,PBKDF2-SHA256(WebCrypto,15 万次,16 字节随机盐),逐字节常量时间比较;打开站点 / 闲置 N 分钟(正在播放不算)/
+//      删除不拦:继续观看列表「只删不加」的改写照常落地(写的是存着的条目去掉被删的)、只带删除墓碑的历史推送照常发。
+//      关掉无痕 = 刷新页面(刷新前照无痕拦着):app 内存里无痕期间的记录(线路分辨率表等)不会在下一次正常写时整份落地。
+//   ③ PIN 锁:4–6 位数字,PBKDF2-SHA256(WebCrypto,15 万次,16 字节随机盐),逐字节常量时间比较;打开站点 / 闲置 N 分钟(正在播放不算,循环播放的短片 / 预览不算播放)/
 //      从后台回来超过 1 分钟时锁上;锁屏盖住一切、暂停媒体、标签页伪装;连错 5 次后等 30s,之后每错一次翻倍(最多 1 小时);
 //      忘记 PIN = 本机完全重置(退出登录 + 清空本机数据和离线下载)。只是本机遮挡,不是账号安全(界面上写明)。
 //   ④ 标签页伪装:文档 / 搜索 / 邮箱 / 自定义标题,中性内联 SVG 图标;开着时站内改 document.title 会被盖回去(MutationObserver,不轮询)。
@@ -123,17 +125,44 @@
         return false;
     }
     function isClearKey(k) { return isBlockedKey(k) || CLEAR_EXTRA.indexOf(String(k)) >= 0; }
-    // 这次写要不要拦:无痕 → 拦 INCOG 键;正在清除 → 也拦(清完要刷新,卸载时 app 的保存/推送会把内存里的旧记录写回去);完全重置 → 全拦
+    // 这次写要不要拦:无痕 → 拦 INCOG 键;正在清除 → 拦 INCOG 键和一键清除额外删的键(清完要刷新,这期间 app 的卸载保存 / 推送 /
+    //   晚到的历史拉取会把内存里的旧记录、删除墓碑(片名)写回去);刚关掉无痕(S.purge='incog',等刷新)→ 跟无痕一样拦;完全重置 → 全拦
     function writeBlocked(k) {
         if (S.selfWrite) return false;
         if (S.purge === 'all') return true;
+        if (S.purge === 'keys') return isClearKey(k);
         if (!S.purge && !S.set.incognito) return false;
         return isBlockedKey(k);
+    }
+    // 无痕时「只删不加」的写照常落地:删除记录永远不该被无痕挡住(继续观看里删一条、过期清理)。
+    //   只认这些列表键;新列表里每一条(按 id 字段)都已经在存着的列表里、且比它少 → 写进去的是「存着的列表去掉被删的那几条」,
+    //   条目内容一律用存着的原样(内存里无痕期间改过的进度等一个字节都不落地);有一条是存着的列表里没有的 → 整次照旧拦掉
+    const SHRINK_KEYS = Object.freeze({ donggua_watch_history: 'name' });
+    function shrinkOnly(stored, next, idKey) {
+        let a, b;
+        try { a = JSON.parse(stored); b = JSON.parse(next); } catch (e) { return null; }
+        if (!Array.isArray(a) || !Array.isArray(b) || b.length >= a.length) return null;
+        const id = (x) => (x && typeof x === 'object' && typeof x[idKey] === 'string' && x[idKey]) ? x[idKey] : null;
+        const have = new Set(a.map(id)), keep = new Set();
+        for (const x of b) { const i = id(x); if (i == null || !have.has(i)) return null; keep.add(i); }
+        const out = a.filter(x => keep.has(id(x)));
+        return out.length < a.length ? JSON.stringify(out) : null;
+    }
+    function shrinkWrite(st, orig, k, v) {
+        if (S.purge === 'all' || S.purge === 'keys') return;   // 清除 / 重置中:什么都不写
+        const idKey = Object.prototype.hasOwnProperty.call(SHRINK_KEYS, String(k)) ? SHRINK_KEYS[String(k)] : null;
+        if (!idKey || !st || typeof st.getItem !== 'function') return;
+        const cur = st.getItem(k);
+        if (cur == null) return;
+        const out = shrinkOnly(cur, String(v), idKey);
+        if (out != null) orig.call(st, k, out);
     }
     function installStorageGuard() {
         const wrap = (orig) => {
             const f = function (k, v) {
-                try { if (writeBlocked(k)) return undefined; } catch (e) { }
+                let blocked = false;
+                try { blocked = writeBlocked(k); } catch (e) { }
+                if (blocked) { try { shrinkWrite(this, orig, k, v); } catch (e) { } return undefined; }
                 return orig.apply(this, arguments);
             };
             f.__dgp = true;
@@ -146,7 +175,15 @@
 
     // ---------- 网络:无痕 / 清除中不发统计、反馈、热度、历史推送 ----------
     // 返回 0 = 放行;否则 = 假回包的状态码(历史推送回 503:app 当失败、不记「已确认」;其余 204 = 当发过了丢掉)
-    function blocksRequest(url, method) {
+    //   例外:无痕时只带删除墓碑、一条观看条目都不带的历史推送照常发(删除记录不该被无痕挡住;墓碑里的片名是无痕之前就在历史里的)。
+    //   清除中 / 刚关无痕等刷新(S.purge)不放:清完云端再推墓碑会把删过的片名又写回服务器
+    function deletionOnlyPush(body) {
+        if (S.purge || !S.set.incognito || typeof body !== 'string' || body.length > 262144) return false;
+        let j = null;
+        try { j = JSON.parse(body); } catch (e) { return false; }
+        return !!j && typeof j === 'object' && Array.isArray(j.history) && j.history.length === 0 && Array.isArray(j.deleted) && j.deleted.length > 0;
+    }
+    function blocksRequest(url, method, body) {
         if (!S.purge && !S.set.incognito) return 0;
         const m = String(method || 'GET').toUpperCase();
         if (m === 'GET' || m === 'HEAD') return 0;
@@ -158,7 +195,11 @@
             if (origin && u.origin !== origin) return 0;
             p = u.pathname;
         } catch (e) { return 0; }
-        for (const b of NET_BLOCK) if (p === b || p.indexOf(b + '/') === 0) return b === '/api/history/push' ? 503 : 204;
+        for (const b of NET_BLOCK) {
+            if (!(p === b || p.indexOf(b + '/') === 0)) continue;
+            if (b !== '/api/history/push') return 204;
+            return (p === b && deletionOnlyPush(body)) ? 0 : 503;
+        }
         return 0;
     }
     function fakeResponse(status) {
@@ -172,7 +213,7 @@
                 try {
                     const url = (input && typeof input === 'object' && 'url' in input) ? input.url : input;
                     const method = (init && init.method) || (input && typeof input === 'object' && input.method) || 'GET';
-                    const st = blocksRequest(url, method);
+                    const st = blocksRequest(url, method, init && init.body);
                     if (st) return Promise.resolve(fakeResponse(st));
                 } catch (e) { }
                 return of.apply(root, arguments);
@@ -799,7 +840,9 @@
 
     // ---------- 闲置 / 后台 ----------
     function idleMs() { return S.set.idleMin * 60e3; }
-    function mediaPlayingVisible() { if (doc.hidden) return false; return mediaList().some(isPlaying); }
+    // 「正在看」只认会自己停下的播放:带 loop 的(刷短片静音自动循环、封面悬停预览)永远不 ended,算进来闲置锁就永远不触发。
+    //   主播放器(DPlayer)的「循环」是 ended 时 seek(0) 重播,video.loop 一直是 false,不受影响
+    function mediaPlayingVisible() { if (doc.hidden) return false; return mediaList().some(m => isPlaying(m) && !m.loop); }
     function scheduleIdle() {
         clearTimeout(S.idleT); S.idleT = 0;
         if (!hasPin() || S.cover) return;
@@ -985,14 +1028,15 @@
             } catch (e) { fin(false); }
         });
     }
-    // 云端观看历史(server.js POST /api/history/clear,按同步令牌)
+    // 云端观看历史(server.js POST /api/history/clear,按同步令牌)。all:true = 删除墓碑也一起删:
+    //   墓碑按片名存、服务器留 120 天,不删的话清完一刷新,历史拉取又把「删过的片名」整份写回本机 donggua_history_deleted
     async function clearServerHistory() {
         const token = lsGet('emax_auth_hash');
         if (!token) return 'skip';
         const f = S.origFetch || root.fetch;
         if (typeof f !== 'function') return 'skip';
         try {
-            const r = await f.call(root, '/api/history/clear', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) });
+            const r = await f.call(root, '/api/history/clear', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, all: true }) });
             return (r && r.ok) ? 'ok' : ('http ' + (r ? r.status : 0));
         } catch (e) { return 'error'; }
     }
@@ -1009,9 +1053,10 @@
         out.session = clearSession();
         out.caches = await purgeCaches();
         if (opts.offline) out.offline = await clearOfflineDb();
-        if (opts.reload !== false) reloadSoon();
+        if (opts.reload !== false) reloadSoon(serverFailed(out.server) ? 2500 : undefined);   // 云端没清掉:多留两秒让人看到提示
         return out;
     }
+    function serverFailed(s) { return s != null && s !== 'ok' && s !== 'skip'; }
     // 忘记 PIN:本机完全重置(退出登录 + 全部本机数据 + 离线下载 + PIN)
     async function resetDevice(opts) {
         opts = opts || {};
@@ -1042,6 +1087,18 @@
         return true;
     }
 
+    // 退出无痕:app 内存里还留着无痕期间的记录(线路实测分辨率表 站点|vod_id、弹幕偏移、推荐缓存…都是「读一次进内存、改完整份写回」),
+    //   只拦 setItem 的话,关掉无痕后下一次正常写就把它们整份落到本机。→ 刷新之前照无痕拦着(S.purge='incog':存储 / 网络 / 历史钩子都当无痕),
+    //   清掉这段时间的接口 / 图片缓存,然后刷新页面,内存里的副本随之丢掉
+    function leaveIncognito() {
+        if (!S.purge) S.purge = 'incog';
+        say('已关闭无痕，正在刷新页面…');
+        let done = false;
+        const go = () => { if (done) return; done = true; reloadSoon(0); };
+        setTimeout(go, 1500);   // 缓存清理卡住也要刷新
+        Promise.resolve().then(purgeCaches).then(go, go);
+    }
+
     // ---------- 设置 ----------
     function setSetting(key, value) {
         const next = Object.assign({}, S.set);
@@ -1049,7 +1106,7 @@
         const was = S.set;
         S.set = normSettings(next);
         saveSettings();
-        if (key === 'incognito' && was.incognito && !S.set.incognito) purgeCaches();   // 退出无痕:这段时间的接口 / 图片缓存清掉
+        if (key === 'incognito' && was.incognito && !S.set.incognito) leaveIncognito();
         if (key === 'idleMin') { S.lastActive = now(); scheduleIdle(); }
         if (key === 'secure') applySecure();
         applyDisguise(); updateFab(); updateBadge();
@@ -1115,7 +1172,7 @@
             sec.appendChild(row('自定义标题', '', inp));
         }
         // 无痕
-        sec.appendChild(row('无痕模式', '开着时不记观看历史、继续观看、播放进度、最近直播，不上报观看统计、线路反馈和热度；已有记录不动。页面左下角会显示「无痕」',
+        sec.appendChild(row('无痕模式', '开着时不记观看历史、继续观看、播放进度、最近直播，不上报观看统计、线路反馈和热度；已有记录不动（删记录照常生效）。页面左下角会显示「无痕」；关掉时页面会刷新一次',
             toggle('incognito', '无痕模式')));
         // PIN
         sec.appendChild(pinBlock(container));
@@ -1203,7 +1260,11 @@
         const run = () => {
             ui.clear = 'busy'; say('');
             rerender(container);
-            clearLocal({ server: !!o.server, offline: !!o.offline }).then(() => { say('已清除，正在刷新…'); ui.clear = 0; rerender(container); }, () => { ui.clear = 0; say('清除出错', true); rerender(container); });
+            clearLocal({ server: !!o.server, offline: !!o.offline }).then((out) => {
+                if (out && serverFailed(out.server)) say('本机已清除；云端观看历史没清掉（网络或服务器出错），刷新后可以再清一次', true);
+                else say('已清除，正在刷新…');
+                ui.clear = 0; rerender(container);
+            }, () => { ui.clear = 0; say('清除出错', true); rerender(container); });
         };
         if (ui.clear === 2) {
             blk.appendChild(h('div', { class: 'dgp-warn', role: 'alert' }, '离线下载删除后没法恢复，要重新下载。确定连离线下载一起删？'));

@@ -13,7 +13,8 @@
  *    连设备号都不生成;直播不记。切后台时先存一份待发(dgx_heat_pend),iOS 后台被杀下次打开再补发。从不写 Vue 响应式状态。
  *
  * ② 手机手势(O8,只认触屏 (any-pointer: coarse)):在 #dplayer 上用【捕获阶段】监听,只有真的接管了才 preventDefault + 截停:
- *    · 长按 ≥450ms(视频在播):按住期间 2 倍速 + 顶部「2x ▶▶」,松手/取消恢复原来的倍速(localStorage dplayer_speed 原样还回去,
+ *    · 长按 ≥450ms(视频在播;安卓系统长按的 contextmenu 先到就拦下它、从那一刻开始):按住期间 2 倍速 + 顶部「2x ▶▶」,
+ *      松手/取消恢复原来的倍速(localStorage dplayer_speed 原样还回去,
  *      index.html 的 ratechange 会把 2 记成用户倍速);
  *    · 横滑(≥24px 且 |dx|>2|dy|):拖动定位,中间显示目标时间和差值,往进度条派发合成 pointermove(dgSeekPreview 据此出缩略图),
  *      松手才 seek,手指回到起点附近 = 取消;从屏幕左右边缘 16px 内起手的不接(系统返回手势);
@@ -887,11 +888,21 @@
                 S.g = null;
             } catch (err) { S.g = null; }
         }
-        // 安卓长按会冒出 contextmenu(DPlayer 会弹它的右键菜单):只在我们接管的长按 / 拖动期间和刚松手时拦
+        // 安卓长按会冒出 contextmenu(DPlayer 会弹它的右键菜单):只在我们接管的长按 / 拖动期间和刚松手时拦。
+        //   修订:长按计时还没到(pending、没挪动、计时器在跑)也拦 —— 安卓 Chrome 的系统长按是 400ms(Android 11+ 默认),比我们的 450ms 先到:
+        //   以前 DPlayer 菜单先弹出来,50ms 后 2 倍速在菜单底下启动。现在拦下它并就此开始长按倍速(系统已经认定是长按了)
         function onCtx(e) {
             try {
                 if (e.currentTarget !== S.cont) return;
-                if (S.lp || S.scrub || (S.g && (S.g.mode === 'lp' || S.g.mode === 'scrub' || S.g.mode === 'swallow')) || now() < S.ctxBlockUntil) {
+                const g = S.g;
+                if (g && g.mode === 'pending' && !g.moved && g.lpT && canLongPress()) {
+                    if (e.cancelable) e.preventDefault();
+                    e.stopPropagation();
+                    clrT(g.lpT);
+                    startLongPress();
+                    return;
+                }
+                if (S.lp || S.scrub || (g && (g.mode === 'lp' || g.mode === 'scrub' || g.mode === 'swallow')) || now() < S.ctxBlockUntil) {
                     if (e.cancelable) e.preventDefault();
                     e.stopPropagation();
                 }

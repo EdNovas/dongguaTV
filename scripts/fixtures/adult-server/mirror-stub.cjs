@@ -20,6 +20,8 @@ function createMirror(d) {
         report(k, ok, kind, info) { rec({ ev: 'report', k, ok, kind, url: info && info.url, hasData: !!(info && info.data) }); },
         status() { return sites().map((s) => ({ key: s.key, primary: s.api, current: map[s.key] || s.api, since: 0, fails: 0, lastProbe: 0, candidates: Array.isArray(s.mirrors) ? s.mirrors.length : 0, reason: '' })); },
         async probe(k) { rec({ ev: 'probe', k }); return { key: k, ok: true, switched: false, current: map[k] || '', reason: 'stub', tried: [] }; },
+        // 复核 SEC-2:后台「回到主地址」
+        reset(k) { rec({ ev: 'reset', k }); const s = sites().find((x) => x.key === k); if (!s) return { key: k, ok: false, switched: false, reason: 'unknown-site' }; const from = map[k] || s.api; delete map[k]; return { key: k, ok: true, switched: from !== s.api, from, current: s.api, reason: from !== s.api ? 'admin-reset' : 'already-primary' }; },
         start() { rec({ ev: 'start' }); },
         stop() { },
         tick() { },

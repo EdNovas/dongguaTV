@@ -18,6 +18,8 @@
 //  ⑥ 第四阶段(目录 / 镜像 = 替身,scripts/fixtures/adult-server/mirror-stub.cjs):/api/catalog/related、/feed、GET|POST /heat 的出口过滤 / 校验 / 限流 /
 //     上报者哈希(dev 原文不落地);beacon orient;换域名跟随接线(搜索 / 爬虫 / /api/sites 走 apiFor,闸门与 catalogHttpGet 的结果 report 回去);
 //     后台:没配 ADMIN_TOKEN 全 404、错令牌 401 + 锁定、测试台、追加屏蔽词只会更严 + 持久化 + 重启并集、隐藏作品处处不出、站点停用持久化、镜像状态 / 探测
+//     复核 SEC-2:POST /api/adult/admin/mirror/reset(回到主地址)。复核 SEC-3(① 里,进程内闸门 + 假 app):公网直连、没配 ADULT_CLIENT_IP_HEADER 时
+//     客户端自己写的转发头不改变客户端键(热度扇出上限照样生效、后台锁定按 IPv6 /64)、Cloudflare 回源地址认不出、clientKeyOf 的 p: 键也按 /64
 //  (换域名跟随本身的逻辑见 scripts/adult-mirror-test.mjs)
 import fs from 'fs';
 import os from 'os';
@@ -135,9 +137,71 @@ console.log('① lib/adult-gate 纯函数');
     const T = gate.trustedClientNet;
     ok(T(rq('127.0.0.1', { 'x-real-ip': '203.0.113.1' }), '') === '' && T(rq('::ffff:127.0.0.1', { 'x-forwarded-for': '198.51.100.7' }), '') === ''
         && T(rq('172.17.0.1', { 'cf-connecting-ip': '8.8.8.8' }), '') === '' && T(rq('::1'), '') === '', '上报者身份:本机/内网反代后面、没配头 → 认不出(转发头不算)');
-    ok(T(rq('8.8.8.8'), '') === '8.8.8.8' && T(rq('::ffff:8.8.4.4'), '') === '8.8.4.4' && T(rq('8.8.8.8', { 'x-real-ip': '1.2.3.4' }), '') === ''
-        && T(rq('9.9.9.9', { 'x-forwarded-for': '1.1.1.1' }), '') === '', '上报者身份:直连公网对端可信;带了转发头(前面有不认识的反代)→ 认不出');
+    // 复核 SEC-3:直连的公网对端自己加转发头不再"认不出"(以前一加 X-Forwarded-For 就退到按单个地址算 → 热度扇出上限没了、IPv6 不按 /64)
+    ok(T(rq('8.8.8.8'), '') === '8.8.8.8' && T(rq('::ffff:8.8.4.4'), '') === '8.8.4.4' && T(rq('8.8.8.8', { 'x-real-ip': '1.2.3.4' }), '') === '8.8.8.8'
+        && T(rq('9.9.9.9', { 'x-forwarded-for': '1.1.1.1' }), '') === '9.9.9.9' && T(rq('9.9.9.9', { forwarded: 'for=1.1.1.1', 'true-client-ip': '1.1.1.2' }), '') === '9.9.9.9',
+    '复核 SEC-3:直连公网对端可信,客户端自己写的转发头(XFF / X-Real-IP / Forwarded …)不改变它', [T(rq('8.8.8.8', { 'x-real-ip': '1.2.3.4' }), ''), T(rq('9.9.9.9', { 'x-forwarded-for': '1.1.1.1' }), '')]);
+    ok(T(rq('172.70.12.34', { 'cf-connecting-ip': '8.8.8.8' }), '') === '' && T(rq('104.16.0.1'), '') === '' && T(rq('2606:4700:10::6816:1'), '') === '' && T(rq('2a06:98c7:1::1'), '') === ''
+        && T(rq('2a06:98d0::1'), '') === '2a06:98d0:0:0::/64' && T(rq('172.80.0.1'), '') === '172.80.0.1' && T(rq('104.32.0.1'), '') === '104.32.0.1',
+    '复核 SEC-3:对端是 Cloudflare 回源地址(没配头的 CDN)→ 认不出;段外的照常', [T(rq('2a06:98d0::1'), ''), T(rq('172.80.0.1'), '')]);
     ok(T(rq('2001:4860:1:2:aaaa::1'), '') === T(rq('2001:4860:1:2:bbbb::9'), '') && T(rq('2001:4860:1:2:aaaa::1'), '') !== T(rq('2001:4860:1:3::1'), ''), '上报者身份:IPv6 按 /64 归并');
+    // 客户端键(限流 / 后台锁定 / 热度扇出):没配头时只看对端,转发头带不带都一样;认不出时也按对端网络(IPv6 /64)
+    const K = gate.clientKeyOf;
+    ok(typeof K === 'function'
+        && K(rq('2a01:4f8:c0c:1234::5'), '') === K(rq('2a01:4f8:c0c:1234::99', { 'x-forwarded-for': '1.2.3.4' }), '') && K(rq('2a01:4f8:c0c:1234::5'), '') === 'n:2a01:4f8:c0c:1234::/64'
+        && K(rq('45.33.10.20', { 'x-forwarded-for': '1.1.1.1' }), '') === 'n:45.33.10.20' && K(rq('45.33.10.20'), '') === 'n:45.33.10.20'
+        && K(rq('fd00:1:2:3::7', { 'x-real-ip': '8.8.8.8' }), '') === K(rq('fd00:1:2:3::8'), '') && K(rq('fd00:1:2:3::7'), '') === 'p:fd00:1:2:3::/64'
+        && K(rq('2606:4700:10::1', { 'cf-connecting-ip': '2a01::1' }), '') === 'p:2606:4700:10:0::/64' && K(rq('127.0.0.1'), '') === 'p:127.0.0.1'
+        && K(rq('127.0.0.1', { 'x-real-ip': '2a01:4f8:c0c:1234::5' }), 'x-real-ip') === 'n:2a01:4f8:c0c:1234::/64' && K(rq('fd00::1', {}), 'x-real-ip') === 'p:fd00:0:0:0::/64',
+    '复核 SEC-3:clientKeyOf —— 转发头开不出新键、IPv6 一律 /64(含认不出时的 p: 键);配了 ADULT_CLIENT_IP_HEADER 照旧只认它',
+    typeof K === 'function' ? [K(rq('2a01:4f8:c0c:1234::5'), ''), K(rq('2a01:4f8:c0c:1234::99', { 'x-forwarded-for': '1.2.3.4' }), ''), K(rq('fd00:1:2:3::7'), ''), K(rq('2606:4700:10::1', { 'cf-connecting-ip': '2a01::1' }), ''), K(rq('fd00::1', {}), 'x-real-ip')] : 'clientKeyOf 没导出');
+    // 进程内挂一个闸门(假 app,不起服务器):公网直连 + 没配头 → 热度扇出上限照样生效、后台锁定按 /64(带不带转发头都一样)
+    {
+        const routes = {}, adminMw = [];
+        const fakeApp = {
+            use(p, ...fns) { if (p === '/api/adult/admin' && fns.length === 1 && typeof fns[0] === 'function' && fns[0].length === 3) adminMw.push(fns[0]); },
+            get(p, ...h) { [].concat(p).forEach((x) => { routes['GET ' + x] = h[h.length - 1]; }); },
+            post(p, ...h) { [].concat(p).forEach((x) => { routes['POST ' + x] = h[h.length - 1]; }); },
+            put(p, ...h) { [].concat(p).forEach((x) => { routes['PUT ' + x] = h[h.length - 1]; }); },
+            delete() { },
+        };
+        const adds = [];
+        const cat = { heatAdd: async (wk, o, who) => { adds.push(who); return true; }, heat: async () => null, adminHidden: async () => [], isHidden: () => false };
+        const g3 = gate.createAdultGate({ adult, allSites: () => [], authConfigured: () => true, ownToken: () => true, env: { ADULT_ADMIN_TOKEN: 'sec3-admin-token-0123456789' }, catalog: () => cat, log: () => { } });
+        g3.register(fakeApp);
+        const heatH = routes['POST /api/catalog/heat'], auth = adminMw[0];
+        const fres = () => { const r = { code: 200, j: null, set() { return r; }, setHeader() { return r; }, status(c) { r.code = c; return r; }, json(j) { r.j = j; return r; }, end() { return r; } }; return r; };
+        const B100 = Buffer.alloc(100, 7).toString('base64');
+        const heatReq = (peer, dev, wk, hdrs) => ({ method: 'POST', headers: Object.assign({ 'x-dg-token': 'sec3tok' }, hdrs || {}), query: {}, params: {}, socket: { remoteAddress: peer }, body: { wk, dur: 3600, bins: B100, dev } });
+        if (typeof heatH !== 'function' || typeof auth !== 'function') ok(false, '进程内闸门:没拿到 POST /api/catalog/heat 或后台鉴权中间件', Object.keys(routes).length);
+        else {
+            for (const d of ['devSEC3noHdr01', 'devSEC3noHdr02', 'devSEC3noHdr03']) await heatH(heatReq('45.33.10.20', d, 'c:SEC-301'), fres());
+            const nNo = adds.length;
+            for (const d of ['devSEC3xff0001', 'devSEC3xff0002', 'devSEC3xff0003']) await heatH(heatReq('45.33.10.20', d, 'c:SEC-302', { 'x-forwarded-for': '1.1.1.' + d.slice(-1) }), fres());
+            const nX = adds.length - nNo;
+            for (const d of ['devSEC3v6xff01', 'devSEC3v6xff02', 'devSEC3v6xff03']) await heatH(heatReq('2a01:4f8:c0c:1234::' + d.slice(-1), d, 'c:SEC-303', { 'x-forwarded-for': '9.9.9.' + d.slice(-1) }), fres());
+            const nV6 = adds.length - nNo - nX;
+            ok(nNo === 1 && nX === 1 && nV6 === 1, '复核 SEC-3:公网直连、没配头:同一网络 3 个假设备号当天同一部片只计 1 份 —— 客户端加 X-Forwarded-For / 换 /64 里的地址也一样', [nNo, nX, nV6]);
+            const call = (peer, hdrs, tok) => new Promise((resolve) => {
+                const res = fres();
+                res.json = (j) => { resolve(res.code + ' ' + (j && j.error)); return res; };
+                auth({ headers: Object.assign({ 'x-admin-token': tok || 'wrong-guess-token' }, hdrs || {}), socket: { remoteAddress: peer } }, res, () => resolve('next'));
+            });
+            const pre = '2a01:4f8:c0c:5678::';
+            const L = [];
+            for (let i = 1; i <= 5; i++) L.push(await call(pre + i, i % 2 ? { 'x-forwarded-for': '1.2.3.' + i } : null));
+            const more = [];
+            for (let i = 100; i < 110; i++) more.push(await call(pre + i.toString(16), { 'x-forwarded-for': '5.6.7.8', 'x-real-ip': '5.6.7.9' }));
+            const goodLocked = await call(pre + 'abc', null, 'sec3-admin-token-0123456789');
+            const v4 = [];
+            for (let i = 0; i < 6; i++) v4.push(await call('45.33.99.7', i % 2 ? { 'x-forwarded-for': '7.7.7.' + i } : null));
+            const other = await call('2a01:4f8:c0c:9999::1', null, 'sec3-admin-token-0123456789');
+            ok(L.slice(0, 4).every((x) => x === '401 BAD_TOKEN') && L[4] === '429 LOCKED' && more.every((x) => x === '429 LOCKED') && goodLocked === '429 LOCKED'
+                && v4.slice(0, 4).every((x) => x === '401 BAD_TOKEN') && v4[4] === '429 LOCKED' && v4[5] === '429 LOCKED' && other === 'next',
+            '复核 SEC-3:后台错令牌锁定按对端网络(IPv6 /64)—— 一半带转发头也是同一个键,锁住后同一 /64 换地址 + 加 XFF 照样 429;IPv4 加 XFF 也开不出第二份配额;别的网络照常',
+            [L, [...new Set(more)], goodLocked, v4, other]);
+        }
+    }
     ok(T(rq('127.0.0.1', { 'x-real-ip': '203.0.113.9' }), 'x-real-ip') === '203.0.113.9' && T(rq('127.0.0.1', { 'x-forwarded-for': '6.6.6.6, 203.0.113.5' }), 'x-forwarded-for') === '203.0.113.5'
         && T(rq('127.0.0.1', {}), 'x-real-ip') === '' && T(rq('127.0.0.1', { 'x-real-ip': 'garbage' }), 'x-real-ip') === '', '上报者身份:配了 ADULT_CLIENT_IP_HEADER 只认它(x-forwarded-for 取最右一跳)');
     // 封面缓存目录:不在 public/ 下(默认 cache.db 同目录的 adult-img-cache;配到 public/ 里 → 退回默认)
@@ -162,6 +226,74 @@ console.log('① lib/adult-gate 纯函数');
             '严格站:政策不信的番号不进 c: 键(普通站同一条照旧 c:)', [cs.ok, cs.codeOk, cs.codeVeto, ws, cn.ok, wn]);
     }
     ok(gate.ipHeaderOf({ ADULT_CLIENT_IP_HEADER: ' CF-Connecting-IP ' }) === 'cf-connecting-ip' && gate.ipHeaderOf({ ADULT_CLIENT_IP_HEADER: 'bad header!' }) === '' && gate.ipHeaderOf({}) === '', 'ADULT_CLIENT_IP_HEADER 解析');
+}
+
+// ---------------------------------------------------------------- ①b 复核 SEC-2:后台镜像页「回到主地址」按钮(public/adult/admin.js + 极简 DOM 替身)
+console.log('①b 后台镜像页「回到主地址」');
+{
+    class El {
+        constructor(tag, doc) { this.tagName = String(tag).toUpperCase(); this.ownerDocument = doc; this.children = []; this.attrs = new Map(); this.listeners = {}; this.parentNode = null; this._text = ''; this.className = ''; this.value = ''; this.disabled = false; }
+        get firstChild() { return this.children[0] || null; }
+        appendChild(c) { if (c.parentNode) c.parentNode.removeChild(c); c.parentNode = this; this.children.push(c); return c; }
+        removeChild(c) { const i = this.children.indexOf(c); if (i >= 0) this.children.splice(i, 1); c.parentNode = null; return c; }
+        setAttribute(k, v) { this.attrs.set(k, String(v)); if (k === 'class') this.className = String(v); }
+        getAttribute(k) { return k === 'class' ? this.className : (this.attrs.has(k) ? this.attrs.get(k) : null); }
+        removeAttribute(k) { this.attrs.delete(k); }
+        addEventListener(t, fn) { (this.listeners[t] = this.listeners[t] || []).push(fn); }
+        click() { if (this.disabled) return; for (const fn of this.listeners.click || []) fn({ preventDefault() { }, target: this }); }
+        focus() { }
+        get textContent() { return this.tagName === '#TEXT' ? this._text : this.children.map((c) => c.textContent).join(''); }
+        set textContent(v) { this.children = []; if (this.tagName === '#TEXT') this._text = String(v); else if (String(v) !== '') this.appendChild(this.ownerDocument.createTextNode(v)); }
+        all(pred, out = []) { for (const c of this.children) { if (pred(c)) out.push(c); c.all(pred, out); } return out; }
+        querySelector(sel) {
+            const pred = sel[0] === '.' ? (c) => (' ' + c.className + ' ').indexOf(' ' + sel.slice(1) + ' ') >= 0 : sel[0] === '[' ? (c) => c.attrs.has(sel.slice(1, -1)) : (c) => c.tagName === sel.toUpperCase();
+            return this.all(pred)[0] || null;
+        }
+    }
+    const doc = { createElement: (t) => new El(t, doc), createTextNode: (t) => { const e = new El('#text', doc); e._text = String(t); return e; } };
+    const mount = doc.createElement('main');
+    const head = doc.createElement('header'); head.className = 'adm-head'; mount.appendChild(head);
+    const MIR0 = [{ key: 'av_s01', primary: 'https://p1-zy.example/api.php/provide/vod', current: 'https://m1-zy.example/api.php/provide/vod', since: 1, fails: 0, candidates: 1, reason: 'failover' },
+        { key: 'av_s02', primary: 'https://p2-zy.example/api.php/provide/vod', current: 'https://p2-zy.example/api.php/provide/vod', since: 0, fails: 0, candidates: 0, reason: '' }];
+    let mirrors = MIR0.map((x) => Object.assign({}, x));
+    const flog = [];
+    let confirmAns = false;
+    const win = { sessionStorage: { _m: new Map([['dgx_admin_token', 'ui-token-xyz']]), getItem(k) { return this._m.has(k) ? this._m.get(k) : null; }, setItem(k, v) { this._m.set(k, String(v)); }, removeItem(k) { this._m.delete(k); } }, confirm: () => confirmAns };
+    const fetchFn = async (u, o) => {
+        const body = o.body ? JSON.parse(o.body) : undefined;
+        flog.push({ u, m: o.method, body, tok: o.headers['X-Admin-Token'] });
+        const p = u.replace('/api/adult/admin', '');
+        let st = 200, j = {};
+        if (o.method === 'GET' && p === '/stats') j = { works: 1, lines: 1, sites: [], rejected: {}, extraBlock: { n: 0, rev: '' }, catalog: true, mirrors: 1 };
+        else if (o.method === 'GET' && p === '/mirrors') j = mirrors;
+        else if (o.method === 'POST' && p === '/mirror/reset') { const x = mirrors.find((y) => y.key === body.key); const sw = x.current !== x.primary; x.current = x.primary; x.reason = 'admin-reset'; j = { key: body.key, ok: true, switched: sw, current: x.primary, reason: 'admin-reset' }; }
+        else st = 404;
+        return { ok: st < 300, status: st, text: async () => JSON.stringify(j) };
+    };
+    const flush = async () => { for (let i = 0; i < 20; i++) await new Promise((r) => setImmediate(r)); };
+    const ADM = require(path.join(ROOT, 'public/adult/admin.js'));
+    const ui = ADM.boot(doc, mount, { window: win, fetch: fetchFn });
+    await flush();
+    await ui.select('mirrors');
+    await flush();
+    const rbs = () => mount.all((c) => c.tagName === 'BUTTON' && c.textContent === '回到主地址');
+    const b0 = rbs();
+    ok(b0.length === 2 && b0[0].disabled === false && b0[1].disabled === true, '镜像页:每个站一个「回到主地址」;已经在主地址上的不可点', b0.map((b) => b.disabled));
+    if (b0.length === 2) {
+        confirmAns = false;
+        b0[0].click(); await flush();
+        const n0 = flog.filter((x) => x.m === 'POST' && /\/mirror\/reset$/.test(x.u)).length;
+        confirmAns = true;
+        b0[0].click(); await flush();
+        const posts = flog.filter((x) => x.m === 'POST' && /\/mirror\/reset$/.test(x.u));
+        const b1 = rbs();
+        ok(n0 === 0 && posts.length === 1 && posts[0].body.key === 'av_s01' && posts[0].tok === 'ui-token-xyz' && posts[0].u === '/api/adult/admin/mirror/reset'
+            && b1.length === 2 && b1.every((b) => b.disabled) && /av_s01 已回到主地址/.test(mount.textContent),
+        '点「回到主地址」:先确认(取消 = 不发);确认后 POST /api/adult/admin/mirror/reset {key} 带 X-Admin-Token,刷新表格、提示已回到主地址',
+            [n0, posts.map((x) => [x.u, x.body, x.tok]), b1.map((b) => b.disabled), mount.textContent.slice(0, 300)]);
+    }
+    const html = fs.readFileSync(path.join(ROOT, 'public/adult/admin.html'), 'utf8');
+    ok(/<script src="\/adult\/admin\.js\?v=4" defer><\/script>/.test(html), 'admin.html 引用 admin.js?v=4(改了 admin.js 要换版本串)');
 }
 
 // ---------------------------------------------------------------- 假 maccms 站
@@ -1205,6 +1337,15 @@ console.log('⑥ 第四阶段:相关 / 短片流 / 热度 / 换域名接线 / �
         ok(r.status === 200 && r.j.reason === 'stub' && mlog().some((x) => x.ev === 'probe' && x.k === 'a'), 'POST mirror/probe → mirror.probe(key)', r.j);
         const mv = [await api('POST', '/api/adult/admin/mirror/probe', { headers: AH(), json: { key: 'zz' } }), await api('POST', '/api/adult/admin/mirror/probe', { headers: AH(), json: {} })];
         ok(mv[0].status === 404 && mv[1].status === 400, 'mirror/probe:不认识的站 404、缺 key 400', mv.map((x) => x.status));
+        // 复核 SEC-2:后台「回到主地址」
+        const rsNo = await api('POST', '/api/adult/admin/mirror/reset', { headers: { 'X-Real-IP': '198.51.100.21' }, json: { key: 'a' } });
+        r = await api('POST', '/api/adult/admin/mirror/reset', { headers: AH(), json: { key: 'a' } });
+        ok(rsNo.status === 401 && r.status === 200 && r.j.ok === true && r.j.switched === true && r.j.from === A2 && r.j.current === SITES[0].api && r.j.reason === 'admin-reset'
+            && mlog().filter((x) => x.ev === 'reset' && x.k === 'a').length === 1, 'POST mirror/reset → mirror.reset(key)(要 X-Admin-Token;没令牌 401 且不调)', [rsNo.status, r.status, r.j]);
+        const mvr = [await api('POST', '/api/adult/admin/mirror/reset', { headers: AH(), json: { key: 'zz' } }), await api('POST', '/api/adult/admin/mirror/reset', { headers: AH(), json: {} }), await api('POST', '/api/adult/admin/mirror/reset', { headers: AH(), json: { key: 'x'.repeat(65) } })];
+        ok(mvr[0].status === 404 && mvr[1].status === 400 && mvr[2].status === 400, 'mirror/reset:不认识的站 404、缺 key / 太长 400', mvr.map((x) => x.status));
+        r = await api('GET', '/api/adult/admin/mirrors', { headers: AH() });
+        ok(r.status === 200 && r.j.some((x) => x.key === 'a' && x.current === SITES[0].api), 'mirror/reset 之后 GET mirrors:a 回到主地址', r.j);
         ok((await api('GET', '/api/adult/admin/nope', { headers: AH() })).status === 404, '后台下未知路径 → 404');
         await BW({ words: ['姐姐的周'] });   // 留一个,下面重启验持久化
         // —— 锁定:同一 IP 10 分钟 5 次错令牌 → 429,锁着时对的令牌也不收;别的 IP 不受影响 ——

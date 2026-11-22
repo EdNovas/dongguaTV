@@ -236,7 +236,11 @@ function makeEnv(opts = {}) {
         innerWidth: 400, innerHeight: 800, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, queueMicrotask,
         location: { href: 'https://adult.example.test/', origin: 'https://adult.example.test', reloads: 0, reload() { this.reloads++; } },
         navigator: { sendBeacon(u) { beaconLog.push(String(u)); return true; } },
-        fetch: (u, o) => { fetchLog.push({ url: String(u && u.url ? u.url : u), method: (o && o.method) || 'GET', body: o && o.body }); return Promise.resolve(new Response('{}', { status: 200 })); },
+        fetch: (u, o) => {
+            const url = String(u && u.url ? u.url : u);
+            fetchLog.push({ url, method: (o && o.method) || 'GET', body: o && o.body });
+            return Promise.resolve(new Response('{}', { status: (opts.fetchStatus && opts.fetchStatus(url)) || 200 }));
+        },
         __clock: clock,
     });
     if (opts.hooks) win.dgAdultHooks = opts.hooks;
@@ -439,10 +443,24 @@ console.log('② 无痕');
     ok(DgAdult.beacon.send({}) === false && beaconSent === 0, '无痕:adult.js 线路反馈(用原生 fetch 绕过包装)在 send 上被挡');
     ok(!!doc.body.querySelector('.dgp-badge') && /无痕/.test(doc.body.querySelector('.dgp-badge').textContent), '无痕:角落小标');
     P.setIncognito(false);
-    ok(!doc.body.querySelector('.dgp-badge') && hooks.call('onHistoryWrite', { kind: 'history' }) === true, '关无痕:小标没了、不再否决');
+    ok(!doc.body.querySelector('.dgp-badge') && JSON.parse(ls.getItem('dgp_settings')).incognito === false, '关无痕:小标没了、设置存成关');
+    // PRIV-1:app 内存里还有无痕期间的记录 → 刷新之前照无痕拦着,然后刷新页面
+    ok(P.incognito() === true && hooks.call('onHistoryWrite', { kind: 'history' }) === false, '关无痕后、刷新前:照旧当无痕(否决历史写入)');
     win.localStorage.setItem('donggua_watch_history', '[2]');
     await win.fetch('/api/stats/watch', { method: 'POST' });
-    ok(ls.getItem('donggua_watch_history') === '[2]' && env.fetchLog.length === before + 5 && DgAdult.beacon.send({}) === true, '关无痕:照常写、照常发');
+    ok(ls.getItem('donggua_watch_history') === '[1]' && env.fetchLog.length === before + 4 && DgAdult.beacon.send({}) === false, '关无痕后、刷新前:列出的键照旧不写、统计 / 反馈照旧不发');
+    await flush(10); await env.clock.advance(2000);
+    ok(env.win.location.reloads === 1, '关无痕:刷新页面(只刷一次)', env.win.location.reloads);
+    // 刷新后(同一份本机存储重新启动)照常
+    {
+        const hooksR = fakeHooks();
+        let sentR = 0;
+        const envR = makeEnv({ ls: Object.fromEntries(ls._m), hooks: hooksR, DgAdult: { beacon: { send() { sentR++; return true; } } } });
+        ok(envR.P.incognito() === false && hooksR.call('onHistoryWrite', { kind: 'history' }) === true && !envR.doc.body.querySelector('.dgp-badge'), '刷新后:不是无痕、不再否决、没小标');
+        envR.win.localStorage.setItem('donggua_watch_history', '[2]');
+        await envR.win.fetch('/api/stats/watch', { method: 'POST' });
+        ok(envR.ls.getItem('donggua_watch_history') === '[2]' && envR.fetchLog.length === 1 && envR.win.DgAdult.beacon.send({}) === true && sentR === 1, '刷新后:照常写、照常发');
+    }
     // 没有 adult.js:放一个普通对象(adult.js 装上时合并)
     const env2 = makeEnv();
     const H = env2.win.dgAdultHooks;
@@ -779,7 +797,7 @@ console.log('⑥ 设置面板');
     ok(calls[calls.length - 1] === false, '关防截屏 → 调 AndroidPrivacy.setSecure(false)');
     box.parentNode.removeChild(box);
     P.setIncognito(false);   // 容器拿掉之后再变化:不报错、不再重画
-    ok(!P.incognito(), '容器拿掉后状态变化照常');
+    ok(P.settings().incognito === false && P.incognito() === true, '容器拿掉后状态变化照常(关无痕:设置存成关,刷新前仍当无痕)');
     ok(JSON.stringify(Object.keys(P.settings()).sort()) === JSON.stringify(['autoPause', 'bossKey', 'cover', 'customTitle', 'disguise', 'fab', 'fabPos', 'idleMin', 'incognito', 'preset', 'secure', 'touch3']), 'settings() 字段');
     // 坏设置 → 默认值
     const env2 = makeEnv({ ls: { dgp_settings: '{"bossKey":"x","idleMin":7,"preset":"<b>","fabPos":{"x":5,"y":-1},"incognito":"yes"}' } });
@@ -930,6 +948,194 @@ console.log('⑦ admin.js');
     const many = Array.from({ length: 501 }, (_, i) => 'w' + i).join('\n');
     ok(adminApi.parseWords(many).errors.some(e => /最多 500/.test(e)), 'parseWords:超过 500 个报错');
     ok(adminApi.fmtAgo(0) === '—' && adminApi.fmtAgo(Date.now() - 90e3) === '1 分钟前' && adminApi.toMs(1_700_000_000) === 1_700_000_000_000, '时间格式(秒 / 毫秒都认)');
+}
+
+// ================= ⑧ 第四阶段审查修复(PRIV-1..4) =================
+//  PRIV-1/3 用 index.html 里真的方法正文(只读;锚点 = 方法签名 / 紧跟着的注释)拼一个最小 app,跑在装了 privacy.js 的桩浏览器里
+console.log('⑧ 审查修复(PRIV-1..4)');
+{
+    const APP_HTML = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8').split('\r\n').join('\n');
+    const IND = '                ';
+    const htmlPart = (from, to) => {
+        const a = APP_HTML.indexOf(IND + from), b = a < 0 ? -1 : APP_HTML.indexOf(IND + to, a + 1);
+        return (a < 0 || b < 0) ? null : APP_HTML.slice(a, b);
+    };
+    const PARTS = {
+        srcRes: [['_srcResMemo() {', '_srcResOf(s, p) {'], ['_srcSetRes(s, w, h, from) {', '// 测速拿到的清单正文']],
+        history: [['loadWatchHistory() {', '// 清理过期的进度记忆'], ['saveWatchHistoryToStorage() {', '// ========== 📡 历史同步功能 =========='],
+            ['pushHistoryToServer(immediate = false) {', '// 使用 sendBeacon 进行最后一次推送'], ['_loadTombstones() {', '// 从历史记录直接播放']],
+    };
+    const QUIET = { log() { }, warn() { }, error() { }, info() { }, debug() { } };
+    const mkApp = (env, part, state) => {
+        const src = PARTS[part].map(([a, b]) => htmlPart(a, b));
+        if (src.some(s => s == null)) { ok(false, 'index.html 里找不到 ' + part + ' 的方法(改名 / 挪位置了:更新 ⑧ 的锚点)'); return null; }
+        env.win.console = QUIET;
+        const app = vm.runInContext('({ watchHistory: [], syncEnabled: false, syncToken: "", _lastPushTime: 0, _pushDebounceTimer: null, srcRev: 0, _resMemo: null,\n'
+            + '$nextTick() { }, updateHistoryScrollNeeded() { }, cleanUpOldProgress() { }, initHistorySync() { }, fetchRecommendations() { }, fetchPopular() { },\n'
+            + '_loadLiveRecentLocal() { }, fetchLiveChannels() { }, refreshOfflineList() { },\n' + src.join('') + '\n})', env.ctx);
+        return Object.assign(app, state || {});
+    };
+
+    // —— PRIV-1:关无痕 → 刷新前照无痕拦着 + 刷新页面(app 内存表里无痕期间的 站点|vod_id 不落地) ——
+    {
+        const env = makeEnv();
+        const { P, ls, win } = env;
+        const app = mkApp(env, 'srcRes');
+        const keysOf = (e) => Object.keys(JSON.parse(e.ls.getItem('donggua_src_res') || '{}')).sort();
+        if (app) {
+            app._srcSetRes({ site_key: 's01', vod_id: '1' }, 1280, 720, 'play');
+            ok(JSON.stringify(keysOf(env)) === '["s01|1"]', '(真方法)平时:线路实测分辨率按 站点|vod_id 记到本机', keysOf(env));
+            P.setIncognito(true);
+            app._srcSetRes({ site_key: 's07', vod_id: '123456' }, 1920, 1080, 'm3u8');
+            ok(JSON.stringify(keysOf(env)) === '["s01|1"]' && !!app._resMemo['s07|123456'], '无痕:本机不写(app 内存表里有这条)', keysOf(env));
+            P.setIncognito(false);
+            app._srcSetRes({ site_key: 's12', vod_id: '777' }, 1280, 720, 'play');   // 关掉后、刷新前又播了一部
+            ok(keysOf(env).indexOf('s07|123456') < 0, 'PRIV-1:关无痕后的下一次写不会把无痕期间的 站点|vod_id 整份落地', keysOf(env));
+            ok(P.incognito() === true, 'PRIV-1:关无痕后、刷新前 dgPrivacy.incognito() 仍为真(热度 / 片头等模块照旧不记)');
+            await flush(10); await env.clock.advance(2000);
+            ok(win.location.reloads === 1, 'PRIV-1:关无痕 → 刷新页面(内存表随之丢掉)', win.location.reloads);
+            const env2 = makeEnv({ ls: Object.fromEntries(ls._m) });
+            const app2 = mkApp(env2, 'srcRes');
+            app2._srcSetRes({ site_key: 's12', vod_id: '777' }, 1280, 720, 'play');
+            ok(env2.P.incognito() === false && JSON.stringify(keysOf(env2)) === '["s01|1","s12|777"]', '刷新后照常记,无痕期间那条不在', keysOf(env2));
+        }
+        // 设置面板的开关
+        const env3 = makeEnv({ ls: { dgp_settings: JSON.stringify({ incognito: true }) } });
+        const box = env3.doc.createElement('div'); env3.app.appendChild(box);
+        env3.P.renderSettings(box);
+        ok(/关掉时页面会刷新/.test(box.textContent), '设置说明:关掉无痕会刷新页面');
+        box.querySelector('[data-dgp="incognito"]').click();
+        await flush(10); await env3.clock.advance(2000);
+        ok(JSON.parse(env3.ls.getItem('dgp_settings')).incognito === false && /正在刷新/.test(box.textContent) && env3.win.location.reloads === 1, '设置面板关掉无痕:存成关、提示正在刷新、刷新一次', [box.textContent.slice(-40), env3.win.location.reloads]);
+        const env4 = makeEnv();
+        env4.P.setIncognito(true);
+        await flush(10); await env4.clock.advance(2000);
+        ok(env4.win.location.reloads === 0 && env4.P.incognito() === true, '打开无痕不刷新');
+    }
+
+    // —— PRIV-3:无痕时删除继续观看照常生效 ——
+    const at = new Date(1_800_000_000_000 - 3600e3).toISOString();
+    const A = { name: '合成作品甲', watchedAt: at, progress: 10, episode: '第1集' };
+    const B = { name: '合成作品乙', watchedAt: at, progress: 20, episode: '第2集' };
+    const C = { name: '合成作品丙', watchedAt: at, progress: 30, episode: '第3集' };
+    const names = (l) => JSON.stringify((l || []).map(x => x && x.name));
+    const storedHist = (e) => JSON.parse(e.ls.getItem('donggua_watch_history') || 'null');
+    {
+        const env = makeEnv({ ls: { donggua_watch_history: JSON.stringify([A, B, C]), donggua_live_recent: '[{"name":"x"},{"name":"y"}]' } });
+        const app = mkApp(env, 'history');
+        if (app) {
+            app.loadWatchHistory();
+            ok(names(app.watchHistory) === names([A, B, C]), '(真方法)载入继续观看');
+            env.P.setIncognito(true);
+            app.watchHistory[1].progress = 99;   // 内存里无痕期间变了的内容:不该落地
+            app.removeFromHistory(0);
+            const s1 = storedHist(env);
+            ok(names(s1) === names([B, C]), 'PRIV-3:无痕时在继续观看里删一条 → 删除落地', s1);
+            ok(s1 && s1[0].progress === 20, '落地的是存着的条目原样(内存里无痕期间改的进度不写)', s1);
+            ok(JSON.parse(env.ls.getItem('donggua_history_deleted') || '{}')[A.name] > 0, '删除墓碑照常记');
+            const app2 = mkApp(env, 'history');   // 刷新(还开着无痕、没登录同步:loadWatchHistory 不看墓碑)
+            app2.loadWatchHistory();
+            ok(names(app2.watchHistory) === names([B, C]), 'PRIV-3:刷新后删掉的那条不会回来', app2.watchHistory);
+            app2.watchHistory.unshift({ name: '合成作品丁', watchedAt: new Date(1_800_000_000_000).toISOString(), progress: 1 });
+            app2.saveWatchHistoryToStorage();
+            ok(names(storedHist(env)) === names([B, C]), '无痕:新加一条的改写照旧整次拦掉');
+            app2.watchHistory = [{ name: '合成作品丁', watchedAt: at }];
+            app2.saveWatchHistoryToStorage();
+            ok(names(storedHist(env)) === names([B, C]), '无痕:条数变少但带着存着的列表里没有的条目 → 整次拦掉');
+            env.win.localStorage.setItem('donggua_live_recent', '[{"name":"x"}]');
+            ok(env.ls.getItem('donggua_live_recent') === '[{"name":"x"},{"name":"y"}]', '「只删不加」的例外只认继续观看这个键');
+            env.win.localStorage.setItem('donggua_watch_history', 'garbage');
+            ok(names(storedHist(env)) === names([B, C]), '无痕:不是列表的改写照旧拦掉');
+            app2.watchHistory = []; app2.saveWatchHistoryToStorage();
+            ok(JSON.stringify(storedHist(env)) === '[]', '无痕:删光也落地');
+        }
+    }
+    {
+        const tok = 'SYNC-TOKEN-0123456789abcdef';
+        const st = { t: tok.slice(0, 16), items: { [A.name]: A.watchedAt, [B.name]: B.watchedAt }, tombs: {} };
+        const env = makeEnv({ ls: { donggua_watch_history: JSON.stringify([A, B]), donggua_hist_synced: JSON.stringify(st), emax_auth_hash: tok } });
+        const app = mkApp(env, 'history', { syncEnabled: true, syncToken: tok });
+        if (app) {
+            app.loadWatchHistory();
+            env.P.setIncognito(true);
+            const n0 = env.fetchLog.length;
+            app.removeFromHistory(0);
+            await flush(10);
+            const pushes = env.fetchLog.slice(n0).filter(x => x.url === '/api/history/push').map(x => JSON.parse(x.body));
+            ok(pushes.length >= 1 && pushes.every(b => b.history.length === 0 && b.deleted.length === 1 && b.deleted[0].id === A.name), 'PRIV-3:同步用户无痕时删一条 → 只带删除墓碑的推送照常发到服务器', pushes);
+            const n1 = env.fetchLog.length;
+            app.watchHistory[0] = Object.assign({}, app.watchHistory[0], { watchedAt: new Date(1_800_000_000_000).toISOString(), progress: 50 });
+            app.pushHistoryToServer(true);
+            await flush(10);
+            ok(!env.fetchLog.slice(n1).some(x => x.url === '/api/history/push'), '无痕:带观看条目的历史推送照旧不发');
+            const r1 = await env.win.fetch('/api/history/push', { method: 'POST', body: JSON.stringify({ token: tok, history: [{ id: 'x', data: { name: 'x' } }], deleted: [{ id: 'y', deleted_at: 1 }] }) });
+            const r2 = await env.win.fetch('/api/history/push', { method: 'POST', body: JSON.stringify({ token: tok, history: [], deleted: [] }) });
+            const r3 = await env.win.fetch('/api/history/push/x', { method: 'POST', body: JSON.stringify({ token: tok, history: [], deleted: [{ id: 'y' }] }) });
+            ok(r1.status === 503 && r2.status === 503 && r3.status === 503 && env.fetchLog.length === n1, '无痕:墓碑 + 条目 / 空推送 / 别的子路径 → 照旧 503 不发', [r1.status, r2.status, r3.status]);
+            ok(env.win.navigator.sendBeacon('/api/history/push', JSON.stringify({ history: [], deleted: [{ id: 'y' }] })) === true && env.beaconLog.length === 0, '无痕:sendBeacon 推送照旧吞掉');
+        }
+    }
+
+    // —— PRIV-2:一键清除让服务器连删除墓碑一起删;清除到刷新之间墓碑写不回本机、也推不回服务器 ——
+    {
+        const env = makeEnv({ ls: { emax_auth_hash: 'TOKEN-P2', donggua_history_deleted: JSON.stringify({ '合成作品已删': 1 }), dg_blur_cover: '0' } });
+        const out = await env.P.clearLocal({ server: true, reload: false });
+        const clr = env.fetchLog.find(x => x.url === '/api/history/clear');
+        const body = clr ? JSON.parse(clr.body) : {};
+        ok(out.server === 'ok' && body.token === 'TOKEN-P2' && body.all === true, 'PRIV-2:一键清除让服务器连删除墓碑一起删(all:true)', clr);
+        ok(env.ls.getItem('donggua_history_deleted') === null, '本机墓碑删了');
+        env.win.localStorage.setItem('donggua_history_deleted', JSON.stringify({ '合成作品已删': 2 }));
+        ok(env.ls.getItem('donggua_history_deleted') === null, 'PRIV-2:清除到刷新之间,晚到的拉取 / 保存写不回墓碑(片名)');
+        const n = env.fetchLog.length;
+        const r = await env.win.fetch('/api/history/push', { method: 'POST', body: JSON.stringify({ token: 'TOKEN-P2', history: [], deleted: [{ id: '合成作品已删', deleted_at: 2 }] }) });
+        ok(r.status === 503 && env.fetchLog.length === n, '清除中:只带墓碑的推送也不发(否则把删过的片名推回服务器)');
+        env.win.localStorage.setItem('dg_blur_cover', '1');
+        ok(env.ls.getItem('dg_blur_cover') === '1', '清除中:别的设置照常写');
+        // 无痕开着时清除:同样不放墓碑推送
+        const envI = makeEnv({ ls: { emax_auth_hash: 'TOKEN-P2', dgp_settings: JSON.stringify({ incognito: true }) } });
+        await envI.P.clearLocal({ server: true, reload: false });
+        const nI = envI.fetchLog.length;
+        const rI = await envI.win.fetch('/api/history/push', { method: 'POST', body: JSON.stringify({ token: 'TOKEN-P2', history: [], deleted: [{ id: 'z', deleted_at: 2 }] }) });
+        ok(rI.status === 503 && envI.fetchLog.length === nI, '无痕 + 清除中:只带墓碑的推送也不发');
+        // 云端清除失败:明说没清掉,多留一会儿再刷新
+        const envF = makeEnv({ ls: { emax_auth_hash: 'TOKEN-P2' }, fetchStatus: (u) => (/\/api\/history\/clear/.test(u) ? 500 : 200) });
+        const box = envF.doc.createElement('div'); envF.app.appendChild(box);
+        envF.P.renderSettings(box);
+        box.querySelector('[data-dgp="clear"]').click();
+        box.querySelector('[data-dgp="clearGo"]').click();
+        await flush(10);
+        ok(/云端观看历史没清掉/.test(box.textContent), '云端清除失败:提示没清掉', box.textContent.slice(-60));
+        await envF.clock.advance(1000);
+        ok(envF.win.location.reloads === 0, '云端清除失败:多留一会儿再刷新');
+        await envF.clock.advance(2000);
+        ok(envF.win.location.reloads === 1, '……然后刷新');
+    }
+
+    // —— PRIV-4:刷短片的静音循环自动播放不算「在看」 ——
+    {
+        const rec = { v: 1, kdf: 'pbkdf2-sha256', it: 150000, salt: '00'.repeat(16), dk: '11'.repeat(32) };
+        const env = makeEnv();
+        const { P, doc, ls, clock } = env;
+        ls._m.set('dgp_pin', JSON.stringify(rec));
+        P.set({ idleMin: 1 });
+        const feed = doc.createElement('video'); feed.loop = true; feed.muted = true; env.app.appendChild(feed);
+        feed.play();
+        await clock.advance(5 * 60e3);
+        ok(P.locked() && P.cover() === 'lock', 'PRIV-4:只有刷短片的循环视频在播 → 闲置 1 分钟照样锁');
+        ok(feed.paused, '锁上时循环视频也暂停了');
+        const env2 = makeEnv();
+        env2.ls._m.set('dgp_pin', JSON.stringify(rec));
+        env2.P.set({ idleMin: 1 });
+        const main = env2.doc.createElement('video'), loopy = env2.doc.createElement('video');
+        loopy.loop = true; loopy.muted = true;
+        env2.app.appendChild(main); env2.app.appendChild(loopy);
+        main.play(); loopy.play();
+        await env2.clock.advance(10 * 60e3);
+        ok(!env2.P.locked(), '主播放器(不带 loop)在播:照旧不算闲置');
+        main.pause();
+        await env2.clock.advance(61e3);
+        ok(env2.P.locked(), '主播放器停了、只剩循环预览:1 分钟后锁');
+    }
 }
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} 通过, ${fail} 失败`);

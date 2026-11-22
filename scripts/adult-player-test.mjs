@@ -859,6 +859,38 @@ await (async () => {
     ok(!cm2.defaultPrevented && w.ctxMenu === 1, '平时(电脑右键)的 contextmenu 不拦');
 })();
 await (async () => {
+    // 修订(p4 复审 F7):安卓 Chrome 的系统长按是 400ms,contextmenu 比我们的 450ms 先到 —— 按着还没到点也要拦,并就此开始 2 倍速
+    const w = await mkGestureWorld();
+    touch(w, 'touchstart', w.video, [P(200, 200)]);
+    await w.clock.advance(400);
+    const cm = new Ev('contextmenu', { bubbles: true, cancelable: true });
+    w.video.dispatchEvent(cm);
+    ok(cm.defaultPrevented && w.ctxMenu === 0, '长按 400ms 时安卓先发的 contextmenu:拦下(DPlayer 菜单不弹)');
+    await w.clock.advance(5);
+    ok(w.video.playbackRate === 2 && w.px.status().lp && w.cont.classList.contains('dgx-lp'), '系统已认定长按:就此开始 2 倍速(不等 450ms)');
+    await w.clock.advance(100);
+    ok(w.px.status().n.lp === 1, '450ms 的计时不会再开一次');
+    touch(w, 'touchend', w.video, [P(200, 200)]);
+    await w.clock.advance(5);
+    ok(w.video.playbackRate === 1.25 && !w.px.status().lp && w.ls.getItem('dplayer_speed') === '1.25', '松手:恢复原来的倍速');
+    // 视频暂停着(本来就不会长按倍速)/ 手指已经挪开:contextmenu 照旧给 DPlayer
+    const wp = await mkGestureWorld();
+    wp.video.paused = true;
+    touch(wp, 'touchstart', wp.video, [P(200, 200)]);
+    await wp.clock.advance(400);
+    const cmp = new Ev('contextmenu', { bubbles: true, cancelable: true });
+    wp.video.dispatchEvent(cmp);
+    ok(!cmp.defaultPrevented && wp.ctxMenu === 1 && wp.px.status().n.lp === 0, '暂停着按住:contextmenu 不拦(没有要接管的长按)');
+    const wm = await mkGestureWorld();
+    touch(wm, 'touchstart', wm.video, [P(200, 200)]);
+    await wm.clock.advance(100);
+    touch(wm, 'touchmove', wm.video, [P(200, 214)]);
+    await wm.clock.advance(300);
+    const cmm = new Ev('contextmenu', { bubbles: true, cancelable: true });
+    wm.video.dispatchEvent(cmm);
+    ok(!cmm.defaultPrevented && wm.px.status().n.lp === 0, '手指挪开了(不算长按):contextmenu 不拦');
+})();
+await (async () => {
     // 双击左右:index.html 真跳了才出波纹,连点累加;中间双击 / 单击照旧
     const w = await mkGestureWorld();
     const V = w.video;

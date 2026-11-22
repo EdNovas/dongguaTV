@@ -185,6 +185,23 @@ t('makePlanCache: 6h TTL, failures cached too, ≤50 entries', () => {
     assert.equal(JSON.parse(m.get('dg_pv_plan')).length, 50);
     assert.ok(C.get('c:X-59') && !C.get('c:X-5'));
 });
+t('F6 makePlanCache: a record can carry a shorter ttl (transient failures); never longer than 6h', () => {
+    const m = new Map();
+    const ss = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
+    let now = 1e12;
+    const C = PV.makePlanCache(ss, () => now);
+    C.put('c:F-1', { fail: 'fetch', ttl: PV.FAIL_TTL });
+    C.put('c:F-2', { fail: 'no-line' });
+    C.put('c:F-3', { fail: 'x', ttl: 48 * 3600e3 });
+    assert.equal(PV.FAIL_TTL, 10 * 60e3);
+    now += PV.FAIL_TTL - 1;
+    assert.ok(C.get('c:F-1') && C.get('c:F-2'));
+    now += 2;
+    assert.equal(C.get('c:F-1'), null, 'short-ttl failure expired after 10 min');
+    assert.equal(C.get('c:F-2').fail, 'no-line', 'normal failure still cached');
+    now += 6 * 3600e3;
+    assert.equal(C.get('c:F-3'), null, 'ttl longer than 6h is clamped to 6h');
+});
 
 console.log('③ 沙箱里跑一次流程');
 function makeEnv(opts) {
@@ -218,7 +235,13 @@ function makeEnv(opts) {
     }
     FakeHls.Events = { FRAG_LOADED: 'hlsFragLoaded', ERROR: 'hlsError' };
     const fetched = [];
+    const aborted = [];
     const PL = `#EXTM3U\n#EXT-X-TARGETDURATION:3\n${Array.from({ length: 600 }, (_, i) => `#EXTINF:3,\nhttps://cdn.example/v/s${i}.ts`).join('\n')}\n#EXT-X-ENDLIST`;
+    // o.hang:直连一直不回(只有被中止才结束,记进 aborted);o.fastTimeout:6 秒的取清单超时缩成 30ms
+    const hangUntilAbort = (u, init) => new Promise((res, rej) => {
+        const sig = init && init.signal;
+        if (sig) sig.addEventListener('abort', () => { aborted.push(u); const e = new Error('aborted'); e.name = 'AbortError'; rej(e); });
+    });
     const doc = {
         hidden: false,
         createElement: (tag) => mkEl(tag === 'video' ? '' : tag),
@@ -231,28 +254,31 @@ function makeEnv(opts) {
         localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) },
         sessionStorage: (() => { const s = new Map(); return { getItem: (k) => (s.has(k) ? s.get(k) : null), setItem: (k, v) => s.set(k, String(v)) }; })(),
         matchMedia: (q) => ({ matches: /hover: hover/.test(q) ? o.hover !== false : false }),
-        fetch: async (u) => {
+        fetch: async (u, init) => {
             fetched.push(u);
             const direct = !u.startsWith('https://w.example/');
+            if (direct && o.hang) return hangUntilAbort(u, init);
             if (direct && o.directFails) return new Response('nope', { status: 403 });
             return new Response(PL, { status: 200 });
         },
         dgAdultHooks: { add() { } },
         DgAdult: {
-            fetchWorkRaw: async () => ({ sources: [{ site_key: 's1', vod_play_url: '正片$https://cdn.example/v/index.m3u8' }] }),
-            proxyUrl: () => 'https://w.example', netNow: () => o.net || '', isTV: () => false, mainBusy: () => !!o.busy, privLocked: () => false,
+            fetchWorkRaw: async (wk) => (o.work ? o.work(wk) : { sources: [{ site_key: 's1', vod_play_url: '正片$https://cdn.example/v/index.m3u8' }] }),
+            proxyUrl: () => (o.noProxy ? '' : 'https://w.example'), netNow: () => o.net || '', isTV: () => false, mainBusy: () => !!o.busy, privLocked: () => false, cellOk: () => !!o.cell,
         },
         addEventListener() { },
         URL: { createObjectURL: () => 'blob:pv-1', revokeObjectURL() { } }, Blob: function () { },
-        AbortController, Response, setTimeout, clearTimeout, console, Promise, JSON, Math, Date, Map, Set, Object, Array, String, Number, RegExp, Error,
+        AbortController, Response, setTimeout: o.fastTimeout ? (f, ms) => setTimeout(f, ms >= 6000 ? 30 : ms) : setTimeout, clearTimeout, console, Promise, JSON, Math, Date, Map, Set, Object, Array, String, Number, RegExp, Error,
     };
+    if (o.nav) win.navigator = o.nav;
     win.window = win; win.globalThis = win;
     const ctx = vm.createContext(win);
     vm.runInContext(fs.readFileSync(SRC_FILE, 'utf8'), ctx, { filename: 'preview.js' });
     const card = mkEl('hot-card');
     const box = mkEl('poster-wrap');
     card.appendChild(box);
-    return { win, api: win.dgAdultPreview, card, box, hlsInst, fetched, store };
+    const fire = (t, ev) => (listeners[t] || []).slice().forEach((f) => f(ev));
+    return { win, api: win.dgAdultPreview, card, box, hlsInst, fetched, aborted, store, fire, ss: win.sessionStorage, mkEl };
 }
 t('pure exports exist and the browser build boots', () => {
     const E = makeEnv();
@@ -313,6 +339,86 @@ at('blocked: cellular / main player playing / no hover device', async () => {
         for (let i = 0; i < 10; i++) await tick();
         assert.equal(E.hlsInst.length, 0, JSON.stringify(o));
         assert.equal(E.fetched.length, 0, 'no network at all: ' + JSON.stringify(o));
+    }
+});
+const DIRECT = 'https://cdn.example/v/index.m3u8', VIA_WORKER = 'https://w.example/?url=' + encodeURIComponent(DIRECT);
+const settle = async (n) => { for (let i = 0; i < (n || 20); i++) await tick(); };
+at('F5 stopped while the direct playlist fetch is in flight → aborted, no Worker retry; each preview cancels its own fetch', async () => {
+    const E = makeEnv({ hang: true });
+    E.api._onHover({ _wk: 'c:SYN-010' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    assert.deepEqual(E.fetched, [DIRECT], 'direct fetch in flight');
+    E.card.dispatch('mouseleave');
+    await settle();
+    assert.deepEqual(E.aborted, [DIRECT], 'stop aborted the direct fetch');
+    assert.deepEqual(E.fetched, [DIRECT], 'no Worker request for a preview nobody will see');
+    // back to back: start(A) → stop → start(B) → stop(B)
+    E.api.start({ _wk: 'c:SYN-011' }, E.card); await settle(); E.api.stop('leave');
+    E.api.start({ _wk: 'c:SYN-012' }, E.card); await settle();
+    E.api.stop('scroll'); await settle();
+    assert.equal(E.fetched.filter((u) => u.startsWith('https://w.example/')).length, 0, 'never hit the Worker: ' + JSON.stringify(E.fetched));
+    assert.equal(E.aborted.length, 3, 'every direct fetch (B too) aborted by its own stop: ' + JSON.stringify(E.aborted));
+});
+at('F5 a direct fetch that times out (preview still live) still gets its one Worker retry', async () => {
+    const E = makeEnv({ hang: true, fastTimeout: true });
+    E.api._onHover({ _wk: 'c:SYN-013' }, E.card, { type: 'pointerover' });
+    await sleep(800); await settle();
+    assert.deepEqual(E.fetched, [DIRECT, VIA_WORKER]);
+    assert.equal(E.hlsInst.length, 1);
+});
+at('F6 a /api/catalog/work outage is not cached as "no line": after recovery the next hover fetches again and previews', async () => {
+    let up = false, calls = 0;
+    const E = makeEnv({ work: () => { calls++; return up ? { sources: [{ site_key: 's1', vod_play_url: '正片$' + DIRECT }] } : null; } });
+    E.api._onHover({ _wk: 'c:SYN-020' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    assert.equal(E.hlsInst.length, 0);
+    assert.ok(!/SYN-020/.test(E.ss.getItem('dg_pv_plan') || ''), 'nothing cached for a failed /work: ' + E.ss.getItem('dg_pv_plan'));
+    E.card.dispatch('mouseleave');
+    up = true;
+    E.api._onHover({ _wk: 'c:SYN-020' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    assert.equal(calls, 2, '/work asked again');
+    assert.equal(E.hlsInst.length, 1, 'previews once the server is back');
+});
+at('F6 a real work with no previewable line is cached (6h); a playlist that could not be fetched only for 10 min', async () => {
+    const E = makeEnv({ work: (wk) => (wk === 'c:SYN-021' ? { sources: [] } : { sources: [{ site_key: 's1', vod_play_url: '正片$' + DIRECT }] }), directFails: true, noProxy: true });
+    E.api._onHover({ _wk: 'c:SYN-021' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    E.card.dispatch('mouseleave');
+    E.api._onHover({ _wk: 'c:SYN-022' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    const rec = Object.fromEntries(JSON.parse(E.ss.getItem('dg_pv_plan')).map((r) => [r.wk, r]));
+    assert.equal(rec['c:SYN-021'].fail, 'no-line'); assert.equal(rec['c:SYN-021'].ttl, undefined);
+    assert.equal(rec['c:SYN-022'].fail, 'fetch'); assert.equal(rec['c:SYN-022'].ttl, PV.FAIL_TTL);
+});
+at('F7 Android long-press: the system contextmenu (400ms) arrives before our 450ms → prevented, preview starts right then', async () => {
+    const E = makeEnv({ hover: false, nav: { connection: { type: 'wifi' } } });
+    E.api._onHover({ _wk: 'c:SYN-030' }, E.card, { type: 'touchstart', touches: [{ clientX: 50, clientY: 60 }] });
+    await sleep(400);
+    let prevented = false;
+    E.fire('contextmenu', { target: E.box, preventDefault() { prevented = true; } });
+    await settle();
+    assert.ok(prevented, 'image context menu suppressed while the long-press is pending');
+    assert.equal(E.hlsInst.length, 1, 'preview started on the contextmenu');
+    await sleep(100); await settle();
+    assert.equal(E.hlsInst.length, 1, 'the 450ms timer does not start a second one');
+    let p2 = false;
+    E.fire('contextmenu', { target: E.mkEl('div'), preventDefault() { p2 = true; } });
+    assert.ok(!p2, 'a contextmenu elsewhere is left alone');
+    // 没有在按着的(电脑右键):不拦
+    const D = makeEnv();
+    let p3 = false;
+    D.fire('contextmenu', { target: D.box, preventDefault() { p3 = true; } });
+    assert.ok(!p3, 'right-click with no press pending is not touched');
+});
+at('F1 touch long-press with no navigator.connection = network unknown → no preview unless 移动网络也自动播放 is on', async () => {
+    for (const [o, want] of [[{ hover: false }, 0], [{ hover: false, cell: true }, 1], [{ hover: false, nav: { connection: { type: 'wifi' } } }, 1], [{}, 1]]) {
+        const E = makeEnv(o);
+        if (o.hover === false) E.api._onHover({ _wk: 'c:SYN-040' }, E.card, { type: 'touchstart', touches: [{ clientX: 5, clientY: 5 }] });
+        else E.api._onHover({ _wk: 'c:SYN-040' }, E.card, { type: 'pointerover' });
+        await sleep(650); await settle();
+        assert.equal(E.hlsInst.length, want, JSON.stringify(o));
+        if (!want) { assert.equal(E.fetched.length, 0, 'no network at all'); assert.equal(E.api.status().block, 'net-unknown'); }
     }
 });
 

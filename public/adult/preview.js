@@ -8,10 +8,11 @@
 //   C4 短组(≤120s 且 <15 片)只在清单是「切块打包」(短组占 ≥50%)或确认有 C1/C2 插播时、且全在主目录里才可选
 //   C5 不选 <1s 的分片,也不选 ≥3 片的组的首尾片;C6 掐头去尾(前 max(6%,15s) / 后 max(6%,10s);3 分钟内的短片 8% / 5%)
 //   加密:每个选中分片的有效 #EXT-X-KEY 重新写出并带显式 IV(隐式 IV = 原清单里的媒体序号;重排后序号变了,不写显式 IV 会解密失败)
-// 取清单:先直连(样本 128/128 都带 ACAO *、页面不发 Referer),网络错 / 非 200 / 没有 #EXTM3U → 经 /api/config 的 Worker(?url=)重试一次;
+// 取清单:先直连(样本 128/128 都带 ACAO *、页面不发 Referer),网络错 / 超时 / 非 200 / 没有 #EXTM3U → 经 /api/config 的 Worker(?url=)重试一次
+//   (预览已经停了就不重试);
 //   红楼系(vfile.meituan.net)的 http 分片升 https;https 页面上还剩 http 分片 → 不预览。拼好的清单按作品缓存 6 小时(sessionStorage,50 部)
 // 预算:单次清单估算 4MB / 实收 5MB 硬顶 / 本会话 60MB / 每天 150MB(非计量网络);同时只有一个预览;离开卡片 / 滚动 / 切走页面就停
-// 不预览:省流量 / 2G·3G / 蜂窝网络(设置里没允许)/ 电视 / 没有 MSE(iPhone)/ 系统「减少动态效果」/ 主播放器在放 / 页面隐藏 /
+// 不预览:省流量 / 2G·3G / 蜂窝网络或触屏上网络类型未知(设置里没允许)/ 电视 / 没有 MSE(iPhone)/ 系统「减少动态效果」/ 主播放器在放 / 页面隐藏 /
 //   刷短片开着 / 隐私锁着 / 设置里关了
 // 只依赖页面上的 window.Hls(补丁版 hls.min.js)和 window.DgAdult(adult/adult.js 的桥:作品信息、代理地址、主播放器忙不忙)
 (function (root, factory) {
@@ -395,22 +396,26 @@
             },
         };
     }
-    // 拼好的清单按作品缓存(sessionStorage,6 小时,最多 50 部,先进先出);失败的原因也记(不反复去拉)
+    // 拼好的清单按作品缓存(sessionStorage,6 小时,最多 50 部,先进先出);失败的原因也记(不反复去拉)。
+    //   修订:记录可以带更短的 ttl(毫秒,只能比 6 小时短):拉清单失败这类可能是一时的,只记一小会儿
+    const FAIL_TTL = 10 * 60e3;
     function makePlanCache(ss, now) {
         const KEY = 'dg_pv_plan', TTL = 6 * 3600e3, MAX = 50;
         const clock = () => (now ? now() : Date.now());
+        const ttlOf = (r) => { const t = Number(r && r.ttl) || 0; return t > 0 && t < TTL ? t : TTL; };
+        const fresh = (r) => !!r && clock() - r.at < ttlOf(r);
         const load = () => { try { const a = JSON.parse((ss && ss.getItem(KEY)) || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } };
         const save = (a) => { try { if (ss) ss.setItem(KEY, JSON.stringify(a.slice(-MAX))); } catch (e) { } };
         return {
-            get(wk) { const r = load().find((x) => x && x.wk === wk); return (r && clock() - r.at < TTL) ? r : null; },
-            put(wk, rec) { const a = load().filter((x) => x && x.wk !== wk && clock() - x.at < TTL); a.push(Object.assign({ wk, at: clock() }, rec)); save(a); },
+            get(wk) { const r = load().find((x) => x && x.wk === wk); return fresh(r) ? r : null; },
+            put(wk, rec) { const a = load().filter((x) => x && x.wk !== wk && fresh(x)); a.push(Object.assign({ wk, at: clock() }, rec)); save(a); },
         };
     }
 
     // ======================= 浏览器胶水 =======================
     const state = {
         cur: null,          // 正在进行的一次预览 { wk, el, hls, video, src, bytes, stop }
-        timer: 0, pressEl: null, pressX: 0, pressY: 0, suppressClickUntil: 0, why: 'idle', budget: null, cache: null, ctl: null,
+        timer: 0, pressEl: null, pressCard: null, pressX: 0, pressY: 0, suppressClickUntil: 0, why: 'idle', budget: null, cache: null,
     };
     function lsGet(k) { try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch (e) { return null; } }
     function D() { return root.DgAdult || null; }
@@ -424,6 +429,15 @@
         try { mse = !!(root.Hls && typeof root.Hls.isSupported === 'function' && root.Hls.isSupported()); } catch (e) { }
         try { hidden = !!root.document.hidden; } catch (e) { }
         try { net = A && typeof A.netNow === 'function' ? A.netNow() : ''; } catch (e) { }
+        // 修订:触屏(长按预览)上浏览器不报网络类型(iPad Safari、Firefox 都没有 navigator.connection)= 网络未知,可能在用流量:
+        //   设置里没开「移动网络也自动播放」就不预览(和刷短片同一口径);电脑鼠标悬停照旧
+        if (!net && !hoverDevice()) {
+            let conn = null;
+            try { conn = root.navigator && root.navigator.connection; } catch (e) { }
+            let cell = false;
+            try { cell = !!(A && typeof A.cellOk === 'function' && A.cellOk()); } catch (e) { }
+            if (!conn && !cell) net = 'net-unknown';
+        }
         try { feed = !!(root.dgAdultFeed && typeof root.dgAdultFeed.isOpen === 'function' && root.dgAdultFeed.isOpen()); } catch (e) { }
         const B = budget();
         return {
@@ -435,29 +449,32 @@
     function budget() { if (!state.budget) state.budget = makeBudget(root.localStorage || null, null); return state.budget; }
     function cache() { if (!state.cache) state.cache = makePlanCache(root.sessionStorage || null, null); return state.cache; }
 
-    function fetchText(url, ms) {
+    // c = 这次预览:中止用的控制器挂在它身上(修订:以前是全局 state.ctl,Worker 重试会把下一个预览的控制器顶掉,stop 中止错对象)
+    function fetchText(url, c, ms) {
         const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        state.ctl = ctl;
+        if (c) c.ctl = ctl;
         const t = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) { } }, ms || 6000) : 0;
         return root.fetch(url, { referrerPolicy: 'no-referrer', credentials: 'omit', mode: 'cors', cache: 'no-store', signal: ctl ? ctl.signal : undefined })
             .then((r) => (r && r.ok) ? r.text() : null)
             .catch(() => null)
-            .then((x) => { if (t) clearTimeout(t); return x; });
+            .then((x) => { if (t) clearTimeout(t); if (c && c.ctl === ctl) c.ctl = null; return x; });
     }
-    // 直连 → 不行再经 Worker 一次(只在网络错 / 非 200 / 不是清单时)
-    function getText(url) {
-        return fetchText(url).then((tx) => {
+    // 直连 → 不行再经 Worker 一次(只在网络错 / 超时 / 非 200 / 不是清单时)。
+    //   修订:预览已经被停掉(离开卡片 / 滚动 / 点击 / 切走;stop 中止了直连)就不再经 Worker 重试 —— 以前每个半路停掉的预览都白打一次 Worker
+    function getText(url, c, live) {
+        return fetchText(url, c).then((tx) => {
             if (tx && tx.indexOf('#EXTM3U') >= 0) return { text: tx, via: 'direct' };
+            if (live && !live()) return null;
             const A = D();
             const proxy = A && typeof A.proxyUrl === 'function' ? A.proxyUrl() : '';
             if (!proxy) return null;
-            return fetchText(proxy + '/?url=' + encodeURIComponent(url)).then((t2) => (t2 && t2.indexOf('#EXTM3U') >= 0) ? { text: t2, via: 'proxy' } : null);
+            return fetchText(proxy + '/?url=' + encodeURIComponent(url), c).then((t2) => (t2 && t2.indexOf('#EXTM3U') >= 0) ? { text: t2, via: 'proxy' } : null);
         });
     }
     // 一条线路 → 拼剪清单(master 往下钻一层)
-    function planFor(line, live) {
+    function planFor(line, live, c) {
         let url = line.url;
-        const step = (hop) => getText(url).then((r) => {
+        const step = (hop) => getText(url, c, live).then((r) => {
             if (!live()) return null;
             if (!r) return { fail: 'fetch' };
             const p = previewPlan(r.text, url, { bandwidth: famBps(line.fam), budgetBytes: PLAN_BUDGET, segUrl: upgradeHttps, keyUrl: upgradeHttps });
@@ -468,20 +485,26 @@
         });
         return step(0);
     }
-    function getPlan(wk, live) {
+    // 修订:作品信息没拿到(fetchWorkRaw 在 401 / 503 / 断网 / 超时时都给 null)不当「这部没有能预览的线路」记 6 小时 ——
+    //   只有真拿到了作品(带 sources 数组)才记 no-line;拉清单失败(可能是一时的)只记 10 分钟
+    function isWork(w) { return !!(w && typeof w === 'object' && Array.isArray(w.sources)); }
+    function getPlan(wk, live, c) {
         const hit = cache().get(wk);
         if (hit) return Promise.resolve(hit.playlist ? hit : null);
         const A = D();
         if (!A || typeof A.fetchWorkRaw !== 'function') return Promise.resolve(null);
-        return A.fetchWorkRaw(wk).then((w) => {
+        return Promise.resolve(A.fetchWorkRaw(wk)).then((w) => {
             if (!live()) return null;
+            if (!isWork(w)) return null;
             const lines = pickLines(w);
             if (!lines.length) { remember(wk, { fail: 'no-line' }); return null; }
-            const tryAt = (i) => planFor(lines[i], live).then((r) => {
+            let transient = false;   // 有一条线路是没拉到清单(不是清单本身不行)
+            const tryAt = (i) => planFor(lines[i], live, c).then((r) => {
                 if (!r || !live()) return null;
                 if (r.playlist) { remember(wk, { playlist: r.playlist, clips: r.clips }); return r; }
+                if (r.fail === 'fetch') transient = true;
                 if (i + 1 < lines.length) return tryAt(i + 1);
-                remember(wk, { fail: r.fail });
+                remember(wk, transient ? { fail: r.fail, ttl: FAIL_TTL } : { fail: r.fail });
                 return null;
             });
             return tryAt(0);
@@ -490,13 +513,13 @@
 
     function stop(why) {
         clearTimeout(state.timer); state.timer = 0;
-        state.pressEl = null;
-        if (state.ctl) { try { state.ctl.abort(); } catch (e) { } state.ctl = null; }
+        state.pressEl = null; state.pressCard = null;
         const c = state.cur;
         state.cur = null;
         if (why) state.why = why;
         if (!c) return;
-        c.dead = true;
+        c.dead = true;   // 先标死再中止:被中止的直连回来时 live() 已经是 false,不会再经 Worker 重试
+        if (c.ctl) { try { c.ctl.abort(); } catch (e) { } c.ctl = null; }
         if (c.hls) { try { c.hls.destroy(); } catch (e) { } }
         if (c.src) { try { URL.revokeObjectURL(c.src); } catch (e) { } }
         const v = c.video;
@@ -515,11 +538,11 @@
         if (r0) { state.why = r0; return; }
         if (state.cur && state.cur.wk === wk && state.cur.el === el) return;
         stop();
-        const c = { wk, el, hls: null, video: null, src: '', bytes: 0, dead: false };
+        const c = { wk, el, hls: null, video: null, src: '', bytes: 0, dead: false, ctl: null };
         state.cur = c;
         state.why = 'loading';
         const live = () => state.cur === c && !c.dead;
-        getPlan(wk, live).then((plan) => {
+        getPlan(wk, live, c).then((plan) => {
             if (!live()) return;
             if (!plan || !plan.playlist) { state.why = 'no-plan'; stop(); return; }
             const r1 = blockReason(envNow());
@@ -563,8 +586,8 @@
         clearTimeout(state.timer);
         if (touch) {
             const t = ev.touches && ev.touches[0];
-            state.pressEl = el; state.pressX = t ? t.clientX : 0; state.pressY = t ? t.clientY : 0;
-            state.timer = setTimeout(() => { if (state.pressEl === el) { state.suppressClickUntil = Date.now() + 900; start(card, el); } }, PRESS_MS);
+            state.pressEl = el; state.pressCard = card; state.pressX = t ? t.clientX : 0; state.pressY = t ? t.clientY : 0;
+            state.timer = setTimeout(() => { if (state.pressEl === el) pressFire(); }, PRESS_MS);
             return;
         }
         const leave = () => {
@@ -575,6 +598,14 @@
         el.addEventListener('mouseleave', leave);
         state.hoverEl = el;
         state.timer = setTimeout(() => { if (state.hoverEl === el) start(card, el); }, DWELL_MS);
+    }
+    // 长按到点(或系统先发了长按的 contextmenu):开始预览
+    function pressFire() {
+        const el = state.pressEl, card = state.pressCard;
+        clearTimeout(state.timer); state.timer = 0;
+        if (!el || !card) return;
+        state.suppressClickUntil = Date.now() + 900;
+        start(card, el);
     }
     function hoverDevice() { try { return !!(root.matchMedia && root.matchMedia('(hover: hover) and (pointer: fine)').matches); } catch (e) { return false; } }
     let booted = false;
@@ -599,7 +630,13 @@
             if (Date.now() < state.suppressClickUntil && state.cur && state.cur.el && state.cur.el.contains(e.target)) { e.preventDefault(); e.stopPropagation(); state.suppressClickUntil = 0; return; }
             if (state.cur || state.timer) stop('click');   // 点了卡片(开播放页)或别处:预览停
         }, true);
-        d.addEventListener('contextmenu', (e) => { if (state.cur && state.cur.el && state.cur.el.contains(e.target)) e.preventDefault(); }, true);
+        // 修订:长按还没到 450ms 时也拦 —— 安卓 Chrome 的系统长按是 400ms(Android 11+ 默认),contextmenu 先到:以前图片菜单弹出来、
+        //   随后的 touchcancel 把长按作废,手机上长按预览基本出不来。现在拦下它并就此开始预览(系统已经认定是长按了)
+        d.addEventListener('contextmenu', (e) => {
+            if (state.cur && state.cur.el && state.cur.el.contains(e.target)) { e.preventDefault(); return; }
+            const pe = state.pressEl;
+            if (pe && state.timer && typeof pe.contains === 'function' && pe.contains(e.target)) { e.preventDefault(); pressFire(); }
+        }, true);
         // 在别处按下(手机)= 停
         d.addEventListener('pointerdown', (e) => { if (state.cur && state.cur.el && !state.cur.el.contains(e.target)) stop('tap-away'); }, { passive: true, capture: true });
         // 滚动(页面或横排)/ 切走 / 隐藏 → 停
@@ -632,7 +669,7 @@
     return {
         parsePlaylist, classify, previewPlan, previewHlsConfig,
         famBps, upgradeHttps, hasInsecure, pickLines, firstM3u8, blockReason, makeBudget, makePlanCache, dayKey,
-        PLAN_BUDGET, HARD_CAP, SESSION_CAP, DAY_CAP, DWELL_MS, PRESS_MS,
+        PLAN_BUDGET, HARD_CAP, SESSION_CAP, DAY_CAP, DWELL_MS, PRESS_MS, FAIL_TTL,
         boot, start, stop, status, _onHover: onHover, _state: state,
     };
 });

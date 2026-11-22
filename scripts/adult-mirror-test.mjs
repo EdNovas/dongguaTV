@@ -9,15 +9,23 @@
 //  ⑦ 持久化:换到镜像后重启仍用镜像;站点表主地址改了 → 状态作废
 //  ⑧ 回切:6 小时后主地址验过(maccms + 指纹)才切回;主地址被停放 → 不切回
 //  ⑨ 手动 probe;没快照时只认配置的镜像;makeSafeHttpGet 拒内网(不连);safeLookup 拒 localhost;classifyError;fileStore
+//  ⑩ 复核 SEC-1:发现时扫 HTML 是线性的 —— 1 MB 的 '<' / 没闭合的 <script / '1.1.1…' / '//' 串 等对抗输入,
+//     一次 probe(→ 换源 → 发现,两页)和直接扫 1 MB 都 < 200 ms(每个输入在独立的 worker 里跑,超时 = 失败,旧实现不会卡死测试)
+//  ⑪ 复核 SEC-2:发现来的候选抄分类表 + 时间写成"现在" → 不收(要按 vod_id 回查片名);同一片库的"太新"镜像按 vod_id 回查通过才收;
+//     根页里和旧域名不同前缀的链接一个都不探;换到镜像后快照仍是主地址的(镜像的样本不进快照)→ 主地址恢复照常回切;
+//     旧版本存的、不是主地址的快照读到就丢;后台 reset(回主地址,正在跑的换源作废)
+//  ADULT_MIRROR_LIB=<目录>:换一份实现来跑(核对"没修之前这些用例会失败")
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { createRequire } from 'module';
 import { fileURLToPath } from 'url';
+import { Worker } from 'worker_threads';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
-const M = require(path.join(ROOT, 'lib/adult-mirror'));
+const MIRROR_LIB = process.env.ADULT_MIRROR_LIB ? path.resolve(process.env.ADULT_MIRROR_LIB) : path.join(ROOT, 'lib/adult-mirror');
+const M = require(MIRROR_LIB);
 const { ssrf } = M;
 const FIX = path.join(ROOT, 'scripts/fixtures/mirror');
 const CAT = JSON.parse(fs.readFileSync(path.join(FIX, 'catalogs.json'), 'utf8'));
@@ -248,21 +256,24 @@ console.log('④ 发现:跳转 Location / 根页链接');
     ok(!N3.log.some((u) => /jsdelivr|googletagmanager|sedo|parkingcrew/.test(u)), '垃圾主机(CDN / 统计 / 停放商)一个都不探', N3.log);
     ok(N3.log.filter((u) => /\?ac=list$/.test(u)).every((u) => u.endsWith('/api.php/provide/vod?ac=list')) && !N3.log.some((u) => /\/api\/vod/.test(u)), '候选一律是 新源站 + 同一个 api 路径', N3.log);
     ok(N3.log.indexOf(LIST(API('gammazy9.com'))) >= 0 && N3.log.indexOf(LIST(API('gammazy9.com'))) < N3.log.indexOf(LIST(API('gammazy7.com'))), '同前缀的域名先探', N3.log);
-    // 同一个根页、但同前缀的两个都不对 → 继续探别的链接:内网链接被 SSRF 拒(不连),别家片库被指纹拒
+    // 同一个根页、但同前缀的两个都不对 → 不换。复核 SEC-2:和旧域名不同前缀的链接(友链 / 内网 IP / 图床)根本不当候选、一个都不探;
+    //   同前缀但解析到内网的 → SSRF 拒且不连
     const N4 = makeNet(), C4 = clock();
     const P4 = API('gammazy1.com');
     N4.routes.set(P4, N4.html('<html>Service Unavailable</html>', 503));
     N4.routes.set('https://gammazy1.com/', N4.html(ROOT_LINKS));
     N4.routes.set(LIST('https://evil-other.net/api.php/provide/vod'), N4.json(listBody(CAT.B, CAT.classes_a)));
     N4.dns.set('img.gammacdn-static.com', ['192.168.3.3']);
+    N4.dns.set('gammazy9.com', ['192.168.3.4']);
     const m4 = M.createMirror({ sites: [{ key: 'g', api: P4 }], httpGet: N4.httpGet, resolve: N4.resolve, now: C4.now });
     m4.report('g', true, 'ok', { url: SAMPLE(P4), data: JSON.parse(A()) });
     for (let i = 0; i < 3; i++) m4.report('g', false, '5xx', { url: SAMPLE(P4) });
     await settle(m4);
     const t4 = Object.fromEntries(m4._state.get('g').tried.map((x) => [x.url, x.reason]));
-    ok(m4.apiFor('g') === P4 && t4['https://evil-other.net/api.php/provide/vod'] === 'names-mismatch' && t4['http://10.0.0.7/api.php/provide/vod'] === 'ssrf:private-ip'
-        && t4['https://img.gammacdn-static.com/api.php/provide/vod'] === 'ssrf:private-ip' && !N4.log.some((u) => /10\.0\.0\.7|gammacdn-static/.test(u)),
-    '根页里的别家片库 → 指纹拒;内网 IP 链接 / 解析到内网的链接 → SSRF 拒且不连;最后不换', [m4.apiFor('g'), t4, N4.log]);
+    ok(m4.apiFor('g') === P4 && t4['https://gammazy9.com/api.php/provide/vod'] === 'ssrf:private-ip' && !N4.log.some((u) => /gammazy9\.com\/api/.test(u)),
+        '同前缀的链接解析到内网 → SSRF 拒且不连;最后不换', [m4.apiFor('g'), t4, N4.log]);
+    ok(!Object.keys(t4).some((u) => /evil-other|10\.0\.0\.7|gammacdn-static|gammaxx-pathonly/.test(u)) && !N4.log.some((u) => /evil-other|10\.0\.0\.7|gammacdn-static|gammaxx/.test(u)),
+        '复核 SEC-2:根页里不同前缀的链接(别家片库 / 内网 IP / 图床 / 另一个前缀)不当候选、一个都不探', [t4, N4.log]);
     // 停放页的根页:没有可用链接
     const N5 = makeNet(), C5 = clock();
     const P5 = API('zetazy1.com');
@@ -481,6 +492,192 @@ console.log('⑨ classifyError / isNewestUrl / fileStore / parseMaccms');
     const st = { load: () => ({ sites: { a: { primary: 1 }, b: null, c: { primary: 'https://c-zy.com/api.php/provide/vod', current: 'https://c2-zy.com/api.php/provide/vod', probeTimes: 'x' } } }), save: () => { } };
     const m = M.createMirror({ sites: [{ key: 'c', api: 'https://c-zy.com/api.php/provide/vod' }], httpGet: async () => ({ status: 500 }), store: st });
     ok(m.apiFor('c') === 'https://c2-zy.com/api.php/provide/vod' && m.status()[0].budgetLeft === 10, '存储里的坏条目跳过、类型不对的字段回默认');
+}
+
+// ---------------------------------------------------------------- ⑩ 复核 SEC-1:发现时扫 HTML 必须是线性的
+console.log('⑩ 复核 SEC-1:对抗 HTML(1 MB)下发现不卡主线程');
+{
+    // 每个输入在独立 worker 里跑:旧实现(平方回溯)要几分钟,这里 8 s 没回就 terminate、记失败,测试本身不会卡住
+    const WORKER = `
+        const { parentPort, workerData } = require('worker_threads');
+        const { performance } = require('perf_hooks');
+        const M = require(workerData.lib);
+        const N = 1 << 20;
+        const rep = (s, len) => s.repeat(Math.floor(len / s.length));
+        const make = (k) => {
+            switch (k) {
+                case 'lt': return '<'.repeat(N);
+                case 'lt-gt-end': return '<'.repeat(N - 1) + '>';
+                case 'script-unclosed': return '<html><script>' + 'a'.repeat(N - 14);
+                case 'script-many': return rep('<script>', N);
+                case 'style-many': return rep('<style>x</styl', N);
+                case 'tag-unclosed': return rep('<a href=x bbbbbbbbbb', N);
+                case 'tag-unclosed-gt-end': return rep('<a bbbbbbbbbb', N - 1) + '>';
+                case 'digits': return rep('1.', N);
+                case 'labels': return rep('a.', N - 3) + 'com';
+                case 'hyphen-labels': return rep('a-', N);
+                case 'slashes': return '/'.repeat(N);
+                case 'proto-rel': return rep('//a.', N);
+                case 'http-long-host': return 'http://' + rep('a1.', N - 7);
+                case 'mixed': return rep('<b>1.2.3.4.5.6.7.8.9 //x.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y.y </b', N);
+                case 'similar-spam': { const a = []; let n = 0; for (let i = 0; n < N - 64; i++) { const s = '<a href="https://sigmazy' + i + '.com/">x</a> sigmazy' + i + '.net '; a.push(s); n += s.length; } return a.join(''); }
+                default: return '';
+            }
+        };
+        (async () => {
+            const html = make(workerData.kind);
+            const P = 'https://sigmazy1.com/api.php/provide/vod';
+            const log = [];
+            const httpGet = async (url) => { log.push(url); return url.indexOf('https://sigmazy1.com/') === 0 ? { status: 200, headers: { 'content-type': 'text/html' }, data: html } : { status: 404, headers: {}, data: '' }; };
+            const m = M.createMirror({ sites: [{ key: 's', api: P }], httpGet, resolve: async () => ['93.184.216.34'], now: () => Date.UTC(2026, 10, 20, 12) });
+            m.report('s', true, 'ok', { url: P + '?ac=list', data: workerData.snap });
+            const t0 = performance.now();
+            const r = await m.probe('s');
+            const ms = performance.now() - t0;
+            let helperMs = -1;
+            if (typeof M.htmlText === 'function' && typeof M.linkHosts === 'function' && typeof M.bareHosts === 'function') {
+                const t1 = performance.now();
+                M.linkHosts(html, () => false, 50);
+                M.bareHosts(M.htmlText(html), () => false, 50);
+                helperMs = performance.now() - t1;
+            }
+            parentPort.postMessage({ ms, helperMs, len: html.length, reason: r && r.reason, gets: log.length });
+        })().catch((e) => parentPort.postMessage({ err: String(e && e.stack || e) }));
+    `;
+    const runCase = (kind) => new Promise((resolve) => {
+        const w = new Worker(WORKER, { eval: true, workerData: { lib: MIRROR_LIB, kind, snap: JSON.parse(A()) } });
+        let done = false;
+        const fin = (v) => { if (done) return; done = true; clearTimeout(tm); w.terminate().catch(() => { }); resolve(v); };
+        const tm = setTimeout(() => fin({ timeout: true }), 8000);
+        w.on('message', fin);
+        w.on('error', (e) => fin({ err: String(e && e.stack || e) }));
+        w.on('exit', () => fin({ err: 'exited' }));
+    });
+    const kinds = ['lt', 'lt-gt-end', 'script-unclosed', 'script-many', 'style-many', 'tag-unclosed', 'tag-unclosed-gt-end', 'digits', 'labels', 'hyphen-labels', 'slashes', 'proto-rel', 'http-long-host', 'mixed', 'similar-spam'];
+    const LIMIT = 200;
+    const rows = [];
+    for (const k of kinds) {
+        const r = await runCase(k);
+        rows.push([k, r.timeout ? 'TIMEOUT(>8s)' : r.err ? 'ERR' : Math.round(r.ms) + 'ms/' + Math.round(r.helperMs) + 'ms']);
+        ok(!r.timeout && !r.err && r.len >= (1 << 20) - 64 && r.ms < LIMIT && r.helperMs >= 0 && r.helperMs < LIMIT,
+            `对抗输入 ${k}(${r.len || '?'} 字符):probe → 换源 → 发现 < ${LIMIT} ms,直接扫 1 MB < ${LIMIT} ms`, r);
+    }
+    console.log('    (probe / 直接扫 1 MB:' + rows.map((x) => x[0] + ' ' + x[1]).join(',') + ')');
+    // 线性扫描的功能对照(和旧正则同义的地方)
+    if (typeof M.htmlText === 'function') {
+        const T = M.htmlText('<p>最新地址:<b>Gammazy7.com</b></p><SCRIPT>var u="https://x-ads.com"</Script ><style>.a{}</style>正文 1 < 2<scr');
+        ok(!/x-ads|\.a\{|</.test(T) && /最新地址: Gammazy7\.com /.test(T) && /正文 1 +2 +scr$/.test(T), 'htmlText:去掉 script / style 块(不分大小写)与标签,孤立的 < 当空格', T);
+        ok(M.htmlText('前<script>没闭合 https://x.com') === '前 ', 'htmlText:没闭合的 <script 后面全丢', M.htmlText('前<script>没闭合 https://x.com'));
+        const L = M.linkHosts('<a href="https://Gammazy9.com/x">a</a> //gammazy8.com:8443/ ftp://gammazy6.com/ http://gammazy5.com. ///gammazy4.com <img src=//cdn.other.com/a>', () => true, 50);
+        ok(JSON.stringify(L) === JSON.stringify([{ scheme: 'https:', host: 'gammazy9.com', port: '' }, { scheme: '', host: 'gammazy8.com', port: '8443' }, { scheme: '', host: 'gammazy6.com', port: '' },
+            { scheme: 'http:', host: 'gammazy5.com', port: '' }, { scheme: '', host: 'gammazy4.com', port: '' }, { scheme: '', host: 'cdn.other.com', port: '' }]), 'linkHosts:绝对 / 协议相对 / 端口 / 结尾句点 / 多斜杠', L);
+        const B = M.bareHosts('最新地址:gammazy7.com。备用 www.gammazy6.net,邮箱 a@gammazy5.org;1.2.3.4 v1.0 ' + '9'.repeat(300) + '.com x.' + 'y'.repeat(300), (h) => true, 50);
+        ok(JSON.stringify(B) === JSON.stringify(['gammazy7.com', 'www.gammazy6.net', 'gammazy5.org']), 'bareHosts:中文标点分隔、去重;IP / 版本号 / 超长串不收', B);
+    } else ok(false, 'htmlText / linkHosts / bareHosts 没导出(线性扫描函数)');
+}
+
+// ---------------------------------------------------------------- ⑪ 复核 SEC-2:发现来的候选要真有片名对上;快照只来自主地址;后台回主地址
+console.log('⑪ 复核 SEC-2:抄分类表 + 现在时间冒充 / 只探同前缀链接 / 快照只认主地址 / 后台 reset');
+{
+    const NOW = Date.UTC(2026, 10, 20, 12, 0, 0);
+    const bj = (ms) => { const d = new Date(ms + 8 * 3600e3), p = (x) => String(x).padStart(2, '0'); return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:00`; };
+    // 冒充的片库:片名是编的,上架时间 = "现在"(北京时间),分类表照抄 A 的
+    const SPOOF = Array.from({ length: 10 }, (_, i) => ({ vod_id: 1010 - i, vod_name: '冒充条目 ' + (i + 1) + ' 合成', vod_time: bj(NOW - i * 60e3), type_id: 1 }));
+    const IDS = CAT.A.slice(0, 8).map((x) => x.vod_id).join(',');
+    const DETAIL = (api) => api + '?ac=detail&ids=' + IDS;
+    {
+        const N = makeNet(), C = clock();
+        const P = API('omegazy1.com');
+        N.routes.set(P, N.html('<html>维护中</html>', 503));
+        N.routes.set('https://omegazy1.com/', N.html('<html><body>新地址 <a href="https://omegazy2.com/">进入</a> 赞助 <a href="https://ads-casino-zz.com/">广告</a></body></html>'));
+        for (const h of ['omegazy2.com', 'ads-casino-zz.com']) {
+            N.routes.set(LIST(API(h)), N.json(listBody(SPOOF, CAT.classes_a)));
+            N.routes.set(DETAIL(API(h)), N.json(listBody(SPOOF, CAT.classes_a)));   // 按 id 回查:同样的 id、编的片名
+        }
+        const m = M.createMirror({ sites: [{ key: 'o', api: P }], httpGet: N.httpGet, resolve: N.resolve, now: C.now });
+        m.report('o', true, 'ok', { url: LIST(P), data: JSON.parse(A()) });
+        const snap = m._state.get('o').snapshot || {};
+        ok(snap.api === P && Array.isArray(snap.ids) && snap.ids.length === 8 && snap.ids[0][0] === '1010', '快照记下主地址 + 最新 8 条的 (vod_id, 片名哈希)', snap);
+        for (let i = 0; i < 3; i++) m.report('o', false, '5xx', { url: SAMPLE(P) });
+        await settle(m);
+        const t = Object.fromEntries((m._state.get('o').tried || []).map((x) => [x.url, x.reason]));
+        ok(m.apiFor('o') === P && t[API('omegazy2.com')] === 'ids-mismatch', '发现来的候选:抄分类表 + 时间写成"现在" + 编的片名 → 按 vod_id 回查片名对不上 → 不收', [m.apiFor('o'), t]);
+        ok(!N.log.some((u) => /ads-casino/.test(u)) && !(API('ads-casino-zz.com') in t), '根页里和旧域名不同前缀的链接(广告)一个请求都不发', N.log);
+    }
+    {   // 同一片库、过了几天("太新",最新 8 条一条都对不上)→ 按快照的 vod_id 回查,片名对上 → 收(how:'ids');id 对上但片名不对 → 拒
+        for (const [label, detail, want] of [['回查片名对上 → 收', CAT.A, 'ids'], ['回查同样的 id、片名不对 → 拒', SPOOF, 'ids-mismatch']]) {
+            const N = makeNet(), C = clock();
+            const P = API('omegazy1.com');
+            N.routes.set(P, N.redirect('https://omegazy3.com/'));
+            N.routes.set(LIST(API('omegazy3.com')), N.json(listBody(CAT.A_fresh, CAT.classes_a)));
+            N.routes.set(DETAIL(API('omegazy3.com')), N.json(listBody(detail, CAT.classes_a)));
+            const m = M.createMirror({ sites: [{ key: 'o', api: P }], httpGet: N.httpGet, resolve: N.resolve, now: C.now });
+            m.report('o', true, 'ok', { url: LIST(P), data: JSON.parse(A()) });
+            C.t = Date.UTC(2026, 10, 23, 12, 0, 0);
+            for (let i = 0; i < 3; i++) m.report('o', false, 'timeout', { url: SAMPLE(P) });
+            await settle(m);
+            const tr = (m._state.get('o').tried || []).find((x) => x.url === API('omegazy3.com')) || {};
+            ok(tr.reason === want && (m.apiFor('o') === API('omegazy3.com')) === (want === 'ids') && N.log.includes(DETAIL(API('omegazy3.com'))), '跳转来的"太新"候选:' + label, [tr, m.apiFor('o'), N.log]);
+        }
+    }
+    {   // 换到配置的镜像后,镜像回的"最新一页"(别家片名 + 时间写到 9 小时后)不进快照 → 主地址恢复,6 小时后照常回切
+        const N = makeNet(), C = clock(), st = memStore();
+        const P = API('pizy1.com'), MR = API('pizy2.com');
+        let up = false;
+        N.routes.set(LIST(P), () => (up ? { status: 200, headers: {}, data: A() } : Object.assign(new Error('x'), { code: 'ECONNREFUSED' })));
+        N.routes.set(LIST(MR), N.json(listBody(CAT.A_shift2, CAT.classes_a)));
+        const m = M.createMirror({ sites: [{ key: 'p', api: P, mirrors: [MR] }], httpGet: N.httpGet, resolve: N.resolve, now: C.now, store: st });
+        m.report('p', true, 'ok', { url: SAMPLE(P), data: JSON.parse(A()) });
+        const before = JSON.stringify(m._state.get('p').snapshot);
+        for (let i = 0; i < 3; i++) m.report('p', false, 'conn', { url: SAMPLE(P) });
+        await settle(m);
+        ok(m.apiFor('p') === MR, '主地址拒连 → 切到配置的镜像');
+        const PIN = CAT.B.map((x, i) => Object.assign({}, x, { vod_time: bj(C.t + 9 * 3600e3 - i * 60e3) }));
+        for (let i = 0; i < 4; i++) { C.t += 6.5 * 3600e3; m.report('p', true, 'ok', { url: SAMPLE(MR), data: listBody(PIN, CAT.classes_other) }); }
+        ok(JSON.stringify(m._state.get('p').snapshot) === before, '镜像回的最新一页不进快照(快照仍是换源前主地址的那份)', m._state.get('p').snapshot);
+        up = true;
+        await m.tick();
+        ok(m.apiFor('p') === P && m.status()[0].reason === 'failback', '主地址恢复 → 按主地址自己的快照验过 → 回切(镜像写不了快照,钉不住)', [m.apiFor('p'), m._state.get('p').tried.slice(0, 2)]);
+        // 旧版本存下的快照(没有 api 标记 = 可能是镜像自己写的)+ 当前在镜像上 → 读到就丢 → 回切按"配置的主地址、没快照"走
+        const pinNames = M.parseMaccms(listBody(PIN, CAT.classes_other));
+        const legacy = { v: 1, sites: { p: { primary: P, current: MR, since: 1, snapshot: { at: 1, names: pinNames.names, maxTime: pinNames.maxTime, classes: pinNames.classes }, tried: [] } } };
+        const st2 = { box: { obj: legacy }, load() { return JSON.parse(JSON.stringify(this.box.obj)); }, save(o) { this.box.obj = JSON.parse(JSON.stringify(o)); } };
+        const m2 = M.createMirror({ sites: [{ key: 'p', api: P, mirrors: [MR] }], httpGet: N.httpGet, resolve: N.resolve, now: C.now, store: st2 });
+        ok(!m2._state.get('p').snapshot, '旧版本存的快照(不是主地址的)读到就丢', m2._state.get('p').snapshot);
+        await m2.tick();
+        ok(m2.apiFor('p') === P && m2.status()[0].reason === 'failback', '…主地址通了就切回(不会被镜像写的旧快照钉住)', [m2.apiFor('p'), m2._state.get('p').tried[0]]);
+    }
+    {   // 后台 reset
+        const N = makeNet(), C = clock(), st = memStore();
+        const P = API('rhozy1.com'), MR = API('rhozy2.com');
+        N.routes.set(LIST(MR), N.json(listBody(CAT.A_shift2, CAT.classes_a)));
+        const m = M.createMirror({ sites: [{ key: 'r', api: P, mirrors: [MR] }], httpGet: N.httpGet, resolve: N.resolve, now: C.now, store: st });
+        if (typeof m.reset !== 'function') ok(false, 'mirror.reset 不存在(后台「回到主地址」)');
+        else {
+            m.report('r', true, 'ok', { url: SAMPLE(P), data: JSON.parse(A()) });
+            for (let i = 0; i < 3; i++) m.report('r', false, 'timeout', { url: SAMPLE(P) });
+            await settle(m);
+            const n0 = N.log.length;
+            const r1 = await m.reset('r');
+            ok(m.apiFor('r') === P && r1.ok && r1.switched === true && r1.from === MR && m.status()[0].reason === 'admin-reset' && st.box.obj.sites.r.current === P && N.log.length === n0,
+                'reset:镜像 → 主地址,立即落盘,不发请求', [r1, m.status()[0], N.log.slice(n0)]);
+            const r2 = await m.reset('r');
+            ok(r2.ok && r2.switched === false && r2.reason === 'already-primary' && (await m.reset('nope')).reason === 'unknown-site', 'reset:已经在主地址 / 不认识的站', r2);
+            // 正在换源时 reset:这一轮作废(不会再切走)
+            let release;
+            const gate = new Promise((r) => { release = r; });
+            N.routes.set(LIST(MR), async () => { await gate; return { status: 200, headers: {}, data: listBody(CAT.A_shift2, CAT.classes_a) }; });
+            C.t += 2 * 3600e3;
+            for (let i = 0; i < 3; i++) m.report('r', false, 'timeout', { url: SAMPLE(P) });
+            await new Promise((r) => setImmediate(r));
+            const busy = m._state.get('r').busy;
+            const r3 = await m.reset('r');
+            release();
+            const fr = busy ? await busy : null;
+            await settle(m);
+            ok(!!busy && r3.ok && fr && fr.reason === 'reset' && fr.switched === false && m.apiFor('r') === P, 'reset 时正在换源 → 这一轮结果作废,留在主地址', [!!busy, fr && fr.reason, m.apiFor('r')]);
+        }
+    }
 }
 
 console.log(fail ? `\nFAILED: ${pass} passed, ${fail} failed` : `\nALL PASSED: ${pass} passed, 0 failed`);

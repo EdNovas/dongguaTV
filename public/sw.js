@@ -52,8 +52,9 @@
 // [adult] -adult7(第四阶段复核):player-x.js?v=2(快点击:按下即预取、不重复拉)、feed.js?v=3(不预拉下一条的 m3u8 清单,只预连源站)。
 // [adult] -adult8(第四阶段复核 r3):adult.js?v=7(「猜你喜欢」带 nr=1 不推荐审查级作品;无痕时浏览路由用 replaceState 不进浏览器历史)。
 // [adult] -adult9:player-x.js?v=3(热度条选择器压过 DPlayer 的 .dplayer svg{height:100%},桌面端曲线不再被压成 3px)。
+// [adult] -adult10(第四阶段复核 r4):player-x.js?v=4(长按时不弹系统菜单)、privacy.js?v=3(关无痕刷新页面、一键清除连同删除记录、无痕下可删继续观看、循环视频不算在看)、preview.js?v=2(触屏网络未知不自动预览、停了不再走 Worker 重试、失败不长期缓存)、feed.js?v=4(网络未知的手机等点一下、原生 HLS 计流量、监听只绑一次、自动播放被拒停止加载、按键只认刷短片自己的);后台 admin.js?v=4(不预缓存)。
 const CACHE_VERSION = 'v43';
-const ADULT_REV = '-adult9';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult10';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -79,10 +80,10 @@ const STATIC_URLS = [
     './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js',
     './adult/adult.js?v=7',   // [adult] v43-adult8:与 index.html 引用同一个 ?v=
-    './adult/player-x.js?v=3',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
-    './adult/privacy.js?v=2',
-    './adult/preview.js?v=1',
-    './adult/feed.js?v=3'
+    './adult/player-x.js?v=4',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
+    './adult/privacy.js?v=3',
+    './adult/preview.js?v=2',
+    './adult/feed.js?v=4'
 ];
 
 // 图片缓存配置

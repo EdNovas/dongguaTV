@@ -1922,9 +1922,17 @@ app.post('/api/history/clear', (req, res) => {
         const deleteStmt = cacheManager.db.prepare(`
             DELETE FROM user_history WHERE user_token = ?
         `);
-        const result = deleteStmt.run(token);
-        console.log(`[History Clear] 用户 ${token.substring(0, 8)}... 删除了 ${result.changes} 条记录`);
-        res.json({ success: true, deleted: result.changes });
+        // [adult] 隐私「一键清除」带 all:true → 删除墓碑(按片名存、留 120 天)也一起删,否则清完刷新又把删过的片名拉回本机;
+        //   主线「清除观看历史」不带这个标记:照旧只删历史、留墓碑(它接着推墓碑,让别的设备不把记录推回来)
+        const all = req.body && req.body.all === true;
+        let tombstones = 0;
+        const result = cacheManager.db.transaction(() => {
+            const r = deleteStmt.run(token);
+            if (all) tombstones = cacheManager.db.prepare('DELETE FROM user_history_deleted WHERE user_token = ?').run(token).changes;
+            return r;
+        })();
+        console.log(`[History Clear] 用户 ${token.substring(0, 8)}... 删除了 ${result.changes} 条记录` + (all ? ` + ${tombstones} 条墓碑` : ''));
+        res.json(all ? { success: true, deleted: result.changes, tombstones } : { success: true, deleted: result.changes });
     } catch (e) {
         console.error('[History Clear Error]', e.message);
         res.status(500).json({ error: 'Database error' });
