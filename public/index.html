@@ -81,7 +81,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=3"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=4"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -5402,8 +5402,10 @@
                     </div>
                     <div class="catnav-foot">
                         <button type="button" class="catnav-all" @click="openBrowse({ type: catNavType, sel: {} })">
-                            {{ adultMode ? '浏览' : '全部' }}{{ catNavLabel }}<span class="catnav-all-sub">{{ adultMode ? '按时长、标记筛选' : '按年份、评分筛选' }}</span><i class="fas fa-arrow-right" aria-hidden="true"></i>
+                            {{ adultMode ? '浏览' : '全部' }}{{ catNavLabel }}<span class="catnav-all-sub">{{ adultMode ? '按标签、时长、厂牌筛选' : '按年份、评分筛选' }}</span><i class="fas fa-arrow-right" aria-hidden="true"></i>
                         </button>
+                        <!-- [adult] 标签云(#/tags?b=):这个大类第一个分类的全部标签 -->
+                        <button v-if="adultMode" type="button" class="catnav-all" @click="adOpenTags(catNavType)">标签<i class="fas fa-tags" aria-hidden="true"></i></button>
                     </div>
                 </div>
             </section>
@@ -5551,7 +5553,7 @@
                             @click="closeBrowse()" :aria-label="browse.fromDir ? '返回分类大全' : '返回首页'">
                             <i class="fas fa-arrow-left me-0 me-md-2" aria-hidden="true"></i><span class="d-none d-md-inline">{{ browse.fromDir ? '返回分类大全' : '返回首页' }}</span>
                         </button>
-                        <h2 class="browse-title">{{ browseTitle }}</h2>
+                        <h2 class="browse-title">{{ adultMode ? adBrowseTitle : browseTitle }}</h2>   <!-- [adult] 标签云 / 标签页 / 女优页的标题 -->
                         <span class="browse-count" v-if="browse.total > 0">约 {{ browseCountLabel(browse.total) }} 部</span>
                     </div>
                     <div class="cat-tabs browse-types" role="group" aria-label="大类">
@@ -5560,6 +5562,8 @@
                             @click="setBrowseType(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}</button>
                     </div>
                 </div>
+                <!-- [adult] 标签页 / 女优页页头:分面组、按分类细分、相关标签;女优名 + 别名(DgAdHead) -->
+                <dg-ad-head v-if="adultMode" :view="adult.view" :sel="browse.sel" @go="adGo" @learn="adLearned"></dg-ad-head>
                 <div class="browse-filters">
                     <div class="browse-frow" v-for="g in browseGroups" :key="browse.type + '-' + g.k" role="group" :aria-label="g.l">
                         <span class="browse-flabel">{{ g.l }}</span>
@@ -5569,24 +5573,10 @@
                                 @click="setBrowseFilter(g.k, op.k)">{{ op.l }}</button>
                         </div>
                     </div>
-                    <!-- [adult] 厂牌行:从作品页「SSIS」按钮进来时按厂牌前缀筛(lp),点一下取消 -->
-                    <div class="browse-frow" v-if="adultMode && browse.sel.lp" role="group" aria-label="厂牌">
-                        <span class="browse-flabel">厂牌</span>
-                        <div class="browse-fopts">
-                            <button type="button" class="browse-fopt active" aria-pressed="true" :title="'取消厂牌 ' + browse.sel.lp" @click="setBrowseFilter('lp', '')">{{ browse.sel.lp }} <i class="fas fa-xmark" aria-hidden="true"></i></button>
-                        </div>
-                    </div>
-                    <!-- [adult] 标签行:当前分类数量最多的标签(/api/catalog/tags,只给 featured 的;审查类标签永远不做按钮) -->
-                    <div class="browse-frow" v-if="adultMode && adTagOpts.length" role="group" aria-label="标签">
-                        <span class="browse-flabel">标签</span>
-                        <div class="browse-fopts">
-                            <button type="button" class="browse-fopt" :class="{ active: !browse.sel.tag }" :aria-pressed="!browse.sel.tag ? 'true' : 'false'"
-                                @click="browse.sel.tag && setBrowseFilter('tag', '')">全部</button>
-                            <button v-for="t in adTagOpts" :key="'tg-' + t.id" type="button" class="browse-fopt"
-                                :class="{ active: browse.sel.tag === t.id }" :aria-pressed="browse.sel.tag === t.id ? 'true' : 'false'"
-                                @click="setBrowseFilter('tag', t.id)">{{ t.label }}</button>
-                        </div>
-                    </div>
+                    <!-- [adult] 标签行(featured,≤3 个同时满足)+ 排序(只列这次可用的)/ 筛选面板(分组标签带数、更多(审查类,只能筛)、
+                         排除、时长含「时长未知」、版本、厂牌、女优)/ 已选条件;组件在 adult/adult.js(DgAdFilter),标签云页不出 -->
+                    <dg-ad-filter v-if="adultMode && adult.view !== 'tags'" ref="adFilter" :sel="browse.sel" :type="browse.type" :facets="adult.facets"
+                        :total="browse.total" :tv="isTVMode" :legacy="adTagOpts" @go="adGo" @sheet="adSheet"></dg-ad-filter>
                 </div>
                 <div v-if="browse.keyword" class="browse-kwhint">
                     已按分类「{{ browse.keyword }}」显示，要找叫这个名字的片？
@@ -5594,7 +5584,10 @@
                 </div>
             </div>
 
-            <div class="browse-grid">
+            <!-- [adult] 标签云(#/tags?b=)/ 窗口化网格(片单可到上千张:只渲染视口附近几块,块的死活由 IntersectionObserver 定,滚动时不写响应式状态) -->
+            <dg-ad-cloud v-if="adultMode && adult.view === 'tags'" :b="browse.sel.b || ''" @go="adGo" @learn="adLearned"></dg-ad-cloud>
+            <dg-ad-grid v-if="adultMode" v-show="adult.view !== 'tags'" :items="browse.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse.loading" @pick="browsePick"></dg-ad-grid>
+            <div class="browse-grid" v-if="!adultMode">
                 <div class="browse-card" v-for="item in browse.items" :key="'b-' + item.id" :data-bid="item.id"
                     :tabindex="isTVMode ? 0 : null" @click="browsePick(item)" @keydown.enter.prevent="browsePick(item)">
                     <div class="poster-wrap">
@@ -5616,7 +5609,7 @@
                 </template>
             </div>
 
-            <div class="browse-foot" ref="browseFoot" aria-live="polite">
+            <div class="browse-foot" ref="browseFoot" aria-live="polite" v-show="!(adultMode && adult.view === 'tags')">   <!-- [adult] 标签云页没有片单 -->
                 <div v-if="browse.loading && browse.items.length" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载更多…</div>
                 <div v-else-if="browse.error" class="browse-state">
                     加载失败，可能是网络不稳定
@@ -5640,8 +5633,8 @@
         <!--   遥控器不进这条(tabindex -1):它压在第一排海报上面,按「上」会先跳进它;遥控器用返回键退出、往上走回筛选区 -->
         <div class="browse-sticky" v-if="browse.open && !searched && browseStuck">
             <button type="button" class="browse-sticky-back" :tabindex="isTVMode ? -1 : null" @click="closeBrowse()" :aria-label="browse.fromDir ? '返回分类大全' : '返回首页'"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
-            <button type="button" class="browse-sticky-main" :tabindex="isTVMode ? -1 : null" @click="browseToTop">
-                <span class="browse-sticky-text">{{ browseSummary }}</span>
+            <button type="button" class="browse-sticky-main" :tabindex="isTVMode ? -1 : null" @click="(adultMode && adOpenSheet()) || browseToTop()">   <!-- [adult] 直接打开筛选面板 -->
+                <span class="browse-sticky-text">{{ adultMode ? adBrowseSummary : browseSummary }}</span>
                 <span class="browse-sticky-edit"><i class="fas fa-sliders" aria-hidden="true"></i> 筛选</span>
             </button>
         </div>
@@ -6175,17 +6168,23 @@
                             <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
                             <template v-else><i class="fas fa-spinner fa-spin"></i> 正在加载…</template>
                         </div>
-                        <!-- [adult] 作品信息条:番号(可复制)· 时长 · 上架 N 站 · 分类 / 标签(点开分类浏览)· 厂牌前缀 / 演员(只出已确认的,点了搜索);
+                        <!-- [adult] 作品信息条:番号(可复制)· 时长 · 发行日期 · 上架 N 站 · 分类 · 厂牌(点了按厂牌浏览)· 番号前缀 · 演员(只出已确认的:
+                             有 aid 的点了进女优页,旧的纯名字点了搜索);下一行标签按分面组排(只有 featured,点了进标签页;审查类不出);
                              同番号的无码流出版 / 正片链接,解说/片段收在折叠里(不算线路) -->
                         <template v-if="adultMode && adMeta && !previewLocked">
                             <div class="dg-meta">
                                 <span v-if="adMeta.code" class="dg-meta-code">{{ adMeta.code }}<button type="button" class="dg-meta-copy" tabindex="2" @click="adCopyCode" :aria-label="'复制番号 ' + adMeta.code" title="复制番号"><i class="far fa-copy" aria-hidden="true"></i></button></span>
                                 <span v-if="adMeta.durText" class="dg-meta-t"><i class="far fa-clock" aria-hidden="true"></i> {{ adMeta.durText }}</span>
+                                <span v-if="adMeta.released" class="dg-meta-t dg-meta-rel"><i class="far fa-calendar" aria-hidden="true"></i> {{ adMeta.released }} 发行</span>
                                 <span v-if="adMeta.nSites" class="dg-meta-t">上架 {{ adMeta.nSites }} 站</span>
                                 <button v-if="adMeta.bucket" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaGo({ b: adMeta.bucket })">{{ adMeta.bucketLabel }}</button>
-                                <button v-for="t in adMeta.tags" :key="'mt-' + t.id" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaGo({ b: adMeta.bucket, tag: t.id })">#{{ t.label }}</button>
+                                <button v-if="adMeta.studio" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaStudio(adMeta.studio)" :title="'浏览厂牌 ' + adMeta.studio.label + ' 的作品'"><i class="fas fa-building" aria-hidden="true"></i> {{ adMeta.studio.label }}</button>
+                                <span v-if="adMeta.label" class="dg-meta-t">{{ adMeta.label }}</span>
                                 <button v-if="adMeta.prefix" type="button" class="dg-meta-chip mono" tabindex="2" @click="adMetaPrefix(adMeta.prefix)" :title="'浏览 ' + adMeta.prefix + ' 的其他作品'">{{ adMeta.prefix }}</button>
-                                <button v-for="a in adMeta.actress" :key="'ma-' + a" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaSearch(a)"><i class="fas fa-user" aria-hidden="true"></i> {{ a }}</button>
+                                <button v-for="a in adMeta.actress" :key="'ma-' + (a.aid || a.name)" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaActress(a)" :title="a.aid ? '浏览 ' + a.name + ' 的作品' : '搜索 ' + a.name"><i class="fas fa-user" aria-hidden="true"></i> {{ a.name }}</button>
+                            </div>
+                            <div v-if="adMeta.tagGroups.length" class="dg-meta-tags">
+                                <div v-for="g in adMeta.tagGroups" :key="'mg-' + g.id" class="dg-meta-tg"><span v-if="g.label" class="dg-meta-tgl">{{ g.label }}</span><button v-for="t in g.tags" :key="'mt-' + t.id" type="button" class="dg-meta-chip" tabindex="2" @click="adMetaTag(t.id)">#{{ t.label }}</button></div>
                             </div>
                             <div v-if="adMeta.sib.length || adMeta.clips.length" class="dg-meta-sib">
                                 <button v-for="s in adMeta.sib" :key="'ms-' + s.wk" type="button" class="dg-meta-link" tabindex="2" :title="s.name" @click="adOpenSibling(s)">{{ s.label }}</button>
@@ -14504,7 +14503,7 @@
                     if (!b.open || this.searched || b.loading || b.done || b.error) return;
                     if (manual) b.idle = 0;
                     // 连着几页大半被滤掉(没中文名/没海报),或已经上了 600 张(电视盒子扛不住无限多卡片):不再自己往下翻,露出「加载更多」
-                    else if (b.idle >= 4 || b.items.length >= 600) return;
+                    else if (b.idle >= 4 || b.items.length >= (this.adultMode ? 10000 : 600)) return;   // [adult] 成人站网格是窗口化的(只渲染视口附近几块),不按 600 张封顶
                     this._browseFetch(false);
                 },
                 _browseAbort() {
@@ -14512,6 +14511,7 @@
                 },
                 // reset = 换了筛选:作废在飞的请求、清空片单,从第 1 页拉
                 async _browseFetch(reset) {
+                    if (this.adultMode && typeof this._adBrowseFetch === 'function') return this._adBrowseFetch(reset);   // [adult] 分面浏览:游标翻页 + facets(adult.js)
                     const b = this.browse;
                     if (reset) {
                         this._browseAbort();

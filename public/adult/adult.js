@@ -15,7 +15,7 @@
     }
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this), function (root) {
     'use strict';
-    const VERSION = 2;
+    const VERSION = 3;
     const DEFAULT_NAME = 'DGX';
 
     // ---------- 安全的存储读写(隐私模式/被禁用时 localStorage 会抛) ----------
@@ -37,11 +37,16 @@
         story: '剧情', uncensored: '无码', subbed: '中字', hktw: '港台', korea: '韩国', beauty: '高颜值', studio: '厂牌',
     };
     // 审查类标签:服务器说 featured 也绝不做成导航/作品页的标签按钮(只在浏览页里作为已选条件出现)。fail-closed:服务器漏标时这里兜住
-    const NEVER_FEATURE = new Set(['noncon', 'rape', 'rape-play', 'incest', 'hypnosis', 'time-stop', 'timestop', 'sleep', 'drunk', 'aphrodisiac', 'drug', 'voyeur', 'teen', 'schoolgirl']);
+    //   phase 3 词表(lib/adult/tag-vocab.json)的 23 个 review 标签全在这里;blocked 的 x_* 一律不认(isBlockedTag)
+    const NEVER_FEATURE = new Set(['noncon', 'rape', 'rape-play', 'incest', 'hypnosis', 'time-stop', 'timestop', 'sleep', 'drunk', 'aphrodisiac', 'drug', 'voyeur', 'teen', 'schoolgirl',
+        'small_tits', 'pregnant', 'lactation', 'college', 'teacher', 'exhibition', 'train', 'pee', 'fisting', 'extreme', 'escort', 'chikan', 'virgin', 'cherry', 'humiliation', 'g_horror']);
+    const isBlockedTag = (id) => typeof id === 'string' && /^x_/i.test(id);
     // 这些分类的人多是素人/主播/网红本人:作品页不出演员名(服务器也不该给,两头都拦)
     const NO_ACTRESS_BUCKETS = new Set(['cn_amateur', 'cn_hookup', 'live', 'creators']);
     const TAG_ID_RE = /^[a-z0-9][a-z0-9_-]{0,39}$/i;
     const validTag = (t) => typeof t === 'string' && TAG_ID_RE.test(t);
+    // 能做成按钮 / 标签云 / 相关标签的:合法 id、不是审查类、不是 blocked
+    const featurable = (id) => validTag(id) && !NEVER_FEATURE.has(id) && !isBlockedTag(id);
     const tagLabels = Object.create(null);   // 运行时从 /api/catalog/tags、搜索建议、作品信息里学到的标签名
     const tagLabel = (id) => (validTag(id) ? (tagLabels[id] || TAG_LABEL[id] || id) : '');
     const learnTag = (id, label) => { const l = cleanText(label, 20); if (validTag(id) && l) tagLabels[id] = l; };
@@ -62,13 +67,53 @@
         { k: 'more', l: '更多', icon: 'fa-ellipsis', sort: 'new', buckets: [['softcore', '三级'], ['fetish', 'SM'], ['lgbt', '同性·TS'], ['commentary', 'AV解说'], ['ai_drama', 'AI短剧'], ['asia', '韩国·东南亚']] },
         { k: 'all', l: '全部', icon: 'fa-layer-group', sort: 'new', buckets: [] },
     ];
-    // 浏览页筛选(与 /api/catalog/browse 的参数一一对应;服务器另有 sort=lines,只作并列时的次序,不单独给入口)
-    const SORTS = [{ k: 'new', l: '新上架' }, { k: 'dur', l: '时长' }, { k: 'random', l: '随机' }];
-    const DURS = [{ k: '', l: '全部' }, { k: 's', l: '10分钟内' }, { k: 'm', l: '10–60分钟' }, { k: 'l', l: '60分钟以上' }];
-    const FLAGS = [{ k: '', l: '全部' }, { k: 'zh', l: '中字' }, { k: 'unc', l: '无码' }, { k: 'multi', l: '≥3线' }];
+    // 浏览页筛选(phase 3,与 /api/catalog/browse 的参数一一对应):
+    //   排序 7 种(服务器 facets.sorts 说哪些这次可用,只显示可用的;没给 facets 时按 DEFAULT_SORTS)/ 时长 6 档(含「时长未知」)/
+    //   版本 6 种(单选)/ 标签 t ≤3(AND)/ 排除 x ≤3 / 厂牌 studio / 女优 actress(aid)/ 旧的厂牌前缀 lp
+    const SORTS = [
+        { k: 'new', l: '最新上架' }, { k: 'updated', l: '最近更新' }, { k: 'released', l: '发行日期' }, { k: 'hot', l: '热门' },
+        { k: 'dur', l: '时长' }, { k: 'lines', l: '线路最多' }, { k: 'rand', l: '随机' },
+    ];
+    const SORT_ALIAS = { random: 'rand', release: 'released' };   // 旧地址 / 首页「随机发现」行的 more 还是 random
+    const DEFAULT_SORTS = ['new', 'dur', 'lines', 'rand'];
+    const DURS = [{ k: '', l: '全部' }, { k: 's', l: '10分钟内' }, { k: 'm', l: '10–30分钟' }, { k: 'l', l: '30–60分钟' }, { k: 'xl', l: '1–2小时' }, { k: 'xxl', l: '2小时以上' }, { k: 'unk', l: '时长未知' }];
+    const VARIANTS = [{ k: '', l: '全部' }, { k: 'zh', l: '中字' }, { k: 'unc', l: '无码' }, { k: 'leak', l: '流出' }, { k: 'vr', l: 'VR' }, { k: '4k', l: '4K' }, { k: 'vertical', l: '竖屏' }];
+    const FLAG_TO_V = { zh: 'zh', unc: 'unc' };   // phase 2 的 flag=(中字/无码)→ v=;flag=multi(≥3线)没有对应,丢掉
+    const MAX_T = 3, MAX_X = 3;
+    // 9 个分面组(与 lib/adult/tag-vocab.json 的 groups 同序;服务器给的 label 优先)
+    const GROUPS = [
+        { id: 'spec', label: '规格' }, { id: 'origin', label: '来源·人物' }, { id: 'body', label: '身材·外貌' }, { id: 'persona', label: '身份·职业' },
+        { id: 'outfit', label: '服装·制服' }, { id: 'setting', label: '场景·地点' }, { id: 'act', label: '玩法·类型' }, { id: 'story', label: '剧情·关系' }, { id: 'genre', label: '题材' },
+    ];
+    const groupLabels = Object.create(null);
+    const groupLabel = (id) => groupLabels[id] || ((GROUPS.find(g => g.id === id) || {}).label) || '';
+    // 女优 id:AVDB 的 aid 是整数(行号),也认字符串 id(与 lib/adult-gate 的 actress 白名单同字符集);一律转成字符串用
+    const AID_RE = /^[A-Za-z0-9][A-Za-z0-9:_.-]{0,39}$/;
+    const aidStr = (a) => (typeof a === 'number' && Number.isInteger(a) && a > 0 && a < 1e15) ? String(a) : ((typeof a === 'string' && AID_RE.test(a)) ? a : '');
+    const validAid = (a) => !!aidStr(a);
+    // 厂牌键:服务器 facets.studio[].id / 作品 _meta.maker(片商名,不是片名);只去掉控制字符和尖括号
+    const cleanStudio = (s) => (typeof s === 'string' ? cleanText(s, 80).replace(/["`\\]/g, '') : '');   // 与服务器 studio 白名单一致(≤80,不含双引号/反引号/反斜杠;单引号留着:M's video 这类片商名)
+    const studioLabels = Object.create(null), actressNames = Object.create(null);
+    const learnStudio = (id, l) => { const k = cleanStudio(id), v = cleanText(l, 40); if (k && v) studioLabels[k] = v; };
+    const learnActress = (aid, n) => { const v = cleanText(n, 40), k = aidStr(aid); if (k && v) actressNames[k] = v; };
+    const studioLabel = (id) => studioLabels[id] || id || '';
+    const actressName = (aid) => { const k = aidStr(aid); return k ? actressNames[k] || '' : ''; };
     const typeOf = (k) => TYPES.find(t => t.k === k) || null;
     const typeOfBucket = (b) => { const T = TYPES.find(t => t.buckets.some(x => x[0] === b)); return T ? T.k : 'all'; };
     const optLabel = (arr, k) => { const x = arr.find(o => o.k === k); return x ? x.l : ''; };
+    const sortKey = (v) => { const x = v == null ? '' : String(v); return SORT_ALIAS[x] || x; };
+    // 标签 id 列表:合法、不是 blocked(x_*)、去重、最多 n 个;字符串(逗号串)或数组都认
+    function idList(v, n) {
+        const arr = Array.isArray(v) ? v : (typeof v === 'string' && v ? v.split(',') : []);
+        const out = [];
+        for (const x of arr) {
+            const id = typeof x === 'string' ? x.trim() : '';
+            if (!validTag(id) || isBlockedTag(id) || out.indexOf(id) >= 0) continue;
+            out.push(id);
+            if (out.length >= n) break;
+        }
+        return out;
+    }
 
     function normSel(tk, sel) {
         const T = typeOf(tk) || TYPES[0], s = sel || {};
@@ -77,18 +122,55 @@
         if (!bs.length) b = '';
         else if (bs.indexOf(b) < 0) b = bs[0];   // 大类里不给「全部」:服务器一次只按一个分类筛
         const pick = (v, arr, d) => { const x = v == null ? '' : String(v); return arr.some(o => o.k === x) ? x : d; };
-        const out = { b, dur: pick(s.dur, DURS, ''), flag: pick(s.flag, FLAGS, ''), sort: pick(s.sort, SORTS, T.sort || 'new') };
-        if (validTag(s.tag)) out.tag = s.tag;   // 标签筛选(phase 2):没选时不带这个键(与旧选择逐字相同)
-        if (typeof s.lp === 'string' && /^[A-Z0-9]{2,10}$/i.test(s.lp)) out.lp = s.lp.toUpperCase();   // 厂牌前缀(作品页「SSIS」按钮);同上,没有不带键
+        const v0 = s.v != null && s.v !== '' ? s.v : (FLAG_TO_V[s.flag] || '');
+        const out = { b, dur: pick(s.dur, DURS, ''), v: pick(v0, VARIANTS, ''), sort: pick(sortKey(s.sort), SORTS, T.sort || 'new') };
+        // 下面这些没选时不带键(选择对象逐字稳定:submitSearch 用 JSON 比「是不是同一页」)
+        const t = idList(s.t != null ? s.t : (validTag(s.tag) ? [s.tag] : []), MAX_T);   // 旧的单标签 tag → t
+        const x = idList(s.x, MAX_X).filter(id => t.indexOf(id) < 0);
+        if (t.length) out.t = t;
+        if (x.length) out.x = x;
+        const st = cleanStudio(s.studio);
+        if (st) out.studio = st;
+        if (validAid(s.actress)) out.actress = aidStr(s.actress);
+        if (typeof s.lp === 'string' && /^[A-Z0-9]{2,10}$/i.test(s.lp)) out.lp = s.lp.toUpperCase();   // 厂牌前缀(作品页「SSIS」按钮)
         return out;
     }
-    function browseUrl(tk, sel, page) {
-        const s = normSel(tk, sel);
-        const p = Math.max(1, Math.min(500, parseInt(page, 10) || 1));
-        const q = [['b', s.b], ['tag', s.tag || ''], ['lp', s.lp || ''], ['sort', s.sort], ['dur', s.dur], ['flag', s.flag], ['page', String(p)]]
-            .filter(([k, v]) => v !== '' || k === 'page')
-            .map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
-        return '/api/catalog/browse?' + q;
+    // /api/catalog/browse 地址。opt.cursor 有值时按游标翻(不带 page),否则按页;opt.facets=1 要分面计数(第 1 页才要)
+    function browseApiUrl(sel, opt) {
+        const s = sel || {}, o = opt || {};
+        const q = [['b', s.b || ''], ['t', (s.t || []).join(',')], ['x', (s.x || []).join(',')], ['dur', s.dur || ''], ['v', s.v || ''],
+            ['studio', s.studio || ''], ['actress', s.actress || ''], ['lp', s.lp || ''], ['sort', s.sort || 'new']];
+        if (o.cursor) q.push(['cursor', String(o.cursor)]);
+        else q.push(['page', String(Math.max(1, Math.min(500, parseInt(o.page, 10) || 1)))]);
+        if (o.facets) q.push(['facets', '1']);
+        return '/api/catalog/browse?' + q.filter(([k, v]) => v !== '' || k === 'page').map(([k, v]) => k + '=' + encQ(v)).join('&');
+    }
+    function browseUrl(tk, sel, page) { return browseApiUrl(normSel(tk, sel), { page }); }
+    // 查询串的值:逗号留着(t=a,b,c 好读;服务器按逗号拆),别的照常转义
+    const encQ = (v) => encodeURIComponent(String(v)).replace(/%2C/gi, ',');
+    // 已选的筛选个数(筛选按钮上的数字):标签 + 排除 + 时长 + 版本 + 厂牌 + 女优 + 厂牌前缀
+    function filterCount(sel) {
+        const s = sel || {};
+        return (s.t || []).length + (s.x || []).length + (s.dur ? 1 : 0) + (s.v ? 1 : 0) + (s.studio ? 1 : 0) + (s.actress ? 1 : 0) + (s.lp ? 1 : 0);
+    }
+    // 点一个标签。mode:
+    //   'cycle'(筛选面板默认):没选 → 选中 → 再点 = 排除 → 再点 = 取消(「点两下 = 排除」)
+    //   'x'(筛选面板开了「排除模式」):没选 → 直接排除;选中/排除 → 取消
+    //   'toggle'(标签行):没选 → 选中;选中/排除 → 取消
+    //   超过 3 个 → { err };不合法 / blocked → { err: '' }(什么都不做)
+    function nextTagState(sel, id, mode) {
+        const m = mode === true ? 'x' : (mode === 'x' || mode === 'toggle' ? mode : 'cycle');
+        const s = sel || {};
+        const t = (s.t || []).slice(), x = (s.x || []).slice();
+        if (!validTag(id) || isBlockedTag(id)) return { err: '' };
+        const ti = t.indexOf(id), xi = x.indexOf(id);
+        if (ti >= 0) {
+            t.splice(ti, 1);
+            if (m === 'cycle' && x.length < MAX_X) x.push(id);   // 第二下:排除
+        } else if (xi >= 0) x.splice(xi, 1);
+        else if (m === 'x') { if (x.length >= MAX_X) return { err: '最多排除 ' + MAX_X + ' 个标签' }; x.push(id); }
+        else { if (t.length >= MAX_T) return { err: '最多同时选 ' + MAX_T + ' 个标签' }; t.push(id); }
+        return { t, x };
     }
     // 目录卡片 → 首页行 / 浏览页卡片用的对象(沿用模板的字段名:id / title / poster_path,另带 _wk/_sub/_badge)
     //   海报上叠 N线(≥2)/ 时长 / 番号:副行里就不再重复这两段(服务器的 sub = '3小时前 · 2:01:33 · 6线')
@@ -98,44 +180,59 @@
         const name = String(c.name || '');
         const dur = Math.max(0, Number(c.dur) || 0), n = Math.max(0, Number(c.n_sites) || 0);
         const durText = fmtDur(dur);
-        const sub = String(c.sub || '').split(' · ').filter(p => p && !(durText && SUB_DUR_RE.test(p)) && !SUB_N_RE.test(p)).join(' · ');
+        let sub = String(c.sub || '').split(' · ').filter(p => p && !(durText && SUB_DUR_RE.test(p)) && !SUB_N_RE.test(p)).join(' · ');
         const variant = cleanText(c.variant, 8);
-        return {
+        const o = {
             id: c.wk, _wk: c.wk, title: name, name: name,
             poster_path: typeof c.pic === 'string' ? c.pic : '',
             _sub: sub, _badge: cleanText(c.badge, 8) || variant, _code: cleanText(c.code, 24),
             _dur: dur, _durText: durText, _bucket: String(c.bucket || ''), _n: n, _variant: variant,
         };
+        // phase 3:番号作品有发行日期(AVDB)→ 副行先写发行日,再跟上架时间;没有就不带这个键(与旧对象逐字相同)
+        const rel = relDate(c.released);
+        if (rel && c.wk.indexOf('c:') === 0) { o._rel = rel; o._sub = rel + (sub ? ' · ' + sub : ''); }
+        return o;
     }
+    // 'YYYY-MM-DD'(1950..2100 年的真实日期)→ 原样;别的 → ''
+    function relDate(v) {
+        const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(typeof v === 'string' ? v.trim() : '');
+        if (!m) return '';
+        const y = +m[1], mo = +m[2], d = +m[3];
+        if (y < 1950 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+        const dt = new Date(Date.UTC(y, mo - 1, d));
+        return dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? m[0] : '';
+    }
+    // 浏览页的固定筛选行只剩「分类」(多桶大类);标签 / 排序 / 时长 / 版本 / 厂牌 / 女优 在 <dg-ad-filter>(标签行 + 筛选面板)里
     function groupsOf(tk, sel) {
         const T = typeOf(tk);
         if (!T) return [];
-        const rows = [];
-        if (T.buckets.length > 1) rows.push({ k: 'b', l: '分类', opts: T.buckets.map(([k, l]) => ({ k, l })) });
-        rows.push({ k: 'dur', l: '时长', opts: DURS.slice() });
-        rows.push({ k: 'flag', l: '标记', opts: FLAGS.slice() });
-        rows.push({ k: 'sort', l: '排序', opts: SORTS.slice() });
-        return rows;
+        return T.buckets.length > 1 ? [{ k: 'b', l: '分类', opts: T.buckets.map(([k, l]) => ({ k, l })) }] : [];
     }
-    const QUICK = [['最新上架', { sort: 'new' }], ['中文字幕', { flag: 'zh' }], ['60分钟以上', { dur: 'l' }], ['随机', { sort: 'random' }]];
+    const QUICK = [['最新上架', { sort: 'new' }], ['中文字幕', { v: 'zh' }], ['1–2小时', { dur: 'xl' }], ['随机', { sort: 'rand' }]];
     function navRows(tk) {
         const T = typeOf(tk);
         if (!T) return [];
         if (T.buckets.length > 1) return [{ l: '分类', items: T.buckets.map(([b, l]) => ({ l, sel: { b } })) }];
         return [{ l: '快速', items: QUICK.map(([l, sel]) => ({ l, sel: Object.assign({}, sel) })) }];
     }
+    // 标题:大类(· 分类)· 厂牌前缀 · 标签名(只写正向选中的;审查类标签不写进标题)· 厂牌 · 女优
+    //   「全部」只按一位女优筛时标题就是「女优 · 名字」
     function title(tk, sel) {
         const T = typeOf(tk);
         if (!T) return '';
         const s = normSel(tk, sel);
-        const tg = (s.lp ? ' · ' + s.lp : '') + (s.tag ? ' · ' + tagLabel(s.tag) : '');
+        const an = s.actress ? (actressName(s.actress) || '女优') : '';
+        if (T.k === 'all' && s.actress && !s.t && !s.studio && !s.lp) return '女优' + (an !== '女优' ? ' · ' + an : '');
+        const tags = (s.t || []).filter(id => !NEVER_FEATURE.has(id)).map(tagLabel).filter(Boolean);
+        const tg = (s.lp ? ' · ' + s.lp : '') + (tags.length ? ' · ' + tags.join(' · ') : '') + (s.studio ? ' · ' + studioLabel(s.studio) : '') + (an ? ' · ' + an : '');
         if (T.buckets.length > 1) { const x = T.buckets.find(b => b[0] === s.b); return T.l + ' · ' + (x ? x[1] : '') + tg; }
         return T.l + tg;
     }
     function summary(tk, sel) {
         const s = normSel(tk, sel), parts = [title(tk, s)];
         if (s.dur) parts.push(optLabel(DURS, s.dur));
-        if (s.flag) parts.push(optLabel(FLAGS, s.flag));
+        if (s.v) parts.push(optLabel(VARIANTS, s.v));
+        if ((s.x || []).length) parts.push('排除 ' + s.x.length);
         parts.push(optLabel(SORTS, s.sort));
         return parts.filter(Boolean).join(' · ');
     }
@@ -158,7 +255,7 @@
                 k: T.k, l: T.l, icon: T.icon,
                 rows: [
                     { l: '分类', items: T.buckets.map(([b, l]) => ({ l: T.buckets.length > 1 ? l : BUCKET_LABEL[b], sel: { b } })) },
-                    { l: '时长', items: DURS.filter(d => d.k).map(d => ({ l: d.l, sel: { b: T.buckets[0][0], dur: d.k } })) },
+                    { l: '时长', items: DURS.filter(d => d.k && d.k !== 'unk').map(d => ({ l: d.l, sel: { b: T.buckets[0][0], dur: d.k } })) },
                 ],
             })),
         };
@@ -195,13 +292,258 @@
     function rowPreset(key, sortMode, cfg) {
         const m = cfg && cfg.more;
         if (!m || typeof m !== 'object') return null;
-        if (m.b && BUCKET_LABEL[m.b]) return { type: typeOfBucket(m.b), sel: { b: m.b, sort: m.sort || 'new' } };
-        if (m.sort) return { type: 'all', sel: { sort: m.sort } };
+        if (m.b && BUCKET_LABEL[m.b]) return { type: typeOfBucket(m.b), sel: { b: m.b, sort: sortKey(m.sort) || 'new' } };
+        if (m.sort) return { type: 'all', sel: { sort: sortKey(m.sort) } };   // 新片速递 → 发行日期;随机发现 → rand
         return null;
+    }
+
+    // ========== phase 3:浏览页分面 / 地址栏路由 ==========
+    // 服务器 facets → 前端用的形状。审查类标签只进 more(不带数);blocked / 不认识的一律丢掉;顺手记下各种名字
+    function normFacets(f) {
+        if (!f || typeof f !== 'object') return null;
+        const arr = (v) => (Array.isArray(v) ? v : []);
+        const cnt = (v) => Math.max(0, Math.floor(Number(v) || 0));
+        const out = { buckets: [], groups: [], more: [], dur: [], variant: [], studio: [], actress: [], sorts: [] };
+        for (const b of arr(f.buckets)) if (b && typeof b.id === 'string' && BUCKET_LABEL[b.id]) out.buckets.push({ id: b.id, label: cleanText(b.label, 20) || BUCKET_LABEL[b.id], count: cnt(b.count) });
+        const seen = new Set();
+        for (const g of arr(f.groups)) {
+            if (!g || typeof g.id !== 'string' || !/^[a-z_]{1,20}$/.test(g.id) || g.id === '_blocked') continue;
+            const gl = cleanText(g.label, 20);
+            if (gl) groupLabels[g.id] = gl;
+            const tags = [];
+            for (const t of arr(g.tags)) {
+                if (!t || !validTag(t.id) || seen.has(t.id)) continue;
+                const label = cleanText(t.label, 20);
+                if (!label) continue;
+                learnTag(t.id, label);
+                if (!featurable(t.id) || t.featured === false) continue;   // 服务器漏放进来的审查类:不做按钮
+                seen.add(t.id);
+                tags.push({ id: t.id, label, count: cnt(t.count) });
+            }
+            if (tags.length) out.groups.push({ id: g.id, label: groupLabel(g.id) || gl, tags });
+        }
+        for (const t of arr(f.more)) {
+            if (!t || !validTag(t.id) || isBlockedTag(t.id) || seen.has(t.id)) continue;
+            const label = cleanText(t.label, 20);
+            if (!label) continue;
+            learnTag(t.id, label);
+            seen.add(t.id);
+            out.more.push({ id: t.id, label });
+        }
+        const opt = (list, defs) => {
+            const o = [];
+            for (const x of arr(list)) {
+                const id = x && typeof x.id === 'string' ? x.id : '';
+                const d = defs.find(z => z.k === id && z.k);
+                if (d && !o.some(z => z.id === id)) o.push({ id, label: cleanText(x.label, 12) || d.l, count: cnt(x.count) });
+            }
+            return o;
+        };
+        out.dur = opt(f.dur, DURS);
+        out.variant = opt(f.variant, VARIANTS);
+        for (const s of arr(f.studio)) {
+            const id = s && cleanStudio(s.id);
+            if (!id || out.studio.some(z => z.id === id)) continue;
+            const label = cleanText(s.label, 40) || id;
+            learnStudio(id, label);
+            out.studio.push({ id, label, count: cnt(s.count) });
+            if (out.studio.length >= 20) break;
+        }
+        for (const a of arr(f.actress)) {
+            const aid = a ? aidStr(a.aid) : '';
+            if (!aid || out.actress.some(z => z.aid === aid)) continue;
+            const name = cleanText(a.name, 40);
+            if (!name) continue;
+            learnActress(aid, name);
+            out.actress.push({ aid, name, count: cnt(a.count) });
+            if (out.actress.length >= 20) break;
+        }
+        // sorts:[{id,label,available}](也认旧草案的纯 id 数组);可用的按 SORTS 的次序
+        const av = new Set();
+        for (const s of arr(f.sorts)) {
+            if (typeof s === 'string') av.add(sortKey(s));
+            else if (s && typeof s.id === 'string' && s.available !== false) av.add(sortKey(s.id));
+        }
+        out.sorts = SORTS.filter(s => av.has(s.k)).map(s => s.k);
+        if (!out.sorts.length) out.sorts = DEFAULT_SORTS.slice();
+        return out;
+    }
+    // 排序下拉的选项:可用的 + 当前选中的(就算这次服务器说不可用,也照实显示,别让下拉和数据对不上)
+    function sortOpts(facets, sel) {
+        const av = (facets && facets.sorts && facets.sorts.length) ? facets.sorts : DEFAULT_SORTS;
+        const cur = sel && sel.sort;
+        return SORTS.filter(s => av.indexOf(s.k) >= 0 || s.k === cur);
+    }
+    // 标签行:已选(正向)在前 → 已排除 → 当前分类数量最多的 featured 标签(facets.groups 摊平,≤12);数为 0 的置灰不可点。
+    //   没有 facets(旧服务器)→ 用 /api/catalog/tags 的 legacy 列表。审查类(选中了也)永不在这一行出现
+    function chipRow(facets, sel, legacy, max) {
+        const s = sel || {}, t = s.t || [], x = s.x || [];
+        const pool = [];
+        if (facets && facets.groups) facets.groups.forEach(g => g.tags.forEach(tg => pool.push(tg)));
+        else (Array.isArray(legacy) ? legacy : []).forEach(tg => { if (tg && featurable(tg.id)) pool.push({ id: tg.id, label: tg.label, count: tg.count || 0 }); });
+        const byId = new Map(pool.map(p => [p.id, p]));
+        const out = [];
+        t.filter(featurable).forEach(id => out.push({ id, label: tagLabel(id), count: (byId.get(id) || {}).count || 0, st: 'in', off: false }));
+        x.filter(featurable).forEach(id => out.push({ id, label: tagLabel(id), count: 0, st: 'ex', off: false }));
+        const rest = pool.filter(p => t.indexOf(p.id) < 0 && x.indexOf(p.id) < 0).sort((a, b) => b.count - a.count).slice(0, max || 12);
+        rest.forEach(p => out.push({ id: p.id, label: p.label, count: p.count, st: '', off: !!facets && p.count <= 0 }));
+        return out;
+    }
+    // 已选的非标签条件(筛选按钮旁的小药丸,点 × 去掉):时长 / 版本 / 厂牌 / 女优 / 厂牌前缀 / 审查类标签(只写「1 个筛选标签」不写名字)
+    function activePills(sel) {
+        const s = sel || {}, out = [];
+        if (s.dur) out.push({ k: 'dur', l: optLabel(DURS, s.dur) });
+        if (s.v) out.push({ k: 'v', l: optLabel(VARIANTS, s.v) });
+        if (s.studio) out.push({ k: 'studio', l: '厂牌 ' + studioLabel(s.studio) });
+        if (s.actress) out.push({ k: 'actress', l: '女优 ' + (actressName(s.actress) || '') });
+        if (s.lp) out.push({ k: 'lp', l: s.lp });
+        const rv = (s.t || []).concat(s.x || []).filter(id => !featurable(id)).length;
+        if (rv) out.push({ k: 'review', l: rv + ' 个筛选标签' });
+        return out;
+    }
+    // ---- 地址栏路由(只有 id,不写片名):#/c/<大类>?b=&t=&x=&dur=&v=&studio=&actress=&lp=&sort= / #/tags?b= / #/tag/<id> / #/actress/<aid>
+    const DEF_SEL_KEYS = ['t', 'x', 'dur', 'v', 'studio', 'actress', 'lp'];
+    const onlyKeys = (s, keys) => DEF_SEL_KEYS.every(k => keys.indexOf(k) >= 0 || !s[k] || (Array.isArray(s[k]) && !s[k].length));
+    function routeOf(view, tk, sel) {
+        const T = typeOf(tk) || typeOf('all');
+        const s = normSel(T.k, sel);
+        if (view === 'tags') return '#/tags' + (s.b ? '?b=' + encodeURIComponent(s.b) : '');
+        if (T.k === 'all' && s.sort === 'new') {
+            if (view === 'tag' && s.t && s.t.length === 1 && onlyKeys(s, ['t'])) return '#/tag/' + encodeURIComponent(s.t[0]);
+            if (s.actress && onlyKeys(s, ['actress'])) return '#/actress/' + encodeURIComponent(s.actress);
+        }
+        const q = [['b', s.b], ['t', (s.t || []).join(',')], ['x', (s.x || []).join(',')], ['dur', s.dur], ['v', s.v], ['studio', s.studio || ''],
+            ['actress', s.actress || ''], ['lp', s.lp || ''], ['sort', s.sort === 'new' ? '' : s.sort]]
+            .filter(([, v]) => v).map(([k, v]) => k + '=' + encQ(v)).join('&');
+        return '#/c/' + T.k + (q ? '?' + q : '');
+    }
+    // 地址栏 → { view, type, sel };不是这几种(空、#admin、乱写的)→ null
+    function parseRoute(hash) {
+        const h = String(hash == null ? '' : hash).replace(/^#/, '');
+        if (!h || h.length > 600 || h[0] !== '/') return null;
+        const qi = h.indexOf('?');
+        const path = qi < 0 ? h : h.slice(0, qi);
+        const params = Object.create(null);
+        if (qi >= 0) {
+            for (const kv of h.slice(qi + 1).split('&')) {
+                const i = kv.indexOf('=');
+                if (i <= 0) continue;
+                try { params[kv.slice(0, i)] = decodeURIComponent(kv.slice(i + 1)); } catch (e) { }
+            }
+        }
+        const seg = path.split('/');   // ['', 'c', 'jp']
+        let one = '';
+        try { one = seg[2] != null ? decodeURIComponent(seg[2]) : ''; } catch (e) { return null; }
+        if (seg.length > 3) return null;
+        if (seg[1] === 'tags' && seg.length === 2) {
+            const b = BUCKET_LABEL[params.b] ? params.b : '';
+            return { view: 'tags', type: b ? typeOfBucket(b) : 'all', sel: { b } };
+        }
+        if (seg[1] === 'tag' && validTag(one) && !isBlockedTag(one)) return { view: 'tag', type: 'all', sel: { t: [one] } };
+        if (seg[1] === 'actress' && validAid(one)) return { view: '', type: 'all', sel: { actress: one } };
+        if (seg[1] === 'c' && typeOf(one)) {
+            const b = BUCKET_LABEL[params.b] ? params.b : '';
+            const type = b ? typeOfBucket(b) : one;
+            const sel = { b, t: params.t || '', x: params.x || '', dur: params.dur, v: params.v, studio: params.studio, actress: params.actress, lp: params.lp, sort: params.sort };
+            return { view: '', type, sel: normSel(type, sel) };
+        }
+        return null;
+    }
+    // 规范化后的地址(两边都按这个比:浏览器对 # 后面字符的转义各家不同)
+    const canonHash = (hash) => { const r = parseRoute(hash); return r ? routeOf(r.view, r.type, r.sel) : ''; };
+    const isOurHash = (hash) => /^#\/(c|tags|tag|actress)(\/|\?|$)/.test(String(hash || ''));
+    // /api/catalog/tags(标签云)→ { groups:[{id,label,tags:[{id,label,count,w}]}] };只要 featured,字号档 w 1..5 按 log(数量)
+    function normCloud(d) {
+        const arr = (v) => (Array.isArray(v) ? v : []);
+        for (const g of arr(d && d.groups)) { const l = g && typeof g.id === 'string' ? cleanText(g.label, 20) : ''; if (l) groupLabels[g.id] = l; }
+        const by = new Map();
+        let max = 1;
+        for (const t of arr(d && d.tags)) {
+            if (!t || !validTag(t.id)) continue;
+            const label = cleanText(t.label, 20) || TAG_LABEL[t.id] || '';
+            if (!label) continue;
+            learnTag(t.id, label);
+            if (t.featured !== true || !featurable(t.id)) continue;
+            const c = Math.max(0, Math.floor(Number(t.count) || 0));
+            if (!c) continue;
+            const gid = typeof t.group === 'string' && /^[a-z_]{1,20}$/.test(t.group) && t.group !== '_blocked' ? t.group : '';
+            if (!by.has(gid)) by.set(gid, []);
+            if (by.get(gid).some(x => x.id === t.id)) continue;
+            by.get(gid).push({ id: t.id, label, count: c });
+            if (c > max) max = c;
+        }
+        const order = arr(d && d.groups).map(g => g && g.id).filter(Boolean).concat(GROUPS.map(g => g.id));
+        const gids = [...by.keys()].sort((a, b) => { const ia = order.indexOf(a), ib = order.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+        const lm = Math.log(max + 1);
+        return {
+            groups: gids.map(id => ({
+                id, label: id ? (groupLabel(id) || id) : '其他',
+                tags: by.get(id).sort((a, b) => b.count - a.count).map(t => Object.assign(t, { w: Math.max(1, Math.min(5, 1 + Math.floor(4 * Math.log(t.count + 1) / lm))) })),
+            })),
+        };
+    }
+    // /api/catalog/tag/:id → { tag:{id,label,group,count}, buckets:[{id,label,count}], related:[{id,label}] };related 只要 featured
+    function normTagInfo(d) {
+        if (!d || typeof d !== 'object' || !d.tag || !validTag(d.tag.id) || isBlockedTag(d.tag.id)) return null;
+        const label = cleanText(d.tag.label, 20) || tagLabel(d.tag.id);
+        learnTag(d.tag.id, label);
+        const arr = (v) => (Array.isArray(v) ? v : []);
+        const buckets = arr(d.buckets).filter(b => b && BUCKET_LABEL[b.id]).map(b => ({ id: b.id, label: cleanText(b.label, 20) || BUCKET_LABEL[b.id], count: Math.max(0, Math.floor(Number(b.count) || 0)) })).filter(b => b.count > 0);
+        const related = [];
+        for (const r of arr(d.related)) {
+            if (!r || !featurable(r.id) || r.id === d.tag.id || related.some(x => x.id === r.id)) continue;
+            const rl = cleanText(r.label, 20);
+            if (!rl) continue;
+            learnTag(r.id, rl);
+            related.push({ id: r.id, label: rl });
+            if (related.length >= 8) break;
+        }
+        const g = typeof d.tag.group === 'string' ? d.tag.group : '';
+        // 部数:服务器放在顶层 d.count(tag 里没有);旧形状 d.tag.count 也认
+        const count = Math.max(0, Math.floor(Number(d.count != null ? d.count : d.tag.count) || 0));
+        return { tag: { id: d.tag.id, label, group: g, groupLabel: groupLabel(g), count, review: !featurable(d.tag.id) }, buckets, related: featurable(d.tag.id) ? related : [] };
+    }
+    // /api/catalog/actress/:aid → { aid, name, aliases }
+    function normActress(d) {
+        const a = d && d.actress;
+        const aid = a ? aidStr(a.aid) : '';
+        if (!aid) return null;
+        const name = cleanText(a.name, 40);
+        if (!name) return null;
+        learnActress(aid, name);
+        const aliases = (Array.isArray(a.aliases) ? a.aliases : []).map(x => cleanText(x, 40)).filter(x => x && x !== name).filter((x, i, arr) => arr.indexOf(x) === i).slice(0, 6);
+        return { aid, name, aliases };
+    }
+    // /api/catalog/actress?q= → [{aid,name,n}] ≤10
+    function normActressList(d) {
+        const out = [];
+        for (const a of Array.isArray(d) ? d : []) {
+            const aid = a ? aidStr(a.aid) : '';
+            if (!aid || out.some(x => x.aid === aid)) continue;
+            const name = cleanText(a.name, 40);
+            if (!name) continue;
+            learnActress(aid, name);
+            out.push({ aid, name, n: Math.max(0, Math.floor(Number(a.n) || 0)) });
+            if (out.length >= 10) break;
+        }
+        return out;
+    }
+    // /api/catalog/studios?b= → [{id,label,count}]
+    function normStudios(d) {
+        const out = [];
+        for (const s of Array.isArray(d) ? d : []) {
+            const id = s && cleanStudio(s.id);
+            if (!id || out.some(x => x.id === id)) continue;
+            const label = cleanText(s.label, 40) || id;
+            learnStudio(id, label);
+            out.push({ id, label, count: Math.max(0, Math.floor(Number(s.count) || 0)) });
+            if (out.length >= 500) break;
+        }
+        return out;
     }
     // index.html 的 DgCatalog 换成这个(同名同参的接口;TMDB 那套不再被调用)
     const catalog = {
-        ADULT: true, DEFAULT_TYPE: 'cn', TYPES, SORTS, NSFW_KW: '',
+        ADULT: true, DEFAULT_TYPE: 'cn', TYPES, SORTS, DURS, VARIANTS, NSFW_KW: '',
         typeOf, yearOpts: () => [], yearRange: () => null, normSel,
         buildQuery: (tk, sel, page) => ({ url: browseUrl(tk, sel, page), path: '', media: '', params: {}, map: cardToItem }),
         visible: (it) => !!(it && it.id != null && it.id !== ''),
@@ -209,7 +551,8 @@
     };
 
     // ========== 首页 ==========
-    const ROW_ICON = { new: 'fa-clock', random: 'fa-dice', hot: 'fa-fire' };
+    const ROW_ICON = { new: 'fa-clock', random: 'fa-dice', hot: 'fa-fire', fresh: 'fa-calendar-check' };
+    const FRESH_MIN = 12;   // 新片速递(AVDB 发行 ≤60 天且能播):不足 12 部整行不出(服务器也这么判,两头都拦)
     // 热门行的来源角标(本站观看统计 / 外站一周点击);行标题统一叫「热门」,来源写在角标上
     const HOT_SRC = {
         local: { l: '本站热门', tip: '按本站用户最近 7 天的观看统计' },
@@ -223,12 +566,12 @@
             if (!r || typeof r.id !== 'string' || !/^[A-Za-z0-9_]{1,40}$/.test(r.id)) continue;
             // 只读展示:冻结 = 不做深层响应式(首页十几行 × 24 张)
             const items = (Array.isArray(r.items) ? r.items : []).map(cardToItem).filter(Boolean).map(Object.freeze);
-            if (!items.length) continue;
+            if (!items.length || (r.id === 'fresh' && items.length < FRESH_MIN)) continue;
             const key = 'ad_' + r.id;
             if (configs[key]) continue;
             const hs = r.id === 'hot' ? (HOT_SRC[r.source] || (r.title === HOT_SRC.local.l ? HOT_SRC.local : r.title === HOT_SRC.ext.l ? HOT_SRC.ext : null)) : null;
             configs[key] = {
-                title: hs ? '热门' : String(r.title || BUCKET_LABEL[r.id] || ''), icon: ROW_ICON[r.id] || ((TILE[r.id] || [])[2]) || 'fa-film',
+                title: hs ? '热门' : String(r.title || BUCKET_LABEL[r.id] || (r.id === 'fresh' ? '新片速递' : '')), icon: ROW_ICON[r.id] || ((TILE[r.id] || [])[2]) || 'fa-film',
                 path: 'ADULT', params: '', page: 1, totalPages: 1, adult: true,
                 more: (r.more && typeof r.more === 'object') ? Object.assign({}, r.more) : null,
                 today: Math.max(0, Number(r.today) || 0),
@@ -360,20 +703,32 @@
 
     // ========== 作品信息条(_meta) ==========
     //   兼容 phase 1 的形状(tags 是 id 字符串、siblings.kind 'alt'),也认契约里的 {id,label,featured} / 'main'
-    function metaTags(tags) {
+    //   phase 3:标签带 group(分面组)→ 另给按组排好的 tagGroups(审查类 / blocked 永远不出,不管服务器怎么标)
+    function metaTagList(tags, max) {
         const out = [], seen = new Set();
         for (const t of Array.isArray(tags) ? tags : []) {
-            let id = '', label = '', featured = false;
+            let id = '', label = '', featured = false, group = '';
             if (typeof t === 'string') { id = t; label = TAG_LABEL[t] || ''; featured = !!label; }
-            else if (t && typeof t === 'object') { id = String(t.id || ''); label = cleanText(t.label, 20) || TAG_LABEL[id] || ''; featured = t.featured === true; }
+            else if (t && typeof t === 'object') {
+                id = String(t.id || ''); label = cleanText(t.label, 20) || TAG_LABEL[id] || ''; featured = t.featured === true;
+                group = typeof t.group === 'string' && /^[a-z_]{1,20}$/.test(t.group) && t.group !== '_blocked' ? t.group : '';
+            }
             if (!validTag(id) || !label || seen.has(id)) continue;
             learnTag(id, label);
-            if (!featured || NEVER_FEATURE.has(id)) continue;
+            if (!featured || !featurable(id)) continue;
             seen.add(id);
-            out.push({ id, label });
-            if (out.length >= 8) break;
+            out.push({ id, label, group });
+            if (out.length >= max) break;
         }
         return out;
+    }
+    function metaTags(tags) { return metaTagList(tags, 8).map(t => ({ id: t.id, label: t.label })); }
+    function metaTagGroups(list) {
+        const order = GROUPS.map(g => g.id);
+        const by = new Map();
+        list.forEach(t => { if (!by.has(t.group)) by.set(t.group, []); by.get(t.group).push({ id: t.id, label: t.label }); });
+        return [...by.keys()].sort((a, b) => { const ia = order.indexOf(a), ib = order.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); })
+            .map(id => ({ id, label: id ? (groupLabel(id) || '') : '', tags: by.get(id) }));
     }
     const WK_RE = /^[ct]:./;
     function metaView(m, g) {
@@ -387,8 +742,26 @@
         if (typeof m.label_prefix === 'string') prefix = m.label_prefix.trim();
         else if (code && wk.indexOf('c:') === 0) { const x = /^([A-Z]{2,8})-\d{2,6}$/i.exec(code); prefix = x ? x[1].toUpperCase() : ''; }
         if (!/^[A-Z0-9]{2,10}$/i.test(prefix)) prefix = '';
-        const actress = (bucket && NO_ACTRESS_BUCKETS.has(bucket)) ? [] :
-            (Array.isArray(m.actress) ? m.actress : []).map(a => cleanText(a, 30)).filter(Boolean).filter((a, i, arr) => arr.indexOf(a) === i).slice(0, 8);
+        // 演员:phase 3 是 [{aid,name}](已确认:站点字段 / 片名高置信 / AVDB)→ 点了进女优页;旧的纯名字 → aid 为空,点了全站搜
+        const actress = [];
+        if (!(bucket && NO_ACTRESS_BUCKETS.has(bucket))) {
+            for (const a of Array.isArray(m.actress) ? m.actress : []) {
+                const name = cleanText(a && typeof a === 'object' ? a.name : a, 30);
+                const aid = a && typeof a === 'object' ? aidStr(a.aid) : '';
+                if (!name || actress.some(x => x.name === name || (aid && x.aid === aid))) continue;
+                if (aid) learnActress(aid, name);
+                actress.push({ aid, name });
+                if (actress.length >= 8) break;
+            }
+        }
+        // 厂牌(片商):_meta.studio({id,label} 或字符串)优先,其次 AVDB 的 maker;label(AVDB 的发行商牌子)不同于片商时只作文字
+        let studio = null;
+        const st = m.studio;
+        if (st && typeof st === 'object' && cleanStudio(st.id)) studio = { id: cleanStudio(st.id), label: cleanText(st.label, 40) || cleanStudio(st.id) };
+        else if (cleanStudio(st)) studio = { id: cleanStudio(st), label: cleanStudio(st) };
+        else if (cleanStudio(m.maker)) studio = { id: cleanStudio(m.maker), label: cleanText(m.maker, 40) };
+        if (studio) learnStudio(studio.id, studio.label);
+        const maker = cleanText(m.maker, 40), lbl = cleanText(m.label, 40);
         const sites = new Set(((g && g.sources) || []).map(s => s && s.site_key).filter(Boolean));
         const nSites = Math.max(Number(m.n_sites) || 0, sites.size);
         const curSub = /#(U|clip)(?=$|[#~])/.test(wk);
@@ -405,9 +778,12 @@
         sib.sort((a, b) => (a.kind === 'U' ? 0 : 1) - (b.kind === 'U' ? 0 : 1));
         // 分类已经说明了的标签不再重复(中文字幕分类的「中字」、日本无码分类的「无码」)
         const dupTag = { jp_subbed: 'subbed', jp_uncensored: 'uncensored' }[bucket] || '';
+        const all = metaTagList(m.tags, 16).filter(t => t.id !== dupTag);
         return {
-            code, dur, durText: fmtDur(dur), nSites, bucket, bucketLabel, tags: metaTags(m.tags).filter(t => t.id !== dupTag), prefix, actress,
+            code, dur, durText: fmtDur(dur), nSites, bucket, bucketLabel, tags: all.slice(0, 8).map(t => ({ id: t.id, label: t.label })), prefix, actress,
             sib: sib.slice(0, 6), clips: clips.slice(0, 12), firstSeen: Number(m.first_seen) || 0,
+            released: relDate(m.released), studio, label: lbl && lbl !== maker && (!studio || lbl !== studio.label) ? lbl : '',
+            tagGroups: metaTagGroups(all), avdb: m.avdb === true,
         };
     }
 
@@ -455,7 +831,8 @@
         if (!b && !tag) return null;
         const sel = {};
         if (b) sel.b = b;
-        if (tag) sel.tag = tag;
+        if (tag && !isBlockedTag(tag)) sel.t = [tag];
+        else if (!b) return null;
         return { type: b ? typeOfBucket(b) : 'all', sel };
     }
     function workToGroup(w) {
@@ -867,6 +1244,65 @@
         '.dg-sug-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
         '.dg-sug-sub { font-size: 11px; color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
         '.dg-sug-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: #ffd479; margin-right: 6px; }',
+        // ---- phase 3:浏览页标签行 / 排序 / 筛选面板 / 窗口化网格 / 标签云 / 标签页页头 / 信息条 ----
+        '.browse-fopt.dg-x { color: #bbb; text-decoration: line-through; border-color: rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.04); }',
+        '.browse-fopt[disabled] { opacity: 0.35; cursor: default; }',
+        '.browse-fopt .dg-chip-x { margin-left: 5px; font-size: 10px; opacity: 0.7; }',
+        '.browse-fopt .dg-c, .dg-chip .dg-c, .dg-cloud-t .dg-c { margin-left: 4px; font-size: 11px; font-weight: normal; color: #888; }',
+        '.browse-fopt.dg-alltags, .browse-fopt.dg-clear { color: #ff8a80; }',
+        // 已选条件的小药丸:样子同选中的选项,但不用 .active(根组件的 _browseRevealActive 会把每行第一个 .active 滚到中间,手机上排序下拉会被滚出去)
+        '.browse-fopt.dg-pill { color: #fff; font-weight: 600; background: rgba(229, 9, 20, 0.2); border-color: rgba(229, 9, 20, 0.6); }',
+        '.dg-tool .browse-fopts { align-items: center; }',
+        '.dg-sort { height: 30px; max-width: 9.5em; background: #1e1e1e; color: #ddd; border: 1px solid #3a3a3a; border-radius: 15px; padding: 0 10px; font-size: 13px; cursor: pointer; flex: none; }',
+        '.dg-sort:focus, .dg-fbtn:focus { outline: 2px solid #fff; outline-offset: 1px; }',
+        '.dg-fbtn { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid rgba(229, 9, 20, 0.6); background: rgba(229, 9, 20, 0.14); color: #fff; font-size: 13px; white-space: nowrap; cursor: pointer; }',
+        '.dg-fbtn .dg-n { min-width: 18px; height: 18px; line-height: 18px; padding: 0 5px; border-radius: 9px; background: #e50914; font-size: 11px; font-weight: 700; text-align: center; }',
+        '.dg-note { margin: 4px 0 2px; color: #ffb347; font-size: 12px; }',
+        'body.tv-mode .dg-blk + .dg-blk { margin-top: 26px; }',
+        '.dg-head { margin: -4px 0 12px; }',
+        '.dg-head-sub { color: #aaa; font-size: 13px; margin: 0 0 6px; }',
+        '.dg-head .browse-frow { padding: 4px 0; }',
+        '.dg-cloud { padding: 8px 0 30px; }',
+        '.dg-cloud-g { margin: 18px 0 6px; }',
+        '.dg-cloud-gt { color: #999; font-size: 13px; letter-spacing: 1px; margin-bottom: 8px; }',
+        '.dg-cloud-ts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }',
+        '.dg-cloud-t { background: none; border: 0; padding: 4px 2px; color: #ccc; cursor: pointer; line-height: 1.3; }',
+        '.dg-cloud-t:hover, .dg-cloud-t:focus { color: #fff; text-decoration: underline; text-underline-offset: 3px; }',
+        '.dg-cloud-t.w1 { font-size: 13px; color: #999; } .dg-cloud-t.w2 { font-size: 14px; } .dg-cloud-t.w3 { font-size: 16px; } .dg-cloud-t.w4 { font-size: 19px; font-weight: 600; color: #eee; } .dg-cloud-t.w5 { font-size: 22px; font-weight: 700; color: #fff; }',
+        'html.dg-sheet-lock, html.dg-sheet-lock body { overflow: hidden !important; }',
+        '.dg-sheet-mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 2000; background: rgba(0, 0, 0, 0.55); display: flex; justify-content: flex-end; }',
+        '.dg-sheet { width: min(420px, 92vw); height: 100%; display: flex; flex-direction: column; background: #181818; color: #ddd; border-left: 1px solid rgba(255, 255, 255, 0.1); box-shadow: -12px 0 32px rgba(0, 0, 0, 0.6); animation: dg-sheet-r 0.2s ease-out; font-size: 14px; }',
+        '@keyframes dg-sheet-r { from { transform: translateX(100%); } to { transform: none; } }',
+        '@keyframes dg-sheet-u { from { transform: translateY(100%); } to { transform: none; } }',
+        '.dg-sheet-hd { display: flex; align-items: center; gap: 12px; padding: 14px 16px; padding-top: calc(14px + env(safe-area-inset-top, 0px)); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }',
+        '.dg-sheet-hd b { flex: 1; font-size: 16px; color: #fff; }',
+        '.dg-xmode { display: inline-flex; align-items: center; gap: 5px; margin: 0; font-size: 12px; color: #bbb; cursor: pointer; white-space: nowrap; }',
+        '.dg-sheet-reset { background: none; border: 0; color: #ff8a80; font-size: 13px; padding: 4px 6px; cursor: pointer; }',
+        '.dg-sheet-reset[disabled] { color: #555; cursor: default; }',
+        '.dg-sheet-x { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.05); color: #fff; cursor: pointer; }',
+        '.dg-sheet-bd { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 4px 16px 16px; }',
+        '.dg-sheet-tip { color: #777; font-size: 12px; margin: 8px 0 2px; }',
+        '.dg-sec { padding: 12px 0; border-bottom: 1px dashed rgba(255, 255, 255, 0.07); }',
+        '.dg-sec-t { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; color: #999; font-size: 13px; letter-spacing: 1px; }',
+        'summary.dg-sec-t { cursor: pointer; margin-bottom: 0; display: list-item; }',
+        '.dg-more-sec[open] summary.dg-sec-t { margin-bottom: 8px; }',
+        '.dg-sec-n { color: #777; font-size: 12px; letter-spacing: 0; }',
+        '.dg-chips { display: flex; flex-wrap: wrap; gap: 6px; }',
+        '.dg-chip { height: 30px; padding: 0 11px; border-radius: 15px; border: 1px solid #3a3a3a; background: #222; color: #ccc; font-size: 13px; white-space: nowrap; cursor: pointer; }',
+        '.dg-chip:hover:not([disabled]), .dg-chip:focus { color: #fff; border-color: #888; }',
+        '.dg-chip.on { color: #fff; font-weight: 600; background: rgba(229, 9, 20, 0.25); border-color: rgba(229, 9, 20, 0.7); }',
+        '.dg-chip.ex { color: #bbb; text-decoration: line-through; background: #1a1a1a; border-color: #777; }',
+        '.dg-chip[disabled] { opacity: 0.35; cursor: default; }',
+        '.dg-sq { width: 100%; height: 34px; margin: 0 0 8px; padding: 0 14px; border-radius: 17px; border: 1px solid #3a3a3a; background: #111; color: #eee; font-size: 13px; }',
+        '.dg-sheet-ft { padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid rgba(255, 255, 255, 0.08); }',
+        '.dg-sheet-go { width: 100%; height: 42px; border-radius: 21px; border: 0; background: #e50914; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer; }',
+        '.dg-sheet-go:focus, .dg-sheet-x:focus { outline: 2px solid #fff; outline-offset: 2px; }',
+        '@media (max-width: 768px) { .dg-sheet-mask { align-items: flex-end; justify-content: stretch; } .dg-sheet { width: 100%; height: auto; max-height: 86vh; border-left: 0; border-top: 1px solid rgba(255, 255, 255, 0.12); border-radius: 16px 16px 0 0; animation-name: dg-sheet-u; } .dg-sheet-hd { padding-top: 14px; } }',
+        '.dg-meta-tags { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; font-size: 12px; }',
+        '.dg-meta-tg { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }',
+        '.dg-meta-tgl { color: #777; min-width: 5em; }',
+        '.dg-meta-rel { white-space: nowrap; color: #bbb; }',
+        '.browse-filters:empty { display: none; }',
     ].join('\n');
     function injectCss() {
         const d = root.document;
@@ -914,6 +1350,462 @@
         }).catch(() => { });
     }
 
+    // ========== phase 3 组件(由 mixin 的 components 注册;模板是字符串,vue.global 的运行时编译器现编) ==========
+    //   都是根组件的子组件:它们自己的状态(面板开合、搜索框打字、网格哪几块活着)变了只重渲染自己,不牵动几万行的根模板。
+    //   与根组件只通过 props / 事件来往:@go(导航)→ 根的 adGo;@sheet(面板开合)→ adSheet;@pick(点卡片)→ browsePick
+    const ROWS_PER_BLOCK = 6;                          // 每块 6 排
+    const IO_MARGIN = '1600px 0px 1600px 0px';         // 视口上下各 1600px 内的块是活的
+    const dCache = new Map();                          // 标签云 / 标签页 / 女优 / 厂牌列表:url → { at, d }(10 分钟)
+    function cachedJson(url, ms) {
+        const hit = dCache.get(url);
+        if (hit && Date.now() - hit.at < 600000) return Promise.resolve(hit.d);
+        return fetchJson(url, ms || 10000).then(d => { if (d != null) { if (dCache.size > 200) dCache.clear(); dCache.set(url, { at: Date.now(), d }); } return d; });
+    }
+    // 还没量到真实列数时按 index.html 的 .browse-grid 规则估一个(量到之后以 getComputedStyle 为准)
+    function guessCols() {
+        const W = (root && typeof root.innerWidth === 'number' && root.innerWidth > 0) ? root.innerWidth : 1280;
+        let min = 150, gap = 16, pad = 0.10;
+        if (W <= 480) { min = 100; gap = 10; pad = 0.08; } else if (W <= 768) { min = 130; gap = 10; pad = 0.08; }
+        return Math.max(2, Math.floor((W * (1 - pad) + gap) / (min + gap)));
+    }
+    const onImgLoad = (e) => { const t = e && e.target; if (t) { t.classList.add('loaded'); if (t.parentElement) t.parentElement.classList.add('img-loaded'); } };
+    // 浏览页网格(窗口化):片单按「块」(6 排一块)切开,每块一个 .browse-grid;离视口 ±1600px 以外的块只留一个等高空壳,
+    //   DOM 里始终只有几块(几十~两百张)卡片。块的死活只在 IntersectionObserver 回调里改(滚动时不写任何响应式状态);
+    //   列数变了(转屏/改窗口)才重新分块,空壳高度按一张卡片的实测高度估
+    const DgAdGrid = {
+        name: 'DgAdGrid',
+        props: { items: { type: Array, default: () => [] }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false }, loading: { type: Boolean, default: false } },
+        emits: ['pick'],
+        data() { return { cols: guessCols(), dead: {} }; },
+        computed: {
+            per() { return Math.max(1, this.cols | 0) * ROWS_PER_BLOCK; },
+            nBlocks() { return Math.ceil(this.items.length / this.per); },
+        },
+        watch: {
+            items(nv, ov) { if (nv !== ov) this.reset(); },   // 换了筛选:整个新数组
+            nBlocks(n, o) {
+                // 新的一页落在最后一块:它永远是活的(还在被填)
+                if (n > 0 && this.dead[n - 1] != null) { const d = Object.assign({}, this.dead); delete d[n - 1]; this.dead = d; }
+                if (n < o) this.reset();
+            },
+        },
+        methods: {
+            slice(bi) { return this.items.slice(bi * this.per, (bi + 1) * this.per); },
+            src(p) { return this.poster ? this.poster(p) : (p || PLACEHOLDER); },
+            pick(it) { this.$emit('pick', it); },
+            loaded: onImgLoad,
+            reset() {
+                this.dead = {};
+                this._needMeasure = true;
+                if (this._io) { this._io.disconnect(); this._obs = new WeakSet(); }
+                this.$nextTick(() => this.sync());
+            },
+            ensureIO() {
+                if (this._io || typeof IntersectionObserver === 'undefined') return this._io;
+                this._obs = new WeakSet();
+                this._io = new IntersectionObserver((es) => this.onIO(es), { rootMargin: IO_MARGIN });
+                return this._io;
+            },
+            onIO(entries) {
+                let d = null;
+                const last = this.nBlocks - 1;
+                for (const en of entries) {
+                    const bi = parseInt(en.target.getAttribute('data-blk'), 10);
+                    if (!(bi >= 0)) continue;
+                    if (en.isIntersecting) {
+                        if (this.dead[bi] != null) { d = d || Object.assign({}, this.dead); delete d[bi]; }
+                    } else if (this.dead[bi] == null && bi < last) {
+                        const h = Math.round(en.boundingClientRect.height);
+                        if (h > 0) { d = d || Object.assign({}, this.dead); d[bi] = h; }
+                    }
+                }
+                if (d) this.dead = d;
+            },
+            // 渲染之后:新出现的块交给 IntersectionObserver;需要时量一次真实列数
+            sync() {
+                const el = this.$el;
+                if (!el || !el.querySelectorAll) return;
+                const io = this.ensureIO();
+                if (io) el.querySelectorAll('.dg-blk').forEach(b => { if (!this._obs.has(b)) { this._obs.add(b); io.observe(b); } });
+                if (this._needMeasure) this.measure();
+            },
+            measure() {
+                const el = this.$el && this.$el.querySelector && this.$el.querySelector('.dg-blk.dg-live');
+                if (!el || !root.getComputedStyle) return;
+                this._needMeasure = false;
+                let c = 0;
+                try { const g = root.getComputedStyle(el).gridTemplateColumns; c = g && g !== 'none' ? g.split(' ').filter(Boolean).length : 0; } catch (e) { }
+                if (c > 0 && c !== this.cols) this.setCols(c);
+            },
+            // 列数变了:重新分块。离当前位置远的块直接给估算高度的空壳(按一张卡片的实测高),再让 IntersectionObserver 从头判一遍
+            setCols(c) {
+                const card = this.$el.querySelector('.dg-blk.dg-live .browse-card');
+                let ch = 0, gap = 0;
+                try { ch = card ? card.offsetHeight : 0; gap = card ? (parseFloat(root.getComputedStyle(card.parentElement).rowGap) || 0) : 0; } catch (e) { }
+                this.cols = c;
+                const n = this.nBlocks;
+                const d = {};
+                if (ch > 0) {
+                    const est = Math.round(ROWS_PER_BLOCK * ch + (ROWS_PER_BLOCK - 1) * gap);
+                    let k = 0;
+                    try { k = Math.floor(Math.max(0, -this.$el.getBoundingClientRect().top) / (est + gap)); } catch (e) { }
+                    for (let i = 0; i < n - 1; i++) if (i < k - 1 || i > k + 2) d[i] = est;
+                }
+                this.dead = d;
+                if (this._io) { this._io.disconnect(); this._obs = new WeakSet(); }
+                this.$nextTick(() => this.sync());
+            },
+            onResize() {
+                clearTimeout(this._rsT);
+                this._rsT = setTimeout(() => { this._needMeasure = true; this.measure(); }, 200);
+            },
+        },
+        mounted() {
+            this._needMeasure = true;
+            this._onRs = () => this.onResize();
+            try { root.addEventListener('resize', this._onRs); } catch (e) { }
+            // 网格自己的宽度变了也要重量列数(筛选面板锁滚动时滚动条消失、侧栏开合,都不发 resize);只看宽度,高度随翻页一直在变不算
+            try {
+                if (typeof root.ResizeObserver === 'function') {
+                    this._ro = new root.ResizeObserver((es) => {
+                        const w = es && es[0] && es[0].contentRect ? Math.round(es[0].contentRect.width) : 0;
+                        if (w && w !== this._w) { const first = !this._w; this._w = w; if (!first) this.onResize(); }
+                    });
+                    this._ro.observe(this.$el);
+                }
+            } catch (e) { }
+            this.sync();
+        },
+        updated() { this.sync(); },
+        beforeUnmount() {
+            clearTimeout(this._rsT);
+            try { root.removeEventListener('resize', this._onRs); } catch (e) { }
+            if (this._ro) { try { this._ro.disconnect(); } catch (e) { } this._ro = null; }
+            if (this._io) { this._io.disconnect(); this._io = null; }
+        },
+        template: `<div class="dg-grid">
+  <div v-if="loading && !items.length" class="browse-grid"><div class="browse-card is-skel" v-for="n in 12" :key="'sk' + n" aria-hidden="true"><div class="poster-wrap"></div><div class="skel-line"></div><div class="skel-line short"></div></div></div>
+  <div v-for="bi in nBlocks" :key="'blk' + bi" class="browse-grid dg-blk" :class="{ 'dg-live': dead[bi - 1] == null }" :data-blk="bi - 1" :style="dead[bi - 1] != null ? { height: dead[bi - 1] + 'px' } : null">
+    <template v-if="dead[bi - 1] == null">
+      <div class="browse-card" v-for="item in slice(bi - 1)" :key="'b-' + item.id" :data-bid="item.id" :tabindex="tv ? 0 : null" @click="pick(item)" @keydown.enter.prevent="pick(item)">
+        <div class="poster-wrap">
+          <img :src="src(item.poster_path)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded">
+          <div v-if="item._badge" class="dg-ad-badge">{{ item._badge }}</div><span v-if="item._n >= 2" class="dg-ov-n">{{ item._n }}线</span><span v-if="item._durText" class="dg-ov-dur">{{ item._durText }}</span><span v-if="item._code" class="dg-ov-code">{{ item._code }}</span>
+        </div>
+        <div class="movie-name">{{ item.title || item.name }}</div>
+        <div class="movie-date dg-ad-sub">{{ item._sub }}</div>
+      </div>
+    </template>
+  </div>
+</div>`,
+    };
+
+    // 标签行 + 排序 / 筛选按钮 / 已选条件 + 筛选面板(手机底部抽屉、宽屏右侧面板)。所有改动 @go → 根的 adGo(立刻生效,面板里的数跟着刷新)
+    const BACK_KEYS = new Set(['Escape', 'Esc', 'GoBack', 'BrowserBack']);
+    const DgAdFilter = {
+        name: 'DgAdFilter',
+        props: {
+            sel: { type: Object, default: () => ({}) }, type: { type: String, default: '' }, facets: { type: Object, default: null },
+            total: { type: Number, default: 0 }, tv: { type: Boolean, default: false }, legacy: { type: Array, default: () => [] },
+        },
+        emits: ['go', 'sheet'],
+        data() { return { open: false, xmode: false, note: '', sq: '', aq: '', aRes: null, studios: null }; },
+        computed: {
+            chips() { return chipRow(this.facets, this.sel, this.legacy); },
+            sorts() { return sortOpts(this.facets, this.sel); },
+            n() { return filterCount(this.sel); },
+            pills() { return activePills(this.sel); },
+            countText() { return countLabel(this.total || 0); },
+            sheetGroups() {
+                const f = this.facets;
+                return f ? f.groups.map(g => ({ id: g.id, label: g.label, tags: g.tags.map(t => Object.assign({}, t, { st: this.st(t.id) })) })) : [];
+            },
+            more() { return (this.facets ? this.facets.more : []).map(t => Object.assign({}, t, { st: this.st(t.id) })); },
+            moreOn() { return this.more.some(t => t.st); },
+            durs() { return this.opts(DURS, this.facets && this.facets.dur, this.sel.dur); },
+            vars() { return this.opts(VARIANTS, this.facets && this.facets.variant, this.sel.v); },
+            unkNote() {
+                const d = this.sel.dur;
+                if (!d || d === 'unk' || !this.facets) return 0;
+                const u = this.facets.dur.find(x => x.id === 'unk');
+                return u ? u.count : 0;
+            },
+            buckets() { return (this.type === 'all' && this.facets) ? this.facets.buckets : []; },
+            studioTop() {
+                const list = (this.facets ? this.facets.studio : []).slice();
+                const cur = this.sel.studio;
+                if (cur && !list.some(s => s.id === cur)) list.unshift({ id: cur, label: studioLabel(cur), count: 0 });
+                return list;
+            },
+            studioHits() {
+                const q = this.sq.trim().toLowerCase();
+                if (!q || !this.studios) return [];
+                return this.studios.filter(s => s.label.toLowerCase().indexOf(q) >= 0 || s.id.toLowerCase().indexOf(q) >= 0).slice(0, 24);
+            },
+            actTop() {
+                const list = (this.facets ? this.facets.actress : []).slice();
+                const cur = this.sel.actress;
+                if (cur && !list.some(a => a.aid === cur)) list.unshift({ aid: cur, name: actressName(cur) || '已选女优', count: 0 });
+                return list;
+            },
+        },
+        methods: {
+            countLabel,
+            st(id) { const s = this.sel || {}; return (s.t || []).indexOf(id) >= 0 ? 'in' : (s.x || []).indexOf(id) >= 0 ? 'ex' : ''; },
+            opts(defs, counts, cur) {
+                const by = new Map((counts || []).map(c => [c.id, c.count]));
+                const has = !!counts && counts.length > 0;
+                return defs.map(d => {
+                    const c = d.k && has ? (by.get(d.k) || 0) : null;
+                    return { k: d.k, l: d.l, c, off: !!d.k && has && !c && (cur || '') !== d.k };
+                });
+            },
+            chipTitle(c) { return c.st === 'ex' ? '已排除「' + c.label + '」,点一下取消' : c.st === 'in' ? '已选「' + c.label + '」,点一下取消' : c.label + (c.count ? ' · ' + c.count + ' 部' : ''); },
+            go(patch) { this.$emit('go', { patch }); },
+            flash(msg) {
+                if (!msg) return;
+                this.note = msg;
+                clearTimeout(this._noteT);
+                this._noteT = setTimeout(() => { this.note = ''; }, 2200);
+            },
+            tapTag(id, mode) {
+                const r = nextTagState(this.sel, id, mode);
+                if (r.err != null) { this.flash(r.err); return; }
+                this.go({ t: r.t, x: r.x });
+            },
+            tap(id) { this.tapTag(id, 'toggle'); },
+            tapSheet(id) { this.tapTag(id, this.xmode ? 'x' : 'cycle'); },
+            drop(k) {
+                const s = this.sel || {};
+                if (k === 'review') this.go({ t: (s.t || []).filter(featurable), x: (s.x || []).filter(featurable) });
+                else { const p = {}; p[k] = ''; this.go(p); }
+            },
+            clearAll() { this.go({ t: [], x: [], dur: '', v: '', studio: '', actress: '', lp: '' }); },
+            loadStudios() {
+                if (this.studios || this._stBusy) return;
+                this._stBusy = true;
+                cachedJson('/api/catalog/studios?b=' + encodeURIComponent(this.sel.b || ''), 8000).then(d => { this._stBusy = false; this.studios = normStudios(d); });
+            },
+            actSearch() {
+                clearTimeout(this._aT);
+                const q = this.aq.trim();
+                if (!q) { this.aRes = null; return; }
+                if (q.length > 40) return;
+                this._aT = setTimeout(() => {
+                    const seq = (this._aSeq = (this._aSeq || 0) + 1);
+                    cachedJson('/api/catalog/actress?q=' + encodeURIComponent(q), 8000).then(d => {
+                        if (seq === this._aSeq && this.aq.trim() === q) this.aRes = normActressList(d);
+                    });
+                }, 250);
+            },
+            // ---- 面板开合(根组件压/退一条历史:手机返回键先关面板)----
+            openSheet() {
+                if (this.open) return true;
+                this.open = true;
+                this.studios = null;
+                this.$emit('sheet', true);
+                const d = root.document;
+                try { d.documentElement.classList.add('dg-sheet-lock'); } catch (e) { }
+                this._onKey = (e) => this.onKey(e);
+                this._onFocus = (e) => this.onFocusIn(e);
+                try { root.addEventListener('keydown', this._onKey, true); d.addEventListener('focusin', this._onFocus, true); } catch (e) { }
+                this.$nextTick(() => { const x = this.$refs.sheetX; try { if (x) x.focus({ preventScroll: true }); } catch (e) { } });
+                return true;
+            },
+            // fromPop = 根组件在 popstate 里关的(历史已经退掉了,不再通知)
+            closeSheet(fromPop) {
+                if (!this.open) return;
+                this.open = false;
+                this.unbind();
+                if (!fromPop) this.$emit('sheet', false);
+                this.$nextTick(() => { const b = this.$refs.fbtn; try { if (b) b.focus({ preventScroll: true }); } catch (e) { } });
+            },
+            unbind() {
+                try { root.document.documentElement.classList.remove('dg-sheet-lock'); } catch (e) { }
+                try { root.removeEventListener('keydown', this._onKey, true); root.document.removeEventListener('focusin', this._onFocus, true); } catch (e) { }
+            },
+            inSheet(el) { const s = this.$refs.sheet; try { return !!(s && el && s.contains(el)); } catch (e) { return false; } },
+            focusables() {
+                const s = this.$refs.sheet;
+                return s ? Array.prototype.filter.call(s.querySelectorAll('button:not([disabled]), input, select, summary, [tabindex]:not([tabindex="-1"])'), x => x.offsetParent !== null) : [];
+            },
+            // 窗口捕获阶段:返回键 / Esc 只关面板(不让根组件的电视返回键把整个浏览页关掉);Tab 在面板里循环
+            onKey(e) {
+                if (!this.open) return;
+                const k = e.key, typing = e.target && /^(input|textarea|select)$/i.test(e.target.tagName || '');
+                if (BACK_KEYS.has(k) || (k === 'Backspace' && !typing)) { e.preventDefault(); e.stopImmediatePropagation(); this.closeSheet(); return; }
+                if (k === 'Tab') {
+                    const f = this.focusables();
+                    if (!f.length) return;
+                    const i = f.indexOf(root.document.activeElement);
+                    const to = e.shiftKey ? (i <= 0 ? f[f.length - 1] : null) : (i < 0 || i === f.length - 1 ? f[0] : null);
+                    if (to) { e.preventDefault(); try { to.focus(); } catch (x) { } }
+                }
+            },
+            // 焦点跑到面板外(电视方向键的焦点导航)→ 拉回面板
+            onFocusIn(e) {
+                if (!this.open || this.inSheet(e.target)) return;
+                const f = this.focusables();
+                if (f.length) { try { f[0].focus({ preventScroll: true }); } catch (x) { } }
+            },
+        },
+        beforeUnmount() {
+            clearTimeout(this._noteT); clearTimeout(this._aT);
+            if (this.open) { this.open = false; this.unbind(); this.$emit('sheet', false); }
+        },
+        template: `<div class="dg-af">
+  <div v-if="chips.length" class="browse-frow" role="group" aria-label="标签">
+    <span class="browse-flabel">标签</span>
+    <div class="browse-fopts">
+      <button v-for="c in chips" :key="'c-' + c.id" type="button" class="browse-fopt" :class="{ active: c.st === 'in', 'dg-x': c.st === 'ex' }" :disabled="c.off" :aria-pressed="c.st ? 'true' : 'false'" :title="chipTitle(c)" @click="tap(c.id)">{{ c.st === 'ex' ? '−' : '' }}{{ c.label }}<i v-if="c.st" class="fas fa-xmark dg-chip-x" aria-hidden="true"></i></button>
+      <button type="button" class="browse-fopt dg-alltags" @click="$emit('go', { view: 'tags', b: sel.b || '' })">全部标签 <i class="fas fa-angle-right" aria-hidden="true"></i></button>
+    </div>
+  </div>
+  <div class="browse-frow dg-tool" role="group" aria-label="排序与筛选">
+    <span class="browse-flabel">排序</span>
+    <div class="browse-fopts">
+      <select class="dg-sort" :value="sel.sort" aria-label="排序" @change="go({ sort: $event.target.value })"><option v-for="s in sorts" :key="s.k" :value="s.k">{{ s.l }}</option></select>
+      <button type="button" ref="fbtn" class="dg-fbtn" :aria-expanded="open ? 'true' : 'false'" @click="openSheet()"><i class="fas fa-sliders" aria-hidden="true"></i> 筛选<span v-if="n" class="dg-n">{{ n }}</span></button>
+      <button v-for="p in pills" :key="'p-' + p.k" type="button" class="browse-fopt dg-pill" :title="'去掉 ' + p.l" @click="drop(p.k)">{{ p.l }} <i class="fas fa-xmark" aria-hidden="true"></i></button>
+      <button v-if="n" type="button" class="browse-fopt dg-clear" @click="clearAll()">清除筛选</button>
+    </div>
+  </div>
+  <div v-if="note && !open" class="dg-note" role="status">{{ note }}</div>
+  <teleport to="body">
+    <div v-if="open" class="dg-sheet-mask" @click.self="closeSheet()">
+      <div class="dg-sheet" ref="sheet" role="dialog" aria-modal="true" aria-label="筛选">
+        <div class="dg-sheet-hd">
+          <b>筛选</b>
+          <label class="dg-xmode"><input type="checkbox" v-model="xmode"> 排除模式</label>
+          <button type="button" class="dg-sheet-reset" :disabled="!n" @click="clearAll()">重置</button>
+          <button type="button" ref="sheetX" class="dg-sheet-x" aria-label="关闭筛选" @click="closeSheet()"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </div>
+        <div class="dg-sheet-bd">
+          <div class="dg-sheet-tip">{{ xmode ? '排除模式：点一下标签就排除它' : '点一下选中，再点一下排除，第三下取消' }} · 标签需同时满足，选中、排除各最多 3 个</div>
+          <div v-if="note" class="dg-note" role="status">{{ note }}</div>
+          <section v-if="buckets.length" class="dg-sec">
+            <div class="dg-sec-t">分类</div>
+            <div class="dg-chips"><button v-for="b in buckets" :key="'sb-' + b.id" type="button" class="dg-chip" :disabled="!b.count" @click="go({ b: b.id })">{{ b.label }}<span class="dg-c">{{ b.count }}</span></button></div>
+          </section>
+          <section class="dg-sec">
+            <div class="dg-sec-t">时长<span v-if="unkNote" class="dg-sec-n">另有 {{ unkNote }} 部时长未知，未计入</span></div>
+            <div class="dg-chips"><button v-for="d in durs" :key="'sd-' + d.k" type="button" class="dg-chip" :class="{ on: (sel.dur || '') === d.k }" :aria-pressed="(sel.dur || '') === d.k ? 'true' : 'false'" :disabled="d.off" @click="go({ dur: d.k })">{{ d.l }}<span v-if="d.c != null" class="dg-c">{{ d.c }}</span></button></div>
+          </section>
+          <section class="dg-sec">
+            <div class="dg-sec-t">版本</div>
+            <div class="dg-chips"><button v-for="d in vars" :key="'sv-' + d.k" type="button" class="dg-chip" :class="{ on: (sel.v || '') === d.k }" :aria-pressed="(sel.v || '') === d.k ? 'true' : 'false'" :disabled="d.off" @click="go({ v: d.k })">{{ d.l }}<span v-if="d.c != null" class="dg-c">{{ d.c }}</span></button></div>
+          </section>
+          <section v-for="g in sheetGroups" :key="'sg-' + g.id" class="dg-sec">
+            <div class="dg-sec-t">{{ g.label }}</div>
+            <div class="dg-chips"><button v-for="t in g.tags" :key="'st-' + t.id" type="button" class="dg-chip" :class="{ on: t.st === 'in', ex: t.st === 'ex' }" :aria-pressed="t.st ? 'true' : 'false'" :disabled="!t.st && !t.count" @click="tapSheet(t.id)">{{ t.st === 'ex' ? '−' : '' }}{{ t.label }}<span class="dg-c">{{ t.count }}</span></button></div>
+          </section>
+          <section class="dg-sec">
+            <div class="dg-sec-t">厂牌</div>
+            <input class="dg-sq" type="search" v-model="sq" placeholder="搜索厂牌" aria-label="搜索厂牌" maxlength="40" @focus="loadStudios()">
+            <div class="dg-chips">
+              <button v-for="s in (sq.trim() ? studioHits : studioTop)" :key="'ss-' + s.id" type="button" class="dg-chip" :class="{ on: sel.studio === s.id }" :aria-pressed="sel.studio === s.id ? 'true' : 'false'" @click="go({ studio: sel.studio === s.id ? '' : s.id })">{{ s.label }}<span v-if="s.count" class="dg-c">{{ s.count }}</span></button>
+              <span v-if="sq.trim() && studios && !studioHits.length" class="dg-sec-n">没有匹配的厂牌</span>
+              <span v-if="!sq.trim() && !studioTop.length" class="dg-sec-n">当前条件下没有可筛的厂牌</span>
+            </div>
+          </section>
+          <section class="dg-sec">
+            <div class="dg-sec-t">女优</div>
+            <input class="dg-sq" type="search" v-model="aq" placeholder="搜索女优" aria-label="搜索女优" maxlength="40" @input="actSearch()">
+            <div class="dg-chips">
+              <button v-for="a in (aq.trim() ? (aRes || []) : actTop)" :key="'sa-' + a.aid" type="button" class="dg-chip" :class="{ on: sel.actress === a.aid }" :aria-pressed="sel.actress === a.aid ? 'true' : 'false'" @click="go({ actress: sel.actress === a.aid ? '' : a.aid })">{{ a.name }}<span v-if="a.count || a.n" class="dg-c">{{ a.count || a.n }}</span></button>
+              <span v-if="aq.trim() && aRes && !aRes.length" class="dg-sec-n">没有找到</span>
+              <span v-if="!aq.trim() && !actTop.length" class="dg-sec-n">当前条件下没有可筛的女优</span>
+            </div>
+          </section>
+          <details v-if="more.length" class="dg-sec dg-more-sec" :open="moreOn">
+            <summary class="dg-sec-t">更多（只能筛选）</summary>
+            <div class="dg-chips"><button v-for="t in more" :key="'sm-' + t.id" type="button" class="dg-chip" :class="{ on: t.st === 'in', ex: t.st === 'ex' }" :aria-pressed="t.st ? 'true' : 'false'" @click="tapSheet(t.id)">{{ t.st === 'ex' ? '−' : '' }}{{ t.label }}</button></div>
+          </details>
+        </div>
+        <div class="dg-sheet-ft"><button type="button" class="dg-sheet-go" @click="closeSheet()">查看 {{ countText }} 部</button></div>
+      </div>
+    </div>
+  </teleport>
+</div>`,
+    };
+
+    // 标签页 / 女优页的页头:标签所属分面组、按分类细分(点了 = 这个标签 + 那个分类)、相关标签(只有 featured);女优名 + 别名
+    const DgAdHead = {
+        name: 'DgAdHead',
+        props: { view: { type: String, default: '' }, sel: { type: Object, default: () => ({}) } },
+        emits: ['go', 'learn'],
+        data() { return { info: null, err: false }; },
+        computed: {
+            kind() { const s = this.sel || {}; return (this.view === 'tag' && s.t && s.t.length) ? 'tag' : (s.actress ? 'actress' : ''); },
+            key() { const s = this.sel || {}; return this.kind === 'tag' ? 'tag:' + s.t[0] : this.kind === 'actress' ? 'actress:' + s.actress : ''; },
+        },
+        watch: { key: { immediate: true, handler() { this.load(); } } },
+        methods: {
+            countLabel,
+            load() {
+                const k = this.key, s = this.sel || {};
+                this.info = null; this.err = false;
+                if (!k) return;
+                const kind = this.kind;
+                const url = kind === 'tag' ? '/api/catalog/tag/' + encodeURIComponent(s.t[0]) : '/api/catalog/actress/' + encodeURIComponent(s.actress) + '?page=1';
+                cachedJson(url, 8000).then(d => {
+                    if (k !== this.key) return;
+                    const v = kind === 'tag' ? normTagInfo(d) : normActress(d);
+                    if (!v) { this.err = true; return; }
+                    this.info = Object.freeze(v);
+                    this.$emit('learn');
+                });
+            },
+        },
+        template: `<div v-if="kind" class="dg-head">
+  <template v-if="kind === 'tag'">
+    <div v-if="err" class="dg-head-sub">这个标签暂时没有可看的作品</div>
+    <template v-else-if="info">
+      <div class="dg-head-sub"><span v-if="info.tag.groupLabel">{{ info.tag.groupLabel }}</span><span v-if="info.tag.count">{{ info.tag.groupLabel ? ' · ' : '' }}共 {{ countLabel(info.tag.count) }} 部</span></div>
+      <div v-if="info.buckets.length" class="browse-frow" role="group" aria-label="按分类"><span class="browse-flabel">分类</span><div class="browse-fopts"><button v-for="b in info.buckets" :key="'hb-' + b.id" type="button" class="browse-fopt" @click="$emit('go', { sel: { b: b.id, t: [info.tag.id] } })">{{ b.label }}<span class="dg-c">{{ b.count }}</span></button></div></div>
+      <div v-if="info.related.length" class="browse-frow" role="group" aria-label="相关标签"><span class="browse-flabel">相关</span><div class="browse-fopts"><button v-for="r in info.related" :key="'hr-' + r.id" type="button" class="browse-fopt" @click="$emit('go', { view: 'tag', id: r.id })">#{{ r.label }}</button></div></div>
+    </template>
+  </template>
+  <div v-else-if="info" class="dg-head-sub"><i class="fas fa-user" aria-hidden="true"></i> {{ info.name }}<span v-if="info.aliases.length"> · 又名 {{ info.aliases.join(' / ') }}</span></div>
+</div>`,
+    };
+
+    // 标签云(#/tags?b=):当前分类的 featured 标签按分面组排,字号按 log(数量);审查类不进来
+    const DgAdCloud = {
+        name: 'DgAdCloud',
+        props: { b: { type: String, default: '' } },
+        emits: ['go', 'learn'],
+        data() { return { data: null, err: false }; },
+        watch: { b: { immediate: true, handler() { this.load(); } } },
+        methods: {
+            load(force) {
+                const b = BUCKET_LABEL[this.b] ? this.b : '';
+                const url = tagsUrl(b);
+                if (force) dCache.delete(url);
+                this.data = null; this.err = false;
+                cachedJson(url, 8000).then(d => {
+                    if ((BUCKET_LABEL[this.b] ? this.b : '') !== b) return;
+                    if (!d) { this.err = true; return; }
+                    this.data = Object.freeze(normCloud(d));
+                    this.$emit('learn');
+                });
+            },
+            pick(id) {
+                const b = BUCKET_LABEL[this.b] ? this.b : '';
+                this.$emit('go', b ? { sel: { b, t: [id] } } : { view: 'tag', id });
+            },
+        },
+        template: `<div class="dg-cloud">
+  <div v-if="err" class="browse-state">标签加载失败 <button type="button" class="browse-btn" @click="load(true)"><i class="fas fa-rotate-right" aria-hidden="true"></i> 重试</button></div>
+  <div v-else-if="!data" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载标签…</div>
+  <div v-else-if="!data.groups.length" class="browse-empty"><i class="fas fa-tags" aria-hidden="true"></i><div class="browse-empty-t">这个分类还没有标签</div></div>
+  <section v-for="g in (data ? data.groups : [])" :key="'cg-' + g.id" class="dg-cloud-g">
+    <div class="dg-cloud-gt">{{ g.label }}</div>
+    <div class="dg-cloud-ts"><button v-for="t in g.tags" :key="'ct-' + t.id" type="button" class="dg-cloud-t" :class="'w' + t.w" :title="t.label + ' · ' + t.count + ' 部'" @click="pick(t.id)">{{ t.label }}<span class="dg-c">{{ t.count }}</span></button></div>
+  </section>
+</div>`,
+    };
+
     // ========== Vue mixin(index.html 的 createApp 里 mixins: [DgAdult.mixin]) ==========
     //   方法名都带 ad 前缀(openWork 除外),scripts/adult-frontend-test.mjs 校验不与主组件的 methods/computed/data 重名
     const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -930,9 +1822,13 @@
                     famOpen: {},                          // 展开了「+N 备用」的线路家族
                     varPref: { wk: '', kind: '' },        // 这部作品选了「中字 / 原版」哪种
                     sug: { q: '', open: false, hi: -1, kind: '', alias: null, exact: null, items: [] },   // 搜索建议
+                    // phase 3 浏览页:facets = 当前筛选的分面计数(冻结;第 1 页随结果下发);view = ''(浏览)/ 'tags'(标签云)/ 'tag'(标签页);
+                    //   labv = 学到新名字(标签/厂牌/女优)时 +1,让标题重算;routeOn = 地址栏路由已接管(启动时先按地址栏开页,再开始写)
+                    facets: null, view: '', labv: 0, routeOn: false,
                 },
             };
         },
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud },
         computed: {
             // 播放页作品信息条(currentGroup._meta 的展示版;没有 _meta 不出)
             adMeta() {
@@ -966,16 +1862,33 @@
                 const T = typeOf(b.type);
                 return 't|' + ((T && T.buckets.length && b.sel && b.sel.b) || '');
             },
+            //   (phase 3:只在服务器没给 facets 时当标签行的后备;选中的标签由 chipRow 自己挂上)
             adTagOpts() {
                 const b = this.browse;
                 if (!this.adultMode || !b || !b.open) return [];
                 const T = typeOf(b.type);
                 const bucket = (T && T.buckets.length && b.sel && b.sel.b) || '';
                 const t = this.adult.tags;
-                const list = (t && t.key === bucket) ? t.list : [];
-                const cur = b.sel && b.sel.tag;
-                if (cur && !list.some(x => x.id === cur)) return list.concat([{ id: cur, label: tagLabel(cur), count: 0 }]);
-                return list;
+                return (t && t.key === bucket) ? t.list : [];
+            },
+            // 地址栏路由(只有 id):浏览页关着 = '';没有目录 / 还没接管 = null(不写地址栏)
+            adRouteHash() {
+                if (!this.adultMode || !this.adult.catalog || !this.adult.routeOn) return null;
+                const b = this.browse;
+                if (!b || !b.open) return '';
+                return routeOf(this.adult.view, b.type, b.sel);
+            },
+            adBrowseTitle() {
+                void this.adult.labv;
+                const b = this.browse, s = (b && b.sel) || {};
+                if (this.adult.view === 'tags') return '全部标签' + (s.b && BUCKET_LABEL[s.b] ? ' · ' + BUCKET_LABEL[s.b] : '');
+                if (this.adult.view === 'tag' && s.t && s.t.length) return '#' + tagLabel(s.t[0]);
+                return catalog.title(b.type, s);
+            },
+            adBrowseSummary() {
+                void this.adult.labv;
+                if (this.adult.view === 'tags' || this.adult.view === 'tag') return this.adBrowseTitle;
+                return catalog.summary(this.browse.type, this.browse.sel);
             },
             // 搜索建议下拉的各行:分类词 → 「按分类浏览」;作品卡片(≤8);最后一行「搜索全部站点」
             adSugRows() {
@@ -1012,7 +1925,14 @@
                 }
                 this._adEnrich(g);
             },
-            adTagKey(k) { if (k) this._adLoadTags(); },
+            // 浏览页的类型/筛选/开关一变 → 写地址栏(新的一条历史;从地址栏来的 / 面板开着时替换当前这条)
+            adRouteHash(h) { this._adRouteSync(h); },
+        },
+        mounted() {
+            if (!this.adultMode) return;
+            this._adHashFn = () => this._adOnHash();
+            this._adPopFn = () => this._adOnPop();
+            try { root.addEventListener('hashchange', this._adHashFn); root.addEventListener('popstate', this._adPopFn); } catch (e) { }
         },
         methods: {
             adultApplyConfig(config) {
@@ -1037,9 +1957,11 @@
                 };
                 if (d === 'slow') {   // 先放行进应用,同一个请求回来后再填首页
                     p.then(h => { if (h) apply(h); else this.adult.home = 'error'; });
+                    this._adRouteBoot();
                     return;
                 }
                 if (d) apply(d); else this.adult.home = 'error';
+                this._adRouteBoot();   // 地址栏带着浏览页路由(刷新 / 书签)→ 直接开那一页
             },
             async adultLoadBuckets() {
                 const b = await fetchJson('/api/catalog/buckets', 10000);
@@ -1176,12 +2098,235 @@
                 this._browsePickId = null;
                 this.doSearch();
             },
+            // 分类 / 标签词 → 浏览页(带「按片名搜索」);只有标签没有分类的 → 标签页(跨分类,带按分类细分)
             _adOpenAlias(alias, kw) {
                 const p = aliasPreset(alias);
                 if (!p || typeof this.openBrowse !== 'function') return false;
                 if (alias && alias.tag && alias.label) learnTag(alias.tag, alias.label);
-                this.openBrowse(p, { keyword: String(kw || '') });
+                const tagOnly = !p.sel.b && p.sel.t && p.sel.t.length === 1 && featurable(p.sel.t[0]);
+                this._adOpen(tagOnly ? 'tag' : '', p.type, p.sel, { keyword: String(kw || '') });
                 return true;
+            },
+            // ---------- phase 3:分面浏览(_browseFetch 在成人站整个交给它)----------
+            //   游标翻页:服务器回了 cursor_next(字符串 / null)就按游标接着拉,到 null 为止;没有这个键 → 按页(旧服务器 / 退路)。
+            //   第 1 页带 facets=1(标签行 / 筛选面板的计数、可用排序);标签云页不拉片单
+            async _adBrowseFetch(reset) {
+                const b = this.browse;
+                if (reset) {
+                    this._browseAbort();
+                    b.seq++;
+                    b.items = []; b.page = 0; b.totalPages = 0; b.total = 0;
+                    b.done = false; b.error = false; b.idle = 0; b.loading = false;
+                    this._browseSeen = new Set();
+                    this._browsePickId = null;
+                    this._adCursor = '';
+                    this._adPaged = false;
+                    // 标签页(#/tag/<id>)只认「全部 + 只选这一个标签 + 默认排序」;动了别的就是普通浏览
+                    if (this.adult.view === 'tag' && !(b.type === 'all' && /^#\/tag\//.test(routeOf('tag', b.type, b.sel)))) this.adult.view = '';
+                }
+                if (b.loading) return;
+                if (this.adult.view === 'tags') { b.done = true; return; }
+                const seq = b.seq, page = b.page + 1;
+                const first = page === 1;
+                const cursor = first || this._adPaged ? '' : this._adCursor;
+                if (!first && !this._adPaged && !cursor) { b.done = true; return; }
+                const url = browseApiUrl(b.sel, { page, cursor, facets: first });
+                const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+                this._browseCtl = ctl;
+                const timer = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) { } }, 15000) : 0;
+                b.loading = true;
+                try {
+                    const r = await root.fetch(url, ctl ? { signal: ctl.signal, credentials: 'same-origin' } : { credentials: 'same-origin' });
+                    if (!r || !r.ok) throw new Error('HTTP ' + (r && r.status));
+                    const d = await r.json();
+                    if (seq !== b.seq) return;
+                    const seen = this._browseSeen || (this._browseSeen = new Set());
+                    const fresh = (d && Array.isArray(d.results) ? d.results : []).map(cardToItem).filter(it => {
+                        if (!it || seen.has(it.id)) return false;
+                        seen.add(it.id);
+                        return true;
+                    }).map(it => Object.freeze(it));   // 只读展示:不做深层响应式
+                    if (fresh.length) b.items.push(...fresh);
+                    b.page = page;
+                    b.totalPages = Math.min(Number(d && d.total_pages) || 0, 500);
+                    b.total = Math.max(0, Number(d && d.total_results) || 0);
+                    const hasCur = !!d && Object.prototype.hasOwnProperty.call(d, 'cursor_next');
+                    if (first) this._adPaged = !hasCur;
+                    if (this._adPaged) b.done = page >= b.totalPages || (!fresh.length && !(d && d.results && d.results.length));
+                    else { this._adCursor = (typeof d.cursor_next === 'string' && d.cursor_next.length <= 400) ? d.cursor_next : ''; b.done = !this._adCursor; }
+                    b.idle = fresh.length >= 4 ? 0 : b.idle + 1;
+                    if (first) {
+                        const f = d && d.facets ? normFacets(d.facets) : null;
+                        this.adult.facets = f ? Object.freeze(f) : null;
+                        if (!f) this._adLoadTags();   // 旧服务器没有 facets:标签行退回 /api/catalog/tags
+                        this.adult.labv++;
+                    }
+                } catch (e) {
+                    if (seq === b.seq) b.error = true;
+                } finally {
+                    if (timer) clearTimeout(timer);
+                    if (this._browseCtl === ctl) this._browseCtl = null;
+                    if (seq === b.seq) b.loading = false;
+                }
+                if (seq === b.seq && !b.error && !b.done) this.$nextTick(() => this._browseFill());
+            },
+            // 组件(标签行 / 筛选面板 / 标签云 / 标签页页头)和信息条的导航都走这里:
+            //   { patch }(改当前筛选的几项)/ { sel, type? }(整个换)/ { view:'tags', b }(标签云)/ { view:'tag', id }(标签页)
+            adGo(nav) {
+                const n = nav || {};
+                const b = this.browse;
+                const cur = (b && b.open) ? b.sel : {};
+                let view = '', type = 'all', sel = {};
+                if (n.view === 'tags') {
+                    const bk = BUCKET_LABEL[n.b] ? n.b : '';
+                    view = 'tags'; type = bk ? typeOfBucket(bk) : 'all'; sel = { b: bk };
+                } else if (n.view === 'tag') {
+                    if (!validTag(n.id) || isBlockedTag(n.id)) return;
+                    view = 'tag'; sel = { t: [n.id] };
+                } else if (n.patch && typeof n.patch === 'object') {
+                    sel = Object.assign({}, cur, n.patch);
+                    if (Object.prototype.hasOwnProperty.call(n.patch, 'b')) type = BUCKET_LABEL[n.patch.b] ? typeOfBucket(n.patch.b) : 'all';
+                    else type = (b && b.open && typeOf(b.type)) ? b.type : (sel.b && BUCKET_LABEL[sel.b] ? typeOfBucket(sel.b) : 'all');
+                } else if (n.sel && typeof n.sel === 'object') {
+                    sel = n.sel;
+                    type = typeOf(n.type) ? n.type : (BUCKET_LABEL[sel.b] ? typeOfBucket(sel.b) : 'all');
+                } else return;
+                this._adOpen(view, type, sel, { keyword: n.keyword });
+            },
+            // 打开 / 换到某一页:浏览页没开(或在搜索结果 / 播放页上)→ openBrowse;开着 → 就地换筛选重拉(不动焦点,滚回顶部)
+            _adOpen(view, type, sel, opt) {
+                const o = opt || {};
+                const T = typeOf(type) || typeOf('all');
+                const ns = normSel(T.k, sel);
+                const run = () => {
+                    const b = this.browse;
+                    if (!b.open || this.searched || o.keyword) {   // 从搜索词来的:openBrowse 才带「按片名搜索」提示
+                        this.adult.view = view;
+                        if (typeof this.openBrowse === 'function') this.openBrowse({ type: T.k, sel: ns }, o.keyword ? { keyword: String(o.keyword) } : undefined);
+                        return;
+                    }
+                    const same = b.type === T.k && JSON.stringify(b.sel) === JSON.stringify(ns);
+                    const prev = this.adult.view;
+                    this.adult.view = view;
+                    // 筛选没变:同一种页面什么都不做;只换了页面形态(#/c/all?t=x ↔ #/tag/x)片单不变,不重拉;进出标签云要重拉 / 清空片单
+                    if (same && (prev === view || (prev !== 'tags' && view !== 'tags'))) return;
+                    if (typeof this._browseDropKeyword === 'function') this._browseDropKeyword();
+                    b.type = T.k;
+                    b.sel = ns;
+                    if (typeof this.catNavSelect === 'function') this.catNavSelect(T.k);
+                    if ((root.scrollY || 0) > 0 && typeof this._jumpTo === 'function') this._jumpTo(0);
+                    this._browseFetch(true);
+                };
+                if (this.showDetail) this._adLeaveDetail(run); else run();
+            },
+            // 学到新名字(标签云 / 标签页 / 女优页回来)→ 标题重算
+            adLearned() { this.adult.labv++; },
+            // 首页分类栏「标签」→ 标签云(当前大类的第一个分类;「全部」不限分类)
+            adOpenTags(tk) {
+                const T = typeOf(tk);
+                const b0 = T && T.buckets.length ? T.buckets[0][0] : '';
+                const cur = this.browse && this.browse.open && this.browse.sel ? this.browse.sel.b : '';
+                this.adGo({ view: 'tags', b: (this.browse && this.browse.open) ? (cur || '') : b0 });
+            },
+            // 顶上摘要条的「筛选」:直接打开筛选面板(返回 true = 已处理;没有面板时调用方照旧滚回顶部)
+            adOpenSheet() {
+                const f = this.$refs && this.$refs.adFilter;
+                if (!f || typeof f.openSheet !== 'function' || this.adult.view === 'tags') return false;
+                return f.openSheet() === true;
+            },
+            // ---------- 地址栏路由 ----------
+            // 状态 → 地址栏。面板开着(它压了一条同地址的历史)时替换那一条(保留标记);从地址栏应用的(规范化)也替换;其余新压一条
+            _adRouteSync(h) {
+                if (h == null) return;
+                if (h === '' && this.adult.view) this.adult.view = '';   // 浏览页关了:下次从首页进来是普通浏览
+                let cur = '';
+                try { cur = canonHash(root.location.hash); } catch (e) { return; }
+                if (h === cur) return;
+                const loc = root.location;
+                if (!h && loc.hash && !isOurHash(loc.hash)) return;   // 别人的 #(#admin 之类)不动
+                const url = h || (loc.pathname + loc.search);
+                const sheet = this._adSheetHist;
+                try {
+                    if (sheet) root.history.replaceState(Object.assign({}, root.history.state || {}, { dgAdSheet: sheet }), '', url);
+                    else if (this._adRouteReplace) root.history.replaceState({ dgAd: 1 }, '', url);
+                    else root.history.pushState({ dgAd: 1 }, '', url);
+                } catch (e) { }
+            },
+            // 地址栏 → 状态(后退 / 前进 / 手改地址栏)。播放页开着时后退 = 关播放页(浏览页留在原样,把刚退掉的那条压回去)
+            _adOnHash() {
+                if (!this.adultMode || !this.adult.catalog || !this.adult.routeOn) return;
+                const want = canonHash(root.location.hash);
+                const have = this.adRouteHash;
+                if (have == null || want === have) return;
+                if (!want && root.location.hash && !isOurHash(root.location.hash)) return;   // 别人的 #
+                if (this.showDetail) {
+                    if (typeof this.closeDetail === 'function') this.closeDetail();
+                    try { root.history.pushState({ dgAd: 1 }, '', have || (root.location.pathname + root.location.search)); } catch (e) { }
+                    return;
+                }
+                this._adApplyRoute(parseRoute(root.location.hash));
+            },
+            _adApplyRoute(r) {
+                this._adRouteReplace = true;
+                this.$nextTick(() => { this.$nextTick(() => { this._adRouteReplace = false; }); });
+                if (!r) {
+                    if (this.browse && this.browse.open) {
+                        if (this.searched && typeof this._leaveSearch === 'function') this._leaveSearch();
+                        if (typeof this.closeBrowse === 'function') this.closeBrowse();
+                    }
+                    return;
+                }
+                if (this.searched && typeof this._leaveSearch === 'function') this._leaveSearch();
+                this._adOpen(r.view, r.type, r.sel, {});
+            },
+            // 启动(首页拿到之后)一次:地址栏带着路由就直接开那一页;之后才开始写地址栏
+            _adRouteBoot() {
+                if (!this.adultMode || !this.adult.catalog || this.adult.routeOn) return;
+                const h = (root.location && root.location.hash) || '';
+                const r = parseRoute(h);
+                this.adult.routeOn = true;
+                if (r) this._adApplyRoute(r);
+                else if (isOurHash(h)) { try { root.history.replaceState(root.history.state, '', root.location.pathname + root.location.search); } catch (e) { } }   // 坏掉的旧路由:清掉
+            },
+            // 筛选面板开 / 关(组件 @sheet)。开:压一条同地址的历史(手机返回键先关面板);关:退掉那条,popstate 里把最终筛选压成新的一条
+            adSheet(open) {
+                if (open) {
+                    if (this._adSheetHist) return;
+                    const id = (this._adSheetSeq = (this._adSheetSeq || 0) + 1);
+                    try { root.history.pushState(Object.assign({}, root.history.state || {}, { dgAdSheet: id }), ''); this._adSheetHist = id; } catch (e) { this._adSheetHist = 0; }
+                    return;
+                }
+                const id = this._adSheetHist;
+                if (!id) return;
+                let mine = false;
+                try { mine = !!(root.history.state && root.history.state.dgAdSheet === id); } catch (e) { }
+                if (mine) { this._adSheetBack = true; try { root.history.back(); } catch (e) { this._adSheetBack = false; this._adSheetHist = 0; } }
+                else this._adSheetHist = 0;
+            },
+            // popstate:离开了面板那条历史(点关闭自己退的 / 手机返回键)→ 面板关上;退回的是开面板前那条,筛选可能已经改过 → 当前状态压成新的一条
+            _adOnPop() {
+                const id = this._adSheetHist;
+                if (!id) return;
+                try { if (root.history.state && root.history.state.dgAdSheet === id) return; } catch (e) { }
+                const viaUi = this._adSheetBack;
+                this._adSheetBack = false;
+                this._adSheetHist = 0;
+                if (!viaUi) { const f = this.$refs && this.$refs.adFilter; if (f && typeof f.closeSheet === 'function') f.closeSheet(true); }
+                const h = this.adRouteHash;
+                if (h == null) return;
+                let cur = '';
+                try { cur = canonHash(root.location.hash); } catch (e) { return; }
+                if (h !== cur) { try { root.history.pushState({ dgAd: 1 }, '', h || (root.location.pathname + root.location.search)); } catch (e) { } }
+            },
+            // 信息条:标签 → 标签页(跨分类,带按分类细分);厂牌 → 按厂牌浏览;女优(有 aid)→ 女优页,没有 aid 的旧名字 → 全站搜
+            adMetaTag(id) { if (featurable(id)) this.adGo({ view: 'tag', id }); },
+            adMetaStudio(st) {
+                const id = cleanStudio(st && typeof st === 'object' ? st.id : st);
+                if (id) this.adGo({ sel: { studio: id }, type: 'all' });
+            },
+            adMetaActress(a) {
+                if (a && validAid(a.aid)) { this.adGo({ sel: { actress: aidStr(a.aid) }, type: 'all' }); return; }
+                this.adMetaSearch(a && typeof a === 'object' ? a.name : a);
             },
             // ---------- 浏览页标签行 ----------
             _adLoadTags() {
@@ -1219,12 +2364,14 @@
                 } catch (e) { legacy(); }
             },
             // 分类 / 标签按钮 → 关掉播放页,打开分类浏览页(标签按这部作品的分类筛)
+            //   (phase 3:只给标签 → 标签页;给了分类 + 标签 → 这个分类里按标签筛)
             adMetaGo(sel) {
                 const s = sel || {};
                 const b = (typeof s.b === 'string' && BUCKET_LABEL[s.b]) ? s.b : '';
-                const p = aliasPreset({ b, tag: validTag(s.tag) ? s.tag : '' });
-                if (!p) return;
-                this._adLeaveDetail(() => this.openBrowse(p));
+                const tag = featurable(s.tag) ? s.tag : '';
+                if (!b && !tag) return;
+                if (tag && !b) { this.adGo({ view: 'tag', id: tag }); return; }
+                this.adGo({ sel: tag ? { b, t: [tag] } : { b } });
             },
             // 厂牌前缀 → 关掉播放页,打开「全部」浏览页按厂牌筛(本地目录,零上游;不再全站扇出)
             adMetaPrefix(lp) {
@@ -1409,12 +2556,16 @@
 
     return {
         ON: true, VERSION, DEFAULT_NAME,
-        BUCKET_LABEL, NAV_BUCKETS, TYPES, SORTS, DURS, FLAGS,
+        BUCKET_LABEL, NAV_BUCKETS, TYPES, SORTS, DURS, VARIANTS, GROUPS, DEFAULT_SORTS,
         catalog, cardToItem, browseUrl, homeToRows, todayMap, todayOf,
         workUrl, workSource, workToGroup, workToList, groupKeyOf, groupNameOf, isLandscape, pickFallbackPic, PLACEHOLDER,
         isContentPath, sameOriginPath,
         TAG_LABEL, NEVER_FEATURE, NO_ACTRESS_BUCKETS, tagLabel, fmtDur, srcFlags, srcExtra, varKind, orderSources, srcView, nativeDev,
         metaView, tagsUrl, normTags, suggestUrl, normSuggest, aliasPreset, beacon,
+        // phase 3
+        browseApiUrl, filterCount, nextTagState, normFacets, sortOpts, chipRow, activePills, routeOf, parseRoute, canonHash, isOurHash,
+        normCloud, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud },
         ageGate, brand, auth, fetchWork, mixin, boot,
     };
 });

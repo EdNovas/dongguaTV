@@ -13,6 +13,10 @@
 //  ⑥ phase 2:浏览标签(tag 参数 / featured 才做按钮)、搜索建议(200ms、回车 exact / alias / blocked、方向键)、热门行来源角标、
 //     作品信息条(_meta)、线路家族(+N 备用、换源先试同家)/ 失效垫底 / risky / 同源 / 中字原版、线路反馈(beacon)、
 //     refreshSources 保留成人字段、补拉 _meta、购买地址(purchase_url)、模糊封面。后端接口全部用桩
+//  ⑦ phase 3(契约 C):facets 归一化(审查类只进「更多」不带数、blocked 一律丢、服务器标错也不做按钮)/ 标签行 / 点标签(选中 · 排除 · 各 ≤3)/
+//     筛选参数与地址 / 地址栏路由(#/c/<大类>?… · #/tag/<id> · #/actress/<aid> · #/tags?b=,只有 id)/ 后退前进 / 播放页开着按返回 /
+//     筛选面板的历史(压一条、替换、退掉再压最终筛选)/ 游标翻页 + 按页退路 / 不按 600 张封顶 / 新片速递 / 卡片发行日 /
+//     信息条(发行日 · 厂牌 · 女优 aid · 按分面组的标签)/ 标签云 / 标签页 / 女优 / 厂牌 / 组件逻辑(窗口化网格、筛选面板)与模板编译
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
@@ -49,25 +53,26 @@ console.log('① adult.js 纯函数');
     const C = A.catalog;
     ok(C.ADULT === true && C.DEFAULT_TYPE === 'cn' && C.typeOf('cn') && !C.typeOf('tv'), '目录版 DgCatalog:默认大类 cn,没有 TMDB 的 tv');
     // normSel
-    ok(eq(C.normSel('cn', {}), { b: 'cn_amateur', dur: '', flag: '', sort: 'new' }), 'normSel:大类默认第一个桶、新上架');
-    ok(eq(C.normSel('jp', { b: 'cn_amateur', dur: 'x', flag: 'zh', sort: 'hot' }), { b: 'jp_censored', dur: '', flag: 'zh', sort: 'new' }), 'normSel:别的大类的桶/不认识的值 → 默认');
-    ok(eq(C.normSel('all', { b: 'jp_subbed', sort: 'random' }), { b: '', dur: '', flag: '', sort: 'random' }), 'normSel:「全部」不带桶');
-    ok(eq(C.normSel('nope', { b: 'jp_subbed' }), { b: 'cn_amateur', dur: '', flag: '', sort: 'new' }), 'normSel:不认识的大类按第一个');
-    // buildQuery:只给地址,参数与 lib/adult-gate 的 browseQuery 白名单一致
+    ok(eq(C.normSel('cn', {}), { b: 'cn_amateur', dur: '', v: '', sort: 'new' }), 'normSel:大类默认第一个桶、最新上架');
+    ok(eq(C.normSel('jp', { b: 'cn_amateur', dur: 'x', flag: 'zh', sort: 'bogus' }), { b: 'jp_censored', dur: '', v: 'zh', sort: 'new' }), 'normSel:别的大类的桶/不认识的值 → 默认;旧 flag=zh → v=zh');
+    ok(eq(C.normSel('all', { b: 'jp_subbed', sort: 'random' }), { b: '', dur: '', v: '', sort: 'rand' }), 'normSel:「全部」不带桶;旧 sort=random → rand');
+    ok(eq(C.normSel('nope', { b: 'jp_subbed' }), { b: 'cn_amateur', dur: '', v: '', sort: 'new' }), 'normSel:不认识的大类按第一个');
+    // buildQuery:只给地址(与契约 C 的 /api/catalog/browse 参数一致)
     const q = C.buildQuery('jp', { b: 'jp_uncensored', dur: 'l', flag: 'zh', sort: 'dur' }, 3);
-    ok(q.url === '/api/catalog/browse?b=jp_uncensored&sort=dur&dur=l&flag=zh&page=3' && eq(q.params, {}) && typeof q.map === 'function', 'buildQuery → /api/catalog/browse 地址(params 空、带卡片映射)', q.url);
+    ok(q.url === '/api/catalog/browse?b=jp_uncensored&dur=l&v=zh&sort=dur&page=3' && eq(q.params, {}) && typeof q.map === 'function', 'buildQuery → /api/catalog/browse 地址(params 空、带卡片映射)', q.url);
     ok(C.buildQuery('all', {}, 0).url === '/api/catalog/browse?sort=new&page=1' && /page=500$/.test(C.buildQuery('cn', {}, 9999).url), 'buildQuery:「全部」不带 b;页码夹在 1..500');
+    // 取值与契约 C 一致:sort=new|updated|released|hot|dur|lines|rand、dur=s|m|l|xl|xxl|unk、v=zh|unc|leak|vr|4k|vertical
+    ok(eq(A.SORTS.map(s => s.k), ['new', 'updated', 'released', 'hot', 'dur', 'lines', 'rand']) && eq(A.SORTS.map(s => s.l), ['最新上架', '最近更新', '发行日期', '热门', '时长', '线路最多', '随机'])
+        && eq(A.DURS.map(d => d.k), ['', 's', 'm', 'l', 'xl', 'xxl', 'unk']) && A.DURS[6].l === '时长未知'
+        && eq(A.VARIANTS.map(v => v.k), ['', 'zh', 'unc', 'leak', 'vr', '4k', 'vertical']) && eq(A.VARIANTS.slice(1).map(v => v.l), ['中字', '无码', '流出', 'VR', '4K', '竖屏']), '排序 / 时长 / 版本的取值与名字(契约 C)');
     const GATE = fs.readFileSync(path.join(ROOT, 'lib/adult-gate/index.js'), 'utf8');
     const srvSorts = (/sort: pick\(q\.sort, \[([^\]]*)\]/.exec(GATE) || [])[1] || '';
-    const srvDur = (/dur: pick\(q\.dur, \[([^\]]*)\]/.exec(GATE) || [])[1] || '';
-    const srvFlag = (/flag: pick\(q\.flag, \[([^\]]*)\]/.exec(GATE) || [])[1] || '';
-    ok(A.SORTS.every(s => srvSorts.includes("'" + s.k + "'")) && A.DURS.every(d => srvDur.includes("'" + d.k + "'")) && A.FLAGS.every(f => srvFlag.includes("'" + f.k + "'")),
-        '前端的排序/时长/标记取值都在服务器 browseQuery 的白名单里', { srvSorts, srvDur, srvFlag });
+    // 服务器换成 phase 3 的白名单(带 released)之后:前端每个排序值都得在里面(并行开发期间旧白名单不判)
+    ok(!/'released'/.test(srvSorts) || A.SORTS.every(s => srvSorts.includes("'" + s.k + "'")), '服务器 browseQuery 换成 phase 3 白名单后,前端排序值都在里面', srvSorts);
     // 筛选行 / 分类栏 / 标题
-    ok(eq(C.groupsOf('cn', {}).map(g => g.k), ['b', 'dur', 'flag', 'sort']) && eq(C.groupsOf('west', {}).map(g => g.k), ['dur', 'flag', 'sort']), '浏览页筛选:多桶大类有「分类」行,单桶没有;时长 / 标记 / 排序');
-    ok(eq(C.groupsOf('cn', {})[3].opts.map(o => o.l), ['新上架', '时长', '随机']) && eq(C.groupsOf('cn', {})[2].opts.map(o => o.l), ['全部', '中字', '无码', '≥3线']), '排序:新上架/时长/随机;标记:中字/无码/≥3线');
-    ok(eq(C.navRows('jp')[0].items.map(i => i.sel.b), ['jp_censored', 'jp_uncensored', 'jp_subbed']) && C.navRows('west')[0].items.length === 4, '分类栏标签:多桶按桶,单桶给快速入口');
-    ok(C.title('cn', { b: 'cn_hookup' }) === '国产 · 探花' && C.title('west', {}) === '欧美' && C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }) === '日本 · 中字 · 60分钟以上 · 随机', '标题 / 摘要', C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }));
+    ok(eq(C.groupsOf('cn', {}).map(g => g.k), ['b']) && eq(C.groupsOf('west', {}), []) && eq(C.groupsOf('all', {}), []), '浏览页固定筛选行只剩「分类」(多桶大类);其余在标签行 / 筛选面板');
+    ok(eq(C.navRows('jp')[0].items.map(i => i.sel.b), ['jp_censored', 'jp_uncensored', 'jp_subbed']) && C.navRows('west')[0].items.length === 4 && eq(C.navRows('west')[0].items[1].sel, { v: 'zh' }), '分类栏标签:多桶按桶,单桶给快速入口(中文字幕 = v=zh)');
+    ok(C.title('cn', { b: 'cn_hookup' }) === '国产 · 探花' && C.title('west', {}) === '欧美' && C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }) === '日本 · 中字 · 30–60分钟 · 随机', '标题 / 摘要', C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }));
     ok(C.countLabel(12345) === '1万+' && C.countLabel(0) === '0', 'countLabel');
     const dir = C.directory();
     ok(dir.hot.length === 17 && dir.hot.every(h => h.l && C.typeOf(h.type) && h.sel.b && /gradient/.test(h.bg) && /^fa-/.test(h.icon)) && dir.types.every(t => t.rows.every(r => r.items.every(i => i.sel && i.sel.b))), '分类大全:17 个桶色块 + 各大类卡片');
@@ -76,7 +81,8 @@ console.log('① adult.js 纯函数');
     ok(C.fromSearch('泰剧') === null && C.fromSearch('人妻') === null && C.fromSearch('SSIS-001') === null && C.fromSearch('') === null, '不是分类词(主站的泰剧、标签词人妻、番号)照常搜索');
     // 首页行「全部」
     ok(eq(C.rowPreset('ad_jp_subbed', undefined, { more: { b: 'jp_subbed' } }), { type: 'jp', sel: { b: 'jp_subbed', sort: 'new' } }) && eq(C.rowPreset('ad_new', undefined, { more: { sort: 'new' } }), { type: 'all', sel: { sort: 'new' } })
-        && C.rowPreset('movieRow', 'newest') === null, '首页行「全部」按 more 进浏览页;没有 more 的不跳');
+        && eq(C.rowPreset('ad_fresh', undefined, { more: { sort: 'released' } }), { type: 'all', sel: { sort: 'released' } }) && eq(C.rowPreset('ad_random', undefined, { more: { sort: 'random' } }), { type: 'all', sel: { sort: 'rand' } })
+        && C.rowPreset('movieRow', 'newest') === null, '首页行「全部」按 more 进浏览页(新片速递 → 发行日期;随机发现 → rand);没有 more 的不跳');
     // 卡片
     const card = { wk: 'c:SSIS-001', name: 'SSIS-001 合成标题', pic: 'https://img.example/a.jpg', sub: '3小时前 · 2:01:33 · 6线', badge: '中字', bucket: 'jp_subbed', code: 'SSIS-001', dur: 7293, n_sites: 6, first_seen: 1 };
     const it = A.cardToItem(card);
@@ -389,12 +395,12 @@ function makeApp(over) {
 {
     // 浏览页:走 /api/catalog/browse(不是 tmdb-proxy),卡片映射、页数
     const app = makeApp();
-    app.browse.open = true; app.browse.type = 'jp'; app.browse.sel = { b: 'jp_subbed', dur: '', flag: 'zh', sort: 'new' };
+    app.browse.open = true; app.browse.type = 'jp'; app.browse.sel = { b: 'jp_subbed', dur: '', v: 'zh', sort: 'new' };
     app._browseFill = () => { };
     net.calls.length = 0;
     net.handler = (u) => (u.startsWith('/api/catalog/browse') ? { body: { page: 1, total_pages: 7, total_results: 160, results: [{ wk: 'c:B-1', name: 'B-1 x', pic: 'https://p/b.jpg', sub: 's', badge: '中字' }, { wk: 'c:B-1', name: 'dup' }, { name: 'bad' }] } } : null);
     await app._browseFetch(true);
-    ok(net.calls[0] === '/api/catalog/browse?b=jp_subbed&sort=new&flag=zh&page=1' && !net.calls.some(u => /tmdb/.test(u)), '浏览页请求 /api/catalog/browse(按当前筛选)', net.calls);
+    ok(net.calls[0] === '/api/catalog/browse?b=jp_subbed&v=zh&sort=new&page=1&facets=1' && !net.calls.some(u => /tmdb/.test(u)), '浏览页请求 /api/catalog/browse(按当前筛选,第 1 页要 facets)', net.calls);
     ok(app.browse.items.length === 1 && app.browse.items[0]._wk === 'c:B-1' && app.browse.items[0]._badge === '中字' && app.browse.totalPages === 7 && app.browse.total === 160 && !app.browse.done, '卡片映射、去重、坏卡丢掉、页数', app.browse);
     // 点卡片 → openWork,不按片名搜
     let ow = null, searched = 0;
@@ -498,7 +504,7 @@ function makeApp(over) {
     ok(!r.ow && r.searched === 1, '番号有两部正片(exact 为空)→ 照常全站搜', r);
     // 分类/标签词 → 浏览页(带「按片名搜索」入口 = from.keyword)
     r = await run('人妻', null, true, { kind: 'alias', alias: { tag: 'milf', label: '人妻熟女' }, exact: null, items: [] });
-    ok(r.br && eq(r.br.p, { type: 'all', sel: { tag: 'milf' } }) && r.br.f.keyword === '人妻' && r.searched === 0, '标签词(人妻)→ 浏览页按标签筛,保留「按片名搜索」', r.br);
+    ok(r.br && eq(r.br.p, { type: 'all', sel: { b: '', dur: '', v: '', sort: 'new', t: ['milf'] } }) && r.br.f.keyword === '人妻' && r.searched === 0, '标签词(人妻)→ 标签页(全部 + t=milf),保留「按片名搜索」', r.br);
     r = await run('里番', null, true, { kind: 'alias', alias: { b: 'anime', label: '动漫·里番' }, exact: null, items: [] });
     ok(r.br && eq(r.br.p, { type: 'anime', sel: { b: 'anime' } }) && r.searched === 0, '分类词(里番,本地 ALIAS 表里也有)→ 动漫浏览页', r.br);
     r = await run('合成标签词', null, true, { kind: 'alias', alias: { tag: 'bad id!', label: 'x' }, exact: null, items: [] });
@@ -561,7 +567,7 @@ function makeApp(over) {
     await sleep(260); for (let i = 0; i < 4; i++) await tick();
     ok(app.adult.sug.open && app.adSugRows[0].t === 'alias' && app.adSugRows[0].label === '探花约炮', '分类词:第一行「按分类浏览」');
     app.adSugPick(app.adSugRows[0]);
-    ok(br && eq(br.p, { type: 'cn', sel: { b: 'cn_hookup' } }) && br.f.keyword === '探花', '点「按分类浏览」→ 浏览页(带按片名搜索)', br);
+    ok(br && eq(br.p, { type: 'cn', sel: { b: 'cn_hookup', dur: '', v: '', sort: 'new' } }) && br.f.keyword === '探花', '点「按分类浏览」→ 浏览页(带按片名搜索)', br);
     // 失焦(焦点去了搜索区之外)收起;焦点还在搜索区里不收
     app.adult.sug.open = true;
     const inside = {}, box = { contains: (x) => x === inside };
@@ -645,12 +651,12 @@ console.log('⑥ phase 2:标签 / 建议 / 信息条 / 线路家族 / 线路反�
 {
     // 浏览:标签筛选进 normSel / 地址 / 标题;没选标签时选择对象逐字不变
     const C = A.catalog;
-    ok(eq(C.normSel('jp', { b: 'jp_censored', tag: 'busty' }), { b: 'jp_censored', dur: '', flag: '', sort: 'new', tag: 'busty' }) && eq(C.normSel('jp', { b: 'jp_censored', tag: '' }), { b: 'jp_censored', dur: '', flag: '', sort: 'new' })
-        && !('tag' in C.normSel('jp', { tag: 'bad id!' })) && !('tag' in C.normSel('jp', { tag: { x: 1 } })), 'normSel:合法标签 id 才带 tag 键;空/非法不带');
-    ok(C.buildQuery('jp', { b: 'jp_censored', tag: 'busty', dur: 'l' }, 2).url === '/api/catalog/browse?b=jp_censored&tag=busty&sort=new&dur=l&page=2' && C.buildQuery('all', { tag: 'milf' }, 1).url === '/api/catalog/browse?tag=milf&sort=new&page=1',
-        'browse 地址带 &tag=(可与 b/sort/dur/flag/page 组合;全部大类只带 tag)', C.buildQuery('all', { tag: 'milf' }, 1).url);
-    ok(eq(C.normSel('all', { lp: 'ssis' }), { b: '', dur: '', flag: '', sort: 'new', lp: 'SSIS' }) && !('lp' in C.normSel('all', { lp: 'S%' })) && !('lp' in C.normSel('all', { lp: '' }))
-        && C.buildQuery('all', { lp: 'SSIS', tag: 'milf' }, 1).url === '/api/catalog/browse?tag=milf&lp=SSIS&sort=new&page=1' && C.title('all', { lp: 'SSIS' }) === '全部 · SSIS',
+    ok(eq(C.normSel('jp', { b: 'jp_censored', tag: 'busty' }), { b: 'jp_censored', dur: '', v: '', sort: 'new', t: ['busty'] }) && eq(C.normSel('jp', { b: 'jp_censored', tag: '' }), { b: 'jp_censored', dur: '', v: '', sort: 'new' })
+        && !('t' in C.normSel('jp', { tag: 'bad id!' })) && !('t' in C.normSel('jp', { tag: { x: 1 } })), 'normSel:旧的单标签 tag → t(合法才带键;空/非法不带)');
+    ok(C.buildQuery('jp', { b: 'jp_censored', tag: 'busty', dur: 'l' }, 2).url === '/api/catalog/browse?b=jp_censored&t=busty&dur=l&sort=new&page=2' && C.buildQuery('all', { tag: 'milf' }, 1).url === '/api/catalog/browse?t=milf&sort=new&page=1',
+        'browse 地址带 &t=(可与 b/dur/sort/page 组合;全部大类只带 t)', C.buildQuery('all', { tag: 'milf' }, 1).url);
+    ok(eq(C.normSel('all', { lp: 'ssis' }), { b: '', dur: '', v: '', sort: 'new', lp: 'SSIS' }) && !('lp' in C.normSel('all', { lp: 'S%' })) && !('lp' in C.normSel('all', { lp: '' }))
+        && C.buildQuery('all', { lp: 'SSIS', tag: 'milf' }, 1).url === '/api/catalog/browse?t=milf&lp=SSIS&sort=new&page=1' && C.title('all', { lp: 'SSIS' }) === '全部 · SSIS',
         'normSel / 地址 / 标题:厂牌前缀 lp(合法才带键)', C.buildQuery('all', { lp: 'SSIS', tag: 'milf' }, 1).url);
     ok(C.title('jp', { b: 'jp_censored', tag: 'busty' }) === '日本 · 有码 · 巨乳美乳' && C.title('all', { tag: 'milf' }) === '全部 · 人妻熟女' && C.summary('all', { tag: 'milf', sort: 'random' }) === '全部 · 人妻熟女 · 随机', '标题/摘要带标签名');
     const X2 = require(path.join(ROOT, 'lib/adult'));
@@ -672,7 +678,7 @@ console.log('⑥ phase 2:标签 / 建议 / 信息条 / 线路家族 / 线路反�
     ok(A.normSuggest({ kind: 'code', exact: 'javascript:x', items: [] }).exact === null && A.normSuggest({ kind: 'weird', items: [] }).kind === 'text' && A.normSuggest(null) === null, 'suggest:exact 必须是作品键;未知 kind 当 text;没有回包 → null');
     const al = A.normSuggest({ kind: 'alias', alias: { tag: 'milf', label: '人妻熟女<b>' } }).alias;
     ok(eq(al, { b: '', tag: 'milf', label: '人妻熟女b' }) && A.normSuggest({ kind: 'alias', alias: { b: 'x_mainstream', label: 'x' } }).alias === null, 'suggest:alias 只认导航桶 / 合法标签,名字去掉尖括号', al);
-    ok(eq(A.aliasPreset({ b: 'jp_uncensored', tag: 'busty' }), { type: 'jp', sel: { b: 'jp_uncensored', tag: 'busty' } }) && eq(A.aliasPreset({ tag: 'milf' }), { type: 'all', sel: { tag: 'milf' } }) && A.aliasPreset({ b: 'nope' }) === null, 'aliasPreset');
+    ok(eq(A.aliasPreset({ b: 'jp_uncensored', tag: 'busty' }), { type: 'jp', sel: { b: 'jp_uncensored', t: ['busty'] } }) && eq(A.aliasPreset({ tag: 'milf' }), { type: 'all', sel: { t: ['milf'] } }) && A.aliasPreset({ b: 'nope' }) === null && A.aliasPreset({ tag: 'x_minor' }) === null, 'aliasPreset(标签进 t;blocked 的 x_* 不认)');
     // 首页热门行:标题统一「热门」,来源在角标上;没有 more → 前端不给「全部」
     const hr = A.homeToRows({ rows: [{ id: 'new', title: '新上架', more: { sort: 'new' }, items: [{ wk: 'c:A-1', name: 'a' }] },
         { id: 'hot', title: '本站热门', source: 'local', more: null, items: [{ wk: 'c:H-1', name: 'h', n_sites: 3 }] }] });
@@ -697,7 +703,7 @@ console.log('⑥ phase 2:标签 / 建议 / 信息条 / 线路家族 / 线路反�
     }, g);
     ok(m.code === 'SSIS-010' && m.durText === '2:01:33' && m.nSites === 2 && m.bucket === 'jp_censored' && m.bucketLabel === '日本有码' && m.prefix === 'SSIS' && m.firstSeen === 5, '信息条:番号/时长/上架站数(取线路实数)/分类/厂牌前缀', m);
     ok(eq(m.tags, [{ id: 'busty', label: '巨乳美乳' }]), '标签按钮:只要 featured===true 的,审查类(featured 也不行)和没标 featured 的都不出', m.tags);
-    ok(eq(m.actress, ['合成演员甲', 'x']), '演员:去空、去重、去尖括号', m.actress);
+    ok(eq(m.actress, [{ aid: '', name: '合成演员甲' }, { aid: '', name: 'x' }]), '演员:去空、去重、去尖括号(旧的纯名字 → aid 为空)', m.actress);
     ok(eq(m.sib.map(s => [s.kind, s.label]), [['U', '另有无码流出版'], ['main', '同番号另一版本']]) && eq(m.clips.map(s => s.wk), ['c:SSIS-010#clip']), '同番号:无码流出版链接在前;解说/片段单独收起;自己和坏键丢掉', m.sib);
     const mu = A.metaView({ code: 'SSIS-010', bucket: 'jp_uncensored', siblings: [{ wk: 'c:SSIS-010', name: 'SSIS-010 正片', kind: 'main' }] }, { _wk: 'c:SSIS-010#U', sources: [] });
     ok(mu.sib[0].label === '正片' && mu.prefix === 'SSIS', '无码流出版页:指回「正片」;没给 label_prefix 时按番号推前缀(phase 1 服务器)');
@@ -942,7 +948,10 @@ console.log('⑥ phase 2:标签 / 建议 / 信息条 / 线路家族 / 线路反�
     app.doSearch = () => { searched++; };
     app.currentGroup = { name: 'n', _wk: 'c:M-1', _meta: { code: 'M-1', bucket: 'jp_censored', tags: [{ id: 'busty', label: '巨乳美乳', featured: true }] }, sources: [{ site_key: 's' }] };
     app.adMetaGo({ b: 'jp_censored', tag: 'busty' });
-    ok(closed === 1 && eq(br, { type: 'jp', sel: { b: 'jp_censored', tag: 'busty' } }), '标签按钮 → 关播放页,按这部的分类 + 标签开浏览页', br);
+    ok(closed === 1 && eq(br, { type: 'jp', sel: { b: 'jp_censored', dur: '', v: '', sort: 'new', t: ['busty'] } }), '分类 + 标签 → 关播放页,这个分类里按标签筛', br);
+    app.showDetail = true;
+    app.adMetaGo({ tag: 'noncon' });
+    ok(closed === 1, '审查类标签不导航(信息条本来也不出它)');
     app.showDetail = true;
     app.adMetaPrefix('ssis');
     ok(closed === 2 && eq(br, { type: 'all', sel: { lp: 'SSIS' } }) && searched === 0, '厂牌前缀 → 关播放页,开「全部」浏览页按厂牌筛(本地目录,不全站搜)', br);
@@ -952,8 +961,8 @@ console.log('⑥ phase 2:标签 / 建议 / 信息条 / 线路家族 / 线路反�
     app.showDetail = true;
     app.adMetaSearch('テスト花子');
     ok(closed === 3 && app.keyword === 'テスト花子' && searched === 1, '演员 → 关播放页,全站搜这个名字');
-    ok(HTML.includes('@click="adMetaPrefix(adMeta.prefix)"') && !HTML.includes('adMetaSearch(adMeta.prefix)') && HTML.includes('v-if="adultMode && browse.sel.lp"') && HTML.includes("@click=\"setBrowseFilter('lp', '')\""),
-        'index.html:前缀按钮走 adMetaPrefix;浏览页有可取消的厂牌行');
+    ok(HTML.includes('@click="adMetaPrefix(adMeta.prefix)"') && !HTML.includes('adMetaSearch(adMeta.prefix)') && eq(A.activePills({ lp: 'SSIS' }), [{ k: 'lp', l: 'SSIS' }]),
+        'index.html:前缀按钮走 adMetaPrefix;浏览页的已选条件里有可去掉的前缀(lp)');
     app.adOpenSibling({ wk: 'c:M-1#U', name: 'M-1 [无码流出]' });
     ok(ow && ow._wk === 'c:M-1#U' && ow.title === 'M-1 [无码流出]', '「另有无码流出版」→ 开那一部');
     app.adOpenSibling({ wk: 'javascript:alert(1)' });
@@ -973,13 +982,15 @@ console.log('⑥ phase 2:标签 / 建议 / 信息条 / 线路家族 / 线路反�
     const app = makeApp();
     net.calls.length = 0;
     net.handler = (u) => (u.startsWith('/api/catalog/tags') ? { body: { tags: [{ id: 'busty', label: '巨乳美乳', count: 9, featured: true }, { id: 'noncon', label: '强制凌辱', count: 99, featured: false }] } } : null);
-    app.browse.open = true; app.browse.type = 'jp'; app.browse.sel = { b: 'jp_censored', dur: '', flag: '', sort: 'new' };
+    app.browse.open = true; app.browse.type = 'jp'; app.browse.sel = { b: 'jp_censored', dur: '', v: '', sort: 'new' };
     ok(app.adTagKey === 't|jp_censored', 'adTagKey 跟着当前分类');
     app._adLoadTags();
     await sleep(5); for (let i = 0; i < 4; i++) await tick();
     ok(eq(net.calls, ['/api/catalog/tags?b=jp_censored']) && eq(app.adTagOpts.map(t => t.id), ['busty']), '标签行:只出 featured 的', app.adTagOpts);
-    app.browse.sel = Object.assign({}, app.browse.sel, { tag: 'noncon' });
-    ok(eq(app.adTagOpts.map(t => t.id), ['busty', 'noncon']), '已选的非 featured 标签(从搜索词进来)挂在后面,能看见、能取消');
+    app.browse.sel = Object.assign({}, app.browse.sel, { t: ['noncon'] });
+    const cr = A.chipRow(null, app.browse.sel, app.adTagOpts);
+    ok(eq(app.adTagOpts.map(t => t.id), ['busty']) && eq(cr.map(c => c.id), ['busty']) && eq(A.activePills(app.browse.sel), [{ k: 'review', l: '1 个筛选标签' }]),
+        '已选的审查类标签(从筛选面板「更多」选的)永不进标签行,只在已选条件里写「1 个筛选标签」(能去掉)', cr);
     app._adLoadTags();
     ok(net.calls.length === 1, '同一分类 10 分钟内不重拉');
     app.browse.type = 'all'; app.browse.sel = { b: '', dur: '', flag: '', sort: 'new' };
@@ -1006,6 +1017,440 @@ console.log('⑥ phase 2:标签 / 建议 / 信息条 / 线路家族 / 线路反�
     ok(/html\.dg-blur \.poster-wrap img/.test(SRC) && /\.hot-card:hover \.poster-wrap img/.test(SRC), '模糊封面的样式:悬停 / 焦点 / 按住看清');
 }
 
+console.log('⑦ phase 3:分面浏览 / 筛选面板 / 标签云 / 标签页 / 女优 / 地址栏路由 / 窗口化网格 / 新片速递 / 信息条');
+{
+    // ---- 纯函数:facets ----
+    const raw = {
+        buckets: [{ id: 'jp_censored', label: '日本有码', count: 312 }, { id: 'x_mainstream', count: 9 }, { id: 'jp_subbed', count: 88 }],
+        groups: [
+            { id: 'body', label: '身材·外貌', tags: [{ id: 'busty', label: '巨乳', count: 120 }, { id: 'legs', label: '美腿', count: 0 }, { id: 'small_tits', label: '贫乳', count: 50 }, { id: 'x_school', label: '学生', count: 9 }] },
+            { id: 'outfit', label: '服装·制服', tags: [{ id: 'black_stockings', label: '黑丝<b>', count: 21 }, { id: 'busty', label: '重复', count: 1 }] },
+            { id: '_blocked', label: 'x', tags: [{ id: 'x_minor', label: 'x', count: 1 }] },
+            { id: 'act', tags: [{ id: 'sleep', label: '睡眠', count: 5, featured: true }, { id: 'oral', label: '口交', count: 40, featured: false }] },
+        ],
+        more: [{ id: 'noncon', label: '强制凌辱', count: 77 }, { id: 'x_drug', label: 'x' }, { id: 'bad id', label: 'x' }],
+        dur: [{ id: 's', label: '10分钟内', count: 3 }, { id: 'xl', count: 51 }, { id: 'unk', count: 140 }, { id: 'zz', count: 1 }],
+        variant: [{ id: 'zh', label: '中字', count: 88 }, { id: 'vertical', count: 2 }, { id: 'nope', count: 3 }],
+        studio: Array.from({ length: 25 }, (_, i) => ({ id: i ? '合成厂牌' + i : 'S1', label: i ? '合成厂牌' + i : 'S1', count: 40 - i })),
+        actress: [{ aid: 'a:12345', name: '合成女优甲', count: 7 }, { aid: 'bad aid!', name: 'x', count: 1 }, { aid: 'a:2', name: '', count: 1 }],
+        sorts: [{ id: 'new', label: '最新上架', available: true }, { id: 'released', available: true }, { id: 'hot', available: false }, { id: 'dur', available: true }, { id: 'rand', available: true }, { id: 'zzz', available: true }],
+    };
+    const f = A.normFacets(raw);
+    ok(eq(f.buckets.map(b => b.id), ['jp_censored', 'jp_subbed']) && f.buckets[1].label === '中文字幕', 'facets.buckets:只认导航桶,缺名字用本地名');
+    ok(eq(f.groups.map(g => g.id), ['body', 'outfit']) && eq(f.groups[0].tags.map(t => t.id), ['busty', 'legs']) && eq(f.groups[1].tags.map(t => [t.id, t.label]), [['black_stockings', '黑丝b']]),
+        'facets.groups:只留 featured;审查类(贫乳 small_tits)、blocked(x_school / _blocked 组)、featured:false、重复 id 全丢;名字去尖括号', f.groups);
+    ok(!f.groups.some(g => g.tags.some(t => t.id === 'sleep')), '服务器把审查类(睡眠 sleep)标成 featured 放进分组 → 前端照样不做按钮(fail-closed)');
+    ok(eq(f.more, [{ id: 'noncon', label: '强制凌辱' }]) && !('count' in f.more[0]), 'facets.more:审查类只要 id + 名字,不带数;blocked / 非法 id 丢掉', f.more);
+    ok(eq(f.dur.map(d => d.id), ['s', 'xl', 'unk']) && f.dur[1].label === '1–2小时' && eq(f.variant.map(v => v.id), ['zh', 'vertical']) && f.variant[1].label === '竖屏', 'facets.dur / variant:只认契约里的取值,缺名字用本地名');
+    ok(f.studio.length === 20 && f.studio[0].id === 'S1' && eq(f.actress, [{ aid: 'a:12345', name: '合成女优甲', count: 7 }]), 'facets.studio 最多 20;actress 要合法 aid 和名字');
+    ok(eq(f.sorts, ['new', 'released', 'dur', 'rand']), 'facets.sorts:只要 available 的、按固定次序、不认识的丢掉', f.sorts);
+    ok(eq(A.normFacets({}).sorts, A.DEFAULT_SORTS) && A.normFacets(null) === null && eq(A.normFacets({ sorts: ['new', 'random'] }).sorts, ['new', 'rand']), 'facets 没给 sorts → 默认(最新/时长/线路/随机);旧草案的纯 id 数组也认');
+    ok(eq(A.sortOpts(f, { sort: 'new' }).map(s => s.k), ['new', 'released', 'dur', 'rand']) && eq(A.sortOpts(f, { sort: 'hot' }).map(s => s.k), ['new', 'released', 'hot', 'dur', 'rand'])
+        && eq(A.sortOpts(null, { sort: 'new' }).map(s => s.k), ['new', 'dur', 'lines', 'rand']), '排序下拉:只列可用的;当前选中的(这次不可用)也照实列出');
+    // ---- 标签行 ----
+    const cr = A.chipRow(f, { t: ['busty'], x: ['black_stockings'] }, []);
+    ok(eq(cr.map(c => [c.id, c.st, c.off]), [['busty', 'in', false], ['black_stockings', 'ex', false], ['legs', '', true]]), '标签行:已选在前、已排除随后、其余按数量;数为 0 的置灰', cr);
+    const big = { groups: [{ id: 'act', label: 'a', tags: Array.from({ length: 30 }, (_, i) => ({ id: 't' + i, label: '合成' + i, count: i + 1 })) }] };
+    const cr2 = A.chipRow(big, {}, []);
+    ok(cr2.length === 12 && cr2[0].id === 't29' && cr2.every((c, i) => !i || cr2[i - 1].count >= c.count), '标签行:没选时最多 12 个,数量多的在前');
+    ok(eq(A.chipRow(null, { t: ['noncon', 'busty'] }, [{ id: 'busty', label: '巨乳美乳', count: 3 }, { id: 'incest', label: '乱伦剧情', count: 9 }]).map(c => c.id), ['busty']), '没有 facets → 用旧标签列表;审查类(选中的、列表里的)都不进标签行');
+    // ---- 点标签 ----
+    ok(eq(A.nextTagState({}, 'busty', 'toggle'), { t: ['busty'], x: [] }) && eq(A.nextTagState({ t: ['busty'] }, 'busty', 'toggle'), { t: [], x: [] }) && eq(A.nextTagState({ x: ['busty'] }, 'busty', 'toggle'), { t: [], x: [] }), '标签行:点一下选中,再点取消');
+    ok(eq(A.nextTagState({}, 'busty'), { t: ['busty'], x: [] }) && eq(A.nextTagState({ t: ['busty'] }, 'busty'), { t: [], x: ['busty'] }) && eq(A.nextTagState({ x: ['busty'] }, 'busty'), { t: [], x: [] }), '筛选面板:选中 → 再点排除 → 再点取消');
+    ok(eq(A.nextTagState({}, 'busty', 'x'), { t: [], x: ['busty'] }) && eq(A.nextTagState({}, 'busty', true), { t: [], x: ['busty'] }), '排除模式:点一下直接排除');
+    ok(A.nextTagState({ t: ['a', 'b', 'c'] }, 'd').err === '最多同时选 3 个标签' && A.nextTagState({ x: ['a', 'b', 'c'] }, 'd', 'x').err === '最多排除 3 个标签'
+        && eq(A.nextTagState({ t: ['d'], x: ['a', 'b', 'c'] }, 'd'), { t: [], x: ['a', 'b', 'c'] }) && A.nextTagState({}, 'x_minor').err === '' && A.nextTagState({}, 'bad id!').err === '', '各最多 3 个(排除满了第二下只取消);blocked / 非法 id 什么都不做');
+    ok(A.filterCount({ b: 'x', sort: 'new', t: ['a', 'b'], x: ['c'], dur: 'l', v: 'zh', studio: 'S1', actress: 'a:1', lp: 'SSIS' }) === 8 && A.filterCount({ b: 'x', sort: 'dur' }) === 0, '筛选按钮上的数:标签 + 排除 + 时长 + 版本 + 厂牌 + 女优 + 前缀');
+    const pills = A.activePills({ dur: 'unk', v: '4k', studio: 'S1', actress: 'a:12345', t: ['busty', 'noncon'], x: ['hypnosis'] });
+    ok(eq(pills.map(p => p.l), ['时长未知', '4K', '厂牌 S1', '女优 合成女优甲', '2 个筛选标签']), '已选条件:时长 / 版本 / 厂牌名 / 女优名(从 facets 学到)/ 审查类只写个数不写名字', pills);
+    // ---- normSel phase 3 ----
+    const C = A.catalog;
+    ok(eq(C.normSel('jp', { b: 'jp_censored', t: 'busty,legs,oral,cosplay', x: ['busty', 'subbed', 'x_school'], dur: 'unk', v: 'vertical', studio: '<S1>', actress: 'a:12345', sort: 'released' }),
+        { b: 'jp_censored', dur: 'unk', v: 'vertical', sort: 'released', t: ['busty', 'legs', 'oral'], x: ['subbed'], studio: 'S1', actress: 'a:12345' }),
+        'normSel:t 最多 3 个、x 去掉和 t 重复的与 blocked、厂牌去尖括号、合法 aid', C.normSel('jp', { b: 'jp_censored', t: 'busty,legs,oral,cosplay', x: ['busty', 'subbed', 'x_school'], studio: '<S1>', actress: 'a:12345', sort: 'released' }));
+    ok(!('actress' in C.normSel('all', { actress: '../x' })) && !('t' in C.normSel('all', { t: ['x_minor', 'bad id'] })) && C.normSel('all', { sort: 'release' }).sort === 'released', 'normSel:非法 aid / 只有 blocked 的 t 不带键;release → released');
+    ok(A.browseApiUrl(C.normSel('jp', { b: 'jp_censored', t: ['busty', 'legs'], x: ['subbed'], dur: 'xl', v: 'zh', studio: '麻豆传媒', actress: 'a:1', sort: 'hot' }), { cursor: 'abc/=', facets: true })
+        === '/api/catalog/browse?b=jp_censored&t=busty,legs&x=subbed&dur=xl&v=zh&studio=%E9%BA%BB%E8%B1%86%E4%BC%A0%E5%AA%92&actress=a%3A1&sort=hot&cursor=abc%2F%3D&facets=1', 'browse 地址:契约 C 的全部参数;游标翻页时不带 page');
+    ok(A.browseApiUrl({ sort: 'new' }, { page: 3 }) === '/api/catalog/browse?sort=new&page=3', 'browse 地址:按页(退路)');
+    ok(C.title('all', { actress: 'a:12345' }) === '女优 · 合成女优甲' && C.title('jp', { b: 'jp_censored', t: ['busty', 'noncon'], studio: 'S1' }) === '日本 · 有码 · ' + A.tagLabel('busty') + ' · S1'
+        && C.summary('jp', { b: 'jp_censored', x: ['a'], v: 'zh', dur: 'unk', sort: 'released' }) === '日本 · 有码 · 时长未知 · 中字 · 排除 1 · 发行日期', '标题 / 摘要:女优名、标签名(审查类不写)、厂牌、排除个数');
+    // ---- 地址栏路由(只有 id,不写片名)----
+    const RT = [
+        ['', 'jp', { b: 'jp_censored', t: ['busty', 'legs'], x: ['subbed'], dur: 'xl', v: 'zh', sort: 'released' }, '#/c/jp?b=jp_censored&t=busty,legs&x=subbed&dur=xl&v=zh&sort=released'],
+        ['', 'all', {}, '#/c/all'],
+        ['', 'all', { sort: 'rand' }, '#/c/all?sort=rand'],
+        ['tag', 'all', { t: ['busty'] }, '#/tag/busty'],
+        ['tag', 'all', { t: ['busty'], sort: 'dur' }, '#/c/all?t=busty&sort=dur'],
+        ['', 'all', { actress: 'a:12345' }, '#/actress/a%3A12345'],
+        ['', 'all', { actress: 'a:12345', v: 'zh' }, '#/c/all?v=zh&actress=a%3A12345'],
+        ['tags', 'jp', { b: 'jp_subbed', t: ['busty'] }, '#/tags?b=jp_subbed'],
+        ['tags', 'all', {}, '#/tags'],
+        ['', 'all', { studio: 'S1', lp: 'SSIS' }, '#/c/all?studio=S1&lp=SSIS'],
+    ];
+    const rtBad = RT.filter(([v, tk, sel, want]) => A.routeOf(v, tk, sel) !== want || A.canonHash(want) !== want);
+    ok(!rtBad.length, 'routeOf:浏览 #/c/<大类>?…(只写非默认项)/ 标签页 #/tag/<id> / 女优页 #/actress/<aid> / 标签云 #/tags?b=;往返规范化不变', rtBad.map(r => [A.routeOf(r[0], r[1], r[2]), r[3]]));
+    const pr = A.parseRoute('#/c/cn?b=jp_censored&t=busty,x_school,legs&sort=hot&studio=%E9%BA%BB%E8%B1%86%E4%BC%A0%E5%AA%92');
+    ok(pr && pr.type === 'jp' && eq(pr.sel.t, ['busty', 'legs']) && pr.sel.sort === 'hot' && pr.sel.studio === '麻豆传媒' && pr.view === '', 'parseRoute:大类以分类为准、blocked 标签剔掉、转义还原', pr);
+    ok(eq(A.parseRoute('#/tag/busty'), { view: 'tag', type: 'all', sel: { t: ['busty'] } }) && eq(A.parseRoute('#/actress/a%3A12345'), { view: '', type: 'all', sel: { actress: 'a:12345' } })
+        && eq(A.parseRoute('#/tags?b=anime'), { view: 'tags', type: 'anime', sel: { b: 'anime' } }) && eq(A.parseRoute('#/tags?b=x_bad'), { view: 'tags', type: 'all', sel: { b: '' } }), 'parseRoute:标签页 / 女优页 / 标签云');
+    ok(['', '#', '#admin', '#/admin', '#/tag/x_minor', '#/tag/bad id', '#/c/nope', '#/c/jp/x', '#/actress/../x', '#/w/abc', '#/' + 'c'.repeat(700), 'javascript:alert(1)'].every(h => A.parseRoute(h) === null), 'parseRoute:空 / #admin / blocked 标签 / 不认识的大类 / 多余路径 / 超长 → null');
+    ok(A.isOurHash('#/c/jp') && A.isOurHash('#/tags') && A.isOurHash('#/tag/x') && A.isOurHash('#/actress/a') && !A.isOurHash('#admin') && !A.isOurHash('#/admin') && !A.isOurHash(''), 'isOurHash:只认这几种');
+    // ---- 卡片发行日期 / 新片速递 ----
+    const c1 = A.cardToItem({ wk: 'c:SSIS-100', name: 'SSIS-100 合成', sub: '3小时前 · 2:00:00 · 3线', dur: 7200, n_sites: 3, released: '2026-10-01' });
+    const c2 = A.cardToItem({ wk: 't:abc', name: '合成国产', sub: '1天前', released: '2026-10-01' });
+    const c3 = A.cardToItem({ wk: 'c:SSIS-101', name: 'x', sub: '1天前', released: '2026-02-30' });
+    ok(c1._sub === '2026-10-01 · 3小时前' && c1._rel === '2026-10-01' && c2._sub === '1天前' && !('_rel' in c2) && c3._sub === '1天前' && !('_rel' in c3), '卡片副行:番号作品有发行日期 → 先写发行日;非番号作品 / 假日期(2 月 30)不写');
+    ok(A.relDate('2024-09-28') === '2024-09-28' && A.relDate('1949-01-01') === '' && A.relDate('2024-9-28') === '' && A.relDate(null) === '', 'relDate');
+    const freshItems = (n) => Array.from({ length: n }, (_, i) => ({ wk: 'c:FR-' + (100 + i), name: 'FR-' + (100 + i), released: '2026-11-0' + (1 + (i % 9)) }));
+    const hr = A.homeToRows({ rows: [{ id: 'new', title: '新上架', more: { sort: 'new' }, items: [{ wk: 'c:A-1', name: 'a' }] }, { id: 'hot', title: '本站热门', source: 'local', items: [{ wk: 'c:H-1', name: 'h' }] }, { id: 'fresh', title: '新片速递', more: { sort: 'released' }, items: freshItems(12) }] });
+    ok(eq(hr.order, ['ad_new', 'ad_hot', 'ad_fresh']) && hr.configs.ad_fresh.title === '新片速递' && hr.configs.ad_fresh.icon === 'fa-calendar-check' && eq(hr.configs.ad_fresh.more, { sort: 'released' })
+        && /^2026-11-0\d · /.test(hr.lists.ad_fresh[0]._sub) === false && hr.lists.ad_fresh[0]._sub === '2026-11-01', '新片速递:紧跟热门(服务器给的次序)、「全部」→ 发行日期排序、卡片副行是发行日', hr.lists.ad_fresh[0]);
+    ok(eq(A.homeToRows({ rows: [{ id: 'fresh', more: { sort: 'released' }, items: freshItems(11) }] }).order, []) && A.homeToRows({ rows: [{ id: 'fresh', items: freshItems(12) }] }).configs.ad_fresh.title === '新片速递', '新片速递不足 12 部整行不出;缺标题用「新片速递」');
+    // ---- 作品信息条 phase 3 ----
+    const g = { _wk: 'c:SSIS-200', sources: [{ site_key: 's1' }] };
+    const m = A.metaView({
+        code: 'SSIS-200', bucket: 'jp_censored', released: '2026-09-28', maker: 'S1 NO.1 STYLE', label: 'S1', avdb: true,
+        actress: [{ aid: 'a:12345', name: '合成女优甲' }, { aid: 'a:12345', name: '重复' }, { aid: 'bad!', name: '合成女优乙' }, '合成女优丙', { name: '' }],
+        tags: [{ id: 'busty', label: '巨乳', group: 'body', featured: true }, { id: 'black_stockings', label: '黑丝', group: 'outfit', featured: true }, { id: 'subbed', label: '中字', group: 'spec', featured: true },
+            { id: 'sleep', label: '睡眠', group: 'act', featured: true }, { id: 'noncon', label: '强制凌辱', group: 'story', featured: false }, { id: 'x_school', label: 'x', group: '_blocked', featured: true },
+            { id: 'legs', label: '美腿', group: 'body', featured: true }, { id: 'oral', label: '口交', featured: true }],
+    }, g);
+    ok(m.released === '2026-09-28' && eq(m.studio, { id: 'S1 NO.1 STYLE', label: 'S1 NO.1 STYLE' }) && m.label === 'S1' && m.avdb === true, '信息条:发行日期、厂牌(片商 maker → 按厂牌浏览)、发行牌子不同于片商时作文字', m);
+    ok(eq(m.actress, [{ aid: 'a:12345', name: '合成女优甲' }, { aid: '', name: '合成女优乙' }, { aid: '', name: '合成女优丙' }]), '演员:有 aid 的进女优页;坏 aid 当纯名字(点了搜索);同 aid 去重', m.actress);
+    ok(eq(m.tagGroups.map(x => [x.id, x.tags.map(t => t.id)]), [['spec', ['subbed']], ['body', ['busty', 'legs']], ['outfit', ['black_stockings']], ['', ['oral']]]) && m.tagGroups[1].label === '身材·外貌',
+        '标签按分面组排(规格 → 身材 → 服装…,没有组的放最后);审查类(睡眠 featured 也不行、强制凌辱)/ blocked 一律不出', m.tagGroups);
+    ok(A.metaView({ bucket: 'cn_hookup', actress: [{ aid: 'a:1', name: '合成名' }], studio: { id: '麻豆传媒', label: '麻豆传媒' } }, { sources: [] }).actress.length === 0
+        && eq(A.metaView({ studio: { id: '麻豆传媒', label: '麻豆' } }, { sources: [] }).studio, { id: '麻豆传媒', label: '麻豆' }) && A.metaView({}, { sources: [] }).studio === null && A.metaView({}, { sources: [] }).released === '', '素人类分类不出演员(aid 也不行);_meta.studio 对象优先;没有就 null');
+    // ---- 标签云 / 标签页 / 女优 / 厂牌 ----
+    const cl = A.normCloud({ groups: [{ id: 'outfit', label: '服装·制服' }, { id: 'body', label: '身材·外貌' }], tags: [
+        { id: 'busty', label: '巨乳', count: 1000, featured: true, group: 'body' }, { id: 'legs', label: '美腿', count: 3, featured: true, group: 'body' },
+        { id: 'black_stockings', label: '黑丝', count: 200, featured: true, group: 'outfit' }, { id: 'noncon', label: '强制凌辱', count: 999, featured: true, group: 'story' },
+        { id: 'small_tits', label: '贫乳', count: 50, featured: false, group: 'body' }, { id: 'x_voyeur', label: 'x', count: 9, featured: true, group: 'act' }, { id: 'oral', label: '口交', count: 0, featured: true, group: 'act' }] });
+    ok(eq(cl.groups.map(x => x.id), ['outfit', 'body']) && eq(cl.groups[1].tags.map(t => [t.id, t.w]), [['busty', 5], ['legs', 1]]) && cl.groups[0].tags[0].w >= 3 && cl.groups[0].tags[0].w <= 4,
+        '标签云:按服务器的分组次序;只要 featured 且有数;字号档按 log(数量);审查类 / blocked(服务器标了 featured 也不行)不进', cl.groups);
+    const ti = A.normTagInfo({ tag: { id: 'black_stockings', label: '黑丝', group: 'outfit', count: 168 }, buckets: [{ id: 'live', count: 72 }, { id: 'x_bad', count: 3 }, { id: 'cn_amateur', count: 0 }],
+        related: [{ id: 'heels', label: '高跟鞋', lift: 20.5 }, { id: 'noncon', label: '强制凌辱', lift: 9 }, { id: 'x_drug', label: 'x' }, { id: 'black_stockings', label: '自己' }] });
+    ok(ti && ti.tag.label === '黑丝' && ti.tag.groupLabel === '服装·制服' && ti.tag.count === 168 && eq(ti.buckets, [{ id: 'live', label: '主播直播', count: 72 }]) && eq(ti.related, [{ id: 'heels', label: '高跟鞋' }]) && !ti.tag.review,
+        '标签页:按分类细分(去掉 0 和非导航桶)、相关标签只要 featured(审查类 / blocked / 自己都去掉)', ti);
+    const tr = A.normTagInfo({ tag: { id: 'noncon', label: '强制凌辱' }, related: [{ id: 'heels', label: '高跟鞋' }] });
+    ok(tr && tr.tag.review === true && eq(tr.related, []) && A.normTagInfo({ tag: { id: 'x_minor', label: 'x' } }) === null && A.normTagInfo(null) === null, '审查类标签页:没有相关标签;blocked → null(当 404)');
+    ok(eq(A.normActress({ actress: { aid: 'a:7', name: '合成女优丁', aliases: ['合成别名', '合成女优丁', '', '合成别名'] } }), { aid: 'a:7', name: '合成女优丁', aliases: ['合成别名'] }) && A.normActress({ actress: { aid: '..', name: 'x' } }) === null, 'normActress');
+    ok(eq(A.normActressList([{ aid: 'a:1', name: '合成甲', n: 30 }, { aid: 'a:1', name: '重复' }, { aid: 'x y', name: 'z' }]), [{ aid: 'a:1', name: '合成甲', n: 30 }]) && eq(A.normActressList(null), []), 'normActressList(≤10)');
+    ok(eq(A.normStudios([{ id: 'S1', label: 'S1', count: 40 }, { id: '', label: 'x' }, { id: 'S1' }]), [{ id: 'S1', label: 'S1', count: 40 }]), 'normStudios');
+    // AVDB 的 aid 是整数(行号):facets / 信息条 / 女优页 / 搜索都转成字符串;0、负数、小数不认
+    ok(eq(A.normFacets({ actress: [{ aid: 123, name: '合成甲', count: 2 }, { aid: -1, name: 'x' }, { aid: 1.5, name: 'y' }, { aid: 0, name: 'z' }] }).actress, [{ aid: '123', name: '合成甲', count: 2 }])
+        && eq(A.metaView({ actress: [{ aid: 7, name: '合成乙' }, { aid: null, name: '合成丙' }] }, { sources: [] }).actress, [{ aid: '7', name: '合成乙' }, { aid: '', name: '合成丙' }])
+        && A.catalog.normSel('all', { actress: 42 }).actress === '42' && A.routeOf('', 'all', { actress: 42 }) === '#/actress/42' && eq(A.parseRoute('#/actress/42').sel, { actress: '42' })
+        && A.normActress({ actress: { aid: 9, name: '合成丁' } }).aid === '9' && eq(A.normActressList([{ aid: 5, name: '合成戊', n: 1 }]), [{ aid: '5', name: '合成戊', n: 1 }]), '整数 aid(AVDB 行号)全链路认,统一成字符串');
+    ok(A.catalog.normSel('all', { studio: 'S1 "x`\\' }).studio === 'S1 x' && A.catalog.normSel('all', { studio: 'x'.repeat(100) }).studio.length === 80
+        && A.catalog.normSel('all', { studio: "M's video" }).studio === "M's video", '厂牌键与服务器白名单一致:≤80 字、去掉双引号 / 反引号 / 反斜杠;单引号留着(M\'s video)');
+    // 标签页部数:服务器在顶层给 count({tag, count, buckets, related, items}),tag 里没有
+    const tc = A.normTagInfo({ tag: { id: 'black_stockings', label: '黑丝', group: 'outfit' }, count: 37, buckets: [], related: [] });
+    ok(tc && tc.tag.count === 37, '标签页部数读顶层 count', tc);
+    // 词表对齐:lib/adult/tag-vocab.json(后端词表)里 review / blocked 的,前端一个都不做按钮;featured 的前端都认
+    const vocabP = path.join(ROOT, 'lib/adult/tag-vocab.json');
+    if (fs.existsSync(vocabP)) {
+        const V = JSON.parse(fs.readFileSync(vocabP, 'utf8')).tags || [];
+        const mism = V.filter(t => (t.status === 'featured') !== A.featurable(t.id)).map(t => t.id + ':' + t.status);
+        ok(V.length > 100 && !mism.length, '前端 featurable 与 lib/adult/tag-vocab.json 的 featured/review/blocked 完全一致', mism);
+    }
+}
+{
+    // ---- 混入:分面浏览(游标翻页 / facets / 退路)----
+    const app = makeApp();
+    app._browseFill = () => { };
+    app.browse.open = true; app.browse.type = 'jp'; app.browse.sel = C2().normSel('jp', { b: 'jp_censored', t: ['busty'] });
+    let page = 0;
+    const card = (i) => ({ wk: 'c:CU-' + i, name: 'CU-' + i, pic: 'https://p/' + i + '.jpg', released: '2026-01-0' + (1 + (i % 9)) });
+    net.calls.length = 0;
+    net.handler = (u) => {
+        if (!u.startsWith('/api/catalog/browse')) return null;
+        page++;
+        if (page === 1) return { body: { page: 1, total_pages: 3, total_results: 12345, cursor_next: 'cur-2', results: Array.from({ length: 24 }, (_, i) => card(i)), facets: { groups: [{ id: 'body', label: '身材·外貌', tags: [{ id: 'busty', label: '巨乳', count: 9 }] }], sorts: [{ id: 'new', available: true }, { id: 'released', available: true }] } } };
+        if (page === 2) return { body: { total_results: 12345, cursor_next: null, results: Array.from({ length: 24 }, (_, i) => card(i + 20)) } };
+        return { body: { results: [] } };
+    };
+    await app._browseFetch(true);
+    ok(net.calls[0] === '/api/catalog/browse?b=jp_censored&t=busty&sort=new&page=1&facets=1' && app.browse.items.length === 24 && app.browse.total === 12345 && !app.browse.done, '第 1 页:带 facets=1;总数 12345(标题栏显示「1万+」)', net.calls);
+    ok(app.adult.facets && Object.isFrozen(app.adult.facets) && eq(app.adult.facets.sorts, ['new', 'released']) && !net.calls.some(u => u.startsWith('/api/catalog/tags')), 'facets 冻结后挂在 adult.facets;有 facets 就不再拉旧的标签列表');
+    ok(app.browseCountLabel(app.browse.total) === '1万+', '筛选后的总数超过一万写「1万+」');
+    app.browseMore(false);
+    await sleep(5); for (let i = 0; i < 4; i++) await tick();
+    ok(net.calls[1] === '/api/catalog/browse?b=jp_censored&t=busty&sort=new&cursor=cur-2' && app.browse.items.length === 44 && app.browse.done, '第 2 页按 cursor_next 翻(不带 page、不再要 facets);去重;cursor_next 为 null → 到底', net.calls);
+    // 旧服务器:没有 cursor_next → 按页;没有 facets → 标签行退回 /api/catalog/tags
+    const app2 = makeApp();
+    app2._browseFill = () => { };
+    app2.browse.open = true; app2.browse.type = 'all'; app2.browse.sel = C2().normSel('all', {});
+    net.calls.length = 0;
+    net.handler = (u) => (u.startsWith('/api/catalog/browse') ? { body: { page: 1, total_pages: 2, total_results: 30, results: [card(1)] } } : u.startsWith('/api/catalog/tags') ? { body: { tags: [] } } : null);
+    await app2._browseFetch(true);
+    app2.browse.idle = 0;
+    app2.browseMore(false);
+    await sleep(5); for (let i = 0; i < 4; i++) await tick();
+    ok(net.calls.includes('/api/catalog/browse?sort=new&page=2') && net.calls.includes('/api/catalog/tags?b=') && app2.adult.facets === null && app2.browse.done, '没有 cursor_next → 按页翻(退路);没有 facets → 标签行用 /api/catalog/tags', net.calls);
+    // 换筛选时在飞的旧请求作废
+    const app3 = makeApp();
+    app3._browseFill = () => { };
+    app3.browse.open = true; app3.browse.type = 'all'; app3.browse.sel = C2().normSel('all', {});
+    let release = null;
+    net.handler = (u) => (u.startsWith('/api/catalog/browse') ? { body: { results: [card(u.includes('v=zh') ? 2 : 1)], total_results: 1, cursor_next: null } } : null);
+    const slowFetch = globalThis.fetch;
+    globalThis.fetch = (u, o) => (String(u).includes('v=zh') ? slowFetch(u, o) : new Promise(r => { release = () => r(slowFetch(u, o)); }));
+    const pOld = app3._browseFetch(true);
+    app3.browse.sel = C2().normSel('all', { v: 'zh' });
+    await app3._browseFetch(true);
+    release(); await pOld;
+    globalThis.fetch = slowFetch;
+    ok(app3.browse.items.length === 1 && app3.browse.items[0]._wk === 'c:CU-2', '换了筛选:旧请求晚回来也不混进新片单');
+    // 成人站不按 600 张封顶(网格是窗口化的)
+    const app4 = makeApp();
+    let fetched = 0;
+    app4._browseFetch = () => { fetched++; };
+    app4.browse.open = true; app4.browse.items = new Array(700).fill(0);
+    app4.browseMore(false);
+    const app5 = makeApp({ adultMode: false });
+    let f5 = 0;
+    app5._browseFetch = () => { f5++; };
+    app5.browse.open = true; app5.browse.items = new Array(700).fill(0);
+    app5.browseMore(false);
+    ok(fetched === 1 && f5 === 0, '成人站浏览页 700 张之后照样自动往下拉;主站仍按 600 张封顶');
+}
+// 假地址栏 + 历史(adult.js 用 root.location / root.history)
+function fakeNav(hash) {
+    const entries = [{ url: '/' + (hash || ''), state: null }];
+    let idx = 0;
+    const loc = { pathname: '/', search: '', hash: hash || '', href: 'https://site.test/' + (hash || ''), replace() { } };
+    const sync = () => { const u = entries[idx].url, i = u.indexOf('#'); loc.hash = i >= 0 ? u.slice(i) : ''; };
+    const norm = (url) => (url == null ? entries[idx].url : url.startsWith('#') ? '/' + url : url);
+    const ops = [];
+    const hist = {
+        get state() { return entries[idx].state; },
+        pushState(st, _, url) { entries.splice(idx + 1); entries.push({ url: norm(url), state: st }); idx++; sync(); ops.push('push ' + entries[idx].url); },
+        replaceState(st, _, url) { entries[idx] = { url: norm(url), state: st }; sync(); ops.push('replace ' + entries[idx].url); },
+        back() { if (idx > 0) { idx--; sync(); ops.push('back'); } },
+    };
+    return { loc, hist, ops, entries, get idx() { return idx; } };
+}
+function C2() { return A.catalog; }
+{
+    // ---- 地址栏路由 ----
+    const nav = fakeNav('#/c/jp?b=jp_subbed&t=busty&sort=released');
+    const L0 = globalThis.location, H0 = globalThis.history;
+    globalThis.location = nav.loc; globalThis.history = nav.hist;
+    const app = makeApp();
+    app._jumpTo = () => { };
+    app._browseFill = () => { };
+    net.calls.length = 0;
+    net.handler = (u) => (u.startsWith('/api/catalog/home') ? { body: { rows: [{ id: 'new', title: '新上架', more: { sort: 'new' }, items: [{ wk: 'c:A-1', name: 'a' }] }] } }
+        : u.startsWith('/api/catalog/browse') ? { body: { results: [{ wk: 'c:R-1', name: 'R-1' }], total_results: 1, cursor_next: null, facets: { sorts: ['new', 'released'] } } } : u.startsWith('/api/catalog/buckets') ? { body: [] } : null);
+    ok(app.adRouteHash === null, '启动之前不写地址栏(adRouteHash = null)');
+    await app.adultLoadHome();
+    await sleep(5); for (let i = 0; i < 4; i++) await tick();
+    ok(app.adult.routeOn && app.browse.open && app.browse.type === 'jp' && eq(app.browse.sel, { b: 'jp_subbed', dur: '', v: '', sort: 'released', t: ['busty'] }) && net.calls.includes('/api/catalog/browse?b=jp_subbed&t=busty&sort=released&page=1&facets=1'),
+        '刷新 / 书签:首页拿到后按地址栏直接开浏览页并拉片单', [app.browse.sel, net.calls]);
+    app._adRouteSync(app.adRouteHash);
+    ok(app.adRouteHash === '#/c/jp?b=jp_subbed&t=busty&sort=released' && !nav.ops.length, '地址栏已经是这一页:不重复写');
+    // 改筛选 → 新的一条历史
+    app.adGo({ patch: { t: ['busty', 'legs'] } });
+    app._adRouteSync(app.adRouteHash);
+    ok(nav.loc.hash === '#/c/jp?b=jp_subbed&t=busty,legs&sort=released' && nav.ops[0] === 'push /#/c/jp?b=jp_subbed&t=busty,legs&sort=released' && nav.hist.state.dgAd === 1, '改筛选:压一条新历史(只有 id)', nav.ops);
+    ok(!/[一-龥]|R-1/.test(decodeURIComponent(nav.loc.hash)), '地址栏不写片名(只有大类 / 分类 / 标签 id)');
+    // 换分类(patch.b)→ 大类跟着变
+    app.adGo({ patch: { b: 'cn_studio' } });
+    ok(app.browse.type === 'cn' && app.browse.sel.b === 'cn_studio' && eq(app.browse.sel.t, ['busty', 'legs']), '面板里选分类:大类跟着换,其余筛选保留');
+    app._adRouteSync(app.adRouteHash);
+    // 后退 → hashchange → 按地址栏恢复
+    nav.hist.back();
+    app._adOnHash();
+    ok(app.browse.type === 'jp' && eq(app.browse.sel.t, ['busty', 'legs']) && app.browse.sel.b === 'jp_subbed', '后退:按地址栏恢复上一组筛选', app.browse.sel);
+    app._adRouteSync(app.adRouteHash);
+    ok(nav.ops[nav.ops.length - 1] === 'back', '从地址栏恢复的不再压历史');
+    // 播放页开着时后退:关播放页、浏览页不动、刚退掉的那条压回去
+    app.showDetail = true;
+    const before = JSON.stringify(app.browse.sel);
+    nav.hist.back();
+    app._adOnHash();
+    ok(app.closed === 1 && JSON.stringify(app.browse.sel) === before && nav.loc.hash === '#/c/jp?b=jp_subbed&t=busty,legs&sort=released', '播放页开着按返回:只关播放页,浏览页和地址栏留在原样', nav.ops.slice(-2));
+    // 标签页 / 标签云 / 女优页
+    net.calls.length = 0;
+    app.adGo({ view: 'tag', id: 'black_stockings' });
+    app._adRouteSync(app.adRouteHash);
+    ok(app.adult.view === 'tag' && app.browse.type === 'all' && eq(app.browse.sel.t, ['black_stockings']) && nav.loc.hash === '#/tag/black_stockings' && net.calls.includes('/api/catalog/browse?t=black_stockings&sort=new&page=1&facets=1'), '标签页:#/tag/<id>,片单 = 全部 + 这个标签', nav.loc.hash);
+    ok(app.adBrowseTitle.indexOf('#') === 0, '标签页标题 #标签名', app.adBrowseTitle);
+    app.adGo({ patch: { sort: 'dur' } });
+    app._adRouteSync(app.adRouteHash);
+    ok(app.adult.view === '' && nav.loc.hash === '#/c/all?t=black_stockings&sort=dur', '标签页上改了排序 → 变成普通浏览页', nav.loc.hash);
+    net.calls.length = 0;
+    app.adGo({ view: 'tags', b: 'jp_censored' });
+    app._adRouteSync(app.adRouteHash);
+    ok(app.adult.view === 'tags' && nav.loc.hash === '#/tags?b=jp_censored' && app.browse.done && !net.calls.some(u => u.startsWith('/api/catalog/browse')) && app.adBrowseTitle === '全部标签 · 日本有码', '标签云:#/tags?b=,不拉片单', [nav.loc.hash, net.calls]);
+    app.setBrowseFilter('b', 'jp_subbed');
+    app._adRouteSync(app.adRouteHash);
+    ok(app.adult.view === 'tags' && nav.loc.hash === '#/tags?b=jp_subbed', '标签云上换分类:还是标签云');
+    app.adGo({ sel: { b: 'jp_subbed', t: ['busty'] } });
+    app._adRouteSync(app.adRouteHash);
+    ok(app.adult.view === '' && nav.loc.hash === '#/c/jp?b=jp_subbed&t=busty', '标签云点标签 → 这个分类里按标签筛');
+    learnActressViaFacets();
+    app.adMetaActress({ aid: 'a:12345', name: '合成女优甲' });
+    app._adRouteSync(app.adRouteHash);
+    ok(nav.loc.hash === '#/actress/a%3A12345' && app.adBrowseTitle === '女优 · 合成女优甲', '信息条的女优 → #/actress/<aid>(浏览页按 actress 筛)', [nav.loc.hash, app.adBrowseTitle]);
+    app.adMetaStudio({ id: 'S1', label: 'S1' });
+    app._adRouteSync(app.adRouteHash);
+    ok(nav.loc.hash === '#/c/all?studio=S1', '信息条的厂牌 → 按厂牌浏览');
+    let searchedKw = null;
+    app.adMetaSearch = (k) => { searchedKw = k; };
+    app.adMetaActress({ aid: '', name: '合成纯名字' });
+    ok(searchedKw === '合成纯名字', '没有 aid 的旧演员名 → 照旧全站搜');
+    const h0 = nav.loc.hash;
+    app.adMetaTag('noncon'); app.adMetaTag('x_school');
+    ok(nav.loc.hash === h0 && app.adult.view === '', '审查类 / blocked 标签不导航');
+    // 关浏览页 → 地址栏回到首页(新的一条);别人的 # 不动
+    app.closeBrowse();
+    app._adRouteSync(app.adRouteHash);
+    ok(!app.browse.open && nav.loc.hash === '' && nav.entries[nav.idx].url === '/' && app.adult.view === '', '关浏览页:地址栏去掉 #');
+    nav.hist.pushState(null, '', '#admin');
+    app._adRouteSync(app.adRouteHash);
+    app._adOnHash();
+    ok(nav.loc.hash === '#admin' && !app.browse.open, '#admin 之类别人的 # 不碰');
+    // 坏掉的旧路由:启动时清掉
+    const nav2 = fakeNav('#/c/nope?b=zz');
+    globalThis.location = nav2.loc; globalThis.history = nav2.hist;
+    const appB = makeApp();
+    appB._adRouteBoot();
+    ok(appB.adult.routeOn && !appB.browse.open && nav2.loc.hash === '' && nav2.ops[0] === 'replace /', '启动时地址栏是坏掉的路由:清掉,停在首页');
+    // ---- 筛选面板的历史:开 = 压一条同地址;面板里改筛选 = 替换那一条;关 = 退掉,再把最终筛选压成新的一条 ----
+    const nav3 = fakeNav('');
+    globalThis.location = nav3.loc; globalThis.history = nav3.hist;
+    const appS = makeApp();
+    appS._jumpTo = () => { }; appS._browseFill = () => { };
+    appS.adult.routeOn = true;
+    appS.adGo({ sel: { b: 'jp_censored' } });
+    appS._adRouteSync(appS.adRouteHash);
+    const base = nav3.loc.hash;
+    let closedByPop = 0;
+    appS.$refs = { adFilter: { closeSheet(fromPop) { if (fromPop) closedByPop++; }, openSheet() { return true; } } };
+    appS.adSheet(true);
+    ok(nav3.hist.state.dgAdSheet > 0 && nav3.loc.hash === base, '开面板:压一条同地址的历史(手机返回键先关面板)');
+    appS.adGo({ patch: { t: ['busty'] } });
+    appS._adRouteSync(appS.adRouteHash);
+    appS.adGo({ patch: { v: 'zh' } });
+    appS._adRouteSync(appS.adRouteHash);
+    ok(nav3.entries.length === 3 && nav3.hist.state.dgAdSheet > 0 && nav3.loc.hash === '#/c/jp?b=jp_censored&t=busty&v=zh', '面板开着改筛选:替换面板那一条(不越压越多),标记还在', nav3.ops);
+    appS.adSheet(false);
+    ok(nav3.ops[nav3.ops.length - 1] === 'back' && nav3.loc.hash === base, '点关闭:退掉面板那一条');
+    appS._adOnPop();
+    ok(nav3.loc.hash === '#/c/jp?b=jp_censored&t=busty&v=zh' && nav3.idx === 2 && closedByPop === 0 && !appS._adSheetHist, '退掉之后:最终筛选压成新的一条(后退 = 回到开面板前的筛选)', nav3.ops);
+    // 手机返回键关面板
+    appS.adSheet(true);
+    appS.adGo({ patch: { dur: 'unk' } });
+    appS._adRouteSync(appS.adRouteHash);
+    nav3.hist.back();
+    appS._adOnPop();
+    ok(closedByPop === 1 && nav3.loc.hash === '#/c/jp?b=jp_censored&t=busty&dur=unk&v=zh' && !appS._adSheetHist, '手机返回键:关面板(不关浏览页),筛选保留并压成新的一条', nav3.ops.slice(-3));
+    ok(appS.adOpenSheet() === true && makeApp().adOpenSheet() === false, '顶上摘要条的「筛选」:有面板就直接打开面板,没有就照旧回到顶部');
+    globalThis.location = L0; globalThis.history = H0;
+}
+function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', name: '合成女优甲', count: 1 }] }); }
+{
+    // ---- 组件逻辑(假 this:props + data + computed 读值 + 方法)----
+    function inst(def, props, extra) {
+        const ev = [];
+        const o = Object.assign({}, props || {});
+        Object.assign(o, def.data ? def.data.call(o) : {});
+        for (const [k, fn] of Object.entries(def.computed || {})) Object.defineProperty(o, k, { get: () => fn.call(o), configurable: true });
+        for (const [k, fn] of Object.entries(def.methods || {})) o[k] = fn.bind(o);
+        o.$emit = (n, a) => ev.push([n, a]);
+        o.$nextTick = (f) => { if (f) f(); return Promise.resolve(); };
+        o.$refs = {};
+        return Object.assign(o, extra || {}, { _ev: ev });
+    }
+    const Fd = A.components.DgAdFilter;
+    const facets = A.normFacets({
+        buckets: [{ id: 'jp_censored', count: 30 }, { id: 'anime', count: 0 }],
+        groups: [{ id: 'body', label: '身材·外貌', tags: [{ id: 'busty', label: '巨乳', count: 9 }, { id: 'legs', label: '美腿', count: 0 }] }],
+        more: [{ id: 'noncon', label: '强制凌辱' }],
+        dur: [{ id: 's', count: 4 }, { id: 'l', count: 9 }, { id: 'unk', count: 140 }],
+        variant: [{ id: 'zh', count: 5 }],
+        studio: [{ id: 'S1', label: 'S1', count: 4 }], actress: [{ aid: 'a:12345', name: '合成女优甲', count: 2 }],
+    });
+    const fi = inst(Fd, { sel: { b: '', sort: 'new', dur: 'l', t: ['busty'] }, type: 'all', facets, total: 23456, tv: false, legacy: [] });
+    ok(fi.n === 2 && fi.countText === '2万+' && eq(fi.chips.map(c => c.id), ['busty', 'legs']) && fi.unkNote === 140, '面板:已选数、总数「2万+」、选了时长区间时提示「另有 N 部时长未知」');
+    ok(eq(fi.durs.map(d => [d.k, d.c, d.off]), [['', null, false], ['s', 4, false], ['m', 0, true], ['l', 9, false], ['xl', 0, true], ['xxl', 0, true], ['unk', 140, false]]), '时长档:带数,0 的置灰(选中的不灰)', fi.durs);
+    ok(eq(fi.sheetGroups[0].tags.map(t => [t.id, t.st]), [['busty', 'in'], ['legs', '']]) && eq(fi.more, [{ id: 'noncon', label: '强制凌辱', st: '' }]) && fi.buckets.length === 2, '面板:分组标签带状态;更多(审查类)不带数;「全部」大类给分类计数');
+    fi.tap('legs');
+    ok(eq(fi._ev[0], ['go', { patch: { t: ['busty', 'legs'], x: [] } }]), '标签行点一下 → go(patch t)');
+    fi.tapSheet('busty');
+    ok(eq(fi._ev[1], ['go', { patch: { t: [], x: ['busty'] } }]), '面板里再点已选的 → 排除');
+    fi.xmode = true;
+    fi.tapSheet('noncon');
+    ok(eq(fi._ev[2], ['go', { patch: { t: ['busty'], x: ['noncon'] } }]), '排除模式:点一下直接排除(更多里的审查类也能排除)');
+    const full = inst(Fd, { sel: { sort: 'new', t: ['a', 'b', 'c'] }, type: 'all', facets, total: 1, legacy: [] });
+    full.tap('busty');
+    ok(!full._ev.length && full.note === '最多同时选 3 个标签', '超过 3 个:不发请求,出提示');
+    clearTimeout(full._noteT);
+    fi.drop('dur'); fi.drop('review'); fi.clearAll();
+    ok(eq(fi._ev.slice(-3).map(e => e[1].patch), [{ dur: '' }, { t: ['busty'], x: [] }, { t: [], x: [], dur: '', v: '', studio: '', actress: '', lp: '' }]), '去掉一项 / 去掉全部审查类标签 / 清除筛选(保留分类和排序)');
+    fi.studios = A.normStudios([{ id: 'S1', label: 'S1', count: 4 }, { id: 'MOODYZ', label: 'MOODYZ', count: 3 }, { id: '麻豆传媒', label: '麻豆传媒', count: 9 }]);
+    fi.sq = 'moo';
+    ok(eq(fi.studioHits.map(s => s.id), ['MOODYZ']), '厂牌搜索:按名字子串(不分大小写)');
+    const fa = inst(Fd, { sel: { sort: 'new', actress: 'a:999', studio: 'X9' }, type: 'jp', facets, total: 1, legacy: [] });
+    ok(fa.actTop[0].aid === 'a:999' && fa.studioTop[0].id === 'X9' && fa.buckets.length === 0, '已选的女优 / 厂牌不在前 20 里也挂在最前;不是「全部」大类不出分类计数');
+    // 女优搜索走 /api/catalog/actress?q=(250ms 防抖)
+    net.calls.length = 0;
+    net.handler = (u) => (u.startsWith('/api/catalog/actress?q=') ? { body: [{ aid: 'a:5', name: '合成搜到', n: 3 }] } : null);
+    fa.aq = '合成'; fa.actSearch();
+    await sleep(300); for (let i = 0; i < 4; i++) await tick();
+    ok(net.calls[0] === '/api/catalog/actress?q=' + encodeURIComponent('合成') && eq(fa.aRes, [{ aid: 'a:5', name: '合成搜到', n: 3 }]), '女优搜索:/api/catalog/actress?q=', net.calls);
+    // ---- 窗口化网格 ----
+    const Gd = A.components.DgAdGrid;
+    const items = Array.from({ length: 1000 }, (_, i) => Object.freeze({ id: 'c:G-' + i, _wk: 'c:G-' + i }));
+    const gi = inst(Gd, { items, poster: null, tv: false, loading: false });
+    gi.cols = 4;
+    ok(gi.per === 24 && gi.nBlocks === 42 && gi.slice(41).length === 16 && gi.slice(0)[0].id === 'c:G-0', '网格按「6 排一块」切块(4 列 = 24 张一块)');
+    const ent = (bi, on, h) => ({ target: { getAttribute: () => String(bi) }, isIntersecting: on, boundingClientRect: { height: h } });
+    gi.onIO([ent(0, false, 1500), ent(1, false, 1490), ent(2, true, 1500), ent(41, false, 900)]);
+    ok(eq(gi.dead, { 0: 1500, 1: 1490 }), '离开视口 ±1600px 的块变空壳(记下实测高度);最后一块(还在被填)永远是活的', gi.dead);
+    gi.onIO([ent(0, true, 1500)]);
+    ok(eq(gi.dead, { 1: 1490 }), '回到附近:恢复成卡片');
+    const d0 = gi.dead;
+    gi.onIO([ent(5, true, 1500)]);
+    ok(gi.dead === d0, '没有变化的回调不写响应式状态');
+    // 模板里只渲染活块的卡片(源码检查):空壳只有高度
+    const tpl = Gd.template;
+    ok(/<template v-if="dead\[bi - 1\] == null">/.test(tpl) && /:style="dead\[bi - 1\] != null \? \{ height: dead\[bi - 1\] \+ 'px' \} : null"/.test(tpl) && /class="browse-card"[^>]*:data-bid="item\.id"/.test(tpl), '网格模板:空壳块不渲染卡片;卡片沿用 .browse-card / data-bid(遥控器焦点还原照旧)');
+    ok(!/scroll/i.test(Object.keys(Gd.methods).join(',')) && /IntersectionObserver/.test(fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8')), '网格不监听滚动(只用 IntersectionObserver;resize 节流 200ms 才重量列数)');
+    // 组件模板交给 Vue 编译器编一遍
+    const vctx = { console: { log() { }, warn() { }, error() { } }, setTimeout, clearTimeout, navigator: { userAgent: 'node' }, document: { createElement: () => ({ style: {} }) }, SVGElement: function () { }, Element: function () { } };
+    vctx.window = vctx; vctx.self = vctx;
+    vm.createContext(vctx);
+    vm.runInContext(fs.readFileSync(path.join(ROOT, 'public/libs/js/vue.global.prod.min.js'), 'utf8'), vctx);
+    const cerr = [];
+    for (const [n, def] of Object.entries(A.components)) {
+        try { const fn = vctx.Vue.compile(def.template, { decodeEntities: (x) => x, onError: (e) => cerr.push(n + ': ' + e.message) }); if (typeof fn !== 'function') cerr.push(n + ': no fn'); } catch (e) { cerr.push(n + ': ' + e.message); }
+    }
+    ok(Object.keys(A.components).length === 4 && !cerr.length, '四个组件(网格 / 筛选 / 页头 / 标签云)的模板都能被 Vue 编译', cerr);
+    ok(A.mixin.components === undefined || eq(Object.keys(A.mixin.components), ['DgAdGrid', 'DgAdFilter', 'DgAdHead', 'DgAdCloud']), 'mixin 注册了这四个组件(index.html 用 <dg-ad-grid> 等)');
+    // 组件里不用老 WebView 不认的语法(?. / ??)
+    const SRCA = fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8');
+    ok(!/\?\.[a-zA-Z_$[(]/.test(SRCA.replace(/\/\/[^\n]*/g, '')) && !/[^?]\?\?[^?]/.test(SRCA.replace(/\/\/[^\n]*/g, '').replace(/'[^'\n]*'/g, "''")), 'adult.js 不用 ?. / ??(老电视 WebView 解析不了,整个文件会挂)');
+}
+{
+    // ---- 模板接线 ----
+    ok(/if \(this\.adultMode && typeof this\._adBrowseFetch === 'function'\) return this\._adBrowseFetch\(reset\);/.test(HTML), '_browseFetch 在成人站交给 _adBrowseFetch(游标 + facets)');
+    ok(/b\.items\.length >= \(this\.adultMode \? 10000 : 600\)/.test(HTML), 'browseMore:成人站不按 600 张封顶');
+    ok(/<dg-ad-grid v-if="adultMode" v-show="adult\.view !== 'tags'" :items="browse\.items" :poster="getPosterUrl" :tv="isTVMode" :loading="browse\.loading" @pick="browsePick"><\/dg-ad-grid>/.test(HTML)
+        && /<div class="browse-grid" v-if="!adultMode">/.test(HTML), '浏览页网格:成人站换成窗口化的 <dg-ad-grid>(点卡片照旧 browsePick),主站网格不动');
+    ok(/<dg-ad-cloud v-if="adultMode && adult\.view === 'tags'" :b="browse\.sel\.b \|\| ''" @go="adGo" @learn="adLearned"><\/dg-ad-cloud>/.test(HTML) && /<dg-ad-head v-if="adultMode" :view="adult\.view" :sel="browse\.sel" @go="adGo" @learn="adLearned"><\/dg-ad-head>/.test(HTML),
+        '标签云 / 标签页与女优页页头');
+    ok(/<h2 class="browse-title">\{\{ adultMode \? adBrowseTitle : browseTitle \}\}<\/h2>/.test(HTML) && /\{\{ adultMode \? adBrowseSummary : browseSummary \}\}/.test(HTML) && /@click="\(adultMode && adOpenSheet\(\)\) \|\| browseToTop\(\)"/.test(HTML), '标题 / 顶上摘要条(点「筛选」直接开面板)');
+    ok(/v-show="!\(adultMode && adult\.view === 'tags'\)"/.test(HTML) && /@click="adOpenTags\(catNavType\)">标签/.test(HTML), '标签云页不出片单底栏;首页分类栏有「标签」入口');
+    ok(/<span v-if="adMeta\.released" class="dg-meta-t dg-meta-rel">/.test(HTML) && /@click="adMetaStudio\(adMeta\.studio\)"/.test(HTML) && /@click="adMetaActress\(a\)"/.test(HTML)
+        && /<div v-for="g in adMeta\.tagGroups" :key="'mg-' \+ g\.id" class="dg-meta-tg">/.test(HTML), '信息条:发行日期 / 厂牌 / 女优(进女优页)/ 按分面组排的标签');
+    const browseTpl = HTML.slice(HTML.indexOf('<div class="browse-page" v-if="browse.open"'), HTML.indexOf('<div class="browse-sticky"'));
+    const vfor = browseTpl.indexOf('v-for="item in browse.items"');
+    ok(browseTpl.length > 1000 && vfor > browseTpl.indexOf('<div class="browse-grid" v-if="!adultMode">') && browseTpl.indexOf('<div class="browse-grid" v-if="!adultMode">') > browseTpl.indexOf('<dg-ad-grid'),
+        '根模板里 v-for 整个片单的只剩主站那份(v-if="!adultMode");成人站走组件');
+}
 console.log('⑤ 页面接线 / sw.js');
 {
     const head = HTML.slice(0, HTML.indexOf('</head>'));
@@ -1013,7 +1458,7 @@ console.log('⑤ 页面接线 / sw.js');
     ok(/<title>DGX<\/title>/.test(head) && !/E视界/.test(headNoComments) && !/E视界/.test(head), '<title> 是站名,head 里不再有主站品牌');
     ok(/<meta name="robots" content="noindex, nofollow, noarchive">/.test(head) && !/og:|twitter:|rel="canonical"|ednovas\.video/.test(head), 'robots noindex;没有 OG / Twitter 卡片 / canonical / 主站域名');
     ok(!/<link rel="(dns-prefetch|preconnect)" href="[^"]*(tmdb|themoviedb)/.test(headNoComments), '不预连接 TMDB');
-    const iAdult = head.indexOf('src="adult/adult.js?v=3"'), iVue = head.indexOf('vue.global.prod.min.js');
+    const iAdult = head.indexOf('src="adult/adult.js?v=4"'), iVue = head.indexOf('vue.global.prod.min.js');
     ok(iAdult > 0 && iAdult < iVue && !/src="adult\/adult\.js[^"]*"[^>]*\b(defer|async)\b/.test(head), 'adult.js 在 Vue 之前同步加载');
     const body = HTML.slice(HTML.indexOf('<body>'));
     const iGate = body.indexOf('DgAdult.ageGate.mount()'), iLoader = body.indexOf('id="app-loader"'), iPw = body.indexOf('id="password-screen"');
@@ -1034,11 +1479,11 @@ console.log('⑤ 页面接线 / sw.js');
         '首页行两处 + 浏览页:海报上叠 N线(≥2)/ 时长 / 番号');
     ok(/<span v-if="config\.adult && config\.srcLabel" class="dg-row-src" :title="config\.srcTip">\{\{ config\.srcLabel \}\}<\/span>/.test(HTML), '热门行标题旁的来源角标(本站热门 / 外站热门)');
     ok(/<button v-if="key !== 'randomRow'" v-show="!\(config\.adult && !config\.more\)" type="button" class="expand-toggle row-all"/.test(HTML), '没有 more 的目录行(热门)不给「全部」');
-    ok(/<div class="browse-frow" v-if="adultMode && adTagOpts\.length" role="group" aria-label="标签">/.test(HTML) && /@click="setBrowseFilter\('tag', t\.id\)"/.test(HTML), '浏览页第二行:标签按钮(setBrowseFilter tag)');
+    ok(/<dg-ad-filter v-if="adultMode && adult\.view !== 'tags'" ref="adFilter" :sel="browse\.sel"[^>]*:legacy="adTagOpts" @go="adGo" @sheet="adSheet"><\/dg-ad-filter>/.test(HTML), '浏览页:标签行 + 排序 + 筛选面板(<dg-ad-filter>,旧服务器的标签列表当后备)');
     ok(/<div class="search-section" @focusout="adultMode && adSugBlur\(\$event\)"/.test(HTML) && /@keydown="adultMode && adSugKey\(\$event\)" @focus="adultMode && adSugFocus\(\)"/.test(HTML)
         && /<div v-if="adultMode && adult\.sug\.open && adSugRows\.length" class="dg-sug"/.test(HTML) && /@mousedown\.prevent @click="adSugPick\(r\)"/.test(HTML), '搜索建议下拉:焦点离开收起、方向键、点行不先失焦');
     ok(/if \(this\.adultMode && typeof this\.adSuggestInput === 'function' && this\.adSuggestInput\(this\.keyword\)\) return;\s*\n\s*if \(!this\.keyword \|\| this\.keyword\.length < 2\)/.test(HTML), 'debouncedSearch 最前面:成人站交给搜索建议(不再自动全站搜)');
-    ok(/<template v-if="adultMode && adMeta && !previewLocked">/.test(HTML) && /@click="adCopyCode"/.test(HTML) && /adMetaGo\(\{ b: adMeta\.bucket, tag: t\.id \}\)/.test(HTML)
+    ok(/<template v-if="adultMode && adMeta && !previewLocked">/.test(HTML) && /@click="adCopyCode"/.test(HTML) && /@click="adMetaTag\(t\.id\)"/.test(HTML)
         && /<details v-if="adMeta\.clips\.length" class="dg-meta-clips">/.test(HTML) && /@click="adOpenSibling\(s\)">\{\{ s\.label \}\}/.test(HTML), '播放页信息条:复制番号 / 分类标签 / 无码流出版链接 / 解说片段折叠');
     ok(/<div v-else class="ep-grid" v-show="!\(adultMode && episodeList\.length === 1\)"/.test(HTML), '单集作品藏选集格子');
     ok(/<div v-for="\(source, i\) in g\.items" class="source-pill" v-show="!\(adultMode && adSrcV\(source\)\.hide\)"/.test(HTML) && /'dg-src-dead': adultMode && source\._dead === true/.test(HTML)
@@ -1079,7 +1524,7 @@ console.log('⑤ 页面接线 / sw.js');
     const ver = +((/const CACHE_VERSION = 'v(\d+)'/.exec(SW) || [])[1] || 0), rev = (/const ADULT_REV = '([^']+)'/.exec(SW) || [])[1] || '';
     ok(ver >= 42 && /^-adult\d+$/.test(rev) && ['static', 'images', 'live-img'].every(n => SW.includes("'donggua-" + n + "-' + CACHE_VERSION + ADULT_REV")),
         'sw.js 升版:三个缓存名都带成人站版本(新 SW 重新预缓存、activate 清掉旧缓存)', [ver, rev]);
-    ok(SW.includes("'./adult/adult.js?v=3'"), 'sw.js 预缓存的 adult.js 与页面引用同一个 ?v=');
+    ok(SW.includes("'./adult/adult.js?v=4'"), 'sw.js 预缓存的 adult.js 与页面引用同一个 ?v=');
     // 真跑 sw.js 的 fetch 处理:哪些请求 SW 接手
     const handlers = {};
     const swCtx = {
@@ -1098,8 +1543,10 @@ console.log('⑤ 页面接线 / sw.js');
     ok(!handled('https://site.test/api/catalog/home') && !handled('https://site.test/api/catalog/browse?b=x&page=1') && !handled('https://site.test/api/detail?site_key=a&id=1') && !handled('https://site.test/api/search?wd=x'), '目录/详情/搜索接口直达不缓存');
     ok(!handled('https://site.test/api/sites') && !handled('https://site.test/api/check?key=a') && !handled('https://site.test/api/catalog/suggest?q=a') && !handled('https://site.test/api/img?k=c%3AA-1&s=s1', 'image'),
         'phase 2:/api/sites、/api/check、/api/catalog/*(含 suggest/tags/beacon)、/api/img 海报代理都直达不缓存');
-    ok(/const ADULT_REV = '-adult3';/.test(SW), 'sw.js 成人站升版到 -adult3(adult.js?v=3 重新预缓存、旧缓存清掉)');
-    ok(handled('https://site.test/adult/adult.js?v=3') && handled('https://site.test/api/config') && handled('https://site.test/', 'document'), '外壳(页面/adult.js)和 /api/config 照旧由 SW 接手');
+    ok(/const ADULT_REV = '-adult4';/.test(SW), 'sw.js 成人站升版到 -adult4(adult.js?v=4 重新预缓存、旧缓存清掉)');
+    ok(handled('https://site.test/adult/adult.js?v=4') && handled('https://site.test/api/config') && handled('https://site.test/', 'document'), '外壳(页面/adult.js)和 /api/config 照旧由 SW 接手');
+    ok(!handled('https://site.test/api/catalog/tag/busty') && !handled('https://site.test/api/catalog/actress/a1?page=1') && !handled('https://site.test/api/catalog/actress?q=x') && !handled('https://site.test/api/catalog/studios?b=') && !handled('https://site.test/api/catalog/browse?t=a,b&cursor=xyz&facets=1'),
+        'phase 3:标签页 / 女优 / 厂牌 / 游标翻页的目录接口同样直达不缓存');
 }
 
 console.log(`\n${fail ? '✗' : '✓'} adult-frontend-test: ${pass} passed, ${fail} failed`);
