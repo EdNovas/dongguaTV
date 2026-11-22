@@ -568,6 +568,8 @@
             });
             hls.on(E.ERROR, (_, d) => { if (d && d.fatal) stop('error'); });
             v.addEventListener('playing', () => { if (live()) { el.classList.add('dg-pv-on'); state.why = 'playing'; } });
+            // 卡片是 16:9:竖屏片源整条放下(两侧黑边),不裁成中间一条
+            v.addEventListener('loadedmetadata', () => { if (v.videoWidth > 0 && v.videoHeight > 0 && v.videoWidth / v.videoHeight < 1.2) v.classList.add('dg-pv-fit'); });
             try {
                 c.src = URL.createObjectURL(new Blob([plan.playlist], { type: 'application/vnd.apple.mpegurl' }));
                 hls.loadSource(c.src);
@@ -649,6 +651,7 @@
     const CSS = [
         '.poster-wrap > .dg-pv-v { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0; transition: opacity .25s; pointer-events: none; background: transparent; }',
         '.dg-pv-on .poster-wrap > .dg-pv-v { opacity: 1; }',
+        '.poster-wrap > .dg-pv-v.dg-pv-fit { object-fit: contain; background: #000; }',
         '.dg-pv-on .poster-wrap .dg-ov-dur, .dg-pv-on .poster-wrap .dg-ov-code, .dg-pv-on .poster-wrap .dg-ov-n, .dg-pv-on .poster-wrap .dg-ad-badge { z-index: 2; }',
         'html.dg-blur .dg-pv-on .poster-wrap > .dg-pv-v { filter: none; }',
     ].join('\n');

@@ -922,6 +922,8 @@
     const groupNameOf = (it) => (it && typeof it._wt === 'string' && it._wt) ? it._wt : (it ? it.vod_name : '');
     // 横版封面(日本有码常见 800×538)放进 2:3 位:人物在右半边 → object-position: right
     const isLandscape = (w, h) => w > 0 && h > 0 && (w / h) > 1.3;
+    // 竖图(海报 0.70、短视频 0.56):在 16:9 卡里整张放下(contain)+ 同一张图模糊铺底,不裁成中间一条
+    const isPortrait = (w, h) => w > 0 && h > 0 && (w / h) < 0.9;
     // 海报坏了:换这一组里另一条线路的海报(没试过的、不是 mac_default/nopic 占位);都试过 → ''(显示中性占位)
     function pickFallbackPic(group, tried) {
         const bad = (u) => !u || !PIC_OK_RE.test(u) || /mac_default|nopic/i.test(u);
@@ -932,7 +934,7 @@
         }
         return '';
     }
-    const PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='450'%3E%3Crect fill='%23262626' width='300' height='450'/%3E%3Cpath d='M120 190h60v70h-60z' fill='%23444'/%3E%3C/svg%3E";
+    const PLACEHOLDER = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='180'%3E%3Crect fill='%23262626' width='320' height='180'/%3E%3Cpath d='M140 62h40v56h-40z' fill='%23444'/%3E%3C/svg%3E";
 
     // ========== 内容接口鉴权(401 → 补核验 → 重试一次 → 登录框) ==========
     const CONTENT_RE = /^\/api\/(search|detail|check|sites|catalog|popular|kz|img)(\/|$)/;
@@ -1429,7 +1431,18 @@
         '.dg-ad-badge { position: absolute; top: 6px; left: 6px; z-index: 2; background: rgba(229, 9, 20, 0.92); color: #fff; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 4px; pointer-events: none; }',
         '.dg-today { margin-left: 4px; font-size: 10px; font-weight: 700; color: #46d369; }',
         '.dg-today-row { margin-left: 10px; font-size: 12px; font-weight: 600; color: #46d369; white-space: nowrap; }',
-        '.poster-wrap img.dg-land { object-position: right center; }',
+        // 横版卡片(2026-11-22):目录封面抽样 400+ 张,按作品数加权约 90% 是横图(国产/欧美 16:9,番号整张封套 1.49),
+        //   竖海报只集中在两个情色电影站和短视频分类。主站的 2:3 海报卡在这里会把横图裁成中间三分之一 → 全站卡片改 16:9,
+        //   卡宽随之加大(桌面一排约 5 张,手机首页行一屏约 1.7 张、浏览网格 2 列);悬停预览的视频本来就是横的,正好铺满
+        'html:root { --card-w: calc(clamp(210px, 17vw, 300px) * var(--ui-scale, 1)); }',
+        '@media (max-width: 480px) { html:root { --card-w: calc(56vw * var(--ui-scale, 1)); } }',
+        // 注意:这段样式在 <head> 里 adult.js 执行时就插入,排在 index.html 的大 <style> 之前 → 同优先级会被主站规则压掉,要加 html 前缀
+        'html .poster-wrap { aspect-ratio: 16 / 9; }',
+        '@media (max-width: 768px) { html .browse-grid { grid-template-columns: repeat(auto-fill, minmax(calc(200px * var(--ui-scale, 1)), 1fr)); } }',
+        '@media (max-width: 480px) { html .browse-grid { grid-template-columns: repeat(auto-fill, minmax(calc(140px * var(--ui-scale, 1)), 1fr)); } }',
+        // 主站给封面 <img> 铺了灰色渐变占位底(background-image),竖图 contain 后两侧会露出来盖住模糊底 → 去掉
+        'html .poster-wrap img.dg-port { object-fit: contain; position: relative; z-index: 1; background: none; }',
+        '.poster-wrap.dg-port-bg::before { content: ""; position: absolute; top: -12px; left: -12px; right: -12px; bottom: -12px; background: var(--dg-pbg, none) center / cover no-repeat; filter: blur(14px) brightness(0.5); z-index: 0; pointer-events: none; }',
         '.movie-date.dg-ad-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
         // 登录框的购买引导:没配 purchase_url 不出(见 brand.showBuy;切登录方式时的行内 display 也压得住)
         'html:not(.dg-buy) #register-link { display: none !important; }',
@@ -1469,7 +1482,8 @@
         '.dg-sug.compact { left: auto; width: min(440px, 92%); }',
         '.dg-sug-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; background: transparent; border: none; border-radius: 8px; color: #ddd; text-align: left; padding: 4px 8px; cursor: pointer; font-size: 13px; }',
         '.dg-sug-row:hover, .dg-sug-row.hi, .dg-sug-row:focus { background: rgba(255, 255, 255, 0.08); color: #fff; outline: none; }',
-        '.dg-sug-row img { width: 34px; height: 48px; object-fit: cover; object-position: right center; border-radius: 4px; flex: none; background: #262626; }',
+        '.dg-sug-row img { width: 64px; height: 36px; object-fit: cover; border-radius: 4px; flex: none; background: #262626; }',
+        '.dg-sug-row img.dg-port { object-fit: contain; }',
         '.dg-sug-row > i { width: 34px; text-align: center; color: #888; flex: none; }',
         '.dg-sug-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }',
         '.dg-sug-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
@@ -1569,15 +1583,31 @@
         s.textContent = CSS;
         (d.head || d.documentElement).appendChild(s);
     }
-    // 首页行 / 浏览页的海报:加载完按宽高比放横版封面;坏图换中性占位(不走 TMDB)
+    // 封面加载完按宽高比:竖图 → contain,父级 .poster-wrap 用同一张图模糊铺底。
+    //   铺底走 CSS 变量里的 url():页面有 <meta name="referrer" content="no-referrer">,和 <img> 一样不带来源,同一 URL 命中缓存不再下载
+    function shapeCover(img) {
+        const src = String(img.currentSrc || img.src || '');
+        const port = isPortrait(img.naturalWidth, img.naturalHeight) && !/^data:/i.test(src);
+        img.classList.toggle('dg-port', port);
+        const wrap = img.parentElement;
+        if (!wrap || !wrap.classList || !wrap.classList.contains('poster-wrap')) return;
+        if (port) {
+            wrap.style.setProperty('--dg-pbg', 'url("' + src.replace(/["\\\r\n]/g, (c) => encodeURIComponent(c)) + '")');
+            wrap.classList.add('dg-port-bg');
+        } else if (wrap.classList.contains('dg-port-bg')) {
+            wrap.classList.remove('dg-port-bg');
+            wrap.style.removeProperty('--dg-pbg');
+        }
+    }
+    // 首页行 / 浏览页的海报:坏图换中性占位(不走 TMDB)
     function hookImages() {
         const d = root.document;
         const inCard = (img) => img && img.tagName === 'IMG' && img.closest && img.closest('.hot-card .poster-wrap, .browse-card .poster-wrap, .dg-sug-row');
+        // 竖图判定覆盖所有封面框(首页行 / 浏览网格 / 继续观看 / 收藏 / 相关推荐 / 搜索联想);坏图换占位只管原来那几处
+        const shaped = (img) => img && img.tagName === 'IMG' && img.closest && img.closest('.poster-wrap, .dg-sug-row');
         d.addEventListener('load', (e) => {
             const img = e.target;
-            if (!inCard(img)) return;
-            if (isLandscape(img.naturalWidth, img.naturalHeight)) img.classList.add('dg-land');
-            else img.classList.remove('dg-land');
+            if (shaped(img)) shapeCover(img);
         }, true);
         d.addEventListener('error', (e) => {
             const img = e.target;
@@ -1649,8 +1679,9 @@
     // 还没量到真实列数时按 index.html 的 .browse-grid 规则估一个(量到之后以 getComputedStyle 为准)
     function guessCols() {
         const W = (root && typeof root.innerWidth === 'number' && root.innerWidth > 0) ? root.innerWidth : 1280;
-        let min = 150, gap = 16, pad = 0.10;
-        if (W <= 480) { min = 100; gap = 10; pad = 0.08; } else if (W <= 768) { min = 130; gap = 10; pad = 0.08; }
+        // 与 CSS 的横版卡宽一致:桌面 clamp(210px, 17vw, 300px),平板 200,手机 140(只是首帧估计,渲染后按实测列数重分块)
+        let min = Math.min(300, Math.max(210, W * 0.17)), gap = 16, pad = 0.10;
+        if (W <= 480) { min = 140; gap = 10; pad = 0.08; } else if (W <= 768) { min = 200; gap = 10; pad = 0.08; }
         return Math.max(2, Math.floor((W * (1 - pad) + gap) / (min + gap)));
     }
     const onImgLoad = (e) => { const t = e && e.target; if (t) { t.classList.add('loaded'); if (t.parentElement) t.parentElement.classList.add('img-loaded'); } };
@@ -3207,7 +3238,7 @@
         ON: true, VERSION, DEFAULT_NAME,
         BUCKET_LABEL, NAV_BUCKETS, TYPES, SORTS, DURS, VARIANTS, GROUPS, DEFAULT_SORTS,
         catalog, cardToItem, browseUrl, homeToRows, todayMap, todayOf,
-        workUrl, workSource, workToGroup, workToList, groupKeyOf, groupNameOf, isLandscape, pickFallbackPic, PLACEHOLDER,
+        workUrl, workSource, workToGroup, workToList, groupKeyOf, groupNameOf, isLandscape, isPortrait, shapeCover, pickFallbackPic, PLACEHOLDER,
         isContentPath, sameOriginPath,
         TAG_LABEL, NEVER_FEATURE, NO_ACTRESS_BUCKETS, tagLabel, fmtDur, srcFlags, srcExtra, varKind, orderSources, srcView, nativeDev,
         metaView, tagsUrl, normTags, suggestUrl, normSuggest, aliasPreset, beacon,

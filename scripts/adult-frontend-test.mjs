@@ -125,6 +125,33 @@ console.log('① adult.js 纯函数');
     // 搜索并组键
     ok(A.groupKeyOf({ _wk: 'c:A-1', vod_name: 'x' }) === 'c:A-1' && A.groupKeyOf({ vod_name: 'x' }) === 'x' && A.groupNameOf({ _wt: '规范', vod_name: 'x' }) === '规范' && A.groupNameOf({ vod_name: 'x' }) === 'x', '并组键 _wk || vod_name;卡片名 _wt || vod_name');
     ok(A.isLandscape(800, 538) && !A.isLandscape(300, 450) && !A.isLandscape(130, 100) && !A.isLandscape(0, 0), '横版封面判定 > 1.3');
+    // 横版卡片:竖图(海报 0.70 / 短视频 0.56)contain + 同图模糊铺底;横图、方图、占位图都不铺底;换成横图要把铺底撤掉
+    ok(A.isPortrait(300, 450) && A.isPortrait(720, 1280) && !A.isPortrait(800, 538) && !A.isPortrait(100, 100) && !A.isPortrait(0, 0), '竖图判定 < 0.9');
+    {
+        const mkCls = () => { const s = new Set(); return { add: (c) => s.add(c), remove: (c) => s.delete(c), contains: (c) => s.has(c), toggle: (c, on) => { if (on) s.add(c); else s.delete(c); return !!on; } }; };
+        const props = {};
+        const wrap = { classList: mkCls(), style: { setProperty: (k, v) => { props[k] = v; }, removeProperty: (k) => { delete props[k]; } } };
+        wrap.classList.add('poster-wrap');
+        const img = { naturalWidth: 300, naturalHeight: 450, currentSrc: 'https://p.example/a"b.jpg', src: '', classList: mkCls(), parentElement: wrap };
+        A.shapeCover(img);
+        ok(img.classList.contains('dg-port') && wrap.classList.contains('dg-port-bg') && props['--dg-pbg'] === 'url("https://p.example/a%22b.jpg")', '竖图:contain + 父级铺同图模糊底(url 里的引号转义)', props);
+        img.naturalWidth = 1280; img.naturalHeight = 720; img.currentSrc = 'https://p.example/c.jpg';
+        A.shapeCover(img);
+        ok(!img.classList.contains('dg-port') && !wrap.classList.contains('dg-port-bg') && !('--dg-pbg' in props), '同一个框换成横图:铺底撤掉', props);
+        img.naturalWidth = 300; img.naturalHeight = 450; img.currentSrc = A.PLACEHOLDER;
+        A.shapeCover(img);
+        ok(!img.classList.contains('dg-port') && !wrap.classList.contains('dg-port-bg'), '占位图(data:)不当竖图铺底');
+        const lone = { naturalWidth: 300, naturalHeight: 450, currentSrc: 'https://p.example/d.jpg', src: '', classList: mkCls(), parentElement: { classList: mkCls(), style: {} } };
+        A.shapeCover(lone);
+        ok(lone.classList.contains('dg-port'), '不在 .poster-wrap 里(搜索联想缩略图):只 contain,不动父级');
+        const AS = fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8');
+        // adult.js 的样式插在 index.html 大 <style> 之前:同优先级会输,必须比主站的 .poster-wrap{aspect-ratio:2/3} 更具体
+        ok(/'html \.poster-wrap \{ aspect-ratio: 16 \/ 9; \}'/.test(AS) && /\.poster-wrap \{[^}]*aspect-ratio: 2\/3/.test(fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8')) && /html:root \{ --card-w: calc\(clamp\(210px, 17vw, 300px\)/.test(AS) && !/dg-land \{ object-position: right center/.test(AS), '封面卡 16:9、卡宽加大;不再把横图裁到右半边');
+        ok(/320' height='180'/.test(A.PLACEHOLDER), '占位图也是 16:9');
+        ok(/'html \.poster-wrap img\.dg-port \{[^}]*background: none;/.test(AS), '竖图去掉 <img> 自带的灰色渐变底(否则盖住模糊铺底)');
+        const PV = fs.readFileSync(path.join(ROOT, 'public/adult/preview.js'), 'utf8');
+        ok(/dg-pv-fit \{ object-fit: contain;/.test(PV) && /videoWidth \/ v\.videoHeight < 1\.2\) v\.classList\.add\('dg-pv-fit'\)/.test(PV), '竖屏片源的悬停预览整条放下(contain),不裁成中间一条');
+    }
     const tried = new Set(['https://p.example/1.jpg']);
     ok(A.pickFallbackPic({ sources: [{ vod_pic: 'https://p.example/1.jpg' }, { vod_pic: 'https://x/mac_default.jpg' }, { vod_pic: 'data:x' }, { vod_pic: 'https://p.example/2.jpg' }] }, tried) === 'https://p.example/2.jpg'
         && A.pickFallbackPic({ sources: [{ vod_pic: 'https://p.example/1.jpg' }] }, tried) === '' && A.pickFallbackPic(null) === '', '海报回退:换没试过的另一条线路海报,都试过 → 空(中性占位)');
@@ -2362,7 +2389,7 @@ async function feedWorld(o) {
     // ---- index.html 接线(p4)----
     const head = HTML.slice(0, HTML.indexOf('</head>'));
     const iSeek = head.indexOf('libs/js/seek-preview.js');
-    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=2', 'adult/feed.js?v=4'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
+    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=3', 'adult/feed.js?v=4'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
     // 修订:head 里的隐私预锁片段(设过 PIN 才加 dgp-prelock;privacy.js 10 秒没起来就撤掉),要在任何 body 内容之前
     const iPre = head.indexOf('dgp-prelock body > *:not(.dgp-layer)'), iPreJs = head.indexOf("localStorage.getItem('dgp_pin')");
     ok(iPre > 0 && iPreJs > iPre && iPreJs < head.indexOf('adult/adult.js?v=') && /if \(!window\.dgPrivacy\) d\.classList\.remove\('dgp-prelock'\); \}, 10000\)/.test(head), 'head:隐私预锁(CSS + 设过 PIN 才加类 + 10 秒兜底撤掉),在 adult.js 之前', [iPre, iPreJs]);
