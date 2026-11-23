@@ -1671,7 +1671,7 @@ console.log('⑩ 第三 / 四阶段:20 万作品合成目录 —— 浏览 / 分
     let fc = null, fItems = 0, dupF = 0, fPages = 0;
     for (let k = 0; k < 20; k++) { const r = await catS.feed({ cursor: fc }); fPages++; for (const it of r.items) { if (seenF.has(it.wk)) dupF++; seenF.add(it.wk); } fItems += r.items.length; fc = r.cursor_next; if (!fc) break; }
     let vc = null, vItems = 0, vBad = 0;
-    for (let k = 0; k < 10; k++) { const r = await catS.feed({ cursor: vc, vert: true }); vItems += r.items.length; vBad += r.items.filter((x) => x.orient !== 'v' || !x.lines.length || !/m3u8/.test(x.lines[0].url)).length; vc = r.cursor_next; if (!vc) break; }
+    for (let k = 0; k < 10; k++) { const r = await catS.feed({ cursor: vc, vert: true }); vItems += r.items.length; vBad += r.items.filter((x) => x.orient === 'h' || !x.lines.length || !/m3u8/.test(x.lines[0].url)).length; vc = r.cursor_next; if (!vc) break; }
     const feedMs = performance.now() - t;
     t = performance.now();
     const hbS = Array.from({ length: 100 }, (_, k) => (k * 7) % 256);
@@ -1762,8 +1762,10 @@ console.log('⑪ 第四阶段(inline):刷一刷 / 方向学习 / 相关推荐 / 
         '刷一刷:主播学到竖屏后进(≤180s);网红竖屏但 600s 不进;没学到方向的主播不进', F2.length);
     ok(F2.every((x, k) => k === 0 || tierOf(F2[k - 1]) <= tierOf(x)) && F2.slice(0, 3).every((x) => x.orient === 'v') && F2[F2.length - 1].wk === sA1, '刷一刷 vert=false:已知竖屏在前、横屏最后', F2.map((x) => x.orient || '-').join(''));
     const FV = allFeed({ vert: true });
-    ok(FV.length === 3 && FV.every((x) => x.orient === 'v') && FV.some((x) => x.wk === sA0), '刷一刷 vert=1:只出已知竖屏', FV.map((x) => x.name));
-    ok(catA.feed({ vert: '1' }).items.length === 3, 'vert 也认 "1"');
+    // 2026-11-23:竖屏 = 已知竖屏在前 + 没量过方向的(以前只出已知竖屏 → 只有几条);已知横屏不出
+    ok(FV.length === F2.filter((x) => x.orient !== 'h').length && FV.length > 3 && FV.every((x) => x.orient !== 'h') && FV.slice(0, 3).every((x) => x.orient === 'v') && FV.some((x) => x.wk === sA0) && !FV.some((x) => x.wk === sA1),
+        '刷一刷 vert=1:已知竖屏在前、没量过的跟着、已知横屏不出', FV.map((x) => x.orient || '-').join(''));
+    ok(catA.feed({ vert: '1' }).items.length === Math.min(10, FV.length), 'vert 也认 "1"');
     // 快照换了:游标按上一个作品接着走
     const p1 = catA.feed({ limit: 5 });
     cA.t += 11 * MIN;
@@ -2308,7 +2310,7 @@ console.log('⑫ 第四阶段(worker):相关 / 刷一刷 / 热度 / 方向 / 隐
     ok(ro.prepare('SELECT orient FROM adult_works WHERE wk=?').get(s0).orient === 'v', '写线程:方向学习');
     await x1.rebuild();
     const fv = await x1.feed({ vert: true });
-    ok(fv.items.length === 1 && fv.items[0].wk === s0 && fv.items[0].orient === 'v', '读线程:竖屏模式', fv.items.map((x) => x.wk));
+    ok(fv.items.length >= 1 && fv.items[0].wk === s0 && fv.items[0].orient === 'v' && fv.items.every((x) => x.orient !== 'h'), '读线程:竖屏模式(学到竖屏的排第一,没量过的跟着)', fv.items.map((x) => x.wk));
     const hb = new Array(100).fill(0);
     hb[3] = 9;
     ok((await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w1')) === true && (await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w1')) === false, '写线程:热度去重');
@@ -2588,6 +2590,16 @@ console.log('⑭ 第四阶段复核(二):首页各行不出审查级 / 猜你喜
     ok(dbM.prepare("SELECT wk FROM adult_items WHERE site='mz1'").get().wk === 'c:SSIS-883' && workRow(dbM, 'c:SSIS-883').hid === 1 && catM.isHidden('c:SSIS-883')
         && fl['hide-follow-merge'] === 1 && !fl['hide-follow'] && catM.adminHidden().some((r) => r.wk === 'c:SSIS-883'),
         '被藏作品的线路并进已有作品:整部一起藏、单独计数 hide-follow-merge、后台隐藏列表里能看到', fl);
+}
+{
+    // 2026-11-23:竖屏序列 = 已知竖屏 + 没量过 / 方形(以前只收已知竖屏 → 只有几条);已知横屏不进;带水印的照旧排在干净的后面
+    const n = 12, fs = Array.from({ length: n }, (_, i) => 1000 - i), id = Array.from({ length: n }, (_, i) => i + 1), fam = Array.from({ length: n }, (_, i) => 'f' + i);
+    const tiers = [[0, 1], [2, 3, 4], [5, 6], [7], [8, 9], [10, 11]];
+    const r = RFM.buildFeed({ tiers: tiers.map((x) => x.slice()), fs, id, fam, C: { feedPoolMax: 100, feedSlotMs: 3600e3, feedMaxRun: 9 }, make: (Ctor, len) => new Ctor(len) });
+    const V = [...r.feedV], All = [...r.feedA];
+    ok(JSON.stringify(V.slice().sort((a, b) => a - b)) === JSON.stringify([0, 1, 2, 3, 4, 7, 8, 9]) && V.slice(0, 2).every((x) => [0, 1].includes(x)) && V.slice(2, 5).every((x) => [2, 3, 4].includes(x)) && V[5] === 7,
+        '竖屏序列:已知竖屏 → 没量过 → 带水印的竖屏 → 带水印没量过;已知横屏(5,6,10,11)不进', V);
+    ok(All.length === n && All.indexOf(7) > All.indexOf(6), '全部序列照旧:干净的三层都在带水印的前面', All);
 }
 
 console.log(`\nsite-catalog-test: ${pass} passed, ${fail} failed`);

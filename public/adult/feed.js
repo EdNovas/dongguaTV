@@ -87,13 +87,13 @@
         const orient = (x.orient === 'v' || x.orient === 'h' || x.orient === 'sq') ? x.orient : '';
         return { wk: x.wk, card, title: cleanText(card.title || card.name, 120), code: cleanText(card._code, 24), badge: cleanText(card._badge, 8), pic: typeof card.poster_path === 'string' ? card.poster_path : '', dur, orient, lines };
     }
-    // 一页 → { items, next, done };seen = 已经有的作品键(跨页去重);只看竖屏时横屏 / 方形的也丢掉
+    // 一页 → { items, next, done };seen = 已经有的作品键(跨页去重);只看竖屏时已知横屏的丢掉(没量过 / 方形的留着,放的时候量到横屏再跳过)
     function normFeed(d, toCard, seen, vert) {
         const s = seen || new Set();
         const items = [];
         for (const x of (d && Array.isArray(d.items)) ? d.items : []) {
             const it = normItem(x, toCard);
-            if (!it || s.has(it.wk) || (vert && it.orient && it.orient !== 'v')) continue;
+            if (!it || s.has(it.wk) || (vert && it.orient === 'h')) continue;
             s.add(it.wk);
             items.push(it);
         }
@@ -667,7 +667,21 @@
         if (sl) sl.classList.toggle('dg-fit-cover', fitOf(v.videoWidth, v.videoHeight, sw, sh) === 'cover');
         const o = orientOf(v.videoWidth, v.videoHeight);
         if (sl) sl.classList.toggle('dg-fs-h', o === 'h');
+        // 竖屏模式里量到横屏(以前没量过方向的):上报(下次快照就不进竖屏了),这条跳过 —— 正在看的翻到下一条,预加载的等翻到时自动越过
+        if (S.vert && o === 'h' && !it.skipH) {
+            it.skipH = true;
+            report(it, x.line, v.videoWidth, v.videoHeight, o);
+            if (S.cur === i) skipHere(i);
+            return;
+        }
         if (o && o !== it.orient && !v.paused) report(it, x.line, v.videoWidth, v.videoHeight, o);
+    }
+    // 竖屏模式下这一条是横屏:按刚才翻的方向越过去(到头了就不动)
+    function skipHere(i) {
+        const d = S.dir < 0 ? -1 : 1, to = i + d;
+        if (to < 0 || to >= S.items.length) return;
+        const g = S.gen;
+        setTimeout(() => { if (S.open && !S.suspended && S.gen === g && S.cur === i) step(d); }, 0);
     }
     // 方向上报(契约 P4 beacon 的 orient/w/h):每部每会话一次;无痕不报;线路没带 vod_id 时按作品信息补(本地目录,零上游)
     function report(it, line, w, hgt, o) {
@@ -731,7 +745,15 @@
     // ---- 当前条目 ----
     function setActive(i) {
         if (i === S.cur || i < 0 || i >= S.items.length) return;
+        S.dir = i < S.cur ? -1 : 1;
         S.cur = i;
+        // 竖屏模式:预加载时已经量到是横屏的 → 不放,顺着方向越过去
+        if (S.vert && S.items[i] && S.items[i].skipH && i + S.dir >= 0 && i + S.dir < S.items.length) {
+            renderWindow();
+            skipHere(i);
+            if (i >= S.items.length - MORE_AT) loadMore();
+            return;
+        }
         renderWindow();
         Object.keys(S.inst).forEach(k => { const n = +k; if (n !== i && n !== i + 1) destroyInst(n); });
         // 离开的那条(往回翻时留着的下一条)先停
