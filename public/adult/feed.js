@@ -26,12 +26,36 @@
     const WK_RE = /^[ct]:./;
 
     // ======================= 纯函数 =======================
-    function feedUrl(cursor, vert) {
+    // rand:没有游标时从服务器挑的随机位置开始(每次打开 / 「换一批」都不是同一批)
+    function feedUrl(cursor, vert, rand) {
         const q = [];
         if (cursor) q.push('cursor=' + encodeURIComponent(String(cursor)));
+        else if (rand) q.push('start=rand');
         if (vert) q.push('vert=1');
         return '/api/catalog/feed' + (q.length ? '?' + q.join('&') : '');
     }
+    // 清单的「正片窗口」(hls.js 的 level 分片 → {start,end} 或 null):按不连续段(cc)分块,最长那块 ≥ 总长 60%、
+    //   别的块都 ≤ 60 秒(片头 / 中插 / 片尾贴片,去广告 Worker 没剪掉的)→ 只在最长那块里放、循环也只在这块里转
+    function contentWindow(frags) {
+        const blocks = new Map();
+        let total = 0;
+        for (const f of Array.isArray(frags) ? frags : []) {
+            if (!f) continue;
+            const d = Number(f.duration) || 0, s = Number(f.start) || 0, cc = Number(f.cc) || 0;
+            if (!(d > 0)) continue;
+            total += d;
+            const b = blocks.get(cc) || { start: s, end: s, dur: 0 };
+            b.start = Math.min(b.start, s); b.end = Math.max(b.end, s + d); b.dur += d;
+            blocks.set(cc, b);
+        }
+        if (blocks.size < 2 || !(total > 0)) return null;
+        const arr = [...blocks.values()].sort((a, b) => b.dur - a.dur);
+        const main = arr[0];
+        if (main.dur < 0.6 * total || arr.slice(1).some(b => b.dur > 60)) return null;
+        return { start: main.start, end: main.end };
+    }
+    // 双击:画面左 40% 后退、右 40% 前进,中间不算
+    function tapZone(rel) { return rel < 0.4 ? -1 : rel > 0.6 ? 1 : 0; }
     // 和服务器(lib/site-catalog/common.js orientOf)同一个阈值:高 ≥ 1.15 × 宽 = 竖,宽 ≥ 1.15 × 高 = 横,其余方
     function orientOf(w, h) {
         const W = Number(w) || 0, H = Number(h) || 0;
@@ -117,10 +141,53 @@
         open: false, suspended: false, el: null, list: null, note: null, vertBox: null, slides: [], items: [], seen: new Set(),
         cursor: '', done: false, loading: false, err: false, vert: false, cur: -1, io: null, ratio: new Map(), inst: Object.create(null),
         muted: true, bytes: 0, opts: null, gen: 0, onKey: null, onVis: null, reported: new Set(),
+        // 随机起点 / 到底后换个随机位置接着刷(wraps)/ 连续几页全是看过的(emptyRun)→ 放开「跳过看过的」(relax)
+        rand: true, wraps: 0, emptyRun: 0, relax: false,
+        seenP: null, marked: new Set(), histMem: [],
+        press: null, lpT: 0, tapT: 0, lastTap: null, suppressClick: 0, scrub: null,
     };
+    const SEEN_KEY = 'dg_feed_seen', HIST_KEY = 'dg_feed_hist';   // 这几天刷到过的(跳过)/「看过」列表 —— 看了 ≥3 秒才算;无痕只在内存
+    const SEEN_TTL = 7 * 86400e3, SEEN_MAX = 2000, HIST_MAX = 200;
+    const LP_MS = 400, DBL_MS = 280, SEEK_STEP = 10;
     function lsGet(k) { try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch (e) { return null; } }
     function lsSet(k, v) { try { if (root.localStorage) root.localStorage.setItem(k, v); } catch (e) { } }
     function A() { return root.DgAdult || null; }
+    // ---- 刷到过 / 看过(本机;无痕只在内存,一键清除连同删)----
+    function incog() { const a = A(); try { return !!(a && typeof a.incognito === 'function' && a.incognito()); } catch (e) { return true; } }
+    function seenMap() {
+        if (S.seenP) return S.seenP;
+        const m = new Map();
+        if (!incog()) {
+            try {
+                const arr = JSON.parse(lsGet(SEEN_KEY) || '[]'), now = Date.now();
+                for (const x of Array.isArray(arr) ? arr : []) if (Array.isArray(x) && typeof x[0] === 'string' && WK_RE.test(x[0]) && now - Number(x[1]) < SEEN_TTL) m.set(x[0], Number(x[1]));
+            } catch (e) { }
+        }
+        S.seenP = m;
+        return m;
+    }
+    function histList() {
+        if (incog()) return S.histMem.slice();
+        try {
+            const a = JSON.parse(lsGet(HIST_KEY) || '[]');
+            return Array.isArray(a) ? a.filter(x => x && typeof x.wk === 'string' && WK_RE.test(x.wk)).slice(0, HIST_MAX) : [];
+        } catch (e) { return []; }
+    }
+    function markWatched(it) {
+        if (!it || S.marked.has(it.wk)) return;
+        S.marked.add(it.wk);
+        const now = Date.now();
+        const m = seenMap();
+        m.set(it.wk, now);
+        const rec = { wk: it.wk, title: cleanText(it.title, 120), pic: typeof it.pic === 'string' && it.pic.length <= 1000 ? it.pic : '', code: cleanText(it.code, 24), dur: Math.max(0, Number(it.dur) || 0), t: now };
+        if (incog()) { S.histMem = [rec].concat(S.histMem.filter(x => x.wk !== it.wk)).slice(0, HIST_MAX); return; }
+        lsSet(SEEN_KEY, JSON.stringify([...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, SEEN_MAX)));
+        lsSet(HIST_KEY, JSON.stringify([rec].concat(histList().filter(x => x.wk !== it.wk)).slice(0, HIST_MAX)));
+    }
+    function histClear() {
+        S.histMem = [];
+        try { if (root.localStorage) root.localStorage.removeItem(HIST_KEY); } catch (e) { }
+    }
     // 隐私锁着(或 head 里的预锁还没解开):不建任何播放实例(不拉清单、不拉分片、预备的下一条也不建);解锁后当前这条点一下才播
     function locked() {
         try { const P = root.dgPrivacy; if (P && typeof P.locked === 'function' && P.locked()) return true; } catch (e) { }
@@ -166,12 +233,27 @@
         cb.addEventListener('change', () => { S.vert = !!cb.checked; lsSet(VERT_KEY, S.vert ? '1' : '0'); reload(); });
         lab.appendChild(cb);
         lab.appendChild(root.document.createTextNode(' 只看竖屏'));
-        bar.appendChild(x); bar.appendChild(t); bar.appendChild(lab);
+        // 「换一批」:从新的随机位置重新开始(像抖音下拉刷新);「看过」:看了 ≥3 秒的短片列表
+        const shuf = h('button', 'dg-feed-btn', { type: 'button', title: '换一批' });
+        shuf.appendChild(icon('fa-rotate-right'));
+        shuf.appendChild(root.document.createTextNode(' 换一批'));
+        shuf.addEventListener('click', () => { S.rand = true; reload(); });
+        const hb = h('button', 'dg-feed-btn', { type: 'button', title: '看过的短片' });
+        hb.appendChild(icon('fa-clock-rotate-left'));
+        hb.appendChild(root.document.createTextNode(' 看过'));
+        hb.addEventListener('click', () => showHist(true));
+        bar.appendChild(x); bar.appendChild(t); bar.appendChild(lab); bar.appendChild(shuf); bar.appendChild(hb);
         const list = h('div', 'dg-feed-list', { tabindex: '-1' });
         const note = h('div', 'dg-feed-note', { role: 'status' });
         note.hidden = true;
         wrap.appendChild(bar); wrap.appendChild(list); wrap.appendChild(note);
         list.addEventListener('click', onListClick);
+        // 长按 2 倍速 / 拖进度条:指针事件(滑动翻页照旧是原生滚动,手指一挪就不算长按)
+        list.addEventListener('pointerdown', onDown);
+        list.addEventListener('pointermove', onMove, { passive: true });
+        list.addEventListener('pointerup', onUp);
+        list.addEventListener('pointercancel', onUp);
+        list.addEventListener('contextmenu', onCtx);
         S.el = wrap; S.list = list; S.note = note; S.vertBox = cb;
         return wrap;
     }
@@ -192,12 +274,56 @@
         n.hidden = false;
     }
 
+    // ---- 看过的短片(面板盖在刷短片上;点一条 = 开它的播放页)----
+    function showHist(on) {
+        if (!S.el) return;
+        const old = S.el.querySelector('.dg-feed-hist');
+        if (old) old.parentNode.removeChild(old);
+        const x = S.inst[S.cur];
+        if (!on) { if (S.histPaused && x && x.video && x.want) playVideo(x.video, S.cur); S.histPaused = false; return; }
+        if (x && x.video && !x.video.paused) { try { x.video.pause(); } catch (e) { } S.histPaused = true; }
+        const p = h('div', 'dg-feed-hist', { role: 'dialog', 'aria-label': '看过的短片' });
+        const head = h('div', 'dg-fh-head');
+        const ttl = h('b');
+        const list = histList();
+        ttl.textContent = '看过的短片' + (list.length ? ' · ' + list.length : '');
+        const clr = h('button', 'dg-feed-btn', { type: 'button' });
+        clr.textContent = '清空';
+        clr.addEventListener('click', () => { histClear(); showHist(true); });
+        const cls = h('button', 'dg-feed-btn', { type: 'button', 'aria-label': '关闭' });
+        cls.appendChild(icon('fa-xmark'));
+        cls.addEventListener('click', () => showHist(false));
+        head.appendChild(ttl); head.appendChild(clr); head.appendChild(cls);
+        p.appendChild(head);
+        if (incog()) { const n = h('div', 'dg-fh-note'); n.textContent = '无痕模式:只记在这次打开的页面里,关掉就没了'; p.appendChild(n); }
+        const grid = h('div', 'dg-fh-grid');
+        if (!list.length) { const n = h('div', 'dg-fh-note'); n.textContent = '还没有看过的短片(看 3 秒以上才算)'; grid.appendChild(n); }
+        list.forEach(r => {
+            const b = h('button', 'dg-fh-item', { type: 'button', title: r.title || '' });
+            const im = h('div', 'dg-fh-img');
+            if (r.pic) { const img = h('img', '', { alt: '', referrerpolicy: 'no-referrer', loading: 'lazy', decoding: 'async' }); img.src = r.pic; im.appendChild(img); }
+            if (r.dur) { const d = h('span', 'dg-fh-dur'); d.textContent = fmtDur(r.dur); im.appendChild(d); }
+            const tt = h('div', 'dg-fh-t');
+            tt.textContent = r.title || r.code || '未命名';
+            b.appendChild(im); b.appendChild(tt);
+            b.addEventListener('click', () => {
+                const o = S.opts;
+                showHist(false);
+                if (o && typeof o.onPick === 'function') o.onPick({ id: r.wk, _wk: r.wk, title: r.title, name: r.title, poster_path: r.pic, _code: r.code, _sub: '', _badge: '' });
+            });
+            grid.appendChild(b);
+        });
+        p.appendChild(grid);
+        S.el.appendChild(p);
+        try { cls.focus({ preventScroll: true }); } catch (e) { }
+    }
+
     // ---- 数据 ----
     function loadMore() {
         if (!S.open || S.loading || S.done || S.err) return;
         S.loading = true;
         const gen = S.gen;
-        const url = feedUrl(S.cursor, S.vert);
+        const url = feedUrl(S.cursor, S.vert, !S.cursor && S.rand);
         const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
         const tm = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) { } }, 15000) : 0;
         Promise.resolve(root.fetch(url, { credentials: 'same-origin', signal: ctl ? ctl.signal : undefined }))
@@ -206,15 +332,27 @@
                 if (gen !== S.gen) return;
                 const a = A();
                 const p = normFeed(d, a && a.cardToItem, S.seen, S.vert);
-                S.cursor = p.next; S.done = p.done;
+                // 这几天刷到过的(看了 ≥3 秒)先跳过;连着 8 页全是看过的 = 池子快刷完了 → 放开,看过的也出
+                const sm = seenMap();
+                const fresh = S.relax ? p.items : p.items.filter(it => !sm.has(it.wk));
+                S.emptyRun = fresh.length ? 0 : S.emptyRun + 1;
+                if (S.emptyRun >= 8 && !S.relax) S.relax = true;
+                S.cursor = p.next; S.done = p.done; S.rand = false;
                 const from = S.items.length;
-                p.items.forEach(it => { S.items.push(it); addSlide(S.items.length - 1); });
+                fresh.forEach(it => { S.items.push(it); addSlide(S.items.length - 1); });
+                // 到底了:换个随机位置接着刷(无尽,像抖音);连续两轮一条新的都没有才真的到底
+                let more = !fresh.length && !S.done;
+                if (S.done) {
+                    if (fresh.length) S.wraps = 0;
+                    if (S.wraps < 2) { S.wraps++; S.done = false; S.cursor = ''; S.rand = true; more = !fresh.length; }
+                    else if (!S.items.length && !S.relax) { S.relax = true; S.wraps = 0; S.done = false; S.cursor = ''; S.rand = true; more = true; }
+                }
                 if (!S.items.length) showNote(S.done ? '暂时没有可刷的短片' : '');
                 else if (S.done) addEnd();
                 if (from === 0 && S.items.length) { S.cur = -1; setActive(0); }
                 else if (S.cur >= 0) renderWindow();
                 // 这一页全被筛掉了但还有下一页 → 接着拉
-                if (!p.items.length && !S.done) setTimeout(() => { if (gen === S.gen) loadMore(); }, 300);
+                if (more) setTimeout(() => { if (gen === S.gen) loadMore(); }, 300);
             })
             .catch(() => { if (gen === S.gen) { S.err = true; showNote('加载失败，可能是网络不稳定', true); } })
             .then(() => { if (tm) clearTimeout(tm); if (gen === S.gen) S.loading = false; });
@@ -223,6 +361,7 @@
         destroyAll();
         S.gen++;
         S.items = []; S.seen = new Set(); S.cursor = ''; S.done = false; S.err = false; S.loading = false; S.cur = -1; S.ratio = new Map();
+        S.rand = true; S.wraps = 0; S.emptyRun = 0; S.relax = false;
         if (S.io) { try { S.io.disconnect(); } catch (e) { } }
         S.slides = [];
         if (S.list) { while (S.list.firstChild) S.list.removeChild(S.list.firstChild); S.list.scrollTop = 0; }
@@ -285,6 +424,20 @@
         const msg = h('div', 'dg-fs-msg', { role: 'status' });
         msg.hidden = true;
         sl.appendChild(msg);
+        // 进度条(可拖)+ 时间;长按 2 倍速的角标;双击 ±10 秒的提示
+        const prog = h('div', 'dg-fs-prog', { role: 'slider', 'aria-label': '播放进度', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0', tabindex: '-1' });
+        const track = h('div', 'dg-fs-prog-t');
+        track.appendChild(h('div', 'dg-fs-prog-f'));
+        prog.appendChild(track);
+        const tm = h('span', 'dg-fs-time');
+        prog.appendChild(tm);
+        sl.appendChild(prog);
+        const fast = h('div', 'dg-fs-fast', { 'aria-hidden': 'true' });
+        fast.appendChild(icon('fa-forward'));
+        fast.appendChild(root.document.createTextNode(' 2× 快进中'));
+        fast.hidden = true;
+        sl.appendChild(fast);
+        sl.appendChild(h('div', 'dg-fs-seek', { 'aria-hidden': 'true' }));
     }
     function empty(i) {
         const sl = S.slides[i];
@@ -349,7 +502,20 @@
                     const n = (d && d.frag && d.frag.stats && (d.frag.stats.loaded || d.frag.stats.total)) || 0;
                     S.bytes += n;
                 });
-                hls.on(E.ERROR, (_, d) => { if (d && d.fatal && mine()) failInst(i); });
+                // 片头 / 片尾贴片(Worker 没剪掉的不连续短块):只在正片那块里放
+                hls.on(E.LEVEL_LOADED, (_, d) => {
+                    if (!mine()) return;
+                    const w = contentWindow(d && d.details && d.details.fragments);
+                    x.win = w;
+                    if (w && x.video && (Number(x.video.currentTime) || 0) < w.start - 0.5) { try { x.video.currentTime = w.start; } catch (e) { } }
+                });
+                // 致命的媒体错误先 recoverMediaError 一次(解码 / 追加缓冲出错常能救回来),再不行才换线路
+                hls.on(E.ERROR, (_, d) => {
+                    if (!d || !d.fatal || !mine()) return;
+                    const T = root.Hls.ErrorTypes || {};
+                    if (d.type === T.MEDIA_ERROR && !x.recovered) { x.recovered = true; try { hls.recoverMediaError(); return; } catch (e) { } }
+                    failInst(i);
+                });
                 hls.loadSource(url);
                 hls.attachMedia(v);
             }
@@ -366,7 +532,20 @@
     }
     // 从哪儿开始 / 接着加载:第一次从 0;停过(往回翻 / 自动播被拦)再续上时从画面停的位置
     function loadPos(x) { const t = x && x.video ? Number(x.video.currentTime) || 0 : 0; return t > 0 ? t : 0; }
+    // 起播看门狗:要播了 15 秒还没出画面、也没报错(卡在 0 秒一直转圈)→ 当这条线路放不了;页面在后台 / 用户停着不算
+    const START_MS = 15000;
+    function armWatchdog(x) {
+        clearTimeout(x.wd);
+        x.wd = setTimeout(() => {
+            if (S.inst[x.i] !== x || !x.want || x.gen !== S.gen || S.suspended || !S.open) return;
+            try { if (root.document.hidden) { armWatchdog(x); return; } } catch (e) { }
+            const v = x.video;
+            if (v && (Number(v.currentTime) || 0) > 0.1) return;
+            failInst(x.i);
+        }, START_MS);
+    }
     function startInst(x) {
+        armWatchdog(x);
         x.want = true;
         if (x.hls && x.parsed && !x.started) { x.started = true; try { x.hls.startLoad(loadPos(x)); } catch (e) { } }
         if (x.native && !x.video.getAttribute('src')) { x.video.src = playUrl(x.line); try { x.video.load(); } catch (e) { } }
@@ -405,12 +584,24 @@
         if (!v || v.__dgFeedBound) return;
         v.__dgFeedBound = true;
         const cur = () => { const x = S.inst[i]; return (x && x.video === v && x.gen === S.gen) ? x : null; };
-        v.addEventListener('playing', () => { const x = cur(); if (!x) return; const sl = S.slides[i]; if (sl) sl.classList.add('dg-fs-on'); measure(i, x); });
+        v.addEventListener('playing', () => { const x = cur(); if (!x) return; clearTimeout(x.wd); const sl = S.slides[i]; if (sl) sl.classList.add('dg-fs-on'); measure(i, x); });
         v.addEventListener('loadedmetadata', () => { const x = cur(); if (x) measure(i, x); });
         v.addEventListener('error', () => { const x = cur(); if (x && x.native && v.getAttribute('src')) failInst(i); });
         const count = () => { const x = cur(); if (x && x.native) countNative(x); };
-        v.addEventListener('timeupdate', count);
         v.addEventListener('progress', count);
+        // 原生 HLS 记流量 + 进度条 / 正片窗口(跳过贴片、只在正片里循环)/ 看了 ≥3 秒记「看过」(每种监听只绑一个)
+        v.addEventListener('timeupdate', () => {
+            const x = cur();
+            if (!x) return;
+            if (x.native) countNative(x);
+            const w = x.win, t = Number(v.currentTime) || 0;
+            if (w && !v.seeking) {
+                if (t < w.start - 0.5) { try { v.currentTime = w.start; } catch (e) { } return; }
+                if (t >= w.end - 0.25) { try { v.currentTime = w.start; } catch (e) { } return; }
+            }
+            progUpd(i);
+            if (t - (w ? w.start : 0) >= 3 && i === S.cur) markWatched(S.items[i]);
+        });
     }
     // 原生 HLS 的流量估算(见 nativeBytes):播过的秒数按 timeupdate 累加(循环回开头 / 跳转不算),缓冲过的秒数取 buffered 的最大值;只往上加
     function countNative(x) {
@@ -457,11 +648,16 @@
         if (!x || !it || x.gen !== S.gen) return;
         const want = x.want;
         teardown(x);
-        x.hls = null; x.parsed = false; x.started = false;
+        x.hls = null; x.parsed = false; x.started = false; x.recovered = false; x.win = null;
         x.li++;
         if (x.li < it.lines.length) { makeInst(i, want); return; }
         delete S.inst[i];
-        showMsg(i, '这条暂时放不了，往下滑看下一条');
+        showMsg(i, '这条暂时放不了，马上跳到下一条…');
+        // 正在看的这条:1.5 秒后自动翻到下一条(用户没自己翻走才翻)
+        if (i === S.cur) {
+            const g = S.gen;
+            setTimeout(() => { if (S.open && !S.suspended && S.gen === g && S.cur === i && i + 1 < S.items.length) step(1); }, 1500);
+        }
     }
     function showMsg(i, text) {
         const sl = S.slides[i];
@@ -471,6 +667,7 @@
     }
     function teardown(x) {
         if (!x) return;
+        clearTimeout(x.wd);
         if (x.hls) { try { x.hls.destroy(); } catch (e) { } }
         const v = x.video;
         if (v) { try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { } }
@@ -546,11 +743,137 @@
         // 点「点一下播放」(出着这个按钮时点画面也算):现在才建实例 / 续上加载,在手势里播
         const tapBtn = sl.querySelector('.dg-fs-tap');
         if (t.closest('.dg-fs-tap') || (tapBtn && !tapBtn.hidden)) { if (i === S.cur) userPlay(i); return; }
-        // 点画面:静音时 → 开声音;有声时 → 暂停 / 继续
+        if (t.closest('.dg-fs-prog')) return;
+        if (Date.now() < S.suppressClick) return;   // 长按 2 倍速 / 拖进度条松手的那一下不算点
+        // 点画面:先等一下看是不是双击(左 40% 后退 10 秒、右 40% 前进 10 秒);单击照旧:静音 → 开声音,有声 → 暂停 / 继续
+        const now = Date.now(), lt = S.lastTap;
+        if (lt && lt.i === i && now - lt.t < DBL_MS && Math.abs(e.clientX - lt.x) < 60 && Math.abs(e.clientY - lt.y) < 60) {
+            clearTimeout(S.tapT); S.lastTap = null;
+            const r = sl.getBoundingClientRect();
+            const z = tapZone((e.clientX - r.left) / (r.width || 1));
+            if (z) seekBy(i, z * SEEK_STEP, z);
+            return;
+        }
+        S.lastTap = { i, t: now, x: e.clientX, y: e.clientY };
+        clearTimeout(S.tapT);
+        S.tapT = setTimeout(() => { S.lastTap = null; singleTap(i); }, DBL_MS);
+    }
+    function singleTap(i) {
         const x = S.inst[i];
-        if (!x || !x.video) return;
+        if (!x || !x.video || i !== S.cur) return;
         if (S.muted) { S.muted = false; syncMute(); if (x.video.paused) playVideo(x.video, i); return; }
         if (x.video.paused) playVideo(x.video, i); else { try { x.video.pause(); } catch (err) { } }
+    }
+    // ---- 进度条 / 快进快退 ----
+    function winOf(x) {
+        const v = x && x.video, D = v ? Number(v.duration) : 0, w = x && x.win;
+        const s0 = w ? w.start : 0, e0 = w ? w.end : (isFinite(D) && D > 0 ? D : 0);
+        return { s0, e0, len: Math.max(0, e0 - s0) };
+    }
+    function progUpd(i) {
+        const x = S.inst[i], sl = S.slides[i];
+        if (!x || !x.video || !sl) return;
+        const f = sl.querySelector('.dg-fs-prog-f'), tm = sl.querySelector('.dg-fs-time'), bar = sl.querySelector('.dg-fs-prog');
+        const W = winOf(x), t = Math.max(0, (Number(x.video.currentTime) || 0) - W.s0);
+        const p = W.len > 0 ? Math.min(1, t / W.len) : 0;
+        if (f) f.style.width = (p * 100).toFixed(2) + '%';
+        if (tm) tm.textContent = W.len > 0 ? fmtDur(t) + ' / ' + fmtDur(W.len) : '';
+        if (bar) bar.setAttribute('aria-valuenow', String(Math.round(p * 100)));
+    }
+    function seekTo(i, sec) {
+        const x = S.inst[i];
+        if (!x || !x.video) return;
+        const W = winOf(x);
+        if (!(W.len > 0)) return;
+        const to = Math.max(W.s0, Math.min(W.e0 - 0.4, sec));
+        try { x.video.currentTime = to; } catch (e) { }
+        progUpd(i);
+    }
+    function seekBy(i, d, side) {
+        const x = S.inst[i];
+        if (!x || !x.video) return;
+        seekTo(i, (Number(x.video.currentTime) || 0) + d);
+        const sl = S.slides[i], tip = sl && sl.querySelector('.dg-fs-seek');
+        if (tip) {
+            tip.textContent = (d > 0 ? '+' : '−') + Math.abs(d) + ' 秒';
+            tip.classList.remove('dg-l', 'dg-r', 'dg-show');
+            tip.classList.add(side < 0 ? 'dg-l' : 'dg-r');
+            void tip.offsetWidth;
+            tip.classList.add('dg-show');
+            clearTimeout(tip.__t);
+            tip.__t = setTimeout(() => tip.classList.remove('dg-show'), 650);
+        }
+    }
+    function seekAtX(i, clientX) {
+        const sl = S.slides[i], tr = sl && sl.querySelector('.dg-fs-prog-t'), x = S.inst[i];
+        if (!tr || !x) return;
+        const r = tr.getBoundingClientRect();
+        const W = winOf(x);
+        if (!(r.width > 0 && W.len > 0)) return;
+        seekTo(i, W.s0 + Math.max(0, Math.min(1, (clientX - r.left) / r.width)) * W.len);
+    }
+    // ---- 长按 2 倍速(按着画面 0.4 秒,松手恢复;手指一挪 = 在滑动,不算)/ 拖进度条 ----
+    function slideIndexOf(t) {
+        const sl = t && t.closest ? t.closest('.dg-fs') : null;
+        return sl ? parseInt(sl.getAttribute('data-i'), 10) : -1;
+    }
+    function fastBadge(i, on) { const sl = S.slides[i], b = sl && sl.querySelector('.dg-fs-fast'); if (b) b.hidden = !on; }
+    function startFast(p) {
+        const x = S.inst[p.i];
+        if (!x || !x.video || x.video.paused || p.lp) return;
+        p.lp = true; p.rate = x.video.playbackRate || 1;
+        try { x.video.playbackRate = 2; } catch (e) { }
+        fastBadge(p.i, true);
+    }
+    function onDown(e) {
+        if (e.button != null && e.button !== 0) return;
+        const t = e.target;
+        const i = slideIndexOf(t);
+        if (i < 0 || i !== S.cur) return;
+        if (t.closest && t.closest('.dg-fs-prog')) {
+            e.preventDefault();
+            S.scrub = { i, id: e.pointerId };
+            try { t.closest('.dg-fs-prog').setPointerCapture(e.pointerId); } catch (err) { }
+            const sl = S.slides[i];
+            if (sl) sl.classList.add('dg-fs-scrub');
+            seekAtX(i, e.clientX);
+            return;
+        }
+        if (t.closest && t.closest('button, a, input, label')) return;
+        S.press = { i, x: e.clientX, y: e.clientY, id: e.pointerId, lp: false };
+        clearTimeout(S.lpT);
+        S.lpT = setTimeout(() => { if (S.press && S.press.i === S.cur) startFast(S.press); }, LP_MS);
+    }
+    function onMove(e) {
+        if (S.scrub && S.scrub.id === e.pointerId) { seekAtX(S.scrub.i, e.clientX); return; }
+        const p = S.press;
+        if (!p || p.id !== e.pointerId || p.lp) return;
+        if (Math.abs(e.clientX - p.x) > 10 || Math.abs(e.clientY - p.y) > 10) { clearTimeout(S.lpT); S.press = null; }
+    }
+    function onUp(e) {
+        if (S.scrub && S.scrub.id === e.pointerId) {
+            const sl = S.slides[S.scrub.i];
+            if (sl) sl.classList.remove('dg-fs-scrub');
+            S.scrub = null;
+            S.suppressClick = Date.now() + 350;
+            return;
+        }
+        const p = S.press;
+        clearTimeout(S.lpT);
+        S.press = null;
+        if (p && p.lp) {
+            const x = S.inst[p.i];
+            if (x && x.video) { try { x.video.playbackRate = p.rate || 1; } catch (err) { } }
+            fastBadge(p.i, false);
+            S.suppressClick = Date.now() + 400;
+        }
+    }
+    // 手机系统的长按菜单(安卓 ~400ms 先到):在画面上拦掉,并且就此开始 2 倍速(系统已经认定是长按了)
+    function onCtx(e) {
+        const t = e.target;
+        if (slideIndexOf(t) < 0 || (t.closest && t.closest('a, input'))) return;
+        e.preventDefault();
+        if (S.press && !S.press.lp) { clearTimeout(S.lpT); startFast(S.press); }
     }
     function userPlay(i) {
         const x = makeInst(i, true);
@@ -621,6 +944,7 @@
         if (k === 'ArrowDown' || k === 'PageDown' || k === 'j') { e.preventDefault(); e.stopPropagation(); step(1); return; }
         if (k === 'ArrowUp' || k === 'PageUp' || k === 'k') { e.preventDefault(); e.stopPropagation(); step(-1); return; }
         if (k === 'm') { S.muted = !S.muted; syncMute(); return; }
+        if (k === 'ArrowLeft' || k === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); seekBy(S.cur, k === 'ArrowLeft' ? -5 : 5, k === 'ArrowLeft' ? -1 : 1); return; }
         if (k === ' ') {
             // 焦点在按钮 / 勾选框上:空格照旧是按那个按钮
             const t = e.target;
@@ -700,6 +1024,8 @@
         try { S.list.focus({ preventScroll: true }); } catch (e) { }
     }
     function boot() {
+        // 「刷到过」「看过」两个本机键:无痕时不写、一键清除连同删(privacy.js 的键表)
+        try { const P = root.dgPrivacy; if (P && typeof P.registerKeys === 'function') P.registerKeys({ keys: [SEEN_KEY, HIST_KEY] }); } catch (e) { }
         // 隐私锁上 → 停掉并销毁全部实例(锁屏后面不许接着下清单 / 分片);解锁不自动续播:当前这条出「点一下播放」
         try {
             const P = root.dgPrivacy;
@@ -717,12 +1043,15 @@
     }
     const CSS = [
         'html.dg-feed-lock, html.dg-feed-lock body { overflow: hidden !important; }',
-        '.dg-feed { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background: #000; color: #fff; display: flex; flex-direction: column; }',
-        '.dg-feed-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: 12px; padding: 10px 16px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); background: linear-gradient(to bottom, rgba(0,0,0,.7), transparent); pointer-events: none; }',
+        // 按钮 / 字号跟着页面的界面缩放(--ui-scale,设置里的「界面大小」)走,底子也比以前大一号
+        '.dg-feed { --fs: var(--ui-scale, 1); position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 3000; background: #000; color: #fff; display: flex; flex-direction: column; }',
+        '.dg-feed-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; gap: calc(10px * var(--fs)); padding: 10px 16px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); background: linear-gradient(to bottom, rgba(0,0,0,.7), transparent); pointer-events: none; }',
         '.dg-feed-bar > * { pointer-events: auto; }',
-        '.dg-feed-x { width: 38px; height: 38px; border-radius: 50%; border: 0; background: rgba(0,0,0,.45); color: #fff; font-size: 16px; cursor: pointer; }',
-        '.dg-feed-t { flex: 1; font-size: 16px; }',
-        '.dg-feed-vert { display: inline-flex; align-items: center; gap: 4px; margin: 0; font-size: 13px; background: rgba(0,0,0,.45); border-radius: 15px; padding: 4px 10px; cursor: pointer; }',
+        '.dg-feed-x { flex: none; width: calc(46px * var(--fs)); height: calc(46px * var(--fs)); border-radius: 50%; border: 0; background: rgba(0,0,0,.5); color: #fff; font-size: calc(19px * var(--fs)); cursor: pointer; }',
+        '.dg-feed-t { flex: 1; font-size: calc(18px * var(--fs)); white-space: nowrap; }',
+        '.dg-feed-vert, .dg-feed-btn { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: calc(14px * var(--fs)); color: #fff; background: rgba(0,0,0,.5); border: 0; border-radius: 999px; padding: calc(8px * var(--fs)) calc(14px * var(--fs)); cursor: pointer; white-space: nowrap; }',
+        '.dg-feed-btn:hover, .dg-feed-btn:focus-visible { background: rgba(229,9,20,.85); outline: none; }',
+        '@media (max-width: 480px) { .dg-feed-vert, .dg-feed-btn { padding: calc(8px * var(--fs)) calc(10px * var(--fs)); } .dg-feed-t { display: none; } }',
         '.dg-feed-list { position: absolute; top: 0; left: 0; right: 0; bottom: 0; overflow-y: scroll; scroll-snap-type: y mandatory; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scrollbar-width: none; outline: none; }',
         '.dg-feed-list::-webkit-scrollbar { display: none; }',
         '.dg-fs { position: relative; height: 100%; width: 100%; scroll-snap-align: start; scroll-snap-stop: always; overflow: hidden; background: #000; }',
@@ -734,19 +1063,40 @@
         '.dg-fs-spin { position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border: 3px solid rgba(255,255,255,.25); border-top-color: #fff; border-radius: 50%; animation: dg-fs-rot .9s linear infinite; pointer-events: none; }',
         '.dg-fs.dg-fs-on .dg-fs-spin, .dg-fs.dg-fs-err .dg-fs-spin, .dg-fs-tap:not([hidden]) ~ .dg-fs-spin { display: none; }',
         '@keyframes dg-fs-rot { to { transform: rotate(360deg); } }',
-        '.dg-fs-tap { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; border: 0; background: rgba(0,0,0,.5); color: #fff; border-radius: 16px; padding: 16px 22px; font-size: 14px; cursor: pointer; }',
-        '.dg-fs-tap i { font-size: 30px; }',
+        '.dg-fs-tap { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 8px; border: 0; background: rgba(0,0,0,.5); color: #fff; border-radius: 16px; padding: calc(18px * var(--fs)) calc(26px * var(--fs)); font-size: calc(16px * var(--fs)); cursor: pointer; }',
+        '.dg-fs-tap i { font-size: calc(36px * var(--fs)); }',
         '.dg-fs-hint { max-width: 220px; font-size: 11px; line-height: 1.4; color: #bbb; }',
-        '.dg-fs-info { position: absolute; left: 0; right: 64px; bottom: 0; z-index: 2; padding: 16px; padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to top, rgba(0,0,0,.75), transparent); }',
-        '.dg-fs-title { display: block; max-width: 100%; background: none; border: 0; padding: 0; color: #fff; font-size: 15px; font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }',
+        '.dg-fs-info { position: absolute; left: 0; right: calc(76px * var(--fs)); bottom: 0; z-index: 2; padding: 16px; padding-bottom: calc(36px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(to top, rgba(0,0,0,.75), transparent); }',
+        '.dg-fs-title { display: block; max-width: 100%; background: none; border: 0; padding: 0; color: #fff; font-size: calc(17px * var(--fs)); font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }',
         '.dg-fs-title:hover, .dg-fs-title:focus { text-decoration: underline; text-underline-offset: 3px; outline: none; }',
-        '.dg-fs-sub { margin-top: 4px; color: #ccc; font-size: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }',
-        '.dg-fs-mute { position: absolute; right: 14px; bottom: calc(26px + env(safe-area-inset-bottom, 0px)); z-index: 2; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(0,0,0,.5); color: #fff; font-size: 18px; cursor: pointer; }',
-        '.dg-fs-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; background: rgba(0,0,0,.7); border-radius: 10px; padding: 10px 16px; font-size: 13px; color: #ddd; }',
+        '.dg-fs-sub { margin-top: 4px; color: #ccc; font-size: calc(13px * var(--fs)); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }',
+        '.dg-fs-mute { position: absolute; right: 14px; bottom: calc(40px + env(safe-area-inset-bottom, 0px)); z-index: 2; width: calc(54px * var(--fs)); height: calc(54px * var(--fs)); border-radius: 50%; border: 0; background: rgba(0,0,0,.5); color: #fff; font-size: calc(22px * var(--fs)); cursor: pointer; }',
+        '.dg-fs-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 2; background: rgba(0,0,0,.7); border-radius: 10px; padding: 12px 18px; font-size: calc(15px * var(--fs)); color: #ddd; }',
+        // 进度条:平时细一条,按住 / 悬停加粗;触屏上手指拖它不会翻页(touch-action:none)
+        '.dg-fs-prog { position: absolute; left: 0; right: 0; bottom: calc(6px + env(safe-area-inset-bottom, 0px)); z-index: 3; height: 26px; display: flex; align-items: center; gap: 10px; padding: 0 14px; touch-action: none; cursor: pointer; }',
+        '.dg-fs-prog-t { position: relative; flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,.28); transition: height .12s; }',
+        '.dg-fs-prog-f { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; background: #fff; }',
+        '.dg-fs-prog:hover .dg-fs-prog-t, .dg-fs.dg-fs-scrub .dg-fs-prog-t { height: 6px; } .dg-fs.dg-fs-scrub .dg-fs-prog-f { background: #e50914; }',
+        '.dg-fs-time { flex: none; min-width: 7.5em; text-align: right; font-size: calc(12px * var(--fs)); color: rgba(255,255,255,.85); font-variant-numeric: tabular-nums; text-shadow: 0 1px 2px #000; }',
+        '.dg-fs:not(.dg-fs-on) .dg-fs-prog { visibility: hidden; }',
+        '.dg-fs-fast { position: absolute; top: calc(70px * var(--fs) + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 3; background: rgba(0,0,0,.6); border-radius: 999px; padding: 6px 14px; font-size: calc(14px * var(--fs)); pointer-events: none; }',
+        '.dg-fs-seek { position: absolute; top: 50%; z-index: 3; transform: translateY(-50%); padding: 10px 18px; border-radius: 999px; background: rgba(0,0,0,.55); font-size: calc(18px * var(--fs)); font-weight: 600; opacity: 0; pointer-events: none; transition: opacity .2s; }',
+        '.dg-fs-seek.dg-l { left: 12%; } .dg-fs-seek.dg-r { right: 12%; } .dg-fs-seek.dg-show { opacity: 1; }',
+        // 看过的短片面板
+        '.dg-feed-hist { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 6; background: rgba(10,10,10,.97); overflow-y: auto; padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 24px; }',
+        '.dg-fh-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; } .dg-fh-head b { flex: 1; font-size: calc(18px * var(--fs)); }',
+        '.dg-fh-note { color: #999; font-size: calc(13px * var(--fs)); margin: 6px 0 12px; }',
+        '.dg-fh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(150px * var(--fs)), 1fr)); gap: 12px; }',
+        '.dg-fh-item { background: none; border: 0; padding: 0; color: #eee; text-align: left; cursor: pointer; }',
+        '.dg-fh-img { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden; background: #222; }',
+        '.dg-fh-img img { width: 100%; height: 100%; object-fit: cover; display: block; }',
+        '.dg-fh-dur { position: absolute; right: 4px; bottom: 4px; font-size: 11px; background: rgba(0,0,0,.7); border-radius: 4px; padding: 1px 5px; }',
+        '.dg-fh-t { margin-top: 6px; font-size: calc(13px * var(--fs)); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }',
+        '.dg-fh-item:hover .dg-fh-t, .dg-fh-item:focus-visible .dg-fh-t { color: #fff; text-decoration: underline; text-underline-offset: 3px; }',
         '.dg-fs-end { height: 64px; display: flex; align-items: center; justify-content: center; color: #777; font-size: 13px; scroll-snap-align: end; }',
         '.dg-feed-note { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4; text-align: center; color: #ccc; font-size: 14px; }',
         '.dg-feed-retry { margin-left: 10px; border: 1px solid #666; background: transparent; color: #fff; border-radius: 14px; padding: 3px 12px; cursor: pointer; }',
-        '@media (min-width: 769px) { .dg-fs-poster, .dg-fs-v { left: 50%; width: min(100%, 62vh); transform: translateX(-50%); } .dg-fs.dg-fs-h .dg-fs-v, .dg-fs.dg-fs-h .dg-fs-poster { width: 100%; } .dg-fs-info { left: calc(50% - min(50%, 31vh)); right: calc(50% - min(50%, 31vh) + 64px); } .dg-fs-mute { right: calc(50% - min(50%, 31vh) + 14px); } }',
+        '@media (min-width: 769px) { .dg-fs-poster, .dg-fs-v { left: 50%; width: min(100%, 62vh); transform: translateX(-50%); } .dg-fs.dg-fs-h .dg-fs-v, .dg-fs.dg-fs-h .dg-fs-poster { width: 100%; } .dg-fs-info { left: calc(50% - min(50%, 31vh)); right: calc(50% - min(50%, 31vh) + 64px); } .dg-fs-mute { right: calc(50% - min(50%, 31vh) + 14px); } .dg-fs-prog { left: calc(50% - min(50%, 31vh)); right: calc(50% - min(50%, 31vh)); } }',
     ].join('\n');
     function injectCss() {
         const d = root.document;
@@ -760,7 +1110,7 @@
         return { open: S.open, suspended: S.suspended, cur: S.cur, items: S.items.length, inst: Object.keys(S.inst).map(Number), mode: mode(), why: why(), mb: +(S.bytes / 1048576).toFixed(1), muted: S.muted, vert: S.vert, done: S.done };
     }
     return {
-        feedUrl, orientOf, normItem, normFeed, netMode, netWhy, nativeBytes, NATIVE_BPS, hlsConfig, fitOf, fmtDur, SESSION_CAP, WINDOW_BEFORE, WINDOW_AFTER,
+        feedUrl, orientOf, normItem, normFeed, netMode, netWhy, nativeBytes, NATIVE_BPS, hlsConfig, fitOf, fmtDur, SESSION_CAP, WINDOW_BEFORE, WINDOW_AFTER, contentWindow, tapZone, SEEN_KEY, HIST_KEY,
         open, close, suspend, resume, boot, status,
         isOpen: () => S.open && !S.suspended, suspended: () => S.open && S.suspended,
         _S: S, _setActive: setActive, _onIO: onIO, _click: onListClick, _onKey: onKey,

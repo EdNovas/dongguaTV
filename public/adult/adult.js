@@ -2140,6 +2140,33 @@
         return { KEY: AGE_KEY, accepted, whenAccepted: () => ready, mount, accept, leave };
     })();
 
+    // ========== 混合内容:红楼系 CDN 的 http 分片升 https ==========
+    //   清单里写的是 http://vfile.meituan.net/…(https 也能用,实测 56/56);https 页面上浏览器拦 http 的 XHR → hls.js 拿到 status 0、
+    //   整条判「放不了」(刷短片开头约七成是这个源)。主播放器 / 刷短片 / 预览都是 hls.js 发 XHR → 在 XMLHttpRequest.open 这一层统一改 https
+    //   (只认这几个主机;Worker 也做同样的改写,管 iPhone 原生 HLS)
+    const HTTPS_UPGRADE_HOSTS = ['vfile.meituan.net'];
+    function upgradeMixed(u) {
+        const s = String(u || '');
+        const m = /^http:\/\/([^\/?#:]+)/i.exec(s);
+        if (!m) return s;
+        const h = m[1].toLowerCase();
+        return HTTPS_UPGRADE_HOSTS.some(x => h === x || h.endsWith('.' + x)) ? 'https://' + s.slice(7) : s;
+    }
+    (function patchXhrOpen() {
+        try {
+            if (!root.location || root.location.protocol !== 'https:' || !root.XMLHttpRequest) return;
+            const P = root.XMLHttpRequest.prototype;
+            if (!P || P.__dgUpgrade) return;
+            const open0 = P.open;
+            P.open = function (method, url) {
+                const a = Array.prototype.slice.call(arguments);
+                if (typeof url === 'string' && url.charCodeAt(4) === 58) a[1] = upgradeMixed(url);   // 只看 "http:" 开头的
+                return open0.apply(this, a);
+            };
+            P.__dgUpgrade = true;
+        } catch (e) { }
+    })();
+
     // ========== 站名 ==========
     const brand = (function () {
         const KEY = 'dg_site_name';
@@ -4786,6 +4813,7 @@
 
     return {
         ON: true, VERSION, DEFAULT_NAME,
+        upgradeMixed,
         BUCKET_LABEL, NAV_BUCKETS, TYPES, SORTS, DURS, VARIANTS, GROUPS, DEFAULT_SORTS,
         catalog, cardToItem, browseUrl, homeToRows, todayMap, todayOf,
         workUrl, workSource, workToGroup, workToList, groupKeyOf, groupNameOf, isLandscape, isPortrait, shapeCover, pickFallbackPic, PLACEHOLDER,

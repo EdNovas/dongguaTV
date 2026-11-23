@@ -41,6 +41,9 @@ const { slimHistoryItem } = require(path.join(ROOT, 'lib/history-slim'));
 console.log('① adult.js 纯函数');
 {
     ok(A.ON === true && typeof A.mixin === 'object' && typeof A.catalog === 'object', '导出 ON / mixin / catalog');
+    ok(A.upgradeMixed('http://vfile.meituan.net/a/1.png') === 'https://vfile.meituan.net/a/1.png' && A.upgradeMixed('http://cdn.example/x.ts') === 'http://cdn.example/x.ts'
+        && A.upgradeMixed('http://vfile.meituan.net.evil.example/x') === 'http://vfile.meituan.net.evil.example/x' && A.upgradeMixed('https://vfile.meituan.net/a') === 'https://vfile.meituan.net/a',
+        '混合内容:红楼系 vfile.meituan.net 的 http 分片改 https(别的主机、仿冒域名不动)');
     // 分类:与 lib/adult 的导航桶完全一致,每个桶恰好落在一个大类里
     const nav = X.taxonomy.NAV_BUCKETS.slice().sort();
     ok(eq(A.NAV_BUCKETS.slice().sort(), nav), '17 个导航桶与 lib/adult/taxonomy 一致', A.NAV_BUCKETS);
@@ -2052,6 +2055,14 @@ function fakeVideo() {
     // ---- 刷短片模块(feed.js)纯函数 ----
     const FD = require(path.join(ROOT, 'public/adult/feed.js'));
     ok(FD.feedUrl('', false) === '/api/catalog/feed' && FD.feedUrl('abc+/=', true) === '/api/catalog/feed?cursor=abc%2B%2F%3D&vert=1', 'feedUrl(契约:/api/catalog/feed?cursor=&vert=1)');
+    ok(FD.feedUrl('', true, true) === '/api/catalog/feed?start=rand&vert=1' && FD.feedUrl('c1', false, true) === '/api/catalog/feed?cursor=c1', 'feedUrl:没游标时随机起点(start=rand);有游标照游标走');
+    // 正片窗口:片头 18 秒贴片 + 117 秒正片 + 尾部 17 秒贴片 → 只放正片;单块 / 正片不够长 / 贴片太长 → 不限制
+    const fr = (cc, start, duration) => ({ cc, start, duration });
+    const cw = FD.contentWindow([fr(0, 0, 9), fr(0, 9, 8.6), fr(1, 17.6, 60), fr(1, 77.6, 57), fr(2, 134.6, 17.6)]);
+    ok(cw && Math.abs(cw.start - 17.6) < 1e-6 && Math.abs(cw.end - 134.6) < 1e-6 && FD.contentWindow([fr(0, 0, 10), fr(0, 10, 10)]) === null
+        && FD.contentWindow([fr(0, 0, 50), fr(1, 50, 50)]) === null && FD.contentWindow([fr(0, 0, 90), fr(1, 90, 300)]) === null && FD.contentWindow(null) === null,
+        '刷短片:正片窗口跳过 Worker 没剪掉的片头 / 片尾贴片(只在最长那块里放)', cw);
+    ok(FD.tapZone(0.1) === -1 && FD.tapZone(0.5) === 0 && FD.tapZone(0.9) === 1, '刷短片:双击左 40% 后退、右 40% 前进、中间不算');
     ok(FD.orientOf(720, 1280) === 'v' && FD.orientOf(1920, 1080) === 'h' && FD.orientOf(1000, 1100) === 'sq' && FD.orientOf(0, 10) === '', 'orientOf:高/宽 ≥1.15 竖、宽/高 ≥1.15 横,其余方');
     {   // 修订:和服务器 lib/site-catalog/common.js orientOf 同一个阈值(1.15 ~ 1.25 之间两边以前判得不一样)
         const KC = require(path.join(ROOT, 'lib/site-catalog/common.js'));
@@ -2130,7 +2141,7 @@ function fakeVideo() {
         dgPrivacy: { locked: () => privLocked, incognito: () => false, onChange: (f) => { privSubs.push(f); return () => { }; } },
         fetch: async (u) => {
             fetched.push(u);
-            if (u === '/api/catalog/feed') return new Response(JSON.stringify({ items: [0, 1, 2, 3, 4, 5].map(i => fItem(i)), cursor_next: 'c2' }), { status: 200 });
+            if (u === '/api/catalog/feed' || u === '/api/catalog/feed?start=rand') return new Response(JSON.stringify({ items: [0, 1, 2, 3, 4, 5].map(i => fItem(i)), cursor_next: 'c2' }), { status: 200 });
             if (u === '/api/catalog/feed?cursor=c2') return new Response(JSON.stringify({ items: [6, 7, 8].map(i => fItem(i)), cursor_next: null }), { status: 200 });
             return new Response('{}', { status: 404 });
         },
@@ -2148,7 +2159,7 @@ function fakeVideo() {
     const S = FDw._S;
     ok(FDw.open({ onClose: () => { closes++; }, onPick: (c) => picks.push(c) }) === true && FDw.isOpen(), 'open()');
     for (let i = 0; i < 10; i++) await tick();
-    ok(eq(fetched, ['/api/catalog/feed']) && S.items.length === 6 && S.slides.length === 6 && S.cur === 0, '第一页 → 6 条空壳,当前第 0 条', fetched);
+    ok(eq(fetched, ['/api/catalog/feed?start=rand']) && S.items.length === 6 && S.slides.length === 6 && S.cur === 0, '第一页 → 6 条空壳,当前第 0 条', fetched);
     ok(hls.length === 1 && hls[0].src === 'W:https://m.example/fs0/index.m3u8' && hls.every(x => x.cfg.autoStartLoad === false && x.cfg.maxBufferLength === 10), '只有 1 个在放(不预拉下一条的清单);地址走去广告变换', hls.map(x => x.src));
     hls[0].emit('hlsManifestParsed');
     ok(hls[0].starts === 1 && hls[0].media.muted === true && hls[0].media._plays >= 1, '在放的清单到了才 startLoad、静音自动播');
@@ -2171,7 +2182,8 @@ function fakeVideo() {
     ok(beacons.length === 1, '同一部不重复报');
     // 点画面:静音 → 开声音
     FDw._click({ target: v1 });
-    ok(S.muted === false && v1.muted === false, '点画面:开声音');
+    await new Promise(r => setTimeout(r, 320));   // 单击要等 280ms 看是不是双击
+    ok(S.muted === false && v1.muted === false, '点画面:开声音(等双击判定)');
     // 片名 → onPick(卡片)
     FDw._click({ target: slide(1).querySelector('.dg-fs-title') });
     ok(picks.length === 1 && picks[0]._wk === 't:FS1' && picks[0].title === '合成短片 1', '点片名 → onPick(卡片对象)');
@@ -2181,7 +2193,7 @@ function fakeVideo() {
     FDw._onIO([{ target: slide(2), isIntersecting: true, intersectionRatio: 0.9 }, { target: slide(1), isIntersecting: false, intersectionRatio: 0 }]);
     for (let i = 0; i < 10; i++) await tick();
     ok(S.cur === 2 && FDw.status().mode === 'tap' && !slide(2).querySelector('.dg-fs-tap').hidden && !hls.some(x => x.src.indexOf('fs2/') > 0) && !hls.some(x => x.src.indexOf('fs3/') > 0), '300MB 用完:不自动播,出「点一下播放」(这条的清单也不拉)');
-    ok(eq(fetched, ['/api/catalog/feed', '/api/catalog/feed?cursor=c2']) && S.items.length === 9, '离末尾还剩 4 条就按游标拉下一页');
+    ok(eq(fetched.slice(0, 2), ['/api/catalog/feed?start=rand', '/api/catalog/feed?cursor=c2']) && S.items.length === 9, '离末尾还剩 4 条就按游标拉下一页(每次打开从随机起点开始)', fetched);
     FDw._click({ target: slide(2).querySelector('.dg-fs-tap') });
     const pre2 = hls.find(x => x.src.indexOf('fs2/') > 0);
     if (pre2) pre2.emit('hlsManifestParsed');
@@ -2286,7 +2298,7 @@ async function feedWorld(o) {
         document: doc, Hls: FakeHls, navigator: nav, innerWidth: 390, innerHeight: 844,
         matchMedia: (q) => ({ matches: !!o.coarse && /coarse/.test(q) }),
         localStorage: { getItem: () => null, setItem() { } },
-        fetch: async (u) => (u === '/api/catalog/feed' ? new Response(JSON.stringify({ items: [0, 1, 2, 3, 4, 5].map(fItem), cursor_next: null }), { status: 200 }) : new Response('{}', { status: 404 })),
+        fetch: async (u) => ((u === '/api/catalog/feed' || u === '/api/catalog/feed?start=rand') ? new Response(JSON.stringify({ items: [0, 1, 2, 3, 4, 5].map(fItem), cursor_next: null }), { status: 200 }) : new Response('{}', { status: 404 })),
         DgAdult: { cardToItem: A.cardToItem, playUrl: (u) => u, isTV: () => false, cellOk: () => env.cell, incognito: () => false, beacon: { send: () => true }, fetchWorkRaw: async () => null },
         IntersectionObserver: function () { this.observe = () => { }; this.disconnect = () => { }; },
         AbortController, Response, setTimeout, clearTimeout, console, Promise, JSON, Math, Date, Map, Set, Object, Array, String, Number, RegExp, Error, encodeURIComponent,
@@ -2384,6 +2396,7 @@ async function feedWorld(o) {
     const U = await feedWorld({});
     U.parsed();
     U.FDw._click({ target: U.video(0) });   // 点画面:开声音
+    await new Promise(r => setTimeout(r, 320));   // 单击要等 280ms 看是不是双击
     U.env.play = 'reject';
     await U.go(1);
     ok(U.S.muted === true && !U.tap(1).hidden && U.video(1)._plays === 2, 'F3 带声音被拦 → 退回静音重试也被拦:出「点一下播放」', { muted: U.S.muted, plays: U.video(1)._plays });
@@ -2418,7 +2431,7 @@ async function feedWorld(o) {
     // ---- index.html 接线(p4)----
     const head = HTML.slice(0, HTML.indexOf('</head>'));
     const iSeek = head.indexOf('libs/js/seek-preview.js');
-    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=4', 'adult/feed.js?v=4'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
+    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=4', 'adult/feed.js?v=5'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
     // 修订:head 里的隐私预锁片段(设过 PIN 才加 dgp-prelock;privacy.js 10 秒没起来就撤掉),要在任何 body 内容之前
     const iPre = head.indexOf('dgp-prelock body > *:not(.dgp-layer)'), iPreJs = head.indexOf("localStorage.getItem('dgp_pin')");
     ok(iPre > 0 && iPreJs > iPre && iPreJs < head.indexOf('adult/adult.js?v=') && /if \(!window\.dgPrivacy\) d\.classList\.remove\('dgp-prelock'\); \}, 10000\)/.test(head), 'head:隐私预锁(CSS + 设过 PIN 才加类 + 10 秒兜底撤掉),在 adult.js 之前', [iPre, iPreJs]);

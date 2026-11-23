@@ -837,7 +837,21 @@ function segExt(url) {
 /**
  * 解析相对 URL 为绝对 URL
  */
+// 混合内容:这些 CDN 的 https 是好的(实测 56/56),但清单里写的是 http —— https 页面上浏览器会拦 http 分片 / 密钥
+//   (hls.js 拿到 status 0 → 整条放不了;刷短片开头 ~70% 是红楼系 vfile.meituan.net)→ 写回清单时一律改 https
+const HTTPS_UPGRADE_HOSTS = ['vfile.meituan.net'];
+function upgradeScheme(u) {
+    const m = /^http:\/\/([^\/?#:]+)/i.exec(u || '');
+    if (!m) return u;
+    const h = m[1].toLowerCase();
+    return HTTPS_UPGRADE_HOSTS.some((x) => h === x || h.endsWith('.' + x)) ? 'https://' + u.slice(7) : u;
+}
+
 function resolveUrl(url, baseOrigin, basePath) {
+    return upgradeScheme(resolveUrlRaw(url, baseOrigin, basePath));
+}
+
+function resolveUrlRaw(url, baseOrigin, basePath) {
     if (url.startsWith('http://') || url.startsWith('https://')) {
         return url; // 已经是绝对 URL
     }

@@ -1125,7 +1125,7 @@ console.log('⑥ 第四阶段:相关 / 短片流 / 热度 / 换域名接线 / �
         // —— 短片流 ——
         r = await api('GET', '/api/catalog/feed?vert=1&cursor=abc_1', { cookie: CK });
         const fq = last('feed');
-        ok(fq && JSON.stringify(fq.o) === JSON.stringify({ cursor: 'abc_1', vert: true, limit: 10 }) && /no-store/.test(r.h.get('cache-control') || ''), 'feed:cursor / vert / limit 透传', fq);
+        ok(fq && JSON.stringify(fq.o) === JSON.stringify({ cursor: 'abc_1', vert: true, limit: 10, rand: false }) && /no-store/.test(r.h.get('cache-control') || ''), 'feed:cursor / vert / limit 透传(有游标时不随机起点)', fq);
         const fi = (r.j && r.j.items) || [];
         ok(r.status === 200 && JSON.stringify(fi.map((x) => x.wk)) === JSON.stringify(['t:feed1', 't:hid1']) && r.j.cursor_next === 'nx_1',
             'feed vert=1:被拦片名 / AVDB 拦的番号 / 横屏 / 一条线路都不剩的 都不出', fi.map((x) => x.wk));

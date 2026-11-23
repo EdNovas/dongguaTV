@@ -71,7 +71,8 @@ function segments(text, base = BASE) {
             if (L[j].trim().startsWith('#EXT-X-KEY:')) key = keyOf(L[j].trim(), base);
             j++;
         }
-        if (j < L.length) out.push({ d, url: resolve(L[j].trim(), base), key });
+        // Worker 把 vfile.meituan.net 的 http 分片写成 https(混合内容);比对时两边按同一地址算
+        if (j < L.length) out.push({ d, url: resolve(L[j].trim(), base).replace(/^http:\/\/((?:[^\/?#:]+\.)?vfile\.meituan\.net)(?=[\/?#:]|$)/i, 'https://$1'), key });
         i = j;
     }
     return out;
