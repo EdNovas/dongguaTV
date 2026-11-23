@@ -708,6 +708,8 @@ class CacheManager {
         } else if (this.type === 'sqlite') {
             try {
                 const Database = require('better-sqlite3');
+                // CACHE_DB_PATH 指到还不存在的目录(部署时常见:数据目录没建)→ 先建;否则 better-sqlite3 打不开、静默退回内存缓存(成人站的首页目录也就起不来)
+                try { fs.mkdirSync(path.dirname(CACHE_DB_FILE), { recursive: true }); } catch (e) { }
                 this.db = new Database(CACHE_DB_FILE);
 
                 // WAL 模式 + 自动 checkpoint：之前 DB 处于 WAL 但无自动 checkpoint，
@@ -811,6 +813,7 @@ class CacheManager {
                 console.log(`[SQLite Cache] Database initialized: ${CACHE_DB_FILE}`);
             } catch (e) {
                 console.error('[SQLite Cache] Init failed, falling back to memory:', e.message);
+                if (adultGateLib && adultGateLib.ADULT_ENV_DEFAULTS) console.error('[adult] ⚠ SQLite 打不开 → 首页目录不会启动(首页一片空白)。检查 CACHE_DB_PATH 目录是否可写、better-sqlite3 是否装好(在项目目录运行 npm rebuild better-sqlite3)');
                 this.type = 'memory';
             }
         }
@@ -1086,6 +1089,8 @@ if (cacheManager.type === 'sqlite' && cacheManager.db && !process.env.VERCEL) {
         });
         catalog.start();
     } catch (e) { console.error('[Catalog] 首页目录不可用(/api/catalog/* 回 503,搜索/播放不受影响):', e.message); catalog = null; }
+} else if (!process.env.VERCEL) {
+    console.error('[Catalog] ⚠ 首页目录没有启动(首页一片空白):需要 CACHE_TYPE=sqlite 且 SQLite 能打开(当前缓存类型:' + cacheManager.type + ')');
 }
 const adultGate = adultGateLib.createAdultGate({
     adult,

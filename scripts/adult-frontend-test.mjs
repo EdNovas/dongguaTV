@@ -1551,6 +1551,7 @@ console.log('⑤ 页面接线 / sw.js');
     ok(/if \(this\.adultMode && dp\.video\) \{ try \{ this\._adBeaconTick\(dp\.video\); \} catch \(e\) \{ \} \}/.test(HTML), '线路反馈:timeupdate 里报起播(出错也不影响播放器的其他 tick)');
     ok(/\.\.\.\(\(data\._adult && this\.adultMode\) \? this\._adSrcExtra\(item\) : \{\}\)/.test(HTML) && /if \(!u \|\| it\._family\) \{ result\.push\(it\); return; \}/.test(HTML), 'refreshSources 保留成人字段;同片源去重不吃同家镜像');
     ok((HTML.match(/window\.DgAdult\.brand\.renew(Html|Text)\(\)/g) || []).length === 3, '三处续费提示:成人站用 /api/config 的 purchase_url(默认主站 ednovas.me,站长关掉就不提)');
+    ok(/class="dg-home-note"/.test(HTML) && /adult.home === 'off'/.test(HTML) && /adult.home === 'empty'/.test(HTML) && /adult.home === 'error'/.test(HTML) && /CACHE_TYPE=sqlite/.test(HTML), '首页目录没起来 / 片库还空 / 拉不到:给一句提示,不留整页空白');
     ok(/<div class="set-row" v-if="adultMode">[\s\S]{0,400}模糊封面[\s\S]{0,600}@change="adSetBlur\(\$event\.target\.checked\)"/.test(HTML), '设置里的「模糊封面」开关');
     // 标了 [adult] 的行里注释不在标签中间(浏览器会把它当属性,模板整个坏掉)
     const badCm = HTML.split('\n').filter(l => l.includes('<!-- [adult]')).filter(l => { const pre = l.split('<!--')[0]; return pre.lastIndexOf('<') > pre.lastIndexOf('>'); });

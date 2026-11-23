@@ -2599,6 +2599,8 @@
         '.dg-sug-row { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 44px; background: transparent; border: none; border-radius: 8px; color: #ddd; text-align: left; padding: 4px 8px; cursor: pointer; font-size: 13px; }',
         '.dg-sug-row:hover, .dg-sug-row.hi, .dg-sug-row:focus { background: rgba(255, 255, 255, 0.08); color: #fff; outline: none; }',
         '.dg-sug-row img { width: 64px; height: 36px; object-fit: cover; border-radius: 4px; flex: none; background: #262626; }',
+        '.dg-home-note { margin: 28px auto 8px; max-width: 640px; padding: 14px 18px; border-radius: 10px; background: rgba(255,255,255,.05); color: #bbb; font-size: 14px; line-height: 1.6; text-align: center; }',
+        '.dg-home-note code { color: #eee; background: rgba(255,255,255,.08); padding: 1px 5px; border-radius: 4px; }',
         '.dg-sug-row img.dg-port { object-fit: contain; }',
         '.dg-sug-row > i { width: 34px; text-align: center; color: #888; flex: none; }',
         '.dg-sug-main { display: flex; flex-direction: column; min-width: 0; flex: 1; }',

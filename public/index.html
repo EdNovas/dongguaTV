@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=9"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=10"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -3296,6 +3296,7 @@
         body.detail-covered #app > #heroCarousel,
         body.detail-covered #app > .search-section,
         body.detail-covered #app > .home-flow,
+        body.detail-covered #app > .dg-home-note,
         body.detail-covered #app > .catdir-page,
         body.detail-covered #app > .browse-page,
         body.detail-covered #app > .browse-sticky,
@@ -5132,6 +5133,12 @@
         </div>
 
         <!-- 首页内容区：用 v-show 而非 v-if，进出搜索只切换 display，避免每次销毁/重建 ~400 张海报卡导致卡顿 -->
+        <!-- [adult] 首页目录没起来 / 还空着 / 拉不到时给句话,不留一整页空白 -->
+        <div v-if="adultMode && adult && !offHome && (adult.home === 'off' || adult.home === 'empty' || adult.home === 'error')" class="dg-home-note" role="status">
+            <template v-if="adult.home === 'off'">首页目录没有启动。服务器需要 <code>CACHE_TYPE=sqlite</code>(并能加载 better-sqlite3),改好后重启;搜索仍然可用。</template>
+            <template v-else-if="adult.home === 'empty'">片库正在建立:首轮抓取要几分钟,稍后刷新即可。搜索已经可用。</template>
+            <template v-else>首页目录暂时拉不到,稍后刷新重试;搜索仍然可用。</template>
+        </div>
         <div v-show="!offHome" class="home-flow">
             <!-- 🧩 首页各板块按偏好设置里的顺序 / 开关排(homeBlocks:开着且有内容的板块,后面接其余分类榜单)。
                  第一个块上边距大一些(home-first);板块里的 ref 在 v-for 里是数组,取用处都要先取 [0] -->
