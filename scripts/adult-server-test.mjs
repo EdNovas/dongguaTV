@@ -1113,6 +1113,18 @@ console.log('⑥ 第四阶段:相关 / 短片流 / 热度 / 换域名接线 / �
         n0 = stubCount();
         ok((await api('GET', '/api/catalog/related/' + encodeURIComponent('c:SSIS-001'))).status === 401 && (await api('GET', '/api/catalog/feed')).status === 401
             && (await api('GET', '/api/catalog/heat/' + encodeURIComponent('c:SSIS-001'))).status === 401 && (await api('POST', '/api/catalog/heat', { json: {} })).status === 401, '相关 / 短片流 / 热度 没令牌 → 401');
+        // —— 分享短码(2026-11-23:每部作品自己的链接 #/v/<码>)——
+        {
+            ok((await api('POST', '/api/catalog/share', { json: { wk: 'c:SSIS-001' } })).status === 401 && (await api('GET', '/api/catalog/share/AbCdEfGh12')).status === 401, '分享短码:没令牌 → 401(要登录)');
+            let s = await api('POST', '/api/catalog/share', { cookie: CK, json: { wk: 'c:SSIS-001' } });
+            ok(s.status === 200 && s.j.code === 'AbCdEfGh12' && /no-store/.test(s.h.get('cache-control') || ''), 'POST /api/catalog/share → {code}', s.j);
+            ok((await api('POST', '/api/catalog/share', { cookie: CK, json: { wk: 'c:NOPE-001' } })).status === 404 && (await api('POST', '/api/catalog/share', { cookie: CK, json: { wk: 'xyz' } })).status === 400
+                && (await api('POST', '/api/catalog/share', { cookie: CK, json: {} })).status === 400, '分享短码:作品没有 → 404;键不合法 / 没给 → 400');
+            s = await api('GET', '/api/catalog/share/AbCdEfGh12', { cookie: CK });
+            ok(s.status === 200 && s.j.wk === 'c:SSIS-001', 'GET /api/catalog/share/:code → {wk}', s.j);
+            ok((await api('GET', '/api/catalog/share/ZZZZZZZZZZ', { cookie: CK })).status === 404 && (await api('GET', '/api/catalog/share/' + encodeURIComponent('bad code'), { cookie: CK })).status === 404
+                && (await api('GET', '/api/catalog/share/abc', { cookie: CK })).status === 404, '分享短码:认不出 / 不合法 → 404');
+        }
         r = await api('GET', '/api/catalog/related/' + encodeURIComponent('c:SSIS-001'), { cookie: CK });
         ok(r.status === 200 && JSON.stringify(r.j.items.map((c) => c.wk)) === JSON.stringify(['t:ok1', 't:hid1', 'c:REL-001']) && /max-age=60/.test(r.h.get('cache-control') || ''),
             '/api/catalog/related/:wk:自己 / 被拦片名 / AVDB 拦的番号 都滤掉', r.j && r.j.items.map((c) => c.wk));

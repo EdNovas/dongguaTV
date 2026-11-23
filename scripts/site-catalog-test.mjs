@@ -1888,6 +1888,25 @@ console.log('⑪ 第四阶段(inline):刷一刷 / 方向学习 / 相关推荐 / 
     dbA.prepare("UPDATE adult_works SET tags=',busty,' WHERE wk='c:RTY-206'").run();
     dbA.prepare("UPDATE adult_works SET review=NULL WHERE wk='c:QWZ-102'").run();
 
+    // —— 分享链接短码(2026-11-23)——
+    {
+        const sw = wkOf('某合成竖屏短片甲3');
+        const c1 = catA.shareCode(sw), c2 = catA.shareCode(sw);
+        ok(typeof c1 === 'string' && /^[A-Za-z0-9]{10}$/.test(c1) && c1 === c2 && catA.shareCode('t:不存在的作品') === null && catA.shareCode('') === null && catA.shareCode('x'.repeat(400)) === null,
+            '分享短码:一部作品一个(再要还是同一个)、10 位 base62;不存在 / 不合法的不给', [c1, c2]);
+        const r1 = catA.shareResolve(c1);
+        ok(r1 && r1.wk === sw && catA.shareResolve('ZZZZZZZZZZ') === null && catA.shareResolve('bad code!') === null && catA.shareResolve(null) === null, '分享短码 → 作品;认不出的码 / 不合法的 → null', r1);
+        const row = dbA.prepare('SELECT code, wk, name, dur, at FROM adult_share WHERE code=?').get(c1);
+        ok(row && row.wk === sw && row.name && Object.keys(row).join() === 'code,wk,name,dur,at', '分享表只存 码 / 作品 / 片名 / 时长 / 时间(不存谁分享的)', row);
+        // 作品键变了(规则重扫):按当时的片名找回同一部
+        dbA.prepare("UPDATE adult_share SET wk='t:改过键的旧作品' WHERE code=?").run(c1);
+        const r2 = catA.shareResolve(c1);
+        ok(r2 && r2.wk === sw, '分享短码:作品键变了 → 按当时的片名找回', r2);
+        dbA.prepare("UPDATE adult_share SET wk='t:改过键的旧作品', name='没有这个片名' WHERE code=?").run(c1);
+        ok(catA.shareResolve(c1) === null, '分享短码:片名也找不到 → null(前端说「找不到了」)');
+        dbA.prepare('UPDATE adult_share SET wk=?, name=? WHERE code=?').run(sw, row.name, c1);
+    }
+
     // —— 热度 ——
     const hw = wkOf('某合成竖屏短片甲4');   // 35s
     const zero = () => new Array(100).fill(0);
@@ -2311,6 +2330,8 @@ console.log('⑫ 第四阶段(worker):相关 / 刷一刷 / 热度 / 方向 / 隐
     await x1.rebuild();
     const fv = await x1.feed({ vert: true });
     ok(fv.items.length >= 1 && fv.items[0].wk === s0 && fv.items[0].orient === 'v' && fv.items.every((x) => x.orient !== 'h'), '读线程:竖屏模式(学到竖屏的排第一,没量过的跟着)', fv.items.map((x) => x.wk));
+    const wsc = await x1.shareCode(s0);
+    ok(/^[A-Za-z0-9]{10}$/.test(String(wsc)) && (await x1.shareCode(s0)) === wsc && x1.shareResolve(wsc) && x1.shareResolve(wsc).wk === s0, '写线程:分享短码(worker 模式)', wsc);
     const hb = new Array(100).fill(0);
     hb[3] = 9;
     ok((await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w1')) === true && (await x1.heatAdd(s0, { bins: hb, dur: 20 }, 'w1')) === false, '写线程:热度去重');

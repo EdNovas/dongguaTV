@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=25"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=27"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -6288,7 +6288,7 @@
                     </div>
                     <!-- 分享 / 投屏:未登录预览与试看时不显示(投屏到电视上播不计试看时长) -->
                     <div v-if="!previewLocked && !trial.on" style="display: flex; gap: 10px; align-items: center;">
-                        <button class="btn-cast" v-if="!adultMode" tabindex="2" @click="openSharePanel" aria-label="分享">   <!-- [adult] 不分享(分享链接会带片名) -->
+                        <button class="btn-cast" v-if="!adultMode || (currentGroup && currentGroup._wk)" tabindex="2" @click="openSharePanel" aria-label="分享">   <!-- [adult] 目录作品能分享:链接是 #/v/<短码>,不带片名(adult.js shareLinks) -->
                             <i class="fas fa-share-alt"></i> 分享
                         </button>
                         <button class="btn-cast" tabindex="2" @click="castVideo">
@@ -12596,7 +12596,9 @@
                 // 🔗 当前分享链接（响应 shareIncludeTime / 集数变化）
                 //   拼法在 DgFrameShare.link(截帧分享卡片的二维码用同一个),各段取自 _shareLinkParts
                 shareUrl() {
-                    return DgFrameShare.link(this._shareLinkParts((this.shareIncludeTime && this.shareSeconds > 0) ? this.shareSeconds : 0));
+                    const t = (this.shareIncludeTime && this.shareSeconds > 0) ? this.shareSeconds : 0;
+                    if (this.adultMode && typeof this.adShareUrl === 'function') return this.adShareUrl(t);   // [adult] 站点/#/v/<短码>[?t=秒]
+                    return DgFrameShare.link(this._shareLinkParts(t));
                 },
                 canNativeShare() { return typeof navigator !== 'undefined' && !!navigator.share; },
                 groupedList() {
@@ -15432,7 +15434,14 @@
                 // 投屏功能：纯粹的原生实现
                 // 🔗 打开分享面板（可勾选"从当前进度开始"）
                 openSharePanel() {
-                    if (this.adultMode) return;   // [adult] 不分享:分享链接/卡片会带片名
+                    // [adult] 目录作品:链接是 #/v/<短码>(不带片名);短码还没拿到就先要,拿到再开面板
+                    if (this.adultMode) {
+                        if (!this.currentGroup || !this.currentGroup._wk || typeof this.adEnsureLink !== 'function') return;
+                        if (!this.adShareUrl(0)) {
+                            this.adEnsureLink().then(ok => { if (ok) this.openSharePanel(); else this.showMiniToast('暂时生成不了分享链接，稍后再试'); });
+                            return;
+                        }
+                    }
                     if (!this.currentGroup || !this.currentGroup.name) return;
                     this.shareIncludeTime = false;
                     // ✂️ 分享原时间轴的秒数(收到的人可能走没剪的线路/设备;打开时再按自己的剪段换算)
@@ -15526,12 +15535,13 @@
                     const url = this.shareUrl;
                     const name = (this.currentGroup && this.currentGroup.name) || '';
                     const text = `一起看《${name}》`;
+                    const site = (this.adultMode && window.DgAdult && window.DgAdult.brand) ? window.DgAdult.brand.name() : 'E视界';   // [adult] 站名
                     const u = encodeURIComponent(url), t = encodeURIComponent(text), tu = encodeURIComponent(text + ' ' + url);
                     const openWin = (href) => window.open(href, '_blank', 'noopener,noreferrer,width=640,height=620');
                     switch (platform) {
                         case 'native':
                             // 调起系统分享面板（可分享到列表外的任意 App）；桌面端无此能力则复制链接
-                            if (navigator.share) { navigator.share({ title: name + ' - E视界', text, url }).catch(() => { }); return; }
+                            if (navigator.share) { navigator.share({ title: name + ' - ' + site, text, url }).catch(() => { }); return; }
                             this.copyShareLink().then(() => this.showMiniToast('🔗 链接已复制，可粘贴到任意 App 分享')); return;
                         case 'wechat':
                             // 微信没有网页直接分享接口（只能微信内 JS-SDK 或扫码/粘贴）：
@@ -15544,8 +15554,8 @@
                             this.copyShareLink().then(() => this.showMiniToast('Instagram 不支持直接分享链接，已复制，去 App 粘贴')); return;
                         case 'qq': {
                             // QQ 互联官方分享（发送给 QQ 好友/群）
-                            const s = encodeURIComponent(`来 E视界 一起看《${name}》`);
-                            openWin(`https://connect.qq.com/widget/shareqq/index.html?url=${u}&title=${t}&summary=${s}&desc=${s}&source=E视界`);
+                            const s = encodeURIComponent(`来 ${site} 一起看《${name}》`);
+                            openWin(`https://connect.qq.com/widget/shareqq/index.html?url=${u}&title=${t}&summary=${s}&desc=${s}&source=${encodeURIComponent(site)}`);
                             return;
                         }
                         case 'telegram': openWin(`https://t.me/share/url?url=${u}&text=${t}`); return;
@@ -15572,7 +15582,12 @@
                 //   卡片上的时间 = 进度条上显示的(剪后时间轴)。分享统计按渠道 'frame' 登记一个码(生成卡片就算一次分享:之后长按转发我们看不到)。
                 //   截图只读 <video> 当前帧,不暂停、不碰播放器;读不了(画布被跨域污染)就换 TMDB 剧照并在卡片上标明。纯函数在 DgFrameShare。
                 async shareFrame() {
-                    if (this.adultMode) { if (this.showMiniToast) this.showMiniToast('本站不提供分享'); return; }   // [adult] 截帧分享卡片带片名和二维码,不出
+                    // [adult] 目录作品能分享:卡片上的二维码 / 链接是 #/v/<短码>;短码还没拿到就先要(截图在拿到之后)
+                    if (this.adultMode) {
+                        const g0 = this.currentGroup;
+                        if (!g0 || !g0._wk || typeof this.adEnsureLink !== 'function') { if (this.showMiniToast) this.showMiniToast('这个视频不能分享'); return; }
+                        if (!this.adShareUrl(0)) { this.adEnsureLink().then(ok => { if (ok) this.shareFrame(); else this.showMiniToast('暂时生成不了分享链接，稍后再试'); }); return; }
+                    }
                     const g = this.currentGroup;
                     if (this.frameShare.show || !g || !g.name || g._isLive || this._liveActive || this.previewLocked) return;
                     if (this._frameShareBack && Date.now() - this._frameShareBack < 1500) return;   // 上一张刚关、退历史那一下还没落地
@@ -15595,7 +15610,7 @@
                     const ep = DgFrameShare.epLabel(cur && cur.name, multi), time = DgFrameShare.timeLabel(playT), tl = DgFrameShare.tail(ep, time);
                     // 📊 先登记码再拼链接(链接里带的就是它),拼完换新码 —— 与分享面板各按钮同一套
                     this._shareTrack('frame', baseT);
-                    const link = DgFrameShare.link(this._shareLinkParts(baseT));
+                    const link = this.adultMode ? this.adShareUrl(baseT) : DgFrameShare.link(this._shareLinkParts(baseT));   // [adult] #/v/<短码>?t=
                     this._shareRotate();
                     this.showSharePanel = false;
                     this._frameShareFree();
@@ -15614,14 +15629,15 @@
                     try {
                         const [qrLib, art, icon] = await Promise.all([
                             this._loadQrLib(),
-                            shot.canvas ? null : this._frameBackdrop(g.name, artHint),
+                            // [adult] 截不到画面(iOS 原生 HLS 污染画布)时没有 TMDB 剧照可用:试作品封面(图床不给跨域就不画图,卡片只放片名 + 二维码)
+                            shot.canvas ? null : (this.adultMode ? (/^https?:\/\//i.test(String(g.pic || '')) ? this._frameFetchArt(String(g.pic)) : null) : this._frameBackdrop(g.name, artHint)),
                             this._frameIcon()
                         ]);
                         if (!still()) return;
                         const qr = qrLib(0, 'M');
                         qr.addData(link); qr.make();
                         const base = {
-                            W: 1080, name: g.name, tail: tl, sub: baseT > 0 ? '扫码从这一秒开始看' : '扫码立即观看', brand: 'E视界', host: location.host, icon,
+                            W: 1080, name: g.name, tail: tl, sub: baseT > 0 ? '扫码从这一秒开始看' : '扫码立即观看', brand: (this.adultMode && window.DgAdult && window.DgAdult.brand) ? window.DgAdult.brand.name() : 'E视界', host: location.host, icon,
                             qr: { count: qr.getModuleCount(), isDark: (r, c) => qr.isDark(r, c) }
                         };
                         const img = shot.canvas ? { src: shot.canvas, sw: shot.canvas.width, sh: shot.canvas.height } : (art ? { src: art, sw: art.naturalWidth, sh: art.naturalHeight } : null);

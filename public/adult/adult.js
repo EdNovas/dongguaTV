@@ -2459,6 +2459,36 @@
             .catch(() => null)
             .then(d => { if (t) clearTimeout(t); return d; });
     }
+    // ========== 每部作品的链接 #/v/<码>(用户 2026-11-23:每个视频要有自己的网址、能分享)==========
+    //   码由服务器发(POST /api/catalog/share,一部作品一个 10 位码),链接里不带片名(聊天软件里显示 / 预览的都是一串码);
+    //   打开:GET /api/catalog/share/<码> → 作品键(作品键因为规则重扫变了时服务器按当时的片名找回)。?t=秒 = 从这一秒开始
+    const SHARE_HASH_RE = /^#\/v\/([A-Za-z0-9]{8,16})(?:\?t=(\d{1,6}))?$/;
+    const shareLinks = (function () {
+        const codes = new Map(), wait = new Map();
+        function code(wk) {
+            if (typeof wk !== 'string' || !WK_RE.test(wk) || wk.length > 300) return Promise.resolve('');
+            if (codes.has(wk)) return Promise.resolve(codes.get(wk));
+            if (wait.has(wk)) return wait.get(wk);
+            let p;
+            try {
+                p = Promise.resolve(root.fetch('/api/catalog/share', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ wk }) }))
+                    .then(r => (r && r.ok ? r.json() : null))
+                    .then(d => { const c = d && typeof d.code === 'string' && /^[A-Za-z0-9]{8,16}$/.test(d.code) ? d.code : ''; if (c) { if (codes.size > 500) codes.clear(); codes.set(wk, c); } return c; })
+                    .catch(() => '')
+                    .then(c => { wait.delete(wk); return c; });
+            } catch (e) { return Promise.resolve(''); }
+            wait.set(wk, p);
+            return p;
+        }
+        const known = (wk) => codes.get(wk) || '';
+        function resolve(c) {
+            if (typeof c !== 'string' || !/^[A-Za-z0-9]{8,16}$/.test(c)) return Promise.resolve('');
+            return fetchJson('/api/catalog/share/' + c, 10000).then(d => (d && typeof d.wk === 'string' && WK_RE.test(d.wk) && d.wk.length <= 300 ? d.wk : ''));
+        }
+        const url = (c, t, origin) => (c ? (origin || '') + '/#/v/' + c + (t > 0 ? '?t=' + Math.floor(t) : '') : '');
+        function parse(h) { const m = SHARE_HASH_RE.exec(String(h || '')); return m ? { code: m[1], t: m[2] ? Number(m[2]) : 0 } : null; }
+        return { code, known, resolve, url, parse };
+    })();
     // [adult] p4:不扩线的作品请求先用 adult/player-x.js 预取好的(dgAdultPlayer.prefetched(wk) → Promise / 作品 JSON / null);
     //   拿不到、形状不对、不是这一部 → 照常请求 /api/catalog/work
     function prefetchedWork(wk) {
@@ -2700,8 +2730,8 @@
         'html.dg-age-lock, html.dg-age-lock body { overflow: hidden !important; }',
         // 成人站没有首页轮播(TMDB 本周热门):整个空壳藏掉
         '#heroCarousel { display: none !important; }',
-        // 不分享:播放器里的「分享当前画面」相机图标 / 手机齿轮菜单那一行 / 分享面板里的入口都藏掉(方法本身也拦了)
-        '#dplayer .dplayer-frame-icon, #dplayer .dg-mob-row[data-dg="frame"], .fshare-entry { display: none !important; }',
+        // 分享(2026-11-23 起能分享:链接 #/v/<短码>):不是目录作品(没有短码可要)的播放页才藏「分享当前画面」入口
+        'html:not(.dg-can-share) #dplayer .dplayer-frame-icon, html:not(.dg-can-share) #dplayer .dg-mob-row[data-dg="frame"], html:not(.dg-can-share) .fshare-entry { display: none !important; }',
         '.dg-age { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 2147483647; background: #0b0b0b; color: #eee; display: flex; align-items: center; justify-content: center; padding: 24px 16px; box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif; }',
         '.dg-age-card { width: 100%; max-width: 420px; text-align: center; }',
         '.dg-age-badge { width: 76px; height: 76px; margin: 0 auto 18px; border-radius: 50%; border: 3px solid #e50914; color: #e50914; font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; }',
@@ -3940,6 +3970,7 @@
                     // 首页分类行的顺序 / 开关 / 自己加的(homeRows);rowsMsg = 读屏播报
                     rows: homeRows.initial(lsGet(homeRows.KEY)), rowsMsg: '',
                     shuf: false,                          // 随机发现「换一批」正在拉
+                    link: null,                           // 播放页这部作品的链接短码 {wk, code}(#/v/<码>,分享面板 / 截帧分享用)
 
                 },
             };
@@ -4079,14 +4110,19 @@
                 if (!v && this.adult && this.adult.relWk) this.adult.relWk = '';   // [adult] p4:相关推荐跟着播放页走
                 if (!v && typeof this._adRelOff === 'function') this._adRelOff();
                 if (!v && this.adultMode) this._adAfterDetail();                 // [adult] p4:从刷短片进来的回到刷短片;猜你喜欢按新历史重算
+                if (this.adultMode) { if (v) this._adLinkSoon(); else this._adLinkRestore(); }   // 地址栏跟着播放页:#/v/<码>,关了换回去
                 if (v || this._adReturnY == null) return;
                 const y = this._adReturnY;
                 this._adReturnY = null;
                 this.$nextTick(() => { try { this._jumpTo(y); } catch (e) { } });
             },
-            // 换了一部:收起展开的备用线路、清掉「中字 / 原版」选择;从搜索结果/历史打开的(没有 _meta)补拉作品信息和线路标记
+            // 换了一部:收起展开的备用线路、清掉「中字 / 原版」选择;从搜索结果/历史打开的(没有 _meta)补拉作品信息和线路标记;
+            //   能分享 = 目录作品(有作品键,能要短码),播放器里的「分享当前画面」入口跟着它显隐;地址栏 #/v/<码> 跟着换(相关推荐 / 刷短片里点开别的)
+            //   (watch 里只能有一个 currentGroup:对象字面量重名 = 后一个静默盖掉前一个)
             currentGroup(g, old) {
                 if (!this.adultMode) return;
+                try { root.document.documentElement.classList.toggle('dg-can-share', !!(g && typeof g._wk === 'string' && g._wk)); } catch (e) { }
+                if (this.showDetail && g && g._wk && (!this.adult.link || this.adult.link.wk !== g._wk)) this._adLinkSoon();
                 if (g !== old) {
                     if (this.adult.relWk && (!g || g._wk !== this.adult.relWk)) this.adult.relWk = '';   // [adult] p4:换了一部,相关推荐等新的首帧
                     if (Object.keys(this.adult.famOpen || {}).length) this.adult.famOpen = {};
@@ -4461,6 +4497,9 @@
             // 地址栏 → 状态(后退 / 前进 / 手改地址栏)。播放页开着时后退 = 关播放页(浏览页留在原样,把刚退掉的那条压回去)
             _adOnHash() {
                 if (!this.adultMode || !this.adult.catalog || !this.adult.routeOn) return;
+                // 分享链接 #/v/<码>:地址栏里贴进来 / 点了站内的这种链接 → 打开那部
+                const sp = shareLinks.parse(root.location.hash);
+                if (sp) { if (!(this.adult.link && this.adult.link.code === sp.code && this.showDetail)) this.adOpenShare(sp); return; }
                 if (this._adFeedHash()) return;   // [adult] p4:#/feed 进出归刷短片管
                 const want = canonHash(root.location.hash);
                 const have = this.adRouteHash;
@@ -4492,6 +4531,8 @@
                 const h = (root.location && root.location.hash) || '';
                 const r = parseRoute(h);
                 this.adult.routeOn = true;
+                const sp = shareLinks.parse(h);
+                if (sp) { this.adOpenShare(sp); return; }   // 分享链接 / 书签 / 刷新时停在某部作品的 #/v/<码>
                 if (isFeedHash(h)) { this._adFeedPushed = false; this._adFeedHash(); return; }   // [adult] p4:书签 / 刷新时停在刷短片
                 if (r) this._adApplyRoute(r);
                 else if (isOurHash(h)) { try { root.history.replaceState(root.history.state, '', root.location.pathname + root.location.search); } catch (e) { } }   // 坏掉的旧路由:清掉
@@ -5021,6 +5062,82 @@
                     this.rowLists = l;
                 }
             },
+            // ---------- 每部作品的链接 #/v/<码>(地址栏 / 分享)----------
+            //   开播放页 → 要这部的短码 → 地址栏换成 #/v/<码>(replaceState:不多压历史,返回键照旧关播放页);关播放页 → 换回原来的地址。
+            //   无痕:不改地址栏(不留浏览记录),分享按钮照样能用(点的时候才要码)
+            _adLinkSoon() {
+                const g = this.currentGroup, wk = g && typeof g._wk === 'string' ? g._wk : '';
+                if (!this.adultMode || !wk || !this.showDetail) return Promise.resolve(false);
+                const seq = (this._adLinkSeq = (this._adLinkSeq || 0) + 1);
+                return shareLinks.code(wk).then(code => {
+                    if (seq !== this._adLinkSeq || !code || !this.showDetail || !this.currentGroup || this.currentGroup._wk !== wk) return false;
+                    this.adult.link = { wk, code };
+                    if (!incognito()) {
+                        try {
+                            const loc = root.location, h = '#/v/' + code;
+                            if (loc.hash !== h) {
+                                if (!SHARE_HASH_RE.test(loc.hash || '')) this._adLinkPrev = loc.pathname + loc.search + (loc.hash || '');
+                                root.history.replaceState(root.history.state, '', loc.pathname + loc.search + h);
+                            }
+                        } catch (e) { }
+                    }
+                    return true;
+                });
+            },
+            _adLinkRestore() {
+                this._adLinkSeq = (this._adLinkSeq || 0) + 1;
+                this.adult.link = null;
+                try {
+                    const loc = root.location;
+                    if (!SHARE_HASH_RE.test(loc.hash || '')) { this._adLinkPrev = null; return; }
+                    const prev = this._adLinkPrev != null ? this._adLinkPrev : (loc.pathname + loc.search);
+                    this._adLinkPrev = null;
+                    root.history.replaceState(root.history.state, '', prev);
+                } catch (e) { }
+            },
+            // 分享面板 / 截帧分享用:这部的短码拿到了没有(没有就现要)→ true / false
+            adEnsureLink() {
+                const g = this.currentGroup;
+                if (this.adult.link && g && this.adult.link.wk === g._wk) return Promise.resolve(true);
+                const wk = g && typeof g._wk === 'string' ? g._wk : '';
+                if (!wk) return Promise.resolve(false);
+                return shareLinks.code(wk).then(code => {
+                    if (!code || !this.currentGroup || this.currentGroup._wk !== wk) return false;
+                    this.adult.link = { wk, code };
+                    return true;
+                });
+            },
+            // 分享链接(t = 原时间轴秒数,0 = 不带);短码还没拿到 → ''
+            adShareUrl(t) {
+                const g = this.currentGroup, L = this.adult && this.adult.link;
+                if (!L || !g || L.wk !== g._wk) return '';
+                return shareLinks.url(L.code, t > 0 ? t : 0, root.location ? root.location.origin : '');
+            },
+            // 打开别人分享的 #/v/<码>[?t=秒]:地址栏先换回干净的(关播放页之后不会又停在这条链接上),问服务器是哪部 → 开;t → 播放器就绪后跳过去
+            async adOpenShare(p) {
+                if (!p || !p.code) return;
+                try { const loc = root.location; if (SHARE_HASH_RE.test(loc.hash || '')) root.history.replaceState(root.history.state, '', loc.pathname + loc.search); } catch (e) { }
+                const wk = await shareLinks.resolve(p.code);
+                if (!wk) { if (this.showMiniToast) this.showMiniToast('这个链接里的视频找不到了(可能已经下架)'); return; }
+                if (typeof this.openWork === 'function') await this.openWork({ _wk: wk, wk });
+                if (!(p.t > 0)) return;
+                let n = 0;
+                const tick = () => {
+                    n++;
+                    let v = null;
+                    try { v = root.document.querySelector('#dplayer video'); } catch (e) { }
+                    if (this.showDetail && v && v.readyState >= 1 && v.duration) {
+                        try {
+                            const at = typeof this._cutToPlay === 'function' ? this._cutToPlay(p.t) : p.t;   // 分享的是原时间轴秒数,按这台的剪段换算
+                            if (at > 0 && at < v.duration) v.currentTime = at;
+                            if (this.showMiniToast) this.showMiniToast('▶ 已跳转到分享的时间点');
+                        } catch (e) { }
+                        return;
+                    }
+                    if (n < 40 && this.showDetail) setTimeout(tick, 300);
+                };
+                setTimeout(tick, 1200);
+            },
             // 随机发现「换一批」:服务器那一行按北京时间日种子排(一天不变,刷新页面也一样)。这里在浏览接口的随机序里随机翻到别的一页
             //   (每页 48 部,几百页),拿 24 部这次打开页面以来这行没出过的(nr=1 不要审查级、封面出得来);不够再翻一页。
             //   _adHomeAll 里那一行也换掉 —— 否则下一批封面判定生效时 _adCvApply 会按原始片单把它改回去
@@ -5215,7 +5332,7 @@
         browseApiUrl, filterCount, nextTagState, normFacets, sortOpts, chipRow, activePills, routeOf, parseRoute, canonHash, isOurHash,
         cloudOf, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
         components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses, DgFold },
-        ageGate, brand, wordmark, homeRows, HOME_BUCKETS, auth, fetchWork, mixin, boot,
+        ageGate, brand, wordmark, homeRows, HOME_BUCKETS, shareLinks, SHARE_HASH_RE, auth, fetchWork, mixin, boot,
         // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
         hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, previewBusy, isTV,
         openWork: openWorkExt, incognito, privLocked, netBlock, netNow, cellOk, pvOn, CELL_KEY, PV_KEY,

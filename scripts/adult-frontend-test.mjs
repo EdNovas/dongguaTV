@@ -723,9 +723,33 @@ function makeApp(over) {
     app.syncShareUrl();
     ok(replaced === 0, 'syncShareUrl:地址栏不写片名');
     app.openSharePanel();
-    ok(!app.showSharePanel, '分享面板不打开');
+    ok(!app.showSharePanel, '不是目录作品(没有作品键):分享面板不打开');
     await app.shareFrame();
-    ok(app.toasts.includes('本站不提供分享'), '截帧分享不出卡片');
+    ok(app.toasts.includes('这个视频不能分享'), '不是目录作品:截帧分享不出卡片');
+    // 2026-11-23:目录作品能分享 —— 链接是 站点/#/v/<短码>(POST /api/catalog/share 要来的),不带片名;短码没拿到之前先要再开面板
+    {
+        const shareBodies = [];
+        const h0 = net.handler;
+        net.handler = (u, init) => {
+            if (u === '/api/catalog/share' && init && init.method === 'POST') { shareBodies.push(String(init.body)); return { body: { code: 'AbCdEfGh12' } }; }
+            if (u === '/api/catalog/share/AbCdEfGh12') return { body: { wk: 'c:SHR-001' } };
+            return h0 ? h0(u, init) : null;
+        };
+        globalThis.location = { origin: 'https://site.test', pathname: '/', search: '', hash: '' };
+        const app2 = makeApp({ currentGroup: { name: 'SHR-001 片名', _wk: 'c:SHR-001' }, showSharePanel: false, shareIncludeTime: false, shareSeconds: 0, watchStatsEnabled: false });
+        app2.openSharePanel();
+        await sleep(20);
+        ok(app2.showSharePanel === true && app2.adult.link && app2.adult.link.code === 'AbCdEfGh12' && shareBodies.length === 1 && JSON.parse(shareBodies[0]).wk === 'c:SHR-001', '目录作品:先要短码再开分享面板', shareBodies);
+        const su = CPm.shareUrl.call(app2);
+        ok(su === 'https://site.test/#/v/AbCdEfGh12' && !/SHR|%E7/.test(su), '分享链接 = 站点/#/v/<短码>,不带片名 / 番号', su);
+        app2.shareIncludeTime = true; app2.shareSeconds = 95;
+        ok(CPm.shareUrl.call(app2) === 'https://site.test/#/v/AbCdEfGh12?t=95', '带时间点:?t=原时间轴秒数');
+        ok(A.shareLinks.parse('#/v/AbCdEfGh12?t=95').t === 95 && A.shareLinks.parse('#/v/AbCdEfGh12').code === 'AbCdEfGh12' && A.shareLinks.parse('#/v/x') === null && A.shareLinks.parse('#/c/cn') === null && A.shareLinks.parse('#/v/AbCdEfGh12?t=abc') === null,
+            '链接解析:#/v/<8~16 位字母数字>[?t=秒],别的不认');
+        ok(await A.shareLinks.resolve('AbCdEfGh12') === 'c:SHR-001' && await A.shareLinks.resolve('bad!') === '', '短码 → 作品键(服务器),不合法的码不请求');
+        net.handler = h0;
+    }
+    ok(/<button class="btn-cast" v-if="!adultMode \|\| \(currentGroup && currentGroup._wk\)" tabindex="2" @click="openSharePanel"/.test(HTML), '播放页分享按钮:目录作品显示');
     let popularCalls = 0;
     AD.ctxObj.fetch = async (u) => { popularCalls++; return adultFetch(u); };
     await app.fetchPopular();
@@ -1597,7 +1621,14 @@ console.log('⑤ 页面接线 / sw.js');
     ok((settings.match(/v-if="!adultMode"/g) || []).length === 1 && (settings.match(/v-if="!adultMode \|\| adult\.intro"/g) || []).length === 2,
         '设置:过滤成人内容 在成人站隐藏;跳过按钮 / 自动跳过 只在站长开了片头学习时显示');
     ok(/<button v-if="requestsEnabled"/.test(HTML) && /v-if="pushUi !== 'hidden'"/.test(HTML), '求片 / 推送 设置行跟着 /api/config(成人站默认关)');
-    ok(/<button class="btn-cast" v-if="!adultMode" tabindex="2" @click="openSharePanel"/.test(HTML), '播放页分享按钮隐藏');
+    ok(HTML.includes('<button class="btn-cast" v-if="!adultMode || (currentGroup && currentGroup._wk)" tabindex="2" @click="openSharePanel"'), '播放页分享按钮:目录作品显示(链接是短码)');
+    // mixin 的 watch / computed / methods 是对象字面量:同名键后一个静默盖掉前一个(2026-11-23 「分享当前画面」入口就这样没出来)
+    {
+        const src = fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8');
+        const blk = (name) => { const i = src.indexOf('\n        ' + name + ': {\n', src.indexOf('const mixin = {')); if (i < 0) return []; const end = src.indexOf('\n        },\n', i); return [...src.slice(i, end).matchAll(/^ {12}(?:async )?([A-Za-z_$][\w$]*)\s*\(/gm)].map(m => m[1]); };
+        const dups = ['watch', 'computed', 'methods'].map(n => { const ks = blk(n); return [n, ks.length, ks.filter((k, i) => ks.indexOf(k) !== i)]; });
+        ok(dups.every(d => d[1] > 0 && !d[2].length) && String(A.mixin.watch.currentGroup).includes('dg-can-share'), 'adult.js mixin 的 watch / computed / methods 没有重名键', dups);
+    }
     const rowClicks = (HTML.match(/@click="item\._wk \? openWork\(item\) : autoSearch\(/g) || []).length;
     ok(rowClicks === 2, '首页行(横排 + 展开网格)的目录卡片点开走 openWork', rowClicks);
     ok((HTML.match(/class="dg-ad-badge"/g) || []).length === 3, '首页行两处 + 浏览页一处都有 中字/无码/竖屏 角标');

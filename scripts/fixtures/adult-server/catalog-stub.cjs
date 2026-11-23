@@ -174,6 +174,9 @@ function createCatalog(deps) {
             return null;
         },
         async heatAdd(wk, o, who) { rec({ ev: 'heatAdd', wk, n: o && Array.isArray(o.bins) ? o.bins.length : -1, b0: o && o.bins && o.bins[0], b99: o && o.bins && o.bins[99], dur: o && o.dur, who }); return true; },
+        // 分享短码:SSIS-001 → AbCdEfGh12;HID-001 能要码但闸门隐藏表里有它(要 / 解都该 404)
+        async shareCode(wk) { rec({ ev: 'shareCode', wk }); return wk === 'c:SSIS-001' ? 'AbCdEfGh12' : wk === 'c:REL-001' ? 'ZyXwVuTs98' : null; },
+        shareResolve(code) { rec({ ev: 'shareResolve', code }); return code === 'AbCdEfGh12' ? { wk: 'c:SSIS-001' } : code === 'HidHidHid1' ? { wk: 't:hid1' } : null; },
         async adminStats() {
             return { works: 3, lines: 9, sites: [{ key: 'a', name: '站A', lastOk: 1700000000000, fails: 0, active: true, overrideActive: null }, { key: 'b', name: '站B', lastOk: 0, fails: 2, active: true, overrideActive: null }],
                 rejected: { 'category:x': 2 }, rescan: null, avdb: { n: 1 }, extraBlock: { n: 0, rev: '' } };
