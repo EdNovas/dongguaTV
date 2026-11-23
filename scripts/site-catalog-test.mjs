@@ -1731,6 +1731,19 @@ console.log('⑪ 第四阶段(inline):刷一刷 / 方向学习 / 相关推荐 / 
     ok(['wk', 'name', 'pic', 'sub', 'badge', 'bucket', 'code', 'dur', 'n_sites', 'first_seen', 'orient', 'lines'].every((k) => k in F1[0]), 'FeedItem = Card + {orient, dur, lines}', Object.keys(F1[0]));
     ok(U.maxRunOf(F1.slice(0, 16), famOf) <= 2, '刷一刷:同一天里按家族轮流(同家族连续 ≤2)', F1.slice(0, 16).map(famOf).join(','));
     ok(catA.feed({ cursor: 'garbage!!' }).items.length === 10 && catA.feed({ limit: 99 }).items.length === 20, '坏游标 = 从头;limit 上限 30');
+    // —— 刷一刷:有线路来自「烧了水印」来源(C.feedWm)的作品排到所有干净作品后面(不删)——
+    {
+        const dbW = new Database(':memory:');
+        const catW = createCatalog({ db: dbW, getSites: () => nA.sitesCfg(), adult, httpGet: nA.httpGet, log: () => {}, now: cA.now, sleep: cA.sleep, opts: { feedWm: [{ site: 'rb', type: '抖音短视频' }] } });
+        await catW.tick();
+        const FW = [];
+        let c = null, n = 0;
+        do { const r = catW.feed(Object.assign({ limit: 7 }, c ? { cursor: c } : {})); FW.push(...r.items); c = r.cursor_next; n++; } while (c && n < 60);
+        const seq = FW.map((x) => x.lines[0].site);
+        ok(FW.length === 20 && new Set(FW.map((x) => x.wk)).size === 20 && seq.indexOf('rb') === 12 && seq.slice(12).every((s) => s === 'rb'),
+            '刷一刷:烧了水印的来源排在所有干净作品后面,翻页照样不重不漏', seq.join(','));
+        await catW.close();
+    }
     // —— 方向学习(播放上报 videoWidth/Height)——
     const live0 = wkOf('某合成主播片段0'), live1 = wkOf('某合成主播片段1'), sA0 = wkOf('某合成竖屏短片甲0'), sA1 = wkOf('某合成竖屏短片甲1'), sB0 = wkOf('某合成竖屏短片乙0'), cr = wkOf('某合成网红长片');
     for (const wk of [live0, live1, cr]) { const l = lineOf(wk); catA.beacon({ site_key: l.site, vod_id: l.vod_id, ok: true, w: 720, h: 1280 }, 'u1'); }
@@ -1789,7 +1802,8 @@ console.log('⑪ 第四阶段(inline):刷一刷 / 方向学习 / 相关推荐 / 
         catA.rebuild();
         const legacy = catA.feed({ limit: 30, cursor: RFM.encCursor(['S-old', 6, 987654321, 0]) });
         ok(legacy.items.length > 0 && legacy.items.length <= full.length - 5 && legacy.items.every((x) => full.includes(x.wk)), '旧 4 元游标、锚不在了 → 按旧位置接着走(不当到底)', [legacy.items.length, full.length]);
-        ok(RFM.decCursor(RFM.encCursor(['S', 1, 2, 0, 3, 5, null])) === null && RFM.decCursor(RFM.encCursor(['S', 1, 'x', 0])) === null && RFM.decCursor(RFM.encCursor(['S', 1, 2, 0, 1, 5, 'f'])) !== null, '游标形状校验(层 0..2、id 是整数)');
+        ok(RFM.decCursor(RFM.encCursor(['S', 1, 2, 0, 6, 5, null])) === null && RFM.decCursor(RFM.encCursor(['S', 1, 2, 0, -1, 5, null])) === null && RFM.decCursor(RFM.encCursor(['S', 1, 'x', 0])) === null
+            && RFM.decCursor(RFM.encCursor(['S', 1, 2, 0, 1, 5, 'f'])) !== null && RFM.decCursor(RFM.encCursor(['S', 1, 2, 0, 4, 5, 'f'])) !== null, '游标形状校验(层 0..5,3..5 = 烧了水印的;id 是整数)');
     }
     // 审查级(审查级标签 / 分类审查级)一律不进
     const sA2 = wkOf('某合成竖屏短片甲2'), sA3 = wkOf('某合成竖屏短片甲3');
