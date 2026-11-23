@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=21"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=22"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -5829,6 +5829,37 @@
                         <button type="button" class="home-layout-reset" :disabled="homeLayoutIsDefault" @click="resetHomeLayout">
                             <i class="fas fa-rotate-left" aria-hidden="true"></i> 恢复默认</button>
                         <div class="visually-hidden" aria-live="polite">{{ homeLayoutMsg }}</div>
+                    </div>
+
+                    <!-- [adult] 首页分类行:顺序 / 开关 / 自己加的分类(最多 adRowsMax 行),跨设备同步(见 adult.js homeRows) -->
+                    <div class="set-block" v-if="adultMode && adult && adult.catalog">
+                        <div class="set-title" id="ad-rows-title">首页分类行</div>
+                        <div class="set-desc">用箭头调整顺序，关掉的行不在首页显示；还能添加想看的分类（最多 {{ adRowsMax }} 行）</div>
+                        <ul class="home-layout" aria-labelledby="ad-rows-title">
+                            <li v-for="(s, i) in adRowsView" :key="s.k" class="home-layout-item" :class="{ off: !s.on }">
+                                <i :class="['fas', s.icon, 'home-layout-ic']" aria-hidden="true"></i>
+                                <span class="home-layout-name">{{ s.l }}<small v-if="s.note" class="dg-hr-note">{{ s.note }}</small></span>
+                                <button v-if="s.custom" type="button" class="home-layout-mv dg-hr-del" @click="adRowsRemove(s.k)" :aria-label="'移除' + s.l" title="移除"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                                <button type="button" class="home-layout-mv" :data-ad-row-mv="s.k + ':-1'" :disabled="i === 0"
+                                    @click="adRowsMove(s.k, -1)" :aria-label="'上移' + s.l" title="上移"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>
+                                <button type="button" class="home-layout-mv" :data-ad-row-mv="s.k + ':1'" :disabled="i === adRowsView.length - 1"
+                                    @click="adRowsMove(s.k, 1)" :aria-label="'下移' + s.l" title="下移"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                                <label class="settings-switch" :title="s.on ? '显示中' : '已隐藏'">
+                                    <input type="checkbox" :checked="s.on" @change="adRowsToggle(s.k, $event.target.checked)" :aria-label="'在首页显示' + s.l">
+                                    <span class="settings-slider"></span>
+                                </label>
+                            </li>
+                        </ul>
+                        <div class="dg-hr-add">
+                            <select :disabled="adRowsAdded >= adRowsMax || !adRowsAddable.length" @change="adRowsAdd($event.target.value, $event)" aria-label="添加分类到首页">
+                                <option value="">{{ adRowsAdded >= adRowsMax ? '已加满 ' + adRowsMax + ' 行' : '＋ 添加分类…' }}</option>
+                                <option v-for="o in adRowsAddable" :key="o.id" :value="o.id">{{ o.l }}</option>
+                            </select>
+                            <span class="dg-hr-cnt">已加 {{ adRowsAdded }}/{{ adRowsMax }}</span>
+                        </div>
+                        <button type="button" class="home-layout-reset" :disabled="adRowsIsDefault" @click="adRowsReset">
+                            <i class="fas fa-rotate-left" aria-hidden="true"></i> 恢复默认</button>
+                        <div class="visually-hidden" aria-live="polite">{{ adult.rowsMsg }}</div>
                     </div>
 
                     <!-- NSFW 过滤开关 -->
@@ -12472,7 +12503,9 @@
                         if (s.k === 'random') { if (!this.adultMode) out.push(row('randomRow')); }   // [adult] 目录的「随机发现」是普通一行(排最后),不占这个位置
                         else if (has[s.k]) out.push({ id: s.k, k: s.k });
                     }
-                    for (const key of Object.keys(this.rowConfigs)) if (key !== 'randomRow') out.push(row(key));
+                    // [adult] 目录各行按偏好设置「首页分类行」的顺序 / 开关排(adHomeKeys)
+                    const keys = this.adultMode && typeof this.adHomeKeys === 'function' ? this.adHomeKeys(Object.keys(this.rowConfigs)) : Object.keys(this.rowConfigs);
+                    for (const key of keys) if (key !== 'randomRow') out.push(row(key));
                     return out;
                 },
                 // 偏好设置里列出的板块:站长没开的(直播 / 收藏)不列
@@ -12716,7 +12749,10 @@
                 // 🔔 打开偏好设置时按浏览器实况刷新推送开关(用户可能在系统设置里关了通知权限)
                 showSettingsModal(v) {
                     if (v) this._pushRefreshState();
-                    else if (this._homePushT) this._pushHomeLayout();   // 🧩 关弹窗时还没推的首页板块改动立刻推
+                    else {
+                        if (this._homePushT) this._pushHomeLayout();   // 🧩 关弹窗时还没推的首页板块改动立刻推
+                        if (this.adultMode && typeof this.adRowsFlush === 'function') this.adRowsFlush();   // [adult] 首页分类行同理
+                    }
                 }
             },
             methods: {
@@ -13284,6 +13320,7 @@
                             this.homeLayout = DgHome.normalize(data.settings.homeLayout);
                             try { localStorage.setItem('donggua_home_layout', JSON.stringify(this.homeLayout)); } catch (e) { }
                         }
+                        if (this.adultMode && typeof this.adRowsPulled === 'function') this.adRowsPulled(data.settings.adHomeRows);   // [adult] 首页分类行
                         // 📺 最近观看频道(跨设备)。服务器版是精简版(无 sources)；与本地按 id 合并、取较新 at，
                         //    并保留本地已有的 sources(本机看过的不丢源)，避免整表覆盖丢失本地源/本机新条目。
                         if (Array.isArray(data.settings.liveRecent)) {

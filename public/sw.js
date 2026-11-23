@@ -63,12 +63,13 @@
 // [adult] -adult18:adult.js?v=15(站名图标当首字母 M:页面上写「EI.NU」)、feed.js?v=6(刷短片外观:「推荐 | 竖屏」切换、右侧声音 / 完整版、标签小块、暂停大图标、出错卡片、电脑端快捷键提示)。
 // [adult] -adult19:adult.js?v=16(站名字母章:M 用和后面同一字体 / 字号 / 字重的文字,红底反白、同一基线,不再用图片当首字母)。
 // [adult] -adult20:adult.js?v=21(站名换成画好的 SVG 字标:M 两侧竖线中段外凸 + 圆肩,后面同一支笔画的圆弧小写「ei.nu」,不加载外部字体;导航栏字标和「刷短片」按钮放大并跟屏宽 / 界面大小走,往下滚后缩小的搜索框不再盖住「刷短片」)、新图标(icon.png 同款 M)。
+// [adult] -adult21:adult.js?v=22(首页分类行可调顺序 / 开关,能加 国产·全部 / 日本·全部 / 首页没有的分区 / 中字 / 无码 / 4K / VR 等最多 6 行,随机发现默认排第一,跨设备同步)。
 //      就对那个图床和 ≤2 个本会话加载成功过的别的图床各发一个 HEAD(no-cors、no-store、20 秒)直接问:图床通 = 文件坏,重试一次再藏;图床不通、别的通 = 藏并记一次失败;
 //      图床没回、别的通 = 30 秒后再问一轮;别的也都不通 = 网络问题,不藏(弱网慢的永远不藏);几个图床同时不通、通的不比它多 = 本机 DNS / 代理的问题,不藏。
 //      页面冻过 / 断网 / 切前后台时在路上的探测作废重来;视口上面的改动先压着不滚动;浏览与搜索网格底下「已隐藏 N 部 · 显示」,底栏「共 N 部」不算藏掉的)。
 //      SW:跨域的 HEAD / no-store 请求一律直通(探测必须真的走网络,不能被策略1 的缓存 / 占位图冒充)。
 const CACHE_VERSION = 'v43';
-const ADULT_REV = '-adult20';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult21';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -93,7 +94,7 @@ const STATIC_URLS = [
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
     './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js',
-    './adult/adult.js?v=21',   // [adult] v43-adult20:与 index.html 引用同一个 ?v=
+    './adult/adult.js?v=22',   // [adult] v43-adult21:与 index.html 引用同一个 ?v=
     './adult/player-x.js?v=4',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
     './adult/privacy.js?v=3',
     './adult/preview.js?v=4',

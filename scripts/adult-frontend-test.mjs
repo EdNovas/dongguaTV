@@ -175,6 +175,29 @@ console.log('① adult.js 纯函数');
     ok(wmHtml === A.wordmark.full && A.brand.html('mei.nu') === wmHtml && /^<svg class="dg-wm" viewBox="[\d. ]+" aria-hidden="true" focusable="false">/.test(wmHtml) && !/font|<text|https?:/i.test(wmHtml.replace(/xmlns="[^"]*"/, '')),
         '字标 = 自己画的 SVG(没有文字 / 字体 / 外链)');
     ok(A.brand.html('Max&"Co') === A.wordmark.mOnly + '<span class="dg-wm-t">ax&amp;&quot;Co</span>' && A.brand.html('视界') === '视界' && A.brand.html('a&b') === 'a&amp;b', '别的站名:M 开头配画的 M,文字一律转义');
+    // 首页分类行(homeRows):默认随机发现最前、固定行 = 服务器 HOME_BUCKETS、自己加的最多 MAX_ADD 行
+    const HR = A.homeRows, KC = require(path.join(ROOT, 'lib/site-catalog/common.js'));
+    ok(JSON.stringify(A.HOME_BUCKETS) === JSON.stringify(KC.HOME_BUCKETS), '前端首页分区行列表 = 服务器 HOME_BUCKETS', A.HOME_BUCKETS);
+    const D0 = HR.def();
+    ok(D0[0].k === 'ad_random' && D0[1].k === 'ad_new' && D0.every(s => s.on) && HR.isDefault(D0) && D0.length === 5 + KC.HOME_BUCKETS.length, '默认:随机发现排第一、其余固定行全开', D0.slice(0, 3));
+    ok(HR.initial(null).length === D0.length && HR.initial('坏的{').length === D0.length && HR.initial('{"a":1}').length === D0.length, '没存过 / 存坏了 → 默认');
+    const N1 = HR.normalize([{ k: 'ad_hot', on: false }, 'ad_new', { k: 'nope' }, { k: 'ad_hot', on: true }, { k: '__proto__' }, null, 5, { k: 'ad_c_v_unc', on: false }]);
+    ok(N1[0].k === 'ad_hot' && N1[0].on === false && N1[1].k === 'ad_new' && N1[2].k === 'ad_c_v_unc' && N1[2].on === false && N1.length === D0.length + 1 && new Set(N1.map(s => s.k)).size === N1.length,
+        'normalize:去重 / 丢不认识的 / 没给到的固定行补在后面开着', N1.slice(0, 4));
+    const many = HR.ADD.map(a => ({ k: a.k, on: true }));
+    ok(HR.added(HR.normalize(many)) === HR.MAX_ADD && HR.MAX_ADD === 6, '存的值里自己加的超过上限 → 只留前 ' + HR.MAX_ADD + ' 行');
+    let L = HR.add(D0, 'v_unc');
+    ok(L[0].k === 'ad_c_v_unc' && L[0].on && HR.add(L, 'v_unc') === L && HR.add(L, 'nope') === L && HR.remove(L, 'ad_new') === L && HR.remove(L, 'ad_c_v_unc').length === D0.length, '加一行放最前;重复 / 不认识的不加;固定行删不掉、自己加的能删');
+    for (const a of HR.ADD) L = HR.add(L, a.id);
+    ok(HR.added(L) === HR.MAX_ADD, '加满 ' + HR.MAX_ADD + ' 行后再加不进去');
+    ok(JSON.stringify(HR.order(HR.toggle(D0, 'ad_new', false), ['ad_new', 'ad_hot', 'ad_cn_amateur', 'ad_random', 'ad_future'])) === JSON.stringify(['ad_random', 'ad_hot', 'ad_cn_amateur', 'ad_future']),
+        '首页按布局排、关掉的不出、服务器新加的行排最后照出');
+    ok(JSON.stringify(HR.move(D0, 'ad_new', -1).slice(0, 2).map(s => s.k)) === '["ad_new","ad_random"]' && HR.move(D0, 'ad_random', -1) === D0, '上移 / 到顶不动');
+    ok(HR.url('ad_c_t_jp') === '/api/catalog/browse?b=jp_censored,jp_uncensored,jp_subbed&sort=new&page=1&nr=1' && HR.url('ad_c_v_unc') === '/api/catalog/browse?v=unc&sort=new&page=1&nr=1'
+        && HR.url('ad_c_b_asia') === '/api/catalog/browse?b=asia&sort=new&page=1&nr=1' && HR.url('ad_new') === '', '自己加的行 = 浏览第 1 页 + nr=1(不要审查级)');
+    ok(HR.ADD.every(a => !KC.HOME_BUCKETS.includes(a.sel.b) && A.catalog.rowPreset(a.k, 'new', HR.config(a.k)) !== null), '能加的都不和首页默认分区行重复,「全部」都能进浏览页');
+    ok(JSON.stringify(A.catalog.rowPreset('x', 'new', { more: { type: 'jp' } })) === '{"type":"jp","sel":{"sort":"new"}}' && JSON.stringify(A.catalog.rowPreset('x', 'new', { more: { v: 'unc' } })) === '{"type":"all","sel":{"v":"unc","sort":"new"}}'
+        && A.catalog.rowPreset('x', 'new', { more: { v: 'evil' } }) === null && A.catalog.rowPreset('x', 'new', { more: { type: 'all' } }) === null, 'rowPreset 认 {type} / {v}');
 }
 
 console.log('② fetch 包装(401 补核验 / 年龄门 / 令牌头)');
@@ -414,7 +437,13 @@ function makeApp(over) {
     ok(app.rowLists.ad_new.length === 1 && !app.rowConfigs.ad_cn_live, '没有封面的卡片渲染之前就拿掉;一张不剩的行(全是没封面的)整行不出', app.rowLists.ad_new.map(x => x._wk));
     ok(app.adToday('cn') === 9 && app.adToday('cn_amateur') === 9, '分类栏今日数(/api/catalog/buckets)');
     const ids = app.homeBlocks.map(b => b.id);
-    ok(eq(ids, ['history', 'catnav', 'row:ad_new', 'row:ad_random']), 'homeBlocks:继续观看、分类栏,然后目录行(随机发现排最后,不占随机盲盒的位置)', ids);
+    ok(eq(ids, ['history', 'catnav', 'row:ad_random', 'row:ad_new']), 'homeBlocks:继续观看、分类栏,然后目录行(按「首页分类行」布局:默认随机发现排第一;不占随机盲盒的位置)', ids);
+    app.adRowsToggle('ad_random', false);
+    ok(eq(app.homeBlocks.map(b => b.id), ['history', 'catnav', 'row:ad_new']) && JSON.parse(store.get(A.homeRows.KEY)).find(s => s.k === 'ad_random').on === false, '关掉一行 → 首页不出、存本机', app.homeBlocks.map(b => b.id));
+    app.adRowsMove('ad_new', -1); app.adRowsToggle('ad_random', true);
+    ok(eq(app.homeBlocks.map(b => b.id), ['history', 'catnav', 'row:ad_new', 'row:ad_random']), '上移后首页跟着换顺序', app.homeBlocks.map(b => b.id));
+    app.adRowsReset();
+    ok(eq(app.homeBlocks.map(b => b.id), ['history', 'catnav', 'row:ad_random', 'row:ad_new']) && app.adRowsIsDefault, '恢复默认');
     app.adult.catalog = false;
     ok(!app.homeBlocks.some(b => b.id === 'catnav'), '没有目录:不出分类栏');
     const view = app.homeLayoutView.map(s => s.k);
@@ -1556,6 +1585,9 @@ console.log('⑤ 页面接线 / sw.js');
     ok(!/<span[^>]*>MAX<\/span>/.test(body.slice(0, body.indexOf('<div id="app"'))) && (body.match(/data-dg-brand/g) || []).length >= 2, 'loader / 登录框的「视界 MAX」换成站名');
     ok(body.split('<span data-dg-brand aria-label="MEI.NU">' + A.brand.html('MEI.NU') + '</span>').length === 3, 'loader / 登录框的静态字标和 brand.html() 一字不差(JS 起来前后不跳)');
     ok(HTML.includes(`<span :aria-label="(adult && adult.siteName) || 'MEI.NU'" v-html="adBrandHtml"></span>`) && !/dg-wm-m|adBrandTail/.test(HTML), '导航栏站名走 adBrandHtml(画好的字标)');
+    ok(HTML.includes('this.adultMode && typeof this.adHomeKeys === \'function\' ? this.adHomeKeys(Object.keys(this.rowConfigs))') && /v-for="\(s, i\) in adRowsView"/.test(HTML)
+        && /@change="adRowsAdd\(\$event\.target\.value, \$event\)"/.test(HTML) && HTML.includes('this.adRowsPulled(data.settings.adHomeRows)') && HTML.includes('this.adRowsFlush()'),
+        '首页分类行:homeBlocks 按 adHomeKeys 排、设置里列表 + 添加下拉、同步拉取 / 关弹窗推送都接上');
     // phase 2 模板接线
     ok((HTML.match(/<template v-if="item\._wk"><span v-if="item\._n >= 2" class="dg-ov-n">\{\{ item\._n \}\}线<\/span><span v-if="item\._durText" class="dg-ov-dur">\{\{ item\._durText \}\}<\/span><span v-if="item\._code" class="dg-ov-code">\{\{ item\._code \}\}<\/span><\/template>/g) || []).length === 3,
         '首页行两处 + 浏览页:海报上叠 N线(≥2)/ 时长 / 番号');

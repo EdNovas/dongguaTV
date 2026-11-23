@@ -319,6 +319,9 @@
         if (!m || typeof m !== 'object') return null;
         if (m.b && BUCKET_LABEL[m.b]) return { type: typeOfBucket(m.b), sel: { b: m.b, sort: sortKey(m.sort) || 'new' } };
         if (m.sort) return { type: 'all', sel: { sort: sortKey(m.sort) } };   // 新片速递 → 发行日期;随机发现 → rand
+        // 首页自己加的行(homeRows):整个大类 / 版本
+        if (m.type && typeOf(m.type) && m.type !== 'all') return { type: m.type, sel: { sort: 'new' } };
+        if (m.v && VARIANTS.some(o => o.k && o.k === m.v)) return { type: 'all', sel: { v: m.v, sort: 'new' } };
         return null;
     }
 
@@ -652,6 +655,82 @@
         }
         return { configs, lists, order };
     }
+    // ========== 首页分类行:顺序 / 开关 / 自己加的分类(用户 2026-11-23 要的)==========
+    //   布局 = 全部分类行按显示顺序的 [{ k, on }](k = rowConfigs 的键);存本机 dg_home_rows,登录了同步账号的也推到服务器(settings.adHomeRows)。
+    //   固定行(服务器 /api/catalog/home 给的 + 猜你喜欢)默认全开、随机发现排最前(用户定);自己加的 = 整个大类 / 首页默认没有的分区 / 版本,
+    //   最多 MAX_ADD 行(每加一行首页多一次浏览请求)。存的值可能来自旧版本 / 别的设备 / 手改,用之前一律过 normalize
+    const HOME_BUCKETS = ['cn_amateur', 'cn_studio', 'cn_hookup', 'live', 'creators', 'short', 'jp_censored', 'jp_uncensored', 'jp_subbed', 'western', 'anime', 'softcore', 'fetish'];   // = lib/site-catalog/common.js HOME_BUCKETS(测试比对)
+    const homeRows = (function () {
+        const KEY = 'dg_home_rows', MAX_ADD = 6, CUSTOM_MIN = 6;
+        const icon = (b) => (TILE[b] || [])[2] || 'fa-film';
+        const BUILTIN = [
+            { k: 'ad_random', l: '随机发现', icon: 'fa-dice' },
+            { k: 'ad_new', l: '新上架', icon: 'fa-clock' },
+            { k: 'ad_foryou', l: '猜你喜欢', icon: 'fa-wand-magic-sparkles', hint: '看过几部之后才有' },
+            { k: 'ad_hot', l: '热门', icon: 'fa-fire' },
+            { k: 'ad_fresh', l: '新片速递', icon: 'fa-calendar-check' },
+        ].concat(HOME_BUCKETS.map(b => ({ k: 'ad_' + b, l: BUCKET_LABEL[b], icon: icon(b) })));
+        // 能加的:国产 / 日本整类、首页默认没有的分区、版本(跨分类)
+        const ADD = [];
+        ['cn', 'jp'].forEach(tk => { const T = typeOf(tk); ADD.push({ id: 't_' + tk, l: T.l + '·全部', icon: T.icon, type: tk, sel: { sort: 'new' }, more: { type: tk } }); });
+        NAV_BUCKETS.filter(b => HOME_BUCKETS.indexOf(b) < 0).forEach(b => ADD.push({ id: 'b_' + b, l: BUCKET_LABEL[b], icon: icon(b), type: typeOfBucket(b), sel: { b, sort: 'new' }, more: { b } }));
+        [['zh', '中字·全部', 'fa-closed-captioning'], ['unc', '无码·全部', 'fa-fire-flame-curved'], ['4k', '4K 高清', 'fa-tv'], ['vr', 'VR', 'fa-vr-cardboard']]
+            .forEach(([v, l, ic]) => ADD.push({ id: 'v_' + v, l, icon: ic, type: 'all', sel: { v, sort: 'new' }, more: { v } }));
+        ADD.forEach(a => { a.k = 'ad_c_' + a.id; });
+        const INFO = Object.create(null);
+        BUILTIN.forEach(s => { INFO[s.k] = s; });
+        ADD.forEach(a => { INFO[a.k] = a; });
+        const isCustom = (k) => typeof k === 'string' && k.indexOf('ad_c_') === 0 && !!INFO[k];
+        const def = () => BUILTIN.map(s => ({ k: s.k, on: true }));
+        // 认得的行按给定顺序留下(去重;自己加的超过 MAX_ADD 的丢掉),没给到的固定行补在后面、开着
+        function normalize(v) {
+            const out = [], seen = new Set();
+            let n = 0;
+            for (const x of Array.isArray(v) ? v : []) {
+                const k = typeof x === 'string' ? x : (x && typeof x === 'object' ? x.k : null);
+                if (typeof k !== 'string' || !INFO[k] || seen.has(k)) continue;
+                if (isCustom(k)) { if (n >= MAX_ADD) continue; n++; }
+                seen.add(k);
+                out.push({ k, on: typeof x === 'string' || x.on !== false });
+            }
+            for (const s of BUILTIN) if (!seen.has(s.k)) out.push({ k: s.k, on: true });
+            return out;
+        }
+        function initial(saved) {
+            if (saved) { try { const v = JSON.parse(saved); if (Array.isArray(v)) return normalize(v); } catch (e) { } }
+            return def();
+        }
+        const added = (L) => L.filter(s => isCustom(s.k)).length;
+        // 首页实际出的行(keys = rowConfigs 现有的键):按布局排、关掉的不出;布局里没有的(服务器以后新加的行)照出,排在最后
+        function order(L, keys) {
+            const pos = new Map(), on = new Map();
+            L.forEach((s, i) => { pos.set(s.k, i); on.set(s.k, s.on); });
+            return keys.filter(k => pos.has(k) && on.get(k)).sort((a, b) => pos.get(a) - pos.get(b)).concat(keys.filter(k => !pos.has(k)));
+        }
+        function move(L, k, dir) {
+            const i = L.findIndex(s => s.k === k), j = i + (dir < 0 ? -1 : 1);
+            if (i < 0 || j < 0 || j >= L.length) return L;
+            const out = L.slice();
+            out[i] = L[j]; out[j] = L[i];
+            return out;
+        }
+        const toggle = (L, k, on) => L.map(s => (s.k === k ? { k, on: !!on } : s));
+        // 新加的放最前面(一眼看到;不想要可以再往下挪)
+        function add(L, id) {
+            const a = ADD.find(x => x.id === id);
+            if (!a || L.some(s => s.k === a.k) || added(L) >= MAX_ADD) return L;
+            return [{ k: a.k, on: true }].concat(L);
+        }
+        const remove = (L, k) => (isCustom(k) ? L.filter(s => s.k !== k) : L);
+        function isDefault(L) { const d = def(); return L.length === d.length && L.every((s, i) => s.k === d[i].k && s.on); }
+        // 自己加的行:浏览接口第 1 页,nr=1 不要审查级(和首页别的推荐位一个口径)
+        function url(k) { const a = INFO[k]; return isCustom(k) ? browseApiUrl(normSel(a.type, a.sel), { page: 1, nr: true, type: a.type }) : ''; }
+        function config(k) {
+            const a = INFO[k];
+            return { title: a.l, icon: a.icon, path: 'ADULT', params: '', page: 1, totalPages: 1, adult: true, more: Object.assign({}, a.more), today: 0, srcLabel: '', srcTip: '', custom: true };
+        }
+        return { KEY, MAX_ADD, CUSTOM_MIN, BUILTIN, ADD, info: (k) => INFO[k] || null, isCustom, def, normalize, initial, added, order, move, toggle, add, remove, isDefault, url, config };
+    })();
     // /api/catalog/buckets → { 桶 id: 今日新增 }
     function todayMap(list) {
         const o = {};
@@ -2764,6 +2843,17 @@
         '.dg-nav-feed:hover, .dg-nav-feed:focus-visible { border-color: #fff; background: rgba(229, 9, 20, 0.35); outline: none; }',
         '.dg-nav-feed:hover i, .dg-nav-feed:focus-visible i { color: #fff; }',
         '@media (max-width: 480px) { .dg-nav-feed span { display: none; } .dg-nav-feed { width: var(--dg-nav-h); padding: 0; justify-content: center; font-size: calc(var(--dg-nav-h) * .42); } }',
+        // 偏好设置「首页分类行」:沿用首页板块的列表样式;今天没内容的行名字后面一行小字;自己加的行多一个删除;底下「添加分类」下拉
+        '.dg-hr-note { display: block; font-size: 11px; color: #888; line-height: 1.3; margin-top: 1px; }',
+        '.dg-hr-del { color: #ff8a8f; }',
+        '.dg-hr-del:hover:not(:disabled) { background: rgba(229, 9, 20, 0.3) !important; color: #fff !important; }',
+        '.dg-hr-add { display: flex; align-items: center; gap: 10px; margin-top: 10px; }',
+        '.dg-hr-add select { flex: 1; min-width: 0; height: 38px; padding: 0 12px; border-radius: 8px; border: 1px dashed rgba(255, 255, 255, 0.28); background: rgba(255, 255, 255, 0.04); color: #eee; font-size: 14px; cursor: pointer; }',
+        '.dg-hr-add select:hover:not(:disabled), .dg-hr-add select:focus-visible { border-color: #e50914; outline: none; }',
+        '.dg-hr-add select:disabled { opacity: 0.5; cursor: default; }',
+        '.dg-hr-add select option { background: #1b1b1b; color: #eee; }',
+        '.dg-hr-cnt { flex: none; font-size: 12px; color: #999; }',
+        '@media (pointer: coarse) { .home-layout-mv { width: 38px; height: 38px; } .dg-hr-add select { height: 44px; } }',
         // 往下滚后搜索框缩进导航栏右侧:和导航栏同高、同一条中线,并让出「刷短片」按钮(以前会整个盖住它)
         'html .search-section { top: 15px; }',
         'html .search-box-wrapper.compact { height: var(--dg-nav-h, 40px); }',
@@ -3776,6 +3866,8 @@
                     facets: null, view: '', labv: 0, routeOn: false,
                     // p4:relWk = 播放页「相关推荐」这部(首帧之后才有);pv / feedAuto = 设置里的「封面悬停预览」「刷短片自动播放(移动网络)」
                     relWk: '', pv: pvOn(), pvReduced: reducedMotion(), cell: cellOk(),
+                    // 首页分类行的顺序 / 开关 / 自己加的(homeRows);rowsMsg = 读屏播报
+                    rows: homeRows.initial(lsGet(homeRows.KEY)), rowsMsg: '',
                 },
             };
         },
@@ -3832,6 +3924,19 @@
             },
             // 导航栏站名:画好的字标(见 brand.html;站名经 clean + 转义,只有自己画的 SVG 是原样 HTML)
             adBrandHtml() { return brand.html((this.adult && this.adult.siteName) || DEFAULT_NAME); },
+            // 偏好设置「首页分类行」:每行 名字 / 开关 / 是不是自己加的 / 今天有没有内容(首页加载完才判)
+            adRowsView() {
+                const has = this.rowConfigs || {}, loaded = this.adult.home === 'ok' || this.adult.home === 'empty';
+                return (this.adult.rows || []).map(s => {
+                    const I = homeRows.info(s.k) || {};
+                    const empty = loaded && s.on && !has[s.k];
+                    return { k: s.k, l: I.l || s.k, icon: I.icon || 'fa-film', on: s.on, custom: homeRows.isCustom(s.k), note: empty ? (I.hint || '暂时没内容') : '' };
+                });
+            },
+            adRowsAddable() { const have = new Set((this.adult.rows || []).map(s => s.k)); return homeRows.ADD.filter(a => !have.has(a.k)).map(a => ({ id: a.id, l: a.l })); },
+            adRowsAdded() { return homeRows.added(this.adult.rows || []); },
+            adRowsMax() { return homeRows.MAX_ADD; },
+            adRowsIsDefault() { return homeRows.isDefault(this.adult.rows || []); },
             adBrowseTitle() {
                 void this.adult.labv;
                 const b = this.browse, s = (b && b.sel) || {};
@@ -3968,6 +4073,7 @@
                     this.adult.home = r.order.length ? 'ok' : 'empty';
                     this._adFySig = '';             // [adult] p4:首页行整个换了,猜你喜欢重新插
                     this._adForYouSoon(1500);
+                    this._adCustomRowsSoon(600);    // 自己加的分类行(首页固定行先出,再一行行补)
                 };
                 // [adult] p4:无痕开关一变 → 猜你喜欢重算(开了无痕整行收起)
                 if (!this._adPrivHooked) {
@@ -4734,6 +4840,112 @@
                 }
                 this._adForYouSoon(2500);
             },
+            // ---------- 首页分类行:顺序 / 开关 / 自己加的(homeRows;偏好设置「首页分类行」)----------
+            // 首页 homeBlocks 用:现有的目录行按布局排、关掉的不出
+            adHomeKeys(keys) { return homeRows.order(this.adult.rows || homeRows.def(), keys); },
+            adRowsMove(k, dir) {
+                const L = this.adult.rows || [], i = L.findIndex(s => s.k === k), j = i + dir;
+                if (i < 0 || j < 0 || j >= L.length) return;
+                this._adRowsSet(homeRows.move(L, k, dir), ((homeRows.info(k) || {}).l || '') + ' 已移到第 ' + (j + 1) + ' 位');
+                // 移到头 / 尾时这个方向的按钮会变灰:焦点换到另一个按钮,键盘 / 遥控器可以接着按
+                const keep = (j === 0 && dir < 0) || (j === L.length - 1 && dir > 0) ? -dir : dir;
+                this.$nextTick(() => { try { const b = root.document.querySelector('[data-ad-row-mv="' + k + ':' + keep + '"]'); if (b) b.focus(); } catch (e) { } });
+            },
+            adRowsToggle(k, on) {
+                this._adRowsSet(homeRows.toggle(this.adult.rows || [], k, on));
+                if (homeRows.isCustom(k)) { if (on) this._adCustomRowsSoon(0); else this._adCustomRowsDrop(); }
+            },
+            adRowsAdd(id, ev) {
+                if (ev && ev.target) { try { ev.target.value = ''; } catch (e) { } }   // 下拉框回到「添加分类…」
+                if (!id) return;
+                const L0 = this.adult.rows || [], L = homeRows.add(L0, id);
+                if (L === L0) { if (homeRows.added(L0) >= homeRows.MAX_ADD) this.adult.rowsMsg = '最多加 ' + homeRows.MAX_ADD + ' 行,先删掉一行再加'; return; }
+                const a = homeRows.ADD.find(x => x.id === id);
+                this._adRowsSet(L, '已添加「' + a.l + '」,在首页最前面');
+                this._adCustomRowsSoon(0);
+            },
+            adRowsRemove(k) {
+                const I = homeRows.info(k);
+                this._adRowsSet(homeRows.remove(this.adult.rows || [], k), '已移除「' + (I ? I.l : k) + '」');
+                this._adCustomRowsDrop();
+            },
+            adRowsReset() {
+                this._adRowsSet(homeRows.def(), '已恢复默认');
+                this._adCustomRowsDrop();
+                this.$nextTick(() => { try { const b = root.document.querySelector('[data-ad-row-mv]:not([disabled])'); if (b) b.focus(); } catch (e) { } });
+            },
+            // 存本机;登录了同步账号的推到服务器(并入 user_settings)。连点上移 / 下移只推最后一次(请求先后乱了会存成中间某一步)
+            _adRowsSet(L, msg) {
+                this.adult.rows = L;
+                if (msg) this.adult.rowsMsg = msg;
+                lsSet(homeRows.KEY, JSON.stringify(L));
+                if (!(this.syncEnabled && this.syncToken)) return;
+                clearTimeout(this._adRowsPushT);
+                this._adRowsPushT = setTimeout(() => this.adRowsFlush(), 600);
+            },
+            // 还没推的立刻推(关偏好设置弹窗时)
+            adRowsFlush() {
+                if (!this._adRowsPushT) return;
+                clearTimeout(this._adRowsPushT);
+                this._adRowsPushT = 0;
+                if (!(this.syncEnabled && this.syncToken)) return;
+                try {
+                    root.fetch('/api/settings/push', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: this.syncToken, settings: { adHomeRows: this.adult.rows } }),
+                    }).catch(() => { });
+                } catch (e) { }
+            },
+            // 同步拉下来的布局(本机刚改、还没推上去的不被服务器旧值盖掉)
+            adRowsPulled(v) {
+                if (this._adRowsPushT || !Array.isArray(v)) return;
+                const L = homeRows.normalize(v);
+                if (JSON.stringify(L) === JSON.stringify(this.adult.rows)) return;
+                this.adult.rows = L;
+                lsSet(homeRows.KEY, JSON.stringify(L));
+                this._adCustomRowsDrop();
+                this._adCustomRowsSoon(0);
+            },
+            _adCustomRowsSoon(ms) {
+                clearTimeout(this._adCrT);
+                this._adCrT = setTimeout(() => { this.adultLoadCustomRows().catch(() => { }); }, ms || 0);
+            },
+            // 拿掉已经不在布局里 / 关掉了的自己加的行
+            _adCustomRowsDrop() {
+                const want = new Set((this.adult.rows || []).filter(s => s.on && homeRows.isCustom(s.k)).map(s => s.k));
+                const cur = this.rowConfigs || {};
+                const gone = Object.keys(cur).filter(k => homeRows.isCustom(k) && !want.has(k));
+                if (!gone.length) return;
+                const c = Object.assign({}, cur), l = Object.assign({}, this.rowLists);
+                gone.forEach(k => { delete c[k]; delete l[k]; });
+                this.rowConfigs = c;
+                this.rowLists = l;
+            },
+            // 自己加的分类行:一行一个浏览请求(第 1 页,nr=1),拿掉封面出不来的,不足 CUSTOM_MIN 部整行不出
+            async adultLoadCustomRows() {
+                if (!this.adultMode || !this.adult || !this.adult.catalog || (this.adult.home !== 'ok' && this.adult.home !== 'empty')) return;
+                const seq = (this._adCrSeq = (this._adCrSeq || 0) + 1);
+                this._adCustomRowsDrop();
+                const isOn = (k) => (this.adult.rows || []).some(s => s.k === k && s.on);
+                const want = (this.adult.rows || []).filter(s => s.on && homeRows.isCustom(s.k)).map(s => s.k);
+                for (const k of want) {
+                    const d = await cachedJson(homeRows.url(k), 10000);
+                    if (seq !== this._adCrSeq) return;
+                    if (!isOn(k)) continue;
+                    const items = [], seen = new Set();
+                    for (const c of (d && Array.isArray(d.results) ? d.results : [])) {
+                        const it = cardToItem(c);
+                        if (!it || seen.has(it._wk) || !covers.visible(it)) continue;
+                        seen.add(it._wk);
+                        items.push(Object.freeze(it));
+                        if (items.length >= 24) break;
+                    }
+                    const c = Object.assign({}, this.rowConfigs), l = Object.assign({}, this.rowLists);
+                    if (items.length >= homeRows.CUSTOM_MIN) { c[k] = homeRows.config(k); l[k] = items; } else { delete c[k]; delete l[k]; }
+                    this.rowConfigs = c;
+                    this.rowLists = l;
+                }
+            },
             // ---------- [adult] p4 猜你喜欢(纯本机:最近看过的目录作品的 featured 标签 → /api/catalog/browse?t=..&sort=hot;无痕不出)----------
             _adForYouSoon(ms) {
                 clearTimeout(this._adFyT);
@@ -4885,7 +5097,7 @@
         browseApiUrl, filterCount, nextTagState, normFacets, sortOpts, chipRow, activePills, routeOf, parseRoute, canonHash, isOurHash,
         cloudOf, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
         components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses },
-        ageGate, brand, wordmark, auth, fetchWork, mixin, boot,
+        ageGate, brand, wordmark, homeRows, HOME_BUCKETS, auth, fetchWork, mixin, boot,
         // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
         hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, previewBusy, isTV,
         openWork: openWorkExt, incognito, privLocked, netBlock, netNow, cellOk, pvOn, CELL_KEY, PV_KEY,
