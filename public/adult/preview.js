@@ -369,7 +369,8 @@
         if (!e.on) return 'off';
         if (e.tv) return 'tv';
         if (!e.mse) return 'no-mse';
-        if (e.reducedMotion && !e.force) return 'reduced-motion';   // 系统「减少动态效果」:默认不预览;设置里明确打开(dg_pv_on=1)就照播
+        // 系统「减少动态效果」不再拦(2026-11-23 用户:电脑上悬停还是不放 —— Windows 关了「动画效果」就会报 reduce,很多人是为了流畅关的):
+        //   预览只在鼠标停在封面上时才放、静音,算用户自己触发的;不想要在设置里关(dg_pv_on=0)
         if (e.hidden) return 'hidden';
         if (e.net) return e.net;
         if (e.busy) return 'main-player';

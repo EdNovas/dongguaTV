@@ -278,6 +278,17 @@ for (const [n, t, code, key, kind] of CASES) {
     ok(pl.actressGuess.length === 0 && pl.cleanTitle === '测试片名-终极测试之某某某某极致体验', 'actress: 长片名碎片不是名字,也不从净标题里切', pl);
     ok(Array.isArray(P(null).actressGuess) && P(null).actressConfident === false, 'actress: 坏输入');
 }
+{
+    // p12:片名最前面的【分类标签】/ [厂牌] 不进片名键(同一部片别的站不带它,不去掉就并不成一部)
+    const K = (n, t) => T.workKey(T.parseTitle(n, t || 'SM'));
+    ok(K('【捆绑调教】丝袜制服母狗学生妹 强制捆绑高潮') === K('丝袜制服母狗学生妹 强制捆绑高潮') && T.parseTitle('【捆绑调教】丝袜制服母狗学生妹 强制捆绑高潮', 'SM').cleanTitle === '丝袜制服母狗学生妹 强制捆绑高潮',
+        'p12:【分类标签】片名 与 片名 同一个键,净标题也去掉标签');
+    ok(K('[セブンエイト] 百舌鳥ノ贄 (もすのにえ)', '动漫') === K('百舌鳥ノ贄 (もすのにえ)', '动漫'), 'p12:[厂牌] 片名 同上');
+    ok(K('【捆绑调教】【户外露出】丝袜美腿女神被调教') === K('丝袜美腿女神被调教'), 'p12:连着两个标签都去');
+    for (const tag of ['上', '下', '第一集', '第2部', '2', '花絮', '预告', '番外', '续集', 'Part1', 'EP3', 'AV解说', '解说', '精选合集', '片段'])
+        ok(K('【' + tag + '】办公室恋情实录完整版本') !== K('办公室恋情实录完整版本'), 'p12:集数 / 上下篇 / 花絮预告 / 带数字的不去(是不同的片):' + tag);
+    ok(K('【短】好的') === 't:短好的' && T.parseTitle('【捆绑】五个字片名', 'SM').cleanTitle === '【捆绑】五个字片名', 'p12:去掉后不足 6 个字不去');
+}
 
 console.log(`adult-title-test: ${pass} passed, ${fail} failed`);
 if (fail) { for (const f of failures) console.log('  FAIL ' + f); process.exit(1); }

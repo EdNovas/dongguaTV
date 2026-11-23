@@ -2683,7 +2683,8 @@
     //   没设过 = 默认开,但系统「减少动态效果」(Windows 关了动画效果时 Chrome 也这么报)时默认关
     const PV_KEY = 'dg_pv_on';
     const reducedMotion = () => { try { return !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } };
-    const pvOn = () => { const s = lsGet(PV_KEY); return s === '1' || (s !== '0' && !reducedMotion()); };
+    // 封面悬停预览:默认开(系统「减少动态效果」也开 —— 只在鼠标停在封面上时放、静音);设置里关了(dg_pv_on=0)才关
+    const pvOn = () => lsGet(PV_KEY) !== '0';
     function netBlock(conn, optIn) {
         const c = conn || null;
         if (!c) return '';

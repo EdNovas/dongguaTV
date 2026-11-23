@@ -151,13 +151,14 @@ t('pickLines / firstM3u8', () => {
 t('blockReason covers every disable condition', () => {
     const ok = { on: true, tv: false, mse: true, reducedMotion: false, hidden: false, net: '', busy: false, feed: false, locked: false, sessionBytes: 0, dayBytes: 0 };
     assert.equal(PV.blockReason(ok), '');
-    const cases = { on: [false, 'off'], tv: [true, 'tv'], mse: [false, 'no-mse'], reducedMotion: [true, 'reduced-motion'], hidden: [true, 'hidden'], net: ['cellular', 'cellular'], busy: [true, 'main-player'], feed: [true, 'feed'], locked: [true, 'locked'], sessionBytes: [PV.SESSION_CAP, 'session-budget'], dayBytes: [PV.DAY_CAP, 'day-budget'] };
+    const cases = { on: [false, 'off'], tv: [true, 'tv'], mse: [false, 'no-mse'], reducedMotion: [true, ''], hidden: [true, 'hidden'], net: ['cellular', 'cellular'], busy: [true, 'main-player'], feed: [true, 'feed'], locked: [true, 'locked'], sessionBytes: [PV.SESSION_CAP, 'session-budget'], dayBytes: [PV.DAY_CAP, 'day-budget'] };
     for (const k of Object.keys(cases)) assert.equal(PV.blockReason(Object.assign({}, ok, { [k]: cases[k][0] })), cases[k][1], k);
     assert.equal(PV.SESSION_CAP, 60 * 1048576); assert.equal(PV.DAY_CAP, 150 * 1048576); assert.equal(PV.HARD_CAP, 5 * 1048576); assert.equal(PV.PLAN_BUDGET, 4 * 1048576);
     assert.equal(PV.DWELL_MS, 600); assert.equal(PV.PRESS_MS, 450);
-    // 系统「减少动态效果」:默认不预览;设置里明确打开(force)就照播(别的拦截照旧)
-    assert.equal(PV.blockReason(Object.assign({}, ok, { reducedMotion: true, force: true })), '');
-    assert.equal(PV.blockReason(Object.assign({}, ok, { reducedMotion: true, force: true, busy: true })), 'main-player');
+    // 系统「减少动态效果」不再拦(悬停 = 用户自己触发、静音);设置里关了照样不放,别的拦截照旧
+    assert.equal(PV.blockReason(Object.assign({}, ok, { reducedMotion: true, force: false })), '');
+    assert.equal(PV.blockReason(Object.assign({}, ok, { reducedMotion: true, on: false })), 'off');
+    assert.equal(PV.blockReason(Object.assign({}, ok, { reducedMotion: true, busy: true })), 'main-player');
 });
 t('makeBudget: session + per-day (rolls over at midnight; storage errors ignored)', () => {
     const m = new Map();
