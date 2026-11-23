@@ -2181,7 +2181,12 @@
             try { root.document.title = v; } catch (e) { }
             try {
                 const tl = tail(v);
-                root.document.querySelectorAll('[data-dg-brand]').forEach(el => { el.textContent = tl; el.setAttribute('aria-label', v); });
+                root.document.querySelectorAll('[data-dg-brand]').forEach(el => {
+                    while (el.firstChild) el.removeChild(el.firstChild);
+                    if (tl !== v) { const m = root.document.createElement('span'); m.className = 'dg-wm-m'; m.setAttribute('aria-hidden', 'true'); m.textContent = v.charAt(0).toUpperCase(); el.appendChild(m); }
+                    el.appendChild(root.document.createTextNode(tl));
+                    el.setAttribute('aria-label', v);
+                });
                 if (root.document.documentElement && root.document.documentElement.classList) root.document.documentElement.classList.toggle('dg-logo-full', tl === v);
                 const m = root.document.querySelector('meta[name="apple-mobile-web-app-title"]');
                 if (m) m.setAttribute('content', v);
@@ -2724,7 +2729,9 @@
         '.dg-nav-feed:hover, .dg-nav-feed:focus { border-color: #fff; background: rgba(229, 9, 20, 0.3); outline: none; }',
         '@media (max-width: 480px) { .dg-nav-feed span { display: none; } .dg-nav-feed { width: 36px; padding: 0; justify-content: center; } }',
         // 站名:图标就是首字母 M,紧挨着后半截字(站名不是 M 开头时 html.dg-logo-full 恢复原来的间距)
-        'html:not(.dg-logo-full) .brand > img, html:not(.dg-logo-full) .loader-logo > img, html:not(.dg-logo-full) .password-logo-text > img { margin-right: 2px !important; }',
+        'html:not(.dg-logo-full) .brand > img, html:not(.dg-logo-full) .loader-logo > img, html:not(.dg-logo-full) .password-logo-text > img { display: none !important; }',
+        '.dg-wm-m { display: inline-block; margin-right: .07em; padding: .1em .13em .06em; border-radius: .2em; background: #e50914; -webkit-background-clip: border-box; background-clip: border-box; color: #fff; -webkit-text-fill-color: #fff; line-height: .82; letter-spacing: 0; text-shadow: none; vertical-align: baseline; box-shadow: 0 2px 10px rgba(229, 9, 20, .35); }',
+        '.loader-logo [data-dg-brand], .password-logo-text [data-dg-brand] { color: #e50914; font-weight: 800; letter-spacing: 1px; }',
         '.dg-rails { margin-top: 18px; }',
         '.dg-rail { margin-top: 14px; }',
         '.dg-rail-t { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 16px; font-weight: 600; margin: 0 0 8px; }',
@@ -3779,6 +3786,7 @@
             },
             // 导航栏站名:图标当首字母 M(见 brand.tail)
             adBrandTail() { return brand.tail((this.adult && this.adult.siteName) || DEFAULT_NAME); },
+            adBrandM() { const n = (this.adult && this.adult.siteName) || DEFAULT_NAME; return brand.tail(n) !== n; },
             adBrowseTitle() {
                 void this.adult.labv;
                 const b = this.browse, s = (b && b.sel) || {};
