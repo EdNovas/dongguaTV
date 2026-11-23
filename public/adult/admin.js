@@ -301,6 +301,19 @@
             catch (e) { if (my === seq) { clear(box); box.appendChild(msg('页面出错：' + str(e && e.message, 120), 'err')); } }
         }
         const refreshBtn = (fn) => h('button', { type: 'button', class: 'adm-btn small', onclick: fn }, '刷新');
+        // 重新抓取(key = null:全部在爬的站):先确认,POST /recrawl,结果写进 m;成功后 after()
+        async function recrawl(key, btn, m, after) {
+            const what = key ? '把 ' + str(key, 64) + ' 的历史从第 1 页重新翻一遍' : '把全部站的历史从第 1 页重新翻一遍(约 14 小时)';
+            let yes = true;
+            try { if (W && typeof W.confirm === 'function') yes = !!W.confirm(what + '?\n期间网站照常可用;按当前过滤规则重新收录,硬过滤照样拦。'); } catch (e) { yes = true; }
+            if (!yes) return;
+            btn.disabled = true;
+            const x = await call('POST', '/recrawl', key ? { key } : {});
+            btn.disabled = false;
+            if (!x.ok) { if (m) { m.className = 'adm-msg err'; m.textContent = x.data && x.data.error === 'backfill-off' ? '全量回填关着(CATALOG_BACKFILL=0),没法重新抓取' : errText(x); } return; }
+            if (m) { m.className = 'adm-msg ok'; m.textContent = '已开始:' + fmtNum(x.data && x.data.sites) + ' 个站从第 1 页重新抓取'; }
+            if (typeof after === 'function') after();
+        }
 
         const VIEWS = {
             // ① 概览
@@ -325,11 +338,18 @@
                     xb.rev ? h('p', { class: 'adm-note' }, '附加屏蔽词版本 ' + str(xb.rev, 40)) : null,
                 ]));
                 const hb = historyView(d.history);
-                if (hb) box.appendChild(h('div', { class: 'adm-card' }, [
-                    h('h2', null, '片库历史回填'),
-                    h('div', { class: 'adm-stats' }, [stat(hb.pct, '已翻页数'), stat(hb.sites, '站 翻完 / 启用'), stat(hb.eta, hb.done ? '完成时间' : '预计还要')]),
-                    h('p', { class: 'adm-note' }, hb.note),
-                ]));
+                if (hb) {
+                    const hm = msg('');
+                    const rb = h('button', { type: 'button', class: 'adm-btn small' }, '全部重新抓取');
+                    rb.addEventListener('click', () => recrawl(null, rb, hm, () => load('overview')));
+                    box.appendChild(h('div', { class: 'adm-card' }, [
+                        h('div', { class: 'adm-row' }, [h('h2', { class: 'adm-grow' }, '片库历史回填'), rb]),
+                        h('div', { class: 'adm-stats' }, [stat(hb.pct, '已翻页数'), stat(hb.sites, '站 翻完 / 启用'), stat(hb.eta, hb.done ? '完成时间' : '预计还要')]),
+                        h('p', { class: 'adm-note' }, hb.note),
+                        h('p', { class: 'adm-note' }, '被拦的条目从来不入库:修好误拦的规则、删了附加屏蔽词之后,以前拦掉、现在允许的片要「重新抓取」才回来(按当前规则重新过一遍,硬过滤照样拦)。'),
+                        hm,
+                    ]));
+                }
                 const rej = isObj(d.rejected) ? Object.keys(d.rejected).map((k) => [k, num(d.rejected[k]) || 0]).sort((a, b) => b[1] - a[1]) : [];
                 box.appendChild(h('div', { class: 'adm-card' }, [
                     h('h2', null, '拦截原因(本次启动以来)'),
@@ -485,7 +505,15 @@
                     { l: '最近成功', f: (s) => fmtAgo(s.lastOk, now) },
                     { l: '失败', f: (s) => fmtNum(s.fails), num: true },
                     { l: '当前接口', f: (s) => str(s.current || s.api || '—', 200), mono: true },
-                    { l: '', f: btnOf },
+                    { l: '', f: (s) => {
+                        const kids = [btnOf(s)];
+                        if (s.active !== false) {
+                            const rb = h('button', { type: 'button', class: 'adm-btn small', title: '这个站的历史从第 1 页重新翻一遍,把以前拦掉、现在允许的片找回来' }, '重新抓取');
+                            rb.addEventListener('click', () => recrawl(s.key, rb, m, null));
+                            kids.push(rb);
+                        }
+                        return h('div', { class: 'adm-row' }, kids);
+                    } },
                 ];
                 box.appendChild(h('div', { class: 'adm-card' }, [
                     h('div', { class: 'adm-row' }, [h('h2', { class: 'adm-grow' }, '资源站'), refreshBtn(() => load('sites'))]),

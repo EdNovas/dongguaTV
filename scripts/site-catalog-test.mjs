@@ -1563,6 +1563,18 @@ console.log('⑨ 第三阶段(worker):写线程入库 / 读线程浏览 / AVDB �
     const b2 = await cw2.browse({ b: 'jp_censored' });
     ok(b2.total_results === 300 || (await (async () => { await cw2.rebuild(); return (await cw2.browse({ b: 'jp_censored' })).total_results === 300; })()), '回填的旧作品进浏览');
     ok((await cw2.historyStep({})).pending === 0, '全部完成:没有待回填的站');
+    // 后台「重新抓取」:这个站的回填行回到第 1 页、重新翻;不认识的站 → unknown;全部 = 每个在爬的站
+    const rc1 = await cw2.adminRecrawl(['wa']), rcBad = await cw2.adminRecrawl(['nope']);
+    const bs3 = Object.fromEntries((await cw2.statsAsync()).historySites.map((r) => [r.site, r]));
+    const m3 = nw.log.length;
+    const hs3 = await cw2.historyStep({ maxPages: 1 });
+    const bf3 = nw.log.slice(m3);
+    ok(rc1.ok && rc1.sites === 1 && rcBad.ok === false && rcBad.reason === 'unknown' && bs3.wa.pg === 1 && !bs3.wa.done && bs3.wb.done === 1
+        && hs3.pending === 1 && bf3.length === 1 && bf3[0].host === 'wa.test' && bf3[0].pg === 1 && nItems() === 450,
+        '重新抓取一个站:回到第 1 页重翻(已有的作品不重复入库),别的站不动', [rc1, rcBad, bs3.wa, bf3.map((x) => x.host + ':' + x.pg)]);
+    const rcAll = await cw2.adminRecrawl(null);
+    const bs4 = (await cw2.statsAsync()).historySites;
+    ok(rcAll.ok && rcAll.sites === bs4.length && bs4.every((r) => r.pg === 1 && !r.done), '全部重新抓取:每个在爬的站都回到第 1 页', [rcAll, bs4]);
     await cw2.close();
     // 自动开始 / CATALOG_BACKFILL=0
     const f3 = path.join(tmpW, 'auto.db'), f4 = path.join(tmpW, 'off.db');
