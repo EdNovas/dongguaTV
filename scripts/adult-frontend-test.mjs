@@ -1542,8 +1542,12 @@ function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', na
     for (const [n, def] of Object.entries(A.components)) {
         try { const fn = vctx.Vue.compile(def.template, { decodeEntities: (x) => x, onError: (e) => cerr.push(n + ': ' + e.message) }); if (typeof fn !== 'function') cerr.push(n + ': no fn'); } catch (e) { cerr.push(n + ': ' + e.message); }
     }
-    ok(Object.keys(A.components).length === 5 && !A.components.DgAdCloud && !cerr.length, '五个组件(网格 / 筛选 / 页头 / p4 相关推荐 / 女优索引)的模板都能被 Vue 编译;单独的标签云页已删', cerr);
-    ok(A.mixin.components === undefined || eq(Object.keys(A.mixin.components), ['DgAdGrid', 'DgAdFilter', 'DgAdHead', 'DgAdRails', 'DgAdActresses']), 'mixin 注册了这五个组件(index.html 用 <dg-ad-grid> / <dg-ad-rails> / <dg-ad-actresses> 等)');
+    ok(Object.keys(A.components).length === 6 && !A.components.DgAdCloud && !cerr.length, '六个组件(网格 / 筛选 / 页头 / p4 相关推荐 / 女优索引 / 手机换行展开)的模板都能被 Vue 编译;单独的标签云页已删', cerr);
+    ok(A.mixin.components === undefined || eq(Object.keys(A.mixin.components), ['DgAdGrid', 'DgAdFilter', 'DgAdHead', 'DgAdRails', 'DgAdActresses', 'DgFold']), 'mixin 注册了这六个组件(index.html 用 <dg-ad-grid> / <dg-ad-rails> / <dg-ad-actresses> / dg-fold 等)');
+    ok(A.components.DgAdFilter.components && A.components.DgAdFilter.components.DgFold === A.components.DgFold && /<dg-fold class="browse-fopts">\s*<button type="button" class="browse-fopt dg-alltags"/.test(A.components.DgAdFilter.template),
+        '标签行:手机换行 + 展开,「全部标签」排第一');
+    ok((HTML.match(/<component :is="adultMode \? 'dg-fold' : 'div'"/g) || []).length === 3 && (HTML.match(/v-for="t in \(adultMode \? adCatTypes : catTypes\)"/g) || []).length === 2, '首页 / 浏览页大类、浏览页筛选行都换成 dg-fold');
+    ok(A.mixin.computed.adCatTypes.call({})[0].k === 'all' && A.mixin.computed.adCatTypes.call({}).length === 10, '大类一排「全部」排第一');
     // 组件里不用老 WebView 不认的语法(?. / ??)
     const SRCA = fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8');
     ok(!/\?\.[a-zA-Z_$[(]/.test(SRCA.replace(/\/\/[^\n]*/g, '')) && !/[^?]\?\?[^?]/.test(SRCA.replace(/\/\/[^\n]*/g, '').replace(/'[^'\n]*'/g, "''")), 'adult.js 不用 ?. / ??(老电视 WebView 解析不了,整个文件会挂)');

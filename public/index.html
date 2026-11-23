@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=24"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=25"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -5397,15 +5397,16 @@
             <!-- 🗂️ 分类栏:上面一行切大类(只换下面的标签)+ 随机盲盒 / 猜你想看两个快捷入口;下面是选中大类的地区、题材,点了进分类浏览页 -->
             <section v-else-if="k === 'catnav'" class="catnav animate__animated animate__fadeInUp" :class="{ 'home-first': bi === 0 }" aria-label="分类">
                 <div class="catnav-head">
-                    <div class="cat-tabs" role="group" aria-label="大类">
+                    <!-- [adult] 手机上不再只能横滑:dg-fold 换行、最多两行、底下「展开」;「全部」排第一(adCatTypes) -->
+                    <component :is="adultMode ? 'dg-fold' : 'div'" class="cat-tabs" role="group" aria-label="大类">
                         <!-- 「全部分类」进分类大全(所有大类的地区 / 题材 / 语言 / 年份一页看全);手机上只留图标 -->
                         <button type="button" class="cat-tab cat-tab-all" @click="openCatDir()" v-if="!adultMode" aria-label="全部分类" title="全部分类">
                             <i class="fas fa-table-cells-large" aria-hidden="true"></i><span class="cat-tab-all-l">全部分类</span></button>
                         <!-- [adult] 成人版大类点了直接进浏览页,首页上不标「选中」(电视模式留着:关浏览页时焦点回到它) -->
-                        <button v-for="t in catTypes" :key="t.k" type="button" class="cat-tab"
+                        <button v-for="t in (adultMode ? adCatTypes : catTypes)" :key="t.k" type="button" class="cat-tab"
                             :class="{ active: catNavType === t.k && (!adultMode || isTVMode) }" :aria-pressed="adultMode && !isTVMode ? null : (catNavType === t.k ? 'true' : 'false')"
                             @click="adultMode ? openBrowse({ type: t.k, sel: {} }) : catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}<span v-if="adultMode && adToday(t.k)" class="dg-today" :title="'今日新增 ' + adToday(t.k)">+{{ adToday(t.k) }}</span></button>   <!-- [adult] 今日新增 -->
-                    </div>
+                    </component>
                     <div class="catnav-quick">
                         <button v-if="!hideRandomRow" type="button" class="catnav-q is-random" @click="catNavJump('random')">
                             <i class="fas fa-dice" aria-hidden="true"></i>随机盲盒</button>
@@ -5580,22 +5581,22 @@
                         <h2 class="browse-title">{{ adultMode ? adBrowseTitle : browseTitle }}</h2>   <!-- [adult] 标签云 / 标签页 / 女优页的标题 -->
                         <span class="browse-count" v-if="browse.total > 0">约 {{ browseCountLabel(browse.total) }} 部</span>
                     </div>
-                    <div class="cat-tabs browse-types" role="group" aria-label="大类">
-                        <button v-for="t in catTypes" :key="t.k" type="button" class="cat-tab"
+                    <component :is="adultMode ? 'dg-fold' : 'div'" class="cat-tabs browse-types" role="group" aria-label="大类">   <!-- [adult] 同首页:手机换行 + 展开,「全部」排第一 -->
+                        <button v-for="t in (adultMode ? adCatTypes : catTypes)" :key="t.k" type="button" class="cat-tab"
                             :class="{ active: browse.type === t.k }" :aria-pressed="browse.type === t.k ? 'true' : 'false'"
                             @click="setBrowseType(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}</button>
-                    </div>
+                    </component>
                 </div>
                 <!-- [adult] 标签页 / 女优页页头:分面组、按分类细分、相关标签;女优名 + 别名(DgAdHead) -->
                 <dg-ad-head v-if="adultMode" :view="adult.view" :sel="browse.sel" :total="browse.total" @go="adGo" @learn="adLearned"></dg-ad-head>   <!-- [adult] p4:女优页带作品数 / 最新发行 -->
                 <div class="browse-filters">
                     <div class="browse-frow" v-for="g in browseGroups" :key="browse.type + '-' + g.k" role="group" :aria-label="g.l">
                         <span class="browse-flabel">{{ g.l }}</span>
-                        <div class="browse-fopts">
+                        <component :is="adultMode ? 'dg-fold' : 'div'" class="browse-fopts">   <!-- [adult] 手机换行 + 展开 -->
                             <button v-for="op in g.opts" :key="op.k" type="button" class="browse-fopt"
                                 :class="{ active: browse.sel[g.k] === op.k }" :aria-pressed="browse.sel[g.k] === op.k ? 'true' : 'false'"
                                 @click="setBrowseFilter(g.k, op.k)">{{ op.l }}</button>
-                        </div>
+                        </component>
                     </div>
                     <!-- [adult] 标签行(featured,≤3 个同时满足)+ 排序(只列这次可用的)/ 筛选面板(分组标签带数、更多(审查类,只能筛)、
                          排除、时长含「时长未知」、版本、厂牌、女优)/ 已选条件;组件在 adult/adult.js(DgAdFilter),标签云页不出 -->

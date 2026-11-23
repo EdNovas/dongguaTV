@@ -2854,6 +2854,21 @@
         '.dg-hr-add select:disabled { opacity: 0.5; cursor: default; }',
         '.dg-hr-add select option { background: #1b1b1b; color: #eee; }',
         '.dg-hr-cnt { flex: none; font-size: 12px; color: #999; }',
+        // 手机上换行 + 最多两行 + 「展开」(DgFold):盖掉 index.html 里手机端 .cat-tabs / .browse-fopts 的「不换行、横滑、右边渐隐」
+        '.dg-fold { display: block; min-width: 0; }',
+        '.dg-fold-in { display: flex; flex-wrap: wrap; gap: 6px; }',
+        '.dg-fold.cat-tabs .dg-fold-in { gap: 8px; }',
+        '.browse-frow > .dg-fold { flex: 1 1 auto; }',
+        '.dg-fold-btn { display: inline-flex; align-items: center; gap: 5px; margin-top: 8px; height: 32px; padding: 0 14px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #ddd; font-size: 13px; cursor: pointer; }',
+        '.dg-fold-btn:hover, .dg-fold-btn:focus-visible { border-color: #e50914; color: #fff; outline: none; }',
+        '@media (max-width: 768px) {'
+        + ' .dg-fold.cat-tabs, .dg-fold.browse-fopts { display: block !important; overflow: visible !important; -webkit-mask-image: none !important; mask-image: none !important; padding: 0 !important; margin: 0 !important; }'
+        + ' .dg-fold.cat-tabs .dg-fold-in { gap: 6px; }'
+        + ' .dg-fold-shut .dg-fold-in { overflow: hidden; }'
+        + ' .dg-fold-in > * { flex: none; }'
+        + ' .dg-fold-in::after { content: none; }'
+        + ' .browse-frow { align-items: flex-start; }'   // 换行之后「分类 / 标签」几个字对齐第一行,不在几行中间
+        + ' }',
         '.dg-row-shuf { margin-right: 8px; }',
         '.dg-row-shuf i { margin-right: 3px; }',
         '.dg-row-shuf:disabled { opacity: .6; cursor: default; }',
@@ -3390,6 +3405,57 @@
 </div>`,
     };
 
+    // 手机上一排放不下的按钮(大类 / 筛选项 / 标签):以前只能横着滑、「全部」「全部标签」在最后要滑到头才看得到(用户 2026-11-23)。
+    //   现在手机上换行、最多 lines 行,多出来的收起,底下「展开 / 收起」;选中的那个在收起的部分里 → 自动展开。电脑上照常全部换行、没有按钮。
+    //   只量子元素的位置(ResizeObserver + 内容变了重量),不改子元素本身
+    const FOLD_MQ = '(max-width: 768px)';
+    const DgFold = {
+        name: 'DgFold',
+        props: { lines: { type: Number, default: 2 } },
+        data() { return { open: false, over: false, mob: false, maxH: 0 }; },
+        mounted() {
+            try {
+                this._mq = root.matchMedia ? root.matchMedia(FOLD_MQ) : null;
+                this.mob = !!(this._mq && this._mq.matches);
+                this._mqFn = () => { this.mob = !!this._mq.matches; this.soon(); };
+                if (this._mq) { if (this._mq.addEventListener) this._mq.addEventListener('change', this._mqFn); else if (this._mq.addListener) this._mq.addListener(this._mqFn); }
+            } catch (e) { this.mob = false; }
+            try { if (root.ResizeObserver && this.$refs.in) { this._ro = new root.ResizeObserver(() => this.soon()); this._ro.observe(this.$refs.in); } } catch (e) { }
+            this.soon();
+        },
+        updated() { this.soon(); },
+        beforeUnmount() {
+            clearTimeout(this._t);
+            try { if (this._ro) this._ro.disconnect(); } catch (e) { }
+            try { if (this._mq) { if (this._mq.removeEventListener) this._mq.removeEventListener('change', this._mqFn); else if (this._mq.removeListener) this._mq.removeListener(this._mqFn); } } catch (e) { }
+        },
+        methods: {
+            soon() { clearTimeout(this._t); this._t = setTimeout(() => this.measure(), 30); },
+            measure() {
+                const el = this.$refs.in;
+                if (!el || !this.mob) { if (this.over) this.over = false; return; }
+                const top0 = el.getBoundingClientRect().top + (el.scrollTop || 0);
+                const kids = Array.prototype.filter.call(el.children, (k) => k.offsetParent !== null || k.getClientRects().length);
+                const tops = [];
+                for (const k of kids) { const t = Math.round(k.getBoundingClientRect().top - top0); if (!tops.some((x) => Math.abs(x - t) < 4)) tops.push(t); }
+                tops.sort((a, b) => a - b);
+                if (tops.length <= this.lines) { if (this.over) this.over = false; return; }
+                const h = Math.max(1, tops[this.lines] - tops[0] - 2);
+                if (!this.over || this.maxH !== h) { this.over = true; this.maxH = h; }
+                // 选中的(大类 / 筛选项 / 标签)在收起的那几行里 → 展开(不然看不到自己选了什么)
+                if (!this.open) {
+                    const act = el.querySelector('.active, [aria-pressed="true"]');
+                    if (act && act.getBoundingClientRect().top - top0 >= h) this.open = true;
+                }
+            },
+            toggle() { this.open = !this.open; },
+        },
+        template: `<div class="dg-fold" :class="{ 'dg-fold-mob': mob, 'dg-fold-shut': mob && over && !open }">
+  <div ref="in" class="dg-fold-in" :style="mob && over && !open ? { maxHeight: maxH + 'px' } : null"><slot></slot></div>
+  <button v-if="mob && over" type="button" class="dg-fold-btn" :aria-expanded="open ? 'true' : 'false'" @click="toggle">{{ open ? '收起' : '展开' }} <i :class="['fas', open ? 'fa-angle-up' : 'fa-angle-down']" aria-hidden="true"></i></button>
+</div>`,
+    };
+
     // 标签行 + 排序 / 筛选按钮 / 已选条件 + 筛选面板(手机底部抽屉、宽屏右侧面板)。所有改动 @go → 根的 adGo(立刻生效,面板里的数跟着刷新)
     const BACK_KEYS = new Set(['Escape', 'Esc', 'GoBack', 'BrowserBack']);
     const DgAdFilter = {
@@ -3399,6 +3465,7 @@
             total: { type: Number, default: 0 }, tv: { type: Boolean, default: false }, legacy: { type: Array, default: () => [] },
         },
         emits: ['go', 'sheet'],
+        components: { DgFold },
         data() { return { open: false, xmode: false, note: '', sq: '', aq: '', aRes: null, studios: null, cloud: false }; },
         computed: {
             chips() { return chipRow(this.facets, this.sel, this.legacy); },
@@ -3548,10 +3615,10 @@
         template: `<div class="dg-af">
   <div v-if="chips.length" class="browse-frow" role="group" aria-label="标签">
     <span class="browse-flabel">标签</span>
-    <div class="browse-fopts">
-      <button v-for="c in chips" :key="'c-' + c.id" type="button" class="browse-fopt" :class="{ active: c.st === 'in', 'dg-x': c.st === 'ex' }" :disabled="c.off" :aria-pressed="c.st ? 'true' : 'false'" :title="chipTitle(c)" @click="tap(c.id)">{{ c.st === 'ex' ? '−' : '' }}{{ c.label }}<i v-if="c.st" class="fas fa-xmark dg-chip-x" aria-hidden="true"></i></button>
+    <dg-fold class="browse-fopts">
       <button type="button" class="browse-fopt dg-alltags" :aria-expanded="cloud ? 'true' : 'false'" @click="cloud = !cloud">全部标签 <i :class="['fas', cloud ? 'fa-angle-up' : 'fa-angle-down']" aria-hidden="true"></i></button>
-    </div>
+      <button v-for="c in chips" :key="'c-' + c.id" type="button" class="browse-fopt" :class="{ active: c.st === 'in', 'dg-x': c.st === 'ex' }" :disabled="c.off" :aria-pressed="c.st ? 'true' : 'false'" :title="chipTitle(c)" @click="tap(c.id)">{{ c.st === 'ex' ? '−' : '' }}{{ c.label }}<i v-if="c.st" class="fas fa-xmark dg-chip-x" aria-hidden="true"></i></button>
+    </dg-fold>
   </div>
   <div v-if="cloud" class="dg-cloud dg-cloud-in" role="group" aria-label="全部标签">
     <section v-for="g in cloudGroups" :key="'cg-' + g.id" class="dg-cloud-g">
@@ -3877,7 +3944,7 @@
                 },
             };
         },
-        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses },
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses, DgFold },
         directives: { dgCv: cvDirective },   // 首页行 / 搜索联想的封面 <img v-dg-cv="item">
         computed: {
             // 播放页作品信息条(currentGroup._meta 的展示版;没有 _meta 不出)
@@ -3939,6 +4006,8 @@
                     return { k: s.k, l: I.l || s.k, icon: I.icon || 'fa-film', on: s.on, custom: homeRows.isCustom(s.k), note: empty ? (I.hint || '暂时没内容') : '' };
                 });
             },
+            // 首页 / 浏览页的大类一排:「全部」排第一(以前在最后,手机上要滑到头才看得到 —— 用户 2026-11-23)
+            adCatTypes() { return TYPES.filter(T => T.k === 'all').concat(TYPES.filter(T => T.k !== 'all')); },
             adRowsAddable() { const have = new Set((this.adult.rows || []).map(s => s.k)); return homeRows.ADD.filter(a => !have.has(a.k)).map(a => ({ id: a.id, l: a.l })); },
             adRowsAdded() { return homeRows.added(this.adult.rows || []); },
             adRowsMax() { return homeRows.MAX_ADD; },
@@ -5145,7 +5214,7 @@
         // phase 3
         browseApiUrl, filterCount, nextTagState, normFacets, sortOpts, chipRow, activePills, routeOf, parseRoute, canonHash, isOurHash,
         cloudOf, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
-        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses },
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses, DgFold },
         ageGate, brand, wordmark, homeRows, HOME_BUCKETS, auth, fetchWork, mixin, boot,
         // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
         hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, previewBusy, isTV,
