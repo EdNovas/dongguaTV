@@ -6,7 +6,7 @@
 
 - **不要推到公开仓库、不要打 tag**：公开仓库的 GitHub Actions 会把 main 打成 `ednovas/dongguatv:latest`；成人分支已经删掉了 docker-publish / android-build 两个 workflow，但仍不要推到同一个公开远端。
 - **内容硬过滤不可配置**：未成年、偷拍盗摄、迷奸/下药/外力致昏、换脸、真人私密泄露、人兽，任何开关都关不掉；后台只能让规则更严（追加屏蔽词、隐藏作品、停用资源站）。
-- **源站列表不在 git 里**：`db.adult.json`（31 个启用后端，带 `mirrors` 备用域名）在本机 `.adult-research/` 下。部署时把它拷到服务器，用 `DB_FILE=/path/to/db.adult.json` 指过去（或改名成 `db.json` 放在项目根目录，`db.json` 本来就被 gitignore）。
+- **源站列表不在 git 里**：`db.adult.json`（30 个启用后端，带 `mirrors` 备用域名；辣椒资源 av_s14 整站封面图床已死，标了 `active:false`）在本机 `.adult-research/` 下。部署时把它拷到服务器，用 `DB_FILE=/path/to/db.adult.json` 指过去（或改名成 `db.json` 放在项目根目录，`db.json` 本来就被 gitignore）。
 
 ## 二、aaPanel（宝塔）Node 项目
 
