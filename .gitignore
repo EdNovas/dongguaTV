@@ -57,3 +57,4 @@ promo/**/capture-stderr.log
 /promo
 promo/**/.scratch/
 promo/**/qa/
+db.json.bak-20261123
