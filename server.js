@@ -813,7 +813,7 @@ class CacheManager {
                 console.log(`[SQLite Cache] Database initialized: ${CACHE_DB_FILE}`);
             } catch (e) {
                 console.error('[SQLite Cache] Init failed, falling back to memory:', e.message);
-                if (adultGateLib && adultGateLib.ADULT_ENV_DEFAULTS) console.error('[adult] ⚠ SQLite 打不开 → 首页目录不会启动(首页一片空白)。检查 CACHE_DB_PATH 目录是否可写、better-sqlite3 是否装好(在项目目录运行 npm rebuild better-sqlite3)');
+                if (adultGateLib && adultGateLib.ADULT_ENV_DEFAULTS) console.error('[adult] ⚠ SQLite 打不开 → 首页目录不会启动(首页一片空白)。检查 CACHE_DB_PATH 目录是否可写、better-sqlite3 是否装好。重装要用跑网站的这个 Node(' + process.version + ',' + process.execPath + '),不是命令行里的系统 node:cd 项目目录 && PATH=' + path.dirname(process.execPath) + ':$PATH npm rebuild better-sqlite3');
                 this.type = 'memory';
             }
         }

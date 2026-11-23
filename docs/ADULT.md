@@ -11,7 +11,7 @@
 ## 二、aaPanel（宝塔）Node 项目
 
 1. 把仓库拷到服务器（不要拷 `node_modules/`、`.git/`、`.adult-research/` 整个目录），然后 `npm ci --omit=dev`。
-2. Node 版本用 22（与主站一致）。
+2. Node 版本用 22 或 24（与主站一致）。**命令行里的 `node` 常常不是宝塔给项目用的那个**（Ubuntu 20.04 自带的 `/usr/bin/node` 是 v10，用它装 better-sqlite3 会报 `-std=c++20` 编译失败，而且会把原来装好的删掉）。`npm ci` / `npm rebuild` 之前先把宝塔的 Node 放到最前面：`export PATH=/www/server/nodejs/v24.12.0/bin:$PATH`（版本号按项目设置里选的改），`node -v` 确认一下。
 3. `.env` 至少要有：
 
 ```ini
