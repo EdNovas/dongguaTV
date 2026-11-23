@@ -9,7 +9,7 @@
     <meta name="referrer" content="no-referrer">
     <!-- [adult] 成人站:标题只放站名(运行时按 /api/config 的 site_name 改,见 adult/adult.js),不收录、不出分享卡片。
          主站的 description/keywords/canonical/Open Graph/Twitter 卡片标签已去掉(指向主站域名、带主站品牌,页面源码里也不留) -->
-    <title>DGX</title>
+    <title>MEI.NU</title>
     <meta name="robots" content="noindex, nofollow, noarchive">
     <!-- [adult] p4 隐私预锁:设过 PIN 的设备,在 adult/privacy.js(defer,要等整页解析完)接手之前先把页面藏起来 —— 慢设备上首页不会先闪一下再被锁屏盖住。
          privacy.js 起来后锁屏(或撤掉预锁);它 10 秒还没起来 = 撤掉预锁(和没有这段时一样,不把页面永远藏住) -->
@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=12"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=13"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -96,7 +96,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="DGX">   <!-- [adult] 站名(运行时按 site_name 改) -->
+    <meta name="apple-mobile-web-app-title" content="MEI.NU">   <!-- [adult] 站名(运行时按 site_name 改) -->
     <link rel="apple-touch-icon" href="icon.png">
 
     <!-- 关键 CSS (优先加载) -->
@@ -120,7 +120,7 @@
          播放器增强(热度条/手势/起播提速)· 隐私(无痕/锁)· 封面悬停预览 · 刷短片。改了要升 ?v= 和 sw.js 版本 -->
     <script data-cfasync="false" src="adult/player-x.js?v=4" defer></script>
     <script data-cfasync="false" src="adult/privacy.js?v=3" defer></script>
-    <script data-cfasync="false" src="adult/preview.js?v=3" defer></script>
+    <script data-cfasync="false" src="adult/preview.js?v=4" defer></script>
     <script data-cfasync="false" src="adult/feed.js?v=4" defer></script>
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
 
@@ -4944,7 +4944,7 @@
     <!-- Initial Loading Screen (Buffer) -->
     <div id="app-loader" class="app-loader">
         <div class="loader-logo" style="display: flex; align-items: center; justify-content: center;"><img
-                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;"><span data-dg-brand>DGX</span>   <!-- [adult] 站名(原:视界 MAX) -->
+                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;"><span data-dg-brand>MEI.NU</span>   <!-- [adult] 站名(原:视界 MAX) -->
         </div>
         <div class="loader-spinner"></div>
         <div id="loader-status" style="margin-top: 20px; color: #666; font-size: 13px; text-align: center;">正在初始化...
@@ -4959,7 +4959,7 @@
         <div class="password-container">
             <div class="password-logo">
                 <div class="password-logo-text" style="display: flex; align-items: center; justify-content: center;">
-                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;"><span data-dg-brand>DGX</span>   <!-- [adult] 站名(原:视界 MAX) -->
+                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;"><span data-dg-brand>MEI.NU</span>   <!-- [adult] 站名(原:视界 MAX) -->
                 </div>
                 <div class="password-logo-subtitle"><i class="fas fa-shield-alt"></i> <span id="login-subtitle-text">请登录以继续</span></div>
             </div>
@@ -5064,7 +5064,7 @@
 
         <nav class="navbar-custom" v-show="!offHome">
             <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
-                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">{{ (adult && adult.siteName) || 'DGX' }}</div>   <!-- [adult] 站名(原:视界 MAX) -->
+                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">{{ (adult && adult.siteName) || 'MEI.NU' }}</div>   <!-- [adult] 站名(原:视界 MAX) -->
             <button v-if="adultMode && adFeedOn" type="button" class="dg-nav-feed" @click="adOpenFeed()" title="刷短片" aria-label="刷短片"><i class="fas fa-mobile-screen" aria-hidden="true"></i><span>刷短片</span></button>   <!-- [adult] p4 刷短片入口(电视上没有) -->
         </nav>
 
@@ -5858,6 +5858,7 @@
                         <div>
                             <div class="set-title">封面悬停预览</div>
                             <div class="set-desc">鼠标停在封面上、或手机长按封面时，静音播几段预览（省流量模式和移动网络下不播）</div>
+                            <div v-if="adult.pvReduced" class="set-desc">你的系统开了「减少动态效果」（Windows：设置 → 辅助功能 → 视觉效果 → 动画效果 关着），所以默认关着；在这里打开就照样预览。</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" :checked="adult.pv" @change="adSetPv($event.target.checked)" aria-label="封面悬停预览">

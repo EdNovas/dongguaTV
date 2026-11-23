@@ -155,6 +155,9 @@ t('blockReason covers every disable condition', () => {
     for (const k of Object.keys(cases)) assert.equal(PV.blockReason(Object.assign({}, ok, { [k]: cases[k][0] })), cases[k][1], k);
     assert.equal(PV.SESSION_CAP, 60 * 1048576); assert.equal(PV.DAY_CAP, 150 * 1048576); assert.equal(PV.HARD_CAP, 5 * 1048576); assert.equal(PV.PLAN_BUDGET, 4 * 1048576);
     assert.equal(PV.DWELL_MS, 600); assert.equal(PV.PRESS_MS, 450);
+    // 系统「减少动态效果」:默认不预览;设置里明确打开(force)就照播(别的拦截照旧)
+    assert.equal(PV.blockReason(Object.assign({}, ok, { reducedMotion: true, force: true })), '');
+    assert.equal(PV.blockReason(Object.assign({}, ok, { reducedMotion: true, force: true, busy: true })), 'main-player');
 });
 t('makeBudget: session + per-day (rolls over at midnight; storage errors ignored)', () => {
     const m = new Map();

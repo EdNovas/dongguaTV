@@ -166,7 +166,7 @@ console.log('① adult.js 纯函数');
     const srvPaths = [...CP.matchAll(/'([^']+)'/g)].map(m => m[1]);
     ok(srvPaths.length >= 5 && srvPaths.every(p => A.isContentPath(p)), '服务器 requireAuth 的每个路径前端都认作内容接口', srvPaths);
     ok(A.sameOriginPath('/api/x?a=1', 'https://s.test/') === '/api/x' && A.sameOriginPath('https://other.test/api/x', 'https://s.test/') === null, 'sameOriginPath');
-    ok(A.brand.clean('<b>站</b>\u0001') === 'b站/b' && A.brand.name() === 'DGX', '站名清洗 / 默认 DGX');
+    ok(A.brand.clean('<b>站</b>\u0001') === 'b站/b' && A.brand.name() === 'MEI.NU', '站名清洗 / 默认 MEI.NU');
 }
 
 console.log('② fetch 包装(401 补核验 / 年龄门 / 令牌头)');
@@ -1525,7 +1525,7 @@ console.log('⑤ 页面接线 / sw.js');
 {
     const head = HTML.slice(0, HTML.indexOf('</head>'));
     const headNoComments = head.replace(/<!--[\s\S]*?-->/g, '');
-    ok(/<title>DGX<\/title>/.test(head) && !/E视界/.test(headNoComments) && !/E视界/.test(head), '<title> 是站名,head 里不再有主站品牌');
+    ok(/<title>MEI\.NU<\/title>/.test(head) && !/E视界/.test(headNoComments) && !/E视界/.test(head), '<title> 是站名,head 里不再有主站品牌');
     ok(/<meta name="robots" content="noindex, nofollow, noarchive">/.test(head) && !/og:|twitter:|rel="canonical"|ednovas\.video/.test(head), 'robots noindex;没有 OG / Twitter 卡片 / canonical / 主站域名');
     ok(!/<link rel="(dns-prefetch|preconnect)" href="[^"]*(tmdb|themoviedb)/.test(headNoComments), '不预连接 TMDB');
     // ?v= 不钉死:页面引用的版本 = sw.js 预缓存的版本(升版时两处一起改,测试跟着走)
@@ -2418,7 +2418,7 @@ async function feedWorld(o) {
     // ---- index.html 接线(p4)----
     const head = HTML.slice(0, HTML.indexOf('</head>'));
     const iSeek = head.indexOf('libs/js/seek-preview.js');
-    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=3', 'adult/feed.js?v=4'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
+    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=4', 'adult/feed.js?v=4'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
     // 修订:head 里的隐私预锁片段(设过 PIN 才加 dgp-prelock;privacy.js 10 秒没起来就撤掉),要在任何 body 内容之前
     const iPre = head.indexOf('dgp-prelock body > *:not(.dgp-layer)'), iPreJs = head.indexOf("localStorage.getItem('dgp_pin')");
     ok(iPre > 0 && iPreJs > iPre && iPreJs < head.indexOf('adult/adult.js?v=') && /if \(!window\.dgPrivacy\) d\.classList\.remove\('dgp-prelock'\); \}, 10000\)/.test(head), 'head:隐私预锁(CSS + 设过 PIN 才加类 + 10 秒兜底撤掉),在 adult.js 之前', [iPre, iPreJs]);

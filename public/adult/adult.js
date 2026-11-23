@@ -1,6 +1,6 @@
 // [adult] 成人站前端(window.DgAdult)。在 index.html 的 <head> 里同步加载,先于 Vue 主脚本:
 //   ① 年龄确认门(Vue 之前的全屏遮罩;没点「我已年满18岁」之前不发任何内容请求)
-//   ② 站名/标题(document.title 用 /api/config 的 site_name,默认 DGX)
+//   ② 站名/标题(document.title 用 /api/config 的 site_name,默认 MEI.NU)
 //   ③ 内容接口 401 处理:fetch 包一层 —— 补一次登录核验(会种 dg_t cookie)再重试一次,还不行就出登录框;同源 /api 带 x-dg-token 头
 //   ④ 目录(lib/site-catalog)接到首页/分类浏览页:DgCatalog 的替身 catalog(同一套接口,buildQuery 给出 /api/catalog/browse 地址)
 //   ⑤ Vue mixin:首页目录行、openWork(按作品键开播放页)、作品线路刷新、海报回退(不走 TMDB)
@@ -16,7 +16,7 @@
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this), function (root) {
     'use strict';
     const VERSION = 3;
-    const DEFAULT_NAME = 'DGX';
+    const DEFAULT_NAME = 'MEI.NU';
 
     // ---------- 安全的存储读写(隐私模式/被禁用时 localStorage 会抛) ----------
     function lsGet(k) { try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch (e) { return null; } }
@@ -2508,6 +2508,20 @@
             return !!(v && !v.paused && !v.ended);
         } catch (e) { return false; }
     }
+    // 悬停预览让不让路:同 mainBusy,但正片在放且前面已缓冲 ≥30 秒时不让(预览只要几 MB,抢不着它;相关推荐上悬停也能预览)
+    function previewBusy() {
+        try {
+            if (root.adCut && typeof root.adCut.busy === 'function' && root.adCut.busy()) return true;
+            if (root.afpOffline && root.afpOffline._busy) return true;
+            const app = bridge.app;
+            if (!app || !app.showDetail) return false;
+            const v = root.document && root.document.querySelector('#dplayer video');
+            if (!v || v.paused || v.ended) return false;
+            const t = v.currentTime || 0, b = v.buffered;
+            for (let k = 0; b && k < b.length; k++) if (b.start(k) <= t + 0.5 && b.end(k) > t) return b.end(k) - t < 30;
+            return true;
+        } catch (e) { return false; }
+    }
     function isTV() { try { const app = bridge.app; return !!(app && app.isTVMode); } catch (e) { return false; } }
     function openWorkExt(card) {
         const app = bridge.app;
@@ -2520,9 +2534,11 @@
     // 网络:省流量 / 2G·3G / 蜂窝(没在设置里允许)→ 不自动拉视频。opt 是「移动网络也自动播放」(设置里开,只存本机)
     const CELL_KEY = 'dg_cell_ok';
     const cellOk = () => lsGet(CELL_KEY) === '1';
-    // 封面悬停预览总开关(只存本机,默认开;preview.js 读同一个键)
+    // 封面悬停预览总开关(只存本机;preview.js 读同一个键):'1' = 明确打开(系统开了「减少动态效果」也照播)/ '0' = 关 /
+    //   没设过 = 默认开,但系统「减少动态效果」(Windows 关了动画效果时 Chrome 也这么报)时默认关
     const PV_KEY = 'dg_pv_on';
-    const pvOn = () => lsGet(PV_KEY) !== '0';
+    const reducedMotion = () => { try { return !!(root.matchMedia && root.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { return false; } };
+    const pvOn = () => { const s = lsGet(PV_KEY); return s === '1' || (s !== '0' && !reducedMotion()); };
     function netBlock(conn, optIn) {
         const c = conn || null;
         if (!c) return '';
@@ -2680,7 +2696,17 @@
         '.dg-rail { margin-top: 14px; }',
         '.dg-rail-t { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 16px; font-weight: 600; margin: 0 0 8px; }',
         '.dg-rail-t > i { color: #e50914; font-size: 14px; }',
-        '.dg-rail-all { margin-left: auto; background: none; border: 0; color: #aaa; font-size: 13px; cursor: pointer; padding: 4px 6px; }',
+        '.dg-rail-acts { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }',
+        '.dg-rail-all, .dg-rail-x { background: none; border: 0; color: #aaa; font-size: 13px; cursor: pointer; padding: 4px 6px; }',
+        '.dg-rail-x:hover, .dg-rail-x:focus { color: #fff; }',
+        // 左右箭头(只在有鼠标的设备上;手机横滑)/ 展开 = 换行成网格
+        '.dg-rail-box { position: relative; }',
+        '.dg-rail-nav { position: absolute; top: calc(50% - 30px); z-index: 2; width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.18); background: rgba(20,20,20,0.82); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(0,0,0,0.5); opacity: 0; transition: opacity .15s; }',
+        '.dg-rail-nav.dg-l { left: -6px; } .dg-rail-nav.dg-r { right: -6px; }',
+        '.dg-rail-box:hover .dg-rail-nav, .dg-rail-nav:focus-visible { opacity: 1; }',
+        '.dg-rail-nav:hover { background: #e50914; border-color: #e50914; }',
+        '@media (hover: none) { .dg-rail-nav { display: none; } }',
+        '.dg-rail-row.dg-open { flex-wrap: wrap; overflow-x: visible; row-gap: 14px; }',
         '.dg-rail-all:hover, .dg-rail-all:focus { color: #fff; }',
         '.dg-rail-row { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; padding: 2px 2px 10px; scrollbar-width: thin; }',
         '.dg-rail-card { flex: none; width: calc(var(--card-w, 150px) * 0.86); cursor: pointer; }',
@@ -3476,7 +3502,8 @@
         name: 'DgAdRails',
         props: { wk: { type: String, default: '' }, poster: { type: Function, default: null }, tv: { type: Boolean, default: false } },
         emits: ['pick', 'go'],
-        data() { return { rails: null }; },
+        // open:哪几排展开成网格;edge:每排左右还能不能翻(电脑上的左右箭头,手机直接横滑)
+        data() { return { rails: null, open: {}, edge: {} }; },
         directives: { dgCv: cvDirective },
         computed: {
             // 封面加载不出来的卡片不出;一排全没了整排不出(不提示)
@@ -3499,8 +3526,15 @@
         },
         // 封面判定这一批要让卡片 / 整排消失(DOM 还是旧的):记下横排露出来的第一张卡的位置、视口里最上面那排的位置,重渲染后补回去
         //   (只在封面判定改了能出的卡时记:换了一部 / 刚拉到推荐不动滚动)
-        mounted() { this._cvOff = covers.listen(() => this.onCv()); },
-        beforeUnmount() { if (this._cvOff) { this._cvOff(); this._cvOff = null; } },
+        mounted() {
+            this._cvOff = covers.listen(() => this.onCv());
+            this._onRz = () => { if (this._rows) this._rows.forEach((el, k) => this.upd(k)); };
+            try { root.addEventListener('resize', this._onRz, { passive: true }); } catch (e) { }
+        },
+        beforeUnmount() {
+            if (this._cvOff) { this._cvOff(); this._cvOff = null; }
+            try { root.removeEventListener('resize', this._onRz); } catch (e) { }
+        },
         updated() {
             const m = this._fm, cm = this._cvm;
             this._fm = null; this._cvm = null;
@@ -3522,6 +3556,8 @@
             load() {
                 const wk = this.wk;
                 this.rails = null;
+                this.open = {};
+                this.edge = {};
                 if (!wk || !WK_RE.test(wk) || wk.length > 300) return;
                 cachedJson('/api/catalog/related/' + encodeURIComponent(wk), 10000).then(d => {
                     if (wk !== this.wk) return;
@@ -3529,19 +3565,40 @@
                 });
             },
             pick(it) { this.$emit('pick', it); },
+            // 左右箭头:记下每排的横滑容器(函数 ref,不进响应式),滚动 / 改窗口大小时更新两头还能不能翻
+            setRow(k, el) {
+                if (!this._rows) this._rows = new Map();
+                if (el) { if (this._rows.get(k) !== el) { this._rows.set(k, el); this.$nextTick(() => this.upd(k)); } } else this._rows.delete(k);
+            },
+            upd(k) {
+                const el = this._rows && this._rows.get(k);
+                if (!el) return;
+                const l = el.scrollLeft > 4, r = el.scrollLeft + el.clientWidth < el.scrollWidth - 4, e = this.edge[k];
+                if (!e || e.l !== l || e.r !== r) this.edge = Object.assign({}, this.edge, { [k]: { l, r } });
+            },
+            nav(k, dir) {
+                const el = this._rows && this._rows.get(k);
+                if (!el) return;
+                try { el.scrollBy({ left: dir * Math.max(200, el.clientWidth * 0.85), behavior: 'smooth' }); } catch (e) { el.scrollLeft += dir * Math.max(200, el.clientWidth * 0.85); }
+            },
+            toggle(k) { this.open = Object.assign({}, this.open, { [k]: !this.open[k] }); this.$nextTick(() => this.upd(k)); },
         },
         template: `<div v-if="shownRails.length" class="dg-rails">
   <section v-for="r in shownRails" :key="r.k" class="dg-rail" :data-rk="r.k" :aria-label="r.title">
-    <div class="dg-rail-t"><i :class="['fas', r.icon]" aria-hidden="true"></i><span>{{ r.title }}</span><button v-if="r.go" type="button" class="dg-rail-all" :tabindex="tv ? 2 : null" @click="$emit('go', r.go)">全部 <i class="fas fa-angle-right" aria-hidden="true"></i></button></div>
-    <div class="dg-rail-row">
-      <div v-for="it in r.items" :key="r.k + '-' + it.id" class="dg-rail-card" :data-wk="it._wk" :tabindex="tv ? 2 : null" @click="pick(it)" @keydown.enter.prevent="pick(it)">
-        <div class="poster-wrap">
-          <img v-dg-cv="it" :src="cvSrc(it)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded">
-          <div v-if="it._badge" class="dg-ad-badge">{{ it._badge }}</div><span v-if="it._durText" class="dg-ov-dur">{{ it._durText }}</span><span v-if="it._code" class="dg-ov-code">{{ it._code }}</span>
+    <div class="dg-rail-t"><i :class="['fas', r.icon]" aria-hidden="true"></i><span>{{ r.title }}</span><span class="dg-rail-acts"><button v-if="!tv && r.items.length > 3" type="button" class="dg-rail-x" :aria-expanded="open[r.k] ? 'true' : 'false'" @click="toggle(r.k)">{{ open[r.k] ? '收起' : '展开' }} <i :class="['fas', open[r.k] ? 'fa-angle-up' : 'fa-angle-down']" aria-hidden="true"></i></button><button v-if="r.go" type="button" class="dg-rail-all" :tabindex="tv ? 2 : null" @click="$emit('go', r.go)">全部 <i class="fas fa-angle-right" aria-hidden="true"></i></button></span></div>
+    <div class="dg-rail-box">
+      <button v-if="!tv && !open[r.k] && edge[r.k] && edge[r.k].l" type="button" class="dg-rail-nav dg-l" aria-label="往左翻" @click="nav(r.k, -1)"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+      <div class="dg-rail-row" :class="{ 'dg-open': !!open[r.k] }" :ref="(el) => setRow(r.k, el)" @scroll.passive="upd(r.k)">
+        <div v-for="it in r.items" :key="r.k + '-' + it.id" class="dg-rail-card" :data-wk="it._wk" :tabindex="tv ? 2 : null" @click="pick(it)" @keydown.enter.prevent="pick(it)">
+          <div class="poster-wrap">
+            <img v-dg-cv="it" :src="cvSrc(it)" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer" @load="loaded">
+            <div v-if="it._badge" class="dg-ad-badge">{{ it._badge }}</div><span v-if="it._durText" class="dg-ov-dur">{{ it._durText }}</span><span v-if="it._code" class="dg-ov-code">{{ it._code }}</span>
+          </div>
+          <div class="movie-name">{{ it.title }}</div>
+          <div class="movie-date dg-ad-sub">{{ it._sub }}</div>
         </div>
-        <div class="movie-name">{{ it.title }}</div>
-        <div class="movie-date dg-ad-sub">{{ it._sub }}</div>
       </div>
+      <button v-if="!tv && !open[r.k] && edge[r.k] && edge[r.k].r" type="button" class="dg-rail-nav dg-r" aria-label="往右翻" @click="nav(r.k, 1)"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
     </div>
   </section>
 </div>`,
@@ -3632,7 +3689,7 @@
                     //   labv = 学到新名字(标签/厂牌/女优)时 +1,让标题重算;routeOn = 地址栏路由已接管(启动时先按地址栏开页,再开始写)
                     facets: null, view: '', labv: 0, routeOn: false,
                     // p4:relWk = 播放页「相关推荐」这部(首帧之后才有);pv / feedAuto = 设置里的「封面悬停预览」「刷短片自动播放(移动网络)」
-                    relWk: '', pv: pvOn(), cell: cellOk(),
+                    relWk: '', pv: pvOn(), pvReduced: reducedMotion(), cell: cellOk(),
                 },
             };
         },
@@ -4741,7 +4798,7 @@
         components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses },
         ageGate, brand, auth, fetchWork, mixin, boot,
         // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
-        hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, isTV,
+        hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, previewBusy, isTV,
         openWork: openWorkExt, incognito, privLocked, netBlock, netNow, cellOk, pvOn, CELL_KEY, PV_KEY,
         normRelated, forYouTags, noList, actSections, actIndexUrls, isFeedHash, FEED_HASH,
         // 封面加载不出来就藏(纯函数 + 控制器)

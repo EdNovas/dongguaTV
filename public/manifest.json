@@ -1,7 +1,7 @@
 {
-    "name": "DGX",
-    "short_name": "DGX",
-    "description": "DGX",
+    "name": "MEI.NU",
+    "short_name": "MEI.NU",
+    "description": "MEI.NU",
     "start_url": "/index.html",
     "display": "standalone",
     "orientation": "any",

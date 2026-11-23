@@ -369,7 +369,7 @@
         if (!e.on) return 'off';
         if (e.tv) return 'tv';
         if (!e.mse) return 'no-mse';
-        if (e.reducedMotion) return 'reduced-motion';
+        if (e.reducedMotion && !e.force) return 'reduced-motion';   // 系统「减少动态效果」:默认不预览;设置里明确打开(dg_pv_on=1)就照播
         if (e.hidden) return 'hidden';
         if (e.net) return e.net;
         if (e.busy) return 'main-player';
@@ -441,8 +441,9 @@
         try { feed = !!(root.dgAdultFeed && typeof root.dgAdultFeed.isOpen === 'function' && root.dgAdultFeed.isOpen()); } catch (e) { }
         const B = budget();
         return {
-            on: lsGet('dg_pv_on') !== '0', tv: !!(A && A.isTV && A.isTV()), mse, reducedMotion: reduced, hidden, net,
-            busy: !!(A && A.mainBusy && A.mainBusy()), feed, locked: !!(A && A.privLocked && A.privLocked()),
+            on: lsGet('dg_pv_on') !== '0', force: lsGet('dg_pv_on') === '1', tv: !!(A && A.isTV && A.isTV()), mse, reducedMotion: reduced, hidden, net,
+            // 主播放器在放:正片前面已缓冲 ≥30 秒就照样预览(几 MB 抢不着它);没有 previewBusy 的旧桥按 mainBusy
+            busy: !!(A && (typeof A.previewBusy === 'function' ? A.previewBusy() : (A.mainBusy && A.mainBusy()))), feed, locked: !!(A && A.privLocked && A.privLocked()),
             sessionBytes: B.session(), dayBytes: B.day(),
         };
     }

@@ -131,7 +131,7 @@ console.log('① lib/adult-gate 纯函数');
     try { gate.vercelGuard({}); } catch (e) { threw = true; }
     ok(threw, 'vercelGuard 缺 lib/adult → 抛错(fail-closed)');
     const c2 = g.configFields();
-    ok(c2.adult === true && c2.age_gate === true && c2.site_name === 'DGX' && c2.tmdb_api_key === null && c2.push_enabled === false && c2.rules_version === RV && c2.img_proxy === false, 'configFields(img_proxy 默认 false)', c2);
+    ok(c2.adult === true && c2.age_gate === true && c2.site_name === 'MEI.NU' && c2.tmdb_api_key === null && c2.push_enabled === false && c2.rules_version === RV && c2.img_proxy === false, 'configFields(img_proxy 默认 false)', c2);
     ok(Array.isArray(c2.cover_dead_hosts) && c2.cover_dead_hosts.length === 0, 'configFields:没有目录 → cover_dead_hosts []', c2.cover_dead_hosts);
     ok(c2.purchase_url === 'https://ednovas.me', 'configFields:没配 PURCHASE_URL → 购买链接沿用主站 ednovas.me', c2.purchase_url);
     {
@@ -756,7 +756,7 @@ try {
     // —— /api/config 与关掉的功能 ——
     r = await api('GET', '/api/config?token=' + TOK);
     const cfg = r.j || {};
-    ok(cfg.adult === true && cfg.catalog === true && cfg.age_gate === true && cfg.site_name === 'DGX' && cfg.auth_required === true && cfg.rules_version === RV, '/api/config 成人站字段', cfg);
+    ok(cfg.adult === true && cfg.catalog === true && cfg.age_gate === true && cfg.site_name === 'MEI.NU' && cfg.auth_required === true && cfg.rules_version === RV, '/api/config 成人站字段', cfg);
     ok(cfg.tmdb_api_key === null && cfg.tmdb_proxy_url === null && cfg.danmaku_enabled === false && cfg.requests_enabled === false && cfg.push_enabled === false
         && cfg.intro_enabled === false && cfg.live_enabled === false && cfg.img_proxy === false, '/api/config:TMDB/弹幕/求片/推送/片头/直播 都报关,img_proxy:false', cfg);
     ok(JSON.stringify(cfg.cover_dead_hosts) === JSON.stringify(['img-gone.example', 'pic.gone2.example']), '/api/config cover_dead_hosts:目录的死封面域名(只放像域名的、去重)', cfg.cover_dead_hosts);
@@ -765,7 +765,7 @@ try {
         const anon = (await api('GET', '/api/config')).j || {};
         const bad = (await api('GET', '/api/config?token=not-a-token')).j || {};
         const ck = (await api('GET', '/api/config', { cookie: CK })).j || {};
-        ok(anon.site_name === 'DGX' && JSON.stringify(anon.cover_dead_hosts) === '[]' && JSON.stringify(bad.cover_dead_hosts) === '[]' && ck.cover_dead_hosts && ck.cover_dead_hosts.length === 2,
+        ok(anon.site_name === 'MEI.NU' && JSON.stringify(anon.cover_dead_hosts) === '[]' && JSON.stringify(bad.cover_dead_hosts) === '[]' && ck.cover_dead_hosts && ck.cover_dead_hosts.length === 2,
             '/api/config cover_dead_hosts:未登录 / 令牌不对 → [];带登录 Cookie → 给', [anon.cover_dead_hosts, bad.cover_dead_hosts, ck.cover_dead_hosts]);
     }
     r = await api('GET', '/api/auth/check');
