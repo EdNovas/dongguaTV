@@ -225,24 +225,39 @@
         const x = h('button', 'dg-feed-x', { type: 'button', 'aria-label': '返回', title: '返回' });
         x.appendChild(icon('fa-arrow-left'));
         x.addEventListener('click', () => close(true));
-        const t = h('b', 'dg-feed-t');
-        t.textContent = '刷短片';
-        const lab = h('label', 'dg-feed-vert');
-        const cb = h('input', '', { type: 'checkbox' });
+        // 中间:「推荐 | 竖屏」切换(底下还是那个勾选框:状态 / 无障碍 / 键盘都认它)
+        const seg = h('div', 'dg-feed-seg', { role: 'group', 'aria-label': '看什么' });
+        const cb = h('input', 'dg-feed-vert-cb', { type: 'checkbox', 'aria-label': '只看竖屏' });
         cb.checked = S.vert;
-        cb.addEventListener('change', () => { S.vert = !!cb.checked; lsSet(VERT_KEY, S.vert ? '1' : '0'); reload(); });
-        lab.appendChild(cb);
-        lab.appendChild(root.document.createTextNode(' 只看竖屏'));
-        // 「换一批」:从新的随机位置重新开始(像抖音下拉刷新);「看过」:看了 ≥3 秒的短片列表
-        const shuf = h('button', 'dg-feed-btn', { type: 'button', title: '换一批' });
-        shuf.appendChild(icon('fa-rotate-right'));
-        shuf.appendChild(root.document.createTextNode(' 换一批'));
-        shuf.addEventListener('click', () => { S.rand = true; reload(); });
-        const hb = h('button', 'dg-feed-btn', { type: 'button', title: '看过的短片' });
-        hb.appendChild(icon('fa-clock-rotate-left'));
-        hb.appendChild(root.document.createTextNode(' 看过'));
-        hb.addEventListener('click', () => showHist(true));
-        bar.appendChild(x); bar.appendChild(t); bar.appendChild(lab); bar.appendChild(shuf); bar.appendChild(hb);
+        const segBtn = (label, vert) => {
+            const b = h('button', 'dg-seg-b', { type: 'button', 'aria-pressed': S.vert === vert ? 'true' : 'false' });
+            b.textContent = label;
+            b.addEventListener('click', () => { if (S.vert === vert) return; cb.checked = vert; onVert(); });
+            return b;
+        };
+        const b1 = segBtn('推荐', false), b2 = segBtn('竖屏', true);
+        function onVert() {
+            S.vert = !!cb.checked; lsSet(VERT_KEY, S.vert ? '1' : '0');
+            b1.setAttribute('aria-pressed', S.vert ? 'false' : 'true'); b2.setAttribute('aria-pressed', S.vert ? 'true' : 'false');
+            reload();
+        }
+        cb.addEventListener('change', onVert);
+        seg.appendChild(b1); seg.appendChild(b2); seg.appendChild(cb);
+        // 右边:「换一批」(从新的随机位置重新开始,像抖音下拉刷新)/「看过」(看了 ≥3 秒的短片)
+        const iconBtn = (cls, ic, label, fn) => {
+            const b = h('button', 'dg-feed-ib ' + cls, { type: 'button', title: label, 'aria-label': label });
+            b.appendChild(icon(ic));
+            const s = h('span', 'dg-ib-l');
+            s.textContent = label;
+            b.appendChild(s);
+            b.addEventListener('click', fn);
+            return b;
+        };
+        const shuf = iconBtn('dg-ib-shuf', 'fa-rotate-right', '换一批', () => { S.rand = true; reload(); });
+        const hb = iconBtn('dg-ib-hist', 'fa-clock-rotate-left', '看过', () => showHist(true));
+        const right = h('div', 'dg-feed-acts');
+        right.appendChild(shuf); right.appendChild(hb);
+        bar.appendChild(x); bar.appendChild(seg); bar.appendChild(right);
         const list = h('div', 'dg-feed-list', { tabindex: '-1' });
         const note = h('div', 'dg-feed-note', { role: 'status' });
         note.hidden = true;
@@ -415,12 +430,36 @@
         const ttl = h('button', 'dg-fs-title', { type: 'button', title: '看完整播放页' });
         ttl.textContent = it.title || it.code || '未命名';
         info.appendChild(ttl);
-        const sub = [it.code, fmtDur(it.dur || (it.lines[0] && it.lines[0].dur)), it.badge].filter(Boolean).join(' · ');
-        if (sub) { const sd = h('div', 'dg-fs-sub'); sd.textContent = sub; info.appendChild(sd); }
+        // 时长 / 番号 / 中字等做成小标签(旧的 .dg-fs-sub 一行字也留着给读屏)
+        const durT = fmtDur(it.dur || (it.lines[0] && it.lines[0].dur));
+        const sub = [it.code, durT, it.badge].filter(Boolean).join(' · ');
+        if (sub) {
+            const sd = h('div', 'dg-fs-sub');
+            [[durT, 'fa-clock'], [it.code, ''], [it.badge, '']].forEach(([v, ic]) => {
+                if (!v) return;
+                const p = h('span', 'dg-fs-pill');
+                if (ic) p.appendChild(icon(ic));
+                p.appendChild(root.document.createTextNode((ic ? ' ' : '') + v));
+                sd.appendChild(p);
+            });
+            sd.setAttribute('aria-label', sub);
+            info.appendChild(sd);
+        }
         sl.appendChild(info);
+        // 右侧一列:声音 / 看完整版
+        const rail = h('div', 'dg-fs-rail');
+        const railIt = (btn, label) => { const w = h('div', 'dg-rail-it'); w.appendChild(btn); const c = h('span', 'dg-rail-c'); c.textContent = label; w.appendChild(c); rail.appendChild(w); return c; };
         const mute = h('button', 'dg-fs-mute', { type: 'button' });
-        sl.appendChild(mute);
         setMuteIcon(mute);
+        railIt(mute, '声音');
+        const full = h('button', 'dg-fs-full', { type: 'button', 'aria-label': '看完整版', title: '看完整播放页' });
+        full.appendChild(icon('fa-film'));
+        railIt(full, '完整版');
+        sl.appendChild(rail);
+        // 暂停时中间一个大播放图标(自动播被拦的「点一下播放」另算)
+        const pz = h('div', 'dg-fs-pz', { 'aria-hidden': 'true' });
+        pz.appendChild(icon('fa-play'));
+        sl.appendChild(pz);
         const msg = h('div', 'dg-fs-msg', { role: 'status' });
         msg.hidden = true;
         sl.appendChild(msg);
@@ -584,7 +623,9 @@
         if (!v || v.__dgFeedBound) return;
         v.__dgFeedBound = true;
         const cur = () => { const x = S.inst[i]; return (x && x.video === v && x.gen === S.gen) ? x : null; };
-        v.addEventListener('playing', () => { const x = cur(); if (!x) return; clearTimeout(x.wd); const sl = S.slides[i]; if (sl) sl.classList.add('dg-fs-on'); measure(i, x); });
+        v.addEventListener('playing', () => { const x = cur(); if (!x) return; clearTimeout(x.wd); const sl = S.slides[i]; if (sl) { sl.classList.add('dg-fs-on'); sl.classList.remove('dg-fs-paused'); } measure(i, x); });
+        // 用户暂停(已经出过画面、还要播的这条)→ 中间出大播放图标;翻走 / 被拦不算
+        v.addEventListener('pause', () => { const x = cur(); const sl = S.slides[i]; if (sl) sl.classList.toggle('dg-fs-paused', !!(x && x.want && i === S.cur && sl.classList.contains('dg-fs-on'))); });
         v.addEventListener('loadedmetadata', () => { const x = cur(); if (x) measure(i, x); });
         v.addEventListener('error', () => { const x = cur(); if (x && x.native && v.getAttribute('src')) failInst(i); });
         const count = () => { const x = cur(); if (x && x.native) countNative(x); };
@@ -662,7 +703,11 @@
     function showMsg(i, text) {
         const sl = S.slides[i];
         const m = sl && sl.querySelector('.dg-fs-msg');
-        if (m) { m.textContent = text; m.hidden = !text; }
+        if (m) {
+            while (m.firstChild) m.removeChild(m.firstChild);
+            if (text) { m.appendChild(icon('fa-circle-exclamation')); const s = h('span'); s.textContent = text; m.appendChild(s); }
+            m.hidden = !text;
+        }
         if (sl) { sl.classList.remove('dg-fs-on'); sl.classList.toggle('dg-fs-err', !!text); }
     }
     function teardown(x) {
@@ -734,7 +779,7 @@
         const i = parseInt(sl.getAttribute('data-i'), 10);
         const it = S.items[i];
         if (!it) return;
-        if (t.closest('.dg-fs-title')) {
+        if (t.closest('.dg-fs-title') || t.closest('.dg-fs-full')) {
             const o = S.opts;
             if (o && typeof o.onPick === 'function') o.onPick(it.card);
             return;
@@ -1097,6 +1142,60 @@
         '.dg-feed-note { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 4; text-align: center; color: #ccc; font-size: 14px; }',
         '.dg-feed-retry { margin-left: 10px; border: 1px solid #666; background: transparent; color: #fff; border-radius: 14px; padding: 3px 12px; cursor: pointer; }',
         '@media (min-width: 769px) { .dg-fs-poster, .dg-fs-v { left: 50%; width: min(100%, 62vh); transform: translateX(-50%); } .dg-fs.dg-fs-h .dg-fs-v, .dg-fs.dg-fs-h .dg-fs-poster { width: 100%; } .dg-fs-info { left: calc(50% - min(50%, 31vh)); right: calc(50% - min(50%, 31vh) + 64px); } .dg-fs-mute { right: calc(50% - min(50%, 31vh) + 14px); } .dg-fs-prog { left: calc(50% - min(50%, 31vh)); right: calc(50% - min(50%, 31vh)); } }',
+        // ---------- v5 外观 ----------
+        '.dg-feed { font-family: inherit; }',
+        '.dg-feed-bar { justify-content: space-between; padding: 12px 14px; padding-top: calc(12px + env(safe-area-inset-top, 0px)); background: linear-gradient(to bottom, rgba(0,0,0,.72), rgba(0,0,0,.25) 70%, transparent); }',
+        '.dg-feed-x { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); background: rgba(255,255,255,.12); }',
+        '.dg-feed-x:hover, .dg-feed-x:focus-visible { background: rgba(255,255,255,.22); outline: none; }',
+        // 中间的「推荐 | 竖屏」切换:选中的白字加粗 + 底下一条红线
+        '.dg-feed-seg { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: calc(18px * var(--fs)); }',
+        '.dg-seg-b { position: relative; background: none; border: 0; padding: 6px 2px; color: rgba(255,255,255,.62); font-size: calc(17px * var(--fs)); font-weight: 500; cursor: pointer; text-shadow: 0 1px 3px rgba(0,0,0,.6); transition: color .15s; }',
+        '.dg-seg-b[aria-pressed="true"] { color: #fff; font-weight: 700; }',
+        '.dg-seg-b[aria-pressed="true"]::after { content: ""; position: absolute; left: 50%; bottom: -2px; width: 22px; height: 3px; margin-left: -11px; border-radius: 2px; background: #e50914; }',
+        '.dg-seg-b:hover, .dg-seg-b:focus-visible { color: #fff; outline: none; }',
+        '.dg-feed-vert-cb { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }',
+        '.dg-feed-acts { display: flex; gap: calc(8px * var(--fs)); }',
+        '.dg-feed-ib { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-width: calc(46px * var(--fs)); height: calc(46px * var(--fs)); padding: 0 calc(8px * var(--fs)); border: 0; border-radius: calc(23px * var(--fs)); background: rgba(255,255,255,.12); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); color: #fff; font-size: calc(17px * var(--fs)); cursor: pointer; transition: background .15s, transform .1s; }',
+        '.dg-feed-ib:hover, .dg-feed-ib:focus-visible { background: rgba(229,9,20,.85); outline: none; }',
+        '.dg-feed-ib:active { transform: scale(.94); }',
+        '.dg-ib-l { display: none; font-size: calc(11px * var(--fs)); line-height: 1; }',
+        '@media (min-width: 769px) { .dg-feed-ib { flex-direction: row; gap: 6px; padding: 0 calc(16px * var(--fs)); font-size: calc(15px * var(--fs)); } .dg-ib-l { display: inline; font-size: calc(14px * var(--fs)); } }',
+        // 右侧一列:圆按钮 + 小字
+        '.dg-fs-rail { position: absolute; right: 12px; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); z-index: 3; display: flex; flex-direction: column; align-items: center; gap: calc(18px * var(--fs)); }',
+        '.dg-rail-it { display: flex; flex-direction: column; align-items: center; gap: 4px; }',
+        '.dg-rail-c { font-size: calc(12px * var(--fs)); color: rgba(255,255,255,.9); text-shadow: 0 1px 3px rgba(0,0,0,.8); }',
+        '.dg-fs-rail .dg-fs-mute, .dg-fs-full { position: static; width: calc(52px * var(--fs)); height: calc(52px * var(--fs)); border-radius: 50%; border: 0; background: rgba(255,255,255,.14); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); color: #fff; font-size: calc(21px * var(--fs)); cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.35); transition: background .15s, transform .1s; }',
+        '.dg-fs-rail .dg-fs-mute:hover, .dg-fs-full:hover, .dg-fs-rail .dg-fs-mute:focus-visible, .dg-fs-full:focus-visible { background: rgba(229,9,20,.85); outline: none; }',
+        '.dg-fs-rail .dg-fs-mute:active, .dg-fs-full:active { transform: scale(.92); }',
+        // 底部文字:片名两行 + 小标签
+        '.dg-fs-info { right: calc(84px * var(--fs)); padding: 0 16px calc(42px + env(safe-area-inset-bottom, 0px)); background: none; }',
+        '.dg-fs::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 42%; z-index: 1; pointer-events: none; background: linear-gradient(to top, rgba(0,0,0,.78), rgba(0,0,0,.35) 55%, transparent); }',
+        '.dg-fs-title { font-size: calc(17px * var(--fs)); line-height: 1.4; text-shadow: 0 1px 4px rgba(0,0,0,.7); }',
+        '.dg-fs-sub { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-family: inherit; }',
+        '.dg-fs-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.16); color: #f2f2f2; font-size: calc(12px * var(--fs)); line-height: 1.6; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }',
+        '.dg-fs-pill i { font-size: .9em; opacity: .85; }',
+        // 暂停的大播放图标
+        '.dg-fs-pz { position: absolute; top: 50%; left: 50%; z-index: 2; width: calc(76px * var(--fs)); height: calc(76px * var(--fs)); margin: calc(-38px * var(--fs)) 0 0 calc(-38px * var(--fs)); border-radius: 50%; background: rgba(0,0,0,.38); display: flex; align-items: center; justify-content: center; font-size: calc(30px * var(--fs)); color: rgba(255,255,255,.92); opacity: 0; transform: scale(1.2); transition: opacity .18s, transform .18s; pointer-events: none; }',
+        '.dg-fs-pz i { margin-left: 5px; }',
+        '.dg-fs.dg-fs-paused .dg-fs-pz { opacity: 1; transform: scale(1); }',
+        // 出错 / 点一下播放:卡片样式
+        '.dg-fs-msg { display: flex; align-items: center; gap: 8px; padding: 14px 20px; border-radius: 14px; background: rgba(20,20,20,.82); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 30px rgba(0,0,0,.4); }',
+        '.dg-fs-msg i { color: #ff6b6b; }',
+        '.dg-fs-tap { background: rgba(20,20,20,.72); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 30px rgba(0,0,0,.4); border-radius: 18px; }',
+        '.dg-fs-tap i { width: calc(64px * var(--fs)); height: calc(64px * var(--fs)); line-height: calc(64px * var(--fs)); border-radius: 50%; background: #e50914; padding-left: 4px; box-sizing: border-box; font-size: calc(26px * var(--fs)); }',
+        '.dg-fs-spin { border-width: 3px; border-color: rgba(255,255,255,.18); border-top-color: #e50914; }',
+        // 进度条在最底下贴边;时间只在悬停 / 拖动时出
+        '.dg-fs-prog { bottom: env(safe-area-inset-bottom, 0px); height: 30px; padding: 0 12px; }',
+        '.dg-fs-time { opacity: 0; transition: opacity .15s; }',
+        '.dg-fs-prog:hover .dg-fs-time, .dg-fs.dg-fs-scrub .dg-fs-time, .dg-fs.dg-fs-paused .dg-fs-time { opacity: 1; }',
+        '.dg-fs-prog-f::after { content: ""; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(229,9,20,.45); opacity: 0; transition: opacity .12s; }',
+        '.dg-fs-prog:hover .dg-fs-prog-f::after, .dg-fs.dg-fs-scrub .dg-fs-prog-f::after { opacity: 1; }',
+        // 快进角标 / 双击提示
+        '.dg-fs-fast { background: rgba(229,9,20,.85); font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,.35); }',
+        '.dg-fs-seek { background: rgba(0,0,0,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }',
+        // 电脑:中间一列圆角、两边是模糊铺底;右下角一行快捷键提示
+        '@media (min-width: 769px) { .dg-fs-v, .dg-fs-poster { border-radius: 14px; } .dg-fs-rail { right: calc(50% - min(50%, 31vh) - 76px * var(--fs)); } .dg-fs-info { right: calc(50% - min(50%, 31vh) + 12px); } .dg-fs::after { left: calc(50% - min(50%, 31vh)); right: calc(50% - min(50%, 31vh)); border-radius: 0 0 14px 14px; } .dg-feed::after { content: "↑ ↓ 切换  ·  ← → 快退 / 快进  ·  空格 暂停  ·  M 声音  ·  双击左右 ±10 秒  ·  长按 2 倍速"; position: absolute; right: 16px; bottom: 12px; z-index: 4; font-size: 12px; color: rgba(255,255,255,.38); pointer-events: none; } }',
+        '@media (min-width: 769px) and (max-width: 1100px) { .dg-fs-rail { right: 16px; } }',
     ].join('\n');
     function injectCss() {
         const d = root.document;

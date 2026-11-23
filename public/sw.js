@@ -60,12 +60,13 @@
 // [adult] -adult15:adult.js?v=12(搜「人妖 / TS / 男同 / 女同」进全部 + 那个标签,不再进大半是女同的整个同性分区)。
 // [adult] -adult16:adult.js?v=13(相关推荐左右箭头 + 展开;系统「减少动态效果」时悬停预览默认关、设置里打开照播;正片缓冲 ≥30 秒时相关推荐也能悬停预览)、preview.js?v=4;站名 MEI.NU、新图标(icon.png / manifest)。
 // [adult] -adult17:adult.js?v=14(红楼系 vfile.meituan.net 的 http 分片在 https 页面上改 https —— 刷短片开头约七成放不了的根因)、feed.js?v=5(进度条可拖、长按 2 倍速、双击 ±10 秒、按钮跟界面缩放变大、每次随机起点 + 换一批 + 无尽续刷、跳过这几天看过的、看过列表、片头贴片跳过、起播看门狗、放不了自动翻下一条)。
+// [adult] -adult18:adult.js?v=15(站名图标当首字母 M:页面上写「EI.NU」)、feed.js?v=6(刷短片外观:「推荐 | 竖屏」切换、右侧声音 / 完整版、标签小块、暂停大图标、出错卡片、电脑端快捷键提示)。
 //      就对那个图床和 ≤2 个本会话加载成功过的别的图床各发一个 HEAD(no-cors、no-store、20 秒)直接问:图床通 = 文件坏,重试一次再藏;图床不通、别的通 = 藏并记一次失败;
 //      图床没回、别的通 = 30 秒后再问一轮;别的也都不通 = 网络问题,不藏(弱网慢的永远不藏);几个图床同时不通、通的不比它多 = 本机 DNS / 代理的问题,不藏。
 //      页面冻过 / 断网 / 切前后台时在路上的探测作废重来;视口上面的改动先压着不滚动;浏览与搜索网格底下「已隐藏 N 部 · 显示」,底栏「共 N 部」不算藏掉的)。
 //      SW:跨域的 HEAD / no-store 请求一律直通(探测必须真的走网络,不能被策略1 的缓存 / 占位图冒充)。
 const CACHE_VERSION = 'v43';
-const ADULT_REV = '-adult17';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult18';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -90,11 +91,11 @@ const STATIC_URLS = [
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
     './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js',
-    './adult/adult.js?v=14',   // [adult] v43-adult17:与 index.html 引用同一个 ?v=
+    './adult/adult.js?v=15',   // [adult] v43-adult18:与 index.html 引用同一个 ?v=
     './adult/player-x.js?v=4',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
     './adult/privacy.js?v=3',
     './adult/preview.js?v=4',
-    './adult/feed.js?v=5'
+    './adult/feed.js?v=6'
 ];
 
 // 图片缓存配置

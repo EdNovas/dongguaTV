@@ -2431,7 +2431,7 @@ async function feedWorld(o) {
     // ---- index.html 接线(p4)----
     const head = HTML.slice(0, HTML.indexOf('</head>'));
     const iSeek = head.indexOf('libs/js/seek-preview.js');
-    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=4', 'adult/feed.js?v=5'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
+    const tags = ['adult/player-x.js?v=4', 'adult/privacy.js?v=3', 'adult/preview.js?v=4', 'adult/feed.js?v=6'].map(s => head.indexOf('<script data-cfasync="false" src="' + s + '" defer></script>'));
     // 修订:head 里的隐私预锁片段(设过 PIN 才加 dgp-prelock;privacy.js 10 秒没起来就撤掉),要在任何 body 内容之前
     const iPre = head.indexOf('dgp-prelock body > *:not(.dgp-layer)'), iPreJs = head.indexOf("localStorage.getItem('dgp_pin')");
     ok(iPre > 0 && iPreJs > iPre && iPreJs < head.indexOf('adult/adult.js?v=') && /if \(!window\.dgPrivacy\) d\.classList\.remove\('dgp-prelock'\); \}, 10000\)/.test(head), 'head:隐私预锁(CSS + 设过 PIN 才加类 + 10 秒兜底撤掉),在 adult.js 之前', [iPre, iPreJs]);

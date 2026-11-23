@@ -2172,13 +2172,17 @@
         const KEY = 'dg_site_name';
         const clean = (s) => String(s || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 40);
         function name() { return clean(lsGet(KEY)) || DEFAULT_NAME; }
+        // 图标就是一个「M」:站名以 M 开头时页面上的字只写后半截(图标 + EI.NU = MEI.NU),读屏照读全名;别的站名照写全名
+        function tail(n) { const v = clean(n) || DEFAULT_NAME; return /^m./i.test(v) ? v.slice(1) : v; }
         function apply(n) {
             const v = clean(n) || DEFAULT_NAME;
             lsSet(KEY, v);
             if (typeof root.document === 'undefined') return v;
             try { root.document.title = v; } catch (e) { }
             try {
-                root.document.querySelectorAll('[data-dg-brand]').forEach(el => { el.textContent = v; });
+                const tl = tail(v);
+                root.document.querySelectorAll('[data-dg-brand]').forEach(el => { el.textContent = tl; el.setAttribute('aria-label', v); });
+                if (root.document.documentElement && root.document.documentElement.classList) root.document.documentElement.classList.toggle('dg-logo-full', tl === v);
                 const m = root.document.querySelector('meta[name="apple-mobile-web-app-title"]');
                 if (m) m.setAttribute('content', v);
             } catch (e) { }
@@ -2218,7 +2222,7 @@
             return '<br>请前往 <a href="' + escHtml(v) + '" target="_blank" rel="noopener noreferrer" style="color:#ff6b6b;text-decoration:underline;">' + escHtml(host) + '</a> 续费';
         }
         function renewText() { const v = buyUrl(); return v ? '\n\n前往续费: ' + v : ''; }
-        return { KEY, name, apply, clean, buyUrl, applyBuy, showBuy, renewHtml, renewText, safeUrl };
+        return { KEY, name, apply, clean, tail, buyUrl, applyBuy, showBuy, renewHtml, renewText, safeUrl };
     })();
 
     // ========== fetch 包装 ==========
@@ -2719,6 +2723,8 @@
         '.dg-nav-feed { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }',
         '.dg-nav-feed:hover, .dg-nav-feed:focus { border-color: #fff; background: rgba(229, 9, 20, 0.3); outline: none; }',
         '@media (max-width: 480px) { .dg-nav-feed span { display: none; } .dg-nav-feed { width: 36px; padding: 0; justify-content: center; } }',
+        // 站名:图标就是首字母 M,紧挨着后半截字(站名不是 M 开头时 html.dg-logo-full 恢复原来的间距)
+        'html:not(.dg-logo-full) .brand > img, html:not(.dg-logo-full) .loader-logo > img, html:not(.dg-logo-full) .password-logo-text > img { margin-right: 2px !important; }',
         '.dg-rails { margin-top: 18px; }',
         '.dg-rail { margin-top: 14px; }',
         '.dg-rail-t { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 16px; font-weight: 600; margin: 0 0 8px; }',
@@ -3771,6 +3777,8 @@
                 if (!b || !b.open) return '';
                 return routeOf(this.adult.view, b.type, b.sel);
             },
+            // 导航栏站名:图标当首字母 M(见 brand.tail)
+            adBrandTail() { return brand.tail((this.adult && this.adult.siteName) || DEFAULT_NAME); },
             adBrowseTitle() {
                 void this.adult.labv;
                 const b = this.browse, s = (b && b.sel) || {};
