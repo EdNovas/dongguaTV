@@ -1025,6 +1025,9 @@ const adultMirrorReport = (siteKey, ok, err, url, data) => {   // [adult] p4
     if (!adultMirror || !siteKey) return;
     try { adultMirror.report(siteKey, ok, ok ? 'ok' : adultMirrorLib.classifyError(err), { url, data: ok ? data : undefined }); } catch (e) { }
 };
+// [adult] TG 频道当片源(lib/adult/tg;视频经单独部署的 tg-relay 中转)。没配 ADULT_TG_* = 空表,什么都不做
+const adultTg = require('./lib/adult/tg').createTg(process.env);
+if (!adultTg.config().on && (process.env.ADULT_TG_RELAY || process.env.ADULT_TG_CHANNELS)) console.warn('[adult] TG 频道没启用:' + adultTg.config().problems.join(';'));
 let _catalogRemoteKick = null;
 const catalogSites = () => {
     // 配了 REMOTE_DB_URL 时远程表过期就后台续一次(没人打开首页时 /api/sites 不会去拉)
@@ -1036,7 +1039,8 @@ const catalogSites = () => {
         //   规则重扫(部署了新规则)立刻删光它的线路、7 天后保留期也删,撤销停用后回不来。
         //   api 一直给主地址(目录的增量 / 全量回填进度、分类图都按 api 记,换成镜像地址 = 回填从第 1 页重来,换回来又重来一次);
         //   有镜像在用的站在 catalogHttpGet 里把主地址前缀换成当前地址再打(catalogFetchUrl)
-        .map(s => (adultAdminState.siteOff(s.key) ? Object.assign({}, s, { active: false }) : s));
+        .map(s => (adultAdminState.siteOff(s.key) ? Object.assign({}, s, { active: false }) : s))
+        .concat(adultTg.sites());   // [adult] TG 频道:每个频道一个"站"(不走 maccms 爬虫,由目录的 TG 同步收)
 };
 // [adult] p4:目录按主地址拼的 URL → 镜像在用时换成当前地址(查询串原样;主 / 镜像地址带不带 '?' 都按目录的拼法重拼)
 const catalogFetchUrl = (u, siteKey) => {
@@ -1070,6 +1074,7 @@ if (cacheManager.type === 'sqlite' && cacheManager.db && !process.env.VERCEL) {
             dbPath: process.env.CATALOG_DB_PATH ? path.resolve(process.env.CATALOG_DB_PATH) : path.join(path.dirname(CACHE_DB_FILE), 'catalog.db'),
             getSites: catalogSites,
             adult,
+            tg: adultTg,   // [adult] TG 频道同步(lib/site-catalog/tg-sync.js)
             tags: adult.tags,
             httpGet: catalogHttpGet,
             log: (msg) => console.log('[Catalog] ' + msg),
@@ -1094,7 +1099,8 @@ if (cacheManager.type === 'sqlite' && cacheManager.db && !process.env.VERCEL) {
 }
 const adultGate = adultGateLib.createAdultGate({
     adult,
-    allSites: () => allSites(),
+    allSites: () => allSites().concat(adultTg.sites()),   // [adult] TG 频道也是"站"(search:false → 不进现搜;详情 / 线路签名见闸门的 loadTgDetail)
+    tg: adultTg,
     profOf: (s) => profOf(s),
     kazumi: () => kazumi,
     fetchJson: async (site, url, timeout) => (await fetchWithProxyFallback(url, { timeout: timeout || 8000 }, site.key)).data,

@@ -433,8 +433,8 @@ try {
     const create = readLines(CAT_LOG).find(x => x.ev === 'create');
     ok(create && !create.hasDb && create.adultOk && create.httpGet === 'function' && create.log === 'function' && create.env && create.avdbFactory === 'function' && create.tagsOk
         && create.dbPath === path.join(path.dirname(CACHE_DB), 'catalog.db')
-        && JSON.stringify(create.keys) === JSON.stringify(['adult', 'avdbFactory', 'dbPath', 'env', 'getSites', 'httpGet', 'log', 'popularTitles', 'tags']),
-        'createCatalog 拿到约定的依赖(第三阶段:dbPath = cache.db 旁边的 catalog.db、avdbFactory、tags;不再给 cache.db 连接)', create);
+        && JSON.stringify(create.keys) === JSON.stringify(['adult', 'avdbFactory', 'dbPath', 'env', 'getSites', 'httpGet', 'log', 'popularTitles', 'tags', 'tg']),
+        'createCatalog 拿到约定的依赖(第三阶段:dbPath = cache.db 旁边的 catalog.db、avdbFactory、tags、tg(TG 频道);不再给 cache.db 连接)', create);
     ok(create && JSON.stringify(create.sites) === JSON.stringify(['a', 'b', 'c']), 'getSites:不含 active:false 的站,含 search:false 的站(目录照爬)', create && create.sites);
     ok(readLines(CAT_LOG).some(x => x.ev === 'start'), 'catalog.start() 被调用');
 

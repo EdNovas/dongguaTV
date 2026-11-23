@@ -8501,6 +8501,7 @@
                 if (!q) { o.off = '页面还没就绪'; return o; }
                 if (q._liveActive) o.off = '直播';
                 else if (q._activeOffCached) o.off = '离线副本';
+                else if (q._activeKz && q._activeKz.tg) o.off = 'TG 频道视频';
                 else if (q._activeKz || q._isKzUrl(q.currentUrl)) o.off = '番剧规则源';
                 else if (q._isCasting && q._isCasting()) o.off = '投屏中';
                 if (v) {
@@ -15050,7 +15051,7 @@
                             if (pu.includes('$$$')) { const sets = pu.split('$$$'); pu = sets.find(x => x.toLowerCase().includes('m3u8')) || sets[0]; }
                             const parts = pu.split('#')[0].split('$');
                             const u = parts.length > 1 ? parts[1] : parts[0];
-                            if (!u || !/^https?:/.test(u) || this._isKzUrl(u) || (location.protocol === 'https:' && u.startsWith('http:'))) return;
+                            if (!u || !/^https?:/.test(u) || this._isKzUrl(u) || this._isTgUrl(u) || (location.protocol === 'https:' && u.startsWith('http:'))) return;
                             const viaProxy = s._useProxy && (s._proxyUrl || this.corsProxyUrl);
                             const fu = viaProxy ? (s._proxyUrl || this.corsProxyUrl) + '/?url=' + encodeURIComponent(u) : u;
                             const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 5000);
@@ -18208,6 +18209,12 @@
                                 checkEarlyReturn();
                                 return source;
                             }
+                            // [adult] TG 频道:整段 MP4,不能当 m3u8 测(GET 会白拉几秒视频)
+                            if (this._isTgUrl(videoUrl)) {
+                                await this._tgProbe(source, videoUrl);
+                                checkEarlyReturn();
+                                return source;
+                            }
 
                             if (!videoUrl || !videoUrl.startsWith('http')) {
                                 source.latency = 9999;
@@ -18831,6 +18838,7 @@
                                 const videoUrl = parts.length > 1 ? parts[1] : parts[0];
 
                                 if (this._isKzUrl(videoUrl)) { await this._kzProbe(source, detail, videoUrl); return source; }   // 🎌 同 openDetail
+                                if (this._isTgUrl(videoUrl)) { await this._tgProbe(source, videoUrl); return source; }   // [adult] TG 同 openDetail
 
                                 if (!videoUrl || !videoUrl.startsWith('http')) {
                                     source.latency = 9999;
@@ -19625,6 +19633,8 @@
                         return;
                     }
                     this._activeKz = _kzRes ? Object.assign({ epUrl: url, tok: kzTok }, _kzRes) : null;
+                    // [adult] TG 频道视频:中转给的是整段 MP4(签名地址)—— 走 Kazumi MP4 同一条通道(原生 <video>,不套去广告 / 插播跳过 / 片头分析)
+                    if (!this._activeKz && !_offCacheRec && this._isTgUrl(url)) this._activeKz = { type: 'mp4', url, epUrl: url, tok: kzTok, tg: true };
                     // 🔇 MP4 直链(跨域、多数无 CORS)不能在"已接入 WebAudio"的 <video> 上播:片头指纹引擎对 hls 流调过
                     //    createMediaElementSource 后,该元素的声音终生走 WebAudio 图,跨域无 CORS 的媒体进图会被浏览器静音
                     //    → 画面正常但没声音。遇到这种元素就重建播放器换一个干净的 <video>(必须在 isFreshPlayer 计算之前)。
@@ -23352,6 +23362,18 @@
                 },
                 // 🎌 Kazumi 规则源识别:选集地址形如 /api/kz/ep/<站点>/<vid>-<sid>-<nid>(相对路径,多域名部署也不失效)
                 _isKzUrl(u) { return typeof u === 'string' && /(^|\/)api\/kz\/ep\//.test(u); },
+                // [adult] TG 频道视频:tg-relay 的签名地址 https://<中转>/v/<频道>/<消息id>?e=<到期>&s=<签名>(整段 MP4,支持 Range)
+                _isTgUrl(u) { return typeof u === 'string' && /^https?:\/\/[^/?#]+\/v\/[A-Za-z][A-Za-z0-9_]{3,31}\/\d{1,12}(?:\.mp4)?\?e=\d{9,11}&s=[A-Za-z0-9_-]{24}$/.test(u); },
+                // TG 线路测速:HEAD 一下中转(只取文件信息,不拉视频);不通 = 9999
+                async _tgProbe(source, videoUrl) {
+                    source._testType = 'tg';
+                    const t0 = Date.now();
+                    try {
+                        const r = await fetchT(videoUrl, { method: 'HEAD', cache: 'no-store', credentials: 'omit' }, 12000);
+                        source.latency = r.ok ? Math.max(400, Date.now() - t0) : 9999;
+                    } catch (e) { source.latency = 9999; }
+                    return source;
+                },
                 _isKzSource(s) { return !!(s && (s._kz || /^kz_/.test(s.site_key || ''))); },
                 // 🎌 Kazumi 源测速:第 1 集交给服务器解析(只走 页面→解析器 拿地址,绝不拉媒体——守"服务器不验 m3u8"铁律),
                 //   耗时即延迟,顺带预热解析缓存。_testType='kz' 不进直连/代理两档,只在没有可用 maccms 源时才被自动选中。
