@@ -58,15 +58,25 @@
         const p2 = (x) => String(x).padStart(2, '0');
         return h ? h + ':' + p2(m) + ':' + p2(s) : m + ':' + p2(s);
     }
-    // 首页分类栏 / 浏览页大类:国产 · 日本 · 欧美 · 动漫 · 更多 · 全部(全部 = 不限分类,首页「新上架」「随机发现」的「全部」进这里)
+    // 首页分类栏 / 浏览页大类:一排平铺(用户 2026-11-23 定:分类只要两层 = 这一排 + 浏览页里的筛选)。
+    //   多分区的大类(国产 / 日本)默认整类浏览(服务器 b= 逗号分隔取并集);只有国产带「分类」细分行(sub),
+    //   日本的 有码/无码/中字 不再是细分,改走 版本 / 标签(无码、中文字幕)。
+    //   SM·重口(fetish)/ 韩国·东南亚(asia)不归任何大类:只从 全部 进(标签 SM·调教 / 韩国 / 东南亚、搜索词、首页行、筛选面板的分类),
+    //   「全部」认这两个孤儿分区的 b(ORPHAN)。全部 = 不限分类,首页「新上架」「随机发现」的「全部」进这里
     const TYPES = [
-        { k: 'cn', l: '国产', icon: 'fa-video', sort: 'new', buckets: [['cn_amateur', '自拍'], ['cn_studio', '传媒'], ['cn_hookup', '探花'], ['creators', '网红'], ['live', '主播'], ['short', '短视频']] },
+        { k: 'cn', l: '国产', icon: 'fa-video', sort: 'new', sub: true, buckets: [['cn_amateur', '自拍'], ['cn_studio', '传媒'], ['cn_hookup', '探花'], ['creators', '网红'], ['live', '主播']] },
         { k: 'jp', l: '日本', icon: 'fa-torii-gate', sort: 'new', buckets: [['jp_censored', '有码'], ['jp_uncensored', '无码'], ['jp_subbed', '中字']] },
         { k: 'west', l: '欧美', icon: 'fa-globe', sort: 'new', buckets: [['western', '欧美']] },
         { k: 'anime', l: '动漫', icon: 'fa-dragon', sort: 'new', buckets: [['anime', '动漫·里番']] },
-        { k: 'more', l: '更多', icon: 'fa-ellipsis', sort: 'new', buckets: [['softcore', '三级'], ['fetish', 'SM'], ['lgbt', '同性·TS'], ['commentary', 'AV解说'], ['ai_drama', 'AI短剧'], ['asia', '韩国·东南亚']] },
+        { k: 'softcore', l: '三级', icon: 'fa-film', sort: 'new', buckets: [['softcore', '三级·伦理']] },
+        { k: 'lgbt', l: '同性', icon: 'fa-rainbow', sort: 'new', buckets: [['lgbt', '同性·TS']] },
+        { k: 'short', l: '短视频', icon: 'fa-mobile', sort: 'new', buckets: [['short', '短视频']] },
+        { k: 'commentary', l: 'AV解说', icon: 'fa-microphone', sort: 'new', buckets: [['commentary', 'AV解说']] },
+        { k: 'ai_drama', l: 'AI短剧', icon: 'fa-robot', sort: 'new', buckets: [['ai_drama', 'AI短剧']] },
         { k: 'all', l: '全部', icon: 'fa-layer-group', sort: 'new', buckets: [] },
     ];
+    // 不归任何大类的分区:「全部」里按它筛(旧链接 #/c/more?b=fetish、首页「SM·重口」行的「全部」、搜「SM」都落到 全部 · SM·重口)
+    const ORPHAN = new Set(NAV_BUCKETS.filter(b => !TYPES.some(T => T.buckets.some(x => x[0] === b))));
     // 浏览页筛选(phase 3,与 /api/catalog/browse 的参数一一对应):
     //   排序 7 种(服务器 facets.sorts 说哪些这次可用,只显示可用的;没给 facets 时按 DEFAULT_SORTS)/ 时长 6 档(含「时长未知」)/
     //   版本 6 种(单选)/ 标签 t ≤3(AND)/ 排除 x ≤3 / 厂牌 studio / 女优 actress(aid)/ 旧的厂牌前缀 lp
@@ -119,8 +129,9 @@
         const T = typeOf(tk) || TYPES[0], s = sel || {};
         const bs = T.buckets.map(x => x[0]);
         let b = s.b == null ? '' : String(s.b);
-        if (!bs.length) b = '';
-        else if (bs.indexOf(b) < 0) b = bs[0];   // 大类里不给「全部」:服务器一次只按一个分类筛
+        if (!bs.length) b = ORPHAN.has(b) ? b : '';   // 全部:只认孤儿分区(SM·重口 / 韩国·东南亚)
+        else if (bs.length === 1) b = bs[0];
+        else if (bs.indexOf(b) < 0) b = '';   // 多分区大类:'' = 整类(browseApiUrl 按大类的几个分区一起查)
         const pick = (v, arr, d) => { const x = v == null ? '' : String(v); return arr.some(o => o.k === x) ? x : d; };
         const v0 = s.v != null && s.v !== '' ? s.v : (FLAG_TO_V[s.flag] || '');
         const out = { b, dur: pick(s.dur, DURS, ''), v: pick(v0, VARIANTS, ''), sort: pick(sortKey(s.sort), SORTS, T.sort || 'new') };
@@ -135,10 +146,13 @@
         if (typeof s.lp === 'string' && /^[A-Z0-9]{2,10}$/i.test(s.lp)) out.lp = s.lp.toUpperCase();   // 厂牌前缀(作品页「SSIS」按钮)
         return out;
     }
-    // /api/catalog/browse 地址。opt.cursor 有值时按游标翻(不带 page),否则按页;opt.facets=1 要分面计数(第 1 页才要)
+    // 多分区大类整类浏览时发给服务器的 b(逗号分隔);单分区 / 全部 → ''
+    const typeBuckets = (tk) => { const T = typeOf(tk); return T && T.buckets.length > 1 ? T.buckets.map(x => x[0]).join(',') : ''; };
+    // /api/catalog/browse 地址。opt.cursor 有值时按游标翻(不带 page),否则按页;opt.facets=1 要分面计数(第 1 页才要);
+    //   opt.type:大类(国产 / 日本 没选细分时 b 为空 → 按这个大类的几个分区一起查;不给 type 就是不限分类)
     function browseApiUrl(sel, opt) {
         const s = sel || {}, o = opt || {};
-        const q = [['b', s.b || ''], ['t', (s.t || []).join(',')], ['x', (s.x || []).join(',')], ['dur', s.dur || ''], ['v', s.v || ''],
+        const q = [['b', s.b || typeBuckets(o.type)], ['t', (s.t || []).join(',')], ['x', (s.x || []).join(',')], ['dur', s.dur || ''], ['v', s.v || ''],
             ['studio', s.studio || ''], ['actress', s.actress || ''], ['lp', s.lp || ''], ['sort', s.sort || 'new']];
         if (o.cursor) q.push(['cursor', String(o.cursor)]);
         else q.push(['page', String(Math.max(1, Math.min(500, parseInt(o.page, 10) || 1)))]);
@@ -146,7 +160,7 @@
         if (o.nr) q.push(['nr', '1']);   // 不要审查级作品(推荐位用,服务器 snapshot rvl)
         return '/api/catalog/browse?' + q.filter(([k, v]) => v !== '' || k === 'page').map(([k, v]) => k + '=' + encQ(v)).join('&');
     }
-    function browseUrl(tk, sel, page) { return browseApiUrl(normSel(tk, sel), { page }); }
+    function browseUrl(tk, sel, page) { return browseApiUrl(normSel(tk, sel), { page, type: tk }); }
     // 查询串的值:逗号留着(t=a,b,c 好读;服务器按逗号拆),别的照常转义
     const encQ = (v) => encodeURIComponent(String(v)).replace(/%2C/gi, ',');
     // 已选的筛选个数(筛选按钮上的数字):标签 + 排除 + 时长 + 版本 + 厂牌 + 女优 + 厂牌前缀
@@ -207,18 +221,17 @@
         const dt = new Date(Date.UTC(y, mo - 1, d));
         return dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d ? m[0] : '';
     }
-    // 浏览页的固定筛选行只剩「分类」(多桶大类);标签 / 排序 / 时长 / 版本 / 厂牌 / 女优 在 <dg-ad-filter>(标签行 + 筛选面板)里
+    // 浏览页的固定筛选行只剩「分类」(只有国产有:全部 + 自拍/传媒/探花/网红/主播);标签 / 排序 / 时长 / 版本 / 厂牌 / 女优 在 <dg-ad-filter>(标签行 + 筛选面板)里
     function groupsOf(tk, sel) {
         const T = typeOf(tk);
-        if (!T) return [];
-        return T.buckets.length > 1 ? [{ k: 'b', l: '分类', opts: T.buckets.map(([k, l]) => ({ k, l })) }] : [];
+        if (!T || !T.sub) return [];
+        return [{ k: 'b', l: '分类', opts: [{ k: '', l: '全部' }].concat(T.buckets.map(([k, l]) => ({ k, l }))) }];
     }
-    const QUICK = [['最新上架', { sort: 'new' }], ['中文字幕', { v: 'zh' }], ['1–2小时', { dur: 'xl' }], ['随机', { sort: 'rand' }]];
+    // 首页分类栏下面那块(成人版不出:首页只有一排大类,点了直接进浏览页;留着给 DgCatalog 的接口)
     function navRows(tk) {
         const T = typeOf(tk);
-        if (!T) return [];
-        if (T.buckets.length > 1) return [{ l: '分类', items: T.buckets.map(([b, l]) => ({ l, sel: { b } })) }];
-        return [{ l: '快速', items: QUICK.map(([l, sel]) => ({ l, sel: Object.assign({}, sel) })) }];
+        if (!T || !T.sub) return [];
+        return [{ l: '分类', items: T.buckets.map(([b, l]) => ({ l, sel: { b } })) }];
     }
     // 标题:大类(· 分类)· 厂牌前缀 · 标签名(只写正向选中的;审查类标签不写进标题)· 厂牌 · 女优
     //   「全部」只按一位女优筛时标题就是「女优 · 名字」
@@ -230,7 +243,8 @@
         if (T.k === 'all' && s.actress && !s.t && !s.studio && !s.lp) return '女优' + (an !== '女优' ? ' · ' + an : '');
         const tags = (s.t || []).filter(id => !NEVER_FEATURE.has(id)).map(tagLabel).filter(Boolean);
         const tg = (s.lp ? ' · ' + s.lp : '') + (tags.length ? ' · ' + tags.join(' · ') : '') + (s.studio ? ' · ' + studioLabel(s.studio) : '') + (an ? ' · ' + an : '');
-        if (T.buckets.length > 1) { const x = T.buckets.find(b => b[0] === s.b); return T.l + ' · ' + (x ? x[1] : '') + tg; }
+        if (T.buckets.length > 1) { const x = T.buckets.find(b => b[0] === s.b); return T.l + (x ? ' · ' + x[1] : '') + tg; }
+        if (!T.buckets.length && s.b && BUCKET_LABEL[s.b]) return BUCKET_LABEL[s.b] + tg;   // 全部 · 孤儿分区:标题就是分区名(SM·重口)
         return T.l + tg;
     }
     function summary(tk, sel) {
@@ -395,6 +409,22 @@
         rest.forEach(p => out.push({ id: p.id, label: p.label, count: p.count, st: '', off: !!facets && p.count <= 0 }));
         return out;
     }
+    // 浏览页「全部标签」展开的标签云:facets.groups(当前筛选下的 featured 标签 + 数)按组排,数为 0 的不列(已选 / 已排除的照样列);
+    //   字号档 w 1..5 按 log(数量)(全部组一起比)。审查类永不在这里(facets.groups 本来只给 featured,这里再拦一道)
+    function cloudOf(facets, sel) {
+        const s = sel || {}, t = s.t || [], x = s.x || [];
+        const groups = [];
+        let max = 1;
+        for (const g of (facets && Array.isArray(facets.groups) ? facets.groups : [])) {
+            const tags = (g.tags || []).filter(tg => tg && featurable(tg.id) && (tg.count > 0 || t.indexOf(tg.id) >= 0 || x.indexOf(tg.id) >= 0))
+                .map(tg => ({ id: tg.id, label: tg.label, count: Math.max(0, tg.count || 0), st: t.indexOf(tg.id) >= 0 ? 'in' : x.indexOf(tg.id) >= 0 ? 'ex' : '' }));
+            tags.forEach(tg => { if (tg.count > max) max = tg.count; });
+            if (tags.length) groups.push({ id: g.id, label: g.label, tags: tags.sort((a, b) => b.count - a.count) });
+        }
+        const lm = Math.log(max + 1);
+        groups.forEach(g => g.tags.forEach(tg => { tg.w = Math.max(1, Math.min(5, 1 + Math.floor(4 * Math.log(tg.count + 1) / lm))); }));
+        return groups;
+    }
     // 已选的非标签条件(筛选按钮旁的小药丸,点 × 去掉):时长 / 版本 / 厂牌 / 女优 / 厂牌前缀 / 审查类标签(只写「1 个筛选标签」不写名字)
     function activePills(sel) {
         const s = sel || {}, out = [];
@@ -411,13 +441,12 @@
     //      p4:#/actresses(女优索引,浏览页的一种「没有片单」的形态,同标签云);#/feed(刷短片)不归这里管(见 mixin 的 _adFeedHash)
     const DEF_SEL_KEYS = ['t', 'x', 'dur', 'v', 'studio', 'actress', 'lp'];
     const onlyKeys = (s, keys) => DEF_SEL_KEYS.every(k => keys.indexOf(k) >= 0 || !s[k] || (Array.isArray(s[k]) && !s[k].length));
-    // 没有片单的页面形态(标签云 / 女优索引):不拉片单、不出筛选行和底栏
-    const noList = (view) => view === 'tags' || view === 'actresses';
+    // 没有片单的页面形态(女优索引):不拉片单、不出筛选行和底栏。全部标签不再是单独一页(浏览页筛选行里展开)
+    const noList = (view) => view === 'actresses';
     function routeOf(view, tk, sel) {
         const T = typeOf(tk) || typeOf('all');
         const s = normSel(T.k, sel);
         if (view === 'actresses') return '#/actresses';
-        if (view === 'tags') return '#/tags' + (s.b ? '?b=' + encodeURIComponent(s.b) : '');
         if (T.k === 'all' && s.sort === 'new') {
             if (view === 'tag' && s.t && s.t.length === 1 && onlyKeys(s, ['t'])) return '#/tag/' + encodeURIComponent(s.t[0]);
             if (s.actress && onlyKeys(s, ['actress'])) return '#/actress/' + encodeURIComponent(s.actress);
@@ -445,16 +474,17 @@
         let one = '';
         try { one = seg[2] != null ? decodeURIComponent(seg[2]) : ''; } catch (e) { return null; }
         if (seg.length > 3) return null;
-        if (seg[1] === 'tags' && seg.length === 2) {
+        if (seg[1] === 'tags' && seg.length === 2) {   // 旧的标签云页 → 那个分类的浏览页(标签在筛选行「全部标签」里展开)
             const b = BUCKET_LABEL[params.b] ? params.b : '';
-            return { view: 'tags', type: b ? typeOfBucket(b) : 'all', sel: { b } };
+            const type = b ? typeOfBucket(b) : 'all';
+            return { view: '', type, sel: normSel(type, { b }) };
         }
         if (seg[1] === 'actresses' && seg.length === 2) return { view: 'actresses', type: 'all', sel: {} };
         if (seg[1] === 'tag' && validTag(one) && !isBlockedTag(one)) return { view: 'tag', type: 'all', sel: { t: [one] } };
         if (seg[1] === 'actress' && validAid(one)) return { view: '', type: 'all', sel: { actress: one } };
-        if (seg[1] === 'c' && typeOf(one)) {
+        if (seg[1] === 'c' && (typeOf(one) || one === 'more')) {   // more:旧版「更多」大类(书签 / 历史里还有)→ 按 b 落到新大类,没 b = 全部
             const b = BUCKET_LABEL[params.b] ? params.b : '';
-            const type = b ? typeOfBucket(b) : one;
+            const type = b ? typeOfBucket(b) : (typeOf(one) ? one : 'all');
             const sel = { b, t: params.t || '', x: params.x || '', dur: params.dur, v: params.v, studio: params.studio, actress: params.actress, lp: params.lp, sort: params.sort };
             return { view: '', type, sel: normSel(type, sel) };
         }
@@ -465,36 +495,6 @@
     const isOurHash = (hash) => /^#\/(c|tags|tag|actress|actresses)(\/|\?|$)/.test(String(hash || ''));
     const FEED_HASH = '#/feed';
     const isFeedHash = (hash) => String(hash || '') === FEED_HASH;
-    // /api/catalog/tags(标签云)→ { groups:[{id,label,tags:[{id,label,count,w}]}] };只要 featured,字号档 w 1..5 按 log(数量)
-    function normCloud(d) {
-        const arr = (v) => (Array.isArray(v) ? v : []);
-        for (const g of arr(d && d.groups)) { const l = g && typeof g.id === 'string' ? cleanText(g.label, 20) : ''; if (l) groupLabels[g.id] = l; }
-        const by = new Map();
-        let max = 1;
-        for (const t of arr(d && d.tags)) {
-            if (!t || !validTag(t.id)) continue;
-            const label = cleanText(t.label, 20) || TAG_LABEL[t.id] || '';
-            if (!label) continue;
-            learnTag(t.id, label);
-            if (t.featured !== true || !featurable(t.id)) continue;
-            const c = Math.max(0, Math.floor(Number(t.count) || 0));
-            if (!c) continue;
-            const gid = typeof t.group === 'string' && /^[a-z_]{1,20}$/.test(t.group) && t.group !== '_blocked' ? t.group : '';
-            if (!by.has(gid)) by.set(gid, []);
-            if (by.get(gid).some(x => x.id === t.id)) continue;
-            by.get(gid).push({ id: t.id, label, count: c });
-            if (c > max) max = c;
-        }
-        const order = arr(d && d.groups).map(g => g && g.id).filter(Boolean).concat(GROUPS.map(g => g.id));
-        const gids = [...by.keys()].sort((a, b) => { const ia = order.indexOf(a), ib = order.indexOf(b); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
-        const lm = Math.log(max + 1);
-        return {
-            groups: gids.map(id => ({
-                id, label: id ? (groupLabel(id) || id) : '其他',
-                tags: by.get(id).sort((a, b) => b.count - a.count).map(t => Object.assign(t, { w: Math.max(1, Math.min(5, 1 + Math.floor(4 * Math.log(t.count + 1) / lm))) })),
-            })),
-        };
-    }
     // /api/catalog/tag/:id → { tag:{id,label,group,count}, buckets:[{id,label,count}], related:[{id,label}] };related 只要 featured
     function normTagInfo(d) {
         if (!d || typeof d !== 'object' || !d.tag || !validTag(d.tag.id) || isBlockedTag(d.tag.id)) return null;
@@ -2670,7 +2670,6 @@
         '.dg-nav-feed { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }',
         '.dg-nav-feed:hover, .dg-nav-feed:focus { border-color: #fff; background: rgba(229, 9, 20, 0.3); outline: none; }',
         '@media (max-width: 480px) { .dg-nav-feed span { display: none; } .dg-nav-feed { width: 36px; padding: 0; justify-content: center; } }',
-        '.catnav-q.is-feed i { color: #2dd4bf; }',
         '.dg-rails { margin-top: 18px; }',
         '.dg-rail { margin-top: 14px; }',
         '.dg-rail-t { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 16px; font-weight: 600; margin: 0 0 8px; }',
@@ -2685,7 +2684,12 @@
         '.dg-acts { padding: 8px 0 30px; }',
         '.dg-acts-q { max-width: 420px; }',
         '.dg-acts-sec { margin: 16px 0 6px; }',
-        '.dg-cloud-links { display: flex; justify-content: flex-end; margin: 0 0 4px; }',
+        '.dg-cloud-links { display: flex; justify-content: flex-end; gap: 8px; margin: 0 0 4px; }',
+        // 浏览页里就地展开的「全部标签」:选中 = 红字,排除 = 删除线
+        '.dg-cloud.dg-cloud-in { padding: 2px 0 12px; margin: 0 0 6px; border-bottom: 1px solid rgba(255,255,255,0.06); }',
+        '.dg-cloud-in .dg-cloud-g { margin: 10px 0 4px; }',
+        '.dg-cloud-in .dg-cloud-links { justify-content: flex-start; margin: 10px 0 0; }',
+        '.dg-cloud-t.active { color: #ff5a4f; } .dg-cloud-t.dg-x { color: #777; text-decoration: line-through; }',
         '.dg-act-head { margin: 0 0 4px; }',
         '.dg-act-name { color: #fff; font-size: 18px; font-weight: 700; margin: 0 0 4px; }',
         '.dg-act-idx { margin-left: 10px; background: none; border: 0; padding: 0; color: #ff8a80; font-size: 12px; cursor: pointer; }',
@@ -3183,9 +3187,11 @@
             total: { type: Number, default: 0 }, tv: { type: Boolean, default: false }, legacy: { type: Array, default: () => [] },
         },
         emits: ['go', 'sheet'],
-        data() { return { open: false, xmode: false, note: '', sq: '', aq: '', aRes: null, studios: null }; },
+        data() { return { open: false, xmode: false, note: '', sq: '', aq: '', aRes: null, studios: null, cloud: false }; },
         computed: {
             chips() { return chipRow(this.facets, this.sel, this.legacy); },
+            // 「全部标签」展开:当前筛选下所有可选标签按分面组排,字号按 log(数量)(原来单独一页的标签云,现在就地展开、点了直接筛)
+            cloudGroups() { return cloudOf(this.facets, this.sel); },
             sorts() { return sortOpts(this.facets, this.sel); },
             n() { return filterCount(this.sel); },
             pills() { return activePills(this.sel); },
@@ -3332,8 +3338,15 @@
     <span class="browse-flabel">标签</span>
     <div class="browse-fopts">
       <button v-for="c in chips" :key="'c-' + c.id" type="button" class="browse-fopt" :class="{ active: c.st === 'in', 'dg-x': c.st === 'ex' }" :disabled="c.off" :aria-pressed="c.st ? 'true' : 'false'" :title="chipTitle(c)" @click="tap(c.id)">{{ c.st === 'ex' ? '−' : '' }}{{ c.label }}<i v-if="c.st" class="fas fa-xmark dg-chip-x" aria-hidden="true"></i></button>
-      <button type="button" class="browse-fopt dg-alltags" @click="$emit('go', { view: 'tags', b: sel.b || '' })">全部标签 <i class="fas fa-angle-right" aria-hidden="true"></i></button>
+      <button type="button" class="browse-fopt dg-alltags" :aria-expanded="cloud ? 'true' : 'false'" @click="cloud = !cloud">全部标签 <i :class="['fas', cloud ? 'fa-angle-up' : 'fa-angle-down']" aria-hidden="true"></i></button>
     </div>
+  </div>
+  <div v-if="cloud" class="dg-cloud dg-cloud-in" role="group" aria-label="全部标签">
+    <section v-for="g in cloudGroups" :key="'cg-' + g.id" class="dg-cloud-g">
+      <div class="dg-cloud-gt">{{ g.label }}</div>
+      <div class="dg-cloud-ts"><button v-for="t in g.tags" :key="'ct-' + t.id" type="button" class="dg-cloud-t" :class="['w' + t.w, { active: t.st === 'in', 'dg-x': t.st === 'ex' }]" :aria-pressed="t.st ? 'true' : 'false'" :title="t.label + ' · ' + t.count + ' 部'" @click="tap(t.id)">{{ t.st === 'ex' ? '−' : '' }}{{ t.label }}<span class="dg-c">{{ t.count }}</span></button></div>
+    </section>
+    <div class="dg-cloud-links"><button type="button" class="browse-fopt" @click="$emit('go', { view: 'actresses' })"><i class="fas fa-user" aria-hidden="true"></i> 女优索引</button><button type="button" class="browse-fopt" @click="cloud = false">收起 <i class="fas fa-angle-up" aria-hidden="true"></i></button></div>
   </div>
   <div class="browse-frow dg-tool" role="group" aria-label="排序与筛选">
     <span class="browse-flabel">排序</span>
@@ -3446,43 +3459,6 @@
     <div v-if="info.aliases.length" class="dg-head-sub">又名 {{ info.aliases.join(' / ') }}</div>
     <div class="dg-head-sub"><span v-if="total">共 {{ countLabel(total) }} 部</span><span v-if="info.latest">{{ total ? ' · ' : '' }}最新 {{ info.latest }} 发行</span><button type="button" class="dg-act-idx" @click="$emit('go', { view: 'actresses' })">女优索引 <i class="fas fa-angle-right" aria-hidden="true"></i></button></div>
   </div>
-</div>`,
-    };
-
-    // 标签云(#/tags?b=):当前分类的 featured 标签按分面组排,字号按 log(数量);审查类不进来
-    const DgAdCloud = {
-        name: 'DgAdCloud',
-        props: { b: { type: String, default: '' } },
-        emits: ['go', 'learn'],
-        data() { return { data: null, err: false }; },
-        watch: { b: { immediate: true, handler() { this.load(); } } },
-        methods: {
-            load(force) {
-                const b = BUCKET_LABEL[this.b] ? this.b : '';
-                const url = tagsUrl(b);
-                if (force) dCache.delete(url);
-                this.data = null; this.err = false;
-                cachedJson(url, 8000).then(d => {
-                    if ((BUCKET_LABEL[this.b] ? this.b : '') !== b) return;
-                    if (!d) { this.err = true; return; }
-                    this.data = Object.freeze(normCloud(d));
-                    this.$emit('learn');
-                });
-            },
-            pick(id) {
-                const b = BUCKET_LABEL[this.b] ? this.b : '';
-                this.$emit('go', b ? { sel: { b, t: [id] } } : { view: 'tag', id });
-            },
-        },
-        template: `<div class="dg-cloud">
-  <div class="dg-cloud-links"><button type="button" class="browse-fopt" @click="$emit('go', { view: 'actresses' })"><i class="fas fa-user" aria-hidden="true"></i> 女优索引</button></div>
-  <div v-if="err" class="browse-state">标签加载失败 <button type="button" class="browse-btn" @click="load(true)"><i class="fas fa-rotate-right" aria-hidden="true"></i> 重试</button></div>
-  <div v-else-if="!data" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载标签…</div>
-  <div v-else-if="!data.groups.length" class="browse-empty"><i class="fas fa-tags" aria-hidden="true"></i><div class="browse-empty-t">这个分类还没有标签</div></div>
-  <section v-for="g in (data ? data.groups : [])" :key="'cg-' + g.id" class="dg-cloud-g">
-    <div class="dg-cloud-gt">{{ g.label }}</div>
-    <div class="dg-cloud-ts"><button v-for="t in g.tags" :key="'ct-' + t.id" type="button" class="dg-cloud-t" :class="'w' + t.w" :title="t.label + ' · ' + t.count + ' 部'" @click="pick(t.id)">{{ t.label }}<span class="dg-c">{{ t.count }}</span></button></div>
-  </section>
 </div>`,
     };
 
@@ -3646,7 +3622,7 @@
                     varPref: { wk: '', kind: '' },        // 这部作品选了「中字 / 原版」哪种
                     sug: { q: '', open: false, hi: -1, kind: '', alias: null, exact: null, items: [] },   // 搜索建议
                     bvis: { n: -1, h: 0 },                // 浏览网格现在出了几张 / 藏了几张(封面加载不出来的不算;-1 = 网格还没报)
-                    // phase 3 浏览页:facets = 当前筛选的分面计数(冻结;第 1 页随结果下发);view = ''(浏览)/ 'tags'(标签云)/ 'tag'(标签页);
+                    // phase 3 浏览页:facets = 当前筛选的分面计数(冻结;第 1 页随结果下发);view = ''(浏览)/ 'tag'(标签页)/ 'actresses'(女优索引);
                     //   labv = 学到新名字(标签/厂牌/女优)时 +1,让标题重算;routeOn = 地址栏路由已接管(启动时先按地址栏开页,再开始写)
                     facets: null, view: '', labv: 0, routeOn: false,
                     // p4:relWk = 播放页「相关推荐」这部(首帧之后才有);pv / feedAuto = 设置里的「封面悬停预览」「刷短片自动播放(移动网络)」
@@ -3654,7 +3630,7 @@
                 },
             };
         },
-        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud, DgAdRails, DgAdActresses },
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses },
         directives: { dgCv: cvDirective },   // 首页行 / 搜索联想的封面 <img v-dg-cv="item">
         computed: {
             // 播放页作品信息条(currentGroup._meta 的展示版;没有 _meta 不出)
@@ -3708,7 +3684,6 @@
             adBrowseTitle() {
                 void this.adult.labv;
                 const b = this.browse, s = (b && b.sel) || {};
-                if (this.adult.view === 'tags') return '全部标签' + (s.b && BUCKET_LABEL[s.b] ? ' · ' + BUCKET_LABEL[s.b] : '');
                 if (this.adult.view === 'actresses') return '女优';   // p4 女优索引
                 if (this.adult.view === 'tag' && s.t && s.t.length) return '#' + tagLabel(s.t[0]);
                 return catalog.title(b.type, s);
@@ -3731,7 +3706,7 @@
                 return rows;
             },
             // ---- p4 ----
-            // 浏览页当前是「没有片单」的形态(标签云 / 女优索引):不出筛选行、网格、底栏
+            // 浏览页当前是「没有片单」的形态(女优索引):不出筛选行、网格、底栏
             adNoList() { return !!(this.adultMode && this.adult && noList(this.adult.view)); },
             // 刷短片入口:有目录、不是电视、feed.js 加载了
             adFeedOn() { return !!(this.adultMode && this.adult && this.adult.catalog && !this.isTVMode && root.dgAdultFeed && typeof root.dgAdultFeed.open === 'function'); },
@@ -4004,7 +3979,7 @@
             },
             // ---------- phase 3:分面浏览(_browseFetch 在成人站整个交给它)----------
             //   游标翻页:服务器回了 cursor_next(字符串 / null)就按游标接着拉,到 null 为止;没有这个键 → 按页(旧服务器 / 退路)。
-            //   第 1 页带 facets=1(标签行 / 筛选面板的计数、可用排序);标签云页不拉片单
+            //   第 1 页带 facets=1(标签行 / 筛选面板 / 全部标签的计数、可用排序);女优索引页不拉片单
             async _adBrowseFetch(reset) {
                 const b = this.browse;
                 if (reset) {
@@ -4028,7 +4003,7 @@
                 const first = page === 1;
                 const cursor = first || this._adPaged ? '' : this._adCursor;
                 if (!first && !this._adPaged && !cursor) { b.done = true; return; }
-                const url = browseApiUrl(b.sel, { page, cursor, facets: first });
+                const url = browseApiUrl(b.sel, { page, cursor, facets: first, type: b.type });
                 const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
                 this._browseCtl = ctl;
                 const timer = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) { } }, 15000) : 0;
@@ -4074,15 +4049,15 @@
                 if (seq === b.seq && !b.error && !b.done) this.$nextTick(() => this._browseFill());
             },
             // 组件(标签行 / 筛选面板 / 标签云 / 标签页页头)和信息条的导航都走这里:
-            //   { patch }(改当前筛选的几项)/ { sel, type? }(整个换)/ { view:'tags', b }(标签云)/ { view:'tag', id }(标签页)
+            //   { patch }(改当前筛选的几项)/ { sel, type? }(整个换)/ { view:'tag', id }(标签页)/ { view:'actresses' }(女优索引)
             adGo(nav) {
                 const n = nav || {};
                 const b = this.browse;
                 const cur = (b && b.open) ? b.sel : {};
                 let view = '', type = 'all', sel = {};
-                if (n.view === 'tags') {
+                if (n.view === 'tags') {   // 旧的标签云页已并进浏览页(筛选行「全部标签」):就是那个分类的浏览页
                     const bk = BUCKET_LABEL[n.b] ? n.b : '';
-                    view = 'tags'; type = bk ? typeOfBucket(bk) : 'all'; sel = { b: bk };
+                    type = bk ? typeOfBucket(bk) : 'all'; sel = { b: bk };
                 } else if (n.view === 'actresses') {
                     view = 'actresses'; type = 'all'; sel = {};   // p4 女优索引
                 } else if (n.view === 'tag') {
@@ -4090,7 +4065,8 @@
                     view = 'tag'; sel = { t: [n.id] };
                 } else if (n.patch && typeof n.patch === 'object') {
                     sel = Object.assign({}, cur, n.patch);
-                    if (Object.prototype.hasOwnProperty.call(n.patch, 'b')) type = BUCKET_LABEL[n.patch.b] ? typeOfBucket(n.patch.b) : 'all';
+                    // 改 b:换到那个分区所在的大类;清掉 b(国产「全部」)= 留在当前大类
+                    if (Object.prototype.hasOwnProperty.call(n.patch, 'b')) type = BUCKET_LABEL[n.patch.b] ? typeOfBucket(n.patch.b) : ((b && b.open && typeOf(b.type)) ? b.type : 'all');
                     else type = (b && b.open && typeOf(b.type)) ? b.type : (sel.b && BUCKET_LABEL[sel.b] ? typeOfBucket(sel.b) : 'all');
                 } else if (n.sel && typeof n.sel === 'object') {
                     sel = n.sel;
@@ -4126,13 +4102,6 @@
             },
             // 学到新名字(标签云 / 标签页 / 女优页回来)→ 标题重算
             adLearned() { this.adult.labv++; },
-            // 首页分类栏「标签」→ 标签云(当前大类的第一个分类;「全部」不限分类)
-            adOpenTags(tk) {
-                const T = typeOf(tk);
-                const b0 = T && T.buckets.length ? T.buckets[0][0] : '';
-                const cur = this.browse && this.browse.open && this.browse.sel ? this.browse.sel.b : '';
-                this.adGo({ view: 'tags', b: (this.browse && this.browse.open) ? (cur || '') : b0 });
-            },
             // 顶上摘要条的「筛选」:直接打开筛选面板(返回 true = 已处理;没有面板时调用方照旧滚回顶部)
             adOpenSheet() {
                 const f = this.$refs && this.$refs.adFilter;
@@ -4762,8 +4731,8 @@
         metaView, tagsUrl, normTags, suggestUrl, normSuggest, aliasPreset, beacon,
         // phase 3
         browseApiUrl, filterCount, nextTagState, normFacets, sortOpts, chipRow, activePills, routeOf, parseRoute, canonHash, isOurHash,
-        normCloud, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
-        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdCloud, DgAdRails, DgAdActresses },
+        cloudOf, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
+        components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses },
         ageGate, brand, auth, fetchWork, mixin, boot,
         // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
         hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, isTV,

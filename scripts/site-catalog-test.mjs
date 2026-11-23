@@ -432,6 +432,14 @@ console.log('④ 读:首页 / 浏览 / 作品 / 审查过滤');
     const r1 = cat.browse({ sort: 'random' }).results.map((c) => c.wk), r2 = cat.browse({ sort: 'random' }).results.map((c) => c.wk);
     ok(r1.length === 24 && r1.join() === r2.join(), '随机排序同一天稳定');
     ok(cat.browse({ b: 'nope' }).total_results === 0 && cat.browse({ tag: 'nope' }).total_results === 0, '未知大类 / 标签 → 空');
+    {   // 多个分区取并集(前端「日本」「国产」整类浏览):总数 = 各分区之和(一部作品只在一个分区);坏的一段 / 多于 6 段 → 空;重复的分区只算一次
+        const nb = (b) => cat.browse({ b }).total_results;
+        const sum = nb('jp_censored') + nb('jp_uncensored') + nb('jp_subbed');
+        const u = cat.browse({ b: 'jp_censored,jp_uncensored,jp_subbed', facets: 1 });
+        ok(sum > 0 && u.total_results === sum && nb('jp_subbed,jp_censored,jp_uncensored') === sum && nb('jp_censored,jp_censored') === nb('jp_censored')
+            && nb('jp_censored,nope') === 0 && nb('jp_censored,cn_amateur,cn_studio,cn_hookup,creators,live,short') === 0
+            && u.facets && u.facets.groups.length > 0 && u.results.every((c) => /^jp_/.test(c.bucket || 'jp_')), '多分区浏览:并集、顺序无关、去重、坏段 / 超过 6 段 → 空、带分面', [sum, u.total_results]);
+    }
     ok(cat.browse({ tag: 'incest' }).results.every((c) => /^c:/.test(c.wk)), '敏感标签只在浏览筛选里,且只有可信番号的作品');
     ok(!cat.browse({}).results.some((c) => /#clip/.test(c.wk)) && cat.browse({ b: 'commentary' }).results.some((c) => /#clip/.test(c.wk)), '#clip 只在 AV解说 里出现');
     ok(cat.browse({ page: 9999 }).page === 500, '页码上限 500');

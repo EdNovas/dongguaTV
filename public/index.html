@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=10"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=11"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -5399,22 +5399,22 @@
                 <div class="catnav-head">
                     <div class="cat-tabs" role="group" aria-label="大类">
                         <!-- 「全部分类」进分类大全(所有大类的地区 / 题材 / 语言 / 年份一页看全);手机上只留图标 -->
-                        <button type="button" class="cat-tab cat-tab-all" @click="openCatDir()" aria-label="全部分类" title="全部分类">
+                        <button type="button" class="cat-tab cat-tab-all" @click="openCatDir()" v-if="!adultMode" aria-label="全部分类" title="全部分类">
                             <i class="fas fa-table-cells-large" aria-hidden="true"></i><span class="cat-tab-all-l">全部分类</span></button>
+                        <!-- [adult] 成人版大类点了直接进浏览页,首页上不标「选中」(电视模式留着:关浏览页时焦点回到它) -->
                         <button v-for="t in catTypes" :key="t.k" type="button" class="cat-tab"
-                            :class="{ active: catNavType === t.k }" :aria-pressed="catNavType === t.k ? 'true' : 'false'"
-                            @click="catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}<span v-if="adultMode && adToday(t.k)" class="dg-today" :title="'今日新增 ' + adToday(t.k)">+{{ adToday(t.k) }}</span></button>   <!-- [adult] 今日新增 -->
+                            :class="{ active: catNavType === t.k && (!adultMode || isTVMode) }" :aria-pressed="adultMode && !isTVMode ? null : (catNavType === t.k ? 'true' : 'false')"
+                            @click="adultMode ? openBrowse({ type: t.k, sel: {} }) : catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}<span v-if="adultMode && adToday(t.k)" class="dg-today" :title="'今日新增 ' + adToday(t.k)">+{{ adToday(t.k) }}</span></button>   <!-- [adult] 今日新增 -->
                     </div>
                     <div class="catnav-quick">
                         <button v-if="!hideRandomRow" type="button" class="catnav-q is-random" @click="catNavJump('random')">
                             <i class="fas fa-dice" aria-hidden="true"></i>随机盲盒</button>
                         <button v-if="recommendList.length > 0 && homeOn.recommend" type="button" class="catnav-q is-rec" @click="catNavJump('recommend')">
                             <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>猜你想看</button>
-                        <button v-if="adultMode && adFeedOn" type="button" class="catnav-q is-feed" @click="adOpenFeed()">
-                            <i class="fas fa-mobile-screen" aria-hidden="true"></i>刷短片</button>   <!-- [adult] p4 刷短片(竖屏短片,#/feed) -->
                     </div>
                 </div>
-                <div class="catnav-body" role="group" :aria-label="catNavLabel">
+                <!-- [adult] 成人版首页只有上面一排大类(点了直接进浏览页,细分 / 标签都在浏览页里),这块不出 -->
+                <div class="catnav-body" role="group" v-if="!adultMode" :aria-label="catNavLabel">
                     <div class="catnav-row" v-for="row in catNavRows" :key="catNavType + '-' + row.l">
                         <span class="catnav-label">{{ row.l }}</span>
                         <div class="catnav-chips">
@@ -5426,8 +5426,6 @@
                         <button type="button" class="catnav-all" @click="openBrowse({ type: catNavType, sel: {} })">
                             {{ adultMode ? '浏览' : '全部' }}{{ catNavLabel }}<span class="catnav-all-sub">{{ adultMode ? '按标签、时长、厂牌筛选' : '按年份、评分筛选' }}</span><i class="fas fa-arrow-right" aria-hidden="true"></i>
                         </button>
-                        <!-- [adult] 标签云(#/tags?b=):这个大类第一个分类的全部标签 -->
-                        <button v-if="adultMode" type="button" class="catnav-all" @click="adOpenTags(catNavType)">标签<i class="fas fa-tags" aria-hidden="true"></i></button>
                     </div>
                 </div>
             </section>
@@ -5608,7 +5606,6 @@
             </div>
 
             <!-- [adult] 标签云(#/tags?b=)/ 窗口化网格(片单可到上千张:只渲染视口附近几块,块的死活由 IntersectionObserver 定,滚动时不写响应式状态) -->
-            <dg-ad-cloud v-if="adultMode && adult.view === 'tags'" :b="browse.sel.b || ''" @go="adGo" @learn="adLearned"></dg-ad-cloud>
             <!-- [adult] p4 女优索引(#/actresses):热门女优(全部 / 日本各分类,按作品数)+ 按名字搜 -->
             <dg-ad-actresses v-if="adultMode && adult.view === 'actresses'" @go="adGo" @learn="adLearned"></dg-ad-actresses>
             <!-- [adult] :cover = 封面加载不出来的卡片从网格里拿掉,底下「已隐藏 N 部 · 显示」 -->

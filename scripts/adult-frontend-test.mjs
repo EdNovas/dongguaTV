@@ -45,22 +45,24 @@ console.log('① adult.js 纯函数');
     const nav = X.taxonomy.NAV_BUCKETS.slice().sort();
     ok(eq(A.NAV_BUCKETS.slice().sort(), nav), '17 个导航桶与 lib/adult/taxonomy 一致', A.NAV_BUCKETS);
     const inTypes = A.TYPES.flatMap(T => T.buckets.map(b => b[0]));
-    ok(eq(inTypes.slice().sort(), nav) && new Set(inTypes).size === inTypes.length, '每个导航桶恰好在一个大类(国产/日本/欧美/动漫/更多)里', inTypes);
+    ok(eq(inTypes.concat(['fetish', 'asia']).sort(), nav) && new Set(inTypes).size === inTypes.length, '除 SM·重口 / 韩国·东南亚(只从 全部 进)外,每个导航桶恰好在一个大类里', inTypes);
     const lab = Object.fromEntries(X.taxonomy.BUCKETS.map(b => [b.id, b.label]));
     ok(A.NAV_BUCKETS.every(b => A.BUCKET_LABEL[b] === lab[b]), '桶名与服务器 taxonomy 的 label 一致(服务器没给 /buckets 时的兜底)');
-    ok(eq(A.TYPES.map(t => t.k), ['cn', 'jp', 'west', 'anime', 'more', 'all']), '大类顺序:国产 · 日本 · 欧美 · 动漫 · 更多 · 全部');
-    ok(eq(A.TYPES[0].buckets.map(b => b[1]), ['自拍', '传媒', '探花', '网红', '主播', '短视频']) && eq(A.TYPES[1].buckets.map(b => b[1]), ['有码', '无码', '中字']), '国产 / 日本 的标签(规格 §4)');
+    ok(eq(A.TYPES.map(t => t.k), ['cn', 'jp', 'west', 'anime', 'softcore', 'lgbt', 'short', 'commentary', 'ai_drama', 'all']) && eq(A.TYPES.map(t => t.l), ['国产', '日本', '欧美', '动漫', '三级', '同性', '短视频', 'AV解说', 'AI短剧', '全部']), '大类一排平铺:国产 · 日本 · 欧美 · 动漫 · 三级 · 同性 · 短视频 · AV解说 · AI短剧 · 全部(没有「更多」)');
+    ok(eq(A.TYPES[0].buckets.map(b => b[1]), ['自拍', '传媒', '探花', '网红', '主播']) && A.TYPES[0].sub === true && eq(A.TYPES[1].buckets.map(b => b[1]), ['有码', '无码', '中字']) && !A.TYPES.slice(1).some(T => T.sub), '国产 / 日本 的分区;只有国产带细分行');
     const C = A.catalog;
     ok(C.ADULT === true && C.DEFAULT_TYPE === 'cn' && C.typeOf('cn') && !C.typeOf('tv'), '目录版 DgCatalog:默认大类 cn,没有 TMDB 的 tv');
     // normSel
-    ok(eq(C.normSel('cn', {}), { b: 'cn_amateur', dur: '', v: '', sort: 'new' }), 'normSel:大类默认第一个桶、最新上架');
-    ok(eq(C.normSel('jp', { b: 'cn_amateur', dur: 'x', flag: 'zh', sort: 'bogus' }), { b: 'jp_censored', dur: '', v: 'zh', sort: 'new' }), 'normSel:别的大类的桶/不认识的值 → 默认;旧 flag=zh → v=zh');
-    ok(eq(C.normSel('all', { b: 'jp_subbed', sort: 'random' }), { b: '', dur: '', v: '', sort: 'rand' }), 'normSel:「全部」不带桶;旧 sort=random → rand');
-    ok(eq(C.normSel('nope', { b: 'jp_subbed' }), { b: 'cn_amateur', dur: '', v: '', sort: 'new' }), 'normSel:不认识的大类按第一个');
+    ok(eq(C.normSel('cn', {}), { b: '', dur: '', v: '', sort: 'new' }) && C.normSel('west', {}).b === 'western' && C.normSel('cn', { b: 'cn_hookup' }).b === 'cn_hookup', 'normSel:多分区大类默认整类(b 空)、单分区大类就是那个分区、最新上架');
+    ok(eq(C.normSel('jp', { b: 'cn_amateur', dur: 'x', flag: 'zh', sort: 'bogus' }), { b: '', dur: '', v: 'zh', sort: 'new' }), 'normSel:别的大类的桶/不认识的值 → 默认;旧 flag=zh → v=zh');
+    ok(eq(C.normSel('all', { b: 'jp_subbed', sort: 'random' }), { b: '', dur: '', v: '', sort: 'rand' }) && C.normSel('all', { b: 'fetish' }).b === 'fetish' && C.normSel('all', { b: 'asia' }).b === 'asia', 'normSel:「全部」只认不归大类的分区(SM·重口 / 韩国·东南亚);旧 sort=random → rand');
+    ok(eq(C.normSel('nope', { b: 'jp_subbed' }), { b: '', dur: '', v: '', sort: 'new' }), 'normSel:不认识的大类按第一个');
     // buildQuery:只给地址(与契约 C 的 /api/catalog/browse 参数一致)
     const q = C.buildQuery('jp', { b: 'jp_uncensored', dur: 'l', flag: 'zh', sort: 'dur' }, 3);
     ok(q.url === '/api/catalog/browse?b=jp_uncensored&dur=l&v=zh&sort=dur&page=3' && eq(q.params, {}) && typeof q.map === 'function', 'buildQuery → /api/catalog/browse 地址(params 空、带卡片映射)', q.url);
     ok(C.buildQuery('all', {}, 0).url === '/api/catalog/browse?sort=new&page=1' && /page=500$/.test(C.buildQuery('cn', {}, 9999).url), 'buildQuery:「全部」不带 b;页码夹在 1..500');
+    ok(C.buildQuery('jp', {}, 1).url === '/api/catalog/browse?b=jp_censored,jp_uncensored,jp_subbed&sort=new&page=1' && C.buildQuery('cn', {}, 1).url.indexOf('b=cn_amateur,cn_studio,cn_hookup,creators,live&') > 0
+        && C.buildQuery('cn', { b: 'live' }, 1).url.indexOf('b=live&') > 0 && C.buildQuery('all', { b: 'fetish' }, 1).url.indexOf('b=fetish&') > 0, 'buildQuery:国产 / 日本 整类 = 逗号分隔的几个分区;选了细分 / 孤儿分区只发那一个', C.buildQuery('jp', {}, 1).url);
     // 取值与契约 C 一致:sort=new|updated|released|hot|dur|lines|rand、dur=s|m|l|xl|xxl|unk、v=zh|unc|leak|vr|4k|vertical
     ok(eq(A.SORTS.map(s => s.k), ['new', 'updated', 'released', 'hot', 'dur', 'lines', 'rand']) && eq(A.SORTS.map(s => s.l), ['最新上架', '最近更新', '发行日期', '热门', '时长', '线路最多', '随机'])
         && eq(A.DURS.map(d => d.k), ['', 's', 'm', 'l', 'xl', 'xxl', 'unk']) && A.DURS[6].l === '时长未知'
@@ -70,14 +72,15 @@ console.log('① adult.js 纯函数');
     // 服务器换成 phase 3 的白名单(带 released)之后:前端每个排序值都得在里面(并行开发期间旧白名单不判)
     ok(!/'released'/.test(srvSorts) || A.SORTS.every(s => srvSorts.includes("'" + s.k + "'")), '服务器 browseQuery 换成 phase 3 白名单后,前端排序值都在里面', srvSorts);
     // 筛选行 / 分类栏 / 标题
-    ok(eq(C.groupsOf('cn', {}).map(g => g.k), ['b']) && eq(C.groupsOf('west', {}), []) && eq(C.groupsOf('all', {}), []), '浏览页固定筛选行只剩「分类」(多桶大类);其余在标签行 / 筛选面板');
-    ok(eq(C.navRows('jp')[0].items.map(i => i.sel.b), ['jp_censored', 'jp_uncensored', 'jp_subbed']) && C.navRows('west')[0].items.length === 4 && eq(C.navRows('west')[0].items[1].sel, { v: 'zh' }), '分类栏标签:多桶按桶,单桶给快速入口(中文字幕 = v=zh)');
-    ok(C.title('cn', { b: 'cn_hookup' }) === '国产 · 探花' && C.title('west', {}) === '欧美' && C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }) === '日本 · 中字 · 30–60分钟 · 随机', '标题 / 摘要', C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }));
+    ok(eq(C.groupsOf('cn', {}).map(g => g.k), ['b']) && eq(C.groupsOf('cn', {})[0].opts.map(o => o.k), ['', 'cn_amateur', 'cn_studio', 'cn_hookup', 'creators', 'live']) && C.groupsOf('cn', {})[0].opts[0].l === '全部'
+        && eq(C.groupsOf('jp', {}), []) && eq(C.groupsOf('west', {}), []) && eq(C.groupsOf('all', {}), []), '浏览页固定筛选行只剩国产的「分类」(全部 + 5 个细分);日本 / 其余没有');
+    ok(eq(C.navRows('cn')[0].items.map(i => i.sel.b), ['cn_amateur', 'cn_studio', 'cn_hookup', 'creators', 'live']) && eq(C.navRows('jp'), []) && eq(C.navRows('west'), []), '分类栏细分(成人版首页不出这块):只有国产');
+    ok(C.title('cn', { b: 'cn_hookup' }) === '国产 · 探花' && C.title('cn', {}) === '国产' && C.title('jp', {}) === '日本' && C.title('all', { b: 'fetish' }) === 'SM·重口' && C.title('west', {}) === '欧美' && C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }) === '日本 · 中字 · 30–60分钟 · 随机', '标题 / 摘要', C.summary('jp', { b: 'jp_subbed', dur: 'l', sort: 'random' }));
     ok(C.countLabel(12345) === '1万+' && C.countLabel(0) === '0', 'countLabel');
     const dir = C.directory();
     ok(dir.hot.length === 17 && dir.hot.every(h => h.l && C.typeOf(h.type) && h.sel.b && /gradient/.test(h.bg) && /^fa-/.test(h.icon)) && dir.types.every(t => t.rows.every(r => r.items.every(i => i.sel && i.sel.b))), '分类大全:17 个桶色块 + 各大类卡片');
     // 搜索框分类词
-    ok(eq(C.fromSearch(' 无码 '), { type: 'jp', sel: { b: 'jp_uncensored' } }) && eq(C.fromSearch('探花'), { type: 'cn', sel: { b: 'cn_hookup' } }) && eq(C.fromSearch('SM'), { type: 'more', sel: { b: 'fetish' } }), '分类词 → 浏览页(无码 / 探花 / SM)');
+    ok(eq(C.fromSearch(' 无码 '), { type: 'jp', sel: { b: 'jp_uncensored' } }) && eq(C.fromSearch('探花'), { type: 'cn', sel: { b: 'cn_hookup' } }) && eq(C.fromSearch('SM'), { type: 'all', sel: { b: 'fetish' } }), '分类词 → 浏览页(无码 / 探花 / SM → 全部 · SM·重口)');
     ok(C.fromSearch('泰剧') === null && C.fromSearch('人妻') === null && C.fromSearch('SSIS-001') === null && C.fromSearch('') === null, '不是分类词(主站的泰剧、标签词人妻、番号)照常搜索');
     // 首页行「全部」
     ok(eq(C.rowPreset('ad_jp_subbed', undefined, { more: { b: 'jp_subbed' } }), { type: 'jp', sel: { b: 'jp_subbed', sort: 'new' } }) && eq(C.rowPreset('ad_new', undefined, { more: { sort: 'new' } }), { type: 'all', sel: { sort: 'new' } })
@@ -343,7 +346,7 @@ ok(!!O && O.mixins[0] === A.mixin, '成人沙箱:createApp 用上 DgAdult.mixin'
     // 分类栏 computed 走目录版
     const CP = O.computed;
     const self = { catNavType: 'jp', browse: { type: 'cn', sel: { b: 'cn_studio' } } };
-    ok(eq(CP.catTypes.call(self).map(t => t.k), ['cn', 'jp', 'west', 'anime', 'more', 'all']) && CP.catNavRows.call(self)[0].items.length === 3 && CP.browseTitle.call(self) === '国产 · 传媒', 'catTypes/catNavRows/browseTitle 都是目录版');
+    ok(eq(CP.catTypes.call(self).map(t => t.k), ['cn', 'jp', 'west', 'anime', 'softcore', 'lgbt', 'short', 'commentary', 'ai_drama', 'all']) && eq(CP.catNavRows.call(self), []) && CP.catNavRows.call(Object.assign({}, self, { catNavType: 'cn' }))[0].items.length === 5 && CP.browseTitle.call(self) === '国产 · 传媒', 'catTypes/catNavRows/browseTitle 都是目录版');
 }
 const M = O.methods, CPm = O.computed;
 function makeApp(over) {
@@ -1113,16 +1116,19 @@ console.log('⑦ phase 3:分面浏览 / 筛选面板 / 标签云 / 标签页 / �
         ['tag', 'all', { t: ['busty'], sort: 'dur' }, '#/c/all?t=busty&sort=dur'],
         ['', 'all', { actress: 'a:12345' }, '#/actress/a%3A12345'],
         ['', 'all', { actress: 'a:12345', v: 'zh' }, '#/c/all?v=zh&actress=a%3A12345'],
-        ['tags', 'jp', { b: 'jp_subbed', t: ['busty'] }, '#/tags?b=jp_subbed'],
-        ['tags', 'all', {}, '#/tags'],
+        ['', 'cn', {}, '#/c/cn'],
+        ['', 'jp', { v: 'unc' }, '#/c/jp?v=unc'],
+        ['', 'all', { b: 'fetish' }, '#/c/all?b=fetish'],
         ['', 'all', { studio: 'S1', lp: 'SSIS' }, '#/c/all?studio=S1&lp=SSIS'],
     ];
     const rtBad = RT.filter(([v, tk, sel, want]) => A.routeOf(v, tk, sel) !== want || A.canonHash(want) !== want);
-    ok(!rtBad.length, 'routeOf:浏览 #/c/<大类>?…(只写非默认项)/ 标签页 #/tag/<id> / 女优页 #/actress/<aid> / 标签云 #/tags?b=;往返规范化不变', rtBad.map(r => [A.routeOf(r[0], r[1], r[2]), r[3]]));
+    ok(!rtBad.length, 'routeOf:浏览 #/c/<大类>?…(只写非默认项;国产 / 日本整类不带 b;全部 · 孤儿分区带 b)/ 标签页 #/tag/<id> / 女优页 #/actress/<aid>;往返规范化不变', rtBad.map(r => [A.routeOf(r[0], r[1], r[2]), r[3]]));
     const pr = A.parseRoute('#/c/cn?b=jp_censored&t=busty,x_school,legs&sort=hot&studio=%E9%BA%BB%E8%B1%86%E4%BC%A0%E5%AA%92');
     ok(pr && pr.type === 'jp' && eq(pr.sel.t, ['busty', 'legs']) && pr.sel.sort === 'hot' && pr.sel.studio === '麻豆传媒' && pr.view === '', 'parseRoute:大类以分类为准、blocked 标签剔掉、转义还原', pr);
     ok(eq(A.parseRoute('#/tag/busty'), { view: 'tag', type: 'all', sel: { t: ['busty'] } }) && eq(A.parseRoute('#/actress/a%3A12345'), { view: '', type: 'all', sel: { actress: 'a:12345' } })
-        && eq(A.parseRoute('#/tags?b=anime'), { view: 'tags', type: 'anime', sel: { b: 'anime' } }) && eq(A.parseRoute('#/tags?b=x_bad'), { view: 'tags', type: 'all', sel: { b: '' } }), 'parseRoute:标签页 / 女优页 / 标签云');
+        && eq(A.parseRoute('#/tags?b=anime'), { view: '', type: 'anime', sel: { b: 'anime', dur: '', v: '', sort: 'new' } }) && eq(A.parseRoute('#/tags?b=x_bad'), { view: '', type: 'all', sel: { b: '', dur: '', v: '', sort: 'new' } })
+        && A.canonHash('#/tags?b=jp_subbed') === '#/c/jp?b=jp_subbed' && A.parseRoute('#/c/more?b=softcore').type === 'softcore' && A.canonHash('#/c/more?b=fetish') === '#/c/all?b=fetish' && A.canonHash('#/c/more') === '#/c/all',
+        'parseRoute:标签页 / 女优页;旧的标签云页 #/tags?b= 和旧「更多」大类 #/c/more?b= → 新的浏览页');
     ok(['', '#', '#admin', '#/admin', '#/tag/x_minor', '#/tag/bad id', '#/c/nope', '#/c/jp/x', '#/actress/../x', '#/w/abc', '#/' + 'c'.repeat(700), 'javascript:alert(1)'].every(h => A.parseRoute(h) === null), 'parseRoute:空 / #admin / blocked 标签 / 不认识的大类 / 多余路径 / 超长 → null');
     ok(A.isOurHash('#/c/jp') && A.isOurHash('#/tags') && A.isOurHash('#/tag/x') && A.isOurHash('#/actress/a') && !A.isOurHash('#admin') && !A.isOurHash('#/admin') && !A.isOurHash(''), 'isOurHash:只认这几种');
     // ---- 卡片发行日期 / 新片速递 ----
@@ -1152,12 +1158,11 @@ console.log('⑦ phase 3:分面浏览 / 筛选面板 / 标签云 / 标签页 / �
     ok(A.metaView({ bucket: 'cn_hookup', actress: [{ aid: 'a:1', name: '合成名' }], studio: { id: '麻豆传媒', label: '麻豆传媒' } }, { sources: [] }).actress.length === 0
         && eq(A.metaView({ studio: { id: '麻豆传媒', label: '麻豆' } }, { sources: [] }).studio, { id: '麻豆传媒', label: '麻豆' }) && A.metaView({}, { sources: [] }).studio === null && A.metaView({}, { sources: [] }).released === '', '素人类分类不出演员(aid 也不行);_meta.studio 对象优先;没有就 null');
     // ---- 标签云 / 标签页 / 女优 / 厂牌 ----
-    const cl = A.normCloud({ groups: [{ id: 'outfit', label: '服装·制服' }, { id: 'body', label: '身材·外貌' }], tags: [
-        { id: 'busty', label: '巨乳', count: 1000, featured: true, group: 'body' }, { id: 'legs', label: '美腿', count: 3, featured: true, group: 'body' },
-        { id: 'black_stockings', label: '黑丝', count: 200, featured: true, group: 'outfit' }, { id: 'noncon', label: '强制凌辱', count: 999, featured: true, group: 'story' },
-        { id: 'small_tits', label: '贫乳', count: 50, featured: false, group: 'body' }, { id: 'x_voyeur', label: 'x', count: 9, featured: true, group: 'act' }, { id: 'oral', label: '口交', count: 0, featured: true, group: 'act' }] });
-    ok(eq(cl.groups.map(x => x.id), ['outfit', 'body']) && eq(cl.groups[1].tags.map(t => [t.id, t.w]), [['busty', 5], ['legs', 1]]) && cl.groups[0].tags[0].w >= 3 && cl.groups[0].tags[0].w <= 4,
-        '标签云:按服务器的分组次序;只要 featured 且有数;字号档按 log(数量);审查类 / blocked(服务器标了 featured 也不行)不进', cl.groups);
+    const cl = A.cloudOf({ groups: [{ id: 'outfit', label: '服装·制服', tags: [{ id: 'black_stockings', label: '黑丝', count: 200 }] },
+        { id: 'body', label: '身材·外貌', tags: [{ id: 'legs', label: '美腿', count: 3 }, { id: 'busty', label: '巨乳', count: 1000 }, { id: 'small_tits', label: '贫乳', count: 50 }, { id: 'heels', label: '高跟鞋', count: 0 }, { id: 'oral', label: '口交', count: 0 }] },
+        { id: 'story', label: '剧情·关系', tags: [{ id: 'noncon', label: '强制凌辱', count: 999 }, { id: 'x_voyeur', label: 'x', count: 9 }] }] }, { t: ['busty'], x: ['heels'] });
+    ok(eq(cl.map(x => x.id), ['outfit', 'body']) && eq(cl[1].tags.map(t => [t.id, t.w, t.st]), [['busty', 5, 'in'], ['legs', 1, ''], ['heels', 1, 'ex']]) && cl[0].tags[0].w >= 3 && cl[0].tags[0].w <= 4 && eq(A.cloudOf(null, {}), []),
+        '全部标签(浏览页就地展开):按分面组排、数为 0 的不列(已选 / 已排除的照列)、字号档按 log(数量);审查类 / blocked 不进', cl);
     const ti = A.normTagInfo({ tag: { id: 'black_stockings', label: '黑丝', group: 'outfit', count: 168 }, buckets: [{ id: 'live', count: 72 }, { id: 'x_bad', count: 3 }, { id: 'cn_amateur', count: 0 }],
         related: [{ id: 'heels', label: '高跟鞋', lift: 20.5 }, { id: 'noncon', label: '强制凌辱', lift: 9 }, { id: 'x_drug', label: 'x' }, { id: 'black_stockings', label: '自己' }] });
     ok(ti && ti.tag.label === '黑丝' && ti.tag.groupLabel === '服装·制服' && ti.tag.count === 168 && eq(ti.buckets, [{ id: 'live', label: '主播直播', count: 72 }]) && eq(ti.related, [{ id: 'heels', label: '高跟鞋' }]) && !ti.tag.review,
@@ -1313,13 +1318,21 @@ function C2() { return A.catalog; }
     net.calls.length = 0;
     app.adGo({ view: 'tags', b: 'jp_censored' });
     app._adRouteSync(app.adRouteHash);
-    ok(app.adult.view === 'tags' && nav.loc.hash === '#/tags?b=jp_censored' && app.browse.done && !net.calls.some(u => u.startsWith('/api/catalog/browse')) && app.adBrowseTitle === '全部标签 · 日本有码', '标签云:#/tags?b=,不拉片单', [nav.loc.hash, net.calls]);
+    ok(app.adult.view === '' && nav.loc.hash === '#/c/jp?b=jp_censored' && net.calls.includes('/api/catalog/browse?b=jp_censored&sort=new&page=1&facets=1') && app.adBrowseTitle === '日本 · 有码',
+        '旧的标签云入口 {view:tags} → 那个分类的普通浏览页(全部标签改在筛选行里就地展开)', [nav.loc.hash, net.calls, app.adBrowseTitle]);
     app.setBrowseFilter('b', 'jp_subbed');
     app._adRouteSync(app.adRouteHash);
-    ok(app.adult.view === 'tags' && nav.loc.hash === '#/tags?b=jp_subbed', '标签云上换分类:还是标签云');
+    ok(app.adult.view === '' && nav.loc.hash === '#/c/jp?b=jp_subbed', '旧地址带的日本分区照样认(日本没有细分行,标题写着)');
     app.adGo({ sel: { b: 'jp_subbed', t: ['busty'] } });
     app._adRouteSync(app.adRouteHash);
-    ok(app.adult.view === '' && nav.loc.hash === '#/c/jp?b=jp_subbed&t=busty', '标签云点标签 → 这个分类里按标签筛');
+    ok(app.adult.view === '' && nav.loc.hash === '#/c/jp?b=jp_subbed&t=busty', '分类 + 标签筛');
+    net.calls.length = 0;
+    app.adGo({ sel: {}, type: 'jp' });
+    app._adRouteSync(app.adRouteHash);
+    ok(nav.loc.hash === '#/c/jp' && net.calls.includes('/api/catalog/browse?b=jp_censored,jp_uncensored,jp_subbed&sort=new&page=1&facets=1') && app.adBrowseTitle === '日本', '「日本」整类:三个分区一起查(b 逗号分隔),地址不带 b', [nav.loc.hash, net.calls]);
+    app.adGo({ patch: { b: 'fetish' } });
+    app._adRouteSync(app.adRouteHash);
+    ok(app.browse.type === 'all' && nav.loc.hash === '#/c/all?b=fetish' && app.adBrowseTitle === 'SM·重口', '筛选面板「分类」点孤儿分区 → 全部 · SM·重口', [nav.loc.hash, app.adBrowseTitle]);
     learnActressViaFacets();
     app.adMetaActress({ aid: 'a:12345', name: '合成女优甲' });
     app._adRouteSync(app.adRouteHash);
@@ -1475,8 +1488,8 @@ function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', na
     for (const [n, def] of Object.entries(A.components)) {
         try { const fn = vctx.Vue.compile(def.template, { decodeEntities: (x) => x, onError: (e) => cerr.push(n + ': ' + e.message) }); if (typeof fn !== 'function') cerr.push(n + ': no fn'); } catch (e) { cerr.push(n + ': ' + e.message); }
     }
-    ok(Object.keys(A.components).length === 6 && !cerr.length, '六个组件(网格 / 筛选 / 页头 / 标签云 / p4 相关推荐 / 女优索引)的模板都能被 Vue 编译', cerr);
-    ok(A.mixin.components === undefined || eq(Object.keys(A.mixin.components), ['DgAdGrid', 'DgAdFilter', 'DgAdHead', 'DgAdCloud', 'DgAdRails', 'DgAdActresses']), 'mixin 注册了这六个组件(index.html 用 <dg-ad-grid> / <dg-ad-rails> / <dg-ad-actresses> 等)');
+    ok(Object.keys(A.components).length === 5 && !A.components.DgAdCloud && !cerr.length, '五个组件(网格 / 筛选 / 页头 / p4 相关推荐 / 女优索引)的模板都能被 Vue 编译;单独的标签云页已删', cerr);
+    ok(A.mixin.components === undefined || eq(Object.keys(A.mixin.components), ['DgAdGrid', 'DgAdFilter', 'DgAdHead', 'DgAdRails', 'DgAdActresses']), 'mixin 注册了这五个组件(index.html 用 <dg-ad-grid> / <dg-ad-rails> / <dg-ad-actresses> 等)');
     // 组件里不用老 WebView 不认的语法(?. / ??)
     const SRCA = fs.readFileSync(path.join(ROOT, 'public/adult/adult.js'), 'utf8');
     ok(!/\?\.[a-zA-Z_$[(]/.test(SRCA.replace(/\/\/[^\n]*/g, '')) && !/[^?]\?\?[^?]/.test(SRCA.replace(/\/\/[^\n]*/g, '').replace(/'[^'\n]*'/g, "''")), 'adult.js 不用 ?. / ??(老电视 WebView 解析不了,整个文件会挂)');
@@ -1493,10 +1506,12 @@ function learnActressViaFacets() { A.normFacets({ actress: [{ aid: 'a:12345', na
     ok(/this\.imageMap && this\.imageMap\[pk\]\) \|\| \(this\.adultMode && typeof this\.adOkPic === 'function' && this\.adOkPic\(g, pk\)\) \|\| \(g && g\.pic\)/.test(HTML) && typeof A.mixin.methods.adOkPic === 'function',
         '收藏的封面:主封面坏了、封面控制器换到的备用地址真加载出来了 → 用那张');
     ok(A.components.DgAdGrid.emits.indexOf('vis') >= 0 && typeof A.components.DgAdGrid.methods.revealBack === 'function', '网格:报 vis;「显示」补滚动 / 焦点');
-    ok(/<dg-ad-cloud v-if="adultMode && adult\.view === 'tags'" :b="browse\.sel\.b \|\| ''" @go="adGo" @learn="adLearned"><\/dg-ad-cloud>/.test(HTML) && /<dg-ad-head v-if="adultMode" :view="adult\.view" :sel="browse\.sel" :total="browse\.total" @go="adGo" @learn="adLearned"><\/dg-ad-head>/.test(HTML),
-        '标签云 / 标签页与女优页页头');
+    ok(!/dg-ad-cloud/.test(HTML) && /<dg-ad-head v-if="adultMode" :view="adult\.view" :sel="browse\.sel" :total="browse\.total" @go="adGo" @learn="adLearned"><\/dg-ad-head>/.test(HTML),
+        '标签页与女优页页头(没有单独的标签云页)');
     ok(/<h2 class="browse-title">\{\{ adultMode \? adBrowseTitle : browseTitle \}\}<\/h2>/.test(HTML) && /\{\{ adultMode \? adBrowseSummary : browseSummary \}\}/.test(HTML) && /@click="\(adultMode && adOpenSheet\(\)\) \|\| browseToTop\(\)"/.test(HTML), '标题 / 顶上摘要条(点「筛选」直接开面板)');
-    ok(/<div class="browse-foot" ref="browseFoot" aria-live="polite" v-show="!adNoList">/.test(HTML) && /@click="adOpenTags\(catNavType\)">标签/.test(HTML), '标签云 / 女优索引页不出片单底栏(adNoList);首页分类栏有「标签」入口');
+    ok(/<div class="browse-foot" ref="browseFoot" aria-live="polite" v-show="!adNoList">/.test(HTML) && !/adOpenTags/.test(HTML) && typeof A.mixin.methods.adOpenTags === 'undefined', '女优索引页不出片单底栏(adNoList);首页没有单独的「标签」入口');
+    ok(/@click="adultMode \? openBrowse\(\{ type: t\.k, sel: \{\} \}\) : catNavSelect\(t\.k\)"/.test(HTML) && /<div class="catnav-body" role="group" v-if="!adultMode"/.test(HTML) && /class="cat-tab cat-tab-all" @click="openCatDir\(\)" v-if="!adultMode"/.test(HTML),
+        '成人版首页分类栏只有一排大类:点了直接进浏览页;没有「全部分类」(分类大全)和下面的细分块');
     ok(/<span v-if="adMeta\.released" class="dg-meta-t dg-meta-rel">/.test(HTML) && /@click="adMetaStudio\(adMeta\.studio\)"/.test(HTML) && /@click="adMetaActress\(a\)"/.test(HTML)
         && /<div v-for="g in adMeta\.tagGroups" :key="'mg-' \+ g\.id" class="dg-meta-tg">/.test(HTML), '信息条:发行日期 / 厂牌 / 女优(进女优页)/ 按分面组排的标签');
     const browseTpl = HTML.slice(HTML.indexOf('<div class="browse-page" v-if="browse.open"'), HTML.indexOf('<div class="browse-sticky"'));
@@ -1770,7 +1785,7 @@ function fakeVideo() {
     ok(eq(A.parseRoute('#/actresses'), { view: 'actresses', type: 'all', sel: {} }) && A.routeOf('actresses', 'all', { b: 'jp_subbed' }) === '#/actresses' && A.canonHash('#/actresses') === '#/actresses'
         && A.isOurHash('#/actresses') && A.parseRoute('#/actresses/x') === null && A.isOurHash('#/actress/5'), '#/actresses 路由(只有路径,不带参数)');
     ok(!A.isOurHash('#/feed') && A.isFeedHash('#/feed') && !A.isFeedHash('#/feed?x') && A.parseRoute('#/feed') === null && A.FEED_HASH === '#/feed', '#/feed 不归浏览页路由管(不透明,不带任何作品信息)');
-    ok(A.noList('tags') && A.noList('actresses') && !A.noList('tag') && !A.noList(''), 'noList:标签云 / 女优索引没有片单');
+    ok(!A.noList('tags') && A.noList('actresses') && !A.noList('tag') && !A.noList(''), 'noList:只有女优索引没有片单');
     ok(A.sortOpts(null, { sort: 'new', actress: '5' }).some(s => s.k === 'released') && !A.sortOpts(null, { sort: 'new' }).some(s => s.k === 'released'), '女优页的排序下拉总有「发行日期」');
     const app = makeApp();
     let opened = null;
@@ -1792,7 +1807,7 @@ function fakeVideo() {
     ok(na && na.latest === '2025-06-30' && na.aid === '12', 'normActress:latest = 第 1 页里最晚的真实发行日期');
     const Hd = A.components.DgAdHead;
     ok(Hd.props.total && /共 \{\{ countLabel\(total\) \}\} 部/.test(Hd.template) && /最新 \{\{ info\.latest \}\} 发行/.test(Hd.template) && /\$emit\('go', \{ view: 'actresses' \}\)/.test(Hd.template), '女优页头:共 N 部 · 最新 YYYY-MM-DD 发行 · 女优索引入口');
-    ok(/\$emit\('go', \{ view: 'actresses' \}\)/.test(A.components.DgAdCloud.template), '标签云页有「女优索引」入口');
+    ok(/\$emit\('go', \{ view: 'actresses' \}\)/.test(A.components.DgAdFilter.template) && /@click="cloud = !cloud">全部标签/.test(A.components.DgAdFilter.template), '筛选行「全部标签」就地展开,里面有「女优索引」入口');
     // 索引组件:全部 + 日本三个分类的 facets.actress
     const urls = A.actIndexUrls();
     ok(eq(urls, ['/api/catalog/browse?sort=new&page=1&facets=1', '/api/catalog/browse?b=jp_censored&sort=new&page=1&facets=1', '/api/catalog/browse?b=jp_uncensored&sort=new&page=1&facets=1', '/api/catalog/browse?b=jp_subbed&sort=new&page=1&facets=1']), '索引用浏览接口的 facets(快照现算)', urls);
@@ -2415,7 +2430,7 @@ async function feedWorld(o) {
         && /window\.DgAdult\.hook\('onHistoryWrite', \{ kind: 'stats', name: '', wk: '' \}\) === false\) return 'private';/.test(HTML), 'onHistoryWrite:观看历史 / 进度 / 观看统计 三条写入路径都能被否决');
     ok(/<div v-if="adultMode" ref="adSetExt" class="dg-set-ext"><\/div>/.test(HTML) && /@change="adSetPv\(\$event\.target\.checked\)"/.test(HTML) && /@change="adSetCell\(\$event\.target\.checked\)"/.test(HTML), '设置:onSettingsRender 容器 + 悬停预览 / 移动网络自动播放 开关');
     ok((HTML.match(/class="hot-card" v-for="item in (rowLists\[key\]|getPagedItems\(key\))" :key="[^"]+" :data-wk="item\._wk \|\| null"/g) || []).length === 2, '首页行(横排 + 展开网格)的卡片带 data-wk(onCardHover)');
-    ok(/<button v-if="adultMode && adFeedOn" type="button" class="dg-nav-feed" @click="adOpenFeed\(\)"/.test(HTML) && /<button v-if="adultMode && adFeedOn" type="button" class="catnav-q is-feed" @click="adOpenFeed\(\)">/.test(HTML), '刷短片入口:导航栏 + 首页分类栏');
+    ok(/<button v-if="adultMode && adFeedOn" type="button" class="dg-nav-feed" @click="adOpenFeed\(\)"/.test(HTML) && !/catnav-q is-feed/.test(HTML), '刷短片入口:只在导航栏(首页分类栏里那个重复的已删)');
     ok(/if \(this\.adultMode && !this\.showDetail && typeof this\.adFeedBack === 'function' && this\.adFeedBack\(\)\) return;/.test(HTML) && /window\.dgAdultFeed\.isOpen\(\)\)\) : Reflect\.get\(t, k\)\)/.test(HTML), '返回键:刷短片开着先关它(goHome / 安卓 App 的 searched 探测)');
     ok(/<dg-ad-rails v-if="adultMode && adult\.relWk && !previewLocked" :wk="adult\.relWk" :poster="getPosterUrl" :tv="isTVMode" @pick="adRelPick" @go="adGo"><\/dg-ad-rails>/.test(HTML), '播放页:相关推荐(首帧之后才有 relWk)');
     ok(/<dg-ad-actresses v-if="adultMode && adult\.view === 'actresses'" @go="adGo" @learn="adLearned"><\/dg-ad-actresses>/.test(HTML), '浏览页:女优索引');

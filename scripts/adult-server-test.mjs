@@ -607,6 +607,10 @@ try {
     r = await api('GET', '/api/catalog/browse?b=' + encodeURIComponent('../../etc') + '&page=abc', { cookie: CK });
     const bq2 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
     ok(r.status === 200 && bq2 && bq2.q.b === '!bad' && bq2.q.tag === '' && bq2.q.page === 1, '目录浏览:非法分区不悄悄变成 ""(=全部分区),标成 !bad', bq2 && bq2.q);
+    // 国产 / 日本 整类浏览:b 逗号分隔 ≤6 个分区原样交给目录;多于 6 个 / 有一段不合法 → !bad
+    const bqOf = async (b) => { await api('GET', '/api/catalog/browse?b=' + b, { cookie: CK }); return (readLines(CAT_LOG).filter(x => x.ev === 'browse').pop() || {}).q || {}; };
+    const bm1 = await bqOf('jp_censored,jp_uncensored,jp_subbed'), bm2 = await bqOf('a,b,c,d,e,f,g'), bm3 = await bqOf('jp_censored,' + encodeURIComponent('../x')), bm4 = await bqOf(',jp_censored');
+    ok(bm1.b === 'jp_censored,jp_uncensored,jp_subbed' && bm2.b === '!bad' && bm3.b === '!bad' && bm4.b === '!bad', '目录浏览:b 可以是逗号分隔的几个分区(≤6,每段都合法)', [bm1.b, bm2.b, bm3.b, bm4.b]);
     await api('GET', '/api/catalog/browse?lp=ssis', { cookie: CK });
     const bq3 = readLines(CAT_LOG).filter(x => x.ev === 'browse').pop();
     await api('GET', '/api/catalog/browse?lp=' + encodeURIComponent('SS%IS'), { cookie: CK });
