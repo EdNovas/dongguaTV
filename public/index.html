@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=16"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=21"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -4944,7 +4944,7 @@
     <!-- Initial Loading Screen (Buffer) -->
     <div id="app-loader" class="app-loader">
         <div class="loader-logo" style="display: flex; align-items: center; justify-content: center;"><img
-                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;"><span data-dg-brand aria-label="MEI.NU"><span class="dg-wm-m" aria-hidden="true">M</span>EI.NU</span>   <!-- [adult] 站名(原:视界 MAX) -->
+                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;"><span data-dg-brand aria-label="MEI.NU"><svg class="dg-wm" viewBox="5 4 300 96" aria-hidden="true" focusable="false"><path d="M22 94 L22 72 C22 65 10 67 10 55 C10 44 22 39 22 29 L22 20 C22 10 28 6 33 13 L50 56 L67 13 C72 6 78 10 78 20 L78 29 C78 39 90 44 90 55 C90 67 78 65 78 72 L78 94" stroke="#e50914" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><g stroke="currentColor" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path transform="translate(106 0)" d="M6 68 H48 C48 51 38 40 26 40 C13 40 4 52 4 67 C4 83 14 94 27 94 C36 94 43 90 47 83"/><path transform="translate(163 0)" d="M4 42 V94 M4 20 h0"/><path transform="translate(200 0)" d="M4 40 V94 M4 64 C4 49 13 40 23 40 C34 40 42 49 42 62 V94"/><path transform="translate(258 0)" d="M4 40 V70 C4 85 13 94 23 94 C34 94 42 85 42 72 M42 40 V94"/></g><path d="M186 94 h0" stroke="#e50914" stroke-width="11.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>   <!-- [adult] 站名(原:视界 MAX) -->
         </div>
         <div class="loader-spinner"></div>
         <div id="loader-status" style="margin-top: 20px; color: #666; font-size: 13px; text-align: center;">正在初始化...
@@ -4959,7 +4959,7 @@
         <div class="password-container">
             <div class="password-logo">
                 <div class="password-logo-text" style="display: flex; align-items: center; justify-content: center;">
-                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;"><span data-dg-brand aria-label="MEI.NU"><span class="dg-wm-m" aria-hidden="true">M</span>EI.NU</span>   <!-- [adult] 站名(原:视界 MAX) -->
+                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;"><span data-dg-brand aria-label="MEI.NU"><svg class="dg-wm" viewBox="5 4 300 96" aria-hidden="true" focusable="false"><path d="M22 94 L22 72 C22 65 10 67 10 55 C10 44 22 39 22 29 L22 20 C22 10 28 6 33 13 L50 56 L67 13 C72 6 78 10 78 20 L78 29 C78 39 90 44 90 55 C90 67 78 65 78 72 L78 94" stroke="#e50914" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"/><g stroke="currentColor" stroke-width="8" fill="none" stroke-linecap="round" stroke-linejoin="round"><path transform="translate(106 0)" d="M6 68 H48 C48 51 38 40 26 40 C13 40 4 52 4 67 C4 83 14 94 27 94 C36 94 43 90 47 83"/><path transform="translate(163 0)" d="M4 42 V94 M4 20 h0"/><path transform="translate(200 0)" d="M4 40 V94 M4 64 C4 49 13 40 23 40 C34 40 42 49 42 62 V94"/><path transform="translate(258 0)" d="M4 40 V70 C4 85 13 94 23 94 C34 94 42 85 42 72 M42 40 V94"/></g><path d="M186 94 h0" stroke="#e50914" stroke-width="11.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>   <!-- [adult] 站名(原:视界 MAX) -->
                 </div>
                 <div class="password-logo-subtitle"><i class="fas fa-shield-alt"></i> <span id="login-subtitle-text">请登录以继续</span></div>
             </div>
@@ -5064,7 +5064,7 @@
 
         <nav class="navbar-custom" v-show="!offHome">
             <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
-                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;"><span :aria-label="(adult && adult.siteName) || 'MEI.NU'"><span v-if="adBrandM" class="dg-wm-m" aria-hidden="true">M</span>{{ adBrandTail }}</span></div>   <!-- [adult] 站名(原:视界 MAX) -->
+                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;"><span :aria-label="(adult && adult.siteName) || 'MEI.NU'" v-html="adBrandHtml"></span></div>   <!-- [adult] 站名(原:视界 MAX) -->
             <button v-if="adultMode && adFeedOn" type="button" class="dg-nav-feed" @click="adOpenFeed()" title="刷短片" aria-label="刷短片"><i class="fas fa-mobile-screen" aria-hidden="true"></i><span>刷短片</span></button>   <!-- [adult] p4 刷短片入口(电视上没有) -->
         </nav>
 
@@ -5110,7 +5110,7 @@
 
         <!-- 2. Search -->
         <div class="search-section" @focusout="adultMode && adSugBlur($event)"
-            :style="{ marginTop: offHome ? (isTVMode ? '20px' : '60px') : (adultMode ? '72px' : '-35px'), position: offHome ? 'relative' : 'sticky' }">   <!-- [adult] 没有轮播:首页搜索框让出导航栏;焦点离开搜索区收起建议 -->
+            :style="{ marginTop: offHome ? (isTVMode ? '20px' : (adultMode ? 'calc(var(--dg-nav-h, 40px) + 26px)' : '60px')) : (adultMode ? 'calc(var(--dg-nav-h, 40px) + 42px)' : '-35px'), position: offHome ? 'relative' : 'sticky' }">   <!-- [adult] 没有轮播:首页搜索框让出导航栏(导航栏高度跟 --dg-nav-h 走);焦点离开搜索区收起建议 -->
             <div class="search-box-wrapper" :class="{ 'compact': !offHome && pastCompactThreshold }">
                 <i class="fas fa-search search-icon" @click="submitSearch(true)"></i>
                 <input type="text" v-model="keyword" @keyup.enter="submitSearch(true)" @input="debouncedSearch"

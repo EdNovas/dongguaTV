@@ -2167,6 +2167,31 @@
         } catch (e) { }
     })();
 
+    // ========== 站名字标 ==========
+    // MEI.NU 的字标是自己画的线条(SVG,不加载任何外部字体 —— Google Fonts 在国内打不开):
+    //   M:两侧竖线中段往外凸(胸部轮廓)、顶上两个角是圆肩;后面「ei.nu」用同一支笔画的圆弧小写(n 的圆拱 = M 的圆肩)。
+    //   M 只和大写字母一样高(不当大图标);M 和点是红的,其余字跟 currentColor(.dg-wm 默认白)。局部坐标:大写高 y 8..94、小写 x 高 y 40..94
+    const wordmark = (function () {
+        const SW = 8;
+        const M = 'M22 94 L22 72 C22 65 10 67 10 55 C10 44 22 39 22 29 L22 20 C22 10 28 6 33 13 L50 56 L67 13 C72 6 78 10 78 20 L78 29 C78 39 90 44 90 55 C90 67 78 65 78 72 L78 94';
+        const TAIL = [   // [x 偏移, 路径]:e i n u
+            [106, 'M6 68 H48 C48 51 38 40 26 40 C13 40 4 52 4 67 C4 83 14 94 27 94 C36 94 43 90 47 83'],
+            [163, 'M4 42 V94 M4 20 h0'],
+            [200, 'M4 40 V94 M4 64 C4 49 13 40 23 40 C34 40 42 49 42 62 V94'],
+            [258, 'M4 40 V70 C4 85 13 94 23 94 C34 94 42 85 42 72 M42 40 V94'],
+        ];
+        const DOT = 186;   // 点和 i、n 都隔开一点(导航栏那么小时不糊成一团)
+        const A = ' fill="none" stroke-linecap="round" stroke-linejoin="round"';
+        const mPath = '<path d="' + M + '" stroke="#e50914" stroke-width="' + SW + '"' + A + '/>';
+        // 整个「Mei.nu」
+        const full = '<svg class="dg-wm" viewBox="5 4 300 96" aria-hidden="true" focusable="false">' + mPath +
+            '<g stroke="currentColor" stroke-width="' + SW + '"' + A + '>' + TAIL.map((t) => '<path transform="translate(' + t[0] + ' 0)" d="' + t[1] + '"/>').join('') + '</g>' +
+            '<path d="M' + DOT + ' 94 h0" stroke="#e50914" stroke-width="' + (SW * 1.4) + '"' + A + '/></svg>';
+        // 只有 M(别的 M 开头站名:M 照画,后半截写字)
+        const mOnly = '<svg class="dg-wm dg-wm-solo" viewBox="5 4 91 96" aria-hidden="true" focusable="false">' + mPath + '</svg>';
+        return { full, mOnly, M, TAIL, DOT, SW };
+    })();
+
     // ========== 站名 ==========
     const brand = (function () {
         const KEY = 'dg_site_name';
@@ -2174,17 +2199,22 @@
         function name() { return clean(lsGet(KEY)) || DEFAULT_NAME; }
         // 图标就是一个「M」:站名以 M 开头时页面上的字只写后半截(图标 + EI.NU = MEI.NU),读屏照读全名;别的站名照写全名
         function tail(n) { const v = clean(n) || DEFAULT_NAME; return /^m./i.test(v) ? v.slice(1) : v; }
+        // 页面上的站名(HTML):MEI.NU → 整个画好的字标;别的 M 开头 → 画的 M + 后半截文字;其余 → 文字(旁边显示 icon.png)
+        function html(n) {
+            const v = clean(n) || DEFAULT_NAME;
+            if (v.toUpperCase() === 'MEI.NU') return wordmark.full;
+            const tl = tail(v);
+            return tl !== v ? wordmark.mOnly + '<span class="dg-wm-t">' + escHtml(tl) + '</span>' : escHtml(v);
+        }
         function apply(n) {
             const v = clean(n) || DEFAULT_NAME;
             lsSet(KEY, v);
             if (typeof root.document === 'undefined') return v;
             try { root.document.title = v; } catch (e) { }
             try {
-                const tl = tail(v);
+                const tl = tail(v), h = html(v);
                 root.document.querySelectorAll('[data-dg-brand]').forEach(el => {
-                    while (el.firstChild) el.removeChild(el.firstChild);
-                    if (tl !== v) { const m = root.document.createElement('span'); m.className = 'dg-wm-m'; m.setAttribute('aria-hidden', 'true'); m.textContent = v.charAt(0).toUpperCase(); el.appendChild(m); }
-                    el.appendChild(root.document.createTextNode(tl));
+                    if (el.innerHTML !== h) el.innerHTML = h;
                     el.setAttribute('aria-label', v);
                 });
                 if (root.document.documentElement && root.document.documentElement.classList) root.document.documentElement.classList.toggle('dg-logo-full', tl === v);
@@ -2227,7 +2257,7 @@
             return '<br>请前往 <a href="' + escHtml(v) + '" target="_blank" rel="noopener noreferrer" style="color:#ff6b6b;text-decoration:underline;">' + escHtml(host) + '</a> 续费';
         }
         function renewText() { const v = buyUrl(); return v ? '\n\n前往续费: ' + v : ''; }
-        return { KEY, name, apply, clean, tail, buyUrl, applyBuy, showBuy, renewHtml, renewText, safeUrl };
+        return { KEY, name, apply, clean, tail, html, buyUrl, applyBuy, showBuy, renewHtml, renewText, safeUrl };
     })();
 
     // ========== fetch 包装 ==========
@@ -2725,13 +2755,29 @@
         '.dg-meta-rel { white-space: nowrap; color: #bbb; }',
         '.browse-filters:empty { display: none; }',
         // ---- p4:刷短片入口 / 播放页相关推荐 / 女优索引与女优页头 / 扩展设置容器 ----
-        '.dg-nav-feed { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 14px; border-radius: 17px; border: 1px solid rgba(255, 255, 255, 0.28); background: rgba(0, 0, 0, 0.35); color: #fff; font-size: 13px; cursor: pointer; white-space: nowrap; }',
-        '.dg-nav-feed:hover, .dg-nav-feed:focus { border-color: #fff; background: rgba(229, 9, 20, 0.3); outline: none; }',
-        '@media (max-width: 480px) { .dg-nav-feed span { display: none; } .dg-nav-feed { width: 36px; padding: 0; justify-content: center; } }',
-        // 站名:图标就是首字母 M,紧挨着后半截字(站名不是 M 开头时 html.dg-logo-full 恢复原来的间距)
+        // 导航栏的字标和「刷短片」按钮:大屏跟着屏宽长一点,也跟设置里的界面大小(--ui-scale)走
+        //   (变量放在根上:导航栏下面的搜索框按它让位,见 index.html .search-section 的 marginTop)
+        'html:root { --dg-nav-h: calc(clamp(40px, 2.3vw, 52px) * var(--ui-scale, 1)); }',
+        '@media (max-width: 480px) { html:root { --dg-nav-h: calc(40px * var(--ui-scale, 1)); } }',
+        '.dg-nav-feed { display: inline-flex; align-items: center; gap: calc(var(--dg-nav-h) * .18); height: var(--dg-nav-h); padding: 0 calc(var(--dg-nav-h) * .46); border-radius: calc(var(--dg-nav-h) / 2); border: 1px solid rgba(255, 255, 255, 0.3); background: rgba(0, 0, 0, 0.4); color: #fff; font-size: calc(var(--dg-nav-h) * .38); font-weight: 500; cursor: pointer; white-space: nowrap; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); transition: background .15s, border-color .15s; }',
+        '.dg-nav-feed i { color: #ff4d55; font-size: 1.1em; }',
+        '.dg-nav-feed:hover, .dg-nav-feed:focus-visible { border-color: #fff; background: rgba(229, 9, 20, 0.35); outline: none; }',
+        '.dg-nav-feed:hover i, .dg-nav-feed:focus-visible i { color: #fff; }',
+        '@media (max-width: 480px) { .dg-nav-feed span { display: none; } .dg-nav-feed { width: var(--dg-nav-h); padding: 0; justify-content: center; font-size: calc(var(--dg-nav-h) * .42); } }',
+        // 往下滚后搜索框缩进导航栏右侧:和导航栏同高、同一条中线,并让出「刷短片」按钮(以前会整个盖住它)
+        'html .search-section { top: 15px; }',
+        'html .search-box-wrapper.compact { height: var(--dg-nav-h, 40px); }',
+        'html .search-box-wrapper.compact .search-input { height: 100%; }',
+        'body:has(.dg-nav-feed) .search-box-wrapper.compact { margin-right: calc(var(--dg-nav-h, 40px) * 2.66 + 14px); }',
+        '@media (max-width: 480px) { body:has(.dg-nav-feed) .search-box-wrapper.compact { margin-right: calc(var(--dg-nav-h, 40px) + 10px); max-width: calc(100% - var(--dg-nav-h, 40px) * 3.81 - 32px); } }',
+        // 站名:画好的字标(M 本身就是标志,旁边不再放 icon.png;站名不是 M 开头时 html.dg-logo-full 把图标放回来)
         'html:not(.dg-logo-full) .brand > img, html:not(.dg-logo-full) .loader-logo > img, html:not(.dg-logo-full) .password-logo-text > img { display: none !important; }',
-        '.dg-wm-m { display: inline-block; margin-right: .07em; padding: .1em .13em .06em; border-radius: .2em; background: #e50914; -webkit-background-clip: border-box; background-clip: border-box; color: #fff; -webkit-text-fill-color: #fff; line-height: .82; letter-spacing: 0; text-shadow: none; vertical-align: baseline; box-shadow: 0 2px 10px rgba(229, 9, 20, .35); }',
-        '.loader-logo [data-dg-brand], .password-logo-text [data-dg-brand] { color: #e50914; font-weight: 800; letter-spacing: 1px; }',
+        '.dg-wm { display: inline-block; height: 1em; width: auto; vertical-align: middle; overflow: visible; color: #fff; }',
+        '.dg-wm-solo { margin-right: .06em; }',
+        '.brand .dg-wm { height: calc(var(--dg-nav-h, 40px) * .9); filter: drop-shadow(0 2px 6px rgba(0, 0, 0, .55)); }',
+        '.loader-logo [data-dg-brand], .password-logo-text [data-dg-brand] { display: inline-flex; align-items: center; color: #e50914; font-weight: 800; letter-spacing: 1px; }',
+        '.loader-logo .dg-wm, .password-logo-text .dg-wm { height: 1.1em; }',
+        '[data-dg-brand], .brand > span { line-height: 1; }',
         '.dg-rails { margin-top: 18px; }',
         '.dg-rail { margin-top: 14px; }',
         '.dg-rail-t { display: flex; align-items: center; gap: 8px; color: #eee; font-size: 16px; font-weight: 600; margin: 0 0 8px; }',
@@ -3784,9 +3830,8 @@
                 if (!b || !b.open) return '';
                 return routeOf(this.adult.view, b.type, b.sel);
             },
-            // 导航栏站名:图标当首字母 M(见 brand.tail)
-            adBrandTail() { return brand.tail((this.adult && this.adult.siteName) || DEFAULT_NAME); },
-            adBrandM() { const n = (this.adult && this.adult.siteName) || DEFAULT_NAME; return brand.tail(n) !== n; },
+            // 导航栏站名:画好的字标(见 brand.html;站名经 clean + 转义,只有自己画的 SVG 是原样 HTML)
+            adBrandHtml() { return brand.html((this.adult && this.adult.siteName) || DEFAULT_NAME); },
             adBrowseTitle() {
                 void this.adult.labv;
                 const b = this.browse, s = (b && b.sel) || {};
@@ -4840,7 +4885,7 @@
         browseApiUrl, filterCount, nextTagState, normFacets, sortOpts, chipRow, activePills, routeOf, parseRoute, canonHash, isOurHash,
         cloudOf, normTagInfo, normActress, normActressList, normStudios, relDate, featurable, isBlockedTag, guessCols,
         components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses },
-        ageGate, brand, auth, fetchWork, mixin, boot,
+        ageGate, brand, wordmark, auth, fetchWork, mixin, boot,
         // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
         hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, previewBusy, isTV,
         openWork: openWorkExt, incognito, privLocked, netBlock, netNow, cellOk, pvOn, CELL_KEY, PV_KEY,

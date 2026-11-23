@@ -170,6 +170,11 @@ console.log('① adult.js 纯函数');
     ok(srvPaths.length >= 5 && srvPaths.every(p => A.isContentPath(p)), '服务器 requireAuth 的每个路径前端都认作内容接口', srvPaths);
     ok(A.sameOriginPath('/api/x?a=1', 'https://s.test/') === '/api/x' && A.sameOriginPath('https://other.test/api/x', 'https://s.test/') === null, 'sameOriginPath');
     ok(A.brand.clean('<b>站</b>\u0001') === 'b站/b' && A.brand.name() === 'MEI.NU', '站名清洗 / 默认 MEI.NU');
+    // 站名字标:MEI.NU(不分大小写)= 画好的整段 SVG;别的 M 开头 = 画的 M + 转义后的后半截;其余 = 转义后的全名
+    const wmHtml = A.brand.html('MEI.NU');
+    ok(wmHtml === A.wordmark.full && A.brand.html('mei.nu') === wmHtml && /^<svg class="dg-wm" viewBox="[\d. ]+" aria-hidden="true" focusable="false">/.test(wmHtml) && !/font|<text|https?:/i.test(wmHtml.replace(/xmlns="[^"]*"/, '')),
+        '字标 = 自己画的 SVG(没有文字 / 字体 / 外链)');
+    ok(A.brand.html('Max&"Co') === A.wordmark.mOnly + '<span class="dg-wm-t">ax&amp;&quot;Co</span>' && A.brand.html('视界') === '视界' && A.brand.html('a&b') === 'a&amp;b', '别的站名:M 开头配画的 M,文字一律转义');
 }
 
 console.log('② fetch 包装(401 补核验 / 年龄门 / 令牌头)');
@@ -1549,6 +1554,8 @@ console.log('⑤ 页面接线 / sw.js');
     ok(rowClicks === 2, '首页行(横排 + 展开网格)的目录卡片点开走 openWork', rowClicks);
     ok((HTML.match(/class="dg-ad-badge"/g) || []).length === 3, '首页行两处 + 浏览页一处都有 中字/无码/竖屏 角标');
     ok(!/<span[^>]*>MAX<\/span>/.test(body.slice(0, body.indexOf('<div id="app"'))) && (body.match(/data-dg-brand/g) || []).length >= 2, 'loader / 登录框的「视界 MAX」换成站名');
+    ok(body.split('<span data-dg-brand aria-label="MEI.NU">' + A.brand.html('MEI.NU') + '</span>').length === 3, 'loader / 登录框的静态字标和 brand.html() 一字不差(JS 起来前后不跳)');
+    ok(HTML.includes(`<span :aria-label="(adult && adult.siteName) || 'MEI.NU'" v-html="adBrandHtml"></span>`) && !/dg-wm-m|adBrandTail/.test(HTML), '导航栏站名走 adBrandHtml(画好的字标)');
     // phase 2 模板接线
     ok((HTML.match(/<template v-if="item\._wk"><span v-if="item\._n >= 2" class="dg-ov-n">\{\{ item\._n \}\}线<\/span><span v-if="item\._durText" class="dg-ov-dur">\{\{ item\._durText \}\}<\/span><span v-if="item\._code" class="dg-ov-code">\{\{ item\._code \}\}<\/span><\/template>/g) || []).length === 3,
         '首页行两处 + 浏览页:海报上叠 N线(≥2)/ 时长 / 番号');
