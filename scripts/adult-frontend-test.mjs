@@ -444,6 +444,21 @@ function makeApp(over) {
     ok(eq(app.homeBlocks.map(b => b.id), ['history', 'catnav', 'row:ad_new', 'row:ad_random']), '上移后首页跟着换顺序', app.homeBlocks.map(b => b.id));
     app.adRowsReset();
     ok(eq(app.homeBlocks.map(b => b.id), ['history', 'catnav', 'row:ad_random', 'row:ad_new']) && app.adRowsIsDefault, '恢复默认');
+    // 随机发现「换一批」:浏览接口随机序的别的页(page ≥ 2、nr=1),这行出过的不再出,_adHomeAll 跟着换(封面判定重筛时不改回去)
+    const shufCalls = [];
+    net.handler = (u) => {
+        const m = /^\/api\/catalog\/browse\?sort=rand&page=(\d+)&nr=1$/.exec(u);
+        if (!m) return null;
+        shufCalls.push(+m[1]);
+        return { body: { total_pages: 300, results: [{ wk: 't:yy', name: 'y', pic: 'https://p/y.jpg' }].concat(Array.from({ length: 30 }, (_, i) => ({ wk: 't:s' + m[1] + '-' + i, name: 's' + i, pic: 'https://p/s' + i + '.jpg' }))) } };
+    };
+    await app.adRowShuffle('ad_random');
+    const sh = app.rowLists.ad_random;
+    ok(shufCalls.length === 1 && shufCalls[0] >= 2 && sh.length === 24 && !sh.some(x => x._wk === 't:yy') && app._adHomeAll.lists.ad_random === sh && app.adult.shuf === false,
+        '换一批:随机翻到第 2 页以后、24 部、原来那行的不再出、原始片单跟着换', [shufCalls, sh.length]);
+    await app.adRowShuffle('ad_random');
+    ok(shufCalls.length === 2 && shufCalls[1] !== shufCalls[0] && !app.rowLists.ad_random.some(x => sh.includes(x)), '再换一批:换了一页、和上一批不重复', shufCalls);
+    ok(/v-if="adultMode && key === 'ad_random'"[^>]*:disabled="adult\.shuf"[\s\S]{0,80}@click="adRowShuffle\(key\)"/.test(HTML), '随机发现行头有「换一批」按钮');
     app.adult.catalog = false;
     ok(!app.homeBlocks.some(b => b.id === 'catnav'), '没有目录:不出分类栏');
     const view = app.homeLayoutView.map(s => s.k);

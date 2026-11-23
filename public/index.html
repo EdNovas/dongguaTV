@@ -85,7 +85,7 @@
     -->
     <!-- [adult] 成人站前端(window.DgAdult):年龄确认门 / 站名 / 内容接口 401 补核验 / 目录首页与分类 / Vue mixin。
          必须同步加载、先于下面的 Vue 主脚本;改了要升 ?v= 和 sw.js 版本 -->
-    <script data-cfasync="false" src="adult/adult.js?v=22"></script>
+    <script data-cfasync="false" src="adult/adult.js?v=23"></script>
 
     <!-- PWA Setup -->
     <link rel="manifest" href="manifest.json">
@@ -5454,6 +5454,9 @@
                         <i class="fas fa-spinner fa-spin"></i> 加载中...
                     </span>
                     <!-- 🗂️ 进分类浏览页看这一类的全部(可再按地区/年份/评分筛) -->
+                    <!-- [adult] 随机发现:换一批(服务器那行按天固定,刷新页面不变) -->
+                    <button v-if="adultMode && key === 'ad_random'" type="button" class="expand-toggle row-all dg-row-shuf" :disabled="adult.shuf"
+                        @click="adRowShuffle(key)" aria-label="随机发现换一批" title="换一批"><i class="fas fa-rotate" :class="{ 'fa-spin': adult.shuf }" aria-hidden="true"></i> 换一批</button>
                     <!-- [adult] 目录行没有 more(热门)就不给「全部」 -->
                     <button v-if="key !== 'randomRow'" v-show="!(config.adult && !config.more)" type="button" class="expand-toggle row-all" @click="rowBrowse(key)"
                         :aria-label="'查看全部：' + config.title">全部 <i class="fas fa-chevron-right" aria-hidden="true"></i></button>

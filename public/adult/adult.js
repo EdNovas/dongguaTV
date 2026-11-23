@@ -2853,6 +2853,9 @@
         '.dg-hr-add select:disabled { opacity: 0.5; cursor: default; }',
         '.dg-hr-add select option { background: #1b1b1b; color: #eee; }',
         '.dg-hr-cnt { flex: none; font-size: 12px; color: #999; }',
+        '.dg-row-shuf { margin-right: 8px; }',
+        '.dg-row-shuf i { margin-right: 3px; }',
+        '.dg-row-shuf:disabled { opacity: .6; cursor: default; }',
         '@media (pointer: coarse) { .home-layout-mv { width: 38px; height: 38px; } .dg-hr-add select { height: 44px; } }',
         // 往下滚后搜索框缩进导航栏右侧:和导航栏同高、同一条中线,并让出「刷短片」按钮(以前会整个盖住它)
         'html .search-section { top: 15px; }',
@@ -3868,6 +3871,8 @@
                     relWk: '', pv: pvOn(), pvReduced: reducedMotion(), cell: cellOk(),
                     // 首页分类行的顺序 / 开关 / 自己加的(homeRows);rowsMsg = 读屏播报
                     rows: homeRows.initial(lsGet(homeRows.KEY)), rowsMsg: '',
+                    shuf: false,                          // 随机发现「换一批」正在拉
+
                 },
             };
         },
@@ -4944,6 +4949,49 @@
                     if (items.length >= homeRows.CUSTOM_MIN) { c[k] = homeRows.config(k); l[k] = items; } else { delete c[k]; delete l[k]; }
                     this.rowConfigs = c;
                     this.rowLists = l;
+                }
+            },
+            // 随机发现「换一批」:服务器那一行按北京时间日种子排(一天不变,刷新页面也一样)。这里在浏览接口的随机序里随机翻到别的一页
+            //   (每页 48 部,几百页),拿 24 部这次打开页面以来这行没出过的(nr=1 不要审查级、封面出得来);不够再翻一页。
+            //   _adHomeAll 里那一行也换掉 —— 否则下一批封面判定生效时 _adCvApply 会按原始片单把它改回去
+            async adRowShuffle(key) {
+                if (!this.adultMode || !this.adult || this.adult.shuf || !this.rowConfigs || !this.rowConfigs[key]) return;
+                const st = this._adShuf || (this._adShuf = { tp: 0, used: new Set([1]), seen: new Set() });
+                (this.rowLists[key] || []).forEach(it => { if (it && it._wk) st.seen.add(it._wk); });
+                this.adult.shuf = true;
+                try {
+                    const items = [];
+                    for (let tries = 0; tries < 4 && items.length < 24; tries++) {
+                        const hi = st.tp > 1 ? Math.min(st.tp, 500) : 40;
+                        let pg = 0;
+                        for (let n = 0; n < 8 && (!pg || st.used.has(pg)); n++) pg = 2 + Math.floor(Math.random() * Math.max(1, hi - 1));
+                        if (st.used.has(pg)) st.used = new Set([1]);   // 翻遍了:从头再来
+                        st.used.add(pg);
+                        const d = await fetchJson(browseApiUrl({ sort: 'rand' }, { page: pg, nr: true }), 10000);
+                        if (!this.adult) return;
+                        const tp = Number(d && d.total_pages) || 0;
+                        if (tp > 0) st.tp = tp;
+                        for (const c of (d && Array.isArray(d.results) ? d.results : [])) {
+                            const it = cardToItem(c);
+                            if (!it || st.seen.has(it._wk) || !covers.visible(it)) continue;
+                            st.seen.add(it._wk);
+                            items.push(Object.freeze(it));
+                            if (items.length >= 24) break;
+                        }
+                        if (st.seen.size > 3000) st.seen.clear();
+                    }
+                    if (items.length < 8 || !this.rowConfigs[key]) { if (this.showMiniToast) this.showMiniToast('暂时换不了,稍后再试'); return; }
+                    if (this._adHomeAll && this._adHomeAll.lists && this._adHomeAll.lists[key]) this._adHomeAll.lists[key] = items;
+                    this.rowLists = Object.assign({}, this.rowLists, { [key]: items });
+                    try { if (this.viewPages && this.viewPages[key]) this.viewPages[key] = 1; } catch (e) { }
+                    this.$nextTick(() => {
+                        try {
+                            const row = root.document.querySelector('[data-row-key="' + key + '"] .hot-row');
+                            if (row) row.scrollLeft = 0;
+                        } catch (e) { }
+                    });
+                } finally {
+                    if (this.adult) this.adult.shuf = false;
                 }
             },
             // ---------- [adult] p4 猜你喜欢(纯本机:最近看过的目录作品的 featured 标签 → /api/catalog/browse?t=..&sort=hot;无痕不出)----------
