@@ -299,12 +299,18 @@
         add('ai短剧 短剧', 'ai_drama');
         add('解说 av解说', 'commentary');
         add('sm 重口 调教', 'fetish');
-        add('同性 男同 ts 人妖 跨性别 同性ts', 'lgbt');
+        add('同性 同性ts', 'lgbt');
+        // 同性·TS 分区里 ~86% 是女同:搜「人妖 / 男同 / 女同」要的是那一种 → 全部 + 那个标签(跨分区:日本的 TS 片不在同性分区里)
+        const addTag = (words, t) => words.split(' ').forEach(w => { ALIAS[w] = { t }; });
+        addTag('人妖 ts 伪娘 ts伪娘 ts人妖 跨性别 变性 变性人 药娘 男娘 ladyboy shemale', 'trans');
+        addTag('男同 基佬 gay', 'gay');
+        addTag('女同 百合 拉拉 蕾丝边 les lesbian', 'lesbian');
     })();
     function fromSearch(kw) {
         const k = String(kw || '').replace(/\s+/g, '').toLowerCase();
         if (!k) return null;
         const a = ALIAS[k];
+        if (a && a.t) return { type: 'all', sel: { t: [a.t] } };
         return a ? { type: typeOfBucket(a.b), sel: { b: a.b } } : null;
     }
     // 首页行的「全部」:行上带的 more({b} / {sort})→ 浏览页预设

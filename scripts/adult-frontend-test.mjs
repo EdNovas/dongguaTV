@@ -81,6 +81,8 @@ console.log('① adult.js 纯函数');
     ok(dir.hot.length === 17 && dir.hot.every(h => h.l && C.typeOf(h.type) && h.sel.b && /gradient/.test(h.bg) && /^fa-/.test(h.icon)) && dir.types.every(t => t.rows.every(r => r.items.every(i => i.sel && i.sel.b))), '分类大全:17 个桶色块 + 各大类卡片');
     // 搜索框分类词
     ok(eq(C.fromSearch(' 无码 '), { type: 'jp', sel: { b: 'jp_uncensored' } }) && eq(C.fromSearch('探花'), { type: 'cn', sel: { b: 'cn_hookup' } }) && eq(C.fromSearch('SM'), { type: 'all', sel: { b: 'fetish' } }), '分类词 → 浏览页(无码 / 探花 / SM → 全部 · SM·重口)');
+    ok(eq(C.fromSearch('人妖'), { type: 'all', sel: { t: ['trans'] } }) && eq(C.fromSearch('TS'), { type: 'all', sel: { t: ['trans'] } }) && eq(C.fromSearch('男同'), { type: 'all', sel: { t: ['gay'] } })
+        && eq(C.fromSearch('女同'), { type: 'all', sel: { t: ['lesbian'] } }) && eq(C.fromSearch('同性'), { type: 'lgbt', sel: { b: 'lgbt' } }), '人妖 / 男同 / 女同 → 全部 + 那个标签(同性分区大半是女同);「同性」才进整个分区');
     ok(C.fromSearch('泰剧') === null && C.fromSearch('人妻') === null && C.fromSearch('SSIS-001') === null && C.fromSearch('') === null, '不是分类词(主站的泰剧、标签词人妻、番号)照常搜索');
     // 首页行「全部」
     ok(eq(C.rowPreset('ad_jp_subbed', undefined, { more: { b: 'jp_subbed' } }), { type: 'jp', sel: { b: 'jp_subbed', sort: 'new' } }) && eq(C.rowPreset('ad_new', undefined, { more: { sort: 'new' } }), { type: 'all', sel: { sort: 'new' } })
