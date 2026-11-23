@@ -55,6 +55,36 @@
         const d = new Date(t), p = (x) => (x < 10 ? '0' : '') + x;
         return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
     }
+    // 概览「拦截原因」每一项的白话说明(原因码来自 lib/site-catalog/writer.js 的 rej() 和 lib/adult/policy.js 的 reason)
+    const REASON_NOTE = {
+        'category': '资源站自己的分类名就在硬过滤名单上(偷拍/偷窥、萝莉/学生、迷奸/下药、换脸/明星、黑料/流出、人兽…),整个分类不收',
+        'mainstream': '普通影视(电视剧 / 电影 / 动漫等非成人内容)或非视频(小说 / 图片),不收',
+        'noclass': '读不到这个站的分类表(站点暂时打不开),这批条目先跳过,下次再收',
+        'bucket': '分类不在 17 个导航分区里,不收',
+        'invalid': '条目数据不完整(没有 ID 或片名)',
+        'error': '处理时出错(看服务器日志)',
+        'policy-error': '过滤规则执行出错,按拦截处理',
+        'policy': '过滤规则拦截',
+        'avdb-block': '有番号的日本片:AVDB 的标签里有硬过滤项(学生 / JK / 制服、偷拍、迷药 / 睡眠 / 昏迷、流出…),片名看着正常也拦',
+        'avdb-review': '有番号的日本片:AVDB 标为审查级(擦边题材),不收',
+        'review': '擦边片名(学生 / 少女 / 处女 / 18岁…,或 操晕 / 失神 / 强奸乱伦 类):只有能核实番号的正规片商作品才收',
+        'review:hide': '靠近未成年的词(学生 / 少女 / 处女 / 18岁 / cos…):一律不收,有番号也不行',
+        'review:code': '擦边题材(操晕 / 失神、强奸乱伦分类…):只有能核实番号的正规片商作品才收',
+        'item:minor': '硬过滤:片名 / 简介涉及未成年',
+        'item:voyeur': '硬过滤:偷拍 / 偷窥 / 监控 / 针孔',
+        'item:drugging': '硬过滤:迷奸 / 下药 / 迷药 / 昏迷',
+        'item:deepfake': '硬过滤:换脸 / AI 合成 / 明星脸',
+        'item:bestiality': '硬过滤:人兽',
+        'item:leak': '硬过滤:真人私密泄露(黑料 / 网曝 / 流出 / 前任…)',
+        'item:filter': '探花 / 反差 / 私房一类,又带 前女友 / 真名 / 偷录 / 不知情 等非自愿迹象',
+        'item:strict': '严格站:AI 改写的片名(占位番号)或仿写的「泄露 / 曝光」简介',
+        'item:admin': '命中后台的「附加屏蔽词」',
+    };
+    function reasonNote(code) {
+        const k = String(code == null ? '' : code);
+        if (Object.prototype.hasOwnProperty.call(REASON_NOTE, k)) return REASON_NOTE[k];
+        return k.indexOf('item:') === 0 ? '硬过滤' : '';
+    }
     // 概览的「片库历史回填」卡片:服务器 history{enabled,running,sites,started,done,pages,pagesTotal,etaMs,startedAt,finishedAt} → 显示用的几段字;没有 / 关了 → null 或一句说明
     function fmtDur(ms) {
         const m = Math.round((num(ms) || 0) / 60000);
@@ -302,8 +332,9 @@
                 ]));
                 const rej = isObj(d.rejected) ? Object.keys(d.rejected).map((k) => [k, num(d.rejected[k]) || 0]).sort((a, b) => b[1] - a[1]) : [];
                 box.appendChild(h('div', { class: 'adm-card' }, [
-                    h('h2', null, '拦截原因'),
-                    rej.length ? table([{ l: '原因', f: (x) => x[0], mono: true }, { l: '条数', f: (x) => fmtNum(x[1]), num: true }], rej.slice(0, 200)) : h('p', null, '没有数据'),
+                    h('h2', null, '拦截原因(本次启动以来)'),
+                    h('p', { class: 'adm-note' }, '按源站条目计(同一部片在几个站上算几条)。数字只存在内存里,服务器重启后从 0 开始;片库里已经有的作品不受影响。内置的硬过滤关不掉,只能在「附加屏蔽词」里再加严。'),
+                    rej.length ? table([{ l: '原因', f: (x) => x[0], mono: true }, { l: '说明', f: (x) => reasonNote(x[0]) || '—' }, { l: '条数', f: (x) => fmtNum(x[1]), num: true }], rej.slice(0, 200)) : h('p', null, '没有数据'),
                 ]));
                 box.appendChild(h('div', { class: 'adm-card' }, [h('h2', null, '规则重扫'), kv(d.rescan)]));
                 if (isObj(d.purge)) box.appendChild(h('div', { class: 'adm-card' }, [h('h2', null, '附加屏蔽词:删除命中线路'), kv(d.purge)]));
@@ -548,5 +579,5 @@
         return { showAuth, showApp, select, load, getToken, setToken };
     }
 
-    return { boot, parseWords, errText, createClient, asArray, toMs, fmtAgo, fmtTime, TOKEN_KEY, BASE, TABS, MAX_WORDS };
+    return { boot, parseWords, errText, createClient, asArray, toMs, fmtAgo, fmtTime, reasonNote, historyView, TOKEN_KEY, BASE, TABS, MAX_WORDS };
 });
