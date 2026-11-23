@@ -318,7 +318,7 @@ console.log('①b 后台镜像页「回到主地址」');
             [n0, posts.map((x) => [x.u, x.body, x.tok]), b1.map((b) => b.disabled), mount.textContent.slice(0, 300)]);
     }
     const html = fs.readFileSync(path.join(ROOT, 'public/adult/admin.html'), 'utf8');
-    ok(/<script src="\/adult\/admin\.js\?v=4" defer><\/script>/.test(html), 'admin.html 引用 admin.js?v=4(改了 admin.js 要换版本串)');
+    ok(/<script src="\/adult\/admin\.js\?v=5" defer><\/script>/.test(html), 'admin.html 引用 admin.js?v=5(改了 admin.js 要换版本串)');
 }
 
 // ---------------------------------------------------------------- 假 maccms 站

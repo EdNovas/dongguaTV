@@ -55,6 +55,25 @@
         const d = new Date(t), p = (x) => (x < 10 ? '0' : '') + x;
         return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
     }
+    // 概览的「片库历史回填」卡片:服务器 history{enabled,running,sites,started,done,pages,pagesTotal,etaMs,startedAt,finishedAt} → 显示用的几段字;没有 / 关了 → null 或一句说明
+    function fmtDur(ms) {
+        const m = Math.round((num(ms) || 0) / 60000);
+        if (m < 1) return '不到 1 分钟';
+        if (m < 60) return m + ' 分钟';
+        const hh = Math.floor(m / 60), mm = m % 60;
+        return hh < 48 ? hh + ' 小时' + (mm ? ' ' + mm + ' 分' : '') : Math.round(hh / 24) + ' 天';
+    }
+    function historyView(x) {
+        if (!x || typeof x !== 'object') return null;
+        const sites = num(x.sites) || 0, done = num(x.done) || 0, pages = num(x.pages) || 0, total = num(x.pagesTotal) || 0;
+        if (x.enabled === false) return { pct: '关', sites: done + ' / ' + sites, eta: '—', done: false, note: '全量回填关着(CATALOG_BACKFILL=0):片库只有爬虫抓到的最新作品' };
+        const all = sites > 0 && done >= sites;
+        const pct = all ? '100%' : total > 0 ? Math.min(99.9, Math.floor(pages * 1000 / total) / 10) + '%' : '—';
+        const note = all ? '全部站点的历史作品都已收录;之后只按新上架增量更新'
+            : (num(x.started) || 0) < sites ? '还有 ' + (sites - (num(x.started) || 0)) + ' 个站在等第一轮增量爬完才开始回填;预计时间按已开始的站估'
+            : '每个站按 ' + fmtNum(pages) + ' / ' + fmtNum(total) + ' 页的进度慢慢翻(同一域名几秒一页);预计时间按最慢那个站估';
+        return { pct, sites: done + ' / ' + sites, eta: all ? fmtTime(x.finishedAt) : (num(x.etaMs) ? fmtDur(x.etaMs) : '—'), done: all, note };
+    }
     const wordLen = (w) => Array.from(String(w)).length;
     // 附加屏蔽词:一行一个(也认中英文逗号);去空白、去重(不分大小写),逐条查 2..40 字、≤500 个
     function parseWords(text) {
@@ -115,6 +134,8 @@
         const getToken = () => { try { return (ss && ss.getItem(TOKEN_KEY)) || memToken; } catch (e) { return memToken; } };
         const setToken = (t) => { memToken = t || ''; try { if (!ss) return; if (t) ss.setItem(TOKEN_KEY, t); else ss.removeItem(TOKEN_KEY); } catch (e) { } };
         const call = createClient(fetchFn, getToken);
+        // 嵌在站长后台 /admin 的「片库管理」页签里(?embed=1):不出自己的标题和「退出」(外层后台管登录 / 退出,令牌同一个 sessionStorage 键)
+        try { if (/[?&]embed=1(&|$)/.test(String((W.location && W.location.search) || '')) && doc.body && doc.body.classList) doc.body.classList.add('adm-embed'); } catch (e) { }
 
         function h(tag, attrs, kids) {
             const el = doc.createElement(tag);
@@ -272,6 +293,12 @@
                         stat(fmtNum(xb.n), '附加屏蔽词'), stat(fmtNum(d.mirrors), '在用镜像'),
                     ]),
                     xb.rev ? h('p', { class: 'adm-note' }, '附加屏蔽词版本 ' + str(xb.rev, 40)) : null,
+                ]));
+                const hb = historyView(d.history);
+                if (hb) box.appendChild(h('div', { class: 'adm-card' }, [
+                    h('h2', null, '片库历史回填'),
+                    h('div', { class: 'adm-stats' }, [stat(hb.pct, '已翻页数'), stat(hb.sites, '站 翻完 / 启用'), stat(hb.eta, hb.done ? '完成时间' : '预计还要')]),
+                    h('p', { class: 'adm-note' }, hb.note),
                 ]));
                 const rej = isObj(d.rejected) ? Object.keys(d.rejected).map((k) => [k, num(d.rejected[k]) || 0]).sort((a, b) => b[1] - a[1]) : [];
                 box.appendChild(h('div', { class: 'adm-card' }, [

@@ -62,6 +62,9 @@
         .adm-note { color: var(--muted); font-size: 12px; }
         .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
         @media (max-width: 560px) { .adm { padding: 14px 12px 40px; } .adm-tab { padding: 8px 10px; } }
+        /* 嵌在站长后台 /admin 里(?embed=1):外层有标题和退出 */
+        .adm-embed .adm-head, .adm-embed .adm-out { display: none !important; }
+        .adm-embed .adm { padding-top: 4px; }
     </style>
 </head>
 <body>
@@ -72,6 +75,6 @@
         </header>
         <noscript><div class="adm-card"><p>这个页面需要开启 JavaScript。</p></div></noscript>
     </main>
-    <script src="/adult/admin.js?v=4" defer></script>
+    <script src="/adult/admin.js?v=5" defer></script>
 </body>
 </html>

@@ -121,6 +121,7 @@
         .tabs button { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--text-2); cursor: pointer; font-size: 14px; white-space: nowrap; }
         .tabs button:hover { background: var(--panel-2); color: var(--text); }
         .tabs button.on { background: var(--accent-soft); border-color: rgba(229, 9, 20, .5); color: #fff; font-weight: 600; }
+        .adult-frame { display: block; width: 100%; height: calc(100vh - 130px); min-height: 560px; border: 0; border-radius: 12px; background: #141416; }
         .tab-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: #fff; font-size: 11px; line-height: 18px; text-align: center; font-weight: 700; }
         .top-acts { display: flex; gap: 6px; }
         @media (max-width: 820px) {
@@ -477,7 +478,7 @@
                     <div class="top-in">
                         <div class="brand"><span aria-hidden="true">🛡️</span>站长后台<span v-if="mock" class="badge b-mock">MOCK</span></div>
                         <nav class="tabs" aria-label="后台分区">
-                            <button v-for="t in K.TABS" :key="t.id" type="button" :class="{ on: tab === t.id }" :aria-current="tab === t.id ? 'page' : null" @click="setTab(t.id)">
+                            <button v-for="t in tabs" :key="t.id" type="button" :class="{ on: tab === t.id }" :aria-current="tab === t.id ? 'page' : null" @click="setTab(t.id)">
                                 <span aria-hidden="true">{{ t.icon }}</span>{{ t.label }}<span v-if="t.id === 'requests' && pendingCount" class="tab-count" :aria-label="pendingCount + ' 条待处理'">{{ pendingCount > 99 ? '99+' : pendingCount }}</span>
                             </button>
                         </nav>
@@ -825,6 +826,11 @@
                             <pager :page="sh.data.page || sh.page" :pages="sharePages" @go="goSharesPage"></pager>
                         </template>
                     </section>
+
+                    <!-- ======================= 🗂️ 片库管理(只有成人版:/admin/adult 嵌进来,同一个令牌) ======================= -->
+                    <section v-if="adultOn" v-show="tab === 'adult'" class="sec" aria-label="片库管理">
+                        <iframe v-if="adultSrc" ref="adultFrame" :src="adultSrc" class="adult-frame" title="片库管理:过滤规则 · 隐藏作品 · 资源站 · 镜像"></iframe>
+                    </section>
                 </main>
             </template>
 
@@ -988,6 +994,7 @@
 
             // ========== ⚙️ 常量 ==========
             const TK = 'donggua_admin_token';
+            const ADULT_TK = 'dgx_admin_token';   // public/adult/admin.js 的 TOKEN_KEY(片库管理页签里的成人后台读它)
             const API_TIMEOUT = 15000;           // 任何请求 15 秒必定结束(成功/失败)，加载态绝不永远转圈
             const PAGE_SIZE = 30;
             const DAY = 86400000;
@@ -1335,6 +1342,7 @@
                         tokenInput: ssGet(TK),
                         authed: false, loginBusy: false, loginErr: '',
                         tab: 'overview',
+                        adultOn: false, adultSrc: '',   // 成人版:多一个「片库管理」页签(/api/config 的 adult)
                         narrow: false,
                         now: Date.now(),
                         ov: Object.assign(st0(), { stale: false }),
@@ -1348,6 +1356,8 @@
                     };
                 },
                 computed: {
+                    // 页签:成人版多一个「片库管理」(成人站的过滤规则 / 隐藏作品 / 资源站 / 镜像,/admin/adult 嵌进来)
+                    tabs() { return this.adultOn ? K.TABS.concat([{ id: 'adult', label: '片库管理', icon: '🗂️' }]) : K.TABS; },
                     curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh }; return !!(m[this.tab] && m[this.tab].loading); },
                     pendingCount() {
                         const c = this.reqCounts;
@@ -1499,6 +1509,12 @@
                     window.addEventListener('hashchange', () => { if (this.authed) this.applyTab(this.tabFromHash()); });
                     document.addEventListener('keydown', this.onGlobalKey);
                     setInterval(() => { this.now = Date.now(); }, 30000);   // 相对时间(N分钟前)定时刷新
+                    // 成人版?(/api/config 的 adult)→ 加「片库管理」页签;地址是 #adult 而且已经登录 → 切过去
+                    fetch('/api/config', { cache: 'no-store', credentials: 'same-origin' }).then(r => (r.ok ? r.json() : null)).then(c => {
+                        if (!c || c.adult !== true) return;
+                        this.adultOn = true;
+                        if (this.authed && location.hash === '#adult') this.applyTab('adult');
+                    }).catch(() => { });
                     if (this.tokenInput) this.login();                    // sessionStorage 有令牌 → 自动登录
                     else this.$nextTick(() => this.$refs.tokenInput && this.$refs.tokenInput.focus());
                 },
@@ -1594,13 +1610,13 @@
                         if (this.cf.open) this.cfDone(false);
                     },
                     logout() {
-                        ssSet(TK, '');
+                        ssSet(TK, ''); ssSet(ADULT_TK, ''); this.adultSrc = '';
                         adminToken = ''; this.tokenInput = ''; this.loginErr = '';
                         this.authed = false; this.resetAll();
                     },
                     kickOut(msg) {
                         if (!this.authed) return;
-                        ssSet(TK, '');
+                        ssSet(TK, ''); ssSet(ADULT_TK, ''); this.adultSrc = '';
                         adminToken = ''; this.tokenInput = '';
                         this.authed = false; this.resetAll();
                         this.loginErr = msg;
@@ -1608,7 +1624,7 @@
                     },
 
                     // ---------- 分区 / 路由(#overview 等) ----------
-                    tabFromHash() { const h = location.hash.replace(/^#/, ''); return K.TABS.some(t => t.id === h) ? h : 'overview'; },
+                    tabFromHash() { const h = location.hash.replace(/^#/, ''); return this.tabs.some(t => t.id === h) ? h : 'overview'; },
                     setTab(id) {
                         if (location.hash !== '#' + id) location.hash = id;   // → hashchange → applyTab
                         else this.applyTab(id);
@@ -1619,8 +1635,10 @@
                         else if (id === 'users' && !this.us.data && !this.us.loading) this.loadUsers();
                         else if (id === 'requests' && !this.rq.data && !this.rq.loading) this.loadRequests();
                         else if (id === 'shares' && !this.sh.data && !this.sh.loading) this.loadShares();
+                        else if (id === 'adult' && this.adultOn && !this.adultSrc) { ssSet(ADULT_TK, adminToken); this.adultSrc = '/admin/adult?embed=1'; }   // 片库管理页认同一个令牌(同源 sessionStorage)
                     },
                     refresh() {
+                        if (this.tab === 'adult') { const fr = this.$refs.adultFrame; try { if (fr && fr.contentWindow) fr.contentWindow.location.reload(); } catch (e) { } return; }
                         if (this.tab === 'overview') this.loadOverview();
                         else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares })[this.tab].call(this); }
                     },
