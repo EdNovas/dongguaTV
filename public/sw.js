@@ -68,12 +68,13 @@
 // [adult] -adult23:adult.js?v=24 + preview.js?v=5(封面悬停预览不再被系统「减少动态效果」默认关掉,设置里关了才关)。
 // [adult] -adult24:feed.js?v=7(刷短片竖屏:没量过方向的也给,放的时候量到横屏就跳过并上报)。
 // [adult] -adult25:adult.js?v=25(手机上大类 / 筛选项 / 标签一排不再只能横滑:换行、最多两行、「展开」;「全部」「全部标签」排第一)。
+// [adult] -adult26:preview.js?v=6(手机长按预览之后滑动:停稳换到屏幕中间那张接着放;加载中 / 预览中卡片放大 + 红框 + 加载条)。
 //      就对那个图床和 ≤2 个本会话加载成功过的别的图床各发一个 HEAD(no-cors、no-store、20 秒)直接问:图床通 = 文件坏,重试一次再藏;图床不通、别的通 = 藏并记一次失败;
 //      图床没回、别的通 = 30 秒后再问一轮;别的也都不通 = 网络问题,不藏(弱网慢的永远不藏);几个图床同时不通、通的不比它多 = 本机 DNS / 代理的问题,不藏。
 //      页面冻过 / 断网 / 切前后台时在路上的探测作废重来;视口上面的改动先压着不滚动;浏览与搜索网格底下「已隐藏 N 部 · 显示」,底栏「共 N 部」不算藏掉的)。
 //      SW:跨域的 HEAD / no-store 请求一律直通(探测必须真的走网络,不能被策略1 的缓存 / 占位图冒充)。
 const CACHE_VERSION = 'v43';
-const ADULT_REV = '-adult25';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult26';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -101,7 +102,7 @@ const STATIC_URLS = [
     './adult/adult.js?v=25',   // [adult] v43-adult25:与 index.html 引用同一个 ?v=
     './adult/player-x.js?v=4',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
     './adult/privacy.js?v=3',
-    './adult/preview.js?v=5',
+    './adult/preview.js?v=6',
     './adult/feed.js?v=7'
 ];
 

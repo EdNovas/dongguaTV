@@ -529,7 +529,7 @@
             try { v.pause(); v.removeAttribute('src'); v.load(); } catch (e) { }
             if (v.parentNode) v.parentNode.removeChild(v);
         }
-        if (c.el) { try { c.el.classList.remove('dg-pv-on'); } catch (e) { } }
+        if (c.el) { try { c.el.classList.remove('dg-pv-on', 'dg-pv-load'); } catch (e) { } }
     }
     function posterBox(el) { return (el && el.querySelector) ? el.querySelector('.poster-wrap') : null; }
     // 真正开始:拿清单 → hls.js 播 blob 清单(静音、循环、内联)→ 第一帧出来才把视频淡入
@@ -543,6 +543,8 @@
         const c = { wk, el, hls: null, video: null, src: '', bytes: 0, dead: false, ctl: null };
         state.cur = c;
         state.why = 'loading';
+        // 正在加载:卡片和电脑上鼠标悬停时一样放大 + 红框,底下一条红色加载条(手机上没有 :hover,以前长按之后看不出在加载)
+        try { el.classList.add('dg-pv-load'); } catch (e) { }
         const live = () => state.cur === c && !c.dead;
         getPlan(wk, live, c).then((plan) => {
             if (!live()) return;
@@ -569,7 +571,7 @@
                 if (c.bytes > HARD_CAP) stop('hard-cap');
             });
             hls.on(E.ERROR, (_, d) => { if (d && d.fatal) stop('error'); });
-            v.addEventListener('playing', () => { if (live()) { el.classList.add('dg-pv-on'); state.why = 'playing'; } });
+            v.addEventListener('playing', () => { if (live()) { el.classList.add('dg-pv-on'); el.classList.remove('dg-pv-load'); state.why = 'playing'; } });
             // 卡片是 16:9:竖屏片源整条放下(两侧黑边),不裁成中间一条
             v.addEventListener('loadedmetadata', () => { if (v.videoWidth > 0 && v.videoHeight > 0 && v.videoWidth / v.videoHeight < 1.2) v.classList.add('dg-pv-fit'); });
             try {
@@ -603,14 +605,52 @@
         state.hoverEl = el;
         state.timer = setTimeout(() => { if (state.hoverEl === el) start(card, el); }, DWELL_MS);
     }
-    // 长按到点(或系统先发了长按的 contextmenu):开始预览
+    // 长按到点(或系统先发了长按的 contextmenu):开始预览,并进入「跟随」—— 之后上下 / 左右滑,停下来就换到屏幕中间那张接着预览
     function pressFire() {
         const el = state.pressEl, card = state.pressCard;
         clearTimeout(state.timer); state.timer = 0;
         if (!el || !card) return;
         state.suppressClickUntil = Date.now() + 900;
+        state.follow = true;
         start(card, el);
     }
+    // ---- 手机「跟随」(用户 2026-11-23:长按之后一滑预览就停了、不会接着放):滚动时先停,停稳 FOLLOW_MS 后挑屏幕中间、露出 ≥70% 的那张卡接着预览。
+    //   真点了一下(开播放页 / 点别处)、页面切走、主播放器开始放 → 退出跟随。滑动开头的按下不算「点别处」
+    const FOLLOW_MS = 450;
+    function followSoon() {
+        clearTimeout(state.followT);
+        state.followT = setTimeout(followPick, FOLLOW_MS);
+    }
+    function followPick() {
+        state.followT = 0;
+        if (!state.follow || state.pressEl) return;
+        const d = root.document;
+        if (!d || d.hidden) return;
+        const W = root.innerWidth || 0, H = root.innerHeight || 0;
+        if (!(W > 0 && H > 0)) return;
+        const cx = W / 2, cy = H * 0.45;
+        let best = null, bd = Infinity;
+        const els = d.querySelectorAll(CARD_SEL);
+        for (let k = 0; k < els.length; k++) {
+            const el = els[k], box = posterBox(el);
+            if (!box) continue;
+            const r = box.getBoundingClientRect();
+            if (!(r.width > 0 && r.height > 0)) continue;
+            const vw = Math.max(0, Math.min(r.right, W) - Math.max(r.left, 0)), vh = Math.max(0, Math.min(r.bottom, H) - Math.max(r.top, 0));
+            if (vw * vh < 0.7 * r.width * r.height) continue;   // 露出不到七成的不挑
+            const dx = (r.left + r.right) / 2 - cx, dy = (r.top + r.bottom) / 2 - cy;
+            const dist = dx * dx + dy * dy * 2;   // 上下偏离比左右更不算「在中间」
+            if (dist < bd) { bd = dist; best = el; }
+        }
+        if (!best) return;
+        const wk = best.getAttribute('data-wk');
+        if (!wk || (state.cur && state.cur.el === best)) return;
+        const A = D();
+        const card = (A && typeof A.cardOf === 'function' && A.cardOf(wk)) || { wk, _wk: wk };
+        start(card, best);
+    }
+    function followEnd(why) { state.follow = false; clearTimeout(state.followT); state.followT = 0; stop(why); }
+    const CARD_SEL = '.hot-card[data-wk], .browse-card[data-wk], .dg-rail-card[data-wk]';
     function hoverDevice() { try { return !!(root.matchMedia && root.matchMedia('(hover: hover) and (pointer: fine)').matches); } catch (e) { return false; } }
     let booted = false;
     function boot() {
@@ -619,8 +659,8 @@
         const d = root.document;
         injectCss();
         const H = root.dgAdultHooks;
-        if (H && typeof H.add === 'function') { H.add('onCardHover', onHover); H.add('onPlayerReady', () => stop('main-player')); }
-        else if (H) { H.onCardHover = onHover; H.onPlayerReady = () => stop('main-player'); }   // 主播放器一开始放就让路
+        if (H && typeof H.add === 'function') { H.add('onCardHover', onHover); H.add('onPlayerReady', () => followEnd('main-player')); }
+        else if (H) { H.onCardHover = onHover; H.onPlayerReady = () => followEnd('main-player'); }   // 主播放器一开始放就让路
         // 手指挪动 / 抬起:长按没到时间就作废;预览开着时滚动就停
         d.addEventListener('touchmove', (e) => {
             if (!state.pressEl) return;
@@ -632,7 +672,7 @@
         // 长按出来预览后松手的那一下点击别开播放页(再点一下才开);长按时的系统菜单也拦掉
         d.addEventListener('click', (e) => {
             if (Date.now() < state.suppressClickUntil && state.cur && state.cur.el && state.cur.el.contains(e.target)) { e.preventDefault(); e.stopPropagation(); state.suppressClickUntil = 0; return; }
-            if (state.cur || state.timer) stop('click');   // 点了卡片(开播放页)或别处:预览停
+            if (state.cur || state.timer || state.follow) followEnd('click');   // 点了卡片(开播放页)或别处:预览停、不再跟随
         }, true);
         // 修订:长按还没到 450ms 时也拦 —— 安卓 Chrome 的系统长按是 400ms(Android 11+ 默认),contextmenu 先到:以前图片菜单弹出来、
         //   随后的 touchcancel 把长按作废,手机上长按预览基本出不来。现在拦下它并就此开始预览(系统已经认定是长按了)
@@ -641,14 +681,21 @@
             const pe = state.pressEl;
             if (pe && state.timer && typeof pe.contains === 'function' && pe.contains(e.target)) { e.preventDefault(); pressFire(); }
         }, true);
-        // 在别处按下(手机)= 停
-        d.addEventListener('pointerdown', (e) => { if (state.cur && state.cur.el && !state.cur.el.contains(e.target)) stop('tap-away'); }, { passive: true, capture: true });
-        // 滚动(页面或横排)/ 切走 / 隐藏 → 停
-        d.addEventListener('scroll', () => { if (state.cur || state.timer) stop('scroll'); }, { passive: true, capture: true });
-        d.addEventListener('visibilitychange', () => { if (d.hidden) stop('hidden'); });
-        try { root.addEventListener('blur', () => stop('blur')); root.addEventListener('pagehide', () => stop('pagehide')); } catch (e) { }
+        // 在别处按下 = 停(鼠标)。手机跟随中不算:滑动也是从按下开始的,真点了一下由上面的 click 退出跟随
+        d.addEventListener('pointerdown', (e) => {
+            if (state.follow && e.pointerType === 'touch') return;
+            if (state.cur && state.cur.el && !state.cur.el.contains(e.target)) stop('tap-away');
+        }, { passive: true, capture: true });
+        // 滚动(页面或横排)→ 停;手机跟随中停稳后换到屏幕中间那张接着预览
+        d.addEventListener('scroll', () => {
+            if (state.cur || state.timer) stop('scroll');
+            if (state.follow) followSoon();
+        }, { passive: true, capture: true });
+        // 切走 / 隐藏 → 停、不再跟随
+        d.addEventListener('visibilitychange', () => { if (d.hidden) followEnd('hidden'); });
+        try { root.addEventListener('blur', () => followEnd('blur')); root.addEventListener('pagehide', () => followEnd('pagehide')); } catch (e) { }
         // 隐私锁上 → 停
-        try { const P = root.dgPrivacy; if (P && typeof P.onChange === 'function') P.onChange(() => { if (P.locked && P.locked()) stop('locked'); }); } catch (e) { }
+        try { const P = root.dgPrivacy; if (P && typeof P.onChange === 'function') P.onChange(() => { if (P.locked && P.locked()) followEnd('locked'); }); } catch (e) { }
     }
     const CSS = [
         '.poster-wrap > .dg-pv-v { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1; opacity: 0; transition: opacity .25s; pointer-events: none; background: transparent; }',
@@ -656,6 +703,13 @@
         '.poster-wrap > .dg-pv-v.dg-pv-fit { object-fit: contain; background: #000; }',
         '.dg-pv-on .poster-wrap .dg-ov-dur, .dg-pv-on .poster-wrap .dg-ov-code, .dg-pv-on .poster-wrap .dg-ov-n, .dg-pv-on .poster-wrap .dg-ad-badge { z-index: 2; }',
         'html.dg-blur .dg-pv-on .poster-wrap > .dg-pv-v { filter: none; }',
+        // 加载中 / 正在预览:和电脑上鼠标悬停一样放大 + 红框(手机没有 :hover);加载中底下一条红色加载条
+        '.hot-card.dg-pv-load, .hot-card.dg-pv-on { transform: scale(1.08) translateZ(0); z-index: 10; }',
+        '.browse-card.dg-pv-load, .browse-card.dg-pv-on, .dg-rail-card.dg-pv-load, .dg-rail-card.dg-pv-on { transform: translateY(-4px); z-index: 10; }',
+        '.dg-pv-load .poster-wrap, .dg-pv-on .poster-wrap { box-shadow: 0 14px 32px rgba(0, 0, 0, 0.7), 0 0 0 2px #e50914, 0 0 22px 3px rgba(229, 9, 20, 0.5); }',
+        '.dg-pv-load .poster-wrap::after { content: ""; position: absolute; left: 0; bottom: 0; z-index: 3; height: 3px; width: 35%; background: #e50914; border-radius: 2px; animation: dg-pv-bar 1s ease-in-out infinite; pointer-events: none; }',
+        '@keyframes dg-pv-bar { 0% { left: -35%; } 100% { left: 100%; } }',
+        '@media (prefers-reduced-motion: reduce) { .dg-pv-load .poster-wrap::after { animation: none; width: 100%; opacity: .7; } }',
     ].join('\n');
     function injectCss() {
         const d = root.document;
