@@ -267,6 +267,68 @@ if (relayDeps) {
     ok(floodSeconds({ errorMessage: 'FLOOD_PREMIUM_WAIT_7' }) === 7, 'FLOOD_PREMIUM_WAIT_X(非会员限速)');
     ok(floodSeconds({ errorMessage: 'FILE_REFERENCE_EXPIRED' }) === null, '别的错误不算限流');
 
+    // login.js:验证码发到哪 / 换方式重发 / 绑邮箱 / 二步验证(假 Telegram,回的是 GramJS 真的 Api 对象)
+    {
+        const L = require(path.join(ROOT, 'tg-relay/login.js'));
+        const { Api } = require(path.join(ROOT, 'tg-relay/node_modules/telegram'));
+        ok(L.normalizePhone('+1 (984) 324-0703') === '+19843240703' && L.normalizePhone('0086 138 0000 0000') === '+8613800000000', '手机号去空格括号、00 当 +');
+        ok(L.normalizePhone('13800000000') === null && L.normalizePhone('+12') === null, '不带国家码 / 太短不收');
+        const SC = (type, hash, next, timeout) => new Api.auth.SentCode({ type, phoneCodeHash: hash, nextType: next, timeout });
+        const dApp = L.describeSent(SC(new Api.auth.SentCodeTypeApp({ length: 5 }), 'h', new Api.auth.CodeTypeSms(), 30));
+        ok(dApp.kind === 'SentCodeTypeApp' && /不是短信/.test(dApp.how) && /「Telegram」/.test(dApp.how) && dApp.next === '短信' && dApp.timeout === 30 && dApp.canUse, '发到 App:说清楚去哪看、下一种是短信', dApp);
+        ok(!L.describeSent(SC(new Api.auth.SentCodeTypeFirebaseSms({}), 'h')).canUse, 'Firebase 短信标成收不到');
+        ok(/fragment/.test(L.describeSent(SC(new Api.auth.SentCodeTypeFragmentSms({ url: 'https://fragment.com/x', length: 5 }), 'h')).how), 'Fragment 给链接');
+        ok(/FLOOD|等 2 分钟/.test(L.zh({ errorMessage: 'FLOOD', seconds: 120 })) && /手机号不对/.test(L.zh({ errorMessage: 'PHONE_NUMBER_INVALID' })), '错误翻成中文');
+
+        const rpc = (m) => Object.assign(new Error(m), { errorMessage: m });
+        const run = async (inputs, handlers, pw) => {
+            const calls = [];
+            const logs = [];
+            const client = {
+                invoke: async (req) => { calls.push({ c: req.className, a: req }); const h = handlers[req.className]; if (!h) throw new Error('unexpected ' + req.className); return h(req, calls); },
+                signInWithPassword: async (creds, p) => { calls.push({ c: 'password' }); const v = await p.password('hint'); if (v !== pw) throw rpc('PASSWORD_HASH_INVALID'); return { id: 'pw-user' }; },
+            };
+            const q = inputs.slice();
+            const io = { ask: async (s) => { logs.push('? ' + s); return q.length ? q.shift() : 'q'; }, askHidden: async () => q.shift(), log: (s) => logs.push(s) };
+            let user = null, err = null;
+            try { user = await L.codeLogin(client, { apiId: 1, apiHash: 'x' }, io); } catch (e) { err = e; }
+            return { user, err, calls, logs, left: q };
+        };
+        // A:先发到 App → r 换短信 → 输错 → 输对(带空格)→ 要二步验证
+        const A = await run(['19843240703', '+1 984 324 0703', 'r', '11111', '12 345', 'secret'], {
+            'auth.SendCode': () => SC(new Api.auth.SentCodeTypeApp({ length: 5 }), 'h1', new Api.auth.CodeTypeSms(), 0),
+            'auth.ResendCode': (r) => (r.phoneCodeHash === 'h1' ? SC(new Api.auth.SentCodeTypeSms({ length: 5 }), 'h2', new Api.auth.CodeTypeCall(), 0) : null),
+            'auth.SignIn': (r) => { if (r.phoneCodeHash !== 'h2') throw rpc('PHONE_CODE_HASH_EMPTY'); if (r.phoneCode !== '12345') throw rpc('PHONE_CODE_INVALID'); throw rpc('SESSION_PASSWORD_NEEDED'); },
+        }, 'secret');
+        ok(A.user && A.user.id === 'pw-user' && !A.left.length, 'App → 重发短信 → 输错再输 → 二步验证 → 登上', { err: A.err && A.err.message, calls: A.calls.map((c) => c.c), left: A.left });
+        ok(A.calls[0].a.phoneNumber === '+19843240703', '没带 + 的号先被拦下,第二次的才发出去', A.calls[0].a.phoneNumber);
+        ok(A.logs.some((s) => /不是短信/.test(s)) && A.logs.some((s) => /改用「短信」重发/.test(s)) && A.logs.some((s) => /验证码不对/.test(s)), '提示发到 App / 可改短信 / 输错', A.logs);
+        // B:要先绑邮箱 → 邮箱验证 → 登录码发到邮箱 → 登上
+        const B = await run(['+8613800000000', 'me@example.com', '777', '55555'], {
+            'auth.SendCode': () => SC(new Api.auth.SentCodeTypeSetUpEmailRequired({}), 'h1'),
+            'account.SendVerifyEmailCode': (r) => (r.purpose.phoneCodeHash === 'h1' && r.email === 'me@example.com' ? new Api.account.SentEmailCode({ emailPattern: 'm*@example.com', length: 3 }) : null),
+            'account.VerifyEmail': (r) => (r.verification.code === '777' ? new Api.account.EmailVerifiedLogin({ email: 'me@example.com', sentCode: SC(new Api.auth.SentCodeTypeEmailCode({ emailPattern: 'm*@example.com', length: 5 }), 'h3') }) : null),
+            'auth.SignIn': (r) => (r.phoneCodeHash === 'h3' && r.phoneCode === '55555' ? new Api.auth.Authorization({ user: { id: 'mail-user' } }) : null),
+        });
+        ok(B.user && B.user.id === 'mail-user', '要求绑邮箱 → 邮箱验证 → 邮箱收登录码 → 登上', { err: B.err && B.err.message, calls: B.calls.map((c) => c.c) });
+        // C:号没注册
+        const C = await run(['+12025550123', '12345'], {
+            'auth.SendCode': () => SC(new Api.auth.SentCodeTypeSms({ length: 5 }), 'h1'),
+            'auth.SignIn': () => new Api.auth.AuthorizationSignUpRequired({}),
+        });
+        ok(!C.user && C.err && /还没注册/.test(C.err.zh), '没注册的号说清楚', C.err && C.err.message);
+        // D:发码就被限流
+        const D = await run(['+12025550123'], { 'auth.SendCode': () => { throw Object.assign(rpc('FLOOD'), { seconds: 3600 }); } });
+        ok(!D.user && D.err && /等 1 小时/.test(D.err.zh), '发码被限流给等待时间', D.err && D.err.zh);
+        // E:重发时旧码过期 → 重新发
+        const E = await run(['+12025550123', 'r', '24680'], {
+            'auth.SendCode': (r, calls) => SC(new Api.auth.SentCodeTypeApp({ length: 5 }), 'h' + calls.length, new Api.auth.CodeTypeSms(), 0),
+            'auth.ResendCode': () => { throw rpc('PHONE_CODE_EXPIRED'); },
+            'auth.SignIn': (r) => (r.phoneCodeHash === 'h3' ? new Api.auth.Authorization({ user: { id: 'u3' } }) : (() => { throw rpc('PHONE_CODE_EXPIRED'); })()),
+        });
+        ok(E.user && E.user.id === 'u3', '重发时旧码过期就重新发码', { err: E.err && E.err.message, calls: E.calls.map((c) => c.c) });
+    }
+
     const { spawn } = await import('node:child_process');
     const net = await import('node:net');
     const port = await new Promise((r) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });

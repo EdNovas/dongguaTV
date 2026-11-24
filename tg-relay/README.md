@@ -37,7 +37,12 @@ cp .env.example .env      # 然后编辑 .env
 node login.js
 ```
 
-按提示输入手机号（带国家码）、Telegram App 里收到的验证码、二步验证密码（没设过就回车）。手机号 / 验证码 / 密码只在你自己的终端里输入，不会发给任何人。登录结果存在 `data/sessions.json`。
+两种登录方式（手机号 / 验证码 / 密码只在你自己的终端里输入，不会发给任何人；登录结果存在 `data/sessions.json`）：
+
+1. **扫二维码（推荐）**：这个号在手机上登录着 Telegram 就用这个，不用验证码。终端里出二维码，手机 Telegram → 设置 → 设备 → 连接桌面设备 → 扫码；开了二步验证会再问密码。
+2. **手机号 + 验证码**：程序会说清楚验证码发到哪了。Telegram 第一次通常发到**这个号已经登录着的 Telegram App 里**（对话列表里叫「Telegram」、带蓝勾的对话），**不是短信**；收不到就输入 `r` 改用短信 / 电话重发。Telegram 要求先绑登录邮箱的号，会让你输邮箱、填邮箱验证码。
+
+服务器上用 systemd 跑的话，要用中转的用户登录，文件归属才对：`cd /opt/tg-relay && sudo -u tgrelay node login.js`。
 
 - 多个账号就多运行几次，每次起个不同的名字。中转在跑的话 30 秒内自动用上新账号，不用重启。
 - `node login.js --list` 看有哪些账号，`node login.js --remove a2` 删掉一个。
