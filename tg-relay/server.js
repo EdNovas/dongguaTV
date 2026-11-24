@@ -6,6 +6,7 @@
 //   GET  /p/<频道>/<消息id>?e=&s=   卡片预览片(几段 2.5 秒拼成的 360p 静音 MP4,第一次要时用 ffmpeg 做、存磁盘;没装 ffmpeg → 501)
 //   GET  /api/list?ch=&after=&limit=&info=1   频道里的视频消息(成人站抓取用,要 Authorization: Bearer <RELAY_SECRET>)
 //   GET  /api/msg?ch=&id=           单条视频消息(同上要密钥)
+//   GET  /api/warm?ch=&ids=1,2,3    这些消息(成人站新收录的)在中转闲着时提前做预览片(同上要密钥)
 //   GET  /api/health                账号 / 缓存状态(同上要密钥)
 //   GET  /healthz                   存活检查
 // 账号:node login.js 登录(可以登录多个,读频道和下载会分摊到各个账号上)
@@ -45,7 +46,10 @@ const previews = new Previews({
     ffmpeg: ENV.RELAY_FFMPEG || 'ffmpeg',
     meta: (ch, id) => pool.videoMeta(ch, id),
     srcUrl: (ch, id) => { const e = nowSec() + 3600; return 'http://' + LOOP_HOST + ':' + PORT + '/v/' + ch + '/' + id + '?e=' + e + '&s=' + sign(SECRET, 'v', ch, id, e); },
-    warm: (ch, id, meta, clips) => warmClips(ch, id, meta, clips),
+    prefetch: (ch, id, meta, clips) => warmClips(ch, id, meta, clips),
+    // 后台预做:RELAY_PREVIEW_WARM=0 关;在转的视频流超过 RELAY_PREVIEW_WARM_STREAMS(默认 6)就先不做,让给看片的人
+    bg: ENV.RELAY_PREVIEW_WARM !== '0',
+    canBg: () => streams <= Math.max(0, Number(ENV.RELAY_PREVIEW_WARM_STREAMS || 6)),
 });
 function cors(res) {
     res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN);
@@ -293,6 +297,14 @@ const server = http.createServer(async (req, res) => {
             if (!sameSecret(auth, SECRET)) { fail(res, 401, 'UNAUTHORIZED'); return; }
             if (u.pathname === '/api/list') { await apiList(u, res); return; }
             if (u.pathname === '/api/msg') { await apiMsg(u, res); return; }
+            if (u.pathname === '/api/warm') {
+                // 成人站:这些新收录的帖子提前做预览片(ids 逗号分隔,≤100)
+                const ch = String(u.searchParams.get('ch') || '');
+                const ids = String(u.searchParams.get('ids') || '').split(',').filter(Boolean);
+                if (!CH_RE.test(ch) || !ids.length || ids.length > 100 || !ids.every((x) => /^[1-9]\d{0,11}$/.test(x))) { fail(res, 400, 'BAD_INPUT'); return; }
+                json(res, 200, Object.assign({ ok: true }, previews.warm(ch, ids)));
+                return;
+            }
             if (u.pathname === '/api/health') {
                 json(res, 200, { ok: true, accounts: pool.status(), usable: pool.usable().length, streams, cache: cache.stat(), fromTg: media.bytesFromTg, fromCache: media.bytesFromCache, previews: previews.stat() });
                 return;

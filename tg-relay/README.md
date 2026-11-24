@@ -31,6 +31,8 @@ cp .env.example .env      # 然后编辑 .env
 | `RELAY_PREVIEW_GB` | 卡片预览片的磁盘上限，默认 10（一个几百 KB，满了先删最久没用的） |
 | `RELAY_PREVIEW_PAR` | 同时最多做几个预览片，默认 2（每个占 ffmpeg 两个线程；排队的超过 16 个直接回忙，浏览器那边就不预览） |
 | `RELAY_FFMPEG` | ffmpeg 的路径，默认 `ffmpeg` |
+| `RELAY_PREVIEW_WARM` | 设 `0` 关掉后台预做（成人站同步到新帖子时让中转提前做预览片）；默认开 |
+| `RELAY_PREVIEW_WARM_STREAMS` | 在转的视频流超过这么多就先不做后台预做，让给看片的人，默认 6 |
 | `RELAY_MAX_STREAMS` | 同时最多转多少个视频流，默认 60（超了回 503，播放器会重试 / 换线路） |
 | `RELAY_DATA` | 数据目录，默认 `./data`（账号、缓存都在这里） |
 
@@ -100,5 +102,6 @@ curl -H "Authorization: Bearer <RELAY_SECRET>" https://relay.example.com/api/hea
 | `GET /p/<频道>/<消息id>?e=&s=` | 签名 | 卡片预览片：从视频里均匀挑 3~5 段、每段 2.5 秒，拼成 360p 静音 MP4（几百 KB）。第一次要时现做（先把各段所在的块并发拉进缓存，再用 ffmpeg 读本机的 `/v/`），存在 `data/previews/`；没装 ffmpeg 回 501、忙回 503、做不了回 422 |
 | `GET /api/list?ch=&after=&limit=&info=1` | `Authorization: Bearer <RELAY_SECRET>` | 频道里 id 大于 `after` 的视频消息（每次最多 100 条消息） |
 | `GET /api/msg?ch=&id=` | 同上 | 单条视频消息 |
+| `GET /api/warm?ch=&ids=1,2,3` | 同上 | 这些消息（成人站新收录的，≤100 个）排进后台预做：一次一个，没有用户在等预览片、视频流不多时才做 |
 | `GET /api/health` | 同上 | 账号 / 缓存状态 |
 | `GET /healthz` | 无 | 存活检查 |

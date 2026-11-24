@@ -4,6 +4,8 @@
 //   ffmpeg 读的时候多半已经在本地 —— 冷启动从"一段一段顺着等 Telegram"变成"几块一起拉"。
 //   同时最多 par 个在做,排队的超过 queueMax 个直接回忙(浏览器那边就不预览,不会排一长串);做失败的记 10 分钟不再做。
 //   没装 ffmpeg → 一律回"没有"(成人站照常,只是 TG 作品没有预览)。
+//   后台预做(warm):成人站同步到新收录的帖子时把消息号交过来(只给真收进库的,被拦的不会来),中转闲着时一个一个做好,
+//   用户第一次长按就不用等那几秒。RELAY_PREVIEW_WARM=0 关掉。
 const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
@@ -11,6 +13,8 @@ const { log } = require('./common');
 
 const CLIP_SEC = 2.5;
 const FAIL_MS = 10 * 60e3;
+// 后台预做(成人站同步到新帖子时叫 /api/warm):排在用户的请求后面 —— 一次一个、没有用户在等预览片、在转的视频流不多(canBg)才做,做完歇一会
+const BG_MAX = 2000, BG_GAP_MS = 2000, BG_WAIT_MS = 10e3;
 
 // 挑哪几段:掐掉开头(片头 / 水印口播)和结尾,中间均匀撒;短片少挑几段
 function clipPlan(dur) {
@@ -40,7 +44,8 @@ function ffmpegArgs(src, clips, out) {
 function pvErr(code, msg) { const e = new Error(msg || code); e.pvCode = code; return e; }
 
 class Previews {
-    // o: { dir, capBytes, par, queueMax, ffmpeg, timeoutMs, srcUrl(ch,id) → 本机 /v/ 签名地址, meta(ch,id) → {size,dur,...}, warm(ch,id,meta,clips) }
+    // o: { dir, capBytes, par, queueMax, ffmpeg, timeoutMs, srcUrl(ch,id) → 本机 /v/ 签名地址, meta(ch,id) → {size,dur,...}, prefetch(ch,id,meta,clips),
+    //      bg(默认 true:接受后台预做), canBg() → 现在能不能做后台的(中转不忙), bgGapMs / bgWaitMs }
     constructor(o) {
         this.dir = o.dir;
         this.cap = Math.max(16 * 1048576, Number(o.capBytes) || 10 * 1073741824);
@@ -48,7 +53,7 @@ class Previews {
         this.queueMax = Math.max(0, o.queueMax == null ? 16 : o.queueMax);
         this.bin = o.ffmpeg || 'ffmpeg';
         this.timeoutMs = o.timeoutMs || 90e3;
-        this.srcUrl = o.srcUrl; this.meta = o.meta; this.warm = o.warm || null;
+        this.srcUrl = o.srcUrl; this.meta = o.meta; this.prefetch = o.prefetch || null;   // 做之前把各段所在的块拉进缓存(server.js 的 warmClips)
         this.idx = new Map();          // 文件名 -> 大小;Map 顺序 = 最近使用顺序
         this.total = 0;
         this.inflight = new Map();
@@ -57,6 +62,11 @@ class Previews {
         this.waiting = [];
         this.ok = false;
         this.made = 0; this.fails = 0; this.hits = 0;
+        this.bgOn = o.bg !== false;
+        this.canBg = typeof o.canBg === 'function' ? o.canBg : () => true;
+        this.bgGapMs = o.bgGapMs == null ? BG_GAP_MS : o.bgGapMs;
+        this.bgWaitMs = o.bgWaitMs == null ? BG_WAIT_MS : o.bgWaitMs;
+        this.bg = []; this.bgSet = new Set(); this.bgT = null; this.bgBusy = false; this.bgMade = 0; this.bgFail = 0;
     }
     init() {
         fs.mkdirSync(this.dir, { recursive: true });
@@ -75,7 +85,45 @@ class Previews {
         log('[preview]', this.ok ? 'ffmpeg 可用' : '没找到 ffmpeg(apt install ffmpeg;装好重启):TG 作品没有卡片预览', '已有', this.idx.size, '个,', (this.total / 1048576).toFixed(1), 'MB');
     }
     name(ch, id) { return String(ch).toLowerCase() + '_' + id + '.mp4'; }
-    stat() { return { ok: this.ok, files: this.idx.size, bytes: this.total, cap: this.cap, running: this.running, waiting: this.waiting.length, made: this.made, fails: this.fails, hits: this.hits }; }
+    stat() {
+        return { ok: this.ok, files: this.idx.size, bytes: this.total, cap: this.cap, running: this.running, waiting: this.waiting.length, made: this.made, fails: this.fails, hits: this.hits,
+            bg: { on: this.bgOn, queue: this.bg.length, made: this.bgMade, fails: this.bgFail } };
+    }
+
+    // 后台预做:已经有的 / 在做的 / 刚做失败的 / 已经排着的不重复排;队列满了后面的不收
+    warm(ch, ids) {
+        if (!this.ok || !this.bgOn) return { queued: 0, have: 0, on: false };
+        let queued = 0, have = 0;
+        for (const id of Array.isArray(ids) ? ids : []) {
+            const n = this.name(ch, id);
+            if (this.idx.has(n)) { have++; continue; }
+            if (this.bgSet.has(n) || this.inflight.has(n)) continue;
+            const f = this.failed.get(n);
+            if (f && Date.now() - f.at < FAIL_MS) continue;
+            if (this.bg.length >= BG_MAX) break;
+            this.bg.push({ ch, id: String(id), n });
+            this.bgSet.add(n);
+            queued++;
+        }
+        this._bgKick(this.bgGapMs);
+        return { queued, have, on: true };
+    }
+    _bgKick(ms) {
+        if (this.bgT || this.bgBusy || !this.bg.length) return;
+        this.bgT = setTimeout(() => { this.bgT = null; this._bgRun(); }, ms);
+        if (this.bgT.unref) this.bgT.unref();
+    }
+    async _bgRun() {
+        if (this.bgBusy || !this.bg.length) return;
+        // 用户在等预览片 / 视频流多 → 过一会再看
+        if (this.running > 0 || this.waiting.length > 0 || !this.canBg()) { this._bgKick(this.bgWaitMs); return; }
+        const job = this.bg.shift();
+        this.bgSet.delete(job.n);
+        this.bgBusy = true;
+        try { await this.get(job.ch, job.id); this.bgMade++; } catch (_) { this.bgFail++; }
+        this.bgBusy = false;
+        this._bgKick(this.bgGapMs);
+    }
 
     async get(ch, id) {
         if (!this.ok) throw pvErr('no-ffmpeg');
@@ -113,7 +161,7 @@ class Previews {
             const meta = await this.meta(ch, id);
             const clips = clipPlan(meta && meta.dur);
             if (!clips.length) throw pvErr('failed', 'too-short');
-            if (this.warm) { try { this.warm(ch, id, meta, clips); } catch (_) { /* 只是预热 */ } }
+            if (this.prefetch) { try { this.prefetch(ch, id, meta, clips); } catch (_) { /* 只是预热 */ } }
             const t0 = Date.now();
             await this._ffmpeg(ffmpegArgs(this.srcUrl(ch, id), clips, tmp));
             const st = await fs.promises.stat(tmp);

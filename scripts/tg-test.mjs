@@ -165,6 +165,7 @@ const captions = {
 };
 function mkRelay() {
     const calls = [];
+    const flags = { warm404: false };
     const chans = {
         TS88158: { info: { title: '伪娘男娘TS人妖 精品收藏', about: '', members: 41736, top: 30 }, msgs: [] },
         ntong_1: { info: { title: '萝莉女同合集', about: '', members: 100, top: 3 }, msgs: [] },
@@ -191,6 +192,7 @@ function mkRelay() {
         const json = (code, j) => ({ ok: code === 200, status: code, json: async () => j });
         if (auth !== 'Bearer ' + SECRET) return json(401, { error: 'UNAUTHORIZED' });
         if (u.pathname === '/api/health') return json(200, { ok: true, usable: 1, streams: 2, cache: { chunks: 3, bytes: 3 * 1048576, cap: 800 * 1073741824 }, fromTg: 5, fromCache: 1, accounts: [{ name: 'a1', ok: true, floodSec: 0, active: 1, served: 9, errors: 0 }, { name: 'a2', ok: false, dead: 'SESSION_REVOKED', floodSec: 0, active: 0, served: 0, errors: 2 }] });
+        if (u.pathname === '/api/warm') return flags.warm404 ? json(404, { error: 'NOT_FOUND' }) : json(200, { ok: true, on: true, queued: (u.searchParams.get('ids') || '').split(',').length, have: 0 });
         const ch = u.searchParams.get('ch');
         const c = chans[ch];
         if (!c) return json(404, { error: 'USERNAME_NOT_OCCUPIED' });
@@ -203,7 +205,7 @@ function mkRelay() {
         const next = rows.length ? rows[rows.length - 1].id : after;
         return json(200, { ok: true, ch, info: u.searchParams.get('info') === '1' ? c.info : null, next, done: rows.length < limit, items: rows });
     };
-    return { fetch, calls, chans };
+    return { fetch, calls, chans, flags };
 }
 {
     const relay = mkRelay();
@@ -322,6 +324,29 @@ function mkRelay() {
         await r.c.tgKick(true);
         ts2 = rows('tg_ts88158');
         ok(relay.calls.some((c) => /ch=TS88158&after=0&/.test(c)) && ts2.every((x) => x.type_name === '伪娘') && ts2.map((x) => x.bucket).join() === b0.join(), '旧进度、库里分类对不上:从头再读改回来', ts2.map((x) => [x.type_name, x.bucket]).slice(0, 3));
+    }
+
+    // 用户 2026-11-24:新收录的帖子(3 天内、真进了库的)交给中转预做预览片;老帖子 / 太短 / 被硬过滤拦的不交;旧中转没有 /api/warm 不影响同步
+    {
+        ok(!relay.calls.some((c) => c.startsWith('/api/warm')), '老帖子(历史 / 重读)从来没交给中转预做');
+        const nowS = Math.floor(now / 1000);
+        relay.chans.TS88158.msgs.push(
+            { id: 40, date: nowS - 3600, text: captions.good(40), dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 },
+            { id: 41, date: nowS - 3600, text: '#伪娘 酒店偷拍 隔壁情侣', dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 },
+            { id: 42, date: nowS - 3600, text: captions.good(42), dur: 30, mime: 'video/mp4', thumb: true, size: 1e8 },
+            { id: 43, date: nowS - 5 * 86400, text: captions.good(43), dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 },
+            { id: 44, date: nowS - 60, text: captions.good(44), dur: 900, mime: 'video/mp4', thumb: true, size: 1e8 });
+        relay.calls.length = 0;
+        await cat2.tgKick(true);
+        const wc = relay.calls.filter((c) => c.startsWith('/api/warm'));
+        ok(wc.length === 1 && /^\/api\/warm\?ch=TS88158&ids=40,44$/.test(wc[0]), '只交 3 天内、真收进库的(偷拍被拦 / 太短 / 5 天前的不交)', relay.calls);
+        ok(rows('tg_ts88158').some((r) => String(r.vod_id) === '43') && !rows('tg_ts88158').some((r) => String(r.vod_id) === '41'), '5 天前的照样收,只是不预做;偷拍的没进库');
+        relay.flags.warm404 = true;
+        relay.chans.TS88158.msgs.push({ id: 45, date: nowS - 60, text: captions.good(45), dur: 900, mime: 'video/mp4', thumb: true, size: 1e8 });
+        relay.calls.length = 0;
+        await cat2.tgKick(true);
+        ok(relay.calls.some((c) => c.startsWith('/api/warm')) && meta('tg:tg_ts88158').cur === 45 && rows('tg_ts88158').some((r) => String(r.vod_id) === '45'), '中转是旧版本(/api/warm 404):同步照常', meta('tg:tg_ts88158'));
+        relay.flags.warm404 = false;
     }
 
     // ---------- 7. 闸门:作品页 / 详情给签名地址 ----------
@@ -474,7 +499,7 @@ if (relayDeps) {
             });
             await new Promise((r) => srv.listen(0, '127.0.0.1', r));
             const warmed = [];
-            const P = new PVR.Previews({ dir: path.join(tmp, 'pv'), capBytes: 64 * 1048576, meta: async (ch, id) => ({ dur: id === '2' ? 3 : 90, size }), srcUrl: () => 'http://127.0.0.1:' + srv.address().port + '/v/x/1', warm: (ch, id, meta, clips) => warmed.push(clips.length) });
+            const P = new PVR.Previews({ dir: path.join(tmp, 'pv'), capBytes: 64 * 1048576, meta: async (ch, id) => ({ dur: id === '2' ? 3 : 90, size }), srcUrl: () => 'http://127.0.0.1:' + srv.address().port + '/v/x/1', prefetch: (ch, id, meta, clips) => warmed.push(clips.length) });
             try {
                 P.init();
                 const [b1, b1b] = await Promise.all([P.get('TestCh', '1'), P.get('TestCh', '1')]);
@@ -496,6 +521,20 @@ if (relayDeps) {
                 P3.init();
                 let e4 = null; try { await P3.get('TestCh', '1'); } catch (e) { e4 = e; }
                 ok(!P3.ok && e4 && e4.pvCode === 'no-ffmpeg', '没装 ffmpeg → no-ffmpeg');
+                ok(P3.warm('TestCh', ['1']).on === false, '没装 ffmpeg 不收后台预做');
+                // 后台预做:已经有的不排、同一条不重复排;中转忙(canBg 假)先不做,闲了一个一个做
+                let busy = true;
+                P.canBg = () => !busy; P.bgGapMs = 0; P.bgWaitMs = 30;
+                const w1 = P.warm('TestCh', ['1', '3', '3', '4']);
+                ok(w1.on && w1.have === 1 && w1.queued === 2, '已经有的不排、重复的只排一次', w1);
+                await new Promise((r) => setTimeout(r, 300));
+                ok(P.stat().bg.made === 0 && P.stat().bg.queue === 2, '中转忙:先不做', P.stat().bg);
+                busy = false;
+                for (let i = 0; i < 100 && P.stat().bg.made < 2; i++) await new Promise((r) => setTimeout(r, 100));
+                ok(P.stat().bg.made === 2 && P.stat().bg.queue === 0 && P.idx.has('testch_3.mp4') && P.idx.has('testch_4.mp4'), '闲了就一个一个做好', P.stat().bg);
+                const P4 = new PVR.Previews({ dir: path.join(tmp, 'pv4'), bg: false, meta: async () => ({ dur: 90, size }), srcUrl: () => 'x' });
+                P4.init();
+                ok(P4.warm('TestCh', ['1']).on === false, 'RELAY_PREVIEW_WARM=0(bg:false)不收后台预做');
             } finally { srv.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
         }
     }
@@ -535,7 +574,12 @@ if (relayDeps) {
         const pvr = await fetch(base + '/p/TS88158/5?e=' + exp + '&s=' + RC.sign(SECRET, 'p', 'TS88158', 5, exp));
         ok(pvr.status === 503 || pvr.status === 501, '预览片签名对 → 没账号 503(没 ffmpeg 501)', pvr.status);
         const hj2 = await (await fetch(base + '/api/health', { headers: { authorization: 'Bearer ' + SECRET } })).json();
-        ok(hj2.previews && typeof hj2.previews.files === 'number' && typeof hj2.previews.ok === 'boolean', '/api/health 带预览片状态', hj2.previews);
+        ok(hj2.previews && typeof hj2.previews.files === 'number' && typeof hj2.previews.ok === 'boolean' && hj2.previews.bg && typeof hj2.previews.bg.queue === 'number', '/api/health 带预览片状态(含后台预做)', hj2.previews);
+        ok((await fetch(base + '/api/warm?ch=TS88158&ids=5')).status === 401, '/api/warm 没密钥 401');
+        const aw = await fetch(base + '/api/warm?ch=TS88158&ids=5,6', { headers: { authorization: 'Bearer ' + SECRET } });
+        const awj = await aw.json();
+        ok(aw.status === 200 && awj.ok === true && typeof awj.queued === 'number', '/api/warm 收下', awj);
+        ok((await fetch(base + '/api/warm?ch=TS88158&ids=5,x', { headers: { authorization: 'Bearer ' + SECRET } })).status === 400 && (await fetch(base + '/api/warm?ch=TS88158&ids=' + Array.from({ length: 101 }, (_, i) => i + 1).join(','), { headers: { authorization: 'Bearer ' + SECRET } })).status === 400, '/api/warm 坏消息号 / 超过 100 个 400');
         // /api/msg 的消息号校验:两位数以上不能被当成坏输入(没账号 → 503,不是 400)
         const am = await fetch(base + '/api/msg?ch=TS88158&id=1243', { headers: { authorization: 'Bearer ' + SECRET } });
         ok(am.status === 503, '/api/msg 四位数消息号过校验(没账号 → 503,不是 400)', am.status);
