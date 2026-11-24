@@ -11,8 +11,10 @@
 // 取清单:先直连(样本 128/128 都带 ACAO *、页面不发 Referer),网络错 / 超时 / 非 200 / 没有 #EXTM3U → 经 /api/config 的 Worker(?url=)重试一次
 //   (预览已经停了就不重试);
 //   红楼系(vfile.meituan.net)的 http 分片升 https;https 页面上还剩 http 分片 → 不预览。拼好的清单按作品缓存 6 小时(sessionStorage,50 部)
-// 预算:单次清单估算 4MB / 实收 5MB 硬顶 / 本会话 60MB / 每天 150MB(非计量网络);同时只有一个预览;离开卡片 / 滚动 / 切走页面就停
-// 不预览:省流量 / 2G·3G / 蜂窝网络或触屏上网络类型未知(设置里没允许)/ 电视 / 没有 MSE(iPhone)/ 系统「减少动态效果」/ 主播放器在放 / 页面隐藏 /
+// 预算:单次清单估算 4MB / 实收 5MB 硬顶 / 本会话 60MB / 每天 150MB(非计量网络);电脑悬停 / 长按同时一个预览,手机长按后的「跟随」
+//   同一排最多两张一起放;离开卡片 / 滚动 / 切走页面就停
+// TG 作品(线路是中转的 MP4,拼不了清单):作品 JSON 的 _pv = 中转用 ffmpeg 现做的预览片(几段 2.5 秒拼成的 360p 静音 MP4,几百 KB),整个拿下来直接放
+// 不预览:省流量 / 2G·3G / 蜂窝网络或触屏上网络类型未知(设置里没允许)/ 电视 / 没有 MSE(iPhone;TG 预览片照放)/ 主播放器在放 / 页面隐藏 /
 //   刷短片开着 / 隐私锁着 / 设置里关了
 // 只依赖页面上的 window.Hls(补丁版 hls.min.js)和 window.DgAdult(adult/adult.js 的桥:作品信息、代理地址、主播放器忙不忙)
 (function (root, factory) {
@@ -338,15 +340,22 @@
     }
     // https 页面上清单里还有 http 分片 / 密钥 → 浏览器会拦(混合内容),不预览
     function hasInsecure(playlist) { return /(^|\n)http:\/\//.test(playlist) || /URI="http:\/\//.test(playlist); }
-    // 作品(/api/catalog/work 的 JSON)→ 能拿来预览的线路:有第一集 .m3u8、没被多人判失效;服务器已按好坏排过,保持次序,最多 2 条
-    function pickLines(work) {
+    // 作品(/api/catalog/work 的 JSON)→ 能拿来预览的线路:有第一集 .m3u8、没被多人判失效;服务器已按好坏排过,保持次序,最多 2 条。
+    //   TG 线路(中转 MP4,拼不了清单)带 _pv = 中转现做的预览片(几段拼成的 360p 静音 MP4)→ { mp4 };不用 hls.js,没有 MSE(iPhone)也能放。
+    //   opts.mse === false:只要 mp4 的(m3u8 的放不了,不白拉清单)
+    const TG_PV_RE = /^https?:\/\/[^/?#\s]+\/p\/[A-Za-z][A-Za-z0-9_]{3,31}\/[1-9]\d{0,11}\?e=\d{9,11}&s=[A-Za-z0-9_-]{24}$/;
+    function pickLines(work, opts) {
+        const mse = !(opts && opts.mse === false);
         const out = [];
         const srcs = work && Array.isArray(work.sources) ? work.sources : [];
         for (const s of srcs) {
             if (!s || s._dead === true) continue;
-            const url = firstM3u8(s.vod_play_url);
-            if (!url) continue;
-            out.push({ url, site: String(s.site_key || ''), fam: String(s._family || ''), dur: Number(s._dur) || 0 });
+            if (typeof s._pv === 'string' && TG_PV_RE.test(s._pv)) out.push({ mp4: s._pv, site: String(s.site_key || ''), fam: String(s._family || ''), dur: Number(s._dur) || 0 });
+            else {
+                const url = mse ? firstM3u8(s.vod_play_url) : '';
+                if (!url) continue;
+                out.push({ url, site: String(s.site_key || ''), fam: String(s._family || ''), dur: Number(s._dur) || 0 });
+            }
             if (out.length >= 2) break;
         }
         return out;
@@ -368,7 +377,7 @@
         const e = env || {};
         if (!e.on) return 'off';
         if (e.tv) return 'tv';
-        if (!e.mse) return 'no-mse';
+        // 没有 MSE(iPhone)不在这里拦:TG 作品的预览片是普通 MP4,照样能放;m3u8 线路到 getPlan 里才跳过
         // 系统「减少动态效果」不再拦(2026-11-23 用户:电脑上悬停还是不放 —— Windows 关了「动画效果」就会报 reduce,很多人是为了流畅关的):
         //   预览只在鼠标停在封面上时才放、静音,算用户自己触发的;不想要在设置里关(dg_pv_on=0)
         if (e.hidden) return 'hidden';
@@ -415,7 +424,8 @@
 
     // ======================= 浏览器胶水 =======================
     const state = {
-        cur: null,          // 正在进行的一次预览 { wk, el, hls, video, src, bytes, stop }
+        cur: null,          // 正在进行的第一个预览 { wk, el, hls, video, src, bytes, ... }(= list[0])
+        list: [],           // 在放的全部(电脑悬停 / 长按 1 个;手机跟随时同一排最多 FOLLOW_MAX 个)
         timer: 0, pressEl: null, pressCard: null, pressX: 0, pressY: 0, suppressClickUntil: 0, why: 'idle', budget: null, cache: null,
     };
     function lsGet(k) { try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch (e) { return null; } }
@@ -490,18 +500,21 @@
     // 修订:作品信息没拿到(fetchWorkRaw 在 401 / 503 / 断网 / 超时时都给 null)不当「这部没有能预览的线路」记 6 小时 ——
     //   只有真拿到了作品(带 sources 数组)才记 no-line;拉清单失败(可能是一时的)只记 10 分钟
     function isWork(w) { return !!(w && typeof w === 'object' && Array.isArray(w.sources)); }
+    function hasMse() { try { return !!(root.Hls && typeof root.Hls.isSupported === 'function' && root.Hls.isSupported()); } catch (e) { return false; } }
     function getPlan(wk, live, c) {
+        const mse = hasMse();
         const hit = cache().get(wk);
-        if (hit) return Promise.resolve(hit.playlist ? hit : null);
+        if (hit) return Promise.resolve(hit.mp4 || (hit.playlist && mse) ? hit : null);
         const A = D();
         if (!A || typeof A.fetchWorkRaw !== 'function') return Promise.resolve(null);
         return Promise.resolve(A.fetchWorkRaw(wk)).then((w) => {
             if (!live()) return null;
             if (!isWork(w)) return null;
-            const lines = pickLines(w);
+            const lines = pickLines(w, { mse });
             if (!lines.length) { remember(wk, { fail: 'no-line' }); return null; }
             let transient = false;   // 有一条线路是没拉到清单(不是清单本身不行)
-            const tryAt = (i) => planFor(lines[i], live, c).then((r) => {
+            const tryAt = (i) => (lines[i].mp4 ? Promise.resolve({ mp4: lines[i].mp4 }) : planFor(lines[i], live, c)).then((r) => {
+                if (r && r.mp4) { if (live()) remember(wk, { mp4: r.mp4 }); return live() ? r : null; }
                 if (!r || !live()) return null;
                 if (r.playlist) { remember(wk, { playlist: r.playlist, clips: r.clips }); return r; }
                 if (r.fail === 'fetch') transient = true;
@@ -513,13 +526,8 @@
         }).catch(() => null);
     }
 
-    function stop(why) {
-        clearTimeout(state.timer); state.timer = 0;
-        state.pressEl = null; state.pressCard = null;
-        const c = state.cur;
-        state.cur = null;
-        if (why) state.why = why;
-        if (!c) return;
+    // 一次预览收摊:中止在拉的、拆播放器、视频拿掉、卡片回原样
+    function teardown(c) {
         c.dead = true;   // 先标死再中止:被中止的直连回来时 live() 已经是 false,不会再经 Worker 重试
         if (c.ctl) { try { c.ctl.abort(); } catch (e) { } c.ctl = null; }
         if (c.hls) { try { c.hls.destroy(); } catch (e) { } }
@@ -531,46 +539,113 @@
         }
         if (c.el) { try { c.el.classList.remove('dg-pv-on', 'dg-pv-load'); } catch (e) { } }
     }
+    // 全停(离开 / 滚动 / 点击 / 切走…);state.cur = 第一个(老接口:adult.js 的封面控制器、status() 看它)
+    function stop(why) {
+        clearTimeout(state.timer); state.timer = 0;
+        state.pressEl = null; state.pressCard = null;
+        const all = state.list.splice(0);
+        state.cur = null;
+        if (why) state.why = why;
+        all.forEach(teardown);
+    }
+    // 只停这一个(同时在放的另一张接着放)
+    function end(c, why) {
+        const i = state.list.indexOf(c);
+        if (i >= 0) state.list.splice(i, 1);
+        state.cur = state.list[0] || null;
+        if (why) state.why = why;
+        teardown(c);
+    }
+    const inPreview = (t) => state.list.some((c) => c.el && typeof c.el.contains === 'function' && c.el.contains(t));
     function posterBox(el) { return (el && el.querySelector) ? el.querySelector('.poster-wrap') : null; }
-    // 真正开始:拿清单 → hls.js 播 blob 清单(静音、循环、内联)→ 第一帧出来才把视频淡入
-    function start(card, el) {
+    function mkVideo(box) {
+        const v = root.document.createElement('video');
+        v.className = 'dg-pv-v';
+        v.muted = true; v.defaultMuted = true; v.playsInline = true; v.loop = true; v.autoplay = false;
+        v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', ''); v.setAttribute('aria-hidden', 'true');
+        v.preload = 'auto';
+        box.appendChild(v);
+        return v;
+    }
+    // 预览片(MP4,几百 KB):整个拿下来(拿得到状态码、能中止、字节记得准),失败按原因记:做不了 / 没装 ffmpeg 记 6 小时,
+    //   忙 / 超时 / 断网只记一分钟 —— 中转第一次做要几秒,离开卡片中止了也照样在做,回来再长按多半就有了
+    const MP4_WAIT_MS = 25000, MP4_MAX = 4 * 1024 * 1024;
+    function fetchMp4(url, c) {
+        const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        c.ctl = ctl;
+        const t = ctl ? setTimeout(() => { try { ctl.abort(); } catch (e) { } }, MP4_WAIT_MS) : 0;
+        return root.fetch(url, { referrerPolicy: 'no-referrer', credentials: 'omit', mode: 'cors', signal: ctl ? ctl.signal : undefined })
+            .then((r) => {
+                if (!r || !r.ok) return { status: r ? r.status : 0 };
+                const n = Number(r.headers && r.headers.get && r.headers.get('content-length')) || 0;
+                if (n > MP4_MAX) { try { ctl && ctl.abort(); } catch (e) { } return { status: 413 }; }
+                return r.blob().then((b) => ({ status: 200, blob: b, size: (b && b.size) || n }));
+            })
+            .catch(() => ({ status: 0 }))
+            .then((x) => { if (t) clearTimeout(t); if (c.ctl === ctl) c.ctl = null; return x; });
+    }
+    function playMp4(c, url, box, live) {
+        fetchMp4(url, c).then((r) => {
+            if (!live()) return;
+            if (!r || !r.blob) {
+                const s = r ? r.status : 0;
+                remember(c.wk, s === 422 || s === 404 || s === 501 || s === 413 ? { fail: 'pv-' + s } : { fail: 'pv-' + (s || 'net'), ttl: 60e3 });
+                end(c, 'no-plan');
+                return;
+            }
+            c.bytes += r.size; budget().add(r.size);
+            const v = mkVideo(box);
+            c.video = v;
+            v.addEventListener('playing', () => { if (live()) { c.el.classList.add('dg-pv-on'); c.el.classList.remove('dg-pv-load'); state.why = 'playing'; } });
+            v.addEventListener('loadedmetadata', () => { if (v.videoWidth > 0 && v.videoHeight > 0 && v.videoWidth / v.videoHeight < 1.2) v.classList.add('dg-pv-fit'); });
+            v.addEventListener('error', () => { if (live()) end(c, 'error'); });
+            try {
+                c.src = URL.createObjectURL(r.blob);
+                v.src = c.src;
+                const p = v.play();
+                if (p && typeof p.catch === 'function') p.catch(() => { if (live()) end(c, 'play'); });
+            } catch (e) { end(c, 'attach'); }
+        });
+    }
+    // 真正开始:拿清单 → hls.js 播 blob 清单(静音、循环、内联)/ TG 预览片直接放 → 第一帧出来才把视频淡入。
+    //   add:手机跟随时同一排的两张一起放(不停掉别的);电脑悬停 / 长按的第一张照旧只放一个
+    function start(card, el, add) {
         const wk = card && (card._wk || card.wk);
         if (!wk || !el) return;
         const r0 = blockReason(envNow());
         if (r0) { state.why = r0; return; }
-        if (state.cur && state.cur.wk === wk && state.cur.el === el) return;
-        stop();
+        if (state.list.some((x) => x.wk === wk && x.el === el)) return;
+        if (!add) stop();
+        else state.list.filter((x) => x.el === el).forEach((x) => end(x));
         const c = { wk, el, hls: null, video: null, src: '', bytes: 0, dead: false, ctl: null };
-        state.cur = c;
+        state.list.push(c);
+        state.cur = state.list[0];
         state.why = 'loading';
         // 正在加载:卡片和电脑上鼠标悬停时一样放大 + 红框,底下一条红色加载条(手机上没有 :hover,以前长按之后看不出在加载)
         try { el.classList.add('dg-pv-load'); } catch (e) { }
-        const live = () => state.cur === c && !c.dead;
+        const live = () => !c.dead && state.list.indexOf(c) >= 0;
         getPlan(wk, live, c).then((plan) => {
             if (!live()) return;
-            if (!plan || !plan.playlist) { state.why = 'no-plan'; stop(); return; }
+            if (!plan || !(plan.playlist || plan.mp4)) { end(c, 'no-plan'); return; }
             const r1 = blockReason(envNow());
-            if (r1) { stop(r1); return; }
+            if (r1) { end(c, r1); return; }
             const box = posterBox(el);
-            if (!box || !root.Hls) { stop('no-box'); return; }
-            const v = root.document.createElement('video');
-            v.className = 'dg-pv-v';
-            v.muted = true; v.defaultMuted = true; v.playsInline = true; v.loop = true; v.autoplay = false;
-            v.setAttribute('muted', ''); v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', ''); v.setAttribute('aria-hidden', 'true');
-            v.preload = 'auto';
-            box.appendChild(v);
+            if (!box) { end(c, 'no-box'); return; }
+            if (plan.mp4) { playMp4(c, plan.mp4, box, live); return; }
+            if (!root.Hls || !hasMse()) { end(c, 'no-mse'); return; }
+            const v = mkVideo(box);
             c.video = v;
             let hls;
-            try { hls = new root.Hls(previewHlsConfig()); } catch (e) { stop('hls'); return; }
+            try { hls = new root.Hls(previewHlsConfig()); } catch (e) { end(c, 'hls'); return; }
             c.hls = hls;
             const E = root.Hls.Events || {};
             hls.on(E.FRAG_LOADED, (_, d) => {
                 const n = (d && d.frag && d.frag.stats && (d.frag.stats.loaded || d.frag.stats.total)) || (d && d.stats && d.stats.loaded) || 0;
                 c.bytes += n;
                 budget().add(n);
-                if (c.bytes > HARD_CAP) stop('hard-cap');
+                if (c.bytes > HARD_CAP) end(c, 'hard-cap');
             });
-            hls.on(E.ERROR, (_, d) => { if (d && d.fatal) stop('error'); });
+            hls.on(E.ERROR, (_, d) => { if (d && d.fatal) end(c, 'error'); });
             v.addEventListener('playing', () => { if (live()) { el.classList.add('dg-pv-on'); el.classList.remove('dg-pv-load'); state.why = 'playing'; } });
             // 卡片是 16:9:竖屏片源整条放下(两侧黑边),不裁成中间一条
             v.addEventListener('loadedmetadata', () => { if (v.videoWidth > 0 && v.videoHeight > 0 && v.videoWidth / v.videoHeight < 1.2) v.classList.add('dg-pv-fit'); });
@@ -579,8 +654,8 @@
                 hls.loadSource(c.src);
                 hls.attachMedia(v);
                 const p = v.play();
-                if (p && typeof p.catch === 'function') p.catch(() => { if (live()) stop('play'); });
-            } catch (e) { stop('attach'); }
+                if (p && typeof p.catch === 'function') p.catch(() => { if (live()) end(c, 'play'); });
+            } catch (e) { end(c, 'attach'); }
         });
     }
     // ---- 触发:电脑停留 ≥600ms(鼠标离开就停);手机长按 ≥450ms(手指挪开 >10px / 提前松手不算;长按出来之后松手那一下不当点击)----
@@ -598,7 +673,7 @@
         }
         const leave = () => {
             el.removeEventListener('mouseleave', leave);
-            if (state.cur && state.cur.el === el) stop('leave');
+            if (state.list.some((c) => c.el === el)) stop('leave');
             else if (state.hoverEl === el) { clearTimeout(state.timer); state.hoverEl = null; }
         };
         el.addEventListener('mouseleave', leave);
@@ -615,8 +690,9 @@
         start(card, el);
     }
     // ---- 手机「跟随」(用户 2026-11-23:长按之后一滑预览就停了、不会接着放):滚动时先停,停稳 FOLLOW_MS 后挑屏幕中间、露出 ≥70% 的那张卡接着预览。
+    //   用户 2026-11-24:一排两张(手机浏览网格)以前只放左边那张(两张离屏幕中线一样远,先到的赢)→ 同一排露出 ≥70% 的最多 FOLLOW_MAX 张一起放。
     //   真点了一下(开播放页 / 点别处)、页面切走、主播放器开始放 → 退出跟随。滑动开头的按下不算「点别处」
-    const FOLLOW_MS = 450;
+    const FOLLOW_MS = 450, FOLLOW_MAX = 2;
     function followSoon() {
         clearTimeout(state.followT);
         state.followT = setTimeout(followPick, FOLLOW_MS);
@@ -630,6 +706,7 @@
         if (!(W > 0 && H > 0)) return;
         const cx = W / 2, cy = H * 0.45;
         let best = null, bd = Infinity;
+        const cands = [];
         const els = d.querySelectorAll(CARD_SEL);
         for (let k = 0; k < els.length; k++) {
             const el = els[k], box = posterBox(el);
@@ -638,16 +715,26 @@
             if (!(r.width > 0 && r.height > 0)) continue;
             const vw = Math.max(0, Math.min(r.right, W) - Math.max(r.left, 0)), vh = Math.max(0, Math.min(r.bottom, H) - Math.max(r.top, 0));
             if (vw * vh < 0.7 * r.width * r.height) continue;   // 露出不到七成的不挑
-            const dx = (r.left + r.right) / 2 - cx, dy = (r.top + r.bottom) / 2 - cy;
+            const x = { el, mx: (r.left + r.right) / 2, my: (r.top + r.bottom) / 2, h: r.height };
+            cands.push(x);
+            const dx = x.mx - cx, dy = x.my - cy;
             const dist = dx * dx + dy * dy * 2;   // 上下偏离比左右更不算「在中间」
-            if (dist < bd) { bd = dist; best = el; }
+            if (dist < bd) { bd = dist; best = x; }
         }
         if (!best) return;
-        const wk = best.getAttribute('data-wk');
-        if (!wk || (state.cur && state.cur.el === best)) return;
+        // 和它同一排的(上下中线差不到卡高的 35%),离它近的先;再按从左到右开(左边那张先出)
+        const row = cands.filter((x) => Math.abs(x.my - best.my) < best.h * 0.35)
+            .sort((a, b) => Math.abs(a.mx - best.mx) - Math.abs(b.mx - best.mx)).slice(0, FOLLOW_MAX)
+            .sort((a, b) => a.mx - b.mx);
+        const want = row.map((x) => x.el);
+        state.list.filter((c) => want.indexOf(c.el) < 0).forEach((c) => end(c, 'follow'));
         const A = D();
-        const card = (A && typeof A.cardOf === 'function' && A.cardOf(wk)) || { wk, _wk: wk };
-        start(card, best);
+        for (const el of want) {
+            const wk = el.getAttribute('data-wk');
+            if (!wk || state.list.some((c) => c.el === el && c.wk === wk)) continue;
+            const card = (A && typeof A.cardOf === 'function' && A.cardOf(wk)) || { wk, _wk: wk };
+            start(card, el, true);
+        }
     }
     function followEnd(why) { state.follow = false; clearTimeout(state.followT); state.followT = 0; stop(why); }
     const CARD_SEL = '.hot-card[data-wk], .browse-card[data-wk], .dg-rail-card[data-wk]';
@@ -671,20 +758,20 @@
         d.addEventListener('touchcancel', () => { clearTimeout(state.timer); state.pressEl = null; }, { passive: true, capture: true });
         // 长按出来预览后松手的那一下点击别开播放页(再点一下才开);长按时的系统菜单也拦掉
         d.addEventListener('click', (e) => {
-            if (Date.now() < state.suppressClickUntil && state.cur && state.cur.el && state.cur.el.contains(e.target)) { e.preventDefault(); e.stopPropagation(); state.suppressClickUntil = 0; return; }
+            if (Date.now() < state.suppressClickUntil && inPreview(e.target)) { e.preventDefault(); e.stopPropagation(); state.suppressClickUntil = 0; return; }
             if (state.cur || state.timer || state.follow) followEnd('click');   // 点了卡片(开播放页)或别处:预览停、不再跟随
         }, true);
         // 修订:长按还没到 450ms 时也拦 —— 安卓 Chrome 的系统长按是 400ms(Android 11+ 默认),contextmenu 先到:以前图片菜单弹出来、
         //   随后的 touchcancel 把长按作废,手机上长按预览基本出不来。现在拦下它并就此开始预览(系统已经认定是长按了)
         d.addEventListener('contextmenu', (e) => {
-            if (state.cur && state.cur.el && state.cur.el.contains(e.target)) { e.preventDefault(); return; }
+            if (inPreview(e.target)) { e.preventDefault(); return; }
             const pe = state.pressEl;
             if (pe && state.timer && typeof pe.contains === 'function' && pe.contains(e.target)) { e.preventDefault(); pressFire(); }
         }, true);
         // 在别处按下 = 停(鼠标)。手机跟随中不算:滑动也是从按下开始的,真点了一下由上面的 click 退出跟随
         d.addEventListener('pointerdown', (e) => {
             if (state.follow && e.pointerType === 'touch') return;
-            if (state.cur && state.cur.el && !state.cur.el.contains(e.target)) stop('tap-away');
+            if (state.list.length && !inPreview(e.target)) stop('tap-away');
         }, { passive: true, capture: true });
         // 滚动(页面或横排)→ 停;手机跟随中停稳后换到屏幕中间那张接着预览
         d.addEventListener('scroll', () => {
@@ -722,13 +809,13 @@
     // 控制台:dgAdultPreview.status() 看为什么没预览 / 用了多少流量
     function status() {
         const B = budget();
-        return { why: state.why, playing: !!(state.cur && state.cur.video), wk: state.cur ? state.cur.wk : '', bytes: state.cur ? state.cur.bytes : 0, sessionMB: +(B.session() / 1048576).toFixed(2), dayMB: +(B.day() / 1048576).toFixed(2), block: blockReason(envNow()) };
+        return { why: state.why, playing: !!(state.cur && state.cur.video), n: state.list.length, wk: state.cur ? state.cur.wk : '', wks: state.list.map((c) => c.wk), bytes: state.list.reduce((a, c) => a + c.bytes, 0), sessionMB: +(B.session() / 1048576).toFixed(2), dayMB: +(B.day() / 1048576).toFixed(2), block: blockReason(envNow()) };
     }
 
     return {
         parsePlaylist, classify, previewPlan, previewHlsConfig,
         famBps, upgradeHttps, hasInsecure, pickLines, firstM3u8, blockReason, makeBudget, makePlanCache, dayKey,
-        PLAN_BUDGET, HARD_CAP, SESSION_CAP, DAY_CAP, DWELL_MS, PRESS_MS, FAIL_TTL,
-        boot, start, stop, status, _onHover: onHover, _state: state,
+        PLAN_BUDGET, HARD_CAP, SESSION_CAP, DAY_CAP, DWELL_MS, PRESS_MS, FAIL_TTL, FOLLOW_MAX, TG_PV_RE,
+        boot, start, stop, status, _onHover: onHover, _state: state, _followPick: followPick,
     };
 });

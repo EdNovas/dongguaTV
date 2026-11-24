@@ -3,6 +3,7 @@
 // Telegram 频道视频中转(给成人站用;单独部署在流量不限的服务器上)
 //   GET  /v/<频道>/<消息id>?e=&s=   视频,支持 Range(拖动进度条);签名地址只有成人站能生成
 //   GET  /t/<频道>/<消息id>?e=&s=   封面(视频自带的缩略图)
+//   GET  /p/<频道>/<消息id>?e=&s=   卡片预览片(几段 2.5 秒拼成的 360p 静音 MP4,第一次要时用 ffmpeg 做、存磁盘;没装 ffmpeg → 501)
 //   GET  /api/list?ch=&after=&limit=&info=1   频道里的视频消息(成人站抓取用,要 Authorization: Bearer <RELAY_SECRET>)
 //   GET  /api/msg?ch=&id=           单条视频消息(同上要密钥)
 //   GET  /api/health                账号 / 缓存状态(同上要密钥)
@@ -10,11 +11,12 @@
 // 账号:node login.js 登录(可以登录多个,读频道和下载会分摊到各个账号上)
 const http = require('http');
 const path = require('path');
-const { loadEnv, verify, sameSecret, log, parseRange, CH_RE } = require('./lib/common');
+const { loadEnv, verify, sameSecret, log, parseRange, CH_RE, sign } = require('./lib/common');
 
 loadEnv(__dirname);
 const { Pool, videoOf, errName } = require('./lib/pool');
 const { ChunkCache, Media, CHUNK } = require('./lib/media');
+const { Previews } = require('./lib/preview');
 
 const ENV = process.env;
 const SECRET = String(ENV.RELAY_SECRET || '');
@@ -34,6 +36,17 @@ const media = new Media(pool, cache, path.join(DATA, 'thumbs'));
 let streams = 0;
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+// 预览片:ffmpeg 从本机自己的 /v/ 读源视频(走同一套分块缓存)
+const LOOP_HOST = /^(0\.0\.0\.0|::|)$/.test(HOST) ? '127.0.0.1' : (HOST.indexOf(':') >= 0 ? '[' + HOST + ']' : HOST);
+const previews = new Previews({
+    dir: path.join(DATA, 'previews'),
+    capBytes: Math.round(Number(ENV.RELAY_PREVIEW_GB || 10) * 1073741824),
+    par: Math.max(1, Number(ENV.RELAY_PREVIEW_PAR || 2)),
+    ffmpeg: ENV.RELAY_FFMPEG || 'ffmpeg',
+    meta: (ch, id) => pool.videoMeta(ch, id),
+    srcUrl: (ch, id) => { const e = nowSec() + 3600; return 'http://' + LOOP_HOST + ':' + PORT + '/v/' + ch + '/' + id + '?e=' + e + '&s=' + sign(SECRET, 'v', ch, id, e); },
+    warm: (ch, id, meta, clips) => warmClips(ch, id, meta, clips),
+});
 function cors(res) {
     res.setHeader('Access-Control-Allow-Origin', ALLOW_ORIGIN);
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
@@ -101,6 +114,26 @@ function prefetchTail(ch, id, meta, buf0) {
     if (tailDone.size > 2000) tailDone.delete(tailDone.keys().next().value);
     prefetchChunks(ch, id, meta, a, b);
 }
+// 做预览片之前:文件头、文件尾(moov 在尾巴上的那种)、每段按"时间比例 ≈ 字节比例"估的位置前后各一块,一起并发拉进缓存。
+//   估得不准也没关系(只是预热):ffmpeg 真要哪块自己会去要
+function warmClips(ch, id, meta, clips) {
+    const size = Number(meta.size) || 0, dur = Number(meta.dur) || 0;
+    if (!(size > 0 && dur > 0)) return;
+    const last = Math.floor((size - 1) / CHUNK), want = new Set([0]);
+    for (const c of clips) {
+        const n = Math.floor(size * Math.min(1, c.ss / dur) / CHUNK);
+        for (let k = n - 1; k <= n + 1 + Math.ceil(c.t / 4); k++) if (k >= 0 && k <= last) want.add(k);
+    }
+    const list = [...want].sort((x, y) => x - y);
+    let i = 0;
+    const worker = async () => {
+        while (i < list.length) {
+            const k = list[i++];
+            try { const buf = await media.chunk(ch, id, meta, k); if (k === 0) prefetchTail(ch, id, meta, buf); } catch (_) { return; }
+        }
+    };
+    for (let w = 0; w < Math.min(TAIL_PAR, list.length); w++) worker();
+}
 
 async function serveVideo(req, res, ch, id) {
     const meta = await pool.videoMeta(ch, id);
@@ -118,12 +151,14 @@ async function serveVideo(req, res, ch, id) {
     let gone = false;
     res.on('close', () => { gone = true; });
     const first = Math.floor(start / CHUNK), last = Math.floor(end / CHUNK);
+    // 本机 ffmpeg 做预览片的读(只从环回地址来才认):每段只读几秒,不顺着往后预取
+    const pv = req.headers['x-relay-preview'] === '1' && /^(127\.|::1$|::ffff:127\.)/.test(String(req.socket && req.socket.remoteAddress));
     if (end === size - 1 && first > 0 && last - first + 1 <= TAIL_MAX) prefetchChunks(ch, id, meta, first, last);   // ② 读 moov 的那一下
     streams++;
     try {
         for (let n = first; n <= last && !gone; n++) {
             // 预取后面两块(播放器是顺着读的,省掉每块之间的等待)
-            for (let k = n + 1; k <= Math.min(n + 2, last); k++) media.chunk(ch, id, meta, k).catch(() => {});
+            if (!pv) for (let k = n + 1; k <= Math.min(n + 2, last); k++) media.chunk(ch, id, meta, k).catch(() => {});
             const buf = await media.chunk(ch, id, meta, n);
             if (n === 0) prefetchTail(ch, id, meta, buf);   // ①
             if (gone) break;
@@ -135,6 +170,22 @@ async function serveVideo(req, res, ch, id) {
     } finally {
         streams--;
     }
+}
+
+async function servePreview(req, res, ch, id) {
+    let buf;
+    try { buf = await previews.get(ch, id); } catch (e) {
+        if (e && e.pvCode === 'no-ffmpeg') { fail(res, 501, 'NO_FFMPEG'); return; }
+        if (e && e.pvCode === 'busy') { res.setHeader('Retry-After', '10'); fail(res, 503, 'BUSY'); return; }
+        if (e && e.pvCode === 'failed') { fail(res, 422, 'NO_PREVIEW'); return; }
+        throw e;
+    }
+    const rg = req.headers.range ? parseRange(req.headers.range, buf.length) : null;
+    if (rg === false) { res.writeHead(416, { 'Content-Range': 'bytes */' + buf.length }); res.end(); return; }
+    const [a, b] = rg || [0, buf.length - 1];
+    res.writeHead(rg ? 206 : 200, Object.assign({ 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Length': b - a + 1, 'Cache-Control': 'private, max-age=86400' },
+        rg ? { 'Content-Range': 'bytes ' + a + '-' + b + '/' + buf.length } : {}));
+    res.end(req.method === 'HEAD' ? undefined : buf.subarray(a, b + 1));
 }
 
 async function serveThumb(req, res, ch, id) {
@@ -226,14 +277,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') { fail(res, 405, 'METHOD'); return; }
     try {
         if (u.pathname === '/healthz') { res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('ok'); return; }
-        const m = /^\/([vt])\/([A-Za-z][A-Za-z0-9_]{3,31})\/([1-9]\d{0,11})(?:\.(?:mp4|jpg))?$/.exec(u.pathname);
+        const m = /^\/([vtp])\/([A-Za-z][A-Za-z0-9_]{3,31})\/([1-9]\d{0,11})(?:\.(?:mp4|jpg))?$/.exec(u.pathname);
         if (m) {
             const [, kind, ch, id] = m;
             if (!verify(SECRET, kind, ch, id, u.searchParams.get('e'), u.searchParams.get('s'), nowSec())) { fail(res, 403, 'BAD_SIGNATURE'); return; }
             if (kind === 'v') {
                 if (streams >= MAX_STREAMS) { res.setHeader('Retry-After', '5'); fail(res, 503, 'BUSY'); return; }
                 await serveVideo(req, res, ch, id);
-            } else await serveThumb(req, res, ch, id);
+            } else if (kind === 'p') await servePreview(req, res, ch, id);
+            else await serveThumb(req, res, ch, id);
             return;
         }
         if (u.pathname.startsWith('/api/')) {
@@ -242,7 +294,7 @@ const server = http.createServer(async (req, res) => {
             if (u.pathname === '/api/list') { await apiList(u, res); return; }
             if (u.pathname === '/api/msg') { await apiMsg(u, res); return; }
             if (u.pathname === '/api/health') {
-                json(res, 200, { ok: true, accounts: pool.status(), usable: pool.usable().length, streams, cache: cache.stat(), fromTg: media.bytesFromTg, fromCache: media.bytesFromCache });
+                json(res, 200, { ok: true, accounts: pool.status(), usable: pool.usable().length, streams, cache: cache.stat(), fromTg: media.bytesFromTg, fromCache: media.bytesFromCache, previews: previews.stat() });
                 return;
             }
         }
@@ -259,6 +311,7 @@ server.keepAliveTimeout = 65e3;
 
 (async () => {
     cache.init();
+    previews.init();
     await pool.start();
     server.listen(PORT, HOST, () => log('[relay] 监听', HOST + ':' + PORT, '账号', pool.usable().length, '个可用'));
 })().catch((e) => { console.error(e); process.exit(1); });

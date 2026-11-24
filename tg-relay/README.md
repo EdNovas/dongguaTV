@@ -12,7 +12,7 @@
 
 ## 2. 装
 
-服务器上要有 Node.js 22 或 24。
+服务器上要有 Node.js 22 或 24；卡片预览片要 ffmpeg（Debian / Ubuntu：`sudo apt install ffmpeg`，没装也能跑，只是 TG 作品没有悬停 / 长按预览）。
 
 ```bash
 git clone -b adult <你的仓库地址> dongguatv && cd dongguatv/tg-relay
@@ -28,6 +28,9 @@ cp .env.example .env      # 然后编辑 .env
 | `RELAY_SECRET` | 随机长串（≥16 位），成人站的 `ADULT_TG_SECRET` 填同一个。生成：`node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"` |
 | `RELAY_PORT` | 默认 8790（前面套 HTTPS 反代时只监听本机：`RELAY_HOST=127.0.0.1`） |
 | `RELAY_CACHE_GB` | 视频分块的磁盘缓存上限，默认 20 |
+| `RELAY_PREVIEW_GB` | 卡片预览片的磁盘上限，默认 10（一个几百 KB，满了先删最久没用的） |
+| `RELAY_PREVIEW_PAR` | 同时最多做几个预览片，默认 2（每个占 ffmpeg 两个线程；排队的超过 16 个直接回忙，浏览器那边就不预览） |
+| `RELAY_FFMPEG` | ffmpeg 的路径，默认 `ffmpeg` |
 | `RELAY_MAX_STREAMS` | 同时最多转多少个视频流，默认 60（超了回 503，播放器会重试 / 换线路） |
 | `RELAY_DATA` | 数据目录，默认 `./data`（账号、缓存都在这里） |
 
@@ -84,7 +87,7 @@ ADULT_TG_CHANNELS=TS88158:伪娘,ladyboy_nngy:人妖,ntong_1:女同,TBB18V
 curl -H "Authorization: Bearer <RELAY_SECRET>" https://relay.example.com/api/health
 ```
 
-看 `accounts` 里每个账号是不是 `ok: true`、有没有在限流（`floodSec`），`cache` 是磁盘缓存用量，`fromTg` / `fromCache` 是从 Telegram 拉的 / 从缓存给的字节数。
+看 `accounts` 里每个账号是不是 `ok: true`、有没有在限流（`floodSec`），`cache` 是磁盘缓存用量，`fromTg` / `fromCache` 是从 Telegram 拉的 / 从缓存给的字节数，`previews` 是预览片（`ok` = 找到了 ffmpeg、`files` 存了几个、`made` / `fails` 这次启动后做成 / 做失败几个）。
 
 成人站后台：`GET /api/adult/admin/tg`（带 `X-Admin-Token`）看每个频道同步到第几条、命中未成年几条、有没有被停用。
 
@@ -94,6 +97,7 @@ curl -H "Authorization: Bearer <RELAY_SECRET>" https://relay.example.com/api/hea
 |---|---|---|
 | `GET/HEAD /v/<频道>/<消息id>?e=&s=` | 签名 | 视频，支持 Range |
 | `GET /t/<频道>/<消息id>.jpg?e=&s=` | 签名 | 封面（视频自带的缩略图） |
+| `GET /p/<频道>/<消息id>?e=&s=` | 签名 | 卡片预览片：从视频里均匀挑 3~5 段、每段 2.5 秒，拼成 360p 静音 MP4（几百 KB）。第一次要时现做（先把各段所在的块并发拉进缓存，再用 ffmpeg 读本机的 `/v/`），存在 `data/previews/`；没装 ffmpeg 回 501、忙回 503、做不了回 422 |
 | `GET /api/list?ch=&after=&limit=&info=1` | `Authorization: Bearer <RELAY_SECRET>` | 频道里 id 大于 `after` 的视频消息（每次最多 100 条消息） |
 | `GET /api/msg?ch=&id=` | 同上 | 单条视频消息 |
 | `GET /api/health` | 同上 | 账号 / 缓存状态 |

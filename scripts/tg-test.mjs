@@ -75,6 +75,11 @@ const ENV = { ADULT_TG_RELAY: 'https://relay.example.com', ADULT_TG_SECRET: SECR
     ok(/^\/t\/TS88158\/123\.jpg$/.test(tu.pathname) && RC.verify(SECRET, 't', 'TS88158', '123', tu.searchParams.get('e'), tu.searchParams.get('s'), NOW), '封面地址:长期有效、中转验得过', tu.href);
     ok(TGL.signPlayUrls(cfg, '正片$tg://TS88158/123', NOW) === '正片$' + pu, 'tg:// → 签名地址');
     ok(TGL.signPlayUrls(cfg, '第1集$https://x.com/a.m3u8', NOW) === '第1集$https://x.com/a.m3u8', '别的地址不动');
+    // 卡片预览片地址(/p/,签名种类 p:拿播放 / 封面的签名换不来)
+    const pvu = new URL(TGL.previewOf(cfg, '正片$tg://TS88158/123', NOW));
+    ok(pvu.pathname === '/p/TS88158/123' && RC.verify(SECRET, 'p', 'TS88158', '123', pvu.searchParams.get('e'), pvu.searchParams.get('s'), NOW), '预览片地址:中转验得过', pvu.href);
+    ok(!RC.verify(SECRET, 'v', 'TS88158', '123', pvu.searchParams.get('e'), pvu.searchParams.get('s'), NOW), '预览片签名不能拿去取整个视频');
+    ok(TGL.previewOf(cfg, '正片$https://x.com/a.m3u8', NOW) === '' && TGL.previewOf({ on: false }, '正片$tg://TS88158/1', NOW) === '', '不是 tg:// / 没启用 → 没有预览片');
     // 播放器的 _isTgUrl(从 index.html 抽出来)
     const html = fs.readFileSync(path.join(ROOT, 'public/index.html'), 'utf8');
     const m = html.match(/_isTgUrl\(u\) \{ return typeof u === 'string' && (\/\^.*?\$\/)\.test\(u\); \}/);
@@ -88,11 +93,11 @@ const ENV = { ADULT_TG_RELAY: 'https://relay.example.com', ADULT_TG_SECRET: SECR
     }
     // 中转路由认得签名地址的路径
     const relaySrc = fs.readFileSync(path.join(ROOT, 'tg-relay/server.js'), 'utf8');
-    const rm = relaySrc.match(/const m = (\/\^\\\/\(\[vt\]\).*?\$\/)\.exec\(u\.pathname\);/);
+    const rm = relaySrc.match(/const m = (\/\^\\\/\(\[vtp\]\).*?\$\/)\.exec\(u\.pathname\);/);
     ok(!!rm, '中转 server.js 的路由正则');
     if (rm) {
         const re = new Function('return ' + rm[1])();
-        ok(re.test(new URL(pu).pathname) && re.test(tu.pathname), '中转路由认得播放 / 封面地址');
+        ok(re.test(new URL(pu).pathname) && re.test(tu.pathname) && re.test(pvu.pathname), '中转路由认得播放 / 封面 / 预览片地址');
     }
 }
 
@@ -338,6 +343,17 @@ function mkRelay() {
             const dd = r.body && r.body.list && r.body.list[0];
             ok(r.code === 200 && dd && new RegExp('/v/TS88158/' + id + '\\?e=').test(dd.vod_play_url), '详情:两位数消息号也给签名地址 #' + id, r);
         }
+        // 作品接口:TG 线路带 _pv(卡片预览片的签名地址)
+        {
+            const routes = {};
+            gate.register(new Proxy({}, { get: (_, m) => (p, ...h) => { if (typeof p === 'string' && h.length) routes[String(m) + ' ' + p] = h[h.length - 1]; } }));
+            const wr = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, set() { return this; } };
+            await routes['get /api/catalog/work']({ query: { k: wk }, headers: {} }, wr);
+            const src = wr.body && wr.body.sources && wr.body.sources.find((x) => x.site_key === 'tg_ts88158');
+            ok(wr.code === 200 && src && /^https:\/\/relay\.example\.com\/p\/TS88158\/\d+\?e=\d+&s=[A-Za-z0-9_-]{24}$/.test(src._pv || ''), '作品接口:TG 线路带预览片地址 _pv', src && src._pv);
+            const PVJ = require(path.join(ROOT, 'public/adult/preview.js'));
+            ok(PVJ.pickLines(wr.body, { mse: false }).length === 1 && PVJ.pickLines(wr.body)[0].mp4 === src._pv, 'preview.js 认得这个 _pv(没有 MSE 也能用)');
+        }
         const res2 = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, set() { return this; } };
         await gate.detailGet({ query: { site_key: 'tg_ts88158', id: '9' } }, res2);
         ok(res2.code === 404, '详情:未成年那条 404', res2);
@@ -431,6 +447,59 @@ if (relayDeps) {
         ok(E.user && E.user.id === 'u3', '重发时旧码过期就重新发码', { err: E.err && E.err.message, calls: E.calls.map((c) => c.c) });
     }
 
+    // 预览片(tg-relay/lib/preview.js):挑段 / ffmpeg 参数;本机有 ffmpeg 就真做一个(源 moov 在文件尾、经带 Range 的 HTTP 读)
+    {
+        const PVR = require(path.join(ROOT, 'tg-relay/lib/preview.js'));
+        const p6 = PVR.clipPlan(600), p60 = PVR.clipPlan(3600), p20 = PVR.clipPlan(20);
+        ok(p6.length === 4 && p60.length === 5 && p20.length === 1 && PVR.clipPlan(3).length === 0, '挑段:10 分钟 4 段、1 小时 5 段、20 秒 1 段、3 秒不做', [p6, p60, p20]);
+        ok(p6.every((c) => c.ss >= 48 && c.ss + c.t <= 600 - 36) && p60[0].ss >= 288, '掐头去尾', p6);
+        const args = PVR.ffmpegArgs('http://127.0.0.1:1/v/x/1', p6, '/tmp/o.mp4');
+        ok(args.filter((a) => a === '-i').length === 4 && args.includes('X-Relay-Preview: 1\r\n') && args.includes('+faststart') && args.includes('-an'), 'ffmpeg 参数:每段一个输入、带预览标记、faststart、不要声音');
+        const { spawnSync } = await import('node:child_process');
+        const hasFf = (() => { try { return spawnSync('ffmpeg', ['-hide_banner', '-version']).status === 0; } catch (_) { return false; } })();
+        if (!hasFf) console.log('  (跳过预览片实做:本机没有 ffmpeg)');
+        else {
+            const http = await import('node:http');
+            const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'tgpv-'));
+            const src = path.join(tmp, 'src.mp4');
+            spawnSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'testsrc2=size=640x360:rate=25', '-t', '90', '-c:v', 'libx264', '-preset', 'ultrafast', '-g', '50', src]);
+            const size = fs.statSync(src).size;
+            let reqs = 0, pvHdr = 0;
+            const srv = http.createServer((req, res) => {
+                reqs++; if (req.headers['x-relay-preview'] === '1') pvHdr++;
+                const rg = req.headers.range ? RC.parseRange(req.headers.range, size) : null;
+                const [a, b] = rg || [0, size - 1];
+                res.writeHead(rg ? 206 : 200, Object.assign({ 'Content-Type': 'video/mp4', 'Accept-Ranges': 'bytes', 'Content-Length': b - a + 1 }, rg ? { 'Content-Range': 'bytes ' + a + '-' + b + '/' + size } : {}));
+                const st = fs.createReadStream(src, { start: a, end: b }); st.pipe(res); res.on('close', () => st.destroy());
+            });
+            await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+            const warmed = [];
+            const P = new PVR.Previews({ dir: path.join(tmp, 'pv'), capBytes: 64 * 1048576, meta: async (ch, id) => ({ dur: id === '2' ? 3 : 90, size }), srcUrl: () => 'http://127.0.0.1:' + srv.address().port + '/v/x/1', warm: (ch, id, meta, clips) => warmed.push(clips.length) });
+            try {
+                P.init();
+                const [b1, b1b] = await Promise.all([P.get('TestCh', '1'), P.get('TestCh', '1')]);
+                ok(b1 && b1.length > 2048 && b1.toString('latin1', 4, 8) === 'ftyp' && b1b.length === b1.length && P.stat().made === 1, '做出预览片(同时要两次只做一次)', P.stat());
+                ok(b1.indexOf('moov') > 0 && b1.indexOf('moov') < b1.indexOf('mdat'), '预览片 moov 在前(faststart,浏览器拿到就能放)');
+                ok(pvHdr > 0 && pvHdr === reqs && warmed[0] === 3, 'ffmpeg 的读都带预览标记;先预热各段', { reqs, pvHdr, warmed });
+                const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height:format=duration', '-of', 'json', path.join(tmp, 'pv', 'testch_1.mp4')], { encoding: 'utf8' });
+                if (probe.status === 0) { const j = JSON.parse(probe.stdout); ok(j.streams[0].height === 360 && Math.abs(Number(j.format.duration) - 7.5) < 0.5, '360p、3 段 × 2.5 秒', j); }
+                const r0 = reqs;
+                ok((await P.get('testch', '1')).length === b1.length && reqs === r0 && P.stat().hits >= 1, '第二次直接读磁盘(频道名不分大小写)');
+                let e2 = null; try { await P.get('TestCh', '2'); } catch (e) { e2 = e; }
+                ok(e2 && e2.pvCode === 'failed', '太短做不了 → failed', e2 && e2.message);
+                let e3 = null; try { await P.get('TestCh', '2'); } catch (e) { e3 = e; }
+                ok(e3 && e3.pvCode === 'failed' && P.stat().fails === 1, '做不了的记住,不反复做');
+                const P2 = new PVR.Previews({ dir: path.join(tmp, 'pv'), capBytes: 64 * 1048576, meta: async () => ({ dur: 90, size }), srcUrl: () => 'x' });
+                P2.init();
+                ok(P2.idx.size === 1 && P2.total === b1.length, '重启后认回磁盘上的预览片');
+                const P3 = new PVR.Previews({ dir: path.join(tmp, 'pv3'), ffmpeg: path.join(tmp, 'no-such-ffmpeg'), meta: async () => ({}), srcUrl: () => 'x' });
+                P3.init();
+                let e4 = null; try { await P3.get('TestCh', '1'); } catch (e) { e4 = e; }
+                ok(!P3.ok && e4 && e4.pvCode === 'no-ffmpeg', '没装 ffmpeg → no-ffmpeg');
+            } finally { srv.close(); fs.rmSync(tmp, { recursive: true, force: true }); }
+        }
+    }
+
     const { spawn } = await import('node:child_process');
     const net = await import('node:net');
     const port = await new Promise((r) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => r(p)); }); });
@@ -461,6 +530,12 @@ if (relayDeps) {
         ok((await fetch(base + '/t/TS88158/5.jpg?e=' + exp + '&s=' + sig)).status === 403, '视频签名拿去取封面 403');
         ok((await fetch(base + '/v/TS88158/5?e=' + (Math.floor(Date.now() / 1000) - 10) + '&s=' + RC.sign(SECRET, 'v', 'TS88158', 5, Math.floor(Date.now() / 1000) - 10))).status === 403, '过期 403');
         ok((await fetch(base + '/x/../../etc/passwd')).status === 404, '别的路径 404');
+        // 预览片:签名种类 p;播放签名拿来不行;签名对 → 去做(没账号 → 503 / 本机没装 ffmpeg → 501)
+        ok((await fetch(base + '/p/TS88158/5?e=' + exp + '&s=' + sig)).status === 403, '播放签名拿去取预览片 403');
+        const pvr = await fetch(base + '/p/TS88158/5?e=' + exp + '&s=' + RC.sign(SECRET, 'p', 'TS88158', 5, exp));
+        ok(pvr.status === 503 || pvr.status === 501, '预览片签名对 → 没账号 503(没 ffmpeg 501)', pvr.status);
+        const hj2 = await (await fetch(base + '/api/health', { headers: { authorization: 'Bearer ' + SECRET } })).json();
+        ok(hj2.previews && typeof hj2.previews.files === 'number' && typeof hj2.previews.ok === 'boolean', '/api/health 带预览片状态', hj2.previews);
         // /api/msg 的消息号校验:两位数以上不能被当成坏输入(没账号 → 503,不是 400)
         const am = await fetch(base + '/api/msg?ch=TS88158&id=1243', { headers: { authorization: 'Bearer ' + SECRET } });
         ok(am.status === 503, '/api/msg 四位数消息号过校验(没账号 → 503,不是 400)', am.status);

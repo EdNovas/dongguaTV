@@ -147,11 +147,22 @@ t('pickLines / firstM3u8', () => {
     ] };
     assert.deepEqual(PV.pickLines(w), [{ url: 'https://m.example/c/index.m3u8', site: 'c', fam: 'tsbf:65', dur: 140 }, { url: 'https://m.example/d/index.m3u8', site: 'd', fam: '', dur: 0 }]);
     assert.deepEqual(PV.pickLines(null), []);
+    // TG 线路:_pv(中转的预览片)→ { mp4 };没有 MSE 时只要 mp4 的;_pv 不像中转预览地址的不认
+    const PVU = 'https://relay.example.com/p/TS88158/123?e=1800000000&s=' + 'A'.repeat(24);
+    const tw = { sources: [
+        { site_key: 'tg_x', _pv: PVU, vod_play_url: '正片$https://relay.example.com/v/TS88158/123?e=1800000000&s=' + 'A'.repeat(24), _dur: 900 },
+        { site_key: 'c', vod_play_url: '正片$https://m.example/c/index.m3u8' },
+        { site_key: 'bad', _pv: 'javascript:alert(1)', vod_play_url: '' },
+    ] };
+    assert.deepEqual(PV.pickLines(tw), [{ mp4: PVU, site: 'tg_x', fam: '', dur: 900 }, { url: 'https://m.example/c/index.m3u8', site: 'c', fam: '', dur: 0 }]);
+    assert.deepEqual(PV.pickLines(tw, { mse: false }), [{ mp4: PVU, site: 'tg_x', fam: '', dur: 900 }]);
+    assert.deepEqual(PV.pickLines({ sources: [{ site_key: 'c', vod_play_url: '正片$https://m.example/c/index.m3u8' }] }, { mse: false }), []);
+    assert.ok(!PV.TG_PV_RE.test(PVU + '&x=1') && !PV.TG_PV_RE.test('https://relay.example.com/v/TS88158/123?e=1800000000&s=' + 'A'.repeat(24)));
 });
 t('blockReason covers every disable condition', () => {
     const ok = { on: true, tv: false, mse: true, reducedMotion: false, hidden: false, net: '', busy: false, feed: false, locked: false, sessionBytes: 0, dayBytes: 0 };
     assert.equal(PV.blockReason(ok), '');
-    const cases = { on: [false, 'off'], tv: [true, 'tv'], mse: [false, 'no-mse'], reducedMotion: [true, ''], hidden: [true, 'hidden'], net: ['cellular', 'cellular'], busy: [true, 'main-player'], feed: [true, 'feed'], locked: [true, 'locked'], sessionBytes: [PV.SESSION_CAP, 'session-budget'], dayBytes: [PV.DAY_CAP, 'day-budget'] };
+    const cases = { on: [false, 'off'], tv: [true, 'tv'], mse: [false, ''], reducedMotion: [true, ''], hidden: [true, 'hidden'], net: ['cellular', 'cellular'], busy: [true, 'main-player'], feed: [true, 'feed'], locked: [true, 'locked'], sessionBytes: [PV.SESSION_CAP, 'session-budget'], dayBytes: [PV.DAY_CAP, 'day-budget'] };
     for (const k of Object.keys(cases)) assert.equal(PV.blockReason(Object.assign({}, ok, { [k]: cases[k][0] })), cases[k][1], k);
     assert.equal(PV.SESSION_CAP, 60 * 1048576); assert.equal(PV.DAY_CAP, 150 * 1048576); assert.equal(PV.HARD_CAP, 5 * 1048576); assert.equal(PV.PLAN_BUDGET, 4 * 1048576);
     assert.equal(PV.DWELL_MS, 600); assert.equal(PV.PRESS_MS, 450);
@@ -214,7 +225,7 @@ function makeEnv(opts) {
     const mkEl = (cls) => {
         const el = {
             className: cls || '', _cls: new Set(), children: [], parentNode: null, _ls: {}, attrs: {},
-            classList: { add: (c) => el._cls.add(c), remove: (c) => el._cls.delete(c), contains: (c) => el._cls.has(c) },
+            classList: { add: (c) => el._cls.add(c), remove: (...cs) => cs.forEach((c) => el._cls.delete(c)), contains: (c) => el._cls.has(c) },
             addEventListener(t, f) { (el._ls[t] = el._ls[t] || []).push(f); },
             removeEventListener(t, f) { el._ls[t] = (el._ls[t] || []).filter((x) => x !== f); },
             dispatch(t) { (el._ls[t] || []).slice().forEach((f) => f({ type: t })); },
@@ -249,17 +260,22 @@ function makeEnv(opts) {
     const doc = {
         hidden: false,
         createElement: (tag) => mkEl(tag === 'video' ? '' : tag),
-        getElementById: () => null, head: mkEl('head'), documentElement: mkEl('html'),
+        getElementById: () => null, head: mkEl('head'), documentElement: mkEl('html'), querySelectorAll: () => (o.cards ? o.cards() : []),
         addEventListener(t, f) { (listeners[t] = listeners[t] || []).push(f); },
     };
     const store = new Map();
     const win = {
-        document: doc, Hls: FakeHls, location: { protocol: 'https:' },
+        document: doc, Hls: FakeHls, location: { protocol: 'https:' }, innerWidth: 390, innerHeight: 800,
         localStorage: { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)) },
         sessionStorage: (() => { const s = new Map(); return { getItem: (k) => (s.has(k) ? s.get(k) : null), setItem: (k, v) => s.set(k, String(v)) }; })(),
         matchMedia: (q) => ({ matches: /hover: hover/.test(q) ? o.hover !== false : false }),
         fetch: async (u, init) => {
             fetched.push(u);
+            if (/\/p\/[A-Za-z]/.test(u)) {
+                if (o.pvHang) return hangUntilAbort(u, init);
+                const st = o.pvStatus || 200;
+                return st === 200 ? new Response(new Uint8Array(300000), { status: 200, headers: { 'content-length': '300000' } }) : new Response('{}', { status: st });
+            }
             const direct = !u.startsWith('https://w.example/');
             if (direct && o.hang) return hangUntilAbort(u, init);
             if (direct && o.directFails) return new Response('nope', { status: 403 });
@@ -271,7 +287,7 @@ function makeEnv(opts) {
             proxyUrl: () => (o.noProxy ? '' : 'https://w.example'), netNow: () => o.net || '', isTV: () => false, mainBusy: () => !!o.busy, privLocked: () => false, cellOk: () => !!o.cell,
         },
         addEventListener() { },
-        URL: { createObjectURL: () => 'blob:pv-1', revokeObjectURL() { } }, Blob: function () { },
+        URL: { createObjectURL: () => 'blob:pv-1', revokeObjectURL() { } }, Blob: function () { }, Uint8Array,
         AbortController, Response, setTimeout: o.fastTimeout ? (f, ms) => setTimeout(f, ms >= 6000 ? 30 : ms) : setTimeout, clearTimeout, console, Promise, JSON, Math, Date, Map, Set, Object, Array, String, Number, RegExp, Error,
     };
     if (o.nav) win.navigator = o.nav;
@@ -424,6 +440,74 @@ at('F1 touch long-press with no navigator.connection = network unknown → no pr
         assert.equal(E.hlsInst.length, want, JSON.stringify(o));
         if (!want) { assert.equal(E.fetched.length, 0, 'no network at all'); assert.equal(E.api.status().block, 'net-unknown'); }
     }
+});
+
+const PVURL = 'https://relay.example.com/p/TS88158/77?e=1800000000&s=' + 'B'.repeat(24);
+const tgWork = () => ({ sources: [{ site_key: 'tg_ts88158', _pv: PVURL, vod_play_url: '正片$https://relay.example.com/v/TS88158/77?e=1800000000&s=' + 'B'.repeat(24) }] });
+at('TG: _pv 预览片整个拿下来直接放(不用 hls.js),计流量;没有 MSE(iPhone)也放', async () => {
+    for (const mse of [true, false]) {
+        const E = makeEnv({ work: tgWork, mse });
+        E.api._onHover({ _wk: 't:tg-1' }, E.card, { type: 'pointerover' });
+        await sleep(650); await settle(30);
+        assert.deepEqual(E.fetched, [PVURL], 'only the preview clip: ' + JSON.stringify(E.fetched));
+        assert.equal(E.hlsInst.length, 0, 'no hls.js for an mp4 clip');
+        const v = E.box.children[0];
+        assert.ok(v && v.src === 'blob:pv-1' && v.muted === true && v.loop === true && v.playsInline === true, 'video on the blob');
+        v.dispatch('playing');
+        assert.ok(E.card.classList.contains('dg-pv-on'));
+        assert.ok(JSON.parse(E.store.get('dg_pv_day')).b >= 300000, 'bytes counted');
+        assert.ok(/"mp4"/.test(E.ss.getItem('dg_pv_plan')), 'plan cached');
+        E.card.dispatch('mouseleave');
+        assert.ok(!E.box.children.length && E.api.status().why === 'leave');
+    }
+});
+at('TG: 预览片做不了(422)记 6 小时;中转忙(503)/ 断网只记一分钟', async () => {
+    for (const [st, ttl] of [[422, undefined], [503, 60e3]]) {
+        const E = makeEnv({ work: tgWork, pvStatus: st });
+        E.api._onHover({ _wk: 't:tg-2' }, E.card, { type: 'pointerover' });
+        await sleep(650); await settle(30);
+        assert.equal(E.box.children.length, 0);
+        assert.ok(!E.card.classList.contains('dg-pv-load'), 'loading bar gone');
+        const rec = JSON.parse(E.ss.getItem('dg_pv_plan')).find((r) => r.wk === 't:tg-2');
+        assert.equal(rec.fail, 'pv-' + st); assert.equal(rec.ttl, ttl);
+    }
+});
+at('TG: 预览片还在做时离开卡片 → 请求中止', async () => {
+    const E = makeEnv({ work: tgWork, pvHang: true });
+    E.api._onHover({ _wk: 't:tg-3' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle(30);
+    E.card.dispatch('mouseleave');
+    await settle();
+    assert.deepEqual(E.aborted, [PVURL]);
+});
+at('手机跟随:停稳后同一排两张一起放(以前只放左边那张);不在同一排的不放', async () => {
+    const cards = [];
+    const mkCard = (wk, left, top) => {
+        const E0 = cards.env;
+        const c = E0.mkEl('browse-card'), b = E0.mkEl('poster-wrap');
+        c.appendChild(b);
+        c.getAttribute = (k) => (k === 'data-wk' ? wk : null);
+        b.getBoundingClientRect = () => ({ left, right: left + 170, top, bottom: top + 96, width: 170, height: 96 });
+        return c;
+    };
+    const E = makeEnv({ work: tgWork, cards: () => cards.list });
+    cards.env = E;
+    cards.list = [mkCard('t:a', 15, 200), mkCard('t:b', 205, 200), mkCard('t:c', 15, 330), mkCard('t:d', 205, 330), mkCard('t:e', 15, 700)];
+    E.api._state.follow = true;
+    E.api._followPick();
+    await settle(30);
+    const st = E.api.status();
+    assert.equal(st.n, 2, 'two at once: ' + JSON.stringify(st));
+    assert.equal(JSON.stringify(st.wks.slice().sort()), JSON.stringify(['t:c', 't:d']), 'the row nearest the middle (y≈45%): ' + JSON.stringify(st.wks));
+    assert.ok(cards.list[2].children[0].children.length === 1 && cards.list[3].children[0].children.length === 1, 'both have a video');
+    // 一张出错只停它自己
+    cards.list[2].children[0].children[0].dispatch('error');
+    assert.equal(E.api.status().n, 1);
+    assert.equal(cards.list[3].children[0].children.length, 1, 'the other keeps playing');
+    // 滚动 → 全停
+    E.fire('scroll', {});
+    assert.equal(E.api.status().n, 0);
+    assert.equal(E.api.FOLLOW_MAX, 2);
 });
 
 // ④ 全量评估(只在调研机上有数据时)

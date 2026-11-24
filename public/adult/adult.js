@@ -1839,7 +1839,7 @@
         }
         // 每批生效时:正在预览 / 悬停等着开预览的那张卡,作品这一批不出了(图床被记死 / 服务器的表变了也会让卡片消失,不经过 hide)→ 先停;
         //   重渲染之后那张卡的元素脱离了文档(跨块挪位被重建)→ 也停(preview.js 在脱离文档的元素上收不到离开事件,视频会接着拉分片)
-        function pvCards(S) { return [S.cur && S.cur.el, S.hoverEl, S.pressEl].filter(Boolean); }
+        function pvCards(S) { return (Array.isArray(S.list) ? S.list.map(c => c && c.el) : [S.cur && S.cur.el]).concat([S.hoverEl, S.pressEl]).filter(Boolean); }
         function pvCheck() {
             const P = root.dgAdultPreview, S = P && P._state;
             if (!P || typeof P.stop !== 'function' || !S || !(S.cur || S.timer)) return;
@@ -2762,6 +2762,10 @@
         'html .poster-wrap { aspect-ratio: 16 / 9; }',
         '@media (max-width: 768px) { html .browse-grid { grid-template-columns: repeat(auto-fill, minmax(calc(200px * var(--ui-scale, 1)), 1fr)); } }',
         '@media (max-width: 480px) { html .browse-grid { grid-template-columns: repeat(auto-fill, minmax(calc(140px * var(--ui-scale, 1)), 1fr)); } }',
+        // 用户 2026-11-24:设置里字号「大」「特大」(--ui-scale ≥ 1.15)时手机上一排一张(以前 140px×1.35≈189px,宽一点的手机照样塞两张)。
+        //   (scale − 1.1) × 10000px:标准 / 小是负数 → 照旧 140px×scale 两列;大 / 特大 ≥ 500px → min(100%, …) = 一整行。
+        //   老浏览器不认 min()/max() 时这条整条作废,落回上面那条(两列)
+        '@media (max-width: 480px) { html .browse-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, max(calc(140px * var(--ui-scale, 1)), calc((var(--ui-scale, 1) - 1.1) * 10000px))), 1fr)); } }',
         // 主站给封面 <img> 铺了灰色渐变占位底(background-image),竖图 contain 后两侧会露出来盖住模糊底 → 去掉
         'html .poster-wrap img.dg-port { object-fit: contain; position: relative; z-index: 1; background: none; }',
         '.poster-wrap.dg-port-bg::before { content: ""; position: absolute; top: -12px; left: -12px; right: -12px; bottom: -12px; background: var(--dg-pbg, none) center / cover no-repeat; filter: blur(14px) brightness(0.5); z-index: 0; pointer-events: none; }',
@@ -3095,7 +3099,10 @@
         // 与 CSS 的横版卡宽一致:桌面 clamp(210px, 17vw, 300px),平板 200,手机 140(只是首帧估计,渲染后按实测列数重分块)
         let min = Math.min(300, Math.max(210, W * 0.17)), gap = 16, pad = 0.10;
         if (W <= 480) { min = 140; gap = 10; pad = 0.08; } else if (W <= 768) { min = 200; gap = 10; pad = 0.08; }
-        return Math.max(2, Math.floor((W * (1 - pad) + gap) / (min + gap)));
+        let s = 1;
+        try { s = parseFloat(root.getComputedStyle(root.document.documentElement).getPropertyValue('--ui-scale')) || 1; } catch (e) { s = 1; }
+        if (W <= 480 && s >= 1.1) return 1;   // 字号大 / 特大:手机一排一张(和 CSS 同一条)
+        return Math.max(W <= 480 ? 1 : 2, Math.floor((W * (1 - pad) + gap) / (min * s + gap)));
     }
     const onImgLoad = (e) => { const t = e && e.target; if (t) { t.classList.add('loaded'); if (t.parentElement) t.parentElement.classList.add('img-loaded'); } };
     // 浏览页网格(窗口化):片单按「块」(6 排一块)切开,每块一个 .browse-grid;离视口 ±1600px 以外的块只留一个等高空壳,
