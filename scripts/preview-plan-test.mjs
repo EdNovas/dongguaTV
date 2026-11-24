@@ -157,6 +157,16 @@ t('pickLines / firstM3u8', () => {
     assert.deepEqual(PV.pickLines(tw), [{ mp4: PVU, site: 'tg_x', fam: '', dur: 900 }, { url: 'https://m.example/c/index.m3u8', site: 'c', fam: '', dur: 0 }]);
     assert.deepEqual(PV.pickLines(tw, { mse: false }), [{ mp4: PVU, site: 'tg_x', fam: '', dur: 900 }]);
     assert.deepEqual(PV.pickLines({ sources: [{ site_key: 'c', vod_play_url: '正片$https://m.example/c/index.m3u8' }] }, { mse: false }), []);
+    // 多线路:前两条都不是 TG、后面有 TG 预览片 → 补成第三条兜底;前两条里已经有 TG 的不再补
+    const many = { sources: [
+        { site_key: 'a', vod_play_url: '正片$https://m.example/a/index.m3u8' },
+        { site_key: 'b', vod_play_url: '正片$https://m.example/b/index.m3u8' },
+        { site_key: 'c', vod_play_url: '正片$https://m.example/c/index.m3u8' },
+        { site_key: 'tg_x', _pv: PVU, vod_play_url: '' },
+    ] };
+    assert.deepEqual(PV.pickLines(many).map((x) => x.site), ['a', 'b', 'tg_x']);
+    assert.deepEqual(PV.pickLines(many, { mse: false }).map((x) => x.site), ['tg_x']);
+    assert.deepEqual(PV.pickLines({ sources: [many.sources[0], many.sources[3], many.sources[1], many.sources[2]] }).map((x) => x.site), ['a', 'tg_x']);
     assert.ok(!PV.TG_PV_RE.test(PVU + '&x=1') && !PV.TG_PV_RE.test('https://relay.example.com/v/TS88158/123?e=1800000000&s=' + 'A'.repeat(24)));
 });
 t('blockReason covers every disable condition', () => {
@@ -284,6 +294,7 @@ function makeEnv(opts) {
         dgAdultHooks: { add() { } },
         DgAdult: {
             fetchWorkRaw: async (wk) => (o.work ? o.work(wk) : { sources: [{ site_key: 's1', vod_play_url: '正片$https://cdn.example/v/index.m3u8' }] }),
+            searchSources: (wk) => (o.search ? o.search(wk) : null),
             proxyUrl: () => (o.noProxy ? '' : 'https://w.example'), netNow: () => o.net || '', isTV: () => false, mainBusy: () => !!o.busy, privLocked: () => false, cellOk: () => !!o.cell,
         },
         addEventListener() { },
@@ -410,6 +421,31 @@ at('F6 a real work with no previewable line is cached (6h); a playlist that coul
     const rec = Object.fromEntries(JSON.parse(E.ss.getItem('dg_pv_plan')).map((r) => [r.wk, r]));
     assert.equal(rec['c:SYN-021'].fail, 'no-line'); assert.equal(rec['c:SYN-021'].ttl, undefined);
     assert.equal(rec['c:SYN-022'].fail, 'fetch'); assert.equal(rec['c:SYN-022'].ttl, PV.FAIL_TTL);
+});
+at('search: work not in the catalog (/work 404) → previews from the search result\'s own lines; nothing there → nothing cached', async () => {
+    const asked = [];
+    const E = makeEnv({ work: () => null, search: (wk) => { asked.push(wk); return wk === 't:only-in-search' ? [{ site_key: 's9', vod_play_url: '正片$' + DIRECT }] : null; } });
+    E.api._onHover({ _wk: 't:only-in-search' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    assert.deepEqual(asked, ['t:only-in-search']);
+    assert.equal(E.hlsInst.length, 1, 'previews from the search lines');
+    assert.deepEqual(E.fetched, [DIRECT]);
+    E.card.dispatch('mouseleave');
+    E.api._onHover({ _wk: 't:nowhere' }, E.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    assert.equal(E.hlsInst.length, 1, 'no second preview');
+    assert.ok(!/t:nowhere/.test(E.ss.getItem('dg_pv_plan') || ''), 'not cached: ' + E.ss.getItem('dg_pv_plan'));
+    // 搜索线路一条能预览的都没有(只有 mp4 地址):「没有线路」只记 10 分钟(搜索还在陆续出线路)
+    const F = makeEnv({ work: () => null, search: () => [{ site_key: 's9', vod_play_url: '正片$https://cdn.example/a.mp4' }] });
+    F.api._onHover({ _wk: 't:mp4-only' }, F.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    const rec = JSON.parse(F.ss.getItem('dg_pv_plan')).find((r) => r.wk === 't:mp4-only');
+    assert.equal(rec.fail, 'no-line'); assert.equal(rec.ttl, PV.FAIL_TTL);
+    // 目录里有这一部:不去问搜索结果
+    const G = makeEnv({ search: () => { throw new Error('should not be asked'); } });
+    G.api._onHover({ _wk: 'c:SYN-050' }, G.card, { type: 'pointerover' });
+    await sleep(650); await settle();
+    assert.equal(G.hlsInst.length, 1);
 });
 at('F7 Android long-press: the system contextmenu (400ms) arrives before our 450ms → prevented, preview starts right then', async () => {
     const E = makeEnv({ hover: false, nav: { connection: { type: 'wifi' } } });

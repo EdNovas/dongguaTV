@@ -343,21 +343,27 @@
     // 作品(/api/catalog/work 的 JSON)→ 能拿来预览的线路:有第一集 .m3u8、没被多人判失效;服务器已按好坏排过,保持次序,最多 2 条。
     //   TG 线路(中转 MP4,拼不了清单)带 _pv = 中转现做的预览片(几段拼成的 360p 静音 MP4)→ { mp4 };不用 hls.js,没有 MSE(iPhone)也能放。
     //   opts.mse === false:只要 mp4 的(m3u8 的放不了,不白拉清单)
+    //   多线路作品:前两条都不是 TG、后面有 TG 预览片 → 把它补成第三条(前两条清单都拉不到时还有它兜底)
     const TG_PV_RE = /^https?:\/\/[^/?#\s]+\/p\/[A-Za-z][A-Za-z0-9_]{3,31}\/[1-9]\d{0,11}\?e=\d{9,11}&s=[A-Za-z0-9_-]{24}$/;
     function pickLines(work, opts) {
         const mse = !(opts && opts.mse === false);
         const out = [];
+        let tg = null;
         const srcs = work && Array.isArray(work.sources) ? work.sources : [];
         for (const s of srcs) {
             if (!s || s._dead === true) continue;
-            if (typeof s._pv === 'string' && TG_PV_RE.test(s._pv)) out.push({ mp4: s._pv, site: String(s.site_key || ''), fam: String(s._family || ''), dur: Number(s._dur) || 0 });
+            let x = null;
+            if (typeof s._pv === 'string' && TG_PV_RE.test(s._pv)) x = { mp4: s._pv, site: String(s.site_key || ''), fam: String(s._family || ''), dur: Number(s._dur) || 0 };
             else {
                 const url = mse ? firstM3u8(s.vod_play_url) : '';
-                if (!url) continue;
-                out.push({ url, site: String(s.site_key || ''), fam: String(s._family || ''), dur: Number(s._dur) || 0 });
+                if (url) x = { url, site: String(s.site_key || ''), fam: String(s._family || ''), dur: Number(s._dur) || 0 };
             }
-            if (out.length >= 2) break;
+            if (!x) continue;
+            if (out.length < 2) out.push(x);
+            else if (x.mp4) { tg = x; break; }
+            if (out.length >= 2 && out.some((y) => y.mp4)) break;
         }
+        if (tg) out.push(tg);
         return out;
     }
     // 选集串「名$地址#名$地址」(多个播放源用 $$$ 隔开)里第一条 http(s) .m3u8
@@ -509,9 +515,17 @@
         if (!A || typeof A.fetchWorkRaw !== 'function') return Promise.resolve(null);
         return Promise.resolve(A.fetchWorkRaw(wk)).then((w) => {
             if (!live()) return null;
-            if (!isWork(w)) return null;
+            // 搜索结果里全站现搜出来、目录里还没有的作品(作品接口 404,用户 2026-11-24:搜索的没有预览)→ 用搜索结果自己的线路;
+            //   搜索还在陆续出线路,这时「没有能预览的线路」只记一小会儿
+            let fromSearch = false;
+            if (!isWork(w)) {
+                let ss = null;
+                try { ss = typeof A.searchSources === 'function' ? A.searchSources(wk) : null; } catch (e) { ss = null; }
+                if (!Array.isArray(ss) || !ss.length) return null;
+                w = { sources: ss }; fromSearch = true;
+            }
             const lines = pickLines(w, { mse });
-            if (!lines.length) { remember(wk, { fail: 'no-line' }); return null; }
+            if (!lines.length) { remember(wk, fromSearch ? { fail: 'no-line', ttl: FAIL_TTL } : { fail: 'no-line' }); return null; }
             let transient = false;   // 有一条线路是没拉到清单(不是清单本身不行)
             const tryAt = (i) => (lines[i].mp4 ? Promise.resolve({ mp4: lines[i].mp4 }) : planFor(lines[i], live, c)).then((r) => {
                 if (r && r.mp4) { if (live()) remember(wk, { mp4: r.mp4 }); return live() ? r : null; }

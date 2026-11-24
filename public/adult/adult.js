@@ -2706,6 +2706,18 @@
         } catch (e) { return false; }
     }
     function isTV() { try { const app = bridge.app; return !!(app && app.isTVMode); } catch (e) { return false; } }
+    // 悬停预览用:当前搜索结果里这一部(作品键)的线路 —— 全站现搜出来、目录里还没有的作品(/api/catalog/work 404)只有它;
+    //   测速判了不可用 / 本机放失败的(延迟 ≥9000)不要,测过的按延迟排前面,没测完的随后;没有这一部 → null
+    function searchSources(wk) {
+        try {
+            const app = bridge.app;
+            if (!app || !app.adultMode || typeof wk !== 'string' || !wk) return null;
+            const g = (app.groupedList || []).find(x => x && x._wk === wk);
+            if (!g || !Array.isArray(g.sources)) return null;
+            const lat = (s) => (typeof s.latency === 'number' ? s.latency : 5000);
+            return g.sources.filter(s => s && typeof s === 'object' && lat(s) < 9000).slice().sort((a, b) => lat(a) - lat(b));
+        } catch (e) { return null; }
+    }
     function openWorkExt(card) {
         const app = bridge.app;
         if (!app || typeof app.openWork !== 'function' || !card) return false;
@@ -5349,7 +5361,7 @@
         components: { DgAdGrid, DgAdFilter, DgAdHead, DgAdRails, DgAdActresses, DgFold },
         ageGate, brand, wordmark, homeRows, HOME_BUCKETS, shareLinks, SHARE_HASH_RE, auth, fetchWork, mixin, boot,
         // p4:扩展点 / 给 preview.js、feed.js、player-x.js、privacy.js 的桥
-        hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, wrapPlayUrl, playUrl, proxyUrl, mainBusy, previewBusy, isTV,
+        hook, hooks: hooks.H, HOOK_NAMES, cardOf, wkTags, fetchWorkRaw, searchSources, wrapPlayUrl, playUrl, proxyUrl, mainBusy, previewBusy, isTV,
         openWork: openWorkExt, incognito, privLocked, netBlock, netNow, cellOk, pvOn, CELL_KEY, PV_KEY,
         normRelated, forYouTags, noList, actSections, actIndexUrls, isFeedHash, FEED_HASH,
         // 封面加载不出来就藏(纯函数 + 控制器)
