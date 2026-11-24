@@ -281,6 +281,13 @@ function mkRelay() {
         await gate.detailGet({ query: { site_key: 'tg_ts88158', id: '5' } }, res);
         const d = res.body && res.body.list && res.body.list[0];
         ok(res.code === 200 && d && /^正片\$https:\/\/relay\.example\.com\/v\/TS88158\/5\?e=\d+&s=/.test(d.vod_play_url), '详情:签名播放地址', res);
+        // 2026-11-24 线上:消息号正则漏了反斜杠(/^[1-9]d{0,11}$/)→ ≥10 的帖子详情全 404,起播慢一点重试就"线路无法播放"
+        for (const id of ['12', '30']) {
+            const r = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, set() { return this; } };
+            await gate.detailGet({ query: { site_key: 'tg_ts88158', id } }, r);
+            const dd = r.body && r.body.list && r.body.list[0];
+            ok(r.code === 200 && dd && new RegExp('/v/TS88158/' + id + '\\?e=').test(dd.vod_play_url), '详情:两位数消息号也给签名地址 #' + id, r);
+        }
         const res2 = { code: 200, body: null, status(c) { this.code = c; return this; }, json(b) { this.body = b; return this; }, set() { return this; } };
         await gate.detailGet({ query: { site_key: 'tg_ts88158', id: '9' } }, res2);
         ok(res2.code === 404, '详情:未成年那条 404', res2);
@@ -404,6 +411,10 @@ if (relayDeps) {
         ok((await fetch(base + '/t/TS88158/5.jpg?e=' + exp + '&s=' + sig)).status === 403, '视频签名拿去取封面 403');
         ok((await fetch(base + '/v/TS88158/5?e=' + (Math.floor(Date.now() / 1000) - 10) + '&s=' + RC.sign(SECRET, 'v', 'TS88158', 5, Math.floor(Date.now() / 1000) - 10))).status === 403, '过期 403');
         ok((await fetch(base + '/x/../../etc/passwd')).status === 404, '别的路径 404');
+        // /api/msg 的消息号校验:两位数以上不能被当成坏输入(没账号 → 503,不是 400)
+        const am = await fetch(base + '/api/msg?ch=TS88158&id=1243', { headers: { authorization: 'Bearer ' + SECRET } });
+        ok(am.status === 503, '/api/msg 四位数消息号过校验(没账号 → 503,不是 400)', am.status);
+        ok((await fetch(base + '/api/msg?ch=TS88158&id=12x', { headers: { authorization: 'Bearer ' + SECRET } })).status === 400, '/api/msg 坏消息号 400');
     } finally {
         child.kill('SIGTERM');
         await new Promise((r) => setTimeout(r, 300));

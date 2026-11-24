@@ -19678,12 +19678,14 @@
                     //    根本不触发,hls.js 拿到清单也不会请求任何分片、readyState 恒 0(生产实测:被别的窗口完全遮住的
                     //    Chrome 窗口 visibilityState=hidden,连裸 MediaSource 都打不开)。这不是源坏了,看门狗此时判死刑
                     //    会在用户切回来之前把好线路一个个换掉。隐藏期间只轮询等待,页面重新可见后再给完整的 14s。
+                    // [adult] TG 频道视频:很多长片 moov 在文件尾,起播要先跳到尾巴读完几 MB 的 moov 再回头读画面,冷启动比普通线路慢 → 给 30s
+                    const startWdMs = (this._activeKz && this._activeKz.tg) ? 30000 : 14000;
                     const armStartWatchdog = (ms) => {
                         this._startWatchdog = setTimeout(() => {
                             if (this._playToken !== playToken) return;   // 已换源/换集 → 本看门狗作废
                             try {
                                 if (document.hidden) { armStartWatchdog(3000); this._startWdHidden = true; return; }
-                                if (this._startWdHidden) { this._startWdHidden = false; armStartWatchdog(14000); return; }   // 刚从后台回来:重新计满 14s
+                                if (this._startWdHidden) { this._startWdHidden = false; armStartWatchdog(startWdMs); return; }   // 刚从后台回来:重新计满 14s(TG 30s)
                                 // ✂️ 播放前剪插播的扫描还在跑(清单要等它)→ 不判死;扫完再给 8s 加载
                                 if (window.adCut && window.adCut.busy()) { armStartWatchdog(2000); return; }
                                 if (window.adCut && window.adCut.graceLeft() > 0) { armStartWatchdog(Math.max(500, window.adCut.graceLeft())); return; }
@@ -19699,7 +19701,7 @@
                         }, ms);
                     };
                     this._startWdHidden = false;
-                    armStartWatchdog(14000);
+                    armStartWatchdog(startWdMs);
                     const isFreshPlayer = !dp;     // ▶ 是否新建播放器（决定如何触发首次播放）
                     this.syncShareUrl();           // 🔗 把当前剧/集写进地址栏（可收藏/分享/深链）
 

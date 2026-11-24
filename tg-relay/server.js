@@ -10,7 +10,6 @@
 // 账号:node login.js 登录(可以登录多个,读频道和下载会分摊到各个账号上)
 const http = require('http');
 const path = require('path');
-const { once } = require('events');
 const { loadEnv, verify, sameSecret, log, parseRange, CH_RE } = require('./lib/common');
 
 loadEnv(__dirname);
@@ -59,6 +58,50 @@ const httpCodeOf = (e) => {
     return 502;
 };
 
+// 背压:等 drain 或连接关掉;两个监听一起摘(旧写法 Promise.race 两个 once(),赢的那个摘了、输的那个留在 res 上,
+//   长视频几千块写下来监听越积越多 → MaxListenersExceededWarning)
+function waitWritable(res) {
+    return new Promise((resolve) => {
+        const done = () => { res.off('drain', done); res.off('close', done); res.off('error', done); resolve(); };
+        res.on('drain', done); res.on('close', done); res.on('error', done);
+    });
+}
+// 很多 TG 长视频的 MP4 是 ftyp → mdat(几 GB)→ moov(几 MB~十几 MB)。浏览器先读开头、发现是 mdat 就跳到文件尾读完整个 moov
+//   才能起播;尾巴一块一块顺着拉(只预取 2 块)要十几秒,播放器的起播看门狗先判死。
+//   ① 第 0 块一到手就看顶层 box:先是 mdat → 把 mdat 后面的尾巴(≤ TAIL_MAX 块)后台并发拉进缓存
+//   ② 读到文件尾的短区间(就是浏览器读 moov 那一下)整段并发取,不再 2 块 2 块地等
+const TAIL_MAX = 32, TAIL_PAR = 6;
+const tailDone = new Map();   // ch/id -> 时间(10 分钟内不重复排)
+function tailStartOf(buf, size) {
+    let off = 0;
+    while (off + 8 <= buf.length) {
+        let sz = buf.readUInt32BE(off);
+        const type = buf.toString('latin1', off + 4, off + 8);
+        if (sz === 1) { if (off + 16 > buf.length) return -1; sz = Number(buf.readBigUInt64BE(off + 8)); } else if (sz === 0) sz = size - off;
+        if (sz < 8) return -1;
+        if (type === 'moov') return -1;                       // moov 在前面(faststart)
+        if (type === 'mdat') return off + sz < size ? off + sz : -1;
+        off += sz;
+    }
+    return -1;
+}
+function prefetchChunks(ch, id, meta, a, b) {
+    let next = a;
+    const worker = async () => { while (next <= b) { const k = next++; try { await media.chunk(ch, id, meta, k); } catch (_) { return; } } };
+    for (let i = 0; i < Math.min(TAIL_PAR, b - a + 1); i++) worker();
+}
+function prefetchTail(ch, id, meta, buf0) {
+    const key = ch + '/' + id, now = Date.now();
+    if ((tailDone.get(key) || 0) > now - 600e3) return;
+    const at = tailStartOf(buf0, meta.size);
+    if (at < 0) return;
+    const a = Math.floor(at / CHUNK), b = Math.floor((meta.size - 1) / CHUNK);
+    if (b - a + 1 > TAIL_MAX) return;
+    tailDone.set(key, now);
+    if (tailDone.size > 2000) tailDone.delete(tailDone.keys().next().value);
+    prefetchChunks(ch, id, meta, a, b);
+}
+
 async function serveVideo(req, res, ch, id) {
     const meta = await pool.videoMeta(ch, id);
     const size = meta.size;
@@ -75,16 +118,18 @@ async function serveVideo(req, res, ch, id) {
     let gone = false;
     res.on('close', () => { gone = true; });
     const first = Math.floor(start / CHUNK), last = Math.floor(end / CHUNK);
+    if (end === size - 1 && first > 0 && last - first + 1 <= TAIL_MAX) prefetchChunks(ch, id, meta, first, last);   // ② 读 moov 的那一下
     streams++;
     try {
         for (let n = first; n <= last && !gone; n++) {
             // 预取后面两块(播放器是顺着读的,省掉每块之间的等待)
             for (let k = n + 1; k <= Math.min(n + 2, last); k++) media.chunk(ch, id, meta, k).catch(() => {});
             const buf = await media.chunk(ch, id, meta, n);
+            if (n === 0) prefetchTail(ch, id, meta, buf);   // ①
             if (gone) break;
             const s = n === first ? start - n * CHUNK : 0;
             const e = n === last ? end - n * CHUNK + 1 : buf.length;
-            if (!res.write(buf.subarray(s, e)) && !gone) await Promise.race([once(res, 'drain'), once(res, 'close')]);
+            if (!res.write(buf.subarray(s, e)) && !gone) await waitWritable(res);
         }
         if (!gone) res.end();
     } finally {
@@ -112,7 +157,7 @@ function itemOf(m, v, groupCaption) {
 async function apiMsg(u, res) {
     const ch = String(u.searchParams.get('ch') || '');
     const id = String(u.searchParams.get('id') || '');
-    if (!CH_RE.test(ch) || !/^[1-9]d{0,11}$/.test(id)) { fail(res, 400, 'BAD_INPUT'); return; }
+    if (!CH_RE.test(ch) || !/^[1-9]\d{0,11}$/.test(id)) { fail(res, 400, 'BAD_INPUT'); return; }
     const item = await pool.run(async (a) => {
         const m = await pool.message(a, ch, id);
         const v = videoOf(m);
