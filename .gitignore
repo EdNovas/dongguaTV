@@ -61,3 +61,4 @@ db.json.bak-20261123
 
 # [adult] TG 中转:登录的账号(=凭据)、视频分块缓存、封面
 tg-relay/data/
+db.adult.json
