@@ -32,6 +32,15 @@ const ENV = { ADULT_TG_RELAY: 'https://relay.example.com', ADULT_TG_SECRET: SECR
     const nt = cfg.channels.find((c) => c.ch === 'ntong_1');
     ok(nt && nt.cls === '女同' && nt.minSec === 180, '默认最短 180 秒', nt);
     ok(cfg.channels.some((c) => c.ch === 'AI538' && c.cls === ''), 't.me/s/xxx 链接', cfg.channels);
+    // 多个分类词:+ / 、 / 同一项里空格隔开(非频道名的词接到分类后面);空格隔开的纯频道名表照旧
+    const chs = (s) => TGL.config({ ...ENV, ADULT_TG_CHANNELS: s }).channels.map((c) => c.ch + ':' + c.cls + ':' + c.minSec).join(' | ');
+    ok(chs('JpSub01:日本+中文字幕') === 'JpSub01:日本+中文字幕:180', '多分类:+', chs('JpSub01:日本+中文字幕'));
+    ok(chs('JpSub01:日本、中文字幕:300') === 'JpSub01:日本+中文字幕:300', '多分类:、', chs('JpSub01:日本、中文字幕:300'));
+    ok(chs('JpSub01:日本 中文字幕, ntong_1:女同') === 'JpSub01:日本+中文字幕:180 | ntong_1:女同:180', '多分类:空格(不再把"中文字幕"丢了)', chs('JpSub01:日本 中文字幕, ntong_1:女同'));
+    ok(chs('JpSub01:日本 中文字幕 ntong_1:女同') === 'JpSub01:日本+中文字幕:180 | ntong_1:女同:180', '多分类:空格后带冒号的是下一个频道', chs('JpSub01:日本 中文字幕 ntong_1:女同'));
+    ok(chs('JpSub01:日本 中文字幕:300,ntong_1') === 'JpSub01:日本+中文字幕:300 | ntong_1::180', '多分类:空格 + 最短秒', chs('JpSub01:日本 中文字幕:300,ntong_1'));
+    ok(chs('TS88158 ntong_1\nAI538')=== 'TS88158::180 | ntong_1::180 | AI538::180', '空格 / 换行隔开的频道表照旧', chs('TS88158 ntong_1\nAI538'));
+    ok(chs('TS88158 中文字幕, ntong_1') === 'TS88158::180 | ntong_1::180', '没写分类的频道后面跟的词不当分类(防手滑)', chs('TS88158 中文字幕, ntong_1'));
     ok(!TGL.config({ ADULT_TG_RELAY: 'relay.example.com', ADULT_TG_SECRET: SECRET, ADULT_TG_CHANNELS: 'abcd' }).on, '中转不是 http(s) → 不启用');
     ok(!TGL.config({ ADULT_TG_RELAY: 'https://r.x', ADULT_TG_SECRET: 'short', ADULT_TG_CHANNELS: 'abcd' }).on, '密钥太短 → 不启用');
     ok(TGL.config({ ...ENV, ADULT_TG_MIN_SEC: '300' }).channels.find((c) => c.ch === 'ntong_1').minSec === 300, 'ADULT_TG_MIN_SEC');
@@ -295,6 +304,12 @@ function mkRelay() {
         relay.calls.length = 0;
         await r.c.tgKick(true);
         ok(relay.calls.some((c) => /ch=TS88158&after=31&/.test(c)), '改完之后照常往后拉', relay.calls);
+        // 用户 2026-11-24:一个频道多个分类词(日本 中文字幕)→ 大类按规则表先命中的、标签全要
+        r = restart('TS88158:日本 中文字幕:120');
+        await r.c.tgKick(true);
+        ts2 = rows('tg_ts88158');
+        const wtags = db.prepare(`SELECT tags FROM adult_works WHERE wk=?`).get(ts2[0].wk).tags || '';
+        ok(ts2.length === 28 && ts2.every((x) => x.type_name === '日本+中文字幕' && x.bucket === 'jp_subbed') && /(^|,)subbed(,|$)/.test(wtags), '多分类词:日本·中文字幕大类 + 中字标签', { b: ts2.map((x) => [x.type_name, x.bucket]).slice(0, 2), wtags });
         // 部署前就改过(旧进度没记 cfgCls,库里分类名对不上)→ 也从头再读
         dropCfg();
         relay.calls.length = 0;
