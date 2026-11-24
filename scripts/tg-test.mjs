@@ -163,6 +163,7 @@ function mkRelay() {
         const auth = (opts && opts.headers && opts.headers.authorization) || '';
         const json = (code, j) => ({ ok: code === 200, status: code, json: async () => j });
         if (auth !== 'Bearer ' + SECRET) return json(401, { error: 'UNAUTHORIZED' });
+        if (u.pathname === '/api/health') return json(200, { ok: true, usable: 1, streams: 2, cache: { chunks: 3, bytes: 3 * 1048576, cap: 800 * 1073741824 }, fromTg: 5, fromCache: 1, accounts: [{ name: 'a1', ok: true, floodSec: 0, active: 1, served: 9, errors: 0 }, { name: 'a2', ok: false, dead: 'SESSION_REVOKED', floodSec: 0, active: 0, served: 0, errors: 2 }] });
         const ch = u.searchParams.get('ch');
         const c = chans[ch];
         if (!c) return json(404, { error: 'USERNAME_NOT_OCCUPIED' });
@@ -218,6 +219,21 @@ function mkRelay() {
     ok(rows('tg_ts88158').length === 28, '新帖子收进来');
     const sts = cat.tgStatus();
     ok(sts.length === 3 && sts.find((x) => x.ch === 'AI538').killed && sts.find((x) => x.ch === 'TS88158').cur === 31, 'tgStatus', sts);
+    const sTs = sts.find((x) => x.ch === 'TS88158'), sAi = sts.find((x) => x.ch === 'AI538');
+    ok(sTs.items === 28 && sAi.items === 0, '后台:收录数 = 库里还在的线路(停用的删光 = 0)', { ts: sTs.items, ai: sAi.items });
+    ok(sTs.sk.short === 1 && sTs.sk.notext === 1 && sTs.rej === 1 && sTs.cls === '伪娘' && !sTs.err && sTs.at > 0, '后台:累计 太短 / 没正文 / 入库被拦,配置的分类', sTs);
+    ok(/^未成年 \d+\/\d+$/.test(sAi.killed) && sAi.killedAt > 0, '后台:停用原因和时间', sAi);
+    const info = await cat.tgInfo();
+    ok(info.on === true && !info.problems.length && info.relay === 'https://relay.example.com' && !JSON.stringify(info).includes(SECRET), '后台:配置齐、给中转地址、不带密钥', info);
+    ok(info.account && info.account.ok && info.account.usable === 1 && info.account.accounts.length === 2 && info.account.accounts[1].dead === 'SESSION_REVOKED', '后台:中转账号状态', info.account);
+    const offInfo = await createCatalog({ db: new Database(':memory:'), getSites: () => [], adult, httpGet: async () => { throw new Error('x'); }, log: () => {}, env: {}, tg: TGL.createTg({ ADULT_TG_RELAY: 'https://relay.example.com' }), fetch: relay.fetch }).tgInfo();
+    ok(offInfo.on === false && offInfo.problems.some((p) => /ADULT_TG_CHANNELS/.test(p)) && offInfo.problems.some((p) => /ADULT_TG_SECRET/.test(p)) && offInfo.account === null, '后台:没配齐说缺哪个', offInfo);
+    // 用户 2026-11-24:TG 不强制审查级 filter → 干净的帖子能进推荐位(严格站的拦截规则照旧:上面未成年那条照样拦)
+    ok(tg.sites().every((s) => s.strict === true && s.strictFloor === false), 'TG 站:strict 拦截照旧、strictFloor:false');
+    const revs = db.prepare("SELECT COUNT(*) n FROM adult_items WHERE site='tg_ts88158' AND COALESCE(review,'') <> ''").get().n;
+    ok(revs === 0, 'TG 干净帖子审查级为空(能进首页 / 相关 / 刷一刷 / 猜你喜欢)', revs);
+    const wrev = db.prepare("SELECT COUNT(*) n FROM adult_works w WHERE w.wk IN (SELECT wk FROM adult_items WHERE site='tg_ts88158') AND COALESCE(w.review,'') <> ''").get().n;
+    ok(wrev === 0, 'TG 作品审查级为空', wrev);
     // 重启(新的 tg 实例):停用状态从库里读回来
     const tg2 = TGL.createTg(ENV);
     const cat2 = createCatalog({ db, getSites: () => tg2.sites(), adult, httpGet: async () => { throw new Error('x'); }, log: () => {}, env: {}, now: () => now, sleep: async () => {}, tg: tg2, fetch: relay.fetch });

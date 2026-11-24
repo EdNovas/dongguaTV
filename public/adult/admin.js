@@ -1,7 +1,7 @@
 // [adult] 过滤规则后台(public/adult/admin.html,GET /admin/adult)。
 //   令牌:输入后只放 sessionStorage(dgx_admin_token);每个请求带 X-Admin-Token。服务器:404 NOT_AVAILABLE = 后台关着(ADULT_ADMIN_TOKEN / ADMIN_TOKEN 都没设,或 ADULT_ADMIN_TOKEN=off)、
 //   401 BAD_TOKEN = 令牌不对、429 LOCKED = 10 分钟内错 5 次被锁。
-//   六个页签:概览(stats)/ 规则测试(test)/ 附加屏蔽词(block-words,只能更严)/ 隐藏作品(hidden、hide)/ 资源站(sites、site)/ 镜像(mirrors、mirror/probe、mirror/reset)。
+//   七个页签:概览(stats)/ 规则测试(test)/ 附加屏蔽词(block-words,只能更严)/ 隐藏作品(hidden、hide)/ 资源站(sites、site)/ TG 频道(tg、tg/sync)/ 镜像(mirrors、mirror/probe、mirror/reset)。
 //   所有服务器字符串一律 textContent / setAttribute(值),绝不拼 HTML;链接一律不做成 <a>(服务器给的地址只显示成文字)。
 //   纯函数与渲染在 node 里可 require(scripts/adult-privacy-test.mjs 用桩 DOM 测转义)。
 (function (root, factory) {
@@ -18,7 +18,7 @@
     const BASE = '/api/adult/admin';
     const MAX_WORDS = 500, WORD_MIN = 2, WORD_MAX = 40;
     const TABS = [
-        ['overview', '概览'], ['test', '规则测试'], ['words', '附加屏蔽词'], ['hidden', '隐藏作品'], ['sites', '资源站'], ['mirrors', '镜像'],
+        ['overview', '概览'], ['test', '规则测试'], ['words', '附加屏蔽词'], ['hidden', '隐藏作品'], ['sites', '资源站'], ['tg', 'TG 频道'], ['mirrors', '镜像'],
     ];
 
     // ---------- 纯函数 ----------
@@ -103,6 +103,38 @@
             : (num(x.started) || 0) < sites ? '还有 ' + (sites - (num(x.started) || 0)) + ' 个站在等第一轮增量爬完才开始回填;预计时间按已开始的站估'
             : '每个站按 ' + fmtNum(pages) + ' / ' + fmtNum(total) + ' 页的进度慢慢翻(同一域名几秒一页);预计时间按最慢那个站估';
         return { pct, sites: done + ' / ' + sites, eta: all ? fmtTime(x.finishedAt) : (num(x.etaMs) ? fmtDur(x.etaMs) : '—'), done: all, note };
+    }
+    // ---- TG 频道页 ----
+    function fmtBytes(v) {
+        const n = num(v) || 0;
+        if (n >= 1073741824) return (Math.round(n / 107374182.4) / 10) + ' GB';
+        if (n >= 1048576) return Math.round(n / 1048576) + ' MB';
+        return n > 0 ? '< 1 MB' : '0';
+    }
+    // 停用原因(lib/site-catalog/tg-sync.js 写的 why):'频道名/简介 item:minor' / '未成年 4/160'
+    function tgKillText(why) {
+        const w = str(why, 200);
+        if (!w) return '';
+        let m = /^频道名\/简介\s+(\S+)/.exec(w);
+        if (m) return '频道名或简介命中硬过滤(' + (reasonNote(m[1]) || m[1]) + ')';
+        m = /^未成年\s+(\d+)\/(\d+)/.exec(w);
+        if (m) return '有正文的 ' + m[2] + ' 条帖子里 ' + m[1] + ' 条涉及未成年(≥2 条且 ≥2% 就整个频道停用)';
+        return w;
+    }
+    // 进度:cur = 已读到的消息编号,top = 频道最新一条的编号(编号不连续,百分比是估的)
+    function tgProgress(c) {
+        const cur = num(c && c.cur) || 0, top = num(c && c.top) || 0;
+        if (!cur && !top) return { text: '还没开始', pct: 0, done: false };
+        if (top > 0 && cur >= top) return { text: '已读完(#' + fmtNum(top) + ')', pct: 100, done: true };
+        if (top > 0) { const pct = Math.min(99, Math.floor(cur * 100 / top)); return { text: '#' + fmtNum(cur) + ' / #' + fmtNum(top) + '(约 ' + pct + '%)', pct, done: false }; }
+        return { text: '读到 #' + fmtNum(cur), pct: 0, done: false };
+    }
+    const TG_SKIP = { short: '太短', notext: '没正文', mime: '不是 mp4', invalid: '数据不全' };
+    function tgSkipText(sk, rej) {
+        const parts = [];
+        if (isObj(sk)) Object.keys(sk).sort((a, b) => (num(sk[b]) || 0) - (num(sk[a]) || 0)).slice(0, 8).forEach((k) => { const n = num(sk[k]) || 0; if (n > 0) parts.push((Object.prototype.hasOwnProperty.call(TG_SKIP, k) ? TG_SKIP[k] : str(k, 20)) + ' ' + fmtNum(n)); });
+        if ((num(rej) || 0) > 0) parts.push('规则拦 ' + fmtNum(rej));
+        return parts.join(' · ');
     }
     const wordLen = (w) => Array.from(String(w)).length;
     // 附加屏蔽词:一行一个(也认中英文逗号);去空白、去重(不分大小写),逐条查 2..40 字、≤500 个
@@ -522,7 +554,77 @@
                     list.length ? table(cols, list) : h('p', null, '没有站点'),
                 ]));
             },
-            // ⑥ 镜像
+            // ⑥ TG 频道
+            async tg(box, alive) {
+                const r = await call('GET', '/tg');
+                if (!alive()) return;
+                if (!r.ok) return failed(r, box);
+                const d = isObj(r.data) ? r.data : {};
+                const list = asArray(d.channels).filter((c) => isObj(c) && typeof c.key === 'string');
+                const acc = isObj(d.account) ? d.account : null;
+                clear(box);
+                const now = Date.now();
+                const m = msg('');
+                const stat = (v, l) => h('div', { class: 'adm-stat' }, [h('b', null, v), h('span', null, l)]);
+                const syncBtn = h('button', { type: 'button', class: 'adm-btn small', disabled: d.on === false, title: '马上同步一轮(出错退避中的频道也重试)' }, '立即同步');
+                syncBtn.addEventListener('click', async () => {
+                    syncBtn.disabled = true;
+                    const x = await call('POST', '/tg/sync', {});
+                    syncBtn.disabled = false;
+                    if (!x.ok) { if (x.status === 401 || x.status === 429) return failed(x, box); m.className = 'adm-msg err'; m.textContent = x.data && x.data.error === 'TG_OFF' ? 'TG 频道没启用,先在服务器上配好环境变量' : errText(x); return; }
+                    m.className = 'adm-msg ok'; m.textContent = '已开始同步。老频道每轮最多读 2000 条帖子,过一两分钟点「刷新」看进度。';
+                });
+                const card = [h('div', { class: 'adm-row' }, [h('h2', { class: 'adm-grow' }, 'TG 频道'), syncBtn, refreshBtn(() => load('tg'))])];
+                const problems = asArray(d.problems).filter((p) => typeof p === 'string');
+                if (d.on === false) card.push(msg('TG 频道没启用:' + (problems.length ? problems.map((p) => str(p, 120)).join(';') : '配置不完整') + '。在服务器上设置 ADULT_TG_RELAY / ADULT_TG_SECRET / ADULT_TG_CHANNELS 后重启网站(Docker 要重建容器才读得到新变量)。', 'warn'));
+                if (d.on !== false && acc && acc.ok === false) card.push(msg('连不上中转:' + str(acc.err, 120), 'err'));
+                if (acc && acc.ok) {
+                    const accs = asArray(acc.accounts).filter(isObj);
+                    card.push(h('div', { class: 'adm-stats' }, [
+                        stat((num(acc.usable) || 0) + ' / ' + accs.length, '中转账号 可用 / 全部'),
+                        stat(fmtNum(acc.streams), '正在转的视频'),
+                        stat(fmtBytes(acc.cache && acc.cache.bytes) + ' / ' + fmtBytes(acc.cache && acc.cache.cap), '中转缓存 已用 / 上限'),
+                        stat(fmtBytes(acc.fromTg), '中转启动以来从 TG 拉'),
+                    ]));
+                    if (accs.length) card.push(table([
+                        { l: '账号', f: (a) => str(a.name, 40), mono: true },
+                        { l: '状态', f: (a) => (a.dead ? pill('失效', 'bad') : !a.ok ? pill('连不上', 'bad') : (num(a.floodSec) || 0) > 0 ? pill('限流 ' + fmtNum(a.floodSec) + ' 秒', 'warn') : pill('可用', 'ok')) },
+                        { l: '进行中', f: (a) => fmtNum(a.active), num: true },
+                        { l: '完成请求', f: (a) => fmtNum(a.served), num: true },
+                        { l: '出错', f: (a) => fmtNum(a.errors), num: true },
+                        { l: '最近的错误', f: (a) => str(a.dead || a.lastErr || '—', 80), mono: true },
+                    ], accs.slice(0, 200)));
+                }
+                if (d.relay) card.push(h('p', { class: 'adm-note' }, '中转地址 ' + str(d.relay, 200) + (num(d.minSec) ? ' · 短于 ' + fmtNum(d.minSec) + ' 秒的视频不收(ADULT_TG_MIN_SEC)' : '')));
+                card.push(m);
+                box.appendChild(h('div', { class: 'adm-card' }, card));
+                const stateOf = (c) => {
+                    if (c.killed) return pill('已停用', 'bad');
+                    if (c.err) return h('div', null, [pill('出错', 'warn'), (num(c.nextAt) || 0) > now ? h('div', { class: 'adm-note' }, Math.max(1, Math.ceil((num(c.nextAt) - now) / 60000)) + ' 分钟后重试') : null]);
+                    if (!num(c.at)) return pill('等第一次同步');
+                    return tgProgress(c).done ? pill('已跟上', 'ok') : pill('收录中', 'ok');
+                };
+                const cols = [
+                    { l: '频道', f: (c) => h('div', null, [h('div', null, str(c.title || c.ch, 80)), h('div', { class: 'mono adm-note' }, '@' + str(c.ch, 40) + (c.cls ? ' · ' + str(c.cls, 30) : ''))]) },
+                    { l: '状态', f: stateOf },
+                    { l: '读取进度', f: (c) => tgProgress(c).text },
+                    { l: '读过的帖子', f: (c) => fmtNum(c.n), num: true },
+                    { l: '收录', f: (c) => (c.items == null ? '—' : fmtNum(c.items)), num: true },
+                    { l: '没收', f: (c) => tgSkipText(c.sk, c.rej) || '—' },
+                    { l: '未成年命中', f: (c) => ((num(c.minor) || 0) > 0 ? pill(fmtNum(c.minor), 'warn') : '0') },
+                    { l: '停用原因 / 错误', f: (c) => (c.killed ? h('div', null, [h('div', null, tgKillText(c.killed)), num(c.killedAt) ? h('div', { class: 'adm-note' }, fmtTime(c.killedAt) + ' 停用') : null]) : str(c.err || '—', 120)) },
+                    { l: '上次同步', f: (c) => fmtAgo(c.at, now) },
+                ];
+                const killed = list.filter((c) => c.killed).length;
+                const items = list.reduce((a, c) => a + (num(c.items) || 0), 0);
+                box.appendChild(h('div', { class: 'adm-card' }, [
+                    h('h2', null, '频道(' + list.length + ' 个' + (killed ? ',停用 ' + killed + ' 个' : '') + ',共收录 ' + fmtNum(items) + ' 条)'),
+                    h('p', { class: 'adm-note' }, '每 10 分钟从中转读一次新帖子,老频道的历史每轮最多读 2000 条,分几轮收完。「读过的帖子」只算有正文的;太短、没正文的不收,命中规则的入库时被拦。「收录」是库里现在还在的线路数。'),
+                    h('p', { class: 'adm-note' }, '停用是硬过滤的一部分:频道名 / 简介命中,或未成年 ≥2 条且 ≥2%,整个频道停用并删掉已收的,这里不提供恢复。TG 作品和资源站的一样进首页 / 相关 / 刷一刷 / 猜你喜欢(带审查级标签的照样只能筛选)。'),
+                    list.length ? table(cols, list) : h('p', null, d.on === false ? '没有频道(TG 没启用)' : '没有频道'),
+                ]));
+            },
+            // ⑦ 镜像
             async mirrors(box, alive) {
                 const r = await call('GET', '/mirrors');
                 if (!alive()) return;
@@ -607,5 +709,5 @@
         return { showAuth, showApp, select, load, getToken, setToken };
     }
 
-    return { boot, parseWords, errText, createClient, asArray, toMs, fmtAgo, fmtTime, reasonNote, historyView, TOKEN_KEY, BASE, TABS, MAX_WORDS };
+    return { boot, parseWords, errText, createClient, asArray, toMs, fmtAgo, fmtTime, reasonNote, historyView, tgKillText, tgProgress, tgSkipText, fmtBytes, TOKEN_KEY, BASE, TABS, MAX_WORDS };
 });

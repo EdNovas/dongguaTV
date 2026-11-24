@@ -318,7 +318,7 @@ console.log('①b 后台镜像页「回到主地址」');
             [n0, posts.map((x) => [x.u, x.body, x.tok]), b1.map((b) => b.disabled), mount.textContent.slice(0, 300)]);
     }
     const html = fs.readFileSync(path.join(ROOT, 'public/adult/admin.html'), 'utf8');
-    ok(/<script src="\/adult\/admin\.js\?v=7" defer><\/script>/.test(html), 'admin.html 引用 admin.js?v=7(改了 admin.js 要换版本串)');
+    ok(/<script src="\/adult\/admin\.js\?v=8" defer><\/script>/.test(html), 'admin.html 引用 admin.js?v=8(改了 admin.js 要换版本串)');
     ok(/硬过滤名单/.test(ADM.reasonNote('category')) && ADM.reasonNote('item:minor') && ADM.reasonNote('item:newthing') === '硬过滤' && ADM.reasonNote('zzz') === '' && ADM.reasonNote('constructor') === '',
         '后台概览:拦截原因带白话说明(未知的 item:* 写「硬过滤」,原型链上的名字不当说明)');
     const hv = ADM.historyView({ enabled: true, sites: 30, started: 30, done: 12, pages: 50000, pagesTotal: 100000, etaMs: 5 * 3600e3 });

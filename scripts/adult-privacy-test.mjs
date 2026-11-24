@@ -850,6 +850,10 @@ console.log('⑦ admin.js');
         'POST /site': { body: { ok: true } },
         'GET /mirrors': { body: [{ key: 'av_s01', primary: 'https://a.example/api.php', current: XSS, since: Date.now(), fails: 3, lastProbe: 0, candidates: 2, reason: XSS2 }] },
         'POST /mirror/probe': { body: { ok: false, tried: [XSS], reason: XSS2 } },
+        'GET /tg': { body: { on: true, problems: [], relay: XSS, minSec: 180, account: { ok: true, usable: 1, streams: 0, cache: { bytes: 0, cap: 1 }, fromTg: 0, accounts: [{ name: XSS, ok: true, floodSec: 0 }, { name: 'a2', ok: false, dead: XSS2 }] },
+            channels: [{ key: 'tg_x', ch: XSS, title: XSS2, cls: XSS, cur: 5, top: 9, n: 4, minor: 0, sk: { [XSS]: 2, short: 1 }, rej: 1, items: 3, killed: '', err: XSS, nextAt: Date.now() + 120e3, at: Date.now() },
+                { key: 'tg_y', ch: 'y', title: 'Y', cur: 9, top: 9, n: 9, minor: 3, sk: {}, rej: 0, items: 0, killed: '未成年 3/9', killedAt: Date.now(), err: '', at: Date.now() }] } },
+        'POST /tg/sync': { body: { ok: true } },
     };
     const A = adminEnv((k) => evil[k] || { status: 404, body: { error: 'NOT_FOUND' } }, { token: 'T0K' });
     HTML_LOG.created = [];
@@ -861,7 +865,13 @@ console.log('⑦ admin.js');
     const txt = () => A.main.textContent;
     ok(A.log[0] && A.log[0].url === '/api/adult/admin/stats' && A.log[0].token === 'T0K', 'sessionStorage 里有令牌 → 直接进概览,请求带 X-Admin-Token');
     ok(txt().indexOf(XSS) >= 0 && txt().indexOf(XSS2) >= 0 && /1,234/.test(txt()), '概览:服务器字符串原样当文字显示(含 <img onerror> / <script>)');
-    for (const t of ['test', 'words', 'hidden', 'sites', 'mirrors']) { await ui.select(t); await flush(10); }
+    for (const t of ['test', 'words', 'hidden', 'sites', 'tg', 'mirrors']) { await ui.select(t); await flush(10); }
+    // TG 频道:服务器字符串(频道名 / 账号名 / 错误 / 不收原因的键)全当文字;停用原因翻成白话;立即同步 POST
+    await ui.select('tg'); await flush(10);
+    ok(txt().indexOf(XSS) >= 0 && txt().indexOf(XSS2) >= 0 && /有正文的 9 条帖子里 3 条涉及未成年/.test(txt()) && txt().indexOf('#5 / #9') >= 0 && /共收录 3 条/.test(txt()), 'TG 频道页:原样当文字、停用原因白话、进度', txt().slice(0, 300));
+    Array.from(A.main.querySelectorAll('button')).find(b => b.textContent === '立即同步').click();
+    await flush(10);
+    ok(A.log.some(x => x.url.endsWith('/tg/sync') && x.method === 'POST') && /已开始同步/.test(txt()), 'TG 频道页:立即同步 POST /tg/sync');
     // 规则测试
     await ui.select('test'); await flush(5);
     A.main.querySelector('#adm-t-title').value = '测试片名';
