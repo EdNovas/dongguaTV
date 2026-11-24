@@ -268,6 +268,41 @@ function mkRelay() {
     const cat2 = createCatalog({ db, getSites: () => tg2.sites(), adult, httpGet: async () => { throw new Error('x'); }, log: () => {}, env: {}, now: () => now, sleep: async () => {}, tg: tg2, fetch: relay.fetch });
     await cat2.tgKick();
     ok(!tg2.sites().some((s) => s.key === 'tg_ai538'), '重启后停用照旧');
+    // 用户 2026-11-24:env 里频道分类标错了,改了重启 → 已收的要按新分类改过来(从头再读一遍,原地更新)
+    {
+        const restart = (chs) => {
+            const t = TGL.createTg(Object.assign({}, ENV, { ADULT_TG_CHANNELS: chs }));
+            const lg = [];
+            return { lg, c: createCatalog({ db, getSites: () => t.sites(), adult, httpGet: async () => { throw new Error('x'); }, log: (m) => lg.push(m), env: {}, now: () => now, sleep: async () => {}, tg: t, fetch: relay.fetch }) };
+        };
+        const dropCfg = () => { const s = meta('tg:tg_ts88158'); delete s.cfgCls; db.prepare('UPDATE adult_meta SET v=? WHERE k=?').run(JSON.stringify(s), 'tg:tg_ts88158'); };
+        const b0 = rows('tg_ts88158').map((r) => r.bucket);
+        ok(meta('tg:tg_ts88158').cfgCls === '伪娘', '进度里记着配置的分类', meta('tg:tg_ts88158'));
+        // 旧进度(没记 cfgCls)、分类没变 → 不重读
+        dropCfg();
+        relay.calls.length = 0;
+        let r = restart('TS88158:伪娘:120');
+        await r.c.tgKick(true);
+        ok(relay.calls.some((c) => /ch=TS88158&after=31&/.test(c)) && meta('tg:tg_ts88158').cfgCls === '伪娘', '旧进度、分类没变:照常往后拉,补记分类', relay.calls);
+        // 改分类 → 从头再读,已收的原地改分类 / 大类,条数不变
+        relay.calls.length = 0;
+        r = restart('TS88158:欧美:120');
+        await r.c.tgKick(true);
+        let ts2 = rows('tg_ts88158');
+        ok(relay.calls.some((c) => /ch=TS88158&after=0&/.test(c)) && r.lg.some((l) => /TS88158:分类改成「欧美」,从头再读一遍/.test(l)), '改分类:从头再读、写日志', { calls: relay.calls, lg: r.lg });
+        ok(ts2.length === 28 && ts2.every((x) => x.type_name === '欧美') && ts2.some((x, i) => x.bucket !== b0[i]), '改分类:已收的改成新分类和大类、不重复', ts2.map((x) => [x.type_name, x.bucket]).slice(0, 3));
+        ok(meta('tg:tg_ts88158').cur === 31 && meta('tg:tg_ts88158').cfgCls === '欧美', '改分类:读完进度回到原处', meta('tg:tg_ts88158'));
+        relay.calls.length = 0;
+        await r.c.tgKick(true);
+        ok(relay.calls.some((c) => /ch=TS88158&after=31&/.test(c)), '改完之后照常往后拉', relay.calls);
+        // 部署前就改过(旧进度没记 cfgCls,库里分类名对不上)→ 也从头再读
+        dropCfg();
+        relay.calls.length = 0;
+        r = restart('TS88158:伪娘:120');
+        await r.c.tgKick(true);
+        ts2 = rows('tg_ts88158');
+        ok(relay.calls.some((c) => /ch=TS88158&after=0&/.test(c)) && ts2.every((x) => x.type_name === '伪娘') && ts2.map((x) => x.bucket).join() === b0.join(), '旧进度、库里分类对不上:从头再读改回来', ts2.map((x) => [x.type_name, x.bucket]).slice(0, 3));
+    }
 
     // ---------- 7. 闸门:作品页 / 详情给签名地址 ----------
     const gate = createAdultGate({
