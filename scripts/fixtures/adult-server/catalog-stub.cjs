@@ -70,6 +70,8 @@ function createCatalog(deps) {
             if (/ssis-?001/i.test(String(q))) return { kind: 'code', alias: null, exact: 'c:SSIS-001', items: [card('c:SSIS-001', 'SSIS-001 温泉旅馆的邂逅', { code: 'SSIS-001' }), card('c:SSIS-001#U', 'SSIS-001 温泉旅馆的邂逅 [无码流出]')] };
             if (/ssis-?002/i.test(String(q))) return { kind: 'code', alias: null, exact: 't:blocked1', items: [card('t:blocked1', '准高一少女 初恋'), card('c:SSIS-002', 'SSIS-002 某作品')] };
             if (String(q) === '无码') return { kind: 'alias', alias: { b: 'jp_uncensored', label: '日本无码', extra: 'x' }, exact: null, items: [] };
+            // 多词合成别名:tags 里夹一个多余字段 / 坏条目,闸门只留 {tag,label}
+            if (String(q) === '人妻 巨乳') return { kind: 'alias', alias: { label: '人妻 · 巨乳', tag: 'wife', tags: [{ tag: 'wife', label: '人妻', x: 1 }, { tag: 'busty', label: '巨乳' }, null, { tag: 42 }] }, exact: null, items: [] };
             return { kind: 'weird', alias: null, exact: null, items: [card('t:ok1', '邻家姐姐的周末'), card('t:blocked3', '情侣自拍流出 合集')] };
         },
         beacon(r, who) { rec({ ev: 'beacon', r, who }); return { ok: true, dead: false }; },

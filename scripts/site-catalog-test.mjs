@@ -1020,6 +1020,19 @@ console.log('⑦ 第二阶段:可信检查 / 站点标志 / 热门行 / 标签 /
         ok(t3.kind === 'text' && t3.items.length === 8 && t3.items.every((c) => c.name.includes('合成热门')), '文字 ≥3 字:FTS trigram,最多 8 张', t3.items.length);
         const t2 = sg('热门');
         ok(t2.kind === 'text' && t2.items.length === 8 && t2.items.every((c) => c.name.includes('热门')), '文字 2 字:bigram 旁路索引(不再全表 LIKE)', t2.items.length);
+        // 多个关键词(用户 2026-11-24「黑丝 女同」):每个词都要对上(片名里有,或者是分类 / 标签词而作品在那个分区 / 带那个标签)
+        const mt = sg('热门  合成');
+        ok(mt.kind === 'text' && mt.items.length > 0 && mt.items.every((c) => c.name.includes('热门') && c.name.includes('合成')), '多词:两个词片名里都要有(不要求连着、不管顺序)', mt.items.map((c) => c.name));
+        ok(sg('热门 这个词谁都没有').items.length === 0 && cat7.lookup('热门 这个词谁都没有').length === 0, '多词:有一个词对不上 → 空');
+        ok(cat7.lookup('合成 热门').length > 0 && cat7.lookup('合成 热门').every((c) => c.name.includes('热门') && c.name.includes('合成')), '多词:本地查找同样每个词都要对上');
+        const mw = sg('人妻 热门');
+        ok(mw.kind === 'text' && mw.items.every((c) => c.name.includes('热门') && (c.name.includes('人妻') || has(c, 'wife'))), '多词:标签词(人妻)按作品标签算,不要求写在片名里', mw.items.map((c) => [c.name, c.tags]));
+        const ma = sg('人妻 巨乳');
+        ok(ma.kind === 'alias' && !ma.alias.b && ma.alias.tags.map((x) => x.tag).join() === 'wife,busty' && ma.alias.tag === 'wife' && ma.alias.label === '人妻 · 巨乳', '多词全是标签词 → 合成别名(浏览页按两个标签一起筛)', ma.alias);
+        const mb = sg('无码 人妻');
+        ok(mb.kind === 'alias' && mb.alias.b === 'jp_uncensored' && mb.alias.tags.map((x) => x.tag).join() === 'wife', '多词:一个分区 + 标签 → 分区里按标签筛', mb.alias);
+        ok(sg('无码 欧美').kind === 'text' && sg('无码 欧美').alias === null, '多词:两个分区不合成别名(浏览页一次只开一个分区)');
+        ok(sg('乱伦 人妻').alias === null, '多词:审查级标签词不做别名(合成也不行)');
         cat7.tags('');
         ok(n7.log.length === m, '联想 / 标签零上游请求');
     }

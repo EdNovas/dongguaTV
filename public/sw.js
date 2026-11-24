@@ -75,7 +75,7 @@
 //      页面冻过 / 断网 / 切前后台时在路上的探测作废重来;视口上面的改动先压着不滚动;浏览与搜索网格底下「已隐藏 N 部 · 显示」,底栏「共 N 部」不算藏掉的)。
 //      SW:跨域的 HEAD / no-store 请求一律直通(探测必须真的走网络,不能被策略1 的缓存 / 占位图冒充)。
 const CACHE_VERSION = 'v43';
-const ADULT_REV = '-adult27';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
+const ADULT_REV = '-adult28';   // [adult] 成人站改了 SW 行为/预缓存就 +1(adult2…):缓存名跟着换 = 新 SW 重新预缓存、activate 清掉旧缓存
 const ADULT_SITE = true;   // [adult] 成人站分支:海报不缓存、内容接口不缓存(见上)
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION + ADULT_REV;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION + ADULT_REV;
@@ -100,7 +100,7 @@ const STATIC_URLS = [
     './libs/js/qrcode-generator.min.js?v=2.0.4',   // v39: 截帧分享的二维码库(按需加载;?v= 与 index.html 的 _loadQrLib 一致)
     './libs/js/seek-preview.js?v=1',   // v43: 进度条缩略图预览(defer;?v= 与 index.html 一致)
     './libs/js/DPlayer.min.js',
-    './adult/adult.js?v=27',   // [adult] v43-adult27:与 index.html 引用同一个 ?v=
+    './adult/adult.js?v=28',   // [adult] v43-adult28:与 index.html 引用同一个 ?v=
     './adult/player-x.js?v=4',   // [adult] -adult5:四个 p4 扩展模块(defer;预缓存走 SWR,弱网不拖住 DOMContentLoaded)。后台 admin.html/admin.js 不预缓存
     './adult/privacy.js?v=3',
     './adult/preview.js?v=6',

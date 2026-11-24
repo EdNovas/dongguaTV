@@ -965,8 +965,15 @@
         if (d.alias && typeof d.alias === 'object') {
             const b = (typeof d.alias.b === 'string' && BUCKET_LABEL[d.alias.b]) ? d.alias.b : '';
             const tag = validTag(d.alias.tag) ? d.alias.tag : '';
-            if (tag && d.alias.label) learnTag(tag, d.alias.label);
-            if (b || tag) alias = { b, tag, label: cleanText(d.alias.label, 20) || (tag ? tagLabel(tag) : BUCKET_LABEL[b]) };
+            if (tag && d.alias.label && !Array.isArray(d.alias.tags)) learnTag(tag, d.alias.label);
+            // 多个词都是标签词(「黑丝 女同」)→ tags:[{tag,label}](≤3),浏览页按这几个标签一起筛
+            const tags = [];
+            for (const x of Array.isArray(d.alias.tags) ? d.alias.tags.slice(0, 3) : []) {
+                if (!x || !validTag(x.tag) || tags.indexOf(x.tag) >= 0) continue;
+                tags.push(x.tag);
+                if (x.label) learnTag(x.tag, x.label);
+            }
+            if (b || tag) alias = Object.assign({ b, tag, label: cleanText(d.alias.label, 30) || (tag ? tagLabel(tag) : BUCKET_LABEL[b]) }, tags.length > 1 ? { tags } : {});
         }
         const items = (Array.isArray(d.items) ? d.items : []).map(cardToItem).filter(Boolean).slice(0, 8).map(Object.freeze);
         const exact = (typeof d.exact === 'string' && WK_RE.test(d.exact) && d.exact.length <= 300) ? d.exact : null;
@@ -980,7 +987,8 @@
         if (!b && !tag) return null;
         const sel = {};
         if (b) sel.b = b;
-        if (tag && !isBlockedTag(tag)) sel.t = [tag];
+        const tags = (Array.isArray(a.tags) && a.tags.length > 1 ? a.tags : [tag]).filter((x) => validTag(x) && !isBlockedTag(x)).slice(0, 3);
+        if (tags.length) sel.t = tags;
         else if (!b) return null;
         return { type: b ? typeOfBucket(b) : 'all', sel };
     }
@@ -4340,7 +4348,7 @@
             _adOpenAlias(alias, kw) {
                 const p = aliasPreset(alias);
                 if (!p || typeof this.openBrowse !== 'function') return false;
-                if (alias && alias.tag && alias.label) learnTag(alias.tag, alias.label);
+                if (alias && alias.tag && alias.label && !alias.tags) learnTag(alias.tag, alias.label);
                 const tagOnly = !p.sel.b && p.sel.t && p.sel.t.length === 1 && featurable(p.sel.t[0]);
                 this._adOpen(tagOnly ? 'tag' : '', p.type, p.sel, { keyword: String(kw || '') });
                 return true;

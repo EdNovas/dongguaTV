@@ -541,6 +541,15 @@ try {
     const j = await api('GET', '/api/search?wd=' + encodeURIComponent('周末'), { cookie: CK });
     keys = (j.j && j.j.list || []).map(keyOf).sort();
     ok(JSON.stringify(keys) === JSON.stringify(['a_102', 'b_204']) && j.j.list.every(it => it.site_profile !== null), 'JSON 模式同样过滤', keys);
+    // —— 多个关键词(用户 2026-11-24「黑丝 女同」):资源站只认整串 → 只发最长的那个词,回来的按全部词过滤(分类名也算) ——
+    for (const [q, want] of [['周末 自拍', ['a_102', 'b_204']], ['姐姐 周末', ['a_102', 'b_204']], ['周末 这个词谁都没有', []]]) {
+        n0 = stubCount();
+        const sm = await sse('/api/search?wd=' + encodeURIComponent(q) + '&stream=true', CK);
+        const sent = [...new Set(stubLog.slice(n0).filter(x => x.q.wd != null).map(x => x.q.wd))];
+        ok(sent.length === 1 && q.split(' ').includes(sent[0]) && !sent[0].includes(' '), `多词「${q}」:只发其中一个词给资源站`, sent);
+        ok(JSON.stringify(sm.items.map(keyOf).sort()) === JSON.stringify(want), `多词「${q}」:每个词都要对上(片名 / 分类名)`, sm.items.map(it => [keyOf(it), it.vod_name, it.type_name]));
+    }
+    ok(!(await sse('/api/search?wd=' + encodeURIComponent('周末 偷拍') + '&stream=true', CK)).items.length, '多词里有被拦的词 → 整个查询照样被拦');
     r = await api('GET', '/api/search?wd=' + encodeURIComponent('周末') + '&site_key=c', { cookie: CK });
     ok(r.j && r.j.list.length === 1 && r.j.list[0].vod_id === 301, '显式 site_key 指定 search:false 的站:照搜(刷新线路用)', r.j);
     r = await api('GET', '/api/search?wd=' + encodeURIComponent('周末') + '&site_key=d', { cookie: CK });
@@ -712,6 +721,9 @@ try {
     ok(r.status === 200 && r.j.exact === null && JSON.stringify(r.j.items.map(c => c.wk)) === JSON.stringify(['c:SSIS-002']), '/api/catalog/suggest:片名被拦的卡片滤掉,exact 指向它 → null', r.j);
     r = await api('GET', '/api/catalog/suggest?q=' + encodeURIComponent('无码'), { cookie: CK });
     ok(r.j && r.j.kind === 'alias' && JSON.stringify(r.j.alias) === JSON.stringify({ label: '日本无码', b: 'jp_uncensored' }), '/api/catalog/suggest:别名 {b|tag,label}(多余字段不透传)', r.j);
+    // 多词全是标签词:合成别名的 tags 要透传(之前被字段白名单吃掉,回车只按第一个标签开)
+    r = await api('GET', '/api/catalog/suggest?q=' + encodeURIComponent('人妻 巨乳'), { cookie: CK });
+    ok(r.j && r.j.kind === 'alias' && r.j.alias.tag === 'wife' && Array.isArray(r.j.alias.tags) && r.j.alias.tags.map(x => x.tag).join() === 'wife,busty' && r.j.alias.tags.every(x => Object.keys(x).join() === 'tag,label'), '/api/catalog/suggest:多词合成别名带 tags(只留 tag / label)', r.j);
     r = await api('GET', '/api/catalog/suggest?q=' + encodeURIComponent('周末'), { cookie: CK });
     ok(r.j && r.j.kind === 'text' && JSON.stringify(r.j.items.map(c => c.name)) === JSON.stringify(['邻家姐姐的周末']), '/api/catalog/suggest:未知 kind 当 text、卡片再过滤', r.j);
     const nSug = readLines(CAT_LOG).filter(x => x.ev === 'suggest').length;
