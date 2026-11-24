@@ -124,8 +124,20 @@ const ENV = { ADULT_TG_RELAY: 'https://relay.example.com', ADULT_TG_SECRET: SECR
     ok(!b.ok && b.counted && b.reason === 'tg:short', '太短不收(但算进比例)', b);
     const c = TGL.toVod(cfg, ch, Object.assign({}, base, { mime: 'video/x-matroska', name: 'a.mkv' }), '伪娘');
     ok(!c.ok && c.counted && c.reason === 'tg:mime', 'mkv 不收');
-    const d = TGL.toVod(cfg, ch, Object.assign({}, base, { text: '#伪娘 #人妖' }), '伪娘');
-    ok(!d.ok && !d.counted && d.reason === 'tg:notext', '没正文不收、不算比例');
+    // 用户 2026-11-24:只有标签也收(标签当片名过硬过滤、算比例);片名带消息号,一个字都没有的才不收
+    const d = TGL.toVod(cfg, ch, Object.assign({}, base, { text: '#锅包柚 #伪娘 #男娘 #TS极品 #TS 109V' }), '伪娘');
+    ok(d.ok && d.counted && d.vod.vod_name === '锅包柚 伪娘 男娘 TS极品 TS · 109V #5' && d.vod.vod_tag === '锅包柚,伪娘,男娘,TS极品,TS', '只有标签:收,片名 = 标签 + 剩下几个字 + 消息号', d.vod);
+    for (const t of ['', '   ', '#2023 #12', 'https://t.me/abcde @somechannel 🔥🔥🔥', '投稿: @xxxx\n商务: @yyyy']) {
+        const e = TGL.toVod(cfg, ch, Object.assign({}, base, { text: t }), '伪娘');
+        ok(!e.ok && !e.counted && e.reason === 'tg:notext', '一个字都没有 / 纯数字标签 / 只有链接和引流 → 不收、不算比例: ' + JSON.stringify(t), e);
+    }
+    const g1 = TGL.toVod(cfg, ch, Object.assign({}, base, { gid: '123' }), '伪娘'), g2 = TGL.toVod(cfg, ch, Object.assign({}, base, { id: 6, gid: '123' }), '伪娘');
+    ok(g1.vod.vod_name === '黑丝伪娘在酒店自慰 射了好多 #5' && g2.vod.vod_name === '黑丝伪娘在酒店自慰 射了好多 #6' && a.vod.vod_name === '黑丝伪娘在酒店自慰 射了好多', '相册里共用配文的片名带消息号(不然按片名并成一部);单条不带(能和资源站按片名合并)', [g1.vod.vod_name, a.vod.vod_name]);
+    const TT = require(path.join(ROOT, 'lib/adult/title.js'));
+    ok(TT.parseTitle(g1.vod.vod_name, '伪娘').titleKey !== TT.parseTitle(g2.vod.vod_name, '伪娘').titleKey && !TT.parseTitle(d.vod.vod_name, '伪娘').code, '消息号让片名键各不相同,也不被当成番号');
+    const m = TGL.toVod(cfg, ch, Object.assign({}, base, { text: '#伪娘 #萝莉' }), '伪娘');
+    const PM = require(path.join(ROOT, 'lib/adult/policy.js'));
+    ok(m.counted && !PM.checkItem(m.vod, { strict: true, strictFloor: false, siteTrust: false }).ok, '只有标签的照样过硬过滤(#萝莉 拦)');
     ok(TGL.toVod(cfg, ch, Object.assign({}, base, { mime: 'video/quicktime' }), '伪娘').ok, 'mov 收');
     ok(TGL.hms(3725) === '1:02:05' && TGL.hms(59) === '0:59', 'hms');
     const U = require(path.join(ROOT, 'lib/site-catalog/util.js'));
@@ -147,7 +159,8 @@ function mkRelay() {
     for (let i = 1; i <= 30; i++) {
         const m = { id: i, date: NOW - 86400 * (40 - i), text: captions.good(i), dur: 600 + i, w: 1280, h: 720, mime: 'video/mp4', thumb: true, size: 1e8 };
         if (i === 7) m.dur = 60;                    // 太短
-        if (i === 8) m.text = '#伪娘 #人妖';           // 没正文
+        if (i === 8) m.text = '';                     // 一个字都没有
+        if (i === 10) m.text = '#伪娘博主小美 #人妖';     // 只有标签:照样收
         if (i === 9) m.text = captions.minor;         // 未成年:1 条(< 2 条,不停用;这一条被硬过滤拦)
         chans.TS88158.msgs.push(m);
     }
@@ -192,6 +205,8 @@ function mkRelay() {
     ok(ts.length === 27, 'TS88158 收 27 条', { n: ts.length, logs: logs.slice(-5) });
     ok(ts.every((r) => /^正片\$tg:\/\/TS88158\/\d+$/.test(r.play_url)), '库里存 tg://(不存签名地址)');
     ok(!ts.some((r) => ['7', '8', '9'].includes(String(r.vod_id))), '太短 / 没正文 / 未成年 都不在库里');
+    const t10 = ts.find((r) => String(r.vod_id) === '10');
+    ok(t10 && t10.name === '伪娘博主小美 人妖 #10', '只有标签的帖子收进来,片名带消息号', t10 && t10.name);
     ok(ts.every((r) => /^https:\/\/relay\.example\.com\/t\/TS88158\//.test(r.pic)), '封面是中转地址');
     const meta = (k) => { const r = db.prepare('SELECT v FROM adult_meta WHERE k=?').get(k); return r ? JSON.parse(r.v) : null; };
     const st = meta('tg:tg_ts88158');
@@ -234,6 +249,20 @@ function mkRelay() {
     ok(revs === 0, 'TG 干净帖子审查级为空(能进首页 / 相关 / 刷一刷 / 猜你喜欢)', revs);
     const wrev = db.prepare("SELECT COUNT(*) n FROM adult_works w WHERE w.wk IN (SELECT wk FROM adult_items WHERE site='tg_ts88158') AND COALESCE(w.review,'') <> ''").get().n;
     ok(wrev === 0, 'TG 作品审查级为空', wrev);
+    // 收录规则升级(TGL.TG_RULES):已经读到头的频道从头再读一遍,计数重算(不翻倍)、线路不重复
+    {
+        const stOld = meta('tg:tg_ts88158');
+        ok(stOld.rv === TGL.TG_RULES, '进度里记着收录规则版本', stOld);
+        db.prepare('UPDATE adult_meta SET v=? WHERE k=?').run(JSON.stringify(Object.assign({}, stOld, { rv: 1 })), 'tg:tg_ts88158');
+        relay.calls.length = 0;
+        await cat.tgKick(true);
+        const st2 = meta('tg:tg_ts88158');
+        ok(relay.calls.some((c) => /ch=TS88158&after=0&/.test(c)) && st2.rv === TGL.TG_RULES && st2.cur === 31 && st2.n === stOld.n && st2.minor === stOld.minor, '规则升级:从头再读,计数重算不翻倍', { calls: relay.calls, st2, stOld });
+        ok(rows('tg_ts88158').length === 28 && logs.some((l) => /TS88158:收录规则改到 v\d+,从头再读一遍/.test(l)), '规则升级:线路不重复、写日志');
+        relay.calls.length = 0;
+        await cat.tgKick(true);
+        ok(relay.calls.some((c) => /ch=TS88158&after=31&/.test(c)), '升级完之后照常往后拉', relay.calls);
+    }
     // 重启(新的 tg 实例):停用状态从库里读回来
     const tg2 = TGL.createTg(ENV);
     const cat2 = createCatalog({ db, getSites: () => tg2.sites(), adult, httpGet: async () => { throw new Error('x'); }, log: () => {}, env: {}, now: () => now, sleep: async () => {}, tg: tg2, fetch: relay.fetch });
