@@ -156,6 +156,27 @@ const ENV = { ADULT_TG_RELAY: 'https://relay.example.com', ADULT_TG_SECRET: SECR
     ok(TGL.hms(3725) === '1:02:05' && TGL.hms(59) === '0:59', 'hms');
     const U = require(path.join(ROOT, 'lib/site-catalog/util.js'));
     ok(U.parseDur(TGL.hms(637)) === 637 && U.parseDur(TGL.hms(3725)) === 3725, '目录 parseDur 读得回 hms');
+    ok(a.vod.tg_fsize === 0 && TGL.toVod(cfg, ch, Object.assign({}, base, { size: 123456789 }), '伪娘').vod.tg_fsize === 123456789, '条目带文件字节数(认同一个文件用)');
+}
+
+// ---------- 5b. 片名(TG_RULES 3,用户 2026-11-25):括号里的标签算正文、字段行 / 分隔线不当片名、带上编号 ----------
+{
+    const cfg = TGL.config(ENV);
+    const ch = cfg.channels.find((c) => c.ch === 'TS88158');
+    const nm = (text, extra) => TGL.toVod(cfg, ch, Object.assign({ id: 27, date: NOW, text, dur: 637, mime: 'video/mp4' }, extra || {}), '伪娘').vod.vod_name;
+    ok(nm('【#欧美女主调教私奴虐阳】\n编号：#OS2023111002\n女主：#Alora #Alika\n出品：#CBT\n标签：#欧美FEMDOM') === '【欧美女主调教私奴虐阳】 OS2023111002', '括号里的标签留字 + 编号接在后面(不再是「【 】 编号」)', nm('【#欧美女主调教私奴虐阳】\n编号：#OS2023111002'));
+    ok(nm('标题:美妖化为中间插头了\n#伪娘') === '美妖化为中间插头了', '去掉「标题:」');
+    ok(nm('标题:护士伪娘遭主人龟头虐后猛入 简介:可爱伪娘肉棒被撸到崩溃 标签') === '护士伪娘遭主人龟头虐后猛入', '一行几个字段:片名到下一个字段名为止');
+    ok(!/─/.test(nm('◤硬邦邦◢  \n───────  \n博主：#czu\n\n简评：散步时掀裙子好刺激')), '分隔线不进片名', nm('◤硬邦邦◢  \n───────  \n博主：#czu\n\n简评：散步时掀裙子好刺激'));
+    ok(nm('伪娘:莹 国产人妖母狗莹内射精后舔食自己的精液~') === '伪娘:莹 国产人妖母狗莹内射精后舔食自己的精液~', '不认识的"xx:"开头照样是正文');
+    ok(nm('#人夫伪娘 #人妖 #熟女\n\n只要能让其进入到喉咙 应该能吞下很长的肉棒') === '只要能让其进入到喉咙 应该能吞下很长的肉棒', '普通配文片名不变');
+    const S = require(path.join(ROOT, 'lib/site-catalog/tg-same.js'));
+    ok(S.similarTitle('最美韩国ts逆天颜值公主极品闺蜜▌Sugar▌3P爆肏极品小妹_双头龙互插嫩鲍后庭', '最美韩TS逆天颜值公主极品闺蜜Sugar 3P狂肏小骚妹双头龙互插嫩鲍后庭谁更浪 #20') > 0, '相似片名:改了几个字');
+    ok(S.similarTitle('女王调教胖奴_边操边撸双重刺激很享受', '标题:超美的妖妖时诗君君黑丝女王调教胖奴_边操边撸双重刺激很享受 #88') > 0, '相似片名:一边前面多了博主名 / 标题: / 消息号');
+    ok(S.similarTitle('伪娘户外露出', '眼镜伪娘户外露出') === 0 && S.similarTitle('浴室play浴室play', '古风伪娘御姐Bela浴室play,坐在浴缸里搔首弄姿') === 0, '泛标题(太短)不算');
+    ok(S.similarTitle('伪娘Kyla最新视频完整版(1V,18min)已更新', '伪娘Kyla最新视频完整版(2V,共60min)已更新') === 0, '数字对不上不算(1V / 2V)');
+    ok(S.similarTitle('黑丝伪娘小姐姐酒店里被大屌猛操 第一部', '黑丝伪娘小姐姐酒店里被大屌猛操 第二部') === 0 && S.similarTitle('黑丝伪娘小姐姐酒店里被大屌猛操 上集', '黑丝伪娘小姐姐酒店里被大屌猛操 下集') === 0, '上下集 / 第几部不算');
+    ok(S.stripMsgNo('伪娘 人妖 #123') === '伪娘 人妖' && S.stripMsgNo('第2部') === '第2部', 'stripMsgNo 只去末尾的 #消息号');
 }
 
 // ---------- 6. 经假中转走真目录:收 / 拦 / 停用 / 进度 ----------
@@ -331,18 +352,18 @@ function mkRelay() {
         ok(!relay.calls.some((c) => c.startsWith('/api/warm')), '老帖子(历史 / 重读)从来没交给中转预做');
         const nowS = Math.floor(now / 1000);
         relay.chans.TS88158.msgs.push(
-            { id: 40, date: nowS - 3600, text: captions.good(40), dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 },
-            { id: 41, date: nowS - 3600, text: '#伪娘 酒店偷拍 隔壁情侣', dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 },
-            { id: 42, date: nowS - 3600, text: captions.good(42), dur: 30, mime: 'video/mp4', thumb: true, size: 1e8 },
-            { id: 43, date: nowS - 5 * 86400, text: captions.good(43), dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 },
-            { id: 44, date: nowS - 60, text: captions.good(44), dur: 900, mime: 'video/mp4', thumb: true, size: 1e8 });
+            { id: 40, date: nowS - 3600, text: captions.good(40), dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 + 40 },
+            { id: 41, date: nowS - 3600, text: '#伪娘 酒店偷拍 隔壁情侣', dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 + 41 },
+            { id: 42, date: nowS - 3600, text: captions.good(42), dur: 30, mime: 'video/mp4', thumb: true, size: 1e8 + 42 },
+            { id: 43, date: nowS - 5 * 86400, text: captions.good(43), dur: 800, mime: 'video/mp4', thumb: true, size: 1e8 + 43 },
+            { id: 44, date: nowS - 60, text: captions.good(44), dur: 900, mime: 'video/mp4', thumb: true, size: 1e8 + 44 });
         relay.calls.length = 0;
         await cat2.tgKick(true);
         const wc = relay.calls.filter((c) => c.startsWith('/api/warm'));
         ok(wc.length === 1 && /^\/api\/warm\?ch=TS88158&ids=40,44$/.test(wc[0]), '只交 3 天内、真收进库的(偷拍被拦 / 太短 / 5 天前的不交)', relay.calls);
         ok(rows('tg_ts88158').some((r) => String(r.vod_id) === '43') && !rows('tg_ts88158').some((r) => String(r.vod_id) === '41'), '5 天前的照样收,只是不预做;偷拍的没进库');
         relay.flags.warm404 = true;
-        relay.chans.TS88158.msgs.push({ id: 45, date: nowS - 60, text: captions.good(45), dur: 900, mime: 'video/mp4', thumb: true, size: 1e8 });
+        relay.chans.TS88158.msgs.push({ id: 45, date: nowS - 60, text: captions.good(45), dur: 900, mime: 'video/mp4', thumb: true, size: 1e8 + 45 });
         relay.calls.length = 0;
         await cat2.tgKick(true);
         ok(relay.calls.some((c) => c.startsWith('/api/warm')) && meta('tg:tg_ts88158').cur === 45 && rows('tg_ts88158').some((r) => String(r.vod_id) === '45'), '中转是旧版本(/api/warm 404):同步照常', meta('tg:tg_ts88158'));
@@ -387,6 +408,73 @@ function mkRelay() {
         ok(res3.code === 404, '详情:停用的频道 404');
     } finally { globalThis.fetch = realFetch; }
     try { await cat.close(); await cat2.close(); } catch (_) { /* */ }
+}
+
+// ---------- 7b. 同一个文件 / 相似片名(用户 2026-11-25:同频道重发的都显示出来了;不同频道片名很像、时长一样的也该并) ----------
+{
+    const chans = {
+        ChanAaa: { info: { title: '伪娘频道甲', about: '', members: 10, top: 9 }, msgs: [
+            { id: 1, date: NOW, text: '#伪娘 黑丝伪娘小姐姐在酒店里被大屌猛操 射了好多', dur: 700, mime: 'video/mp4', thumb: true, size: 5e8 + 1 },
+            { id: 2, date: NOW, text: '#伪娘 #人妖', dur: 700, mime: 'video/mp4', thumb: true, size: 0 },   // 重发的同一个文件(先当旧库:没有字节数)
+            { id: 3, date: NOW, gid: 'g1', text: '#伪娘 两个美妖穿着女仆装一起被大屌猛操', dur: 650, mime: 'video/mp4', thumb: true, size: 3e8 + 3 },
+            { id: 4, date: NOW, gid: 'g1', text: '#伪娘 两个美妖穿着女仆装一起被大屌猛操', dur: 660, mime: 'video/mp4', thumb: true, size: 3e8 + 4 },
+            { id: 5, date: NOW, text: '#伪娘 男娘穿着白丝在沙发上被后入 叫得好大声', dur: 800, mime: 'video/mp4', thumb: true, size: 4e8 + 5 },
+        ] },
+        ChanBbb: { info: { title: '伪娘频道乙', about: '', members: 10, top: 13 }, msgs: [
+            { id: 10, date: NOW, text: '#人妖 最新上传 黑丝美妖酒店被干 超爽', dur: 700, mime: 'video/mp4', thumb: true, size: 5e8 + 1 },        // = 甲 1 同一个文件
+            { id: 11, date: NOW, text: '#人妖 男娘穿着白丝在沙发上被后入 叫得好大声 好爽', dur: 801, mime: 'video/mp4', thumb: true, size: 2e8 + 11 },   // ≈ 甲 5(重新上传)
+            { id: 12, date: NOW, text: '#人妖 男娘穿着白丝在沙发上被后入 叫得好大声', dur: 900, mime: 'video/mp4', thumb: true, size: 2e8 + 12 },       // 片名一样、时长差太多
+        ] },
+    };
+    const fetch = async (url, opts) => {
+        const u = new URL(url);
+        const json = (code, j) => ({ ok: code === 200, status: code, json: async () => j });
+        if (((opts && opts.headers && opts.headers.authorization) || '') !== 'Bearer ' + SECRET) return json(401, {});
+        if (u.pathname === '/api/warm') return json(200, { ok: true, queued: 0 });
+        const c = chans[u.searchParams.get('ch')];
+        if (!c) return json(404, { error: 'USERNAME_NOT_OCCUPIED' });
+        const after = Number(u.searchParams.get('after')) || 0;
+        const rows = c.msgs.filter((m) => m.id > after);
+        return json(200, { ok: true, info: c.info, next: rows.length ? rows[rows.length - 1].id : after, done: true, items: rows });
+    };
+    const E = Object.assign({}, ENV, { ADULT_TG_CHANNELS: 'ChanAaa:伪娘:120, ChanBbb:伪娘:120' });
+    const tg = TGL.createTg(E);
+    const db = new Database(':memory:');
+    const cat = createCatalog({ db, getSites: () => tg.sites(), adult, httpGet: async () => { throw new Error('x'); }, log: () => {}, env: {}, now: () => NOW * 1000, sleep: async () => {}, tg, fetch });
+    await cat.tgKick();
+    const items = (site) => db.prepare('SELECT vod_id, wk, fsz, dur FROM adult_items WHERE site=? ORDER BY CAST(vod_id AS INTEGER)').all(site);
+    const ids = (site) => items(site).map((r) => Number(r.vod_id));
+    const wkOf = (site, id) => (items(site).find((r) => Number(r.vod_id) === id) || {}).wk;
+    const meta = (k) => { const r = db.prepare('SELECT v FROM adult_meta WHERE k=?').get(k); return r ? JSON.parse(r.v) : null; };
+    const workName = (wk) => (db.prepare('SELECT name FROM adult_works WHERE wk=?').get(wk) || {}).name;
+    ok(ids('tg_chanaaa').join() === '1,2,3,4,5' && items('tg_chanaaa')[0].fsz === 5e8 + 1, '甲:旧库样子(2 没有字节数)全收,字节数记下', items('tg_chanaaa'));
+    ok(wkOf('tg_chanbbb', 10) === wkOf('tg_chanaaa', 1), '别的频道的同一个文件(片名完全不同)→ 并进同一部、多一条线路', [wkOf('tg_chanbbb', 10), wkOf('tg_chanaaa', 1)]);
+    ok(wkOf('tg_chanbbb', 11) === wkOf('tg_chanaaa', 5), '别的频道片名很像、时长差 1 秒(大小不同)→ 并进同一部');
+    ok(wkOf('tg_chanbbb', 12) !== wkOf('tg_chanaaa', 5), '片名一样但时长差太多 → 不并');
+    ok(wkOf('tg_chanaaa', 3) !== wkOf('tg_chanaaa', 4), '相册里共用配文的不同视频照旧各是一部');
+    ok(!/#\d+$/.test(workName(wkOf('tg_chanaaa', 3))) && !/#\d+$/.test(workName(wkOf('tg_chanaaa', 4))) && !/#\d+$/.test(workName(wkOf('tg_chanaaa', 2))), '作品名不带消息号', [workName(wkOf('tg_chanaaa', 3)), workName(wkOf('tg_chanaaa', 4)), workName(wkOf('tg_chanaaa', 2))]);
+    // 旧库升级:旧作品名带着消息号、重发的那条当时没认出来 → 规则升级重读一遍:重发的删掉、名字去掉消息号
+    db.prepare('UPDATE adult_works SET name=? WHERE wk=?').run('两个美妖穿着女仆装一起被大屌猛操 #4', wkOf('tg_chanaaa', 4));
+    const dupWk = wkOf('tg_chanaaa', 2);
+    chans.ChanAaa.msgs[1].size = 5e8 + 1;
+    for (const k of ['tg:tg_chanaaa', 'tg:tg_chanbbb']) { const s = meta(k); s.rv = 2; db.prepare('UPDATE adult_meta SET v=? WHERE k=?').run(JSON.stringify(s), k); }
+    await cat.tgKick(true);
+    ok(ids('tg_chanaaa').join() === '1,3,4,5' && !db.prepare('SELECT 1 FROM adult_works WHERE wk=?').get(dupWk), '重读:同频道重发的那条删掉(作品也没了),留最早的', ids('tg_chanaaa'));
+    ok(meta('tg:tg_chanaaa').sk.dup === 1 && meta('tg:tg_chanaaa').rej === 0, '后台:重复的记在「不收 · 重复发的」,不算被拦', meta('tg:tg_chanaaa'));
+    ok(workName(wkOf('tg_chanaaa', 4)) === '两个美妖穿着女仆装一起被大屌猛操' || /^两个美妖穿着女仆装一起被大屌猛操 · \d+$/.test(workName(wkOf('tg_chanaaa', 4))), '旧作品名去掉消息号', workName(wkOf('tg_chanaaa', 4)));
+    ok(ids('tg_chanbbb').join() === '10,11,12' && wkOf('tg_chanbbb', 10) === wkOf('tg_chanaaa', 1) && wkOf('tg_chanbbb', 11) === wkOf('tg_chanaaa', 5), '重读后跨频道的合并不变');
+    // 同频道后来又发了一次:不收
+    chans.ChanAaa.msgs.push({ id: 6, date: NOW, text: '#伪娘 重发 男娘白丝沙发后入', dur: 800, mime: 'video/mp4', thumb: true, size: 4e8 + 5 });
+    await cat.tgKick(true);
+    ok(ids('tg_chanaaa').join() === '1,3,4,5' && meta('tg:tg_chanaaa').sk.dup === 2, '后来再重发的同一个文件不收');
+    // 同一个文件在别的频道的配文被硬过滤拦下 → 这个文件哪儿都不要(已收的删掉,以后再发也不收)
+    chans.ChanBbb.msgs.push({ id: 13, date: NOW, text: '#伪娘 酒店偷拍 隔壁情侣', dur: 650, mime: 'video/mp4', thumb: true, size: 3e8 + 3 });
+    await cat.tgKick(true);
+    ok(ids('tg_chanaaa').join() === '1,4,5' && !ids('tg_chanbbb').includes(13) && db.prepare('SELECT 1 FROM adult_tg_block WHERE fp=?').get((3e8 + 3) + ':650'), '别的频道配文是偷拍 → 甲 3(同一个文件)也删掉', ids('tg_chanaaa'));
+    chans.ChanAaa.msgs.push({ id: 7, date: NOW, text: '#伪娘 两个美妖女仆装 重新发一次', dur: 650, mime: 'video/mp4', thumb: true, size: 3e8 + 3 });
+    await cat.tgKick(true);
+    ok(!ids('tg_chanaaa').includes(7), '被拦过的文件以后再发也不收');
+    try { await cat.close(); } catch (_) { /* */ }
 }
 
 // ---------- 8. 中转:分块缓存淘汰 / 限流秒数 / 起一个真的中转(没账号)看鉴权 ----------

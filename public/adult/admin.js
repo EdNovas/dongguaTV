@@ -129,7 +129,7 @@
         if (top > 0) { const pct = Math.min(99, Math.floor(cur * 100 / top)); return { text: '#' + fmtNum(cur) + ' / #' + fmtNum(top) + '(约 ' + pct + '%)', pct, done: false }; }
         return { text: '读到 #' + fmtNum(cur), pct: 0, done: false };
     }
-    const TG_SKIP = { short: '太短', notext: '没正文', mime: '不是 mp4', invalid: '数据不全' };
+    const TG_SKIP = { short: '太短', notext: '没正文', mime: '不是 mp4', invalid: '数据不全', dup: '重复发的' };
     function tgSkipText(sk, rej) {
         const parts = [];
         if (isObj(sk)) Object.keys(sk).sort((a, b) => (num(sk[b]) || 0) - (num(sk[a]) || 0)).slice(0, 8).forEach((k) => { const n = num(sk[k]) || 0; if (n > 0) parts.push((Object.prototype.hasOwnProperty.call(TG_SKIP, k) ? TG_SKIP[k] : str(k, 20)) + ' ' + fmtNum(n)); });
