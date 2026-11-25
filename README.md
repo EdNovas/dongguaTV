@@ -8,7 +8,7 @@ https://github.com/user-attachments/assets/8100fd07-46cd-4f16-9228-90a09075ac54
 
 在原版基础上重构了前后端，并加入了：流式搜索、按广告情况分组的线路与自动选源、边缘 + 播放器两级去广告、跳过片头片尾、弹幕、直播、离线缓存、多用户云同步、站长后台、分享深链、PWA / Android / TV 模式等。
 
-**演示**：https://ednovas-test.vercel.app （不含任何数据）
+**演示**：https://ednovas.video
 
 <img width="2547" height="1226" alt="image" src="https://github.com/user-attachments/assets/15392a90-9078-45b6-828d-829402669950" />
 
