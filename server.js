@@ -1084,6 +1084,37 @@ try {
     favorites.start();   // 启动 60s 后第一轮,之后每 10 分钟(模块内部到下一轮事件循环才判开关,避开 TDZ)
 } catch (e) { console.warn('[Favorites] 模块加载失败,收藏与更新提醒已禁用:', e.message); favorites = null; }
 
+// 🗂️ 片名索引(见 lib/title-index):资源站关了关键词搜索(?wd= 回「暂不支持搜索」)但列表 / 详情还开着 →
+//    后台把它的片名表爬进本地 SQLite(title-index.db,纯缓存,丢了会自己重爬),搜索时本地查出 vod_id 再 ?ac=detail&ids= 取详情。
+//    每天自动探测哪些站关了搜索;db.json 里给站点写 "search": false / true 可强制走 / 不走索引。站长后台「片库」页看进度、手动操作。
+//    TITLE_INDEX_DISABLE=1 关闭;TITLE_INDEX_DB 改库文件位置(Docker 想保留就挂载它)。
+const TITLE_INDEX_ENABLED = !envFlag('TITLE_INDEX_DISABLE');
+let titleIndex = null;
+if (!process.env.VERCEL) {
+    try {
+        titleIndex = require('./lib/title-index').createTitleIndex({
+            dbFile: process.env.TITLE_INDEX_DB ? path.resolve(process.env.TITLE_INDEX_DB) : path.join(__dirname, 'title-index.db'),
+            sites: () => allSites().filter(s => s && s.active !== false && !(kazumi && kazumi.isKzSite(s))),
+            prepare: async () => !(REMOTE_DB_URL && !remoteDbCache && !(await loadRemoteDb())),
+            // 只直连、不走 CORS 代理:全量要翻几万页,不能烧 Worker 额度;拿原文,模块自己判断是不是「暂不支持搜索」
+            httpGet: async (url, timeout) => (await axios.get(url, { timeout, responseType: 'text', transformResponse: [(x) => x], maxContentLength: 4 * 1024 * 1024 })).data,
+            enabled: () => TITLE_INDEX_ENABLED,
+            log: (...a) => console.log('[TitleIndex]', ...a)
+        });
+        titleIndex.start();   // 启动 90s 后第一轮,之后每分钟
+    } catch (e) { console.warn('[TitleIndex] 模块加载失败,关了搜索的站继续搜不到:', e.message); titleIndex = null; }
+}
+// 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback
+async function siteSearchFetch(site, kw) {
+    if (titleIndex && titleIndex.useFor(site)) {
+        let ids = [];
+        try { ids = await titleIndex.lookup(site.key, kw, 20); } catch (e) { console.error(`[TitleIndex] ${site.key} 查询失败:`, e.message); }
+        if (!ids.length) return { data: { list: [] }, usedProxy: false };
+        return fetchWithProxyFallback(`${site.api}?ac=detail&ids=${ids.map(encodeURIComponent).join(',')}`, { timeout: 8000 }, site.key);
+    }
+    return fetchWithProxyFallback(`${site.api}?ac=detail&wd=${encodeURIComponent(kw)}`, { timeout: 8000 }, site.key);
+}
+
 // 对分享预览 API 应用更严格的限流
 app.use('/api/preview', previewLimiter);
 
@@ -2169,6 +2200,28 @@ const adminAuthed = (req) => {
 
 // 用户统计列表/概览/详情 → 见 lib/user-stats(GET /api/admin/users|overview|user|shares|requests,SQL 聚合 + 20s 缓存)。
 // 旧实现同步 JSON.parse 最多 20 万行 user_history 估算时长,会阻塞事件循环把全站一起卡死,已删除。
+
+// 🗂️ 片库(片名索引)管理:各站是否关了搜索、索引进度,手动 探测 / 重建 / 清空 / 暂停 / 强制走或不走索引;试搜只查本地
+app.get('/api/admin/title-index', (req, res) => {
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    if (!titleIndex) return res.json({ available: false, enabled: false, sites: [] });
+    try { res.json(Object.assign({ available: true }, titleIndex.status())); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/api/admin/title-index/sample', (req, res) => {
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    if (!titleIndex) return res.status(400).json({ error: '片名索引没启用' });
+    const site = String(req.query.site || ''), q = String(req.query.q || '').slice(0, 60);
+    try { res.json({ items: titleIndex.sample(site, q, 20) }); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/title-index/action', async (req, res) => {
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    if (!titleIndex) return res.status(400).json({ error: '片名索引没启用' });
+    const { action, site } = req.body || {};
+    try { res.json(Object.assign({ available: true }, await titleIndex.action(String(action || ''), site ? String(site) : ''))); }
+    catch (e) { res.status(400).json({ error: e.message }); }
+});
 
 // 封禁 / 解封（被封用户：/api/config 返回 banned→前端锁屏；历史同步/求片接口一律 403）
 app.post('/api/admin/ban', (req, res) => {
@@ -3654,8 +3707,7 @@ app.get('/api/search', async (req, res) => {
                 return;
             }
             try {
-                const searchUrl = `${site.api}?ac=detail&wd=${encodeURIComponent(keyword)}`;
-                const { data } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
+                const { data } = await siteSearchFetch(site, keyword);   // 关了搜索的站走本地片名索引
                 const list = data.list ? data.list.map(item => ({
                     vod_id: item.vod_id,
                     vod_name: item.vod_name,
@@ -3746,11 +3798,8 @@ app.get('/api/search', async (req, res) => {
                         console.log(`[SSE Search] ${site.name} -> ${searchKeywords.length > 1 ? searchKeywords.join(' | ') : kw}`);
                     }
 
-                    // 构建请求 URL（带参数）
-                    const searchUrl = `${site.api}?ac=detail&wd=${encodeURIComponent(kw)}`;
-
-                    // 使用带代理回退的请求
-                    const { data, usedProxy } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
+                    // 使用带代理回退的请求(关了搜索的站走本地片名索引)
+                    const { data, usedProxy } = await siteSearchFetch(site, kw);
 
                     if (usedProxy && kw === searchKeywords[0]) {
                         console.log(`[SSE Search] ${site.name} 通过代理获取结果`);
@@ -3845,9 +3894,7 @@ app.post('/api/search', async (req, res) => {
     try {
         console.log(`[Search] ${site.name} -> ${keyword}`);
 
-        // 构建请求 URL
-        const searchUrl = `${site.api}?ac=detail&wd=${encodeURIComponent(keyword)}`;
-        const { data } = await fetchWithProxyFallback(searchUrl, { timeout: 8000 }, site.key);
+        const { data } = await siteSearchFetch(site, keyword);   // 关了搜索的站走本地片名索引
 
         // 简单的数据清洗
         const result = {
