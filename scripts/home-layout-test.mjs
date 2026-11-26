@@ -209,7 +209,7 @@ function any() {
 let captured = null;
 const store = new Map(), timers = [], fetches = [], focused = [], scrolls = [];
 const ctxObj = {
-    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, config: {} }; } },
+    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, component() { return this; }, config: {} }; } },
     console: { log() { }, warn() { }, error() { }, info() { } },
     localStorage: { getItem: k => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: k => store.delete(k) },
     setTimeout: (fn, ms) => { timers.push({ fn, ms, live: true }); return timers.length; },

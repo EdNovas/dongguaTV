@@ -178,7 +178,7 @@ function any() {
 }
 let captured = null;
 const ctxObj = {
-    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, config: {} }; } },
+    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, component() { return this; }, config: {} }; } },
     console: { log() { }, warn() { }, error() { }, info() { } },
     setTimeout: () => 0, clearTimeout() { }, setInterval: () => 0, clearInterval() { },
     requestAnimationFrame: () => 0, Promise, JSON, Math, Date, Object, Array, String, Number, Boolean, RegExp, Map, Set, WeakMap, WeakSet, Symbol, Error, TypeError,

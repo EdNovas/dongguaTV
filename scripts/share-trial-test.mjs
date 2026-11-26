@@ -120,7 +120,7 @@ class FakeDate extends Date { constructor(...a) { if (a.length) super(...a); els
 const store = mkStore(), intervals = [], calls = [];
 const loc = { search: '?play=' + encodeURIComponent('兰香如故') + '&ep=1', pathname: '/' };
 const ctxObj = {
-    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, config: {} }; } },
+    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, component() { return this; }, config: {} }; } },
     console: { log() { }, warn() { }, error() { }, info() { } },
     localStorage: store, sessionStorage: mkStore(), location: loc,
     history: { state: null, replaceState(s, t, u) { calls.push('replace:' + u); loc.search = String(u).includes('?') ? String(u).slice(String(u).indexOf('?')) : ''; } },
