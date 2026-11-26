@@ -180,6 +180,8 @@ node server.js                       # 或 pm2 start server.js --name donggua-tv
 | `TITLE_INDEX_DB` | `./title-index.db` | 片名索引库位置。它是纯缓存，丢了会自己重新爬（每站约 1~2 小时）；Docker 想保留就把它也挂载出来 |
 | `CALENDAR_DISABLE` | — | `1` = 关闭首页「追剧日历」。不关时（需 `CACHE_TYPE=sqlite`），服务器每 30 分钟从 2~3 个大资源站拉最近更新，按天、按分类（电视剧 / 动漫 / 综艺 / 电影 / 纪录片 / 短剧）整理成一周的更新表，存在 cache.db 里，保留 9 周 |
 | `CALENDAR_SITES` | 自动 | 追剧日历用哪些资源站当更新源，填 db.json 里的站点 key，逗号分隔。默认从 速播 / 红牛 / 非凡 / 最大 / 极速 里挑现有的前 3 个，都没有就用前 3 个站 |
+| `SHORTS_DISABLE` | — | `1` = 关闭首页「刷短剧」(竖屏一部一部往上刷)。不关时服务器每 30 分钟从各资源站的短剧分类拉最新的，只收一集一集的（整部拼成一个「全集」文件的站自动跳过），按片名去重存进 cache.db（没有 sqlite 就放内存），保留 30 天 |
+| `SHORTS_SITES` | 自动 | 刷短剧用哪些资源站，填 db.json 里的站点 key，逗号分隔。默认自动认：分类表里有短剧分类、而且是分集的站（如意 / 非凡 / iKun 等先拉） |
 | `CORS_PROXY_URL` | — | Cloudflare Worker CORS 代理，**边缘去广告与直播都靠它**。可逗号分隔多个，第一个是主代理，故障时前端自动换备用 |
 | `TMDB_PROXY_URL` | — | TMDB 反代。图片与搜索翻译设了就用；`/api/tmdb-proxy` 按访客 IP 判断大陆才走 |
 | `SERVER_IN_CHINA` | — | 设 `true`：服务器自己发起的 TMDB 请求（分享卡片、预览、SEO 页、sitemap）强制走反代 |

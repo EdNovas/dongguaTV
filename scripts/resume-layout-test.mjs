@@ -96,7 +96,8 @@ console.log('② CSS');
     ok(sels.length && sels.every(s => kids.some(k => matches(k, s))), '列出的每一项都是 #app 的直接子节点', sels.filter(s => !kids.some(k => matches(k, s))));
     const keep = ['.detail-overlay', '.info-modal-overlay', '.ban-lock', '.tv-mode-float-btn'];
     ok(!sels.some(s => keep.includes(s)), '覆盖层 / 弹窗 / 封禁锁 / TV 悬浮钮不藏', sels);
-    const notHome = (k) => k.nodeName === 'teleport' || keep.some(s => matches(k, s));
+    // <dg-shorts>:短剧竖屏刷,自己是整屏 fixed 覆盖层(开播放页前先关掉它),不是首页层
+    const notHome = (k) => k.nodeName === 'teleport' || k.nodeName === 'dg-shorts' || keep.some(s => matches(k, s));
     const missed = kids.filter(k => !notHome(k) && !sels.some(s => matches(k, s))).map(k => k.nodeName + '.' + (attr(k, 'class') || '') + '#' + (attr(k, 'id') || ''));
     ok(missed.length === 0, '#app 下的首页层一个都没漏(新加首页层要补进隐藏列表)', missed);
 }
