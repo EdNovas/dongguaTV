@@ -94,6 +94,18 @@
         .t-unknown { background: rgba(255, 255, 255, .08); color: #c8c8d2; }
         .b-ban { background: rgba(248, 113, 113, .18); color: var(--bad); }
         .b-live { background: rgba(25, 158, 112, .2); color: #7ee2bd; }
+        /* 🗂️ 片库 */
+        .b-idx { background: rgba(229, 9, 20, .18); color: #ff9aa0; }
+        .b-ok { background: rgba(25, 158, 112, .2); color: #7ee2bd; }
+        .b-unk { background: rgba(255, 255, 255, .08); color: var(--text-2); }
+        .ti-prog { height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .08); overflow: hidden; margin-top: 4px; min-width: 90px; }
+        .ti-prog > i { display: block; height: 100%; background: var(--accent); }
+        .ti-acts { display: flex; flex-wrap: wrap; gap: 4px; }
+        .ti-err { color: #ff9aa0; font-size: 12px; overflow-wrap: anywhere; }
+        .ti-try { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0 8px; }
+        .ti-try input { flex: 1 1 180px; min-width: 0; }
+        .ti-hits { margin: 0; padding-left: 18px; }
+        .ti-hits li { margin: 3px 0; }
         .b-hot { background: rgba(229, 9, 20, .2); color: #ffb3b8; }
         .b-ch { background: rgba(140, 196, 255, .12); color: #b8dbff; }
         .b-est { background: rgba(253, 186, 116, .14); color: var(--serious); }
@@ -126,7 +138,7 @@
         @media (max-width: 820px) {
             .top-in { flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
             .brand { flex: 1; }
-            .tabs { order: 3; flex: 1 1 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .tabs { order: 3; flex: 1 1 100%; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
             .tabs button { justify-content: center; padding: 7px 2px; font-size: 13px; gap: 4px; }
             .hide-narrow { display: none; }
         }
@@ -825,6 +837,83 @@
                             <pager :page="sh.data.page || sh.page" :pages="sharePages" @go="goSharesPage"></pager>
                         </template>
                     </section>
+
+                    <!-- ======================= 🗂️ 片库(片名索引) ======================= -->
+                    <section v-show="tab === 'library'" class="sec" aria-label="片库">
+                        <p class="since">有些资源站把关键词搜索关了(搜什么都回「暂不支持搜索」)，但片单还能翻。服务器会把这些站的片名表爬到本地，搜索时先在本地找出片子，再去资源站取详情，这样它们的线路也会出现在搜索结果里。每天自动检查一次哪些站关了搜索；第一次全量要翻几千页，每站约 1~2 小时。</p>
+                        <load-state :st="ti" :has="!!ti.data" @retry="loadTitleIndex"></load-state>
+                        <template v-if="ti.data">
+                            <div v-if="!ti.data.available" class="empty">服务器没启用片名索引(Vercel 部署或设了 TITLE_INDEX_DISABLE=1)。</div>
+                            <template v-else>
+                                <div class="kpis" style="margin-bottom:12px">
+                                    <div class="kpi"><div class="k-l">走索引的站</div><div class="k-v">{{ tiStats.active }} / {{ tiStats.nosearch }}</div><div class="k-s">正在用 / 关了搜索</div></div>
+                                    <div class="kpi"><div class="k-l">已收录片名</div><div class="k-v">{{ fmtNum(tiStats.rows) }}</div><div class="k-s">资源站共 {{ fmtNum(tiStats.total) }}</div></div>
+                                    <div class="kpi"><div class="k-l">搜索正常的站</div><div class="k-v">{{ tiStats.ok }}</div><div class="k-s">不用建索引</div></div>
+                                    <div class="kpi"><div class="k-l">未确认</div><div class="k-v">{{ tiStats.unknown }}</div><div class="k-s">打不开 / 限海外，2 小时后再探</div></div>
+                                </div>
+                                <div class="toolbar">
+                                    <button type="button" class="btn btn-sm" :disabled="ti.busy.all" @click="tiAct('probe', '')">全部重新探测</button>
+                                    <label class="muted" style="font-size:13px"><input type="checkbox" v-model="ti.showAll"> 也显示其他站(搜索正常 / 未确认)</label>
+                                    <span class="muted count">{{ ti.data.running ? '后台正在爬…' : '后台空闲(每分钟一轮)' }}</span>
+                                </div>
+                                <div class="panel p0 table-wrap" :class="{ dim: ti.loading }">
+                                    <table class="tbl">
+                                        <thead><tr><th>资源站</th><th>状态</th><th class="num">已收录 / 资源站总数</th><th>进度</th><th>最近</th><th>操作</th></tr></thead>
+                                        <tbody>
+                                            <tr v-for="s in tiRows" :key="s.key">
+                                                <td><div>{{ s.name }}</div><div class="sub">{{ s.key }}<template v-if="!s.configured"> · 已从站点表移除</template></div></td>
+                                                <td>
+                                                    <span class="badge" :class="(K.TI_MODE[s.mode] || K.TI_MODE.unknown)[1]">{{ (K.TI_MODE[s.mode] || K.TI_MODE.unknown)[0] }}</span>
+                                                    <span v-if="s.paused" class="badge b-unk" style="margin-left:4px">已暂停</span>
+                                                    <span v-if="s.override !== 'auto' || s.forced" class="badge b-unk" style="margin-left:4px" :title="s.forced ? 'db.json 里写了 search 字段' : '后台手动指定'">{{ (s.forced || s.override) === 'index' ? '强制索引' : '强制不走' }}</span>
+                                                    <div class="sub" :title="s.probe_note">探测 {{ s.probed_at ? fmtRel(s.probed_at) : '还没探' }}</div>
+                                                </td>
+                                                <td class="num"><div>{{ fmtNum(s.rows) }}</div><div class="sub">{{ s.total ? fmtNum(s.total) : '—' }}</div></td>
+                                                <td>
+                                                    <template v-if="s.mode === 'nosearch'">
+                                                        <div v-if="s.full_done" class="sub">全量完成 {{ fmtRel(s.full_done) }}</div>
+                                                        <div v-else class="sub">全量 第 {{ fmtNum(Math.max(0, s.full_pg - 1)) }} / {{ s.pagecount ? fmtNum(s.pagecount) : '?' }} 页</div>
+                                                        <div class="ti-prog"><i :style="{ width: tiPct(s) + '%' }"></i></div>
+                                                    </template>
+                                                    <span v-else class="muted">—</span>
+                                                </td>
+                                                <td>
+                                                    <div class="sub" v-if="s.inc_at">增量 {{ fmtRel(s.inc_at) }}</div>
+                                                    <div v-if="s.last_err" class="ti-err" :title="s.last_err">失败 {{ s.fails }} 次：{{ s.last_err }}</div>
+                                                    <div v-if="s.next_at > ti.data.now" class="sub">{{ fmtRel(s.next_at) }}重试</div>
+                                                </td>
+                                                <td>
+                                                    <div class="ti-acts">
+                                                        <button type="button" class="btn btn-sm" :disabled="ti.busy[s.key]" @click="tiAct('probe', s.key)">探测</button>
+                                                        <button v-if="s.mode === 'nosearch'" type="button" class="btn btn-sm" :disabled="ti.busy[s.key]" @click="tiAct('rebuild', s.key)">重新全量</button>
+                                                        <button v-if="s.mode === 'nosearch'" type="button" class="btn btn-sm" :disabled="ti.busy[s.key]" @click="tiAct(s.paused ? 'resume' : 'pause', s.key)">{{ s.paused ? '继续' : '暂停' }}</button>
+                                                        <button v-if="s.fails" type="button" class="btn btn-sm" :disabled="ti.busy[s.key]" @click="tiAct('retry', s.key)">立刻重试</button>
+                                                        <button v-if="s.override === 'auto' && s.mode !== 'nosearch'" type="button" class="btn btn-sm" :disabled="ti.busy[s.key]" @click="tiAct('force-index', s.key)" title="自动探测判错时用:这个站其实搜不到">强制走索引</button>
+                                                        <button v-if="s.override === 'auto' && s.mode === 'nosearch' && !s.forced" type="button" class="btn btn-sm" :disabled="ti.busy[s.key]" @click="tiAct('force-off', s.key)">不走索引</button>
+                                                        <button v-if="s.override !== 'auto'" type="button" class="btn btn-sm" :disabled="ti.busy[s.key]" @click="tiAct('auto', s.key)">恢复自动</button>
+                                                        <button v-if="s.rows" type="button" class="btn btn-sm btn-danger-ghost" :disabled="ti.busy[s.key]" @click="tiAct('clear', s.key)">清空</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                            <tr v-if="!tiRows.length"><td colspan="6" class="empty">还没有关了搜索的站{{ ti.data.sites.length ? '' : '(第一轮探测在服务器启动 90 秒后)' }}</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="ti-try">
+                                    <select v-model="ti.trySite" aria-label="试搜的资源站">
+                                        <option value="">选一个走索引的站</option>
+                                        <option v-for="s in ti.data.sites.filter(x => x.rows)" :key="s.key" :value="s.key">{{ s.name }}</option>
+                                    </select>
+                                    <input v-model="ti.tryQ" type="search" placeholder="输入片名试搜(只查本地索引)" @keydown.enter.prevent="tiTry">
+                                    <button type="button" class="btn btn-sm btn-primary" :disabled="!ti.trySite || !ti.tryQ.trim() || ti.tryBusy" @click="tiTry">试搜</button>
+                                </div>
+                                <ul v-if="ti.tryRes" class="ti-hits">
+                                    <li v-for="h in ti.tryRes" :key="h.vod_id">{{ h.name }} <span class="muted">· {{ h.tname }} · id {{ h.vod_id }}</span></li>
+                                    <li v-if="!ti.tryRes.length" class="muted" style="list-style:none">本地索引里没找到</li>
+                                </ul>
+                            </template>
+                        </template>
+                    </section>
                 </main>
             </template>
 
@@ -1001,7 +1090,8 @@
             const CH_LABEL = Object.fromEntries(CHANNELS);
             const SOURCE_PRESET = ['微信', '企业微信', 'QQ', 'QQ浏览器', '微博', '钉钉', '飞书', '抖音/TikTok', '小红书', '百度App', 'Telegram', 'Facebook', 'Instagram', 'LINE', 'X', 'Google', '百度', 'Bing', '直接打开'];
             const K = Object.freeze({
-                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }],
+                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }, { id: 'library', label: '片库', icon: '🗂️' }],
+                TI_MODE: { nosearch: ['走索引', 'b-idx'], ok: ['搜索正常', 'b-ok'], unknown: ['未确认', 'b-unk'] },
                 USER_STATUS: [['all', '全部状态'], ['active1', '今日活跃'], ['active7', '7 日活跃'], ['active30', '30 日活跃'], ['dormant', '沉睡 30 天+'], ['never', '从未观看'], ['banned', '已封禁'], ['requests', '有求片'], ['shares', '有分享']],
                 USER_SORTS: [['last_active', '最近活跃'], ['last_login', '最近登录'], ['watch', '观看时长'], ['episodes', '观看集数'], ['shows', '看过剧数'], ['last_watch', '最近观看'], ['first_seen', '首次出现'], ['share_opens', '分享带来打开'], ['shares', '分享次数'], ['requests', '求片数']],
                 USER_COLS: [
@@ -1342,13 +1432,31 @@
                         us: Object.assign(st0(), { qInput: '', q: '', type: 'all', status: 'all', sort: 'last_active', order: 'desc', page: 1 }),
                         rq: Object.assign(st0(), { status: 'pending', qInput: '', q: '', sort: 'new', sel: {}, open: null, drafts: {}, busy: {}, badPoster: {}, bulkNote: '', bulkLink: '', bulkBusy: false, bulkExtra: false }),
                         sh: Object.assign(st0(), { channel: '', source: '', page: 1 }),
+                        ti: Object.assign(st0(), { busy: {}, showAll: false, trySite: '', tryQ: '', tryRes: null, tryBusy: false }),
                         dw: Object.assign(st0(), { open: false, token: '', seed: null, sub: 'shows', exp: {}, banBusy: false }),
                         cf: { open: false, title: '', message: '', ok: '确定', danger: false },
                         toasts: []
                     };
                 },
                 computed: {
-                    curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh }; return !!(m[this.tab] && m[this.tab].loading); },
+                    curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh, library: this.ti }; return !!(m[this.tab] && m[this.tab].loading); },
+                    // ---- 片库 ----
+                    tiRows() {
+                        const d = this.ti.data; if (!d || !Array.isArray(d.sites)) return [];
+                        // 默认只列走索引的 / 有收录的 / 手动指定过的;搜索正常和打不开(未确认)的勾选后再看
+                        return this.ti.showAll ? d.sites : d.sites.filter(s => s.mode === 'nosearch' || s.rows || s.override !== 'auto' || s.forced);
+                    },
+                    tiStats() {
+                        const s = (this.ti.data && this.ti.data.sites) || [];
+                        const st = { active: 0, nosearch: 0, ok: 0, unknown: 0, rows: 0, total: 0 };
+                        for (const x of s) {
+                            if (x.active) st.active++;
+                            if (x.mode === 'nosearch') { st.nosearch++; st.total += x.total || 0; }
+                            else if (x.mode === 'ok') st.ok++; else st.unknown++;
+                            st.rows += x.rows || 0;
+                        }
+                        return st;
+                    },
                     pendingCount() {
                         const c = this.reqCounts;
                         return (c.pending || 0);
@@ -1590,6 +1698,8 @@
                         Object.assign(this.us, st0(), { page: 1 });
                         Object.assign(this.rq, st0(), { sel: {}, open: null, drafts: {}, busy: {} });
                         Object.assign(this.sh, st0(), { page: 1 });
+                        clearTimeout(this._tiTimer);
+                        Object.assign(this.ti, st0(), { busy: {}, tryRes: null, tryBusy: false });
                         this.dw.open = false; this.dw.data = null;
                         if (this.cf.open) this.cfDone(false);
                     },
@@ -1619,10 +1729,11 @@
                         else if (id === 'users' && !this.us.data && !this.us.loading) this.loadUsers();
                         else if (id === 'requests' && !this.rq.data && !this.rq.loading) this.loadRequests();
                         else if (id === 'shares' && !this.sh.data && !this.sh.loading) this.loadShares();
+                        else if (id === 'library' && !this.ti.loading) this.loadTitleIndex();
                     },
                     refresh() {
                         if (this.tab === 'overview') this.loadOverview();
-                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares })[this.tab].call(this); }
+                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares, library: this.loadTitleIndex })[this.tab].call(this); }
                     },
                     goKpi(go) {
                         if (go.tab === 'users') {
@@ -1694,6 +1805,53 @@
                         });
                     },
                     goSharesPage(p) { this.sh.page = p; this.loadShares(); window.scrollTo(0, 0); },
+                    // ---------- 片库(片名索引) ----------
+                    loadTitleIndex() {
+                        clearTimeout(this._tiTimer);
+                        return runLoad('ti', this.ti, signal => api('/api/admin/title-index', { signal })).then(d => {
+                            if (d && !Array.isArray(d.sites)) d.sites = [];
+                            // 停在这页时每 20 秒刷新一次进度
+                            if (this.tab === 'library' && this.authed) this._tiTimer = setTimeout(() => { if (this.tab === 'library') this.loadTitleIndex(); }, 20000);
+                        });
+                    },
+                    tiPct(s) {
+                        if (s.full_done) return 100;
+                        if (!s.pagecount) return 0;
+                        return Math.max(0, Math.min(100, Math.round((Math.max(0, s.full_pg - 1) / s.pagecount) * 100)));
+                    },
+                    async tiAct(action, key) {
+                        const LABEL = { probe: '重新探测', rebuild: '重新全量', pause: '暂停', resume: '继续', retry: '立刻重试', 'force-index': '强制走索引', 'force-off': '不走索引', auto: '恢复自动', clear: '清空' };
+                        if (action === 'clear' || action === 'rebuild') {
+                            const name = (this.ti.data.sites.find(s => s.key === key) || {}).name || key;
+                            const ok = await this.ask({
+                                title: LABEL[action], danger: action === 'clear', ok: LABEL[action],
+                                message: action === 'clear' ? '清空「' + name + '」已收录的片名？清空后它的线路搜不到，直到重新爬完(约 1~2 小时)。' : '从第 1 页重新翻一遍「' + name + '」的片单？已收录的不会删，翻完会补上漏的。'
+                            });
+                            if (!ok) return;
+                        }
+                        const bk = key || 'all';
+                        this.ti.busy = Object.assign({}, this.ti.busy, { [bk]: true });
+                        try {
+                            const d = await api('/api/admin/title-index/action', { method: 'POST', body: { action, site: key || '' } });
+                            if (d && Array.isArray(d.sites)) { this.ti.data = d; this.ti.at = Date.now(); }
+                            this.toast((key ? ((this.ti.data.sites.find(s => s.key === key) || {}).name || key) + '：' : '全部：') + LABEL[action], 'ok');
+                        } catch (e) {
+                            if (e.code !== 'auth') this.toast('操作失败：' + e.message, 'err');
+                        } finally {
+                            const b = Object.assign({}, this.ti.busy); delete b[bk]; this.ti.busy = b;
+                        }
+                    },
+                    async tiTry() {
+                        const q = this.ti.tryQ.trim();
+                        if (!this.ti.trySite || !q) return;
+                        this.ti.tryBusy = true;
+                        try {
+                            const d = await api('/api/admin/title-index/sample?' + new URLSearchParams({ site: this.ti.trySite, q }).toString());
+                            this.ti.tryRes = Array.isArray(d.items) ? d.items : [];
+                        } catch (e) {
+                            if (e.code !== 'auth') this.toast('试搜失败：' + e.message, 'err');
+                        } finally { this.ti.tryBusy = false; }
+                    },
 
                     // ---------- 用户详情抽屉 ----------
                     openUser(token, seed) {
@@ -2259,6 +2417,21 @@
                     return { counts, requests: list.slice(0, 500) };
                 }
 
+                // 🗂️ 片库示例:2 个走索引(1 个还在全量)、1 个暂时打不开、1 个搜索正常
+                const TI_SITES = [
+                    { key: 'wujinwsy', name: '无尽资源(无水印版)', mode: 'nosearch', override: 'auto', rows: 118512, total: 118512, pagecount: 5926, full_pg: 5927, full_done: Date.now() - 3 * 3600e3, inc_at: Date.now() - 40 * 60e3 },
+                    { key: 'suonizy', name: '索尼资源', mode: 'nosearch', override: 'auto', rows: 61200, total: 149863, pagecount: 7494, full_pg: 3061, full_done: 0, inc_at: 0 },
+                    { key: 'kuaichezy', name: '快车资源', mode: 'unknown', override: 'auto', rows: 0, total: 0, pagecount: 0, full_pg: 0, full_done: 0, inc_at: 0, fails: 2, last_err: 'timeout of 15000ms exceeded', next_at: Date.now() + 25 * 60e3 },
+                    { key: 'ffzy', name: '非凡影视', mode: 'ok', override: 'auto', rows: 0, total: 0, pagecount: 0, full_pg: 0, full_done: 0, inc_at: 0 }
+                ];
+                function tiMock() {
+                    const t = Date.now();
+                    return {
+                        available: true, enabled: true, running: true, now: t, worker: 'thread',
+                        sites: TI_SITES.map(s => Object.assign({ api: 'https://example.com/api.php/provide/vod', configured: true, forced: '', paused: false, probed_at: t - 5 * 3600e3, probe_note: s.mode === 'nosearch' ? '暂不支持搜索' : '', fails: 0, last_err: '', next_at: 0, gone_at: 0 }, s, { active: s.mode === 'nosearch' && !s.paused && s.rows > 0 }))
+                    };
+                }
+
                 async function handle(path, method, body, signal) {
                     await sleep(SLOW ? 20000 : 120 + Math.random() * 380, signal);
                     const url = new URL(path, location.origin), p = url.searchParams, route = url.pathname;
@@ -2272,8 +2445,29 @@
                         if (route === '/api/admin/user') return userDetail(p.get('token'));
                         if (route === '/api/admin/shares') return ok(sharesList(p));
                         if (route === '/api/admin/requests') return ok(requestsList(p));
+                        if (route === '/api/admin/title-index') return ok(tiMock());
+                        if (route === '/api/admin/title-index/sample') {
+                            const q = String(p.get('q') || '');
+                            return ok({ items: [{ vod_id: '168324', name: q + '(示例)', tname: '国产剧', t: Date.now() }, { vod_id: '115089', name: q + ' 第二季', tname: '国产剧', t: Date.now() - 86400000 }] });
+                        }
                     } else if (method === 'POST') {
                         body = body || {};
+                        if (route === '/api/admin/title-index/action') {
+                            const keys = body.site ? [body.site] : TI_SITES.map(s => s.key);
+                            for (const k of keys) {
+                                const s = TI_SITES.find(x => x.key === k); if (!s) return { status: 400, data: { error: '没有这个站' } };
+                                if (body.action === 'pause') s.paused = true;
+                                else if (body.action === 'resume') s.paused = false;
+                                else if (body.action === 'clear') { s.rows = 0; s.full_pg = 0; s.full_done = 0; }
+                                else if (body.action === 'rebuild') { s.full_pg = 1; s.full_done = 0; }
+                                else if (body.action === 'force-index') s.override = 'index';
+                                else if (body.action === 'force-off') s.override = 'off';
+                                else if (body.action === 'auto') s.override = 'auto';
+                                else if (body.action === 'probe') s.probed_at = Date.now();
+                                else if (body.action === 'retry') { s.fails = 0; s.last_err = ''; s.next_at = 0; }
+                            }
+                            return ok(tiMock());
+                        }
                         if (route === '/api/admin/ban') {
                             const u = byTok[body.token]; if (!u) return { status: 400, data: { error: 'Missing token' } };
                             u.row.banned = !!body.banned; u.row.banned_at = body.banned ? Date.now() : null;

@@ -180,6 +180,8 @@ node server.js                       # 或 pm2 start server.js --name donggua-tv
 |---|---|---|
 | `REMOTE_DB_URL` | — | 远程 db.json（5 分钟缓存，失败回退本地） |
 | `SITES_JSON` | — | 仅 Vercel：直接填 JSON 或 Base64 的站点配置，优先于 `REMOTE_DB_URL` |
+| `TITLE_INDEX_DISABLE` | — | `1` = 关闭片名索引。不关时，服务器每天自动检查哪些资源站把关键词搜索关了（回「暂不支持搜索」），把这些站的片名表爬到本地，搜索时先本地查再取详情，它们的线路才会出现在搜索结果里；站长后台「片库」页看进度。db.json 里给某个站写 `"search": false` / `true` 可强制走 / 不走索引 |
+| `TITLE_INDEX_DB` | `./title-index.db` | 片名索引库位置。它是纯缓存，丢了会自己重新爬（每站约 1~2 小时）；Docker 想保留就把它也挂载出来 |
 | `CORS_PROXY_URL` | — | Cloudflare Worker CORS 代理，**边缘去广告与直播都靠它**。可逗号分隔多个，第一个是主代理，故障时前端自动换备用 |
 | `TMDB_PROXY_URL` | — | TMDB 反代。图片与搜索翻译设了就用；`/api/tmdb-proxy` 按访客 IP 判断大陆才走 |
 | `SERVER_IN_CHINA` | — | 设 `true`：服务器自己发起的 TMDB 请求（分享卡片、预览、SEO 页、sitemap）强制走反代 |
@@ -502,6 +504,7 @@ App 有问题时，网页版和 PWA（浏览器「添加到主屏幕」）兼容
 | `cache.db`（+ `cache.db-wal` / `-shm`） | SQLite：**用户历史、设置、收藏、推送订阅与推送密钥、求片、用户统计与封禁、观看统计、分享记录、片头片尾标记**、弹幕缓存、各类缓存。换服务器时整个带走，否则已开推送的用户要重新打开开关 |
 | `cache_search.json` / `cache_detail.json` / `cache_intro.json` / `cache_intro_env.json` | 仅 `CACHE_TYPE=json` 时：缓存与片头片尾标记 |
 | `public/cache/images/` | TMDB 图片缓存（上限 1GB，自动淘汰） |
+| `title-index.db`（+ `-wal` / `-shm`） | 片名索引（关了搜索的资源站的片名表，十来个站约 100MB）。纯缓存，可以删，删了自动重爬 |
 
 > ⚠️ `cache.db` 不只是缓存，删掉它会丢掉所有用户数据。只想清缓存请不要删它。
 

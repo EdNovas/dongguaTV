@@ -11,6 +11,9 @@ cache_intro_env.json
 cache.db
 cache.db-wal
 cache.db-shm
+title-index.db
+title-index.db-wal
+title-index.db-shm
 *.log
 db.json
 public/cache
