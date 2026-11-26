@@ -100,6 +100,63 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" href="icon.png" type="image/png">
     <meta name="theme-color" content="#141414">
+    <!-- 🎨 主题 = 风格 × 明暗,在任何 CSS / 页面内容之前就把 <html> 上的属性定好,刷新不会先闪一下暗色再变:
+         data-style 风格(default / mono / neon / film / magazine)、data-tone 明暗(light / dark)、data-theme 实际色板(见 <style> 末尾「🎨 主题」)。
+         偏好存 localStorage donggua_theme_style / donggua_theme_mode(mode = dark / light / system,system 跟着系统亮暗实时切);同时改地址栏颜色 meta theme-color。
+         页面里用 window.dgTheme.set({ style, mode }) 切换(偏好设置的「主题」),get() 读偏好,resolved() 读实际生效的 { theme, style, tone } -->
+    <script>
+        (function () {
+            // 风格 → { 明暗: [色板, 地址栏颜色] }
+            var STYLES = {
+                'default': { dark: ['dark', '#141414'], light: ['light', '#f4f4f6'] },
+                mono: { light: ['mono', '#ffffff'], dark: ['mono-dark', '#000000'] },
+                neon: { dark: ['neon', '#07060f'], light: ['neon-light', '#f6f3ff'] },
+                film: { dark: ['film', '#16110b'], light: ['film-light', '#efe6d2'] },
+                magazine: { light: ['magazine', '#f5f1e8'], dark: ['magazine-dark', '#15130f'] }
+            };
+            var MODES = { dark: 1, light: 1, system: 1 };
+            var root = document.documentElement, mq = null, style = 'default', mode = 'dark', subs = [];
+            try { mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null; } catch (e) { }
+            function resolved() {
+                var tone = mode === 'system' ? (mq && mq.matches ? 'light' : 'dark') : mode;
+                return { theme: STYLES[style][tone][0], style: style, tone: tone, color: STYLES[style][tone][1] };
+            }
+            function apply() {
+                var r = resolved();
+                root.setAttribute('data-theme', r.theme);
+                root.setAttribute('data-style', r.style);
+                root.setAttribute('data-tone', r.tone);
+                var m = document.querySelector('meta[name="theme-color"]');
+                if (m) m.setAttribute('content', r.color);
+                for (var i = 0; i < subs.length; i++) { try { subs[i](r, { style: style, mode: mode }); } catch (e) { } }
+            }
+            try {
+                var s = localStorage.getItem('donggua_theme_style'), md = localStorage.getItem('donggua_theme_mode');
+                if (STYLES.hasOwnProperty(s)) style = s;
+                if (MODES.hasOwnProperty(md)) mode = md;
+            } catch (e) { }
+            window.dgTheme = {
+                styles: ['default', 'mono', 'neon', 'film', 'magazine'],
+                modes: ['dark', 'light', 'system'],
+                validStyle: function (s) { return STYLES.hasOwnProperty(s); },
+                validMode: function (m) { return MODES.hasOwnProperty(m); },
+                palette: function (s, tone) { return STYLES.hasOwnProperty(s) ? STYLES[s][tone === 'light' ? 'light' : 'dark'][0] : 'dark'; },
+                get: function () { return { style: style, mode: mode }; },
+                resolved: resolved,
+                set: function (o) {
+                    o = o || {};
+                    if (STYLES.hasOwnProperty(o.style)) style = o.style;
+                    if (MODES.hasOwnProperty(o.mode)) mode = o.mode;
+                    try { localStorage.setItem('donggua_theme_style', style); localStorage.setItem('donggua_theme_mode', mode); } catch (e) { }
+                    apply();
+                    return resolved();
+                },
+                onChange: function (fn) { subs.push(fn); }
+            };
+            apply();
+            if (mq) { var h = function () { if (mode === 'system') apply(); }; if (mq.addEventListener) mq.addEventListener('change', h); else if (mq.addListener) mq.addListener(h); }
+        })();
+    </script>
 
     <!-- iOS PWA 支持（iOS 不读 manifest，需要这些 meta 才能添加到主屏并全屏） -->
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -3414,6 +3471,8 @@
         body.detail-covered #app > #heroCarousel,
         body.detail-covered #app > .search-section,
         body.detail-covered #app > .home-flow,
+        body.detail-covered #app > .mag-mast,
+        body.detail-covered #app > .mag,
         body.detail-covered #app > .catdir-page,
         body.detail-covered #app > .browse-page,
         body.detail-covered #app > .browse-sticky,
@@ -5052,6 +5111,619 @@
                 font-size: 12px;
             }
         }
+        /* ═══════════════════════════ 🎨 主题 ═══════════════════════════
+           主题 = 风格 × 明暗,都在偏好设置 →「主题」里选(本机存 + 同步账号跨设备),<head> 里的小脚本在页面出来之前就套好:
+             data-style = 风格:default 默认 / mono 极简黑白 / neon 赛博霓虹 / film 复古胶片 / magazine 杂志风(形状、字体、杂志首页按它挂)
+             data-tone  = 明暗:light / dark(「跟随系统」由脚本按系统亮暗解析成其中一个;亮底共用一段轮播 / 导航栏的覆盖样式)
+             data-theme = 实际用的那套色板:dark / light、mono / mono-dark、neon / neon-light、film / film-light、magazine / magazine-dark
+           每套色板 = 开头说明里那些变量的一组值;暗色就是 :root 的默认值。主题选择器里的小预览也是靠 data-theme / data-style 拿到各自的色板。 */
+
+        /* ── 亮色 ── */
+        [data-theme="light"] {
+            --bg: #f4f4f6; --bg-rgb: 244, 244, 246; --bg-deep: #ececef; --bg-sunken: #e8e8ec;
+            --surface-0: #fff; --surface-1: #fff; --surface-2: #e9e9ed; --surface-3: #fff; --surface-4: #fff; --surface-5: #e4e4e9;
+            --surface-6: #f1f1f4; --surface-7: #ececf0; --surface-8: #e4e4e9; --surface-9: #dcdce2; --surface-10: #cdcdd4; --surface-11: #b9b9c1; --surface-12: #a5a5ae;
+            --glass-rgb: 255, 255, 255; --glass-2-rgb: 255, 255, 255; --glass-3-rgb: 236, 236, 240;
+            --login-mid: #e6e8f2; --login-card-rgb: 255, 255, 255;
+            --fg-rgb: 0, 0, 0;
+            --inv-bg: #18181b; --inv-fg: #fff;
+            --text-1: #111114; --text-2: #1d1d21; --text-3: #2b2b31; --text-4: #3a3a42; --text-5: #4a4a53; --text-sub: #52525b; --text-6: #5a5a63;
+            --text-7: #686871; --text-8: #74747d; --text-9: #82828b; --text-10: #92929a; --text-11: #a2a2aa; --text-12: #b3b3ba; --text-13: #c4c4ca;
+            --line-1: #dcdce2; --line-2: #d2d2d9; --line-3: #c6c6ce; --line-4: #b6b6bf; --line-5: #a3a3ad; --line-6: #8a8a94;
+            --accent-bright: #ff3b4f; --accent-soft: #f43f5e; --accent-soft-rgb: 244, 63, 94; --accent-text: #c8101c; --accent-text-2: #d32f3a; --accent-warm: #f97316;
+            --success: #16a34a; --success-rgb: 22, 163, 74; --success-soft: #15803d;
+            --danger: #dc2626; --danger-rgb: 220, 38, 38; --danger-soft: #b91c1c;
+            --warn: #b45309; --warn-rgb: 217, 119, 6; --warn-soft: #a16207; --info: #2563eb;
+            --gold: #8a5a00; --gold-rgb: 202, 138, 4; --gold-2: #7c5200; --gold-3: #6f5420; --gold-4: #9a5b0b;
+            --shadow-rgb: 70, 70, 90;
+            --src-clean: #059669; --src-clean-bg: rgba(16, 185, 129, 0.14); --src-insert: #a16207; --src-insert-bg: rgba(234, 179, 8, 0.16);
+            --src-unknown: #71717a; --src-unknown-bg: rgba(113, 113, 122, 0.14); --src-ads: #c2410c; --src-ads-bg: rgba(249, 115, 22, 0.14);
+            --src-unreach: #dc2626; --src-unreach-bg: rgba(239, 68, 68, 0.12); --src-chip-border: rgba(0, 0, 0, 0.18); --src-chip-text: #3f3f46;
+            --src-group-text: #71717a; --src-group-line: #dcdce2;
+        }
+
+        /* ── 极简黑白:白纸黑字、直角、没有阴影和渐变、粗无衬线;海报在能悬停的设备上是黑白的,指上去才有颜色 ── */
+        [data-theme="mono"] {
+            --bg: #fff; --bg-rgb: 255, 255, 255; --bg-deep: #fff; --bg-sunken: #f2f2f2;
+            --surface-0: #fff; --surface-1: #fff; --surface-2: #f2f2f2; --surface-3: #fff; --surface-4: #fff; --surface-5: #eee;
+            --surface-6: #f5f5f5; --surface-7: #f2f2f2; --surface-8: #e8e8e8; --surface-9: #e0e0e0; --surface-10: #ccc; --surface-11: #b5b5b5; --surface-12: #999;
+            --glass-rgb: 255, 255, 255; --glass-2-rgb: 255, 255, 255; --glass-3-rgb: 245, 245, 245;
+            --login-mid: #fff; --login-card-rgb: 255, 255, 255;
+            --fg-rgb: 0, 0, 0;
+            --inv-bg: #000; --inv-fg: #fff;
+            --text-1: #000; --text-2: #111; --text-3: #1e1e1e; --text-4: #2c2c2c; --text-5: #3a3a3a; --text-sub: #444; --text-6: #4c4c4c;
+            --text-7: #5a5a5a; --text-8: #666; --text-9: #747474; --text-10: #828282; --text-11: #999; --text-12: #aaa; --text-13: #bbb;
+            --line-1: #000; --line-2: #111; --line-3: #222; --line-4: #333; --line-5: #000; --line-6: #000;
+            --accent: #000; --accent-rgb: 0, 0, 0; --accent-deep: #000; --accent-deep-rgb: 0, 0, 0; --accent-dark-rgb: 0, 0, 0;
+            --accent-bright: #2a2a2a; --accent-soft: #444; --accent-soft-rgb: 68, 68, 68; --accent-text: #000; --accent-text-2: #333; --accent-warm: #333;
+            --on-accent: #fff; --on-accent-rgb: 255, 255, 255;
+            --success: #137333; --success-rgb: 19, 115, 51; --success-soft: #0d5c28;
+            --danger: #c5221f; --danger-rgb: 197, 34, 31; --danger-soft: #a50e0e;
+            --warn: #7a5200; --warn-rgb: 160, 110, 0; --warn-soft: #6b4800; --info: #1a56db;
+            --gold: #5c4400; --gold-rgb: 120, 90, 0; --gold-2: #5c4400; --gold-3: #5c4400; --gold-4: #5c4400;
+            --shadow-rgb: 0, 0, 0;
+            --radius-k: 0;
+            --font-ui: "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            --font-display: "Helvetica Neue", "Arial Black", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            --src-clean: #137333; --src-clean-bg: rgba(0, 0, 0, 0.05); --src-insert: #7a5200; --src-insert-bg: rgba(0, 0, 0, 0.05);
+            --src-unknown: #666; --src-unknown-bg: rgba(0, 0, 0, 0.05); --src-ads: #a33a00; --src-ads-bg: rgba(0, 0, 0, 0.05);
+            --src-unreach: #c5221f; --src-unreach-bg: rgba(0, 0, 0, 0.05); --src-chip-border: #000; --src-chip-text: #000;
+            --src-group-text: #444; --src-group-line: #000;
+        }
+
+        /* ── 赛博霓虹:近黑的靛紫底、品红 + 青两色霓虹、发光描边、等宽大写标题、背景细网格 ── */
+        [data-theme="neon"] {
+            --bg: #07060f; --bg-rgb: 7, 6, 15; --bg-deep: #040309; --bg-sunken: #05040b;
+            --surface-0: #020107; --surface-1: #0d0b1c; --surface-2: #100d22; --surface-3: #120f26; --surface-4: #110e24; --surface-5: #15112c;
+            --surface-6: #18143a; --surface-7: #1b1640; --surface-8: #201a4a; --surface-9: #261f57; --surface-10: #312a6b; --surface-11: #3d357f; --surface-12: #4a4290;
+            --glass-rgb: 16, 12, 36; --glass-2-rgb: 22, 18, 50; --glass-3-rgb: 32, 26, 72;
+            --login-mid: #1a0f3d; --login-card-rgb: 16, 12, 36;
+            --fg-rgb: 170, 200, 255;
+            --inv-bg: #00e5ff; --inv-fg: #05040c;
+            --text-1: #f2f7ff; --text-2: #e3ecff; --text-3: #d2ddf7; --text-4: #c0cbeb; --text-5: #adb8dd; --text-sub: #a5b0d6; --text-6: #9aa4cc;
+            --text-7: #8a93bd; --text-8: #7c84ad; --text-9: #6d749c; --text-10: #5f668b; --text-11: #50567a; --text-12: #424768; --text-13: #353a56;
+            --line-1: #2a2456; --line-2: #322b66; --line-3: #3b3377; --line-4: #463d8a; --line-5: #5a4fa8; --line-6: #7a6fd0;
+            --accent: #ff2e97; --accent-rgb: 255, 46, 151; --accent-deep: #7b2cff; --accent-deep-rgb: 123, 44, 255; --accent-dark-rgb: 80, 20, 160;
+            --accent-bright: #00e5ff; --accent-soft: #ff6ec7; --accent-soft-rgb: 255, 110, 199; --accent-text: #5ff3ff; --accent-text-2: #8af6ff; --accent-warm: #00e5ff;
+            --on-accent: #fff; --on-accent-rgb: 255, 255, 255;
+            --success: #39ff88; --success-rgb: 57, 255, 136; --success-soft: #8dffbb;
+            --danger: #ff4d6d; --danger-rgb: 255, 77, 109; --danger-soft: #ff8fa3;
+            --warn: #ffe14d; --warn-rgb: 255, 225, 77; --warn-soft: #fff07a; --info: #4dc3ff;
+            --gold: #ffe14d; --gold-rgb: 255, 225, 77; --gold-2: #ffd84d; --gold-3: #e8c75a; --gold-4: #ffcf5c;
+            --shadow-rgb: 30, 0, 70;
+            --radius-k: 0.35;
+            --font-display: "Cascadia Code", "SF Mono", Menlo, Consolas, "Courier New", monospace;
+            --neon-cyan: #00e5ff; --neon-cyan-rgb: 0, 229, 255; --neon-grid: 0.045;
+            --src-chip-border: rgba(0, 229, 255, 0.3); --src-chip-text: #c0cbeb; --src-group-text: #7c84ad; --src-group-line: #2a2456;
+        }
+
+        /* ── 复古胶片:暖棕近黑底、琥珀主色、奶油色字、衬线标题;海报像冲洗出来的相片(米色相纸边 + 一点做旧),背景有胶片颗粒 ── */
+        [data-theme="film"] {
+            --bg: #16110b; --bg-rgb: 22, 17, 11; --bg-deep: #0f0b07; --bg-sunken: #120d08;
+            --surface-0: #0d0905; --surface-1: #1d160e; --surface-2: #1f1810; --surface-3: #221a11; --surface-4: #211910; --surface-5: #261d13;
+            --surface-6: #2a2015; --surface-7: #2e2317; --surface-8: #33281a; --surface-9: #3a2e1f; --surface-10: #4a3b28; --surface-11: #5b4a33; --surface-12: #6d5a40;
+            --glass-rgb: 34, 26, 17; --glass-2-rgb: 44, 34, 22; --glass-3-rgb: 56, 44, 29;
+            --login-mid: #2a1d10; --login-card-rgb: 34, 26, 17;
+            --fg-rgb: 255, 232, 196;
+            --inv-bg: #f1e4c8; --inv-fg: #1a120a;
+            --text-1: #f6ead2; --text-2: #eadcc0; --text-3: #dfcfb0; --text-4: #d2c09f; --text-5: #c5b28f; --text-sub: #bea986; --text-6: #b29f7f;
+            --text-7: #a08e70; --text-8: #928063; --text-9: #827156; --text-10: #73644b; --text-11: #63563f; --text-12: #544834; --text-13: #463c2b;
+            --line-1: #3b3022; --line-2: #433627; --line-3: #4d3f2d; --line-4: #5c4c37; --line-5: #6d5b42; --line-6: #8d7759;
+            --accent: #e2a03f; --accent-rgb: 226, 160, 63; --accent-deep: #b5651d; --accent-deep-rgb: 181, 101, 29; --accent-dark-rgb: 120, 64, 16;
+            --accent-bright: #f0bd62; --accent-soft: #f3c77e; --accent-soft-rgb: 243, 199, 126; --accent-text: #f0b45a; --accent-text-2: #f4c57a; --accent-warm: #c4492a;
+            --on-accent: #1d1309; --on-accent-rgb: 29, 19, 9;
+            --success: #9cc65b; --success-rgb: 156, 198, 91; --success-soft: #bfdc8e;
+            --danger: #e0664a; --danger-rgb: 224, 102, 74; --danger-soft: #eb8d74;
+            --warn: #f0c35a; --warn-rgb: 240, 195, 90; --warn-soft: #f5d488; --info: #8fb8c9;
+            --gold: #f0c35a; --gold-rgb: 240, 195, 90; --gold-2: #e8bd6a; --gold-3: #cdaa72; --gold-4: #e6ad5c;
+            --shadow-rgb: 0, 0, 0;
+            --radius-k: 0.5;
+            --font-display: Georgia, "Times New Roman", "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+            --font-type: "Courier New", Courier, "Noto Serif SC", "Songti SC", STSong, monospace;
+            --print: #efe3c6;
+            --src-chip-border: rgba(255, 232, 196, 0.22); --src-chip-text: #d2c09f; --src-group-text: #928063; --src-group-line: #3b3022;
+        }
+
+        /* ── 杂志风:暖白纸、墨黑字、杂志红、衬线标题、细线分栏、直角;首页换成杂志排版(.mag),其它页只换配色和字体 ── */
+        [data-theme="magazine"] {
+            --bg: #f5f1e8; --bg-rgb: 245, 241, 232; --bg-deep: #efe9dc; --bg-sunken: #ebe4d5;
+            --surface-0: #fffdf8; --surface-1: #fffdf8; --surface-2: #ece5d6; --surface-3: #fffdf8; --surface-4: #fbf8f1; --surface-5: #e6dece;
+            --surface-6: #f3eee3; --surface-7: #ece6d9; --surface-8: #e5ddcd; --surface-9: #ddd4c2; --surface-10: #cfc4ae; --surface-11: #bdb199; --surface-12: #a99c83;
+            --glass-rgb: 251, 248, 241; --glass-2-rgb: 251, 248, 241; --glass-3-rgb: 236, 230, 217;
+            --login-mid: #ece4d2; --login-card-rgb: 255, 253, 248;
+            --fg-rgb: 30, 24, 16;
+            --inv-bg: #1a1612; --inv-fg: #f5f1e8;
+            --text-1: #15120e; --text-2: #221e18; --text-3: #2f2a22; --text-4: #3d372e; --text-5: #4b443a; --text-sub: #534c41; --text-6: #5d564b;
+            --text-7: #6b6458; --text-8: #787064; --text-9: #867e72; --text-10: #958d80; --text-11: #a59d90; --text-12: #b6aea0; --text-13: #c7bfb1;
+            --line-1: #d8cfbd; --line-2: #cfc5b1; --line-3: #c3b8a2; --line-4: #b3a790; --line-5: #9f937b; --line-6: #847961;
+            --accent: #c8102e; --accent-rgb: 200, 16, 46; --accent-deep: #8c0a1f; --accent-deep-rgb: 140, 10, 31; --accent-dark-rgb: 100, 8, 22;
+            --accent-bright: #e0243f; --accent-soft: #d9475d; --accent-soft-rgb: 217, 71, 93; --accent-text: #b00e28; --accent-text-2: #c42a40; --accent-warm: #d9661f;
+            --on-accent: #fff; --on-accent-rgb: 255, 255, 255;
+            --success: #2f7d32; --success-rgb: 47, 125, 50; --success-soft: #2e6b30;
+            --danger: #b3261e; --danger-rgb: 179, 38, 30; --danger-soft: #9c2a22;
+            --warn: #9a6200; --warn-rgb: 200, 140, 20; --warn-soft: #85580c; --info: #1f5fa8;
+            --gold: #8a6100; --gold-rgb: 190, 140, 40; --gold-2: #7a5600; --gold-3: #6e5524; --gold-4: #8f5a10;
+            --shadow-rgb: 70, 50, 20;
+            --radius-k: 0;
+            --font-ui: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            --font-display: Georgia, "Times New Roman", "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+            --src-clean: #2f7d32; --src-clean-bg: rgba(47, 125, 50, 0.1); --src-insert: #8a5a00; --src-insert-bg: rgba(190, 140, 40, 0.14);
+            --src-unknown: #786f63; --src-unknown-bg: rgba(30, 24, 16, 0.06); --src-ads: #a3441a; --src-ads-bg: rgba(217, 102, 31, 0.12);
+            --src-unreach: #b3261e; --src-unreach-bg: rgba(179, 38, 30, 0.1); --src-chip-border: rgba(30, 24, 16, 0.2); --src-chip-text: #3d372e;
+            --src-group-text: #787064; --src-group-line: #d8cfbd;
+        }
+
+        /* ── 极简黑白 · 暗:黑底白字,主色是白(主色底上的字 = 黑) ── */
+        [data-theme="mono-dark"] {
+            --bg: #000; --bg-rgb: 0, 0, 0; --bg-deep: #000; --bg-sunken: #0d0d0d;
+            --surface-0: #000; --surface-1: #000; --surface-2: #111; --surface-3: #000; --surface-4: #000; --surface-5: #161616;
+            --surface-6: #0d0d0d; --surface-7: #111; --surface-8: #1a1a1a; --surface-9: #222; --surface-10: #333; --surface-11: #4a4a4a; --surface-12: #666;
+            --glass-rgb: 0, 0, 0; --glass-2-rgb: 0, 0, 0; --glass-3-rgb: 17, 17, 17;
+            --login-mid: #000; --login-card-rgb: 0, 0, 0;
+            --fg-rgb: 255, 255, 255;
+            --inv-bg: #fff; --inv-fg: #000;
+            --text-1: #fff; --text-2: #f0f0f0; --text-3: #e0e0e0; --text-4: #d0d0d0; --text-5: #c0c0c0; --text-sub: #b8b8b8; --text-6: #b0b0b0;
+            --text-7: #a0a0a0; --text-8: #929292; --text-9: #828282; --text-10: #727272; --text-11: #5c5c5c; --text-12: #4a4a4a; --text-13: #383838;
+            --line-1: #fff; --line-2: #eee; --line-3: #ddd; --line-4: #ccc; --line-5: #fff; --line-6: #fff;
+            --accent: #fff; --accent-rgb: 255, 255, 255; --accent-deep: #fff; --accent-deep-rgb: 255, 255, 255; --accent-dark-rgb: 255, 255, 255;
+            --accent-bright: #ddd; --accent-soft: #bbb; --accent-soft-rgb: 187, 187, 187; --accent-text: #fff; --accent-text-2: #ddd; --accent-warm: #ccc;
+            --on-accent: #000; --on-accent-rgb: 0, 0, 0;
+            --success: #4ade80; --success-rgb: 74, 222, 128; --success-soft: #86efac;
+            --danger: #f87171; --danger-rgb: 248, 113, 113; --danger-soft: #fca5a5;
+            --warn: #facc15; --warn-rgb: 250, 204, 21; --warn-soft: #fde047; --info: #93c5fd;
+            --gold: #e5c770; --gold-rgb: 229, 199, 112; --gold-2: #e5c770; --gold-3: #e5c770; --gold-4: #e5c770;
+            --shadow-rgb: 0, 0, 0;
+            --radius-k: 0;
+            --font-ui: "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            --font-display: "Helvetica Neue", "Arial Black", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+            --src-clean: #4ade80; --src-clean-bg: rgba(255, 255, 255, 0.08); --src-insert: #facc15; --src-insert-bg: rgba(255, 255, 255, 0.08);
+            --src-unknown: #aaa; --src-unknown-bg: rgba(255, 255, 255, 0.08); --src-ads: #fdba74; --src-ads-bg: rgba(255, 255, 255, 0.08);
+            --src-unreach: #f87171; --src-unreach-bg: rgba(255, 255, 255, 0.08); --src-chip-border: #fff; --src-chip-text: #fff;
+            --src-group-text: #bbb; --src-group-line: #fff;
+        }
+
+        /* ── 赛博霓虹 · 日间:浅薰衣草底、深品红 + 青、紫色柔光 ── */
+        [data-theme="neon-light"] {
+            --bg: #f6f3ff; --bg-rgb: 246, 243, 255; --bg-deep: #efeaff; --bg-sunken: #ece6fb;
+            --surface-0: #fff; --surface-1: #fff; --surface-2: #ebe5fa; --surface-3: #fff; --surface-4: #fff; --surface-5: #e6def8;
+            --surface-6: #f1ecfd; --surface-7: #ede7fc; --surface-8: #e4dcf7; --surface-9: #dbd1f2; --surface-10: #cbbfe8; --surface-11: #b7a9da; --surface-12: #a294c9;
+            --glass-rgb: 255, 255, 255; --glass-2-rgb: 255, 255, 255; --glass-3-rgb: 237, 231, 252;
+            --login-mid: #e9e0ff; --login-card-rgb: 255, 255, 255;
+            --fg-rgb: 40, 20, 90;
+            --inv-bg: #1a1033; --inv-fg: #fff;
+            --text-1: #1a1033; --text-2: #241840; --text-3: #30234f; --text-4: #3d2f5e; --text-5: #4a3c6c; --text-sub: #514473; --text-6: #584b7a;
+            --text-7: #665a87; --text-8: #736893; --text-9: #8277a0; --text-10: #9188ad; --text-11: #a299bb; --text-12: #b3abc9; --text-13: #c5bed7;
+            --line-1: #ddd4f3; --line-2: #d3c8ee; --line-3: #c6b9e7; --line-4: #b4a5dc; --line-5: #9d8bcc; --line-6: #8270b8;
+            --accent: #e6007e; --accent-rgb: 230, 0, 126; --accent-deep: #6a1bdc; --accent-deep-rgb: 106, 27, 220; --accent-dark-rgb: 80, 20, 160;
+            --accent-bright: #00a9c4; --accent-soft: #ff4fb0; --accent-soft-rgb: 255, 79, 176; --accent-text: #00788c; --accent-text-2: #008fa6; --accent-warm: #00a9c4;
+            --on-accent: #fff; --on-accent-rgb: 255, 255, 255;
+            --success: #0f9d58; --success-rgb: 15, 157, 88; --success-soft: #0b7a44;
+            --danger: #e11d48; --danger-rgb: 225, 29, 72; --danger-soft: #be123c;
+            --warn: #a16207; --warn-rgb: 202, 138, 4; --warn-soft: #854d0e; --info: #2563eb;
+            --gold: #8a5a00; --gold-rgb: 202, 138, 4; --gold-2: #7c5200; --gold-3: #6f5420; --gold-4: #9a5b0b;
+            --shadow-rgb: 110, 60, 200;
+            --radius-k: 0.35;
+            --font-display: "Cascadia Code", "SF Mono", Menlo, Consolas, "Courier New", monospace;
+            --neon-cyan: #00a9c4; --neon-cyan-rgb: 0, 169, 196; --neon-grid: 0.08;
+            --src-clean: #059669; --src-clean-bg: rgba(16, 185, 129, 0.14); --src-insert: #a16207; --src-insert-bg: rgba(234, 179, 8, 0.16);
+            --src-unknown: #71717a; --src-unknown-bg: rgba(113, 113, 122, 0.14); --src-ads: #c2410c; --src-ads-bg: rgba(249, 115, 22, 0.14);
+            --src-unreach: #dc2626; --src-unreach-bg: rgba(239, 68, 68, 0.12);
+            --src-chip-border: rgba(106, 27, 220, 0.25); --src-chip-text: #3d2f5e; --src-group-text: #736893; --src-group-line: #ddd4f3;
+        }
+
+        /* ── 复古胶片 · 冲印纸:泛黄相纸底、深褐墨字、焦糖色主色;海报是白边相片 ── */
+        [data-theme="film-light"] {
+            --bg: #efe6d2; --bg-rgb: 239, 230, 210; --bg-deep: #e8ddc5; --bg-sunken: #e4d8bd;
+            --surface-0: #faf4e6; --surface-1: #f8f1e1; --surface-2: #e6d9be; --surface-3: #f8f1e1; --surface-4: #f6efde; --surface-5: #e2d4b6;
+            --surface-6: #f2eadb; --surface-7: #ebe0c9; --surface-8: #e4d7bb; --surface-9: #dccdae; --surface-10: #cdbb97; --surface-11: #b9a57f; --surface-12: #a38f6a;
+            --glass-rgb: 248, 241, 225; --glass-2-rgb: 248, 241, 225; --glass-3-rgb: 235, 224, 201;
+            --login-mid: #e6d6b4; --login-card-rgb: 248, 241, 225;
+            --fg-rgb: 60, 40, 20;
+            --inv-bg: #2b1d0e; --inv-fg: #f7efe0;
+            --text-1: #2b1d0e; --text-2: #362614; --text-3: #42301b; --text-4: #4f3b23; --text-5: #5c472d; --text-sub: #634e33; --text-6: #6a5539;
+            --text-7: #725d42; --text-8: #7a6650; --text-9: #826d55; --text-10: #8a765c; --text-11: #9f8d74; --text-12: #b4a38a; --text-13: #c6b79f;
+            --line-1: #d8c8a8; --line-2: #cfbe9c; --line-3: #c3b08c; --line-4: #b39e78; --line-5: #9f8963; --line-6: #85704c;
+            --accent: #b5651d; --accent-rgb: 181, 101, 29; --accent-deep: #7a3e0e; --accent-deep-rgb: 122, 62, 14; --accent-dark-rgb: 90, 45, 10;
+            --accent-bright: #d08a3a; --accent-soft: #c98a4b; --accent-soft-rgb: 201, 138, 75; --accent-text: #9a4f12; --accent-text-2: #a85a1a; --accent-warm: #a33a1d;
+            --on-accent: #fff8ec; --on-accent-rgb: 255, 248, 236;
+            --success: #4d7c2a; --success-rgb: 77, 124, 42; --success-soft: #3e6622;
+            --danger: #a8321e; --danger-rgb: 168, 50, 30; --danger-soft: #8f2a18;
+            --warn: #8a5a00; --warn-rgb: 180, 120, 20; --warn-soft: #744b00; --info: #3b6e85;
+            --gold: #8a5a00; --gold-rgb: 180, 120, 20; --gold-2: #7a5000; --gold-3: #6e5524; --gold-4: #8f5a10;
+            --shadow-rgb: 70, 45, 15;
+            --radius-k: 0.5;
+            --font-display: Georgia, "Times New Roman", "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+            --font-type: "Courier New", Courier, "Noto Serif SC", "Songti SC", STSong, monospace;
+            --print: #fffaf0;
+            --src-clean: #059669; --src-clean-bg: rgba(16, 185, 129, 0.14); --src-insert: #a16207; --src-insert-bg: rgba(234, 179, 8, 0.16);
+            --src-unknown: #71717a; --src-unknown-bg: rgba(113, 113, 122, 0.14); --src-ads: #c2410c; --src-ads-bg: rgba(249, 115, 22, 0.14);
+            --src-unreach: #dc2626; --src-unreach-bg: rgba(239, 68, 68, 0.12);
+            --src-chip-border: rgba(60, 40, 20, 0.22); --src-chip-text: #4f3b23; --src-group-text: #857156; --src-group-line: #d8c8a8;
+        }
+
+        /* ── 杂志风 · 夜读版:墨色纸、奶油色字、亮一点的杂志红 ── */
+        [data-theme="magazine-dark"] {
+            --bg: #15130f; --bg-rgb: 21, 19, 15; --bg-deep: #100e0b; --bg-sunken: #12100c;
+            --surface-0: #0e0c09; --surface-1: #1d1a15; --surface-2: #211d17; --surface-3: #1d1a15; --surface-4: #1b1813; --surface-5: #26221b;
+            --surface-6: #221e18; --surface-7: #29241c; --surface-8: #2f2a21; --surface-9: #363027; --surface-10: #463f33; --surface-11: #575043; --surface-12: #696154;
+            --glass-rgb: 29, 26, 21; --glass-2-rgb: 37, 33, 27; --glass-3-rgb: 47, 42, 33;
+            --login-mid: #221d15; --login-card-rgb: 29, 26, 21;
+            --fg-rgb: 245, 238, 225;
+            --inv-bg: #f3ecdf; --inv-fg: #15130f;
+            --text-1: #f5efe3; --text-2: #ebe3d4; --text-3: #dfd6c5; --text-4: #d2c8b6; --text-5: #c4baa7; --text-sub: #bdb3a0; --text-6: #b2a895;
+            --text-7: #a1978a; --text-8: #938a7c; --text-9: #847b6e; --text-10: #756d61; --text-11: #655e53; --text-12: #565045; --text-13: #474238;
+            --line-1: #3a342a; --line-2: #433c31; --line-3: #4e463a; --line-4: #5d5446; --line-5: #6f6556; --line-6: #8e8371;
+            --accent: #e23a4f; --accent-rgb: 226, 58, 79; --accent-deep: #a8182d; --accent-deep-rgb: 168, 24, 45; --accent-dark-rgb: 120, 14, 30;
+            --accent-bright: #ff5a6e; --accent-soft: #ff7a8a; --accent-soft-rgb: 255, 122, 138; --accent-text: #ff6b7c; --accent-text-2: #ff8a97; --accent-warm: #e8823a;
+            --on-accent: #fff; --on-accent-rgb: 255, 255, 255;
+            --success: #6cc070; --success-rgb: 108, 192, 112; --success-soft: #98d69b;
+            --danger: #ff6b5e; --danger-rgb: 255, 107, 94; --danger-soft: #ff9489;
+            --warn: #e8b04a; --warn-rgb: 232, 176, 74; --warn-soft: #f0c674; --info: #7fb2e5;
+            --gold: #e8c46a; --gold-rgb: 232, 196, 106; --gold-2: #dcb764; --gold-3: #c7a66a; --gold-4: #e0aa5c;
+            --shadow-rgb: 0, 0, 0;
+            --radius-k: 0;
+            --font-ui: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+            --font-display: Georgia, "Times New Roman", "Noto Serif SC", "Source Han Serif SC", "Songti SC", STSong, SimSun, serif;
+            --src-chip-border: rgba(245, 238, 225, 0.22); --src-chip-text: #d2c8b6; --src-group-text: #938a7c; --src-group-line: #3a342a;
+        }
+
+        /* 大标题统一走 --font-display(默认 = 正文字体,看不出变化) */
+        .section-title, .hero-title, .video-title, .info-modal-details h2, .browse-title, .settings-h, .catdir-title { font-family: var(--font-display); }
+
+        /* ── 亮底主题共用:轮播 / 顶栏原来是"图上压黑渐变 + 白字",亮底下改成压底色渐变 + 深色字 ── */
+        html[data-tone="light"] .navbar-custom { background: linear-gradient(to bottom, rgba(var(--bg-rgb), 0.92) 0%, transparent 100%); }
+        html[data-tone="light"] .navbar-custom.scrolled { background: var(--bg); }
+        html[data-theme]:not([data-theme="dark"]) .carousel-item { background-color: var(--bg); }   /* 轮播底边原来露 1px 黑底,暗色下看不出 */
+        html[data-tone="light"] .brand { text-shadow: none; }
+        html[data-tone="light"] .hero-overlay {
+            background: linear-gradient(to top, var(--bg) 0%, transparent 55%),
+                linear-gradient(to right, rgba(var(--bg-rgb), 0.94) 0%, rgba(var(--bg-rgb), 0.7) 32%, transparent 62%);
+        }
+        html[data-tone="light"] .hero-title { color: var(--text-1); text-shadow: none; }
+        html[data-tone="light"] .hero-desc { color: var(--text-4); text-shadow: none; }
+        html[data-tone="light"] .hero-tag { background: rgba(var(--fg-rgb), 0.08); color: var(--text-2); backdrop-filter: none; }
+        html[data-tone="light"] .btn-play { background: var(--inv-bg); color: var(--inv-fg); }
+        html[data-tone="light"] .btn-info { background: rgba(var(--fg-rgb), 0.08); color: var(--text-1); backdrop-filter: none; }
+        html[data-tone="light"] .btn-info:hover { background: rgba(var(--fg-rgb), 0.14); }
+        html[data-tone="light"] .hero-dot { background: rgba(var(--fg-rgb), 0.22); }
+        html[data-tone="light"] .hero-dot:hover { background: rgba(var(--fg-rgb), 0.45); }
+        html[data-tone="light"] .hero-dot.active { background: var(--text-1); }
+        html[data-tone="light"] .password-input { background: rgba(var(--fg-rgb), 0.04); }
+        html[data-tone="light"] .info-modal-overlay { background: rgba(20, 20, 30, 0.55); }
+        html[data-tone="light"] .rank-badge { text-shadow: none; }
+        html[data-tone="light"] .btn-outline-light { color: var(--text-2); border-color: var(--line-4); }
+        html[data-tone="light"] .btn-outline-light:hover { background: rgba(var(--fg-rgb), 0.06); color: var(--text-1); }
+        /* 主色底按钮悬停 / 选中:图标跟着换成主色底上的字色 */
+        html[data-theme] .scroll-btn:hover, html[data-theme] .btn-settings:hover, html[data-theme] .fshare-entry > .fa-camera,
+        html[data-theme] .history-delete-btn:hover i { color: var(--on-accent); }
+
+        /* ── 极简黑白 ── */
+        html[data-style="mono"] body { letter-spacing: 0.01em; }
+        html[data-style="mono"] *:not(:focus):not(:focus-visible) { box-shadow: none !important; text-shadow: none !important; }
+        html[data-style="mono"] .section-header { border-top: 3px solid var(--text-1); padding-top: 14px; margin-left: 10px; margin-right: 10px; padding-left: 0; }
+        html[data-style="mono"] .section-line { display: none; }
+        html[data-style="mono"] .section-title { font-weight: 900; letter-spacing: 0.04em; text-transform: uppercase; }
+        html[data-style="mono"] .section-title i { opacity: 1; }
+        html[data-style="mono"] .poster-wrap { border: 1px solid var(--text-1); background: var(--surface-2); }
+        html[data-style="mono"] .hot-card:hover { transform: translateY(-4px) translateZ(0); }
+        html[data-style="mono"] .hot-card:hover .poster-wrap, html[data-style="mono"] .browse-card:hover .poster-wrap { outline: 2px solid var(--text-1); outline-offset: 2px; }
+        html[data-style="mono"] .movie-name { font-weight: 700; color: var(--text-1); }
+        html[data-style="mono"] .rating-badge { background: #000; color: #fff; border: 0; }
+        html[data-style="mono"] .rating-badge .text-warning { color: #fff !important; }
+        html[data-style="mono"] .search-box-wrapper { border: 2px solid var(--text-1); background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+        html[data-style="mono"] .hero-bg { filter: grayscale(1) contrast(1.05); }
+        html[data-style="mono"] .hero-title { font-weight: 900; letter-spacing: -0.01em; }
+        html[data-style="mono"] .catnav { background: var(--bg); border: 2px solid var(--text-1); }
+        html[data-style="mono"] .cat-tab, html[data-style="mono"] .cat-chip, html[data-style="mono"] .expand-toggle,
+        html[data-style="mono"] .source-pill, html[data-style="mono"] .ep-btn { border-color: var(--text-1); }
+        html[data-style="mono"] .info-modal, html[data-style="mono"] .controls-area { border: 2px solid var(--text-1); }
+        html[data-style="mono"] .cal-new, html[data-style="mono"] .fav-upd-badge { background: #000; }
+        html[data-theme="mono-dark"] .play-icon-overlay i, html[data-theme="mono-dark"] .mobile-play-overlay i, html[data-theme="mono-dark"] .desktop-play-overlay i,
+        html[data-theme="mono-dark"] .dplayer-speed-indicator, html[data-theme="mono-dark"] .history-delete-btn:hover i { color: #000; }
+        html[data-theme="mono-dark"] .dplayer-bezel-icon svg path { fill: #000 !important; }
+        html[data-theme="mono-dark"] #dplayer .dm-toggle.dm-on .dm-knob, html[data-theme="mono-dark"] #dplayer .dg-mob-toggle.on::after { background: #000; }
+        html[data-theme="mono-dark"] .rating-badge { background: #fff; color: #000; }
+        html[data-theme="mono-dark"] .rating-badge .text-warning { color: #000 !important; }
+        @media (hover: hover) {
+            html[data-style="mono"] .poster-wrap img, html[data-style="mono"] .live-logo img { filter: grayscale(1); transition: opacity 0.4s ease, filter 0.3s ease; }
+            html[data-style="mono"] .hot-card:hover img, html[data-style="mono"] .result-card:hover img, html[data-style="mono"] .browse-card:hover img,
+            html[data-style="mono"] .history-card:hover img, html[data-style="mono"] .live-card:hover img, html[data-style="mono"] .mag-art:hover img { filter: none; }
+        }
+
+        /* ── 赛博霓虹 ── */
+        html[data-style="neon"] body {
+            background-image:
+                radial-gradient(ellipse 80% 50% at 50% -10%, rgba(var(--accent-deep-rgb), 0.22), transparent 70%),
+                linear-gradient(rgba(var(--neon-cyan-rgb), var(--neon-grid)) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(var(--neon-cyan-rgb), var(--neon-grid)) 1px, transparent 1px);
+            background-size: 100% 900px, 44px 44px, 44px 44px;
+            background-repeat: no-repeat, repeat, repeat;
+        }
+        html[data-style="neon"] .section-title { text-transform: uppercase; letter-spacing: 0.06em; text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.65), 0 0 24px rgba(var(--accent-rgb), 0.25); }
+        html[data-style="neon"] .section-title i { color: var(--neon-cyan); opacity: 1; text-shadow: 0 0 8px rgba(var(--neon-cyan-rgb), 0.8); }
+        html[data-style="neon"] .section-line { width: 3px; background: linear-gradient(var(--accent), var(--neon-cyan)) !important; box-shadow: 0 0 8px var(--accent), 0 0 18px rgba(var(--neon-cyan-rgb), 0.6); }
+        html[data-style="neon"] .brand { text-shadow: 0 0 12px rgba(var(--accent-rgb), 0.9), 0 0 28px rgba(var(--accent-rgb), 0.4); }
+        html[data-style="neon"] .poster-wrap { border-color: rgba(var(--neon-cyan-rgb), 0.22); }
+        html[data-style="neon"] .hot-card:hover .poster-wrap, html[data-style="neon"] .browse-card:hover .poster-wrap {
+            border-color: var(--neon-cyan);
+            box-shadow: 0 0 0 1px var(--neon-cyan), 0 0 18px rgba(var(--neon-cyan-rgb), 0.55), 0 0 40px rgba(var(--accent-rgb), 0.35);
+        }
+        html[data-style="neon"] .rating-badge { color: var(--neon-cyan); border-color: rgba(var(--neon-cyan-rgb), 0.5); font-family: var(--font-display); }
+        html[data-style="neon"] .search-box-wrapper { border-color: rgba(var(--neon-cyan-rgb), 0.4); box-shadow: 0 0 22px rgba(var(--neon-cyan-rgb), 0.12), inset 0 0 12px rgba(var(--neon-cyan-rgb), 0.06); }
+        html[data-style="neon"] .search-box-wrapper:focus-within { border-color: var(--neon-cyan); box-shadow: 0 0 0 1px var(--neon-cyan), 0 0 26px rgba(var(--neon-cyan-rgb), 0.45); }
+        html[data-style="neon"] .hero-title { font-family: var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; text-shadow: 0 0 18px rgba(var(--accent-rgb), 0.75), 2px 2px 0 rgba(var(--neon-cyan-rgb), 0.55); }
+        html[data-style="neon"] .hero-overlay::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 3px); }
+        html[data-style="neon"] .hero-content { position: relative; z-index: 1; }
+        html[data-style="neon"] .btn-play { background: var(--neon-cyan); color: #05040c; box-shadow: 0 0 18px rgba(var(--neon-cyan-rgb), 0.6); }
+        html[data-style="neon"] .catnav, html[data-style="neon"] .info-modal, html[data-style="neon"] .controls-area {
+            border: 1px solid rgba(var(--neon-cyan-rgb), 0.25); box-shadow: 0 0 34px rgba(123, 44, 255, 0.25), inset 0 0 22px rgba(var(--neon-cyan-rgb), 0.04);
+        }
+        html[data-style="neon"] .cat-tab.active, html[data-style="neon"] .source-pill.active, html[data-style="neon"] .cal-day.active { box-shadow: 0 0 14px rgba(var(--accent-rgb), 0.7), 0 0 2px #fff inset; }
+        html[data-style="neon"] .ep-btn.active { box-shadow: 0 0 14px rgba(var(--neon-cyan-rgb), 0.7); }
+        html[data-style="neon"] .movie-name { letter-spacing: 0.02em; }
+
+        /* ── 复古胶片 ── */
+        html[data-style="film"] body {
+            background-image:
+                url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 .9 0 0 0 0 .75 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.09'/%3E%3C/svg%3E");
+            background-size: 180px 180px;
+            background-repeat: repeat;
+        }
+        html[data-style="film"] .section-line {
+            width: 14px; height: 24px; border-radius: 2px; margin-right: 14px;
+            background: linear-gradient(var(--accent), var(--accent)) center / 6px 70% no-repeat,
+                repeating-linear-gradient(to bottom, var(--print) 0 3px, transparent 3px 6px) 1px 0 / 2px 100% no-repeat,
+                repeating-linear-gradient(to bottom, var(--print) 0 3px, transparent 3px 6px) 11px 0 / 2px 100% no-repeat,
+                #0b0805 !important;
+        }
+        html[data-style="film"] .section-title { font-weight: 700; letter-spacing: 0.03em; }
+        html[data-style="film"] .section-title i { color: var(--accent); opacity: 0.9; }
+        html[data-style="film"] .poster-wrap { border: 4px solid var(--print); border-bottom-width: 12px; background: var(--print); box-shadow: 0 6px 14px rgba(var(--shadow-rgb), 0.55); }
+        html[data-style="film"] .poster-wrap img, html[data-style="film"] .hero-bg { filter: sepia(0.28) saturate(0.88) contrast(1.06); }
+        html[data-style="film"] .hot-card:hover .poster-wrap, html[data-style="film"] .browse-card:hover .poster-wrap {
+            border-color: var(--print); box-shadow: 0 14px 30px rgba(var(--shadow-rgb), 0.7), 0 0 0 2px var(--accent);
+        }
+        html[data-style="film"] .hot-card:hover { transform: scale(1.06) rotate(-1deg) translateZ(0); }
+        html[data-style="film"] .rating-badge, html[data-style="film"] .movie-date, html[data-style="film"] .hero-tag, html[data-style="film"] .cal-ep { font-family: var(--font-type); }
+        html[data-style="film"] .rating-badge { background: rgba(20, 14, 8, 0.85); color: var(--accent-bright); border-color: rgba(var(--accent-rgb), 0.4); }
+        html[data-style="film"][data-tone="dark"] .hero-overlay { background: linear-gradient(to top, var(--bg) 0%, transparent 60%), linear-gradient(to right, rgba(18, 12, 6, 0.85) 0%, transparent 55%), radial-gradient(ellipse at center, transparent 50%, rgba(0, 0, 0, 0.55) 100%); }
+        html[data-style="film"] .hero-title { font-style: italic; letter-spacing: 0.01em; }
+        html[data-style="film"][data-tone="dark"] .btn-play { background: var(--print); color: #1d1309; }
+        html[data-style="film"] .movie-name { font-family: var(--font-display); }
+        html[data-style="film"] .catnav, html[data-style="film"] .info-modal, html[data-style="film"] .controls-area { border: 1px solid rgba(var(--accent-rgb), 0.22); }
+
+        /* ── 杂志风(首页以外的页面):衬线标题、细线、无阴影海报 ── */
+        html[data-style="magazine"] .section-line { width: 26px; height: 3px; border-radius: 0; align-self: flex-start; margin-top: 0.55em; }
+        html[data-style="magazine"] .section-title { font-weight: 700; letter-spacing: 0.01em; }
+        html[data-style="magazine"] .section-header { border-bottom: 1px solid var(--line-1); padding-bottom: 12px; }
+        html[data-style="magazine"] .poster-wrap { box-shadow: none; border-color: rgba(var(--fg-rgb), 0.12); }
+        html[data-style="magazine"] .hot-card:hover .poster-wrap, html[data-style="magazine"] .browse-card:hover .poster-wrap { box-shadow: 0 10px 24px rgba(var(--shadow-rgb), 0.25), 0 0 0 2px var(--accent); }
+        html[data-style="magazine"] .movie-name { font-family: var(--font-display); font-weight: 700; }
+        html[data-style="magazine"] .video-title { font-weight: 700; }
+        html[data-style="magazine"] .search-box-wrapper { backdrop-filter: none; -webkit-backdrop-filter: none; box-shadow: none; border: 1px solid var(--text-1); }
+
+        /* ── 偏好设置 →「主题」:小预览卡片(预览里用的就是那套主题自己的色板) ── */
+        .theme-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 10px; margin-top: 12px; }
+        .theme-opt {
+            display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; margin: 0;
+            background: rgba(var(--fg-rgb), 0.04); border: 2px solid transparent; border-radius: calc(12px * var(--radius-k));
+            color: var(--text-4); font: inherit; font-size: 12px; cursor: pointer; text-align: center; transition: border-color 0.15s, background 0.15s;
+        }
+        .theme-opt:hover { background: rgba(var(--fg-rgb), 0.08); color: var(--text-1); }
+        .theme-opt.on { border-color: var(--accent); color: var(--text-1); }
+        .theme-opt-n { line-height: 1.2; font-weight: 600; }
+        .theme-mode { display: flex; gap: 6px; margin-top: 12px; }
+        .theme-mode button {
+            flex: 1; min-width: 0; padding: 8px 6px; border: 1px solid rgba(var(--fg-rgb), 0.14); background: rgba(var(--fg-rgb), 0.05); color: var(--text-5);
+            border-radius: calc(8px * var(--radius-k)); font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s;
+        }
+        .theme-mode button:hover { background: rgba(var(--fg-rgb), 0.1); color: var(--text-2); }
+        .theme-mode button.active { background: rgba(var(--accent-rgb), 0.18); border-color: rgba(var(--accent-rgb), 0.55); color: var(--text-1); }
+        .theme-prev {
+            position: relative; display: block; height: 64px; overflow: hidden; border-radius: calc(8px * var(--radius-k));
+            background: var(--bg); color: var(--text-1); border: 1px solid rgba(var(--fg-rgb), 0.12); font-family: var(--font-display);
+        }
+        .theme-prev .tp-hero { position: absolute; left: 6px; right: 6px; top: 6px; height: 22px; border-radius: calc(4px * var(--radius-k)); background: linear-gradient(120deg, var(--surface-9), var(--surface-5)); }
+        .theme-prev .tp-aa { position: absolute; left: 9px; top: 7px; font-size: 15px; font-weight: 800; line-height: 1; color: var(--text-1); }
+        .theme-prev .tp-bar { position: absolute; left: 6px; top: 34px; width: 3px; height: 9px; background: var(--accent); border-radius: 1px; }
+        .theme-prev .tp-line { position: absolute; left: 13px; top: 36px; width: 32px; height: 5px; border-radius: 3px; background: var(--text-1); opacity: 0.85; }
+        .theme-prev .tp-cards { position: absolute; left: 6px; right: 6px; bottom: 6px; height: 14px; display: flex; gap: 4px; }
+        .theme-prev .tp-cards i { flex: 1; border-radius: calc(3px * var(--radius-k)); background: var(--surface-7); border: 1px solid rgba(var(--fg-rgb), 0.12); }
+        .theme-prev .tp-cards i:first-child { background: var(--accent-grad); border-color: transparent; }
+        .theme-prev .tp-half { position: absolute; top: 0; bottom: 0; left: 0; width: 50%; overflow: hidden; }
+        .theme-prev .tp-half + .tp-half { left: 50%; }
+        .theme-prev .tp-half .theme-prev { position: absolute; top: 0; bottom: 0; width: 200%; height: auto; border: 0; border-radius: 0; }
+        .theme-prev .tp-half + .tp-half .theme-prev { left: -100%; }
+        .theme-prev[data-style="magazine"] .tp-hero { background: var(--surface-0); border-top: 2px solid var(--text-1); border-bottom: 1px solid var(--text-1); border-radius: 0; height: 20px; }
+        .theme-prev[data-style="neon"] .tp-bar { box-shadow: 0 0 6px var(--accent); }
+        .theme-prev[data-style="neon"] .tp-aa { text-shadow: 0 0 6px var(--accent); }
+        .theme-prev[data-style="film"] .tp-cards i { background: var(--print); border-color: var(--print); }
+        .theme-prev[data-style="mono"] .tp-hero { background: var(--text-1); }
+        .theme-prev[data-style="mono"] .tp-aa { color: var(--bg); }
+        /* ── 📰 杂志风首页(.mag-mast 刊头 + .mag 正文):只在 data-style="magazine" 时渲染(亮 / 暗两版);普通首页 / 轮播 / 顶栏这时藏起来(不销毁) ── */
+        html[data-style="magazine"] .home-flow, html[data-style="magazine"] #heroCarousel, html[data-style="magazine"] .navbar-custom { display: none !important; }
+        .mag-mast + .search-section { margin-top: 0 !important; padding: 0 max(16px, calc((100% - 1240px) / 2 + 40px)); top: 0; }
+        .mag-mast + .search-section .search-box-wrapper { border-radius: 0; background: var(--bg); border: 0; border-top: 1px solid var(--text-1); border-bottom: 1px solid var(--line-1); box-shadow: none; }
+        .mag-mast + .search-section .search-box-wrapper.compact { max-width: 320px; border: 1px solid var(--text-1); }
+        .mag-mast { max-width: 1240px; margin: 0 auto; padding: 22px 40px 10px; text-align: center; color: var(--text-1); }
+        .mag-mast-top { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; letter-spacing: 0.12em; color: var(--text-7); border-bottom: 1px solid var(--line-1); padding-bottom: 8px; }
+        .mag-logo { margin: 18px 0 2px; font-family: var(--font-display); font-weight: 700; font-size: clamp(54px, 9vw, 116px); line-height: 1; letter-spacing: 0.08em; cursor: pointer; display: inline-flex; align-items: baseline; gap: 0.08em; }
+        .mag-logo-ic { height: 0.78em; width: auto; border-radius: calc(0.12em * var(--radius-k)); align-self: center; margin-right: 0.04em; }
+        .mag-logo-sub { font-size: 0.2em; letter-spacing: 0.3em; margin-left: 0.6em; padding: 0.35em 0.5em; border: 1px solid currentColor; align-self: center; font-weight: 400; }
+        .mag-mast-sub { font-size: 12px; letter-spacing: 0.42em; color: var(--text-7); padding: 6px 0 14px; border-bottom: 3px double var(--text-1); }
+        .mag-toc { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px 4px; padding: 10px 0 8px; font-size: 13px; }
+        .mag-toc-l { font-weight: 700; color: var(--accent); margin-right: 8px; letter-spacing: 0.1em; }
+        .mag-toc-i { background: none; border: 0; padding: 2px 8px; color: var(--text-4); font: inherit; cursor: pointer; }
+        .mag-toc-i + .mag-toc-i::before { content: '·'; margin-right: 10px; color: var(--text-11); }
+        .mag-toc-i:hover { color: var(--accent); }
+
+        .mag { max-width: 1240px; margin: 0 auto; padding: 8px 40px 64px; color: var(--text-1); }
+        .mag-art { cursor: pointer; }
+        .mag-art img { display: block; width: 100%; height: 100%; object-fit: cover; background: var(--surface-5); transition: transform 0.6s ease; }
+        .mag-art:hover img { transform: scale(1.03); }
+        .mag-ph { overflow: hidden; aspect-ratio: 16 / 9; background: var(--surface-5); }
+        .mag-kicker { display: flex; align-items: baseline; gap: 10px; font-size: 12px; letter-spacing: 0.2em; color: var(--text-7); margin: 18px 0 10px; }
+        .mag-kicker b { color: var(--accent); font-size: 13px; letter-spacing: 0.12em; }
+        .mag-kick-s { font-size: 11px; letter-spacing: 0.16em; color: var(--accent); font-weight: 700; margin: 12px 0 4px; text-transform: uppercase; }
+        .mag-h4 { font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1.3; margin: 0 0 6px; color: var(--text-1); }
+        .mag-h4 small { font-family: var(--font-ui); font-size: 12px; font-weight: 400; color: var(--text-8); margin-left: 8px; }
+        .mag-excerpt { font-size: 14px; line-height: 1.75; color: var(--text-5); margin: 0; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .mag-loading, .mag-empty { padding: 28px 0; color: var(--text-8); font-style: italic; font-family: var(--font-display); }
+        .mag-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border: 1px solid var(--text-1); background: transparent; color: var(--text-1); font: inherit; font-size: 14px; font-weight: 600; letter-spacing: 0.06em; cursor: pointer; border-radius: calc(2px * var(--radius-k)); }
+        .mag-btn:hover { background: rgba(var(--fg-rgb), 0.06); }
+        .mag-btn.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+        .mag-btn.pri:hover { background: var(--accent-deep); }
+        .mag-link { background: none; border: 0; padding: 0; color: var(--accent); font: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.08em; cursor: pointer; }
+        .mag-link:hover { text-decoration: underline; }
+        .mag-cols { column-count: 2; column-gap: 32px; column-rule: 1px solid var(--line-1); font-size: 15px; line-height: 1.85; color: var(--text-3); margin: 0; text-align: justify; }
+        .mag-cols.mag-cols-1 { column-count: 1; }
+        .mag-cover-body.solo { grid-template-columns: 1fr; }
+        .mag-cover-body.solo .mag-standfirst { max-width: 860px; font-size: 26px; }
+        .mag-dropcap::first-letter { float: left; font-family: var(--font-display); font-size: 3.4em; line-height: 0.9; font-weight: 700; padding: 0.06em 0.1em 0 0; color: var(--accent); }
+
+        /* 封面 */
+        .mag-cover-fig { position: relative; margin: 0; aspect-ratio: 21 / 9; overflow: hidden; background: var(--surface-5); }
+        .mag-cover-cap { position: absolute; left: 0; right: 0; bottom: 0; padding: 80px 36px 26px; background: linear-gradient(to top, rgba(10, 8, 6, 0.82), transparent); color: #fff; }
+        .mag-cover-h { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: clamp(34px, 5.4vw, 72px); line-height: 1.05; letter-spacing: 0.01em; color: #fff; text-shadow: 0 2px 18px rgba(0, 0, 0, 0.35); }
+        .mag-cover-orig { margin: 8px 0 0; font-family: var(--font-display); font-style: italic; font-size: 18px; opacity: 0.85; }
+        .mag-cover-body { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 36px; padding: 26px 0 34px; border-bottom: 1px solid var(--text-1); }
+        .mag-standfirst { margin: 0 0 14px; font-family: var(--font-display); font-size: 24px; line-height: 1.45; font-weight: 700; color: var(--text-1); }
+        .mag-byline { font-size: 12px; letter-spacing: 0.14em; color: var(--text-8); margin-bottom: 18px; }
+        .mag-cta { display: flex; flex-wrap: wrap; gap: 10px; }
+
+        /* 通用小节标题:粗线 + 衬线标题 + 小字 */
+        .mag-sec { padding: 30px 0 34px; border-bottom: 1px solid var(--line-1); }
+        .mag-sec-h { display: flex; align-items: baseline; gap: 14px; margin: 0 0 20px; padding-top: 10px; border-top: 3px solid var(--text-1); font-family: var(--font-display); font-size: 26px; font-weight: 700; color: var(--text-1); }
+        .mag-sec-h small { font-family: var(--font-ui); font-size: 12px; font-weight: 400; letter-spacing: 0.14em; color: var(--text-8); }
+        .mag-also-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 28px; }
+        .mag-also-i + .mag-also-i { border-left: 1px solid var(--line-1); padding-left: 28px; margin-left: -1px; }
+
+        /* 书架(继续观看 / 收藏) */
+        .mag-shelf { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 18px; }
+        .mag-shelf-ph { position: relative; aspect-ratio: 2 / 3; overflow: hidden; background: var(--surface-5); box-shadow: 0 6px 16px rgba(var(--shadow-rgb), 0.18); }
+        .mag-prog { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(0, 0, 0, 0.35); }
+        .mag-prog i { display: block; height: 100%; background: var(--accent); }
+        .mag-new { position: absolute; top: 6px; left: 6px; background: var(--accent); color: var(--on-accent); font-size: 11px; padding: 1px 6px; }
+        .mag-shelf-t { margin-top: 8px; font-family: var(--font-display); font-weight: 700; font-size: 14px; line-height: 1.35; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mag-shelf-m { font-size: 11px; color: var(--text-8); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* 短评 / 为你推荐 */
+        .mag-rev-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--line-1); }
+        .mag-rev { display: flex; gap: 16px; padding: 18px 20px 18px 0; border-bottom: 1px solid var(--line-1); }
+        .mag-rev:not(:nth-child(3n + 1)) { padding-left: 20px; border-left: 1px solid var(--line-1); }
+        .mag-rev-score { flex: none; font-family: var(--font-display); font-size: 40px; line-height: 1; font-weight: 700; color: var(--accent); min-width: 64px; }
+        .mag-rev-body { min-width: 0; }
+        .mag-rev:hover .mag-h4 { color: var(--accent); }
+
+        /* 排行 / 榜单 */
+        .mag-list { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 32px; }
+        .mag-list li { display: flex; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px dotted var(--line-3); break-inside: avoid; cursor: pointer; }
+        .mag-list li:hover .mag-list-t { color: var(--accent); }
+        .mag-list-n { flex: none; width: 1.6em; font-family: var(--font-display); font-weight: 700; font-size: 20px; color: var(--accent); text-align: right; }
+        .mag-list-t { flex: 1; min-width: 0; font-weight: 600; font-size: 15px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mag-list-m { flex: none; font-size: 12px; color: var(--text-8); }
+        .mag-list-wide { columns: 3; }
+
+        /* 本周播出表 */
+        .mag-cal-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border: 1px solid var(--text-1); }
+        .mag-cal-days button { background: none; border: 0; border-left: 1px solid var(--line-1); padding: 10px 4px; font: inherit; font-weight: 700; font-size: 14px; color: var(--text-2); cursor: pointer; }
+        .mag-cal-days button:first-child { border-left: 0; }
+        .mag-cal-days button small { display: block; font-weight: 400; font-size: 11px; color: var(--text-8); margin-top: 2px; }
+        .mag-cal-days button.on { background: var(--inv-bg); color: var(--inv-fg); }
+        .mag-cal-days button.on small { color: inherit; opacity: 0.75; }
+        .mag-cal-days button:disabled { opacity: 0.35; cursor: default; }
+        .mag-cal-cats, .mag-chips { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 14px 0; }
+        .mag-cal-cats button, .mag-chips button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 2px 0; font: inherit; font-size: 14px; color: var(--text-5); cursor: pointer; }
+        .mag-cal-cats button small { margin-left: 4px; font-size: 11px; color: var(--text-9); }
+        .mag-cal-cats button.on, .mag-cal-cats button:hover, .mag-chips button:hover { color: var(--text-1); border-bottom-color: var(--accent); }
+        .mag-chips button { border: 1px solid var(--line-2); padding: 6px 12px; color: var(--text-3); }
+        .mag-chips button.dead { opacity: 0.45; }
+        .mag-chips button.all { border-color: var(--text-1); font-weight: 700; }
+        .mag-cal-list { list-style: none; margin: 0; padding: 0; columns: 3; column-gap: 30px; column-rule: 1px solid var(--line-1); }
+        .mag-cal-list li { break-inside: avoid; padding: 7px 0; border-bottom: 1px dotted var(--line-2); cursor: pointer; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
+        .mag-cal-list b { font-weight: 600; color: var(--text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mag-cal-list span { flex: none; margin-left: auto; font-size: 12px; color: var(--text-8); }
+        .mag-cal-list em { flex: none; font-style: normal; font-size: 11px; color: var(--on-accent); background: var(--accent); padding: 0 5px; }
+        .mag-cal-list li:hover b { color: var(--accent); }
+
+        /* 专题 */
+        .mag-feat { padding: 34px 0 38px; border-bottom: 1px solid var(--line-1); }
+        .mag-feat-head { display: flex; align-items: baseline; gap: 16px; border-top: 3px solid var(--text-1); padding-top: 10px; margin-bottom: 22px; }
+        .mag-feat-no { flex: none; font-size: 12px; font-weight: 700; letter-spacing: 0.2em; color: var(--accent); }
+        .mag-feat-t { flex: 1; min-width: 0; margin: 0; font-family: var(--font-display); font-weight: 700; font-size: clamp(26px, 3.2vw, 40px); line-height: 1.15; color: var(--text-1); }
+        .mag-more { flex: none; background: none; border: 0; color: var(--text-6); font: inherit; font-size: 13px; letter-spacing: 0.06em; cursor: pointer; }
+        .mag-more:hover { color: var(--accent); }
+        .mag-feat-lead { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 32px; align-items: start; }
+        .mag-feat.flip .mag-feat-fig { order: 2; }
+        .mag-feat-fig { margin: 0; aspect-ratio: 16 / 10; overflow: hidden; background: var(--surface-5); }
+        .mag-feat-h { margin: 0 0 14px; font-family: var(--font-display); font-weight: 700; font-size: clamp(24px, 2.6vw, 34px); line-height: 1.2; color: var(--text-1); cursor: pointer; }
+        .mag-feat-h:hover { color: var(--accent); }
+        .mag-feat-text .mag-cols { margin-bottom: 14px; font-size: 14px; }
+        .mag-feat-more { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 8fr); gap: 32px; margin-top: 28px; align-items: start; }
+        .mag-feat-more > .mag-list:only-child { grid-column: 1 / -1; }
+        .mag-quote { margin: 0; padding: 4px 0 0 0; cursor: pointer; }
+        .mag-quote p { margin: 0; font-family: var(--font-display); font-style: italic; font-size: 22px; line-height: 1.5; color: var(--text-2); }
+        .mag-quote p::before { content: '“'; display: block; font-size: 72px; line-height: 0.6; height: 0.42em; color: var(--accent); font-style: normal; }
+        .mag-quote cite { display: block; margin-top: 12px; font-style: normal; font-size: 13px; color: var(--text-8); letter-spacing: 0.06em; }
+        .mag-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 16px; margin-top: 26px; }
+        .mag-strip .mag-ph { aspect-ratio: 2 / 3; }
+        .mag-strip-i span { display: block; margin-top: 6px; font-size: 13px; color: var(--text-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .mag-strip-i:hover span { color: var(--accent); }
+
+        .mag-colophon { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; padding: 18px 0 0; margin-top: 8px; border-top: 3px double var(--text-1); font-size: 12px; letter-spacing: 0.1em; color: var(--text-8); }
+
+        /* 平板:四栏 → 两栏 */
+        @media (max-width: 1024px) {
+            .mag-mast, .mag { padding-left: 24px; padding-right: 24px; }
+            .mag-also-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 28px; }
+            .mag-also-i:nth-child(odd) { border-left: 0; padding-left: 0; margin-left: 0; }
+            .mag-shelf { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+            .mag-shelf-i:nth-child(n + 7) { display: none; }
+            .mag-rev-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+            .mag-rev:not(:nth-child(3n + 1)) { padding-left: 0; border-left: 0; }
+            .mag-rev:nth-child(even) { padding-left: 20px; border-left: 1px solid var(--line-1); }
+            .mag-list-wide, .mag-cal-list { columns: 2; }
+        }
+        /* 手机:单栏 */
+        @media (max-width: 768px) {
+            .mag-mast { padding: 14px 16px 4px; }
+            .mag-mast-top { font-size: 11px; letter-spacing: 0.04em; }
+            .mag-mast-r { display: none; }
+            .mag-logo { font-size: 52px; margin-top: 12px; }
+            .mag-logo-sub { display: none; }
+            .mag-mast-sub { letter-spacing: 0.2em; font-size: 11px; }
+            .mag-toc { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; white-space: nowrap; font-size: 13px; }
+            .mag-toc::-webkit-scrollbar { display: none; }
+            .mag { padding: 4px 16px 48px; }
+            .mag-cover-fig { aspect-ratio: 4 / 3; }
+            .mag-cover-cap { padding: 60px 16px 16px; }
+            .mag-cover-orig { font-size: 14px; }
+            .mag-cover-body { grid-template-columns: 1fr; gap: 18px; padding: 18px 0 26px; }
+            .mag-standfirst, .mag-cover-body.solo .mag-standfirst { font-size: 19px; }
+            .mag-cols { column-count: 1; font-size: 15px; }
+            .mag-also-grid { grid-template-columns: 1fr; gap: 22px; }
+            .mag-also-i + .mag-also-i { border-left: 0; padding-left: 0; margin-left: 0; border-top: 1px solid var(--line-1); padding-top: 4px; }
+            .mag-sec-h { font-size: 22px; flex-wrap: wrap; gap: 4px 12px; }
+            .mag-shelf { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 30%; overflow-x: auto; scrollbar-width: none; gap: 12px; }
+            .mag-shelf::-webkit-scrollbar { display: none; }
+            .mag-shelf-i:nth-child(n + 7) { display: block; }
+            .mag-rev-grid { grid-template-columns: 1fr; }
+            .mag-rev, .mag-rev:not(:nth-child(3n + 1)), .mag-rev:nth-child(even) { padding: 14px 0; border-left: 0; }
+            .mag-rev-score { font-size: 32px; min-width: 52px; }
+            .mag-list, .mag-list-wide, .mag-cal-list { columns: 1; }
+            .mag-cal-days button { font-size: 12px; padding: 8px 0; }
+            .mag-feat { padding: 26px 0 30px; }
+            .mag-feat-head { flex-wrap: wrap; gap: 4px 12px; }
+            .mag-feat-t { flex-basis: 100%; order: 2; }
+            .mag-more { margin-left: auto; }
+            .mag-feat-lead, .mag-feat-more { grid-template-columns: 1fr; gap: 16px; }
+            .mag-feat.flip .mag-feat-fig { order: 0; }
+            .mag-quote p { font-size: 19px; }
+            .mag-strip { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 30%; overflow-x: auto; scrollbar-width: none; gap: 12px; }
+            .mag-strip::-webkit-scrollbar { display: none; }
+        }
+        /* TV 模式下杂志首页照常可用,按钮给遥控器焦点留出空间 */
+        body.tv-mode .mag-art:focus, body.tv-mode .mag-list li:focus { outline: 3px solid var(--accent); outline-offset: 3px; }
     </style>
 </head>
 
@@ -5225,6 +5897,22 @@
             </div>
         </div>
 
+        <!-- 📰 杂志风首页(主题选「杂志风」时代替轮播 + 首页各行):同一份首页数据(轮播 heroList / 板块 homeBlocks / 榜单 rowLists /
+             继续观看 / 追剧日历…)排成电子杂志 —— 刊头、本期封面、本期还有、专题(大图 + 分栏简介 + 引语 + 榜单)、短评、本周播出表。
+             板块顺序和开关照偏好设置里的「首页板块」走;点哪儿都和普通首页一样(autoSearch / 继续播放 / 进分类浏览)。
+             普通首页的 .home-flow / 轮播 / 顶栏在杂志主题下由 CSS 藏起来(不销毁,换回别的主题不用重建) -->
+        <header v-if="isMagazine && !offHome" class="mag-mast" aria-label="E视界 影像周刊">
+            <div class="mag-mast-top">
+                <span>第 {{ magIssue.vol }} 期 · {{ magIssue.date }}</span>
+                <span class="mag-mast-r">E视界出品 · 每周四出刊</span>
+            </div>
+            <h1 class="mag-logo" @click="goHome"><img src="icon.png" alt="" class="mag-logo-ic">视界<span class="mag-logo-sub">影像周刊</span></h1>
+            <div class="mag-mast-sub">THE WEEKLY SCREEN · 电影 剧集 综艺 动漫</div>
+            <nav class="mag-toc" aria-label="本期目录" v-if="magToc.length">
+                <span class="mag-toc-l">本期</span>
+                <button v-for="t in magToc" :key="t.id" type="button" class="mag-toc-i" @click="magGo(t.id)">{{ t.l }}</button>
+            </nav>
+        </header>
         <!-- 2. Search -->
         <div class="search-section"
             :style="{ marginTop: offHome ? (isTVMode ? '20px' : '60px') : '-35px', position: offHome ? 'relative' : 'sticky' }">
@@ -5234,6 +5922,165 @@
                     class="search-input" placeholder="输入片名或分类（如 泰剧、韩综）">
             </div>
         </div>
+
+        <main v-if="isMagazine" v-show="!offHome" class="mag" aria-label="杂志风首页">
+            <!-- 本期封面:本周热门第一 -->
+            <article v-if="magCover" id="mag-cover" class="mag-cover">
+                <div class="mag-kicker"><b>本期封面</b> COVER STORY</div>
+                <figure class="mag-cover-fig mag-art" @click="autoSearch(magCover.title, magCover.originalTitle)">
+                    <img :src="magArt(magCover.rawData, 'w1280')" alt="" decoding="async">
+                    <figcaption class="mag-cover-cap">
+                        <h2 class="mag-cover-h">{{ magCover.title }}</h2>
+                        <p v-if="magCover.originalTitle && magCover.originalTitle !== magCover.title" class="mag-cover-orig">{{ magCover.originalTitle }}</p>
+                    </figcaption>
+                </figure>
+                <div class="mag-cover-body" :class="{ solo: !magRest(magCover.overview) }">
+                    <div class="mag-cover-side">
+                        <p class="mag-standfirst">{{ magSentence(magCover.overview, 120) }}</p>
+                        <div class="mag-byline">{{ magMeta(magCover.rawData, '本周热度第 1') }}</div>
+                        <div class="mag-cta">
+                            <button type="button" class="mag-btn pri" @click="autoSearch(magCover.title, magCover.originalTitle)"><i class="fas fa-play" aria-hidden="true"></i> 立即观看</button>
+                            <button type="button" class="mag-btn" @click="showMovieInfo(magCover.rawData)">详细信息</button>
+                        </div>
+                    </div>
+                    <p v-if="magRest(magCover.overview)" class="mag-cols" :class="{ 'mag-dropcap': magCap(magRest(magCover.overview)), 'mag-cols-1': magRest(magCover.overview).length < 160 }">{{ magRest(magCover.overview) }}</p>
+                </div>
+            </article>
+            <div v-else class="mag-loading">本期正在排版…</div>
+
+            <!-- 本期还有:本周热门第 2~5 -->
+            <section v-if="magAlso.length" class="mag-sec mag-also" aria-label="本期还有">
+                <h3 class="mag-sec-h"><span>本期还有</span><small>本周热门</small></h3>
+                <div class="mag-also-grid">
+                    <article v-for="(h, i) in magAlso" :key="'also-' + i" class="mag-also-i mag-art" @click="autoSearch(h.title, h.originalTitle)">
+                        <div class="mag-ph"><img :src="magArt(h.rawData, 'w780')" loading="lazy" decoding="async" alt=""></div>
+                        <div class="mag-kick-s">{{ ['TOP ' + (i + 2), magYear(h.rawData)].filter(Boolean).join(' · ') }}</div>
+                        <h4 class="mag-h4">{{ h.title }}</h4>
+                        <p class="mag-excerpt">{{ h.overview }}</p>
+                    </article>
+                </div>
+            </section>
+
+            <template v-for="b in magBlocks" :key="b.id">
+                <!-- 继续观看 -->
+                <section v-if="b.k === 'history'" :id="'mag-' + b.id" class="mag-sec">
+                    <h3 class="mag-sec-h"><span>继续观看</span><small>上次看到这儿</small></h3>
+                    <div class="mag-shelf">
+                        <div v-for="(item, i) in watchHistory.slice(0, 8)" :key="'mh-' + item.name + i" class="mag-shelf-i mag-art" @click="playFromHistory(item)">
+                            <div class="mag-shelf-ph"><img :src="item.poster" alt="" loading="lazy" decoding="async"><span class="mag-prog"><i :style="{ width: (item.progress || 0) + '%' }"></i></span></div>
+                            <div class="mag-shelf-t">{{ item.name }}</div>
+                            <div class="mag-shelf-m">{{ item.episode ? item.episode + ' · ' : '' }}{{ formatWatchTime(item.watchedAt) }}</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- 我的收藏 -->
+                <section v-else-if="b.k === 'fav'" :id="'mag-' + b.id" class="mag-sec">
+                    <h3 class="mag-sec-h"><span>我的收藏</span><small v-if="favUpdateCount > 0">{{ favUpdateCount }} 部有更新</small></h3>
+                    <div class="mag-shelf">
+                        <div v-for="item in favSorted.slice(0, 8)" :key="'mf-' + item.fav_id" class="mag-shelf-i mag-art" @click="openFavorite(item)">
+                            <div class="mag-shelf-ph"><img :src="(item.data && item.data.poster) || getPosterUrl('')" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"><span v-if="favHasUpdate(item)" class="mag-new">{{ favBadgeText(item) }}</span></div>
+                            <div class="mag-shelf-t">{{ item.data && item.data.name }}</div>
+                            <div class="mag-shelf-m">{{ favSubText(item) }}</div>
+                        </div>
+                    </div>
+                </section>
+                <!-- 为你推荐 / 短评:评分大数字 + 一句话 -->
+                <section v-else-if="b.k === 'recommend' || (b.k === 'reviews' && magReviews.length)" :id="'mag-' + b.id" class="mag-sec mag-reviews">
+                    <h3 class="mag-sec-h"><span>{{ b.k === 'recommend' ? '为你推荐' : '短评' }}</span><small>{{ b.k === 'recommend' ? '根据你的观看记录' : '一句话看片 · TMDB 评分' }}</small></h3>
+                    <div class="mag-rev-grid">
+                        <article v-for="it in (b.k === 'recommend' ? recommendList.slice(0, 6) : magReviews)" :key="'mr-' + b.k + (it.media_type || '') + it.id" class="mag-rev mag-art" @click="magOpen(it)">
+                            <div class="mag-rev-score">{{ magVote(it) }}</div>
+                            <div class="mag-rev-body">
+                                <h4 class="mag-h4">{{ magTitle(it) }}<small>{{ magYear(it) }}</small></h4>
+                                <p class="mag-excerpt">{{ magSentence(it.overview, 80) || '暂无简介' }}</p>
+                            </div>
+                        </article>
+                    </div>
+                </section>
+                <!-- 大家都在看:排行 -->
+                <section v-else-if="b.k === 'popular'" :id="'mag-' + b.id" class="mag-sec">
+                    <h3 class="mag-sec-h"><span>大家都在看</span><small>本站用户最近 7 天常看</small></h3>
+                    <ol class="mag-list mag-list-wide">
+                        <li v-for="(it, i) in popularShown.slice(0, 10)" :key="'mp-' + it.title" @click="autoSearch(it.name)">
+                            <span class="mag-list-n">{{ i + 1 }}</span><span class="mag-list-t">{{ it.name }}</span><span class="mag-list-m">{{ it.year || '' }}</span>
+                        </li>
+                    </ol>
+                </section>
+                <!-- 追剧日历 → 本周播出表 -->
+                <section v-else-if="b.k === 'calendar'" :id="'mag-' + b.id" class="mag-sec mag-cal">
+                    <h3 class="mag-sec-h"><span>本周播出</span><small>资源站这一周每天更新了什么</small></h3>
+                    <div class="mag-cal-days" role="tablist" aria-label="日期">
+                        <button v-for="d in calDays" :key="d.day" type="button" role="tab" :class="{ on: d.active }" :disabled="d.future"
+                            :aria-selected="d.active ? 'true' : 'false'" @click="calPickDay(d.day)">{{ d.today ? '今天' : d.dow }}<small>{{ d.md }}</small></button>
+                    </div>
+                    <div class="mag-cal-cats" v-if="calCats.length">
+                        <button v-for="c in calCats" :key="c.k" type="button" :class="{ on: c.k === cal.cat }" @click="calPickCat(c.k)">{{ c.l }}<small>{{ c.n }}</small></button>
+                    </div>
+                    <ul v-if="calItems.length" class="mag-cal-list">
+                        <li v-for="it in calItems" :key="'mc-' + it.title" @click="autoSearch(it.title)"><b>{{ it.title }}</b><span v-if="it.remarks">{{ it.remarks }}</span><em v-if="it.isNew">新上</em></li>
+                    </ul>
+                    <div v-else class="mag-empty">这天资源站还没有更新</div>
+                </section>
+                <!-- 直播 -->
+                <section v-else-if="b.k === 'live'" :id="'mag-' + b.id" class="mag-sec">
+                    <h3 class="mag-sec-h"><span>直播频道</span><small>点开即看</small></h3>
+                    <div class="mag-chips">
+                        <button v-for="ch in liveHomeChannels.slice(0, 18)" :key="'ml-' + ch.id" type="button" :class="{ dead: ch.ok === false }" @click="openLiveChannel(ch)">{{ ch.name }}</button>
+                    </div>
+                </section>
+                <!-- 分类索引 -->
+                <section v-else-if="b.k === 'catnav'" :id="'mag-' + b.id" class="mag-sec">
+                    <h3 class="mag-sec-h"><span>分类索引</span><small>按类型翻阅</small></h3>
+                    <div class="mag-chips">
+                        <button v-for="t in catTypes" :key="'mt-' + t.k" type="button" @click="openBrowse({ type: t.k, sel: {} })"><i :class="['fas', t.icon]" aria-hidden="true"></i> {{ t.l }}</button>
+                        <button type="button" class="all" @click="openCatDir()"><i class="fas fa-table-cells-large" aria-hidden="true"></i> 全部分类</button>
+                    </div>
+                </section>
+                <!-- 专题:一个榜单 = 一篇专题(大图 + 分栏简介 + 引语 + 榜单 + 海报条);单双数左右交替 -->
+                <article v-else-if="b.k === 'row'" :id="'mag-' + b.id" class="mag-feat" :class="{ flip: b.flip }">
+                    <header class="mag-feat-head">
+                        <span class="mag-feat-no">专题 {{ b.no }}</span>
+                        <h3 class="mag-feat-t">{{ b.config.title }}</h3>
+                        <button v-if="b.key !== 'randomRow'" type="button" class="mag-more" @click="rowBrowse(b.key)">翻阅全部 <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+                    </header>
+                    <div v-if="!b.lead" class="mag-loading">本专题正在排版…</div>
+                    <template v-else>
+                        <div class="mag-feat-lead">
+                            <figure class="mag-feat-fig mag-art" @click="magOpen(b.lead)"><img :src="magArt(b.lead, 'w780')" alt="" loading="lazy" decoding="async"></figure>
+                            <div class="mag-feat-text">
+                                <div class="mag-kick-s">{{ magMeta(b.lead) }}</div>
+                                <h4 class="mag-feat-h" @click="magOpen(b.lead)">{{ magTitle(b.lead) }}</h4>
+                                <p class="mag-cols" :class="{ 'mag-dropcap': magCap(b.lead.overview), 'mag-cols-1': (b.lead.overview || '').length < 160 }">{{ b.lead.overview || '暂无简介' }}</p>
+                                <button type="button" class="mag-link" @click="magOpen(b.lead)">去看看 <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+                            </div>
+                        </div>
+                        <div class="mag-feat-more">
+                            <blockquote v-if="b.quote" class="mag-quote" @click="magOpen(b.quote.item)">
+                                <p>{{ b.quote.text }}</p>
+                                <cite>——《{{ magTitle(b.quote.item) }}》</cite>
+                            </blockquote>
+                            <ol class="mag-list" v-if="b.list.length">
+                                <li v-for="(it, i) in b.list" :key="'ml-' + b.key + it.id" @click="magOpen(it)">
+                                    <span class="mag-list-n">{{ i + 2 }}</span><span class="mag-list-t">{{ magTitle(it) }}</span><span class="mag-list-m">{{ magMeta(it) }}</span>
+                                </li>
+                            </ol>
+                        </div>
+                        <div class="mag-strip" v-if="b.strip.length">
+                            <div v-for="it in b.strip" :key="'ms-' + b.key + it.id" class="mag-strip-i mag-art" @click="magOpen(it)">
+                                <div class="mag-ph"><img :src="getPosterUrl(it.poster_path)" alt="" loading="lazy" decoding="async"></div>
+                                <span>{{ magTitle(it) }}</span>
+                            </div>
+                        </div>
+                    </template>
+                </article>
+            </template>
+
+            <footer class="mag-colophon">
+                <span>E视界 · 影像周刊 第 {{ magIssue.vol }} 期</span>
+                <span>封面与剧照:TMDB · 节目表:各资源站</span>
+                <button type="button" class="mag-link" @click="showSettingsModal = true">换个主题 <i class="fas fa-palette" aria-hidden="true"></i></button>
+            </footer>
+        </main>
 
         <!-- 首页内容区：用 v-show 而非 v-if，进出搜索只切换 display，避免每次销毁/重建 ~400 张海报卡导致卡顿 -->
         <div v-show="!offHome" class="home-flow">
@@ -5282,7 +6129,7 @@
                                 <div
                                     style="position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: rgba(0,0,0,0.5);">
                                     <div
-                                        :style="{ width: item.progress + '%', height: '100%', background: 'linear-gradient(90deg, #e50914, #ff4757)' }">
+                                        :style="{ width: item.progress + '%', height: '100%', background: 'linear-gradient(90deg, var(--accent), var(--accent-bright))' }">
                                     </div>
                                 </div>
                                 <!-- 集数标签 -->
@@ -5944,15 +6791,37 @@
                         </div>
                         <button @click="refreshV2boardInfo" :disabled="v2bRefreshing"
                             style="margin-top: 12px; width: 100%; padding: 8px; background: rgba(var(--accent-rgb), 0.15); border: 1px solid rgba(var(--accent-rgb), 0.3); border-radius: calc(8px * var(--radius-k)); color: var(--accent-text); font-size: 13px; cursor: pointer; transition: all 0.2s;"
-                            onmouseover="this.style.background='rgba(229,9,20,0.25)'"
-                            onmouseout="this.style.background='rgba(229,9,20,0.15)'">
+                            onmouseover="this.style.background='rgba(var(--accent-rgb),0.25)'"
+                            onmouseout="this.style.background='rgba(var(--accent-rgb),0.15)'">
                             <i :class="v2bRefreshing ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"
                                 style="margin-right: 6px;"></i>
                             {{ v2bRefreshing ? '刷新中...' : '刷新订阅信息' }}
                         </button>
                         <div v-if="v2bRefreshMsg" style="margin-top: 8px; font-size: 12px; text-align: center;"
-                            :style="{ color: v2bRefreshOk ? '#46d369' : '#ff6b6b' }">
+                            :style="{ color: v2bRefreshOk ? 'var(--success)' : 'var(--accent-text)' }">
                             {{ v2bRefreshMsg }}
+                        </div>
+                    </div>
+
+                    <!-- 🎨 主题 = 风格 × 明暗:点了立刻换,本机记住,登录了同步账号的跨设备同步。每个风格都有亮 / 暗两版;
+                         小预览按现在选的明暗画(跟随系统时左暗右亮),用的就是那套色板本身 -->
+                    <div class="set-block">
+                        <div class="set-title" id="theme-title"><i class="fas fa-palette" aria-hidden="true"></i>主题</div>
+                        <div class="set-desc">{{ themeDesc }}</div>
+                        <div class="theme-grid" role="radiogroup" aria-label="风格">
+                            <button v-for="t in themeStyles" :key="t.k" type="button" class="theme-opt" :class="{ on: themeStyle === t.k }"
+                                role="radio" :aria-checked="themeStyle === t.k ? 'true' : 'false'" :title="t.d" @click="setThemeStyle(t.k)">
+                                <span v-if="themeMode === 'system'" class="theme-prev" aria-hidden="true">
+                                    <span class="tp-half"><span class="theme-prev" :data-theme="themePalette(t.k, 'dark')" :data-style="t.k"><span class="tp-hero"></span><span class="tp-aa">Aa</span><span class="tp-bar"></span><span class="tp-line"></span><span class="tp-cards"><i></i><i></i><i></i></span></span></span>
+                                    <span class="tp-half"><span class="theme-prev" :data-theme="themePalette(t.k, 'light')" :data-style="t.k"><span class="tp-hero"></span><span class="tp-aa">Aa</span><span class="tp-bar"></span><span class="tp-line"></span><span class="tp-cards"><i></i><i></i><i></i></span></span></span>
+                                </span>
+                                <span v-else class="theme-prev" :data-theme="themePalette(t.k, themeMode)" :data-style="t.k" aria-hidden="true"><span class="tp-hero"></span><span class="tp-aa">Aa</span><span class="tp-bar"></span><span class="tp-line"></span><span class="tp-cards"><i></i><i></i><i></i></span></span>
+                                <span class="theme-opt-n">{{ t.l }}</span>
+                            </button>
+                        </div>
+                        <div class="theme-mode" role="radiogroup" aria-label="明暗">
+                            <button v-for="m in themeModes" :key="m.k" type="button" :class="{ active: themeMode === m.k }" role="radio"
+                                :aria-checked="themeMode === m.k ? 'true' : 'false'" @click="setThemeMode(m.k)"><i :class="['fas', m.icon]" aria-hidden="true"></i> {{ m.l }}</button>
                         </div>
                     </div>
 
@@ -6331,7 +7200,7 @@
                         </div>
                         <div class="video-meta">
                             <template v-if="previewLocked"><i class="fas fa-lock" style="color:var(--accent);"></i> 登录后即可观看</template>
-                            <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
+                            <template v-else-if="currentSource">正在播放: <span class="fw-bold" style="color: var(--text-1);">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
                             <template v-else><i class="fas fa-spinner fa-spin"></i> 正在加载…</template>
                         </div>
                         <!-- 🎟️ 分享链接试看(没登录):剩余时间 + 登录入口 -->
@@ -6419,8 +7288,8 @@
                             <span v-else-if="!previewLocked" @click="refreshSources"
                                 style="margin-left: 10px; font-size: 12px; color: var(--text-8); cursor: pointer; padding: 2px 8px; border-radius: calc(4px * var(--radius-k)); border: 1px solid var(--line-3); transition: all 0.2s;"
                                 :style="{ opacity: refreshingSources ? 0.5 : 1, pointerEvents: refreshingSources ? 'none' : 'auto' }"
-                                @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
-                                @mouseleave="$event.target.style.color='#888'; $event.target.style.borderColor='#444'">
+                                @mouseenter="$event.target.style.color='var(--text-1)'; $event.target.style.borderColor='var(--line-6)'"
+                                @mouseleave="$event.target.style.color='var(--text-8)'; $event.target.style.borderColor='var(--line-3)'">
                                 <i :class="['fas', refreshingSources ? 'fa-spinner fa-spin' : 'fa-sync-alt']"
                                     style="margin-right: 4px;"></i>
                                 {{ refreshingSources ? '刷新中...' : '刷新线路' }}
@@ -6483,8 +7352,8 @@
                             <span v-if="!previewLocked" @click="refreshEpisodes"
                                 style="margin-left: 10px; font-size: 12px; color: var(--text-8); cursor: pointer; padding: 2px 8px; border-radius: calc(4px * var(--radius-k)); border: 1px solid var(--line-3); transition: all 0.2s;"
                                 :style="{ opacity: refreshingEpisodes ? 0.5 : 1, pointerEvents: refreshingEpisodes ? 'none' : 'auto', marginLeft: trial.on ? 'auto' : null }"
-                                @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
-                                @mouseleave="$event.target.style.color='#888'; $event.target.style.borderColor='#444'">
+                                @mouseenter="$event.target.style.color='var(--text-1)'; $event.target.style.borderColor='var(--line-6)'"
+                                @mouseleave="$event.target.style.color='var(--text-8)'; $event.target.style.borderColor='var(--line-3)'">
                                 <i :class="['fas', refreshingEpisodes ? 'fa-spinner fa-spin' : 'fa-sync-alt']"
                                     style="margin-right: 4px;"></i>
                                 {{ refreshingEpisodes ? '刷新中...' : '刷新集数' }}
@@ -12177,6 +13046,23 @@
                     // 🧩 首页板块顺序与开关(DgHome);老的「隐藏随机盲盒」并进来了,hideRandomRow 由它算出
                     homeLayout: (function () { try { return DgHome.initial(localStorage.getItem('donggua_home_layout'), localStorage.getItem('donggua_hide_random') === 'true', HOME_ROW_KEYS); } catch (e) { return DgHome.normalize(null, HOME_ROW_KEYS); } })(),
                     homeLayoutMsg: '',   // 读屏器播报:上移 / 下移到第几位
+                    // 🎨 主题 = 风格 × 明暗(偏好设置 →「主题」):themeStyle / themeMode = 选的(mode 含 system 跟随系统),themeTone = 实际亮 / 暗;
+                    //   <head> 里的 window.dgTheme 在页面出来之前就把 <html data-theme / data-style / data-tone> 套好了,这里只是读出来给设置页和杂志风首页用
+                    themeStyle: (window.dgTheme && window.dgTheme.get().style) || 'default',
+                    themeMode: (window.dgTheme && window.dgTheme.get().mode) || 'dark',
+                    themeTone: (window.dgTheme && window.dgTheme.resolved().tone) || 'dark',
+                    themeStyles: [
+                        { k: 'default', l: '默认', d: '原来的影院风格', v: { dark: '暗色', light: '亮色' } },
+                        { k: 'mono', l: '极简黑白', d: '只有黑白、直角、没有阴影;电脑上海报是黑白的,指上去才有颜色', v: { light: '白底黑字', dark: '黑底白字' } },
+                        { k: 'neon', l: '赛博霓虹', d: '品红与青色霓虹、发光描边、等宽大写标题、背景细网格', v: { dark: '夜间', light: '日间' } },
+                        { k: 'film', l: '复古胶片', d: '琥珀色、衬线标题,海报像冲洗出来的老相片', v: { dark: '暗房', light: '冲印纸' } },
+                        { k: 'magazine', l: '杂志风', d: '首页排成电子杂志:本期封面、专题、短评、本周播出表;其它页面换成杂志的配色和衬线字', v: { light: '日刊', dark: '夜读版' } },
+                    ],
+                    themeModes: [
+                        { k: 'dark', l: '暗色', icon: 'fa-moon' },
+                        { k: 'light', l: '亮色', icon: 'fa-sun' },
+                        { k: 'system', l: '跟随系统', icon: 'fa-circle-half-stroke' },
+                    ],
                     filterNsfw: (function () { try { return localStorage.getItem('donggua_filter_nsfw') !== 'false'; } catch (e) { return true; } })(),  // 过滤 NSFW 内容（默认开启）
                     // ⏭️ 跳过片头/片尾：按钮显示开关(默认开) / 自动跳过(默认关,开了不弹按钮直接跳/切下一集)
                     introSkipShow: (function () { try { return localStorage.getItem('donggua_intro_show') !== 'false'; } catch (e) { return true; } })(),
@@ -12259,6 +13145,8 @@
 
                 // 📐 封面/文字缩放：尽早套用本地值(避免封面先以默认大小渲染再跳变)
                 this.applyCoverScale();
+                // 🎨 「跟随系统」时系统亮暗变了,<head> 里的 dgTheme 会换 data-theme;这里同步给设置页 / 杂志风首页
+                try { if (window.dgTheme) window.dgTheme.onChange((r, p) => { this.themeStyle = p.style; this.themeMode = p.mode; this.themeTone = r.tone; }); } catch (e) { }
 
                 // 📺 TV 模式设置
                 if (this.isTVMode) {
@@ -12603,6 +13491,67 @@
                         .filter(Boolean);
                 },
                 homeLayoutIsDefault() { return DgHome.isDefault(this.homeLayout, HOME_ROW_KEYS); },
+                // 🎨 主题
+                themeDesc() {
+                    const t = this.themeStyles.find(x => x.k === this.themeStyle);
+                    return t ? t.d + '。现在是' + (this.themeMode === 'system' ? '跟随系统 · ' : '') + t.v[this.themeTone] : '';
+                },
+                isMagazine() { return this.themeStyle === 'magazine'; },
+                // 📰 杂志风首页:同一份首页数据(轮播 / 板块 / 榜单)排成杂志。期号 = 今年第几周
+                magIssue() {
+                    const d = new Date(), y = d.getFullYear();
+                    return { vol: Math.floor((d - new Date(y, 0, 1)) / 604800000) + 1, date: y + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 星期' + '日一二三四五六'[d.getDay()] };
+                },
+                magCover() { return this.heroList[0] || null; },
+                magAlso() { return this.heroList.slice(1, 5); },
+                // 板块照首页顺序走;一个榜单 = 一篇专题:头条(有剧照有简介、没上封面的那部)+ 引语(另一部的简介第一句)+ 榜单 8 部 + 海报条 6 部。
+                //   第二篇专题后面插「短评」;单双数专题图文左右交替。不是杂志主题时不算(返回空)
+                magBlocks() {
+                    if (!this.isMagazine) return [];
+                    const out = [], used = new Set();
+                    for (const h of this.heroList) if (h && h.rawData) used.add(h.rawData.id);
+                    let n = 0;
+                    for (const b of this.homeBlocks) {
+                        if (b.k !== 'row') { out.push(b); continue; }
+                        const list = (this.rowLists[b.key] || []).filter(x => x && (x.title || x.name));
+                        n++;
+                        const f = { id: b.id, k: 'row', key: b.key, config: b.config || { title: '' }, no: (n < 10 ? '0' : '') + n, flip: n % 2 === 0, lead: null, quote: null, list: [], strip: [] };
+                        if (list.length) {
+                            const lead = list.find(x => x.backdrop_path && x.overview && !used.has(x.id)) || list.find(x => x.backdrop_path && !used.has(x.id)) || list[0];
+                            used.add(lead.id);
+                            const rest = list.filter(x => x !== lead);
+                            const q = rest.find(x => x.overview && x.overview.length >= 24 && !used.has(x.id));
+                            Object.assign(f, { lead, quote: q ? { text: this.magSentence(q.overview, 90), item: q } : null, list: rest.slice(0, 8), strip: rest.slice(8, 14) });
+                        }
+                        out.push(f);
+                        if (n === 2) out.push({ id: 'reviews', k: 'reviews' });
+                    }
+                    if (n < 2) out.push({ id: 'reviews', k: 'reviews' });
+                    return out;
+                },
+                // 短评:每个榜单挑一部有简介、TMDB 评分 ≥ 6 的(不重复封面 / 专题头条 / 引语),凑 6 部
+                magReviews() {
+                    const out = [], seen = new Set();
+                    for (const h of this.heroList) if (h && h.rawData) seen.add(h.rawData.id);
+                    for (const b of this.magBlocks) if (b.lead) { seen.add(b.lead.id); if (b.quote) seen.add(b.quote.item.id); }
+                    for (const b of this.magBlocks) {
+                        if (b.k !== 'row') continue;
+                        const it = (this.rowLists[b.key] || []).find(x => x && x.overview && x.vote_average >= 6 && !seen.has(x.id));
+                        if (it) { seen.add(it.id); out.push(it); }
+                        if (out.length >= 6) break;
+                    }
+                    return out;
+                },
+                magToc() {
+                    const t = [];
+                    if (this.magCover) t.push({ id: 'mag-cover', l: '封面' });
+                    for (const b of this.magBlocks) {
+                        if (b.k === 'row' && b.lead) t.push({ id: 'mag-' + b.id, l: b.config.title });
+                        else if (b.k === 'reviews' && this.magReviews.length) t.push({ id: 'mag-reviews', l: '短评' });
+                        else if (b.k === 'calendar') t.push({ id: 'mag-calendar', l: '本周播出' });
+                    }
+                    return t.slice(0, 9);
+                },
                 // 📅 追剧日历
                 calHas() { const d = this.cal.data; return this.cal.enabled !== false && !!d && d.days.some(x => x.total > 0 || (x.counts.short || 0) > 0); },
                 calDays() {
@@ -13435,6 +14384,13 @@
                             this.homeLayout = DgHome.normalize(data.settings.homeLayout, HOME_ROW_KEYS);
                             try { localStorage.setItem('donggua_home_layout', JSON.stringify(this.homeLayout)); } catch (e) { }
                         }
+                        // 🎨 主题跨设备同步(本机刚换、还没推上去的不被服务器旧值盖掉)
+                        const th = data.settings.theme;
+                        if (th && typeof th === 'object' && window.dgTheme && !this._themePushT && (th.style !== this.themeStyle || th.mode !== this.themeMode)) {
+                            window.dgTheme.set({ style: th.style, mode: th.mode });   // 不认识的值 dgTheme 自己丢掉
+                            const p = window.dgTheme.get();
+                            this.themeStyle = p.style; this.themeMode = p.mode; this.themeTone = window.dgTheme.resolved().tone;
+                        }
                         // 📺 最近观看频道(跨设备)。服务器版是精简版(无 sources)；与本地按 id 合并、取较新 at，
                         //    并保留本地已有的 sources(本机看过的不丢源)，避免整表覆盖丢失本地源/本机新条目。
                         if (Array.isArray(data.settings.liveRecent)) {
@@ -14127,6 +15083,59 @@
                     clearTimeout(this._homePushT);
                     this._homePushT = setTimeout(() => this._pushHomeLayout(), 600);
                 },
+                // 🎨 换风格 / 明暗:立刻生效(<html> 上的属性、地址栏颜色),本机记住;登录了同步账号的推到服务器(user_settings.theme = { style, mode }),
+                //   连点几下只推最后一次(同 _saveHomeLayout)
+                themePalette(style, tone) { return window.dgTheme ? window.dgTheme.palette(style, tone === 'system' ? this.themeTone : tone) : 'dark'; },
+                setThemeStyle(k) { this._setTheme({ style: k }); },
+                setThemeMode(m) { this._setTheme({ mode: m }); },
+                _setTheme(o) {
+                    if (!window.dgTheme) return;
+                    window.dgTheme.set(o);
+                    const p = window.dgTheme.get();
+                    this.themeStyle = p.style; this.themeMode = p.mode; this.themeTone = window.dgTheme.resolved().tone;
+                    if (!(this.syncEnabled && this.syncToken)) return;
+                    clearTimeout(this._themePushT);
+                    this._themePushT = setTimeout(() => {
+                        this._themePushT = 0;
+                        fetch('/api/settings/push', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ token: this.syncToken, settings: { theme: { style: this.themeStyle, mode: this.themeMode } } })
+                        }).catch(() => { });
+                    }, 600);
+                },
+                // 📰 杂志风首页的小工具
+                magArt(item, size) {
+                    if (!item) return this.getPosterUrl('');
+                    if (item.backdrop_path) return String(TMDB_BACKDROP_URL || this.TMDB_BACKDROP_URL || '/api/tmdb-image/original').replace(/\/original$/, '/' + size) + item.backdrop_path;
+                    return this.getPosterUrl(item.poster_path);
+                },
+                magTitle(it) { return (it && (it.title || it.name)) || ''; },
+                magYear(it) { return String((it && (it.release_date || it.first_air_date)) || '').slice(0, 4); },
+                magVote(it) { return it && it.vote_average ? Number(it.vote_average).toFixed(1) : '—'; },
+                // 简介第一句(太长截断),用作导语 / 引语 / 短评
+                magSentence(text, max) {
+                    const t = String(text || '').replace(/\s+/g, ' ').trim();
+                    if (!t) return '';
+                    const m = t.match(/^[\s\S]*?[。！？!?](?=[^。！？!?”」』"]|$)/);
+                    let f = m ? m[0] : t;
+                    if (f.length > max) f = f.slice(0, max - 1) + '…';
+                    return f;
+                },
+                magMeta(it, extra) {
+                    const p = [this.magYear(it)];
+                    if (it && it.vote_average) p.push('★ ' + Number(it.vote_average).toFixed(1));
+                    if (extra) p.push(extra);
+                    return p.filter(Boolean).join(' · ');
+                },
+                // 简介第一句之后的部分(封面导语已经用了第一句)
+                magRest(text) {
+                    const t = String(text || '').replace(/\s+/g, ' ').trim();
+                    return t.slice(this.magSentence(t, Infinity).length).trim();
+                },
+                // 首字下沉只给真正的字:「一」和标点沉下去像一道杠 / 一个符号
+                magCap(text) { const c = String(text || '').trim().charAt(0); return !!c && !/[一\s“”"'「」『』《》〈〉()（）\[\]【】—–\-…·,.，。、:：;；!！?？]/.test(c); },
+                magOpen(it) { if (it) this.autoSearch(it.title || it.name, it.original_title || it.original_name || ''); },
+                magGo(id) { const el = document.getElementById(id); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
                 _pushHomeLayout() {
                     clearTimeout(this._homePushT);
                     this._homePushT = 0;
