@@ -183,6 +183,8 @@ node server.js                       # 或 pm2 start server.js --name donggua-tv
 | `CF_AI_ACCOUNT_ID` / `CF_AI_TOKEN` | — | Cloudflare Workers AI（账户 ID + 有 Workers AI 读写权限的 API Token）。配了才开：搜索框的🎙️语音搜索（录音交给 Whisper 转文字，约 $0.0005/分钟）、AI 找片。没配时语音搜索退回浏览器自带识别（Chrome 自带的要连谷歌，国内用不了） |
 | `CF_AI_DAILY_LIMIT` | `3000` | 每天最多调用 Workers AI 几次（全站合计，按北京日期），防止被刷爆账单 |
 | `VOICE_DISABLE` | — | `1` = 只关语音搜索（AI 找片照常） |
+| `AI_FIND_DISABLE` | — | `1` = 只关 AI 找片。不关时（需配 `CF_AI_*`），搜索框旁 ✨ 按钮、搜不到时「让 AI 找找」、语音说一段描述，都会把剧情 / 演员 / 台词 / 截图交给 AI 给出候选，再到 TMDB 核实（编造的片名会被筛掉），点一部就在本站搜线路。文字默认 glm-5.3（约 $0.45/千次），截图用 deepseek-v4.1-flash（约 $0.22/千次） |
+| `CF_AI_FIND_MODEL` | — | 换 AI 找片的文字主模型（填 Workers AI 模型名，如 `@cf/deepseek-ai/deepseek-v4.1-flash-1017`）；主模型下架或不可用时会自动换备用 |
 | `CORS_PROXY_URL` | — | Cloudflare Worker CORS 代理，**边缘去广告与直播都靠它**。可逗号分隔多个，第一个是主代理，故障时前端自动换备用 |
 | `TMDB_PROXY_URL` | — | TMDB 反代。图片与搜索翻译设了就用；`/api/tmdb-proxy` 按访客 IP 判断大陆才走 |
 | `SERVER_IN_CHINA` | — | 设 `true`：服务器自己发起的 TMDB 请求（分享卡片、预览、SEO 页、sitemap）强制走反代 |

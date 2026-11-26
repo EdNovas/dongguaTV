@@ -2318,6 +2318,65 @@
         .voice-sub { margin-top: 6px; color: #888; font-size: 13px; }
         .voice-cancel { margin-top: 18px; height: 36px; padding: 0 22px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.18); background: transparent; color: #bbb; font-size: 14px; cursor: pointer; }
         .voice-cancel:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); }
+        /* ✨ AI 找片 */
+        .search-ai { color: #ffb36b; }
+        .search-ai:hover, .search-ai:focus-visible { color: #ffd2a8; }
+        .search-box-wrapper .search-ai { margin-right: 0; }
+        .aif-mask {
+            position: fixed; inset: 0; z-index: 3000; background: rgba(0, 0, 0, 0.72);
+            display: flex; align-items: flex-start; justify-content: center; padding: max(6vh, 16px) 16px 16px; overflow-y: auto;
+        }
+        .aif-card {
+            width: min(620px, 100%); padding: 18px 18px 14px; border-radius: 20px; background: #181818;
+            border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        }
+        .aif-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .aif-head h3 { margin: 0; font-size: 19px; font-weight: 800; color: #fff; }
+        .aif-head h3 i { color: #ffb36b; margin-right: 6px; }
+        .aif-x { width: 34px; height: 34px; border-radius: 50%; border: none; background: rgba(255, 255, 255, 0.06); color: #bbb; cursor: pointer; }
+        .aif-x:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+        .aif-box { border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; background: rgba(255, 255, 255, 0.03); padding: 10px 12px; }
+        .aif-box:focus-within { border-color: rgba(255, 179, 107, 0.6); }
+        .aif-text { width: 100%; resize: none; border: none; outline: none; background: transparent; color: #fff; font-size: 15px; line-height: 1.6; }
+        .aif-text::placeholder { color: #777; }
+        .aif-img { position: relative; display: inline-block; margin: 6px 0 4px; }
+        .aif-img img { max-height: 120px; max-width: 220px; border-radius: 8px; display: block; }
+        .aif-img button { position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; border: none; background: #333; color: #fff; font-size: 12px; cursor: pointer; }
+        .aif-tools { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+        .aif-up { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.16); color: #ccc; font-size: 13px; cursor: pointer; margin: 0; }
+        .aif-up:hover { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+        .aif-tip { color: #666; font-size: 12px; }
+        .aif-go { margin-left: auto; height: 36px; padding: 0 20px; border-radius: 999px; border: none; color: #fff; font-weight: 700; font-size: 14px; cursor: pointer; background: linear-gradient(135deg, #e50914, #ff6a00); }
+        .aif-go:disabled { opacity: 0.45; cursor: default; }
+        .aif-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 12px; color: #777; font-size: 12px; }
+        .aif-examples button { border: 1px solid rgba(255, 255, 255, 0.12); background: transparent; color: #bbb; border-radius: 999px; padding: 5px 12px; font-size: 12px; cursor: pointer; text-align: left; }
+        .aif-examples button:hover { color: #fff; border-color: rgba(255, 255, 255, 0.35); }
+        .aif-status { margin-top: 14px; color: #aaa; font-size: 14px; }
+        .aif-status.is-err { color: #ff8a8a; }
+        .aif-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+        .aif-item {
+            display: flex; align-items: stretch; gap: 12px; width: 100%; text-align: left; padding: 8px; border-radius: 12px; cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.06); background: rgba(255, 255, 255, 0.03); color: inherit; transition: background 0.15s, border-color 0.15s;
+        }
+        .aif-item:hover, .aif-item:focus-visible { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); }
+        .aif-poster { flex: none; width: 62px; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; background: #222; }
+        .aif-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .aif-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+        .aif-t { color: #fff; font-size: 15px; font-weight: 700; }
+        .aif-t em { font-style: normal; font-weight: 400; color: #888; font-size: 12px; margin-left: 8px; }
+        .aif-r { color: #ffcf9e; font-size: 12px; line-height: 1.5; }
+        .aif-r i { margin-right: 2px; }
+        .aif-o { color: #999; font-size: 12px; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .aif-go-ic { flex: none; align-self: center; color: #666; padding: 0 6px; }
+        .aif-unv { margin-top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: #888; font-size: 12px; }
+        .aif-unv button { border: 1px dashed rgba(255, 255, 255, 0.2); background: transparent; color: #ccc; border-radius: 999px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
+        .aif-foot { margin-top: 14px; color: #555; font-size: 11px; text-align: center; }
+        @media (max-width: 576px) {
+            .aif-mask { padding: 10px; }
+            .aif-card { padding: 14px 12px 12px; border-radius: 16px; }
+            .aif-tip { display: none; }
+            .aif-poster { width: 54px; }
+        }
         /* 📅 追剧日历 */
         .cal-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .cal-week { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
@@ -5216,6 +5275,7 @@
                 <i class="fas fa-search search-icon" @click="submitSearch(true)"></i>
                 <input type="text" v-model="keyword" @keyup.enter="submitSearch(true)" @input="debouncedSearch"
                     class="search-input" placeholder="输入片名或分类（如 泰剧、韩综）">
+                <button v-if="aiFindOn" type="button" class="search-mic search-ai" @click="aiFindOpen()" aria-label="AI 找片" title="AI 找片:描述剧情或上传截图"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i></button>
                 <button v-if="voiceAvail" type="button" class="search-mic" @click="voiceStart" aria-label="语音搜索" title="语音搜索"><i class="fas fa-microphone" aria-hidden="true"></i></button>
             </div>
         </div>
@@ -5707,6 +5767,55 @@
             </section>
         </div>
 
+        <!-- ✨ AI 找片:描述剧情 / 演员 / 台词 / 画面,或上传截图(也能直接粘贴)→ AI 给候选、服务器到 TMDB 核实 → 点一部就在本站搜线路 -->
+        <div v-if="aiFind.open" class="aif-mask" @click.self="aiFindClose" @keydown.esc="aiFindClose" role="dialog" aria-modal="true" aria-labelledby="aif-title">
+            <div class="aif-card" @paste="aiFindPaste">
+                <div class="aif-head">
+                    <h3 id="aif-title"><i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i> AI 找片</h3>
+                    <button type="button" class="aif-x" @click="aiFindClose" aria-label="关闭"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                </div>
+                <div class="aif-box">
+                    <textarea ref="aifText" v-model="aiFind.q" maxlength="300" rows="3" class="aif-text"
+                        placeholder="描述你想找的片:剧情、演员、台词、画面都行;也可以传一张截图问是哪部" @keydown.enter.exact.prevent="aiFindGo()"></textarea>
+                    <div class="aif-img" v-if="aiFind.image">
+                        <img :src="aiFind.image" alt="要找的截图">
+                        <button type="button" @click="aiFind.image = ''" aria-label="去掉截图"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                    </div>
+                    <div class="aif-tools">
+                        <label class="aif-up" tabindex="0" @keydown.enter="$refs.aifFile && $refs.aifFile.click()">
+                            <input ref="aifFile" type="file" accept="image/*" @change="aiFindPickFile" hidden>
+                            <i class="fas fa-image" aria-hidden="true"></i> {{ aiFind.image ? '换一张' : '传截图' }}</label>
+                        <span class="aif-tip">可以直接粘贴图片</span>
+                        <button type="button" class="aif-go" :disabled="aiFind.loading || (!aiFind.q.trim() && !aiFind.image)" @click="aiFindGo()">
+                            <i v-if="aiFind.loading" class="fas fa-spinner fa-spin" aria-hidden="true"></i> {{ aiFind.loading ? '正在想…' : '找一找' }}</button>
+                    </div>
+                </div>
+                <div class="aif-examples" v-if="!aiFind.loading && !aiFind.done && !aiFind.error">
+                    <span>试试这样问:</span>
+                    <button type="button" v-for="e in aiFindExamples" :key="e" @click="aiFind.q = e; aiFindGo()">{{ e }}</button>
+                </div>
+                <div class="aif-status" v-if="aiFind.loading" aria-live="polite"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> AI 正在想,一般两三秒…</div>
+                <div class="aif-status is-err" v-else-if="aiFind.error" aria-live="polite">{{ aiFind.error }}</div>
+                <div class="aif-status" v-else-if="aiFind.done && !aiFind.items.length && !aiFind.unverified.length" aria-live="polite">没找到对得上的作品,换个说法或多说点细节试试</div>
+                <div class="aif-list" v-if="aiFind.items.length">
+                    <button type="button" class="aif-item" v-for="(it, i) in aiFind.items" :key="it.media + it.tmdb" @click="aiFindPickItem(it)">
+                        <span class="aif-poster"><img :src="getPosterUrl(it.poster)" loading="lazy" alt=""></span>
+                        <span class="aif-meta">
+                            <span class="aif-t">{{ it.title }}<em v-if="it.year">{{ it.year }}</em><em v-if="it.media === 'tv'">剧集</em><em v-else>电影</em></span>
+                            <span class="aif-r" v-if="it.reason"><i class="fas fa-lightbulb" aria-hidden="true"></i> {{ it.reason }}</span>
+                            <span class="aif-o" v-if="it.overview">{{ it.overview }}</span>
+                        </span>
+                        <span class="aif-go-ic"><i class="fas fa-magnifying-glass" aria-hidden="true"></i></span>
+                    </button>
+                </div>
+                <div class="aif-unv" v-if="aiFind.unverified.length">
+                    <span>{{ aiFind.items.length ? '也可能是:' : 'AI 猜是(片库里没核实到):' }}</span>
+                    <button type="button" v-for="u in aiFind.unverified" :key="u.title" @click="aiFindPickItem(u)">{{ u.title }}</button>
+                </div>
+                <div class="aif-foot">结果由 AI 生成,可能不准;点一部就在本站搜它的线路</div>
+            </div>
+        </div>
+
         <!-- 🎙️ 语音搜索:听(音量跟着跳)→ 识别中 → 填进搜索框直接搜;说完停顿一秒多自动结束,点麦克风也能提前结束 -->
         <div v-if="voice.on" class="voice-mask" @click.self="voiceCancel" @keydown.esc="voiceCancel" role="dialog" aria-modal="true" aria-label="语音搜索">
             <div class="voice-card">
@@ -5872,6 +5981,10 @@
                     <p>🔍 或尝试搜索其他热门影片</p>
                 </div>
                 <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:24px;">
+                    <button v-if="aiFindOn" type="button" class="btn btn-light aif-empty-btn" @click="aiFindOpen(keyword)"
+                        style="border-radius: 20px; padding: 8px 25px;">
+                        <i class="fas fa-wand-magic-sparkles"></i> 让 AI 找找
+                    </button>
                     <button v-if="requestsEnabled" class="btn btn-danger" @click="openRequestModal(keyword)"
                         style="border-radius: 20px; padding: 8px 25px;">
                         <i class="fas fa-paper-plane"></i> 求这部片
@@ -11852,7 +11965,13 @@
                 for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
                 return btoa(s);
             }
-            return { clean, downsample, wav, b64 };
+            // 说的是一段描述而不是片名(「有个剧男主每次坐公交车都会爆炸」)→ 交给 AI 找片
+            function descriptive(t) {
+                const s = clean(t);
+                if (!s) return false;
+                return s.length >= 14 || /^(?:有个|有一?部|有部|一个|一部|那个|那部|讲|关于|推荐|找一?部)/.test(s) || /(?:推荐|类似|像.{1,12}一样|讲的是|讲一个|里面有)/.test(s);
+            }
+            return { clean, descriptive, downsample, wav, b64 };
         })();
         // </dg-voice-core>
         // 📅 追剧日历的分类(顺序 = 分类标签顺序)与日期加减(YYYY-MM-DD,按 UTC 算不受本机时区影响)
@@ -12189,6 +12308,10 @@
                     // 🎙️ 语音搜索:phase listen / busy / err;voiceAsr = 服务器能转文字(/api/config.voice_asr)
                     voice: { on: false, phase: 'listen', level: 0, text: '', msg: '' },
                     voiceAsr: false,
+                    // ✨ AI 找片(/api/config.ai_find)
+                    aiFindOn: false,
+                    aiFind: { open: false, q: '', image: '', loading: false, done: false, error: '', items: [], unverified: [] },
+                    aiFindExamples: ['男主每次坐公交车都会爆炸,然后重新醒来', '推荐几部像《开端》一样的时间循环剧', '胡歌演的,讲九十年代上海做生意的剧'],
                     // 🔔 Web Push 更新提醒
                     pushEnabled: false,             // 来自 /api/config(push_enabled)
                     pushSubscribed: false,          // 本浏览器当前是否已订阅(打开偏好设置时按 pushManager 实况刷新)
@@ -13169,6 +13292,7 @@
                         // ⭐ 收藏 / 🔔 推送(都要服务器 sqlite;没有就整个入口隐藏)
                         this.favoritesEnabled = !!config.favorites_enabled;
                         this.voiceAsr = !!config.voice_asr;   // 🎙️ 语音搜索走服务器转文字
+                        this.aiFindOn = !!config.ai_find;     // ✨ AI 找片
                         this.pushEnabled = !!config.push_enabled;
                         // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
                         this.liveEnabled = !!config.live_enabled;
@@ -17035,8 +17159,85 @@
                     const v = this.voice, q = DgVoice.clean(text);
                     if (!q) { Object.assign(v, { phase: 'err', text: '', msg: '没听清,点一下再说一次' }); return; }
                     v.on = false;
+                    // 说的是一段描述(不是片名)→ 交给 AI 找片
+                    if (this.aiFindOn && DgVoice.descriptive(text)) { this.aiFindOpen(String(text).replace(/[。.!！]+$/, '').trim()); return; }
                     this.keyword = q;
                     this.submitSearch(true);
+                },
+
+                // ========== ✨ AI 找片 ==========
+                aiFindOpen(q) {
+                    const a = this.aiFind;
+                    if (!this.aiFindOn) return;
+                    const fresh = typeof q === 'string' && q.trim();
+                    if (!a.open || fresh) Object.assign(a, { image: '', loading: false, done: false, error: '', items: [], unverified: [] });
+                    a.open = true;
+                    if (fresh) a.q = q.trim().slice(0, 300);
+                    this.$nextTick(() => { const t = this.$refs.aifText; if (t && t.focus) t.focus({ preventScroll: true }); });
+                    if (fresh) this.aiFindGo();
+                },
+                aiFindClose() {
+                    this.aiFind.open = false;
+                    this._aiSeq = (this._aiSeq || 0) + 1;   // 还在问的请求回来也不用了
+                    this.aiFind.loading = false;
+                },
+                async aiFindGo() {
+                    const a = this.aiFind;
+                    if (a.loading || (!a.q.trim() && !a.image)) return;
+                    const seq = (this._aiSeq = (this._aiSeq || 0) + 1);
+                    Object.assign(a, { loading: true, done: false, error: '', items: [], unverified: [] });
+                    try {
+                        const r = await fetchT('/api/ai/find', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ q: a.q.trim(), image: a.image || '', token: localStorage.getItem('emax_auth_hash') || '' }),
+                        }, 40000);
+                        const j = await r.json().catch(() => ({}));
+                        if (seq !== this._aiSeq) return;
+                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+                        a.items = (j.items || []).map(x => Object.freeze(x));
+                        a.unverified = (j.unverified || []).map(x => Object.freeze(x));
+                        a.done = true;
+                    } catch (e) {
+                        if (seq !== this._aiSeq) return;
+                        a.error = /AbortError|timeout|超时/i.test(String(e && (e.name + e.message))) ? 'AI 想太久了,再试一次' : (e && e.message && !/^HTTP|Failed to fetch|NetworkError/.test(e.message) ? e.message : '网络不太好,再试一次');
+                    } finally {
+                        if (seq === this._aiSeq) a.loading = false;
+                    }
+                },
+                aiFindPickItem(it) {
+                    this.aiFindClose();
+                    this.autoSearch(it.title, it.original || '');
+                },
+                aiFindPickFile(e) {
+                    const f = e && e.target && e.target.files && e.target.files[0];
+                    if (e && e.target) e.target.value = '';
+                    if (f) this._aiFindSetImage(f);
+                },
+                aiFindPaste(e) {
+                    const items = (e.clipboardData && e.clipboardData.items) || [];
+                    for (const it of items) {
+                        if (it.kind === 'file' && /^image\//.test(it.type)) { e.preventDefault(); this._aiFindSetImage(it.getAsFile()); return; }
+                    }
+                },
+                // 截图缩到最长边 1024、转 JPEG(手机截图 3~5MB → 一两百 KB;服务器只收 jpg / png / webp)
+                async _aiFindSetImage(file) {
+                    const a = this.aiFind;
+                    if (!file || !/^image\//.test(file.type || '')) { a.error = '只能传图片'; return; }
+                    if (file.size > 25 * 1024 * 1024) { a.error = '图片太大了'; return; }
+                    a.error = '';
+                    try {
+                        const url = URL.createObjectURL(file);
+                        const img = await new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = url; });
+                        const k = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+                        const c = document.createElement('canvas');
+                        c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+                        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                        URL.revokeObjectURL(url);
+                        a.image = c.toDataURL('image/jpeg', 0.85);
+                        a.done = false; a.items = []; a.unverified = [];
+                    } catch (err) {
+                        a.error = '这张图读不出来,换一张试试';
+                    }
                 },
 
                 // ========== 📅 追剧日历 ==========

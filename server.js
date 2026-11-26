@@ -1175,6 +1175,44 @@ app.post('/api/voice/transcribe', voiceLimiter, async (req, res) => {
     }
 });
 
+// ✨ AI 找片:描述剧情 / 演员 / 台词 / 画面,或上传截图 → Workers AI 给候选 → TMDB 核实(编造的片名筛掉)→ 前端点了照常搜线路。
+//    AI_FIND_DISABLE=1 关;CF_AI_FIND_MODEL 换文字主模型(默认 glm-5.3;截图用 deepseek-v4.1-flash;主模型不可用时按顺序换备用)
+const AI_FIND_ENABLED = cfAi.enabled() && !envFlag('AI_FIND_DISABLE');
+async function tmdbGetServer(p, params) {
+    const key = process.env.TMDB_API_KEY;
+    if (!key) return null;
+    const proxy = process.env['TMDB_PROXY_URL'];
+    const base = proxy ? `${proxy.replace(/\/$/, '')}/api/3` : 'https://api.themoviedb.org/3';
+    const r = await axios.get(base + p, { params: Object.assign({ api_key: key }, params), timeout: 6000 });
+    return r.data;
+}
+const aiFind = AI_FIND_ENABLED ? require('./lib/ai-find').createAiFind({
+    ai: cfAi,
+    tmdbGet: process.env.TMDB_API_KEY ? tmdbGetServer : null,
+    log: (...a) => console.log('[AiFind]', ...a),
+    opts: /^@cf\/[\w.-]+\/[\w.-]+$/.test(process.env.CF_AI_FIND_MODEL || '')
+        ? { textModels: [{ id: process.env.CF_AI_FIND_MODEL, extra: {} }, { id: '@cf/deepseek-ai/deepseek-v4.1-flash-1017', extra: { reasoning_effort: 'none' } }] } : {},
+}) : null;
+const aiFindLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, keyGenerator: ipKey, message: { error: '问得太频繁了,歇一会儿再试' } });
+const AI_IMG_RE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]{16}/;
+app.post('/api/ai/find', aiFindLimiter, async (req, res) => {
+    if (!aiFind) return res.status(404).json({ error: 'disabled' });
+    const bad = aiCaller(req);
+    if (bad) return res.status(bad.status).json({ error: bad.error });
+    const q = typeof req.body.q === 'string' ? req.body.q.trim().slice(0, 300) : '';
+    const image = req.body.image == null || req.body.image === '' ? '' : req.body.image;
+    if (image && (typeof image !== 'string' || image.length > 2000000 || !AI_IMG_RE.test(image) || !/^[A-Za-z0-9+/]*={0,2}$/.test(image.slice(-64)))) {
+        return res.status(400).json({ error: '图片格式不对(支持 jpg / png / webp,最大约 1.5MB)' });
+    }
+    if (!q && !image) return res.status(400).json({ error: '说说想找什么,或者传一张截图' });
+    try {
+        res.json(await aiFind.find({ q, image }));
+    } catch (e) {
+        console.warn('[AiFind] 失败:', e.message);
+        res.status(e.code === 'quota' ? 429 : 502).json({ error: e.code === 'quota' ? '今天的 AI 次数用完了,明天再来' : e.code === 'timeout' ? 'AI 想太久了,再试一次' : 'AI 暂时不可用,稍后再试' });
+    }
+});
+
 // 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback
 async function siteSearchFetch(site, kw) {
     if (titleIndex && titleIndex.useFor(site)) {
@@ -1697,6 +1735,8 @@ app.get('/api/config', (req, res) => {
         favorites_enabled: !!(favorites && favorites.enabled()),
         // 🎙️ 语音搜索走服务器转文字(配了 Workers AI 才有;没有时前端退回浏览器自带的识别)
         voice_asr: VOICE_ENABLED,
+        // ✨ AI 找片(配了 Workers AI 才有)
+        ai_find: !!aiFind,
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });
