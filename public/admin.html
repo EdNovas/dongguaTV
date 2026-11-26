@@ -94,6 +94,15 @@
         .t-unknown { background: rgba(255, 255, 255, .08); color: #c8c8d2; }
         .b-ban { background: rgba(248, 113, 113, .18); color: var(--bad); }
         .b-live { background: rgba(25, 158, 112, .2); color: #7ee2bd; }
+        /* 💬 评论 */
+        .ucm-row { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-top: 1px solid var(--line); }
+        .ucm-row:first-child { border-top: 0; }
+        .ucm-main { flex: 1; min-width: 0; }
+        .ucm-text { white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; line-height: 1.6; }
+        .ucm-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); margin-top: 4px; }
+        .ucm-acts { display: flex; flex-wrap: wrap; gap: 6px; flex: 0 0 auto; justify-content: flex-end; max-width: 46%; }
+        .ucm-words { width: 100%; min-height: 120px; background: var(--panel-2); color: var(--text); border: 1px solid var(--line-2); border-radius: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.6; }
+        @media (max-width: 640px) { .ucm-row { flex-direction: column; } .ucm-acts { max-width: none; justify-content: flex-start; } }
         /* 🗂️ 片库 */
         .b-idx { background: rgba(229, 9, 20, .18); color: #ff9aa0; }
         .b-ok { background: rgba(25, 158, 112, .2); color: #7ee2bd; }
@@ -914,6 +923,66 @@
                             </template>
                         </template>
                     </section>
+
+                    <!-- ======================= 💬 评论 / 用户弹幕 ======================= -->
+                    <section v-show="tab === 'ucomm'" class="sec" aria-label="评论">
+                        <p class="since">播放页的评论和观众自己发的弹幕。被 3 个不同的人举报会自动收起(只有作者自己还看得见)，等你决定恢复还是删除；封禁作者后他发过的全部不再显示，解封就回来。</p>
+                        <div class="subtabs" role="group" aria-label="评论还是弹幕">
+                            <button type="button" :class="{ on: uc.kind === 'c' }" :aria-pressed="uc.kind === 'c'" @click="ucSet({ kind: 'c' })">评论<span class="n">{{ ucCount('c', 'all') }}</span></button>
+                            <button type="button" :class="{ on: uc.kind === 'd' }" :aria-pressed="uc.kind === 'd'" @click="ucSet({ kind: 'd' })">弹幕<span class="n">{{ ucCount('d', 'all') }}</span></button>
+                        </div>
+                        <div class="toolbar">
+                            <div class="seg" role="group" aria-label="筛选">
+                                <button v-for="f in K.UC_FILTERS" :key="f.id" type="button" :class="{ on: uc.filter === f.id }" :aria-pressed="uc.filter === f.id" @click="ucSet({ filter: f.id })">{{ f.label }}<span class="seg-n">{{ ucCount(uc.kind, f.id) }}</span></button>
+                            </div>
+                            <input v-model="uc.qInput" type="search" placeholder="搜内容 / 片名" aria-label="搜索评论" @keydown.enter.prevent="ucSet({ q: uc.qInput.trim() })">
+                            <button type="button" class="btn btn-sm" @click="ucSet({ q: uc.qInput.trim() })">搜索</button>
+                            <span v-if="uc.data" class="muted count">共 {{ fmtNum(uc.data.total) }} 条</span>
+                        </div>
+                        <load-state :st="uc" :has="!!uc.data" @retry="loadUcomm"></load-state>
+                        <template v-if="uc.data">
+                            <div v-if="!uc.data.available" class="empty">服务器没启用评论(要 CACHE_TYPE=sqlite，且没设 COMMENTS_DISABLE=1)。</div>
+                            <div v-else-if="!uc.data.items.length" class="empty">没有匹配的{{ uc.kind === 'd' ? '弹幕' : '评论' }}</div>
+                            <div v-else class="panel p0" :class="{ dim: uc.loading }">
+                                <div v-for="x in uc.data.items" :key="x.kind + x.id" class="ucm-row">
+                                    <div class="ucm-main">
+                                        <div class="ucm-text">{{ x.text }}</div>
+                                        <div class="ucm-meta">
+                                            <span>《{{ x.title || '?' }}》</span>
+                                            <span v-if="x.ep">{{ x.ep }}</span>
+                                            <span v-if="x.kind === 'd'">{{ fmtClock(x.t) }}</span>
+                                            <span v-if="x.parent" class="badge b-unk">回复</span>
+                                            <span class="badge" :class="(K.UC_STATUS[x.status] || K.UC_STATUS[0])[1]">{{ (K.UC_STATUS[x.status] || K.UC_STATUS[0])[0] }}</span>
+                                            <span v-if="x.reports" class="badge b-ban">举报 {{ x.reports }}</span>
+                                            <span v-if="x.kind === 'c' && x.likes">赞 {{ x.likes }}</span>
+                                            <span :title="fmtAbs(x.at)">{{ fmtRel(x.at) }}</span>
+                                        </div>
+                                        <div class="ucm-meta">
+                                            <button type="button" class="linkish" @click="openUser(x.token, { identity: x.who })">{{ x.who || shortTok(x.token) }}</button>
+                                            <span class="muted">显示为 {{ x.nick }}</span>
+                                            <span v-if="x.banned" class="badge b-ban">⛔ 已封禁</span>
+                                        </div>
+                                    </div>
+                                    <div class="ucm-acts">
+                                        <button v-if="x.status === 0" type="button" class="btn btn-sm" :disabled="uc.busy[x.kind + x.id]" @click="ucAct(x, 'hide')">隐藏</button>
+                                        <button v-else type="button" class="btn btn-sm btn-ok" :disabled="uc.busy[x.kind + x.id]" @click="ucAct(x, 'show')">恢复</button>
+                                        <button type="button" class="btn btn-sm btn-danger-ghost" :disabled="uc.busy[x.kind + x.id]" @click="ucAct(x, 'delete')">删除</button>
+                                        <button type="button" class="btn btn-sm" :class="x.banned ? 'btn-ok' : 'btn-danger-ghost'" :disabled="uc.busy['ban' + x.token]" @click="ucBan(x)">{{ x.banned ? '解封作者' : '封禁作者' }}</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <pager :page="uc.data.page || uc.page" :pages="uc.data.pages || 1" @go="ucGoPage"></pager>
+                        </template>
+                        <div class="panel" style="margin-top:16px">
+                            <div class="panel-h"><h2>屏蔽词</h2><span class="muted">一行一个，评论和弹幕里出现就发不出去(不分大小写，中间夹空格、符号也认)；网址和长串数字一直不收</span></div>
+                            <textarea v-model="uc.words" class="ucm-words" aria-label="屏蔽词" :disabled="uc.wordsBusy"></textarea>
+                            <div class="toolbar" style="margin-top:8px">
+                                <button type="button" class="btn btn-sm btn-primary" :disabled="uc.wordsBusy || !uc.wordsLoaded" @click="ucSaveWords">保存</button>
+                                <button type="button" class="btn btn-sm" :disabled="uc.wordsBusy || !uc.wordsLoaded" @click="ucResetWords">换回默认</button>
+                                <span class="muted count">{{ ucWordCount }} 个词</span>
+                            </div>
+                        </div>
+                    </section>
                 </main>
             </template>
 
@@ -1090,7 +1159,9 @@
             const CH_LABEL = Object.fromEntries(CHANNELS);
             const SOURCE_PRESET = ['微信', '企业微信', 'QQ', 'QQ浏览器', '微博', '钉钉', '飞书', '抖音/TikTok', '小红书', '百度App', 'Telegram', 'Facebook', 'Instagram', 'LINE', 'X', 'Google', '百度', 'Bing', '直接打开'];
             const K = Object.freeze({
-                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }, { id: 'library', label: '片库', icon: '🗂️' }],
+                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }, { id: 'library', label: '片库', icon: '🗂️' }, { id: 'ucomm', label: '评论', icon: '💬' }],
+                UC_STATUS: { 0: ['正常', 'b-ok'], 1: ['已隐藏', 'b-ban'], 2: ['举报收起', 'b-unk'], 3: ['审核拦下', 'b-unk'] },
+                UC_FILTERS: [{ id: 'all', label: '全部' }, { id: 'reported', label: '被举报' }, { id: 'hidden', label: '已隐藏' }],
                 TI_MODE: { nosearch: ['走索引', 'b-idx'], ok: ['搜索正常', 'b-ok'], unknown: ['未确认', 'b-unk'] },
                 USER_STATUS: [['all', '全部状态'], ['active1', '今日活跃'], ['active7', '7 日活跃'], ['active30', '30 日活跃'], ['dormant', '沉睡 30 天+'], ['never', '从未观看'], ['banned', '已封禁'], ['requests', '有求片'], ['shares', '有分享']],
                 USER_SORTS: [['last_active', '最近活跃'], ['last_login', '最近登录'], ['watch', '观看时长'], ['episodes', '观看集数'], ['shows', '看过剧数'], ['last_watch', '最近观看'], ['first_seen', '首次出现'], ['share_opens', '分享带来打开'], ['shares', '分享次数'], ['requests', '求片数']],
@@ -1433,13 +1504,15 @@
                         rq: Object.assign(st0(), { status: 'pending', qInput: '', q: '', sort: 'new', sel: {}, open: null, drafts: {}, busy: {}, badPoster: {}, bulkNote: '', bulkLink: '', bulkBusy: false, bulkExtra: false }),
                         sh: Object.assign(st0(), { channel: '', source: '', page: 1 }),
                         ti: Object.assign(st0(), { busy: {}, showAll: false, trySite: '', tryQ: '', tryRes: null, tryBusy: false }),
+                        uc: Object.assign(st0(), { kind: 'c', filter: 'all', qInput: '', q: '', page: 1, busy: {}, words: '', wordsDefault: [], wordsLoaded: false, wordsBusy: false }),
                         dw: Object.assign(st0(), { open: false, token: '', seed: null, sub: 'shows', exp: {}, banBusy: false }),
                         cf: { open: false, title: '', message: '', ok: '确定', danger: false },
                         toasts: []
                     };
                 },
                 computed: {
-                    curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh, library: this.ti }; return !!(m[this.tab] && m[this.tab].loading); },
+                    curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh, library: this.ti, ucomm: this.uc }; return !!(m[this.tab] && m[this.tab].loading); },
+                    ucWordCount() { return this.uc.words.split(/\r?\n/).map(w => w.trim()).filter(Boolean).length; },
                     // ---- 片库 ----
                     tiRows() {
                         const d = this.ti.data; if (!d || !Array.isArray(d.sites)) return [];
@@ -1730,10 +1803,11 @@
                         else if (id === 'requests' && !this.rq.data && !this.rq.loading) this.loadRequests();
                         else if (id === 'shares' && !this.sh.data && !this.sh.loading) this.loadShares();
                         else if (id === 'library' && !this.ti.loading) this.loadTitleIndex();
+                        else if (id === 'ucomm' && !this.uc.data && !this.uc.loading) { this.loadUcomm(); this.loadUcWords(); }
                     },
                     refresh() {
                         if (this.tab === 'overview') this.loadOverview();
-                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares, library: this.loadTitleIndex })[this.tab].call(this); }
+                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares, library: this.loadTitleIndex, ucomm: this.loadUcomm })[this.tab].call(this); }
                     },
                     goKpi(go) {
                         if (go.tab === 'users') {
@@ -1805,6 +1879,70 @@
                         });
                     },
                     goSharesPage(p) { this.sh.page = p; this.loadShares(); window.scrollTo(0, 0); },
+                    // ---------- 💬 评论 / 用户弹幕 ----------
+                    ucCount(kind, f) { const c = this.uc.data && this.uc.data.counts && this.uc.data.counts[kind]; return c && c[f] != null ? fmtNum(c[f]) : ''; },
+                    ucSet(patch) { Object.assign(this.uc, patch); this.uc.page = 1; this.loadUcomm(); },
+                    ucGoPage(p) { this.uc.page = p; this.loadUcomm(); window.scrollTo(0, 0); },
+                    ucResetWords() { this.uc.words = this.uc.wordsDefault.join('\n'); },
+                    loadUcomm() {
+                        const u = this.uc;
+                        const qs = new URLSearchParams({ kind: u.kind, filter: u.filter, page: String(u.page), size: String(PAGE_SIZE) });
+                        if (u.q) qs.set('q', u.q);
+                        return runLoad('uc', u, signal => api('/api/admin/ucomm?' + qs.toString(), { signal })).then(d => {
+                            if (d && !Array.isArray(d.items)) d.items = [];
+                        });
+                    },
+                    async loadUcWords() {
+                        try {
+                            const d = await api('/api/admin/ucomm/words');
+                            this.uc.words = (d.words || []).join('\n'); this.uc.wordsDefault = d.defaults || []; this.uc.wordsLoaded = !!d.available;
+                        } catch (e) { if (e.code !== 'auth') this.toast('屏蔽词没读出来：' + e.message, 'err'); }
+                    },
+                    async ucSaveWords() {
+                        this.uc.wordsBusy = true;
+                        try {
+                            const d = await api('/api/admin/ucomm/words', { method: 'POST', body: { words: this.uc.words.split(/\r?\n/) } });
+                            this.uc.words = (d.words || []).join('\n');
+                            this.toast('屏蔽词已保存(' + (d.words || []).length + ' 个)', 'ok');
+                        } catch (e) { if (e.code !== 'auth') this.toast('保存失败：' + e.message, 'err'); }
+                        finally { this.uc.wordsBusy = false; }
+                    },
+                    async ucAct(x, action) {
+                        const what = x.kind === 'd' ? '弹幕' : '评论';
+                        if (action === 'delete') {
+                            const ok = await this.ask({ title: '删除' + what, danger: true, ok: '删除', message: '删除这条' + what + '？删了就找不回来了' + (x.kind === 'c' && !x.parent ? '，它下面的回复也会一起删掉。' : '。') });
+                            if (!ok) return;
+                        }
+                        const bk = x.kind + x.id;
+                        this.uc.busy = Object.assign({}, this.uc.busy, { [bk]: true });
+                        try {
+                            await api('/api/admin/ucomm/action', { method: 'POST', body: { kind: x.kind, id: x.id, action } });
+                            this.toast(({ hide: '已隐藏', show: '已恢复', delete: '已删除' })[action], 'ok');
+                            this.loadUcomm();
+                        } catch (e) { if (e.code !== 'auth') this.toast('操作失败：' + e.message, 'err'); }
+                        finally { const b = Object.assign({}, this.uc.busy); delete b[bk]; this.uc.busy = b; }
+                    },
+                    async ucBan(x) {
+                        const to = !x.banned, name = x.who || this.shortTok(x.token);
+                        const ok = await this.ask({
+                            title: to ? '封禁作者' : '解封作者', ok: to ? '封禁' : '解封', danger: to,
+                            message: to ? '封禁「' + name + '」？\n他发过的评论和弹幕全部不再显示，打开网站会被锁屏，历史同步、求片也会被拒绝。' : '解封「' + name + '」？他之前发的会重新显示。'
+                        });
+                        if (!ok) return;
+                        const bk = 'ban' + x.token;
+                        this.uc.busy = Object.assign({}, this.uc.busy, { [bk]: true });
+                        try {
+                            const res = await api('/api/admin/ban', { method: 'POST', body: { token: x.token, banned: to } });
+                            if (!res || !res.ok) throw new ApiError((res && res.error) || '操作失败', 'fail');
+                            const b = res.banned != null ? !!res.banned : to;
+                            (this.uc.data.items || []).forEach(y => { if (y.token === x.token) y.banned = b; });
+                            const row = this.us.data && this.us.data.users && this.us.data.users.find(y => y.token === x.token);
+                            if (row) row.banned = b;
+                            this.ov.stale = true;
+                            this.toast((b ? '已封禁 ' : '已解封 ') + name, 'ok');
+                        } catch (e) { if (e.code !== 'auth') this.toast('操作失败：' + e.message, 'err'); }
+                        finally { const bb = Object.assign({}, this.uc.busy); delete bb[bk]; this.uc.busy = bb; }
+                    },
                     // ---------- 片库(片名索引) ----------
                     loadTitleIndex() {
                         clearTimeout(this._tiTimer);
@@ -2432,6 +2570,30 @@
                     };
                 }
 
+                // 💬 评论 / 弹幕示例:作者取前 12 个假用户,几条被举报 / 隐藏 / 审核拦下
+                const UC_TEXT = ['这集节奏好快，一口气看完了', '男主演技在线，哭戏太绝了', '第一次看这种题材，意外好看', '有没有人知道片尾曲叫什么？', '前方高能！', '这里伏笔埋得好深', '加微信看全集 vx12345678', '演员换了吧？感觉不像同一个人', '弹幕护体', '哈哈哈哈哈哈'];
+                const UC_SHOWS = ['庆余年 第二季', '繁花', '漫长的季节', '狂飙'];
+                let ucItems = [];
+                for (let i = 0; i < 46; i++) {
+                    const kind = i % 3 === 2 ? 'd' : 'c', u = users[i % Math.min(12, users.length)];
+                    ucItems.push({
+                        kind, id: 1000 + i, title: UC_SHOWS[i % UC_SHOWS.length], ep: i % 4 ? '第' + (1 + i % 12) + '集' : '', epLabel: '', t: kind === 'd' ? 60 + i * 37 : null,
+                        parent: kind === 'c' && i % 5 === 4 ? 1000 + i - 4 : 0, text: UC_TEXT[i % UC_TEXT.length], token: u.row.token, who: u.row.identity, nick: '观众' + 'K7QZ9M3XPA'.slice(i % 6, i % 6 + 4),
+                        banned: !!u.row.banned, status: i % 9 === 6 ? 2 : i % 13 === 7 ? 1 : i % 17 === 11 ? 3 : 0, reports: i % 9 === 6 ? 3 : i % 7 === 3 ? 1 : 0,
+                        likes: kind === 'c' ? (i * 7) % 23 : 0, replies: 0, at: Date.now() - i * 3.7 * 3600e3
+                    });
+                }
+                let ucWords = ['加微信', '加我微信', '加v', '薇信', '博彩', '裸聊'];
+                function ucList(p) {
+                    const kind = p.get('kind') === 'd' ? 'd' : 'c', filter = p.get('filter') || 'all', q = String(p.get('q') || '');
+                    const page = Math.max(1, +p.get('page') || 1), size = +p.get('size') || 30;
+                    ucItems.forEach(x => { const u = byTok[x.token]; if (u) x.banned = !!u.row.banned; });
+                    const cnt = (k) => { const a = ucItems.filter(x => x.kind === k); return { all: a.length, reported: a.filter(x => x.reports).length, hidden: a.filter(x => x.status).length }; };
+                    let list = ucItems.filter(x => x.kind === kind && (filter === 'reported' ? x.reports > 0 : filter === 'hidden' ? x.status !== 0 : true) && (!q || x.text.indexOf(q) >= 0 || x.title.indexOf(q) >= 0));
+                    if (filter === 'reported') list = list.slice().sort((a, b) => b.reports - a.reports || b.at - a.at);
+                    return { available: true, kind, filter, page, size, total: list.length, pages: Math.max(1, Math.ceil(list.length / size)), counts: { c: cnt('c'), d: cnt('d') }, items: list.slice((page - 1) * size, page * size) };
+                }
+
                 async function handle(path, method, body, signal) {
                     await sleep(SLOW ? 20000 : 120 + Math.random() * 380, signal);
                     const url = new URL(path, location.origin), p = url.searchParams, route = url.pathname;
@@ -2446,12 +2608,22 @@
                         if (route === '/api/admin/shares') return ok(sharesList(p));
                         if (route === '/api/admin/requests') return ok(requestsList(p));
                         if (route === '/api/admin/title-index') return ok(tiMock());
+                        if (route === '/api/admin/ucomm') return ok(ucList(p));
+                        if (route === '/api/admin/ucomm/words') return ok({ available: true, words: ucWords, defaults: ['加微信', '加我微信', '加v', '薇信', '博彩', '菠菜', '棋牌', '裸聊', '约炮'] });
                         if (route === '/api/admin/title-index/sample') {
                             const q = String(p.get('q') || '');
                             return ok({ items: [{ vod_id: '168324', name: q + '(示例)', tname: '国产剧', t: Date.now() }, { vod_id: '115089', name: q + ' 第二季', tname: '国产剧', t: Date.now() - 86400000 }] });
                         }
                     } else if (method === 'POST') {
                         body = body || {};
+                        if (route === '/api/admin/ucomm/action') {
+                            const x = ucItems.find(y => y.kind === body.kind && y.id === body.id); if (!x) return { status: 400, data: { error: '没选中' } };
+                            if (body.action === 'delete') ucItems = ucItems.filter(y => y !== x && !(x.kind === 'c' && !x.parent && y.parent === x.id));
+                            else if (body.action === 'hide') x.status = 1;
+                            else { x.status = 0; x.reports = 0; }
+                            return ok({ ok: true, changed: 1 });
+                        }
+                        if (route === '/api/admin/ucomm/words') { ucWords = (body.words || []).map(w => String(w).trim()).filter(Boolean).filter((w, i, a) => a.indexOf(w) === i); return ok({ ok: true, words: ucWords }); }
                         if (route === '/api/admin/title-index/action') {
                             const keys = body.site ? [body.site] : TI_SITES.map(s => s.key);
                             for (const k of keys) {

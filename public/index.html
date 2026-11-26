@@ -120,6 +120,7 @@
 
     <!-- 非关键脚本 (延迟加载) -->
     <script data-cfasync="false" src="libs/js/hls.min.js?v=1.1.5-lc1" defer></script>   <!-- ?v= 必带:/libs 有 30 天 HTTP 缓存,补丁版(AAC-LC 信令,见 _dgHlsCustomType 注释)靠换 URL 才能到达老用户浏览器 -->
+    <script data-cfasync="false" src="libs/js/ucomm-key.js?v=1" defer></script>   <!-- 💬 评论 / 用户弹幕的剧集键(window.DgUcomm;服务端 lib/comments 共用同一文件) -->
     <script data-cfasync="false" src="libs/js/kz-titlematch.js?v=1" defer></script>   <!-- 🎌 Kazumi 源片名归一化/并组(服务端 lib/kazumi 共用同一文件) -->
     <script data-cfasync="false" src="libs/js/ad-clip-core.js?v=7" defer></script>   <!-- 🛡️ 插播广告"分辨率突变/时间戳重启"判定 + 原生 HLS 分片头解析(window.adClipSkip 用;改了要升 ?v= 和 sw.js 版本) -->
     <script data-cfasync="false" src="libs/js/ad-filter.js?v=4.0" defer></script>
@@ -6525,6 +6526,11 @@
                             </div>
                         </template>
                     </div>
+
+                    <!-- 💬 评论 + 用户弹幕(服务器有 sqlite 才有;未登录预览框架里不显示) -->
+                    <dg-comments v-if="commentsEnabled && !previewLocked && currentGroup && currentGroup.name"
+                        :title="currentGroup.name" :work="ucWorkSig()" :token="syncToken" :ep-name="ucCurEpName()"
+                        :ep-count="(episodeList || []).length" :dm-rev="ucDmRev"></dg-comments>
                 </div>
 
                 <!-- 📺 直播控制面板：替代 VOD 的简介/线路/选集 -->
@@ -6595,6 +6601,308 @@
         </div>
 
     </div>
+
+    <!-- 💬 <dg-comments>:播放页的评论 + 用户弹幕(服务器 lib/comments;剧/集的键见 libs/js/ucomm-key.js)。
+         自成一块:状态全在组件里,不进根实例的 data;要用根实例的只有 play / promptLogin / showMiniToast / ucSeekTo / episodeList(经 $root)。 -->
+    <style>
+        .ucm { margin-top: 22px; }
+        .ucm-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+        .ucm-tabs { display: flex; gap: 4px; }
+        .ucm-tabs button, .ucm-sort button { background: none; border: 0; color: #9a9a9a; font-size: 15px; font-weight: 600; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+        .ucm-tabs button.on { color: #fff; background: rgba(255, 255, 255, .08); }
+        .ucm-tabs button.on::after { content: ''; display: block; height: 2px; margin-top: 4px; border-radius: 2px; background: #e50914; }
+        .ucm-n { margin-left: 5px; font-size: 12px; font-weight: 400; color: #8a8a8a; }
+        .ucm-sort { margin-left: auto; display: flex; gap: 2px; }
+        .ucm-sort button { font-size: 13px; font-weight: 400; padding: 4px 9px; }
+        .ucm-sort button.on { color: #fff; background: rgba(229, 9, 20, .18); }
+        .ucm-compose { background: rgba(255, 255, 255, .04); border: 1px solid #333; border-radius: 10px; padding: 10px; margin-bottom: 14px; }
+        .ucm-compose textarea { width: 100%; background: transparent; border: 0; outline: 0; color: #eee; font-size: 14px; line-height: 1.6; resize: vertical; min-height: 48px; }
+        .ucm-compose-bar { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+        .ucm-tag { color: #9a9a9a; font-size: 12px; display: flex; align-items: center; gap: 4px; cursor: pointer; margin: 0; }
+        .ucm-len { margin-left: auto; font-size: 12px; color: #666; }
+        .ucm-len.warn { color: #f5a524; }
+        .ucm-send { background: #e50914; color: #fff; border: 0; border-radius: 8px; padding: 6px 16px; font-size: 14px; cursor: pointer; }
+        .ucm-send:disabled { opacity: .45; cursor: default; }
+        .ucm-login { color: #9a9a9a; font-size: 13px; padding: 12px; border: 1px dashed #3a3a3a; border-radius: 10px; margin-bottom: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .ucm-login button, .ucm-err button { background: #e50914; color: #fff; border: 0; border-radius: 6px; padding: 4px 12px; font-size: 13px; cursor: pointer; }
+        .ucm-err { color: #ff8a8a; font-size: 13px; padding: 10px 0; display: flex; gap: 10px; align-items: center; }
+        .ucm-empty, .ucm-hint { color: #777; font-size: 13px; padding: 14px 0; }
+        .ucm-hint { padding: 0 0 8px; font-size: 12px; }
+        .ucm-list, .ucm-replies, .ucm-dms { list-style: none; margin: 0; padding: 0; }
+        .ucm-item { display: flex; gap: 10px; padding: 12px 0; border-top: 1px solid #262626; }
+        .ucm-item:first-child { border-top: 0; }
+        .ucm-av { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; }
+        .ucm-replies .ucm-av { flex-basis: 24px; width: 24px; height: 24px; font-size: 11px; }
+        .ucm-body { flex: 1; min-width: 0; }
+        .ucm-meta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: #8a8a8a; }
+        .ucm-meta b { color: #cfcfcf; font-weight: 600; font-size: 13px; }
+        .ucm-me { background: #e50914; color: #fff; border-radius: 4px; padding: 0 5px; font-size: 11px; }
+        .ucm-ep { background: rgba(255, 255, 255, .08); color: #bbb; border-radius: 4px; padding: 0 6px; }
+        .ucm-text { color: #e6e6e6; font-size: 14px; line-height: 1.65; margin-top: 4px; white-space: pre-wrap; word-break: break-word; overflow-wrap: anywhere; }
+        .ucm-note { color: #f5a524; font-size: 12px; margin-top: 3px; }
+        .ucm-acts { display: flex; gap: 4px; margin-top: 4px; margin-left: -8px; }
+        .ucm-acts button { background: none; border: 0; color: #8a8a8a; font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer; min-height: 30px; }
+        .ucm-acts button:hover, .ucm-acts button:focus-visible { color: #fff; background: rgba(255, 255, 255, .06); }
+        .ucm-acts button.on { color: #e50914; }
+        .ucm-replies { margin-top: 6px; background: rgba(255, 255, 255, .03); border-radius: 8px; padding: 2px 10px; }
+        .ucm-replies .ucm-item { padding: 8px 0; gap: 8px; border-top-color: #222; }
+        .ucm-replies .ucm-text { font-size: 13px; }
+        .ucm-more-rep, .ucm-more { background: none; border: 0; color: #7fb2ff; font-size: 13px; padding: 6px 0; cursor: pointer; }
+        .ucm-more { display: block; width: 100%; text-align: center; border: 1px solid #333; border-radius: 8px; color: #bbb; margin-top: 8px; padding: 8px; }
+        .ucm-replybox { display: flex; gap: 6px; margin-top: 6px; }
+        .ucm-replybox input { flex: 1; min-width: 0; background: rgba(255, 255, 255, .05); border: 1px solid #3a3a3a; border-radius: 8px; color: #eee; padding: 6px 10px; font-size: 13px; outline: 0; }
+        .ucm-replybox button { border: 0; border-radius: 8px; padding: 6px 12px; font-size: 13px; background: #333; color: #ddd; cursor: pointer; }
+        .ucm-replybox button.go { background: #e50914; color: #fff; }
+        .ucm-dms li { display: flex; align-items: stretch; border-top: 1px solid #242424; }
+        .ucm-dms li:first-child { border-top: 0; }
+        .ucm-dm { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; background: none; border: 0; color: #ddd; text-align: left; padding: 9px 4px; cursor: pointer; font-size: 13px; }
+        .ucm-dm:hover, .ucm-dm:focus-visible { background: rgba(255, 255, 255, .05); }
+        .ucm-dm-ep { flex: 0 0 auto; color: #9a9a9a; font-size: 12px; }
+        .ucm-dm-t { flex: 0 0 auto; color: #e50914; font-variant-numeric: tabular-nums; font-size: 12px; }
+        .ucm-dm-x { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ucm-dm-x.dim { color: #f5a524; }
+        .ucm-dm-rep { background: none; border: 0; color: #666; font-size: 12px; padding: 0 8px; cursor: pointer; }
+        .ucm-dm-rep:hover, .ucm-dm-rep:focus-visible { color: #ddd; }
+        body.tv-mode .ucm-tabs button:focus, body.tv-mode .ucm-sort button:focus, body.tv-mode .ucm-acts button:focus, body.tv-mode .ucm-dm:focus, body.tv-mode .ucm-more:focus, body.tv-mode .ucm-send:focus { outline: 3px solid #fff; outline-offset: 1px; }
+    </style>
+    <script type="text/x-template" id="tpl-dg-comments">
+        <section class="ucm" aria-label="评论">
+            <div class="ucm-head">
+                <div class="ucm-tabs" role="tablist">
+                    <button type="button" role="tab" :aria-selected="tab === 'c'" :class="{ on: tab === 'c' }" @click="setTab('c')">评论<span v-if="all" class="ucm-n">{{ all }}</span></button>
+                    <button type="button" role="tab" :aria-selected="tab === 'd'" :class="{ on: tab === 'd' }" @click="setTab('d')">弹幕<span v-if="dm.total" class="ucm-n">{{ dm.total }}</span></button>
+                </div>
+                <div v-if="tab === 'c'" class="ucm-sort" role="group" aria-label="排序">
+                    <button type="button" :class="{ on: sort === 'new' }" :aria-pressed="sort === 'new'" @click="setSort('new')">最新</button>
+                    <button type="button" :class="{ on: sort === 'hot' }" :aria-pressed="sort === 'hot'" @click="setSort('hot')">最热</button>
+                </div>
+            </div>
+            <template v-if="tab === 'c'">
+                <div v-if="token" class="ucm-compose">
+                    <textarea v-model="text" maxlength="500" rows="2" placeholder="说说你的看法…（友善发言，别剧透太狠）" aria-label="写评论" @keydown.ctrl.enter="post" @keydown.meta.enter="post"></textarea>
+                    <div class="ucm-compose-bar">
+                        <label v-if="epTag" class="ucm-tag"><input type="checkbox" v-model="tagEp"> 标上{{ epTag }}</label>
+                        <span class="ucm-len" :class="{ warn: text.length > 450 }">{{ text.length }}/500</span>
+                        <button type="button" class="ucm-send" :disabled="posting || !text.trim()" @click="post">{{ posting ? '发送中…' : '发表' }}</button>
+                    </div>
+                </div>
+                <div v-else class="ucm-login">登录后可以发评论、发弹幕<button type="button" @click="login">去登录</button></div>
+                <div v-if="locked" class="ucm-empty">登录后才能看大家的评论</div>
+                <div v-else-if="err" class="ucm-err">{{ err }}<button type="button" @click="load(1)">重试</button></div>
+                <div v-else-if="!items.length" class="ucm-empty"><template v-if="loading"><i class="fas fa-spinner fa-spin"></i> 加载中…</template><template v-else>还没有人评论，来抢沙发</template></div>
+                <ul class="ucm-list">
+                    <li v-for="c in items" :key="c.id" class="ucm-item">
+                        <span class="ucm-av" :style="{ background: avColor(c.nick) }" aria-hidden="true">{{ c.nick.charAt(2) }}</span>
+                        <div class="ucm-body">
+                            <div class="ucm-meta"><b>{{ c.nick }}</b><span v-if="c.mine" class="ucm-me">我</span><span v-if="c.ep" class="ucm-ep">{{ c.ep }}</span><span>{{ ago(c.at) }}</span></div>
+                            <div v-if="c.hidden" class="ucm-note">只有你自己看得见（审核中或被举报收起）</div>
+                            <div class="ucm-text">{{ c.text }}</div>
+                            <div class="ucm-acts">
+                                <button type="button" :class="{ on: c.liked }" :aria-pressed="c.liked" @click="like(c)"><i class="fas fa-thumbs-up"></i> {{ c.likes || '赞' }}</button>
+                                <button type="button" @click="openReply(c, null)"><i class="far fa-comment"></i> 回复</button>
+                                <button v-if="c.mine" type="button" @click="remove('c', c, null)">删除</button>
+                                <button v-else type="button" @click="report('c', c)">举报</button>
+                            </div>
+                            <ul v-if="c.replies.length" class="ucm-replies">
+                                <li v-for="r in c.replies" :key="r.id" class="ucm-item">
+                                    <span class="ucm-av" :style="{ background: avColor(r.nick) }" aria-hidden="true">{{ r.nick.charAt(2) }}</span>
+                                    <div class="ucm-body">
+                                        <div class="ucm-meta"><b>{{ r.nick }}</b><span v-if="r.mine" class="ucm-me">我</span><span>{{ ago(r.at) }}</span></div>
+                                        <div v-if="r.hidden" class="ucm-note">只有你自己看得见</div>
+                                        <div class="ucm-text">{{ r.text }}</div>
+                                        <div class="ucm-acts">
+                                            <button type="button" :class="{ on: r.liked }" :aria-pressed="r.liked" @click="like(r)"><i class="fas fa-thumbs-up"></i> {{ r.likes || '赞' }}</button>
+                                            <button type="button" @click="openReply(c, r)">回复</button>
+                                            <button v-if="r.mine" type="button" @click="remove('c', r, c)">删除</button>
+                                            <button v-else type="button" @click="report('c', r)">举报</button>
+                                        </div>
+                                    </div>
+                                </li>
+                            </ul>
+                            <button v-if="c.replyN > c.replies.length" type="button" class="ucm-more-rep" @click="moreReplies(c)">展开另外 {{ c.replyN - c.replies.length }} 条回复</button>
+                            <div v-if="replyTo === c.id" class="ucm-replybox">
+                                <input v-model="replyText" maxlength="500" :placeholder="'回复 ' + replyName" aria-label="写回复" @keydown.enter.prevent="sendReply(c)">
+                                <button type="button" class="go" :disabled="replyBusy || !replyText.trim()" @click="sendReply(c)">回复</button>
+                                <button type="button" @click="replyTo = 0">取消</button>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+                <button v-if="page < pages" type="button" class="ucm-more" :disabled="loading" @click="load(page + 1)">{{ loading ? '加载中…' : '更多评论' }}</button>
+            </template>
+            <template v-else>
+                <p class="ucm-hint">大家在这部剧里发的弹幕。点一条跳到那个时间（不是正在看的集会先换过去）。在播放器里点弹幕按钮就能发。</p>
+                <div v-if="locked" class="ucm-empty">登录后才能看大家发的弹幕</div>
+                <div v-else-if="dm.err" class="ucm-err">{{ dm.err }}<button type="button" @click="loadDm(1)">重试</button></div>
+                <div v-else-if="!dm.items.length" class="ucm-empty"><template v-if="dm.loading"><i class="fas fa-spinner fa-spin"></i> 加载中…</template><template v-else>还没有人发弹幕</template></div>
+                <ul class="ucm-dms">
+                    <li v-for="d in dm.items" :key="d.id">
+                        <button type="button" class="ucm-dm" @click="seek(d)">
+                            <span v-if="d.ep" class="ucm-dm-ep">{{ d.ep }}</span>
+                            <span class="ucm-dm-t">{{ clock(d.t) }}</span>
+                            <span class="ucm-dm-x" :class="{ dim: d.hidden }">{{ d.text }}</span>
+                        </button>
+                        <button v-if="d.mine" type="button" class="ucm-dm-rep" @click="remove('d', d, null)">删除</button>
+                        <button v-else type="button" class="ucm-dm-rep" @click="report('d', d)">举报</button>
+                    </li>
+                </ul>
+                <button v-if="dm.page < dm.pages" type="button" class="ucm-more" :disabled="dm.loading" @click="loadDm(dm.page + 1)">{{ dm.loading ? '加载中…' : '更多弹幕' }}</button>
+            </template>
+        </section>
+    </script>
+    <script data-cfasync="false">
+        window.DgComments = {
+            template: '#tpl-dg-comments',
+            props: { title: String, work: String, token: String, epName: String, epCount: Number, dmRev: Number },
+            data() {
+                return {
+                    tab: 'c', sort: 'new', items: [], total: 0, all: 0, page: 1, pages: 1, loading: false, err: '', gen: 0, locked: false,
+                    text: '', tagEp: true, posting: false, replyTo: 0, replyName: '', replyText: '', replyBusy: false,
+                    dm: { items: [], total: 0, page: 1, pages: 1, loading: false, err: '', loaded: false }
+                };
+            },
+            computed: {
+                showId() { return (this.title || '') + '|' + (this.work || '') + '|' + (this.token || ''); },
+                epTag() {
+                    const K = window.DgUcomm;
+                    return (K && this.epName) ? K.epText(K.epKey(this.epName, this.epCount), this.epName) : '';
+                }
+            },
+            watch: {
+                showId: { immediate: true, handler() { this.reset(); this.load(1); this.loadDm(1); } },
+                dmRev() { this.loadDm(1); }
+            },
+            methods: {
+                reset() {
+                    this.gen++;
+                    this.items = []; this.total = 0; this.all = 0; this.page = 1; this.pages = 1; this.err = ''; this.replyTo = 0; this.locked = false;
+                    this.dm = { items: [], total: 0, page: 1, pages: 1, loading: false, err: '', loaded: false };
+                },
+                qs(extra) {
+                    const p = new URLSearchParams(Object.assign({ title: this.title || '', w: this.work || '', token: this.token || '' }, extra || {}));
+                    return p.toString();
+                },
+                async req(url, body) {
+                    const ctrl = new AbortController(), t = setTimeout(() => ctrl.abort(), 12000);
+                    try {
+                        const r = await fetch(url, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ token: this.token || '' }, body)), signal: ctrl.signal } : { signal: ctrl.signal, cache: 'no-store' });
+                        let d = null; try { d = await r.json(); } catch (e) { }
+                        return { status: r.status, d: d || {} };
+                    } catch (e) { return { status: 0, d: {} }; }
+                    finally { clearTimeout(t); }
+                },
+                toast(m) { try { this.$root.showMiniToast(m); } catch (e) { } },
+                login() { try { this.$root.promptLogin(); } catch (e) { } },
+                failed(r, def) {
+                    if (r.status === 401) { this.toast((r.d && r.d.msg) || '登录后才能发言'); return; }
+                    this.toast((r.d && r.d.msg) || (r.status ? def : '网络不太好，稍后再试'));
+                },
+                async load(page) {
+                    const gen = this.gen;
+                    this.loading = true; this.err = '';
+                    const r = await this.req('/api/comments?' + this.qs({ sort: this.sort, page: String(page) }));
+                    if (gen !== this.gen) return;
+                    this.loading = false;
+                    if (r.status === 401) { this.locked = true; return; }   // 配了访问密码的站:没登录不给看(上面的登录框已经说了)
+                    if (r.status !== 200 || !Array.isArray(r.d.items)) { this.err = r.status ? '评论没加载出来' : '网络不太好，评论没加载出来'; return; }
+                    this.items = page > 1 ? this.items.concat(r.d.items.filter(x => !this.items.some(y => y.id === x.id))) : r.d.items;
+                    this.total = r.d.total || 0; this.all = r.d.all || 0; this.page = r.d.page || page; this.pages = r.d.pages || 1;
+                },
+                async loadDm(page) {
+                    const gen = this.gen;
+                    this.dm.loading = true; this.dm.err = '';
+                    const r = await this.req('/api/comments/danmaku?' + this.qs({ page: String(page) }));
+                    if (gen !== this.gen) return;
+                    this.dm.loading = false;
+                    if (r.status === 401) { this.locked = true; return; }
+                    if (r.status !== 200 || !Array.isArray(r.d.items)) { this.dm.err = '没加载出来'; return; }
+                    this.dm.items = page > 1 ? this.dm.items.concat(r.d.items) : r.d.items;
+                    this.dm.total = r.d.total || 0; this.dm.page = r.d.page || page; this.dm.pages = r.d.pages || 1; this.dm.loaded = true;
+                },
+                setTab(t) { this.tab = t; if (t === 'd' && !this.dm.loaded && !this.dm.loading) this.loadDm(1); },
+                setSort(s) { if (this.sort === s) return; this.sort = s; this.gen++; this.items = []; this.load(1); },
+                async post() {
+                    const text = this.text.trim();
+                    if (!text || this.posting) return;
+                    this.posting = true;
+                    const body = { title: this.title, w: this.work || '', text };
+                    if (this.tagEp && this.epName) { body.ep = this.epName; body.n = this.epCount || 0; }
+                    const gen = this.gen;
+                    const r = await this.req('/api/comments', body);
+                    this.posting = false;
+                    if (!r.d.ok) return this.failed(r, '没发出去，稍后再试');
+                    this.text = '';
+                    if (r.d.held) this.toast('发出去了，审核通过后其他人才看得到');
+                    if (gen !== this.gen) return;
+                    if (this.sort === 'new') { this.items = [r.d.item].concat(this.items); this.total++; this.all++; }
+                    else this.load(1);
+                },
+                openReply(c, r) {
+                    if (!this.token) { this.toast('登录后才能回复'); return this.login(); }
+                    this.replyTo = c.id; this.replyName = r ? r.nick : c.nick;
+                    this.replyText = r ? '@' + r.nick + ' ' : '';
+                    this.$nextTick(() => { try { const el = this.$el.querySelector('.ucm-replybox input'); if (el) el.focus(); } catch (e) { } });
+                },
+                async sendReply(c) {
+                    const text = this.replyText.trim();
+                    if (!text || this.replyBusy) return;
+                    this.replyBusy = true;
+                    const r = await this.req('/api/comments', { parent: c.id, text });
+                    this.replyBusy = false;
+                    if (!r.d.ok) return this.failed(r, '没发出去，稍后再试');
+                    if (r.d.held) this.toast('发出去了，审核通过后其他人才看得到');
+                    c.replies.push(r.d.item); c.replyN++; this.all++;
+                    this.replyTo = 0; this.replyText = '';
+                },
+                async moreReplies(c) {
+                    const r = await this.req('/api/comments/replies?' + new URLSearchParams({ id: String(c.id), token: this.token || '', offset: String(c.replies.length) }).toString());
+                    if (r.status !== 200 || !Array.isArray(r.d.items)) return this.toast('没加载出来，稍后再试');
+                    const have = new Set(c.replies.map(x => x.id));
+                    c.replies = c.replies.concat(r.d.items.filter(x => !have.has(x.id)));
+                },
+                async like(c) {
+                    if (!this.token) { this.toast('登录后才能点赞'); return this.login(); }
+                    if (c._busy) return;
+                    c._busy = true;
+                    const r = await this.req('/api/comments/like', { id: c.id });
+                    c._busy = false;
+                    if (!r.d.ok) return this.failed(r, '没点上，稍后再试');
+                    c.liked = !!r.d.liked; c.likes = r.d.likes || 0;
+                },
+                async report(kind, x) {
+                    if (!this.token) { this.toast('登录后才能举报'); return this.login(); }
+                    if (!window.confirm(kind === 'd' ? '举报这条弹幕？' : '举报这条评论？')) return;
+                    const r = await this.req('/api/comments/report', { kind, id: x.id });
+                    if (!r.d.ok) return this.failed(r, '没举报上，稍后再试');
+                    this.toast('已举报，谢谢');
+                },
+                async remove(kind, x, parent) {
+                    if (!window.confirm(kind === 'd' ? '删除这条弹幕？' : '删除这条评论？')) return;
+                    const r = await this.req('/api/comments/delete', { kind, id: x.id });
+                    if (!r.d.ok) return this.failed(r, '没删掉，稍后再试');
+                    if (kind === 'd') { this.dm.items = this.dm.items.filter(y => y.id !== x.id); this.dm.total = Math.max(0, this.dm.total - 1); return; }
+                    if (parent) { parent.replies = parent.replies.filter(y => y.id !== x.id); parent.replyN = Math.max(0, parent.replyN - 1); this.all = Math.max(0, this.all - 1); }
+                    else { this.items = this.items.filter(y => y.id !== x.id); this.total = Math.max(0, this.total - 1); this.all = Math.max(0, this.all - 1 - (x.replyN || 0)); }
+                },
+                seek(d) { try { this.$root.ucSeekTo(d.epKey, d.t); } catch (e) { } },
+                clock(t) { return window.DgUcomm ? window.DgUcomm.clock(t) : String(Math.floor(t || 0)); },
+                ago(ts) {
+                    const s = (Date.now() - ts) / 1000;
+                    if (s < 60) return '刚刚';
+                    if (s < 3600) return Math.floor(s / 60) + '分钟前';
+                    if (s < 86400) return Math.floor(s / 3600) + '小时前';
+                    if (s < 30 * 86400) return Math.floor(s / 86400) + '天前';
+                    const d = new Date(ts), p = n => (n < 10 ? '0' : '') + n;
+                    return (d.getFullYear() === new Date().getFullYear() ? '' : d.getFullYear() + '-') + p(d.getMonth() + 1) + '-' + p(d.getDate());
+                },
+                avColor(nick) {
+                    let h = 0; const s = String(nick || '');
+                    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
+                    return 'hsl(' + h + ', 45%, 38%)';
+                }
+            }
+        };
+    </script>
 
     <!-- Auth Verification Script (runs before Vue) -->
     <script data-cfasync="false">
@@ -7743,7 +8051,10 @@
             sent: null,   // 日期式集名最近一次发出去的 { id, d:时长, key }
             src: null,    // 最近一份弹幕的平台来源 { id, v }(v = imgo/qq/…,'' = 未知;响应里没有这个字段的老缓存也是未知)。模块级,不进 Vue 响应式
             source() { const s = _dmBackend.src; return (s && s.id === _dmBackend.want) ? s.v : undefined; },   // 当前要的这份弹幕的来源;undefined = 还没到
+            uc: null,       // 💬 用户弹幕(danmaku.addition 第二个端点)这一次的 { id, done, n }
+            ucWait: null,   // 平台弹幕是空的、用户弹幕还没回来:{ id, why },等用户弹幕回来再决定说不说"本集暂无弹幕"
             read(o) {
+                if (/\/api\/udanmaku\//.test(o.url || '')) return _dmBackend.readUser(o);
                 const m = /[?&]id=([^&]*)/.exec(o.url || '');
                 const id = m ? m[1] : '';
                 const seq = ++_dmBackend.seq, born = Date.now();
@@ -7763,7 +8074,7 @@
                             // 列表晚到时 DPlayer 的读指针还在 0:下一帧会把"弹幕时间之前"的弹幕一口气全画出来(实测开海量一帧 8 秒)→ 对到当前弹幕时间(见 dmAlignAfterLoad)
                             try { if (typeof dp !== 'undefined') dmAlignAfterLoad(dp); } catch (e) { }
                             try { dmAuto.wake(); } catch (e) { }   // 列表比等待期还晚到:再看一眼要不要自动校正
-                            if (!list.length) dmEmptyNotice(d.pending ? 'fail' : d.why);
+                            if (!list.length) _dmBackend.emptyNotice(id, d.pending ? 'fail' : d.why);
                         }
                         else if (o.error) o.error(d && d.msg);
                     })
@@ -7789,11 +8100,63 @@
                 };
                 setTimeout(tick, 200);
             },
+            // 💬 用户弹幕(/api/udanmaku/v3/,见 lib/comments):不领 seq —— seq 是平台弹幕"只有最新一次在等时长"用的,
+            //    DPlayer 对同一次加载的几个端点依次调 read,这里领了号就会把平台那次判成过期、整次加载永远等不齐。
+            //    只认 want(换剧/换集后晚到的丢掉);出错当空列表(不弹"弹幕加载失败",平台弹幕照常)。
+            //    DPlayer 等几个端点都回来才合并、排序(用户弹幕和平台弹幕同一个时间轴,原样合进去,不做偏移);谁最后到谁负责对齐读指针。
+            readUser(o) {
+                const m = /[?&]id=([^&]*)/.exec(o.url || '');
+                const id = m ? m[1] : '';
+                const u = _dmBackend.uc = { id, done: false, n: 0 };
+                const done = (list) => {
+                    if (u.done || id !== _dmBackend.want || _dmBackend.uc !== u) return;   // 只回一次(超时后晚到的不再算一个端点)
+                    u.done = true; u.n = list.length;
+                    if (o.success) o.success(list);
+                    try { if (typeof dp !== 'undefined') dmAlignAfterLoad(dp); } catch (e) { }
+                    const w = _dmBackend.ucWait;
+                    if (w && w.id === id) { _dmBackend.ucWait = null; if (!list.length) dmEmptyNotice(w.why); }
+                };
+                // DPlayer 要等几个端点都回来才合并:这边卡住平台弹幕也出不来 → 8 秒没回就当空的
+                const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+                const timer = setTimeout(() => { try { if (ctrl) ctrl.abort(); } catch (e) { } done([]); }, 8000);
+                fetch(o.url, { credentials: 'same-origin', signal: ctrl ? ctrl.signal : undefined })
+                    .then(r => (r.ok ? r.json() : null))
+                    .then(d => done((d && d.code === 0 && Array.isArray(d.data)) ? d.data.map(e => ({ time: e[0], type: e[1], color: e[2], author: e[3], text: e[4] })) : []))
+                    .catch(() => done([]))
+                    .then(() => clearTimeout(timer));
+            },
+            // 平台弹幕是空的:这一集还挂着用户弹幕就等它回来 —— 有用户弹幕就不说"本集暂无弹幕"
+            emptyNotice(id, why) {
+                const u = _dmBackend.uc;
+                if (!u || u.id !== id) return dmEmptyNotice(why);
+                if (u.done) { if (!u.n) dmEmptyNotice(why); return; }
+                _dmBackend.ucWait = { id, why };
+            },
+            // 发弹幕:开了评论(服务器有 sqlite)就存进 /api/udanmaku/v3/(带同步账号令牌 + 同名作品签名),否则照旧发给只读的 /api/danmaku/v3/。
+            //    DPlayer 调这里之后才把这条插进列表、画出来;没发成(没登录/太快/屏蔽词)要把它从列表里拿掉,免得拖回去又出来一遍
             send(o) {
-                fetch(o.url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(o.data) })
-                    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                    .then(d => { if (d && d.code === 0) { if (o.success) o.success(d); } else if (o.error) o.error(d && d.msg); })
-                    .catch(e => { console.error(e); if (o.error) o.error(); });
+                const app = window.vueApp;
+                const drop = (msg) => setTimeout(() => {
+                    try {
+                        const dm = typeof dp !== 'undefined' && dp && dp.danmaku;
+                        const i = dm && Array.isArray(dm.dan) ? dm.dan.indexOf(o.data) : -1;
+                        if (i >= 0) { dm.dan.splice(i, 1); if (i < dm.danIndex) dm.danIndex--; }
+                    } catch (e) { }
+                    if (o.error) o.error(msg);
+                }, 0);
+                let url = o.url, body = o.data;
+                if (app && app.commentsEnabled) {
+                    if (!app.syncToken) return drop('登录账号后才能发弹幕');
+                    url = '/api/udanmaku/v3/';
+                    body = Object.assign({}, o.data, { token: app.syncToken, w: app.ucWorkSig ? app.ucWorkSig() : '' });
+                }
+                fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+                    .then(r => r.json().catch(() => null))
+                    .then(d => {
+                        if (d && d.code === 0) { if (o.success) o.success(d); try { if (app && app.ucDmSent) app.ucDmSent(); } catch (e) { } }
+                        else drop(d && d.msg);
+                    })
+                    .catch(e => { console.error(e); drop(); });
             }
         };
         // 🗨️ iOS / iPadOS Safari 上每条新弹幕先在右边闪一下:DPlayer 的滚动弹幕用 right:0 定位,靠 CSS 动画从 translateX(100%)
@@ -12055,6 +12418,8 @@
                     corsProxyUrl: null,  // CORS 代理 URL（当前主代理；用于中转无法直接访问的资源站 API）
                     corsProxyUrls: [],   // 全部 CORS 代理（多代理冗余；过滤代理故障时轮换到备用 worker）
                     danmakuEnabled: false,  // 🗨️ 弹幕开关（来自 /api/config，配置了 DANMU_API_URL 才为 true）
+                    commentsEnabled: false, // 💬 评论 + 用户弹幕(来自 /api/config comments_enabled:服务器有 sqlite 才 true;见 <dg-comments>)
+                    ucDmRev: 0,             // 💬 自己刚发了一条弹幕 → 评论区"弹幕"页重新拉
                     requestsEnabled: false, // 📮 求片开关（来自 /api/config：仅 VPS/server.js 配了 ADMIN_TOKEN 才为 true；Vercel 始终 false）
                     watchStatsEnabled: false, // ⏱️ 实测观看时长 + 分享统计(来自 /api/config.watch_stats:服务器 sqlite 且未设 STATS_DISABLE 才为 true;Vercel 恒 false)
                     playbackErrorCount: 0,  // 播放失败计数
@@ -13044,7 +13409,9 @@
                         }
 
                         // 🗨️ 弹幕开关（服务端配置了 DANMU_API_URL 才开启）
-                        this.danmakuEnabled = !!config.danmaku_enabled;
+                        // 💬 评论 + 用户弹幕(服务器有 sqlite 才开):没配平台弹幕(DANMU_API_URL)也给播放器挂弹幕 —— 用户自己发的照样有
+                        this.commentsEnabled = !!config.comments_enabled;
+                        this.danmakuEnabled = !!config.danmaku_enabled || this.commentsEnabled;
                         if (this.danmakuEnabled) console.log('[Config] 弹幕已开启');
                         // ✂️ 服务器能托管剪后的清单(Safari 原生 HLS 播放前剪插播要它;Vercel 无状态 → false,原生通道退回播放中静默跳过)
                         this._cfgHlsCut = config.hls_cut === true;
@@ -19111,13 +19478,17 @@
                     if (!this.currentGroup || !this.currentGroup.name) return null;
                     const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
                     const epName = (cur && cur.name) || '';
+                    const id = encodeURIComponent(this.currentGroup.name + '|' + epName + '|v5' + this._danmakuHints());
                     return {
+                        // 💬 用户弹幕:DPlayer 的第二个弹幕端点,和平台弹幕合进同一个列表(见 _dmBackend.readUser / lib/comments)。
+                        //    id 与平台弹幕相同(_dmBackend 靠它丢晚到的旧弹幕);token 参数可以是空的 —— 带着它 Service Worker 就不缓存这个请求
+                        addition: this.commentsEnabled ? ['/api/udanmaku/v3/?id=' + id + '&w=' + encodeURIComponent(this.ucWorkSig()) + '&token=' + encodeURIComponent(this.syncToken || '')] : undefined,
                         // 末尾 |v3 是缓存版本：CF 曾把"暂时为空"的弹幕响应按 1 年浏览器TTL 缓存进了各用户浏览器(中毒)，
                         // 改 URL 即让旧的中毒缓存 miss、重新拉取。服务器只取 split('|') 的前两段(剧名|集名)，第三段被忽略、
                         // 不影响匹配与服务器缓存键。将来若再需强制刷新弹幕缓存，把版本号往上 bump 即可。
                         // (v2→v3: 修"带年份期号撞任意年份同月日"串台;v3→v4: 综艺匹配16项对抗审查大修后再冲一次缓存;
                         //  v4→v5: 带上我方的分类/年份/集数提示,服务器据此排除同名电影↔综艺、不同年份的翻拍、别的季)
-                        id: encodeURIComponent(this.currentGroup.name + '|' + epName + '|v5' + this._danmakuHints()),
+                        id,
                         api: '/api/danmaku/',
                         user: '观众',
                         // 弹幕显示区域由 CSS(.dplayer-danmaku height:33%)限制到顶部 1/3，
@@ -19142,7 +19513,7 @@
                         if (Math.abs(d - s.d) <= Math.max(30, s.d * 0.03)) return;
                         _dmBackend.want = opt.id;
                         _dmBackend.key = key;
-                        try { dp.danmaku.reload({ id: opt.id, address: opt.api, user: opt.user }); } catch (e) { }
+                        try { dp.danmaku.reload({ id: opt.id, address: opt.api, user: opt.user, addition: opt.addition }); } catch (e) { }
                     };
                     setTimeout(tick, 200);
                 },
@@ -19159,6 +19530,47 @@
                         dp.danmaku.clear();
                         if (dp.template && dp.template.danmakuLoading) dp.template.danmakuLoading.style.display = 'none';
                     } catch (e) { }
+                },
+                // ========== 💬 评论 + 用户弹幕(组件 <dg-comments>,服务器 lib/comments)==========
+                // 同名拆卡的【非主作品】带作品签名(主作品不带:冷门同名作品出现在搜索结果里时,主作品的评论/弹幕不能跟着换键);见 libs/js/ucomm-key.js
+                ucWorkSig() {
+                    const g = this.currentGroup;
+                    return (g && g._work && g._workSig && /^[a-z0-9]{1,24}$/i.test(g._workSig)) ? g._workSig : '';
+                },
+                ucCurEpName() {
+                    const cur = (this.episodeList || []).find(e => e.url === this.currentUrl);
+                    return (cur && cur.name) || '';
+                },
+                ucDmSent() { this.ucDmRev++; },
+                // 评论区"弹幕"页点一条:是正在看的这集就跳过去,别的集先换集再跳。
+                //    存的是弹幕时间轴上的时间(见 lib/comments),跳转按当前的映射差(插播 + 偏移,dmTime)倒推回播放器时间。
+                //    换集后起播 / 恢复进度可能再 seek 一次:跳过去之后 5 秒内被拉走就再跳(最多 3 次)
+                ucSeekTo(epKey, t) {
+                    const K = window.DgUcomm;
+                    if (!K || !isFinite(t)) return;
+                    const list = this.episodeList || [], n = list.length;
+                    const ep = list.find(e => K.epKey(e.name, n) === epKey);
+                    if (!ep) { this.showMiniToast('当前线路没有这一集'); return; }
+                    const tok = this._ucSeekTok = (this._ucSeekTok || 0) + 1, t0 = Date.now();
+                    let target = null, tries = 0, at = 0;
+                    const tick = () => {
+                        if (tok !== this._ucSeekTok || this.currentUrl !== ep.url || Date.now() - t0 > 30000) return;
+                        const v = (typeof dp !== 'undefined' && dp && dp.video) || null;
+                        if (v && v.readyState >= 1 && isFinite(v.duration) && v.duration > 0) {
+                            if (target == null) {
+                                let diff = 0;
+                                try { if (dp.danmaku && dp.danmaku.options) diff = dp.danmaku.options.time() - v.currentTime; } catch (e) { }
+                                target = Math.max(0, Math.min(v.duration - 1, t - (isFinite(diff) ? diff : 0)));
+                            }
+                            if (Math.abs(v.currentTime - target) > 3 && tries < 3) { tries++; at = Date.now(); try { dp.seek(target); if (v.paused) dp.play(); } catch (e) { } }
+                            else if (!at) at = Date.now();
+                            if (Date.now() - at > 5000) return;
+                        }
+                        setTimeout(tick, 400);
+                    };
+                    if (ep.url !== this.currentUrl) this.play(ep.url);
+                    tick();
+                    try { const box = document.querySelector('.player-box'); if (box) box.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) { }
                 },
                 // 🗨️ 弹幕时间映射绑到这一次播放(见 dmTime):键 = 剧|线路|集,集用 _danmakuKey 归一后的写法。直播不启用
                 _dmTimeBegin() {
@@ -24061,7 +24473,7 @@
                     }
                 }
             }
-        }).mount('#app');
+        }).component('dg-comments', window.DgComments).mount('#app');   // 💬 评论区组件(定义在 #app 后面那段 <script>)
     </script>
 
     <!-- Register Service Worker with Auto-Update -->

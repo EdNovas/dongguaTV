@@ -1084,6 +1084,31 @@ try {
     favorites.start();   // 启动 60s 后第一轮,之后每 10 分钟(模块内部到下一轮事件循环才判开关,避开 TDZ)
 } catch (e) { console.warn('[Favorites] 模块加载失败,收藏与更新提醒已禁用:', e.message); favorites = null; }
 
+// 💬 评论 + 用户弹幕(见 lib/comments):登录的同步账号能发评论 / 回复 / 点赞 / 举报,播放器发的弹幕存下来给同一集的所有人
+//    (播放器经 danmaku.addition 取 /api/udanmaku/v3/,和平台弹幕合进一个列表);站长后台「评论」页隐藏 / 删除 / 封作者 / 改屏蔽词。
+//    需 CACHE_TYPE=sqlite(否则 /api/config.comments_enabled=false,前端整块不显示);COMMENTS_DISABLE=1 关。
+// 🤖 审核钩子:每条评论 / 弹幕过了屏蔽词之后调一次 reviewText(text, ctx) —— 回 { action:'allow' } 照常发、'reject' 拒收(提示没通过审核)、
+//    'hold' 收下但只给作者自己看(站长后台「已隐藏」里能看到、恢复)。超过 4 秒或出错一律放行。
+//    ctx = { kind:'comment'|'reply'|'danmaku', token, title, ep }。现在是空桩(全部放行),之后接 Cloudflare Workers AI。
+async function reviewText(text, ctx) { return { action: 'allow' }; }   // eslint-disable-line no-unused-vars
+const COMMENTS_ENABLED = !envFlag('COMMENTS_DISABLE');
+let comments = null;
+try {
+    if (COMMENTS_ENABLED) {
+        comments = require('./lib/comments').createComments({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            authRequired: () => ACCESS_PASSWORDS.length > 0,
+            tokenOk: ownToken,
+            tokenInfo: (token) => ownToken(token) ? PASSWORD_HASH_MAP[token] : null,
+            isBanned: (token) => isBanned(token),
+            adminAuthed: (req) => adminAuthed(req),
+            identity: (token, label) => userIdentity(token, label),
+            reviewText: (text, ctx) => reviewText(text, ctx)
+        });
+        comments.registerRoutes(app);
+    }
+} catch (e) { console.warn('[Comments] 模块加载失败,评论与用户弹幕已禁用:', e.message); comments = null; }
+
 // 🗂️ 片名索引(见 lib/title-index):资源站关了关键词搜索(?wd= 回「暂不支持搜索」)但列表 / 详情还开着 →
 //    后台把它的片名表爬进本地 SQLite(title-index.db,纯缓存,丢了会自己重爬),搜索时本地查出 vod_id 再 ?ac=detail&ids= 取详情。
 //    每天自动探测哪些站关了搜索;db.json 里给站点写 "search": false / true 可强制走 / 不走索引。站长后台「片库」页看进度、手动操作。
@@ -1661,6 +1686,8 @@ app.get('/api/config', (req, res) => {
         // 🔔 推送可用(需 sqlite + web-push 依赖;密钥自动生成)/ ❤️ 服务器收藏可用(需 sqlite;没开就只用本机收藏)
         push_enabled: !!(webPush && webPush.enabled()),
         favorites_enabled: !!(favorites && favorites.enabled()),
+        // 💬 评论 + 用户弹幕(需 sqlite;COMMENTS_DISABLE=1 关)
+        comments_enabled: !!(comments && comments.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });
