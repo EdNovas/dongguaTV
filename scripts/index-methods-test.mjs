@@ -225,7 +225,7 @@ console.log('② 首页横向行的滚动处理');
     const calls1 = [...HTML.matchAll(/onRowScroll\(([^)]*)\)/g)].map(m => m[1].trim());
     ok(calls1.every(a => !a.includes(',')), '没有地方再用两个参数调 onRowScroll:' + JSON.stringify(calls1.filter(a => a.includes(','))));
     const calls2 = [...HTML.matchAll(/onFavPopRowScroll\(([^)]*)\)/g)].map(m => m[1].trim()).filter(a => !/^ref, key$/.test(a));
-    ok(calls2.length >= 8 && calls2.every(a => /^'(favRow|popularRow|calRow)', '(fav|popular|cal)'$/.test(a)), 'onFavPopRowScroll 的调用都是 (favRow, fav) / (popularRow, popular) / (calRow, cal):' + JSON.stringify(calls2));
+    ok(calls2.length >= 8 && calls2.every(a => /^'(favRow|popularRow|calRow|plRow)', '(fav|popular|cal|pl)'$/.test(a)), 'onFavPopRowScroll 的调用都是 (favRow, fav) / (popularRow, popular) / (calRow, cal) / (plRow, pl):' + JSON.stringify(calls2));
 }
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} 通过, ${fail} 失败`);

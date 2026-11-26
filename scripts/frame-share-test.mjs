@@ -492,6 +492,7 @@ function makeApp(o) {
         $nextTick: (f) => { f && f(); }, $refs: { fshareBox: null },
         frameShare: { show: false, busy: false, img: '', note: '', link: '', title: '', canFiles: false, err: '', tip: '' },
         showMiniToast: (m) => S.toasts.push(m),
+        _plOnPop: () => false,   // 📚 片单页的 popstate 钩子(这里没开片单页;片单另有 scripts/playlists-test.mjs)
         syncShareUrl: () => { S.synced++; },
         _cutToBase: (t) => t + 30,   // 片头前剪掉了 30 秒插播:进度条 12:34 = 原时间轴 13:04
     };

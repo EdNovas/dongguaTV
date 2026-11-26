@@ -108,6 +108,8 @@ function makeVm(opts) {
         currentGroup: null, currentSource: null, episodeList: [], imageMap: {}, watchHistory: [], _liveActive: false,
         pushEnabled: !!opts.push, isNativeApp: false, pushSubscribed: false, pushBusy: false, pushMsg: '',
         pushAsk: { show: false, kind: '', msg: '' }, isTVMode: false, frameShare: { show: false }, showRequestModal: false, showSettingsModal: false,
+        // 📚 片单挂在收藏启动 / popstate 上的两个钩子:这里只测收藏,片单另有 scripts/playlists-test.mjs
+        _plBoot() { }, _plOnPop() { return false; }, _plRefreshMaybe() { }, plPage: { open: false },
         showInfoModal: false, showSharePanel: false, showOfflinePanel: false, userBanned: false, previewLocked: false,
         _favBooted: opts.booted !== false,
         showMiniToast: m => toasts.push(m),
@@ -1160,7 +1162,7 @@ await T(async () => {
             showDetail: false, currentGroup: null, currentSource: null, episodeList: [], currentUrl: '', previewLocked: false, deepLinkLoading: false,
             isTestingSources: false, deepLinkSourceCount: 0, offlineList: [], groupedList: [], introBtn: { show: false }, _liveOpenSeq: 0,
             watchHistory: [], searched: false, keyword: '', rawList: [], loading: false, isTVMode: false, refreshingEpisodes: false, showOfflinePanel: false,
-            liveChannelId: null, liveTesting: false, _liveActive: false, browse: { open: false },
+            liveChannelId: null, liveTesting: false, _liveActive: false, browse: { open: false }, plPage: { open: false },
             $nextTick(f) { if (f) f(); return Promise.resolve(); },
             handleImgError() { }, _introRenderBtn() { }, _openOfflineContext() { }, releaseWakeLock() { }, syncShareUrl() { },
         };
