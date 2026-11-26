@@ -1083,6 +1083,21 @@ try {
     favorites.registerRoutes(app);
     favorites.start();   // 启动 60s 后第一轮,之后每 10 分钟(模块内部到下一轮事件循环才判开关,避开 TDZ)
 } catch (e) { console.warn('[Favorites] 模块加载失败,收藏与更新提醒已禁用:', e.message); favorites = null; }
+// 📚 片单(见 lib/playlists):同步账号存服务器(每人 50 个 × 每个 500 部、总共 3000 部),可设公开拿分享链接 /?list=<id>。
+//    需 sqlite;没有就只存本机(前端看 /api/config 的 playlists_enabled)。写接口按令牌 90 次/分 + 每 IP 120 次/分;
+//    公开片单每 IP 60 次/分,配了访问密码时要有效令牌
+let playlists = null;
+try {
+    playlists = require('./lib/playlists').createPlaylists({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        authRequired: () => ACCESS_PASSWORDS.length > 0,
+        tokenOk: ownToken,
+        isBanned: (token) => isBanned(token),
+        writeLimiter: rateLimit({ windowMs: 60 * 1000, max: 120, keyGenerator: ipKey, message: { ok: false, error: 'rate' } }),
+        readLimiter: rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: ipKey, message: { ok: false, error: 'rate' } })
+    });
+    playlists.registerRoutes(app);
+} catch (e) { console.warn('[Playlists] 模块加载失败,片单只存本机:', e.message); playlists = null; }
 
 // 🗂️ 片名索引(见 lib/title-index):资源站关了关键词搜索(?wd= 回「暂不支持搜索」)但列表 / 详情还开着 →
 //    后台把它的片名表爬进本地 SQLite(title-index.db,纯缓存,丢了会自己重爬),搜索时本地查出 vod_id 再 ?ac=detail&ids= 取详情。
@@ -1785,6 +1800,8 @@ app.get('/api/config', (req, res) => {
         voice_asr: VOICE_ENABLED,
         // ✨ AI 找片(配了 Workers AI 才有)
         ai_find: !!aiFind,
+        // 📚 片单存服务器 / 分享可用(需 sqlite;没开就只存本机、不能分享)
+        playlists_enabled: !!(playlists && playlists.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });

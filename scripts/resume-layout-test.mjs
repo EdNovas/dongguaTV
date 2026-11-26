@@ -86,7 +86,7 @@ console.log('② CSS');
     // 盖住后藏起的首页层:每个都是 #app 真实的直接子节点;覆盖层/弹窗/封禁锁/TV 悬浮钮一个都不能在里面;首页层一个都不能漏
     const cm = /((?:\s*body\.detail-covered #app > [^,{]+,?)+)\s*\{\s*visibility: hidden !important;\s*\}/.exec(HTML);
     const sels = cm ? cm[1].split(',').map(s => s.trim().replace(/^body\.detail-covered #app > /, '')).filter(Boolean) : [];
-    ok(sels.length === 11, '隐藏列表 11 项', sels);
+    ok(sels.length === 12, '隐藏列表 12 项', sels);
     const parse5 = dep('parse5');
     const attr = (n, name) => { const a = (n.attrs || []).find(x => x.name === name); return a ? a.value : null; };
     const walk = function* (n) { yield n; for (const c of ((n.nodeName === 'template' ? n.content : n).childNodes || [])) yield* walk(c); };
@@ -94,7 +94,7 @@ console.log('② CSS');
     const kids = app ? app.childNodes.filter(c => c.attrs) : [];
     const matches = (n, sel) => sel[0] === '#' ? attr(n, 'id') === sel.slice(1) : (' ' + (attr(n, 'class') || '') + ' ').includes(' ' + sel.slice(1) + ' ');
     ok(sels.length && sels.every(s => kids.some(k => matches(k, s))), '列出的每一项都是 #app 的直接子节点', sels.filter(s => !kids.some(k => matches(k, s))));
-    const keep = ['.detail-overlay', '.info-modal-overlay', '.ban-lock', '.tv-mode-float-btn', '.voice-mask', '.aif-mask'];   // 语音搜索 / AI 找片浮层也是弹窗
+    const keep = ['.detail-overlay', '.info-modal-overlay', '.pl-sheet-overlay', '.ban-lock', '.tv-mode-float-btn', '.voice-mask', '.aif-mask'];   // 片单 / 语音搜索 / AI 找片浮层也是弹窗
     ok(!sels.some(s => keep.includes(s)), '覆盖层 / 弹窗 / 封禁锁 / TV 悬浮钮不藏', sels);
     const notHome = (k) => k.nodeName === 'teleport' || keep.some(s => matches(k, s));
     const missed = kids.filter(k => !notHome(k) && !sels.some(s => matches(k, s))).map(k => k.nodeName + '.' + (attr(k, 'class') || '') + '#' + (attr(k, 'id') || ''));

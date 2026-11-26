@@ -3388,6 +3388,118 @@
         .fav-heart.on { color: #e50914; border-color: rgba(229, 9, 20, .45); background: rgba(229, 9, 20, .12); }
         .fav-heart:disabled { opacity: .5; cursor: default; }
 
+        /* 📚 片单 */
+        .pl-heart { font-size: 16px; }
+        .pl-heart.on { color: #7fd3ff; border-color: rgba(127, 211, 255, .45); background: rgba(127, 211, 255, .12); }
+        /* 海报左上角「＋ 加到片单」:桌面悬停才出来,触屏常驻;电视模式不出(遥控器在播放页标题旁加,省得每张卡多一个焦点) */
+        .pl-add {
+            position: absolute; top: 6px; left: 6px; z-index: 3;
+            width: 28px; height: 28px; padding: 0; border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, .3); background: rgba(0, 0, 0, .65); color: #fff; font-size: 12px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer;
+            opacity: 0; transition: opacity .2s, background .2s, transform .15s;
+        }
+        .hot-card:hover .pl-add, .browse-card:hover .pl-add, .result-card:hover .pl-add, .pl-add:focus-visible { opacity: 1; }
+        .pl-add:hover { background: var(--accent, #e50914); border-color: transparent; }
+        .pl-add:active { transform: scale(.9); }
+        @media (hover: none) { .pl-add { opacity: .9; width: 26px; height: 26px; } }
+        body.tv-mode .pl-add { display: none; }
+        /* 首页片单卡:前 4 部海报拼成一张封面(1 张占满 / 2 张左右 / 3 张左一右二 / 4 张田字) */
+        .pl-card { min-width: var(--card-w, 150px); width: var(--card-w, 150px); cursor: pointer; position: relative; outline: none; }
+        .pl-collage {
+            position: relative; aspect-ratio: 2 / 3; border-radius: 6px; overflow: hidden; background: #222;
+            display: grid; gap: 2px; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+            border: 1px solid var(--border, rgba(255, 255, 255, .08)); box-shadow: 0 4px 10px rgba(0, 0, 0, .4);
+            transition: transform .3s cubic-bezier(.25, .8, .25, 1), box-shadow .25s;
+        }
+        .pl-collage img { width: 100%; height: 100%; min-height: 0; object-fit: cover; display: block; }
+        .pl-collage.n1 img { grid-column: 1 / 3; grid-row: 1 / 3; }
+        .pl-collage.n2 img { grid-row: 1 / 3; }
+        .pl-collage.n3 img:first-child { grid-row: 1 / 3; }
+        .pl-collage-empty { grid-column: 1 / 3; grid-row: 1 / 3; display: flex; align-items: center; justify-content: center; color: #555; font-size: 34px; }
+        .pl-count { position: absolute; right: 6px; bottom: 6px; background: rgba(0, 0, 0, .78); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; }
+        .pl-pub { position: absolute; left: 6px; top: 6px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0, 0, 0, .7); color: #7fd3ff; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+        .pl-card:hover .pl-collage { transform: scale(1.04); box-shadow: 0 14px 32px rgba(0, 0, 0, .7), 0 0 0 2px var(--accent); }
+        .pl-card:focus .pl-collage { transform: scale(1.04); box-shadow: 0 14px 32px rgba(0, 0, 0, .7), 0 0 0 3px #fff, 0 0 22px 3px rgba(229, 9, 20, .6); }
+        /* 片单页:整屏盖住首页(播放页 9999 / 加到片单弹窗 10010 在它上面);首页在后面不滚 */
+        body.pl-open { overflow: hidden; }
+        .pl-page { position: fixed; inset: 0; z-index: 9000; background: #141414; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+        .pl-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 4% 60px; }
+        /* 📱 返回按钮让开 iOS 状态栏(同 .close-btn:不认 max() 的老 TV WebView 遇到带 var() 的声明会算成无效,所以包在 @supports 里) */
+        @supports (top: max(1px, 2px)) {
+            .pl-wrap { padding-top: max(24px, calc(env(safe-area-inset-top, 0px) + 12px), calc(var(--dg-sb-guard, 0px) + 12px)); }
+        }
+        .pl-top { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+        .pl-back { color: #fff; border-color: rgba(255, 255, 255, .3); }
+        .pl-top-label { color: #999; font-size: 13px; }
+        .pl-head { max-width: 760px; margin-bottom: 6px; }
+        .pl-title { margin: 0 0 8px; color: #fff; font-size: 26px; font-weight: 700; line-height: 1.3; word-break: break-word; }
+        .pl-desc { margin: 0 0 8px; color: #bbb; font-size: 14px; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+        .pl-meta { margin-bottom: 14px; color: #888; font-size: 13px; }
+        .pl-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+        .pl-btn {
+            display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 18px; cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, .18); background: rgba(255, 255, 255, .06); color: #ddd; font-size: 13px;
+            transition: background .2s, border-color .2s, color .2s;
+        }
+        .pl-btn:hover, .pl-btn:focus-visible { background: rgba(255, 255, 255, .14); color: #fff; outline: none; }
+        .pl-btn:focus { box-shadow: 0 0 0 2px rgba(255, 255, 255, .7); outline: none; }
+        .pl-btn:not(:focus-visible):focus { box-shadow: none; }
+        .pl-btn.pri { background: var(--accent, #e50914); border-color: transparent; color: #fff; }
+        .pl-btn.pri:hover { background: #f6121d; }
+        .pl-btn.on { border-color: rgba(127, 211, 255, .5); color: #7fd3ff; }
+        .pl-btn.danger:hover { border-color: rgba(229, 9, 20, .6); color: #ff6b6b; }
+        .pl-btn:disabled { opacity: .5; cursor: default; }
+        .pl-tip { margin-top: 10px; color: #888; font-size: 12px; line-height: 1.6; }
+        .pl-edit { display: flex; flex-direction: column; gap: 10px; }
+        /* 16px:iOS 上输入框字号小于 16px 会在聚焦时整页放大 */
+        .pl-input { width: 100%; padding: 9px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, .15); background: #222; color: #fff; font-size: 16px; resize: vertical; }
+        .pl-input:focus { outline: none; border-color: var(--accent, #e50914); }
+        .pl-item-del {
+            position: absolute; top: 5px; right: 5px; z-index: 3; width: 24px; height: 24px; padding: 0; border: none; border-radius: 50%;
+            background: rgba(0, 0, 0, .7); color: #fff; font-size: 11px; display: flex; align-items: center; justify-content: center;
+            cursor: pointer; opacity: 0; transition: opacity .2s, background .2s;
+        }
+        .browse-card:hover .pl-item-del { opacity: 1; }
+        .pl-item-del:hover { background: rgba(229, 9, 20, .9); }
+        @media (hover: none) { .pl-item-del { opacity: .9; } }
+        .pl-empty { padding: 50px 0; }
+        @media (max-width: 600px) {
+            .pl-wrap { padding-left: 14px; padding-right: 14px; }
+            .pl-title { font-size: 22px; }
+            .pl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 10px; }
+        }
+        /* 加到片单弹窗:桌面居中,手机贴底 */
+        .pl-sheet-overlay { position: fixed; inset: 0; z-index: 10010; background: rgba(0, 0, 0, .6); display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .pl-sheet {
+            width: 100%; max-width: 420px; max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain;
+            padding: 16px 18px 18px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, .1); background: #1c1c1c; box-shadow: 0 20px 60px rgba(0, 0, 0, .6);
+        }
+        @media (max-width: 600px) {
+            .pl-sheet-overlay { align-items: flex-end; padding: 0; }
+            .pl-sheet { max-width: none; max-height: 85vh; max-height: 85dvh; border-radius: 16px 16px 0 0; border-bottom: none; padding-bottom: 18px; padding-bottom: max(18px, calc(env(safe-area-inset-bottom, 0px) + 12px)); }
+        }
+        .pl-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+        .pl-sheet-h { margin: 0; color: #fff; font-size: 17px; font-weight: 600; }
+        .pl-sheet .info-modal-close { position: static; flex: none; }
+        .pl-sheet-item { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding: 8px; border-radius: 8px; background: rgba(255, 255, 255, .04); color: #ddd; font-size: 14px; }
+        .pl-sheet-item img { flex: none; width: 36px; height: 54px; object-fit: cover; border-radius: 4px; }
+        .pl-sheet-item small { color: #888; }
+        .pl-sheet-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+        .pl-sheet-row {
+            display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px; border-radius: 8px; cursor: pointer; text-align: left;
+            border: 1px solid transparent; background: transparent; color: #ddd; font-size: 15px;
+        }
+        .pl-sheet-row:hover, .pl-sheet-row:focus { background: rgba(255, 255, 255, .08); border-color: rgba(255, 255, 255, .2); outline: none; }
+        .pl-sheet-row i { width: 18px; flex: none; color: #888; font-size: 17px; text-align: center; }
+        .pl-sheet-row.on i { color: #7fd3ff; }
+        .pl-sheet-row:disabled { opacity: .6; cursor: default; }
+        .pl-sheet-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pl-sheet-n { flex: none; color: #777; font-size: 12px; }
+        .pl-sheet-add { color: #bbb; }
+        .pl-sheet-new { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+        .pl-sheet-done { width: 100%; justify-content: center; margin-top: 14px; padding: 10px; font-size: 15px; }
+
         .movie-date {
             font-size: calc(12px * var(--ui-scale, 1));
             color: #666;
@@ -3460,6 +3572,7 @@
         body.detail-covered #app > .catdir-page,
         body.detail-covered #app > .browse-page,
         body.detail-covered #app > .browse-sticky,
+        body.detail-covered #app > .pl-page,
         body.detail-covered #app > #search-result-anchor,
         body.detail-covered #app > .footer {
             visibility: hidden !important;
@@ -5396,6 +5509,37 @@
                 </div>
             </div>
 
+            <!-- 📚 我的片单:每个片单一张拼图封面(前 4 部的海报),点开进片单页;一个片单都没有时整段隐藏 -->
+            <div v-else-if="k === 'lists'" class="section-container home-sec animate__animated animate__fadeInUp"
+                :class="{ 'home-first': bi === 0 }">
+                <div class="section-header" style="display: flex; align-items: center;">
+                    <div class="section-line" style="background: linear-gradient(135deg, #36d1dc, #5b86e5);"></div>
+                    <div class="section-title"><i class="fas fa-rectangle-list"></i> 我的片单</div>
+                    <button type="button" class="expand-toggle row-all" style="margin-left: auto;" @click="openPlSheet(null)"
+                        aria-label="新建片单"><i class="fas fa-plus" aria-hidden="true"></i> 新建</button>
+                </div>
+                <div class="scroll-container">
+                    <button class="scroll-btn left" v-show="plCanScrollLeft" @click="scrollRowBy('plRow', -1)"
+                        aria-label="向左滚动片单"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <div class="hot-row" ref="plRow" @scroll="onFavPopRowScroll('plRow', 'pl')">
+                        <div class="pl-card" v-for="l in plLists" :key="'pl-' + l.id" :tabindex="isTVMode ? 0 : null"
+                            @click="openPlaylist(l.id)" @keydown.enter.prevent="openPlaylist(l.id)">
+                            <div class="pl-collage" :class="'n' + plCovers(l).length">
+                                <img v-for="(src, i) in plCovers(l)" :key="i + src" :src="src" alt="" loading="lazy" decoding="async"
+                                    referrerpolicy="no-referrer" @error="$event.target.style.visibility = 'hidden'">
+                                <div v-if="!plCovers(l).length" class="pl-collage-empty"><i class="fas fa-rectangle-list" aria-hidden="true"></i></div>
+                                <span class="pl-count">{{ l.items.length }} 部</span>
+                                <span v-if="l.pub" class="pl-pub" title="公开"><i class="fas fa-globe" aria-hidden="true"></i></span>
+                            </div>
+                            <div class="movie-name">{{ l.name }}</div>
+                            <div class="movie-date" style="font-size: 11px;">{{ l.desc || (l.pub ? '公开' : '仅自己可见') }}</div>
+                        </div>
+                    </div>
+                    <button class="scroll-btn right" v-show="plCanScrollRight" @click="scrollRowBy('plRow', 1)"
+                        aria-label="向右滚动片单"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                </div>
+            </div>
+
             <!-- ✨ 为你推荐：基于观看历史的 TMDB 推荐(无历史/无结果时整段隐藏) -->
             <div v-else-if="k === 'recommend'" class="section-container home-sec animate__animated animate__fadeInUp"
                 :class="{ 'home-first': bi === 0 }" ref="recommendSection">
@@ -5418,6 +5562,7 @@
                             :key="'rec-' + (item.media_type || '') + '-' + item.id"
                             @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
                             <div class="poster-wrap">
+                                <button type="button" class="pl-add" :tabindex="isTVMode ? -1 : null" @click.stop="plAddTmdb(item)" title="加到片单" aria-label="加到片单"><i class="fas fa-plus" aria-hidden="true"></i></button>
                                 <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                 <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
@@ -5438,6 +5583,7 @@
                             :key="'recg-' + (item.media_type || '') + '-' + item.id"
                             @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
                             <div class="poster-wrap">
+                                <button type="button" class="pl-add" :tabindex="isTVMode ? -1 : null" @click.stop="plAddTmdb(item)" title="加到片单" aria-label="加到片单"><i class="fas fa-plus" aria-hidden="true"></i></button>
                                 <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                 <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
@@ -5681,6 +5827,7 @@
                             <div class="hot-card" v-for="item in rowLists[key]" :key="item.id"
                                 @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
                                 <div class="poster-wrap">
+                                    <button type="button" class="pl-add" :tabindex="isTVMode ? -1 : null" @click.stop="plAddTmdb(item)" title="加到片单" aria-label="加到片单"><i class="fas fa-plus" aria-hidden="true"></i></button>
                                     <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
                                         @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                     <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{
@@ -5701,6 +5848,7 @@
                         <div class="hot-card" v-for="item in getPagedItems(key)" :key="'grid-' + item.id"
                             @click="autoSearch(item.title || item.name, item.original_title || item.original_name)">
                             <div class="poster-wrap">
+                                <button type="button" class="pl-add" :tabindex="isTVMode ? -1 : null" @click.stop="plAddTmdb(item)" title="加到片单" aria-label="加到片单"><i class="fas fa-plus" aria-hidden="true"></i></button>
                                 <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async"
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                                 <div class="rating-badge"><i class="fas fa-star text-warning"></i> {{ item.vote_average
@@ -5875,6 +6023,7 @@
                 <div class="browse-card" v-for="item in browse.items" :key="'b-' + item.id" :data-bid="item.id"
                     :tabindex="isTVMode ? 0 : null" @click="browsePick(item)" @keydown.enter.prevent="browsePick(item)">
                     <div class="poster-wrap">
+                        <button type="button" class="pl-add" tabindex="-1" @click.stop="plAddTmdb(item, browse.type)" title="加到片单" aria-label="加到片单"><i class="fas fa-plus" aria-hidden="true"></i></button>
                         <img :src="getPosterUrl(item.poster_path)" loading="lazy" decoding="async" alt=""
                             @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
                         <div class="rating-badge" v-if="item.vote_average"><i class="fas fa-star text-warning"></i> {{
@@ -5922,6 +6071,103 @@
             </button>
         </div>
 
+        <!-- 📚 片单页(整屏盖住首页):首页「我的片单」/ 分享链接 ?list= 进来。点片子 = 按片名搜索,搜索结果页返回回到这里;
+             自己的能改名 / 设公开 / 复制链接 / 删;别人分享的只读,能「存到我的片单」 -->
+        <div class="pl-page" v-if="plPage.open" v-show="!searched" ref="plPageEl" role="dialog" aria-modal="true" :aria-label="plCur ? plCur.name : '片单'">
+            <div class="pl-wrap">
+                <div class="pl-top">
+                    <button type="button" ref="plBack" class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2 pl-back"
+                        @click="closePlaylist()" aria-label="返回首页">
+                        <i class="fas fa-arrow-left me-0 me-md-2" aria-hidden="true"></i><span class="d-none d-md-inline">返回首页</span>
+                    </button>
+                    <span class="pl-top-label"><i class="fas fa-rectangle-list" aria-hidden="true"></i> {{ plCurMine ? '我的片单' : '分享的片单' }}</span>
+                </div>
+                <div v-if="plCur" class="pl-head">
+                    <template v-if="!plPage.editing">
+                        <h2 class="pl-title">{{ plCur.name }}</h2>
+                        <p v-if="plCur.desc" class="pl-desc">{{ plCur.desc }}</p>
+                        <div class="pl-meta">{{ plCur.items.length }} 部<span v-if="plCurMine"> · {{ plCur.pub ? '公开（有链接的人都能看）' : '仅自己可见' }}</span></div>
+                        <div v-if="plCurMine" class="pl-actions">
+                            <button type="button" class="pl-btn" @click="plEditStart"><i class="fas fa-pen" aria-hidden="true"></i> 编辑</button>
+                            <button v-if="plCanShare" type="button" class="pl-btn" :class="{ on: plCur.pub }" :disabled="plBusy" @click="plTogglePub"
+                                :aria-pressed="plCur.pub ? 'true' : 'false'"><i :class="['fas', plCur.pub ? 'fa-globe' : 'fa-lock']" aria-hidden="true"></i> {{ plCur.pub ? '已公开' : '设为公开' }}</button>
+                            <button v-if="plCanShare && plCur.pub" type="button" class="pl-btn pri" @click="plCopyLink"><i class="fas fa-link" aria-hidden="true"></i> 复制链接</button>
+                            <button type="button" class="pl-btn danger" :disabled="plBusy" @click="plDeleteList"><i class="fas fa-trash-alt" aria-hidden="true"></i> {{ plPage.confirmDel ? '再点一次删除' : '删除片单' }}</button>
+                        </div>
+                        <div v-else class="pl-actions">
+                            <button type="button" class="pl-btn pri" :disabled="plBusy" @click="plSaveShared"><i class="fas fa-folder-plus" aria-hidden="true"></i> 存到我的片单</button>
+                        </div>
+                        <div v-if="plCurMine && !plCanShare" class="pl-tip">{{ plEnabled ? '片单只存在这台设备上，登录同步账号后可以跨设备同步、分享给别人' : '片单只存在这台设备上' }}</div>
+                    </template>
+                    <form v-else class="pl-edit" @submit.prevent="plEditSave">
+                        <input ref="plEditName" v-model="plPage.name" maxlength="40" class="pl-input" placeholder="片单名字" aria-label="片单名字">
+                        <textarea v-model="plPage.desc" maxlength="200" rows="2" class="pl-input" placeholder="一句话介绍（可不填）" aria-label="一句话介绍"></textarea>
+                        <div class="pl-actions">
+                            <button type="submit" class="pl-btn pri" :disabled="plBusy || !plPage.name.trim()">保存</button>
+                            <button type="button" class="pl-btn" @click="plPage.editing = false">取消</button>
+                        </div>
+                    </form>
+                </div>
+                <div v-if="plCur && plCur.items.length" class="browse-grid pl-grid">
+                    <div class="browse-card" v-for="it in plCur.items" :key="'pi-' + it.k" :data-pk="it.k" :tabindex="isTVMode ? 0 : null"
+                        @click="openPlItem(it)" @keydown.enter.prevent="openPlItem(it)">
+                        <div class="poster-wrap">
+                            <img :src="it.p || getPosterUrl('')" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer"
+                                @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')"
+                                @error="$event.target.src = getPosterUrl(''); $event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')">
+                            <button v-if="plCurMine" type="button" class="pl-item-del" tabindex="-1" @click.stop="plRemoveItem(plCur.id, it.k)"
+                                title="从片单移除" aria-label="从片单移除"><i class="fas fa-times" aria-hidden="true"></i></button>
+                        </div>
+                        <div class="movie-name">{{ it.t }}</div>
+                        <div class="movie-date">{{ plItemSub(it) }}</div>
+                    </div>
+                </div>
+                <div v-else-if="plCur" class="browse-empty pl-empty">
+                    <i class="fas fa-film" aria-hidden="true"></i>
+                    <div class="browse-empty-t">片单里还没有片子</div>
+                    <div v-if="plCurMine" class="browse-empty-s">在播放页点片名旁的 <i class="fas fa-folder-plus" aria-hidden="true"></i>，或点海报左上角的 <i class="fas fa-plus" aria-hidden="true"></i>，就能加进来</div>
+                </div>
+                <div v-else-if="plPage.loading" class="browse-state"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> 正在加载片单…</div>
+                <div v-else class="browse-empty pl-empty">
+                    <i class="fas fa-circle-exclamation" aria-hidden="true"></i>
+                    <div class="browse-empty-t">{{ plPage.error || '找不到这个片单' }}</div>
+                    <div class="browse-empty-btns"><button type="button" class="browse-btn" @click="closePlaylist()">回首页</button></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 📚 加到片单:播放页片名旁 / 海报左上角 ＋ 打开;点一行 = 加入 / 移出那个片单,可以就地新建。首页「新建」也用它(只新建) -->
+        <div class="pl-sheet-overlay" v-if="plSheet.show" @click.self="closePlSheet">
+            <div class="pl-sheet" role="dialog" aria-modal="true" aria-labelledby="pl-sheet-title">
+                <div class="pl-sheet-head">
+                    <h3 id="pl-sheet-title" class="pl-sheet-h">{{ plSheet.item ? '加到片单' : '新建片单' }}</h3>
+                    <button type="button" class="info-modal-close" @click="closePlSheet" aria-label="关闭"><i class="fas fa-times" aria-hidden="true"></i></button>
+                </div>
+                <div v-if="plSheet.item" class="pl-sheet-item">
+                    <img v-if="plSheet.item.p" :src="plSheet.item.p" alt="" referrerpolicy="no-referrer" @error="$event.target.style.display = 'none'">
+                    <span>{{ plSheet.item.t }}<small v-if="plSheet.item.y"> · {{ plSheet.item.y }}</small></span>
+                </div>
+                <div v-if="plSheet.item && plLists.length" class="pl-sheet-list">
+                    <button v-for="l in plLists" :key="'ps-' + l.id" type="button" class="pl-sheet-row" :class="{ on: plSheetHas(l) }"
+                        :aria-pressed="plSheetHas(l) ? 'true' : 'false'" :disabled="plBusy" @click="plSheetToggle(l)">
+                        <i :class="plSheetHas(l) ? 'fas fa-square-check' : 'far fa-square'" aria-hidden="true"></i>
+                        <span class="pl-sheet-name">{{ l.name }}</span><span class="pl-sheet-n">{{ l.items.length }} 部</span>
+                    </button>
+                </div>
+                <form v-if="plSheet.creating" class="pl-sheet-new" @submit.prevent="plSheetCreate">
+                    <input ref="plNewName" v-model="plSheet.name" maxlength="40" class="pl-input" placeholder="片单名字，比如「周末必看」" aria-label="片单名字">
+                    <input v-model="plSheet.desc" maxlength="200" class="pl-input" placeholder="一句话介绍（可不填）" aria-label="一句话介绍">
+                    <div class="pl-actions">
+                        <button type="submit" class="pl-btn pri" :disabled="plBusy || !plSheet.name.trim()">{{ plSheet.item ? '新建并加入' : '新建' }}</button>
+                        <button v-if="plSheet.item && plLists.length" type="button" class="pl-btn" @click="plSheet.creating = false">取消</button>
+                    </div>
+                </form>
+                <button v-else type="button" class="pl-sheet-row pl-sheet-add" @click="plSheetNew"><i class="fas fa-plus" aria-hidden="true"></i> <span class="pl-sheet-name">新建片单</span></button>
+                <div v-if="!plCanShare" class="pl-tip">{{ plEnabled ? '片单先存在这台设备上，登录同步账号后会自动并进账号' : '片单存在这台设备上' }}</div>
+                <button v-if="plSheet.item" type="button" class="pl-btn pri pl-sheet-done" @click="closePlSheet">完成</button>
+            </div>
+        </div>
+
         <!-- Search Results -->
         <div id="search-result-anchor" class="section-container" v-show="searched">
             <div class="d-flex align-items-center gap-2 mb-5 mt-2">
@@ -5944,6 +6190,7 @@
             <div class="result-grid" v-if="groupedList.length > 0">
                 <div class="result-card" v-for="group in groupedList" :key="group.name + '|' + (group._work || '')" @click="openDetail(group)">
                     <div class="poster-wrap">
+                        <button type="button" class="pl-add" :tabindex="isTVMode ? -1 : null" @click.stop="plAddGroup(group)" title="加到片单" aria-label="加到片单"><i class="fas fa-plus" aria-hidden="true"></i></button>
                         <img v-if="!isFallback(posterKey(group))" :src="finalPoster(group)" :key="finalPoster(group)"
                             referrerpolicy="no-referrer" loading="lazy" decoding="async"
                             @load="$event.target.classList.add('loaded'); $event.target.parentElement && $event.target.parentElement.classList.add('img-loaded')"
@@ -6440,6 +6687,12 @@
                                 class="fav-heart" :class="{ on: !!curFav }" tabindex="2" :disabled="favBusy"
                                 @click="toggleFavorite" :title="curFav ? '取消收藏' : '收藏(追剧,有更新会提醒)'" :aria-label="curFav ? '取消收藏' : '收藏'">
                                 <i :class="curFav ? 'fas fa-heart' : 'far fa-heart'"></i>
+                            </button>
+                            <!-- 📚 加到片单(哪个单里已经有了在弹窗里勾着);条件同 ♥,但不要求服务器开收藏(没登录同步也能存本机) -->
+                            <button v-if="!previewLocked && !trial.on && !currentGroup._isLive && !currentGroup._offlineCtx && currentGroup.sources && currentGroup.sources.length"
+                                class="fav-heart pl-heart" :class="{ on: curInPl }" tabindex="2" @click="plAddCurrent"
+                                :title="curInPl ? '已在片单里(点开可加到别的片单)' : '加到片单'" aria-label="加到片单">
+                                <i :class="curInPl ? 'fas fa-list-check' : 'fas fa-folder-plus'"></i>
                             </button>
                         </div>
                         <div class="video-meta">
@@ -7395,7 +7648,7 @@
                 // 但【无任何本地凭据】的访客在"已知本站需要登录"(上次成功检查缓存过)或深链场景下不放行——
                 // 否则弱网 8s 超时就成了登录墙的绕过通道。
                 let hasPlay = false;
-                try { hasPlay = !!new URLSearchParams(location.search).get('play'); } catch (_) { }
+                try { const _q = new URLSearchParams(location.search); hasPlay = !!(_q.get('play') || _q.get('list')); } catch (_) { }   // 📚 片单分享链接同样不放行
                 const knownRequired = localStorage.getItem('donggua_auth_required') === '1';
                 if ((hasPlay || knownRequired) && !localStorage.getItem(AUTH_STORAGE_KEY)) {
                     showLoginScreen();
@@ -7454,6 +7707,8 @@
                 localStorage.removeItem('donggua_popular_cache3');
                 localStorage.removeItem('donggua_popular_cache2');
                 localStorage.removeItem('donggua_fav_tmdb');   // 📅 追更日历的片名 → TMDB 表(键就是收藏的片名)
+                localStorage.removeItem('donggua_playlists');  // 📚 本机片单 / 同步账号片单缓存(同收藏:主动退出 = 可能换人)
+                localStorage.removeItem('donggua_pl_cache');
             } catch (e) { }
             return (async () => {
                 try {
@@ -11831,6 +12086,7 @@
             const SECTIONS = [
                 { k: 'history', l: '继续观看', icon: 'fa-history' },
                 { k: 'fav', l: '我的收藏', icon: 'fa-heart' },
+                { k: 'lists', l: '我的片单', icon: 'fa-rectangle-list' },
                 { k: 'calendar', l: '追剧日历', icon: 'fa-calendar-days' },
                 { k: 'recommend', l: '为你推荐', icon: 'fa-magic' },
                 { k: 'popular', l: '大家都在看', icon: 'fa-users' },
@@ -11974,6 +12230,104 @@
             return { clean, descriptive, downsample, wav, b64 };
         })();
         // </dg-voice-core>
+        // <dg-pl-core>
+        // 📚 片单的本机数据(没登录同步账号的人存 localStorage donggua_playlists;同步账号的服务器那份也按同一形状缓存)。
+        //   片单 { id, name, desc, pub, created_at, updated_at, items:[{ k, t, p, y, ty, tm, ot, w, a }] },条目新的在前。
+        //   条目规则与服务器 lib/playlists 一致(片名截 100、海报只认 http(s) / 站内路径、k = 片名去空白小写 + 作品签名)。
+        //   所有函数不改传进来的数组,返回新的。scripts/playlists-test.mjs 直接测这一段
+        const DgPl = (() => {
+            const LIM = { lists: 50, items: 500, total: 3000 };
+            const clean = (v, n) => String(v == null ? '' : v).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n);
+            const keyOf = (t, w) => { const s = String(t || '').replace(/\s+/g, '').toLowerCase(); return s ? s + (w ? '|w:' + w : '') : ''; };
+            const poster = (v) => {
+                const s = typeof v === 'string' ? v.trim() : '';
+                if (!s || s.length > 500 || /[\s"'<>\\]/.test(s)) return '';
+                return /^https?:\/\/[^/]/i.test(s) || /^\/(?!\/)/.test(s) ? s : '';
+            };
+            function item(x) {
+                if (!x || typeof x !== 'object') return null;
+                const t = clean(x.t, 100);
+                if (!t) return null;
+                const o = { t };
+                const p = poster(x.p); if (p) o.p = p;
+                const y = String(x.y == null ? '' : x.y).trim(); if (/^(19|20)\d{2}$/.test(y)) o.y = y;
+                if (typeof x.ty === 'string' && /^[a-z]{1,12}$/.test(x.ty)) o.ty = x.ty;
+                const tm = Number(x.tm); if (Number.isInteger(tm) && tm > 0 && tm < 1e9) o.tm = tm;
+                const ot = clean(x.ot, 100); if (ot && ot !== t) o.ot = ot;
+                const w = clean(x.w, 80); if (w) o.w = w;
+                o.k = keyOf(t, o.w);
+                const a = Number(x.a); if (a > 0) o.a = a;
+                return o;
+            }
+            function list(x) {
+                if (!x || typeof x !== 'object' || typeof x.id !== 'string' || !/^[A-Za-z0-9_-]{1,16}$/.test(x.id)) return null;
+                const name = clean(x.name, 40);
+                if (!name) return null;
+                const seen = new Set(), items = [];
+                for (const r of Array.isArray(x.items) ? x.items : []) {
+                    const it = item(r);
+                    if (it && !seen.has(it.k) && items.length < LIM.items) { seen.add(it.k); items.push(it); }
+                }
+                return { id: x.id, name, desc: clean(x.desc, 200), pub: x.pub === true, created_at: Number(x.created_at) || 0, updated_at: Number(x.updated_at) || 0, items };
+            }
+            function load(str) {
+                let a = null;
+                try { a = typeof str === 'string' ? JSON.parse(str) : str; } catch (e) { }
+                return (Array.isArray(a) ? a : []).map(list).filter(Boolean).slice(0, LIM.lists);
+            }
+            const total = (lists) => lists.reduce((n, l) => n + l.items.length, 0);
+            const lim = (l) => Object.assign({}, LIM, l || {});
+            const newId = () => 'l' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
+            function create(lists, name, desc, limits, first) {
+                const L = lim(limits), n = clean(name, 40);
+                if (!n) return { ok: false, error: 'name' };
+                if (lists.length >= L.lists) return { ok: false, error: 'limit' };
+                const now = Date.now();
+                let l = { id: newId(), name: n, desc: clean(desc, 200), pub: false, created_at: now, updated_at: now, items: [] };
+                const it = item(first);
+                if (it && total(lists) < L.total) l.items = [Object.assign(it, { a: now })];
+                return { ok: true, list: l, lists: [l].concat(lists) };
+            }
+            // 加一部:已有 = 更新内容(不挪位置、加入时间不变);新的放最前
+            function add(lists, id, x, limits) {
+                const L = lim(limits), it = item(x);
+                if (!it) return { ok: false, error: 'item' };
+                const i = lists.findIndex(l => l.id === id);
+                if (i < 0) return { ok: false, error: 'not_found' };
+                const l = lists[i], j = l.items.findIndex(y => y.k === it.k);
+                let items;
+                if (j >= 0) { items = l.items.slice(); items[j] = Object.assign({}, l.items[j], it, { a: l.items[j].a }); }
+                else {
+                    if (l.items.length >= L.items) return { ok: false, error: 'limit' };
+                    if (total(lists) >= L.total) return { ok: false, error: 'total' };
+                    items = [Object.assign(it, { a: it.a || Date.now() })].concat(l.items);
+                }
+                const out = lists.slice();
+                out[i] = Object.assign({}, l, { items, updated_at: Date.now() });
+                return { ok: true, added: j < 0, item: it, lists: out };
+            }
+            function update(lists, id, patch) {
+                const i = lists.findIndex(l => l.id === id);
+                if (i < 0) return { ok: false, error: 'not_found' };
+                const l = Object.assign({}, lists[i], { updated_at: Date.now() });
+                if (patch.name !== undefined) { const n = clean(patch.name, 40); if (!n) return { ok: false, error: 'name' }; l.name = n; }
+                if (patch.desc !== undefined) l.desc = clean(patch.desc, 200);
+                if (patch.pub !== undefined) l.pub = patch.pub === true;
+                const out = lists.slice();
+                out[i] = l;
+                return { ok: true, list: l, lists: out };
+            }
+            const removeItem = (lists, id, k) => lists.map(l => (l.id === id ? Object.assign({}, l, { items: l.items.filter(y => y.k !== k), updated_at: Date.now() }) : l));
+            const removeList = (lists, id) => lists.filter(l => l.id !== id);
+            const inLists = (lists, k) => lists.filter(l => l.items.some(y => y.k === k)).map(l => l.id);
+            const has = (lists, k) => !!k && lists.some(l => l.items.some(y => y.k === k));
+            // 首页封面拼图:前 4 张有海报的
+            const covers = (l) => ((l && l.items) || []).filter(y => y && y.p).slice(0, 4).map(y => y.p);
+            // 登录后并进账号(/api/playlists/import):去掉本机 id,其余照给
+            const forImport = (lists) => lists.map(l => ({ name: l.name, desc: l.desc, created_at: l.created_at, items: l.items.map(y => Object.assign({}, y)) }));
+            return { LIM, keyOf, item, list, load, create, add, update, removeItem, removeList, inLists, has, covers, forImport };
+        })();
+        // </dg-pl-core>
         // 📅 追剧日历的分类(顺序 = 分类标签顺序)与日期加减(YYYY-MM-DD,按 UTC 算不受本机时区影响)
         const CAL_CATS = [['tv', '电视剧'], ['anime', '动漫'], ['variety', '综艺'], ['movie', '电影'], ['doc', '纪录片'], ['short', '短剧']];
         const calAddDays = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
@@ -12296,6 +12650,16 @@
                     // 📅 追更日历:fav_id → TMDB 下一集 {d:'YYYY-MM-DD', e:集号}。冻结对象整个替换(不逐键响应式);开页先用本地缓存 → 首屏就有
                     favAir: (function () { try { return DgFavSched.airMap(DgFavSched.cacheParse(localStorage.getItem('donggua_fav_tmdb')), Date.now()); } catch (e) { return Object.freeze(Object.create(null)); } })(),
                     favToday: DgFavSched.localDay(new Date()),   // 本地日历的今天('YYYY-MM-DD',过零点由 _favDayTick 改)
+                    // 📚 片单(像豆瓣豆列):同步账号存服务器(plEnabled = /api/config 的 playlists_enabled),其他人存本机 donggua_playlists;
+                    //    形状见 <dg-pl-core>。plSheet = 「加到片单」弹窗;plPage = 片单页(自己的 / 分享链接 ?list= 进来的别人的)
+                    plEnabled: false,
+                    plLists: [],
+                    plLimits: { lists: 50, items: 500, total: 3000 },
+                    plBusy: false,
+                    plSheet: { show: false, item: null, creating: false, name: '', desc: '' },
+                    plPage: { open: false, id: '', shared: null, mine: false, loading: false, error: '', editing: false, name: '', desc: '' },
+                    plCanScrollLeft: false,
+                    plCanScrollRight: false,
                     // 👥 大家都在看(/api/popular + TMDB 补海报)
                     popularList: [],
                     popularCanScrollLeft: false,
@@ -12558,6 +12922,19 @@
                         self.pushAskLater();
                         return;
                     }
+                    // 📚「加到片单」弹窗开着(最上面一层):Esc / 返回键只关它;片单页(上面没盖播放页 / 搜索结果)Esc 关片单页
+                    if (self.plSheet.show && (e.key === 'Escape' || e.key === 'Esc' || e.key === 'GoBack' || e.key === 'BrowserBack'
+                        || (self.isTVMode && e.key === 'Backspace' && !(e.target && (/^(input|textarea)$/i.test(e.target.tagName || '') || e.target.isContentEditable))))) {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        self.closePlSheet();
+                        return;
+                    }
+                    if (!self.isTVMode && (e.key === 'Escape' || e.key === 'Esc') && self.plPage.open && !self.searched && !self.showDetail && !self.showSettingsModal) {
+                        if (self.plPage.editing) { self.plPage.editing = false; return; }
+                        self.closePlaylist();
+                        return;
+                    }
                     // 在输入框里删字的 Backspace 不算返回(TV 模式下用键盘在搜索框 / 弹幕框打字,以前一按退格就退出了这一页)
                     if (e.key === 'Backspace' && e.target && (/^(input|textarea)$/i.test(e.target.tagName || '') || e.target.isContentEditable)) return;
                     // TV 模式全局返回键处理
@@ -12583,6 +12960,13 @@
                         if (self.searched) {
                             e.preventDefault();
                             self.goHome();
+                            return false;
+                        }
+
+                        // 📚 在片单页：返回首页
+                        if (self.plPage && self.plPage.open) {
+                            e.preventDefault();
+                            self.closePlaylist();
                             return false;
                         }
 
@@ -12717,7 +13101,7 @@
                 // 🗂️ 安卓 App 的返回键(MainActivity.onBackPressed 注入的 JS,装好的 App 改不了)只认 showDetail / searched 两种状态:
                 //    分类浏览页 / 分类大全开着时对它说 searched = true → 它调 goHome() 退一层;否则在这两页按返回直接退出 App
                 window.vueApp = new Proxy(this, {
-                    get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen) : Reflect.get(t, k)),
+                    get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen || (t.plPage && t.plPage.open)) : Reflect.get(t, k)),
                 });
 
                 // 定义 startApp 函数供密码验证成功后调用
@@ -12749,6 +13133,7 @@
                     const has = {
                         history: this.watchHistory.length > 0,
                         fav: this.favoritesEnabled && this.favList.length > 0,
+                        lists: this.plLists.length > 0,
                         recommend: this.recommendList.length > 0,
                         popular: this.popularShown.length >= 4,
                         live: this.liveEnabled && this.liveChannels.length > 0,
@@ -12834,6 +13219,19 @@
                 curFav() {
                     return (this.favoritesEnabled && this.currentGroup) ? this._favFind(this.currentGroup) : null;
                 },
+                // 📚 片单:播放页这部在不在任何一个片单里(标题旁按钮亮不亮)/ 片单页显示的那个(自己的优先,别人分享的只读)
+                curInPl() {
+                    const g = this.currentGroup;
+                    return !!(g && g.name && this.plLists.length) && DgPl.has(this.plLists, DgPl.keyOf(g.name, this._favWorkSig(g)));
+                },
+                plCur() {
+                    if (!this.plPage.open) return null;
+                    return this.plLists.find(l => l.id === this.plPage.id) || this.plPage.shared || null;
+                },
+                plCurMine() { return !!this.plPage.open && this.plLists.some(l => l.id === this.plPage.id); },
+                plCanShare() { return !!(this.plEnabled && this.syncEnabled && this.syncToken); },
+                // 片单页盖着整屏(没被搜索结果 / 播放页换掉):锁住后面首页的滚动
+                plCovering() { return this.plPage.open && !this.searched; },
                 // ⭐ 收藏行顺序:有更新的排前面(最近更新的最前),其余按收藏时间倒序
                 favSorted() {
                     return (this.favList || []).slice().sort((a, b) => {
@@ -13015,6 +13413,7 @@
                 }
             },
             watch: {
+                plCovering(v) { try { document.body.classList.toggle('pl-open', !!v); } catch (e) { } },
                 // 📌 首页布局变了(加 / 删自选分类、打开关掉的行、别的设备同步过来):补齐行配置、补拉新显示的行
                 homeLayout: {
                     handler() {
@@ -13294,6 +13693,7 @@
                         this.voiceAsr = !!config.voice_asr;   // 🎙️ 语音搜索走服务器转文字
                         this.aiFindOn = !!config.ai_find;     // ✨ AI 找片
                         this.pushEnabled = !!config.push_enabled;
+                        this.plEnabled = !!config.playlists_enabled;   // 📚 片单存服务器 / 能分享(没有 = 只存本机)
                         // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
                         this.liveEnabled = !!config.live_enabled;
                         // 🚫 封禁锁屏（站长在后台封了这个用户）
@@ -16172,6 +16572,7 @@
                 //   ③ 弹窗没开:上次弹窗开着时刷新/标签页被回收,留下那条历史(启动时已去掉标记);退回/前进到它 → 页面不动,只把地址栏
                 //      对齐:播放页开着写当前集,没开着清掉 ?play=/?live=(以前首页顶着上一部的深链,刷新又打开它)
                 _onHistPop() {
+                    if (this._plOnPop()) return;   // 📚 片单页自己那条历史(见 _plOnPop)
                     if (this._frameShareBack) {
                         this._frameShareBack = 0;
                         if (this.showDetail && !this.frameShare.show) this.syncShareUrl();
@@ -16280,6 +16681,8 @@
                         if (p.get('tvlogin')) { this._tvLoginOpen(p.get('tvlogin')); return; }
                         const liveName = p.get('live');
                         if (liveName) { this._resolveLiveDeepLink(decodeURIComponent(liveName)); return; }  // 📺 ?live=频道名
+                        const listId = p.get('list');
+                        if (listId) { this.openPlaylist(listId, { link: true }); return; }   // 📚 ?list=片单 id(分享链接;登录门在这之前)
                         const playName = p.get('play');
                         if (!playName) return;
                         this._openWorkByName(playName, { ep: p.get('ep') || '', t: parseInt(p.get('t'), 10) || 0, w: p.get('w') || '' });
@@ -16770,6 +17173,12 @@
                 scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); },
 
                 goHome() {
+                    // 📚 片单页开着:搜索结果 → 片单页,片单页 → 首页(一次退一层,同分类浏览页)
+                    if (this.plPage.open && !this.showDetail) {
+                        if (this.searched) this._plFromSearch();
+                        else this.closePlaylist();
+                        return;
+                    }
                     // 🗂️ 分类浏览页开着:一次退一层 —— 搜索结果 → 浏览页(筛选和位置都在),浏览页 → 首页。
                     //    搜索结果页的返回按钮、TV 遥控返回键、安卓 App 返回键(MainActivity 注入的 JS)都走这里
                     if (this.browse.open && !this.showDetail) {
@@ -17469,6 +17878,7 @@
                 //   本机列表 donggua_favorites 只在"非同步"模式显示/使用(同步模式只把它一次性迁进账号,_favMigrateLocal):
                 //   被动登出不清它,换个同步账号登录也不能把它当成这个账号的收藏显示出来
                 _favBoot(displayOnly) {
+                    this._plBoot(displayOnly);   // 📚 片单跟收藏同一时机启动(同步与否定了才知道存哪边)
                     if (this._favBooted || !this.favoritesEnabled) return;
                     if (displayOnly) {
                         this._favDisplayOnly = true;
@@ -17591,6 +18001,7 @@
                     } catch (e) { }
                 },
                 _favRefreshMaybe() {
+                    this._plRefreshMaybe();   // 📚 回首页:同步账号的片单隔一阵拉一次
                     this.$nextTick(() => { this.onFavPopRowScroll('favRow', 'fav'); this.onFavPopRowScroll('popularRow', 'popular'); });   // 首页刚显示:箭头按真实宽度校正
                     this._favSchedKick();   // 📅 回首页:详情页里新收藏的 / 过期的下一集补查(有缓存的不发请求)
                     if (!this._favBooted) { this._favRetryBoot(false); return; }   // 只做过"只显示"启动:再确认一次同步状态
@@ -17712,6 +18123,455 @@
                         const x = list.find(y => y.fav_id === f.fav_id);
                         if (x) { x.seen_count = Math.max(x.seen_count | 0, n); this._favLocalSave(list); }
                     }
+                },
+
+                // ========== 📚 片单(像豆瓣豆列) ==========
+                // 同步账号(服务器能存 + 开了同步)→ 服务器 /api/playlists/*(本机缓存一份 donggua_pl_cache 按令牌前缀认人,冷启动秒显);
+                //   其他人 → 本机 donggua_playlists。同步账号第一次加载时把本机的片单一次性并进账号(同名合并),然后删掉本机那份。
+                //   启动时机跟收藏一样(_favBoot 里调 _plBoot):同步与否没确认(弱网)→ 只显示上次的,不写任何一边
+                _plIsSync() { return !!(this.plEnabled && this.syncEnabled && this.syncToken); },
+                _plLocalLoad() { try { return DgPl.load(localStorage.getItem('donggua_playlists')); } catch (e) { return []; } },
+                _plLocalSave(lists) { try { localStorage.setItem('donggua_playlists', JSON.stringify(lists || [])); } catch (e) { } },
+                _plCacheLoad() {
+                    try {
+                        const c = JSON.parse(localStorage.getItem('donggua_pl_cache') || 'null');
+                        const t = String(this.syncToken || '').slice(0, 16);
+                        return (c && t && c.t === t) ? DgPl.load(c.lists) : null;
+                    } catch (e) { return null; }
+                },
+                _plCacheSave(lists) {
+                    try { localStorage.setItem('donggua_pl_cache', JSON.stringify({ t: String(this.syncToken || '').slice(0, 16), lists: lists || [] })); } catch (e) { }
+                },
+                _plBoot(displayOnly) {
+                    if (this._plBooted) return;
+                    if (displayOnly) {
+                        let v2b = false;
+                        try { v2b = localStorage.getItem('emax_auth_type') === 'v2board'; } catch (e) { }
+                        this.plLists = this._plCacheLoad() || (v2b ? [] : this._plLocalLoad());
+                        return;
+                    }
+                    this._plBooted = true;
+                    this.plLists = this._plIsSync() ? (this._plCacheLoad() || []) : this._plLocalLoad();
+                    this.loadPlaylists();
+                },
+                // 改完存回当前模式那一边(同步账号 = 只更新缓存,服务器那边已经写过了)
+                _plSet(lists) {
+                    this.plLists = lists;
+                    if (this._plIsSync()) this._plCacheSave(lists); else this._plLocalSave(lists);
+                    this.$nextTick(() => this.onFavPopRowScroll('plRow', 'pl'));
+                },
+                _plApplyServer(d) {
+                    if (d && d.limits) this.plLimits = Object.assign({}, this.plLimits, d.limits);
+                    this._plSet(DgPl.load(d && d.lists));
+                },
+                async loadPlaylists() {
+                    if (!this._plIsSync()) { this._plSet(this._plLocalLoad()); return; }
+                    if (this._plLoading) return;
+                    this._plLoading = true;
+                    this._plLoadedAt = Date.now();
+                    try {
+                        const r = await fetchT('/api/playlists?token=' + encodeURIComponent(this.syncToken), null, 10000);
+                        const d = await r.json();
+                        if (d && d.enabled === false) { this.plEnabled = false; this._plSet(this._plLocalLoad()); return; }   // 服务器没了 sqlite:退回本机
+                        if (!d || !Array.isArray(d.lists)) return;
+                        this._plApplyServer(d);
+                        // 本机以前存的片单(没登录同步时建的)并进账号:成功才删本机那份,失败留着下次再并
+                        const local = this._plLocalLoad();
+                        if (local.length) {
+                            const m = await this._plPost('import', { lists: DgPl.forImport(local) });
+                            if (m.ok && Array.isArray(m.lists)) {
+                                try { localStorage.removeItem('donggua_playlists'); } catch (e) { }
+                                this._plApplyServer(m);
+                                this.showMiniToast('本机的 ' + local.length + ' 个片单已并入账号' + (m.skipped ? '（' + m.skipped + ' 部超出上限没能并入）' : ''));
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('[片单] 加载失败:', e);
+                    } finally {
+                        this._plLoading = false;
+                    }
+                },
+                // 回首页:同步账号 10 分钟拉一次(别的设备改过的跟上);本机模式不用拉
+                _plRefreshMaybe() {
+                    if (this._plBooted && this._plIsSync() && Date.now() - (this._plLoadedAt || 0) > 10 * 60 * 1000) this.loadPlaylists();
+                },
+                async _plPost(op, body) {
+                    try {
+                        const r = await fetchT('/api/playlists/' + op, {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.assign({ token: this.syncToken }, body))
+                        }, 10000);
+                        let d = {};
+                        try { d = (await r.json()) || {}; } catch (e) { }
+                        if (r.status === 429) return { ok: false, error: 'rate' };
+                        if (!r.ok && !d.error) return { ok: false, error: 'http' };
+                        return d;
+                    } catch (e) { return { ok: false, error: 'network' }; }
+                },
+                _plErr(d) {
+                    const L = this.plLimits, e = d && d.error;
+                    const msg = e === 'limit' && d.what === 'lists' ? '片单最多 ' + L.lists + ' 个，先删掉一些吧'
+                        : e === 'limit' ? '这个片单已经满 ' + L.items + ' 部了'
+                        : e === 'total' ? '所有片单加起来最多 ' + L.total + ' 部'
+                        : e === 'name' ? '给片单起个名字吧'
+                        : e === 'rate' ? '操作太快了，稍等一下再试'
+                        : e === 'not_found' ? '这个片单已经不在了'
+                        : e === 'network' ? '网络异常，稍后再试' : '保存失败，请稍后再试';
+                    this.showMiniToast(msg);
+                    if (e === 'not_found' && this._plIsSync()) this.loadPlaylists();   // 另一台设备删了:拉一次最新的
+                },
+                // 同步状态还没确认(弱网/服务器出错):不知道该写服务器还是本机 → 先不写
+                _plReady() {
+                    if (this._plBooted) return true;
+                    this.showMiniToast('网络异常，稍后再试');
+                    this._favRetryBoot(false);
+                    return false;
+                },
+                async plCreate(name, desc, first) {
+                    if (!this._plReady() || this.plBusy) return null;
+                    if (!String(name || '').trim()) { this._plErr({ error: 'name' }); return null; }
+                    if (this.plLists.length >= this.plLimits.lists) { this._plErr({ error: 'limit', what: 'lists' }); return null; }
+                    if (!this._plIsSync()) {
+                        const r = DgPl.create(this.plLists, name, desc, this.plLimits, first);
+                        if (!r.ok) { this._plErr(Object.assign({ what: 'lists' }, r)); return null; }
+                        this._plSet(r.lists);
+                        return r.list;
+                    }
+                    this.plBusy = true;
+                    try {
+                        const d = await this._plPost('create', { name, desc, item: first || undefined });
+                        const l = d.ok && DgPl.list(d.list);
+                        if (!l) { this._plErr(Object.assign({ what: 'lists' }, d)); return null; }
+                        this._plSet([l].concat(this.plLists.filter(x => x.id !== l.id)));
+                        return l;
+                    } finally { this.plBusy = false; }
+                },
+                async plAddItem(id, item) {
+                    if (!this._plReady() || this.plBusy) return false;
+                    if (!this._plIsSync()) {
+                        const r = DgPl.add(this.plLists, id, item, this.plLimits);
+                        if (!r.ok) { this._plErr(r); return false; }
+                        this._plSet(r.lists);
+                        return true;
+                    }
+                    this.plBusy = true;
+                    try {
+                        const d = await this._plPost('add', { id, item });
+                        if (!d.ok) { this._plErr(d); return false; }
+                        // 服务器是准的(上限它卡过了):本机这份照它回的条目改,不再按本机上限拦
+                        const r = DgPl.add(this.plLists, id, d.item || item, { items: 1e9, total: 1e9 });
+                        if (r.ok) this._plSet(r.lists);
+                        return true;
+                    } finally { this.plBusy = false; }
+                },
+                // 删一部:先在界面上删掉(乐观),服务器失败再放回
+                async plRemoveItem(id, k) {
+                    if (!this._plReady()) return false;
+                    const prev = this.plLists;
+                    this._plSet(DgPl.removeItem(prev, id, k));
+                    if (!this._plIsSync()) return true;
+                    const d = await this._plPost('remove', { id, k });
+                    if (d.ok) return true;
+                    this._plSet(prev);
+                    this._plErr(d);
+                    return false;
+                },
+                async plUpdate(id, patch) {
+                    if (!this._plReady() || this.plBusy) return false;
+                    if (!this._plIsSync()) {
+                        const r = DgPl.update(this.plLists, id, patch);
+                        if (!r.ok) { this._plErr(r); return false; }
+                        this._plSet(r.lists);
+                        return true;
+                    }
+                    this.plBusy = true;
+                    try {
+                        const d = await this._plPost('update', Object.assign({ id }, patch));
+                        if (!d.ok || !d.list) { this._plErr(d); return false; }
+                        const r = DgPl.update(this.plLists, id, { name: d.list.name, desc: d.list.desc, pub: d.list.pub === true });
+                        if (r.ok) this._plSet(r.lists);
+                        return true;
+                    } finally { this.plBusy = false; }
+                },
+                async _plDelete(id) {
+                    if (!this._plReady() || this.plBusy) return false;
+                    if (this._plIsSync()) {
+                        this.plBusy = true;
+                        try {
+                            const d = await this._plPost('delete', { id });
+                            if (!d.ok) { this._plErr(d); return false; }
+                        } finally { this.plBusy = false; }
+                    }
+                    this._plSet(DgPl.removeList(this.plLists, id));
+                    return true;
+                },
+                plCovers(l) { return DgPl.covers(l); },
+                plItemSub(it) {
+                    const ty = { movie: '电影', tv: '剧集', anime: '动漫', variety: '综艺', doc: '纪录片', short: '短剧' }[it && it.ty] || '';
+                    return [it && it.y, ty].filter(Boolean).join(' · ');
+                },
+
+                // ---- 「加到片单」弹窗 ----
+                // 播放页标题旁的按钮:当前这部(站内片名 + 海报 + 年份 + 同名多部的作品签名)
+                plAddCurrent() {
+                    const g = this.currentGroup;
+                    if (!g || !g.name) return;
+                    this.openPlSheet(this._plItemOfGroup(g, true));
+                },
+                // 搜索结果卡片(站内的片子)
+                plAddGroup(g) { if (g && g.name) this.openPlSheet(this._plItemOfGroup(g, false)); },
+                // TMDB 卡片(首页榜单 / 为你推荐 / 分类浏览):片名就是点卡片时搜的那个名字
+                plAddTmdb(item, hint) {
+                    if (!item) return;
+                    const t = item.title || item.name;
+                    if (!t) return;
+                    const ty = (item.media_type === 'movie' || item.media_type === 'tv') ? item.media_type
+                        : (typeof hint === 'string' && /^[a-z]{1,12}$/.test(hint)) ? hint : (item.title ? 'movie' : 'tv');
+                    this.openPlSheet({
+                        t, ot: item.original_title || item.original_name || '', p: item.poster_path ? this.getPosterUrl(item.poster_path) : '',
+                        y: String(item.release_date || item.first_air_date || '').slice(0, 4), ty, tm: item.id
+                    });
+                },
+                _plItemOfGroup(g, isCurrent) {
+                    let y = '';
+                    for (const s of [isCurrent ? this.currentSource : null].concat((g && g.sources) || [])) {
+                        const m = String((s && (s.vod_year || (s._cachedDetail && s._cachedDetail.vod_year))) || '').match(/(19|20)\d{2}/);
+                        if (m) { y = m[0]; break; }
+                    }
+                    const eps = isCurrent ? (this.episodeList || []).length : 0;
+                    return {
+                        t: g.name, p: String((this.imageMap && this.imageMap[this.posterKey(g)]) || g.pic || ''), y,
+                        ty: eps > 1 ? 'tv' : (eps === 1 ? 'movie' : ''), w: this._favWorkSig(g)
+                    };
+                },
+                // item = null:只新建片单(首页「新建」)
+                openPlSheet(item) {
+                    const it = item ? DgPl.item(item) : null;
+                    if (item && !it) return;
+                    this._plSheetOpener = document.activeElement;
+                    this.plSheet = { show: true, item: it, creating: !it || !this.plLists.length, name: '', desc: '' };
+                    // 焦点:遥控器落在第一行;只新建时(桌面)落在名字框;触屏不自动聚焦(会弹键盘 / 画焦点框)
+                    this.$nextTick(() => {
+                        const el = this.isTVMode ? document.querySelector('.pl-sheet-row, .pl-sheet .pl-input')
+                            : (this.plSheet.creating && !('ontouchstart' in window) ? this.$refs.plNewName : null);
+                        if (el && el.focus) { try { el.focus({ preventScroll: true }); } catch (e) { } }
+                    });
+                },
+                closePlSheet() {
+                    if (!this.plSheet.show) return;
+                    this.plSheet = Object.assign({}, this.plSheet, { show: false });
+                    const o = this._plSheetOpener;
+                    this._plSheetOpener = null;
+                    if (this.isTVMode && o && o.isConnected && o.focus) this.$nextTick(() => { try { o.focus({ preventScroll: true }); } catch (e) { } });
+                },
+                plSheetHas(l) { const it = this.plSheet.item; return !!it && !!l && l.items.some(y => y.k === it.k); },
+                async plSheetToggle(l) {
+                    const it = this.plSheet.item;
+                    if (!it || !l || this.plBusy) return;
+                    if (this.plSheetHas(l)) { if (await this.plRemoveItem(l.id, it.k)) this.showMiniToast('已从「' + l.name + '」移除'); }
+                    else if (await this.plAddItem(l.id, it)) this.showMiniToast('📚 已加到「' + l.name + '」');
+                },
+                plSheetNew() {
+                    this.plSheet.creating = true;
+                    this.$nextTick(() => { const el = this.$refs.plNewName; if (el && el.focus) { try { el.focus(); } catch (e) { } } });
+                },
+                async plSheetCreate() {
+                    const s = this.plSheet;
+                    const l = await this.plCreate(s.name, s.desc, s.item);
+                    if (!l) return;
+                    this.showMiniToast(s.item ? '📚 已新建「' + l.name + '」并加入' : '📚 已新建片单「' + l.name + '」');
+                    if (!s.item) { this.closePlSheet(); return; }
+                    this.plSheet = Object.assign({}, this.plSheet, { creating: false, name: '', desc: '' });
+                },
+
+                // ---- 片单页(整屏):自己的 = 在 plLists 里;别人分享的 = /api/playlists/public/:id(只读,能「存到我的片单」)----
+                async openPlaylist(id, o) {
+                    o = o || {};
+                    if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,16}$/.test(id)) { if (o.link) this._plClearLink(); return; }
+                    const wasOpen = this.plPage.open;
+                    if (!wasOpen) { this._plHomeY = window.scrollY || 0; this._plOpener = document.activeElement; }
+                    this.closePlSheet();
+                    this.plPage = { open: true, id, shared: null, mine: false, loading: false, error: '', editing: false, confirmDel: false, name: '', desc: '' };
+                    if (!wasOpen) this._plPushHist(id, !!o.link);
+                    this.$nextTick(() => {
+                        const el = this.$refs.plPageEl;
+                        if (el) el.scrollTop = 0;
+                        if (this.isTVMode && this.$refs.plBack) this._browseFocus(this.$refs.plBack);
+                    });
+                    if (this.plLists.some(l => l.id === id)) return;
+                    await this._plFetchShared(id);
+                },
+                async _plFetchShared(id) {
+                    const pg = this.plPage;
+                    if (!this.plEnabled) { pg.error = '这个片单打不开（本站没有开启片单分享）'; return; }
+                    pg.loading = true;
+                    let token = this.syncToken || '';
+                    if (!token) { try { token = localStorage.getItem('emax_auth_hash') || ''; } catch (e) { } }
+                    try {
+                        const r = await fetchT('/api/playlists/public/' + encodeURIComponent(id) + (token ? '?token=' + encodeURIComponent(token) : ''), null, 10000);
+                        let d = {};
+                        try { d = (await r.json()) || {}; } catch (e) { }
+                        if (this.plPage !== pg) return;   // 等的时候关了 / 换了别的片单
+                        const l = r.ok && d.ok && DgPl.list(d.list);
+                        if (l) { pg.shared = l; pg.mine = !!d.mine; }
+                        else pg.error = r.status === 401 ? '登录后才能查看这个片单' : (r.status === 404 ? '这个片单不存在，或者已经不公开了' : '片单加载失败，请稍后再试');
+                    } catch (e) {
+                        if (this.plPage === pg) pg.error = '网络异常，片单加载失败';
+                    } finally {
+                        if (this.plPage === pg) pg.loading = false;
+                    }
+                },
+                closePlaylist(fromPop) {
+                    if (!this.plPage.open) return;
+                    if (this.searched) this._leaveSearch();
+                    this.closePlSheet();
+                    this.plPage = Object.assign({}, this.plPage, { open: false, editing: false, confirmDel: false });
+                    clearTimeout(this._plDelT);
+                    // 自己压的那条历史退掉(退回那一下的 popstate 由 _plOnPop 认领);分享链接进来、没压成历史的,把 ?list= 从地址栏去掉
+                    if (this._plHist && !fromPop) { this._plBackAt = Date.now(); try { history.back(); } catch (e) { } }
+                    else if (!fromPop) this._plClearLink();
+                    this._plHist = false;
+                    const y = this._plHomeY || 0, opener = this._plOpener;
+                    this._plOpener = null;
+                    this.$nextTick(() => {
+                        this._jumpTo(y);
+                        this.onFavPopRowScroll('plRow', 'pl');
+                        if (this.isTVMode && opener && opener.isConnected) this._browseFocus(opener);
+                    });
+                },
+                // 打开片单页压一条历史(手机返回键 / 侧滑返回 / 浏览器后退 = 关片单页)。能分享的片单地址栏写 ?list=<id>(刷新还在这页);
+                //   从分享链接进来的:先把进来那条的 ?list= 去掉,关掉片单页落回干净的首页
+                _plPushHist(id, link) {
+                    try {
+                        if (link) this._plClearLink();
+                        const u = new URL(location.href);
+                        u.searchParams.delete('play'); u.searchParams.delete('list');
+                        if (this.plEnabled && (link || this._plIsSync())) u.searchParams.set('list', id);
+                        history.pushState(Object.assign({}, history.state || {}, { dgPl: id }), '', u.pathname + u.search + u.hash);
+                        this._plHist = true;
+                    } catch (e) { this._plHist = false; }
+                },
+                _plClearLink() {
+                    try {
+                        const u = new URL(location.href);
+                        if (!u.searchParams.has('list')) return;
+                        u.searchParams.delete('list');
+                        history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+                    } catch (e) { }
+                },
+                // popstate(_onHistPop 最先问这里):返回 true = 这一下是片单页的,别的逻辑别管
+                //   ① 自己 history.back() 退回那一下(1.5s 内)
+                //   ② 退到了片单页那条下面:上面还盖着播放页 / 搜索结果 → 关上面那层、把片单页那条压回去(一次退一层);否则关片单页
+                //   落在片单页那条上(上面叠的截帧弹窗 / 提醒小卡片那条退回来了)→ 不是我的,照原逻辑
+                _plOnPop() {
+                    if (this._plBackAt) {
+                        const mine = Date.now() - this._plBackAt < 1500;
+                        this._plBackAt = 0;
+                        if (mine) return true;
+                    }
+                    if (!this.plPage.open || !this._plHist) return false;
+                    const st = history.state;
+                    if (st && st.dgPl) return false;
+                    this._plHist = false;
+                    if (this.showDetail || this.searched) {
+                        if (this.showDetail) this.closeDetail();
+                        else this._plFromSearch();
+                        this._plPushHist(this.plPage.id, false);
+                        return true;
+                    }
+                    this.closePlaylist(true);
+                    return true;
+                },
+                // 片单页点了片子去搜索 → 返回回到片单页原位置
+                openPlItem(it) {
+                    if (!it || !it.t) return;
+                    const el = this.$refs.plPageEl;
+                    this._plScrollY = el ? el.scrollTop : 0;
+                    this._plPickK = it.k;
+                    this.autoSearch(it.t, it.ot || '');
+                },
+                _plFromSearch() {
+                    this._leaveSearch();
+                    this.keyword = '';
+                    const y = this._plScrollY || 0, k = this._plPickK;
+                    this.$nextTick(() => {
+                        const el = this.$refs.plPageEl;
+                        if (el) el.scrollTop = y;
+                        if (this.isTVMode) {
+                            const c = k != null && Array.from(document.querySelectorAll('.pl-grid .browse-card')).find(x => x.getAttribute('data-pk') === k);
+                            this._browseFocus(c || this.$refs.plBack);
+                        }
+                    });
+                },
+                plEditStart() {
+                    const l = this.plCur;
+                    if (!l) return;
+                    Object.assign(this.plPage, { editing: true, name: l.name, desc: l.desc, confirmDel: false });
+                    this.$nextTick(() => { const el = this.$refs.plEditName; if (el && el.focus) { try { el.focus(); } catch (e) { } } });
+                },
+                async plEditSave() {
+                    const l = this.plCur;
+                    if (!l) return;
+                    if (await this.plUpdate(l.id, { name: this.plPage.name, desc: this.plPage.desc })) this.plPage.editing = false;
+                },
+                async plTogglePub() {
+                    const l = this.plCur;
+                    if (!l || !this.plCanShare) return;
+                    const pub = !l.pub;
+                    if (!(await this.plUpdate(l.id, { pub }))) return;
+                    if (pub) await this.plCopyLink('已设为公开，');
+                    else this.showMiniToast('已改成仅自己可见，之前分享出去的链接打不开了');
+                },
+                async plCopyLink(prefix) {
+                    const l = this.plCur;
+                    if (!l) return;
+                    const url = location.origin + '/?list=' + encodeURIComponent(l.id);
+                    const ok = await this.copyShareLink(url);
+                    if (ok) this.showMiniToast((typeof prefix === 'string' ? prefix : '') + '🔗 片单链接已复制');
+                    else { try { window.prompt('复制片单链接：', url); } catch (e) { } }
+                },
+                // 删片单:点两下才删(App 里的 WebView 不一定弹得出 confirm)
+                async plDeleteList() {
+                    const l = this.plCur;
+                    if (!l || this.plBusy) return;
+                    if (!this.plPage.confirmDel) {
+                        this.plPage.confirmDel = true;
+                        clearTimeout(this._plDelT);
+                        this._plDelT = setTimeout(() => { this.plPage.confirmDel = false; }, 4000);
+                        return;
+                    }
+                    clearTimeout(this._plDelT);
+                    if (await this._plDelete(l.id)) {
+                        this.showMiniToast('已删除片单「' + l.name + '」');
+                        this.closePlaylist();
+                    }
+                },
+                // 别人分享的片单 → 存一份到自己的片单(同步账号走导入接口:同名的并进去)
+                async plSaveShared() {
+                    const l = this.plPage.shared;
+                    if (!l || this.plBusy || !this._plReady()) return;
+                    if (this._plIsSync()) {
+                        this.plBusy = true;
+                        try {
+                            const d = await this._plPost('import', { lists: DgPl.forImport([l]) });
+                            if (!d.ok || !Array.isArray(d.lists)) { this._plErr(d); return; }
+                            this._plApplyServer(d);
+                            this.showMiniToast('📚 已存到我的片单「' + l.name + '」' + (d.skipped ? '（' + d.skipped + ' 部超出上限）' : ''));
+                        } finally { this.plBusy = false; }
+                        return;
+                    }
+                    let lists = this.plLists, made = lists.find(x => x.name === l.name);
+                    if (!made) {
+                        const r = DgPl.create(lists, l.name, l.desc, this.plLimits);
+                        if (!r.ok) { this._plErr(Object.assign({ what: 'lists' }, r)); return; }
+                        lists = r.lists; made = r.list;
+                    }
+                    let skipped = 0;
+                    for (let i = l.items.length - 1; i >= 0; i--) {   // 倒着加:加完顺序和原片单一样
+                        const r = DgPl.add(lists, made.id, Object.assign({}, l.items[i], { a: 0 }), this.plLimits);
+                        if (r.ok) lists = r.lists; else skipped++;
+                    }
+                    this._plSet(lists);
+                    this.showMiniToast('📚 已存到我的片单「' + l.name + '」' + (skipped ? '（' + skipped + ' 部超出上限）' : ''));
                 },
 
                 // ========== 📅 追更日历(TMDB 下一集播出日) ==========

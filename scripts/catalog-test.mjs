@@ -229,7 +229,7 @@ console.log('② 模板 / 方法接线');
     ok(/if \(self\.searched\) \{[\s\S]*?self\.goHome\(\);[\s\S]*?if \(self\.browse && self\.browse\.open\) \{[\s\S]*?self\.closeBrowse\(\);/.test(tvH), 'TV 遥控返回键:搜索结果 → goHome(会退回浏览页),浏览页 → 首页');
     ok(!/@click="closeBrowse"/.test(HTML) && /@click="closeBrowse\(\)"/.test(HTML), '模板里 closeBrowse 都带括号调用(不带的话点击事件会被当成 quiet,不还原首页位置)');
     ok((HTML.match(/class="browse-sticky-(back|main)" :tabindex="isTVMode \? -1 : null"/g) || []).length === 2, '顶上摘要条的两个按钮不进遥控器焦点链');
-    ok(/window\.vueApp = new Proxy\(this, \{\s*get: \(t, k\) => \(k === 'searched' \? !!\(t\.searched \|\| \(t\.browse && t\.browse\.open\) \|\| t\.catDirOpen\) : Reflect\.get\(t, k\)\),/.test(HTML), 'window.vueApp:浏览页 / 分类大全开着时对安卓 App 说 searched = true');
+    ok(/window\.vueApp = new Proxy\(this, \{\s*get: \(t, k\) => \(k === 'searched' \? !!\(t\.searched \|\| \(t\.browse && t\.browse\.open\) \|\| t\.catDirOpen \|\| \(t\.plPage && t\.plPage\.open\)\) : Reflect\.get\(t, k\)\),/.test(HTML), 'window.vueApp:浏览页 / 分类大全 / 片单页开着时对安卓 App 说 searched = true');
     ok(/过滤随机盲盒和分类浏览中的不适宜内容/.test(HTML) && /if \(this\.browse\.open\) this\._browseFetch\(true\);/.test(HTML), '「过滤成人内容」也管分类浏览,切换后浏览页重拉');
 }
 
@@ -275,6 +275,7 @@ function makeApp(over) {
     const app = {
         browse: { open: false, type: 'tv', sel: {}, items: [], page: 0, totalPages: 0, total: 0, loading: false, error: false, done: false, idle: 0, seq: 0, keyword: '', auto: false, fromDir: false },
         browseStuck: false, catDirOpen: false, searched: false, keyword: '', rawList: [], loading: false, _originalTitle: '', showDetail: false, isTVMode: false, filterNsfw: true,
+        plPage: { open: false }, plSheet: { show: false },   // 📚 片单页 / 加到片单弹窗(goHome、返回键先问它们;片单另有 scripts/playlists-test.mjs)
         catNavType: 'tv', rowConfigs: { cnRow: { sortMode: 'newest' }, movieRow: {} }, $refs: {}, calls: [],
         $nextTick(f) { if (f) f(); return Promise.resolve(); },
     };

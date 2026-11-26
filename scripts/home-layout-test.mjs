@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 首页板块顺序 / 开关 + 偏好设置弹窗回归(离线、零网络):
 //   node scripts/home-layout-test.mjs
-//  ① public/index.html 里 <dg-home-core> 那段纯函数:八个板块、存储值规整(旧版本 / 别的设备 / 手改)、
+//  ① public/index.html 里 <dg-home-core> 那段纯函数:九个板块、存储值规整(旧版本 / 别的设备 / 手改)、
 //     老的「隐藏随机盲盒」迁移、换位、固定榜单 row:<键> 与自选分类 crow:<id>(加 / 删 / 上限)
 //  ② 模板接线:首页按 homeBlocks 顺序渲染、设置弹窗限高可滚动、两个入口开的是同一个弹窗;整份 #app 模板用 Vue 编译器编一遍
 //  ③ 在沙箱里真跑 Vue 方法 / 计算属性:首页块顺序、设置里上移下移(跳过没列出的板块)、开关、推服务器只推最后一次、
@@ -24,29 +24,29 @@ const ks = layout => layout.map(s => s.k + (s.on ? '' : '(关)')).join(',');
 const coreM = /\/\/ <dg-home-core>\n([\s\S]*?)\n\s*\/\/ <\/dg-home-core>/.exec(HTML);
 if (!coreM) { console.log('✗ index.html 里找不到 <dg-home-core> 段'); process.exit(1); }
 const H = vm.runInNewContext(coreM[1] + '\n;DgHome;', { Array, Object, JSON, Set, String });
-const DEF = 'history,fav,calendar,recommend,popular,live,catnav,random';
+const DEF = 'history,fav,lists,calendar,recommend,popular,live,catnav,random';
 const RK = JSON.parse((/const HOME_ROW_KEYS = (\[[^\]]*\]);/.exec(HTML) || [0, '[]'])[1].replace(/'/g, '"'));
 const DEF_R = DEF + ',' + RK.map(k => 'row:' + k).join(',');
 
 console.log('① 纯函数');
 {
-    ok(H.SECTIONS.map(s => s.k).join(',') === DEF && H.SECTIONS.every(s => s.l && /^fa-/.test(s.icon)), '八个板块:继续观看 / 收藏 / 追剧日历 / 为你推荐 / 大家都在看 / 直播 / 分类栏 / 随机盲盒,都有名字和图标');
+    ok(H.SECTIONS.map(s => s.k).join(',') === DEF && H.SECTIONS.every(s => s.l && /^fa-/.test(s.icon)), '九个板块:继续观看 / 收藏 / 片单 / 追剧日历 / 为你推荐 / 大家都在看 / 直播 / 分类栏 / 随机盲盒,都有名字和图标');
     ok(ks(H.normalize(null)) === DEF, '没有值 → 默认顺序、全开');
     for (const bad of ['x', 123, {}, { k: 'history' }, [null, 1, 'nope', { k: 'zzz' }]]) ok(ks(H.normalize(bad)) === DEF, '乱七八糟的值 → 默认:' + JSON.stringify(bad));
-    ok(ks(H.normalize([{ k: 'random', on: false }, { k: 'zzz' }, { k: 'history' }, { k: 'random', on: true }])) === 'random(关),history,fav,calendar,recommend,popular,live,catnav',
+    ok(ks(H.normalize([{ k: 'random', on: false }, { k: 'zzz' }, { k: 'history' }, { k: 'random', on: true }])) === 'random(关),history,fav,lists,calendar,recommend,popular,live,catnav',
         '认得的按给定顺序留下、重复的只留第一个、不认得的丢掉、没给到的插在默认顺序里它前一个板块后面', ks(H.normalize([{ k: 'random', on: false }, { k: 'zzz' }, { k: 'history' }, { k: 'random', on: true }])));
-    ok(ks(H.normalize(['live', 'catnav'])) === 'history,fav,calendar,recommend,popular,live,catnav,random', '只存了键名的也认(当开着)', ks(H.normalize(['live', 'catnav'])));
+    ok(ks(H.normalize(['live', 'catnav'])) === 'history,fav,lists,calendar,recommend,popular,live,catnav,random', '只存了键名的也认(当开着)', ks(H.normalize(['live', 'catnav'])));
     const OLD7 = [{ k: 'random' }, { k: 'history' }, { k: 'fav', on: false }, { k: 'recommend' }, { k: 'popular' }, { k: 'live' }, { k: 'catnav' }];
-    ok(ks(H.normalize(OLD7)) === 'random,history,fav(关),calendar,recommend,popular,live,catnav', '老版本存的 7 个板块:新加的追剧日历插在收藏后面(不掉到最底下),原来的顺序 / 开关不动', ks(H.normalize(OLD7)));
+    ok(ks(H.normalize(OLD7)) === 'random,history,fav(关),lists,calendar,recommend,popular,live,catnav', '老版本存的 7 个板块:新加的片单 / 追剧日历插在收藏后面(不掉到最底下),原来的顺序 / 开关不动', ks(H.normalize(OLD7)));
     ok(H.normalize([{ k: 'fav' }]).find(x => x.k === 'fav').on === true && H.normalize([{ k: 'fav', on: false }]).find(x => x.k === 'fav').on === false, '没写 on 当开着,on:false 才是关');
     ok(ks(H.initial(null, false)) === DEF, '没存过、老版本也没关随机盲盒 → 默认');
-    ok(ks(H.initial(null, true)) === 'history,fav,calendar,recommend,popular,live,catnav,random(关)', '老版本关了随机盲盒 → 迁移成随机盲盒关');
-    ok(ks(H.initial('{坏的 json', true)) === 'history,fav,calendar,recommend,popular,live,catnav,random(关)', '存的值坏了 → 当没存过(老设置照样迁移)');
+    ok(ks(H.initial(null, true)) === 'history,fav,lists,calendar,recommend,popular,live,catnav,random(关)', '老版本关了随机盲盒 → 迁移成随机盲盒关');
+    ok(ks(H.initial('{坏的 json', true)) === 'history,fav,lists,calendar,recommend,popular,live,catnav,random(关)', '存的值坏了 → 当没存过(老设置照样迁移)');
     const saved = JSON.stringify([{ k: 'random', on: true }, { k: 'catnav', on: false }]);
     ok(/,random,catnav\(关\)$/.test(ks(H.initial(saved, true))), '存过新布局 → 用新布局(随机盲盒在分类栏前面、分类栏关),不再看老的隐藏随机盲盒', ks(H.initial(saved, true)));
     const d = H.normalize(null);
     const sw = H.swap(d, 'random', 'catnav');
-    ok(ks(sw) === 'history,fav,calendar,recommend,popular,live,random,catnav' && ks(d) === DEF, 'swap 换位、不改原数组');
+    ok(ks(sw) === 'history,fav,lists,calendar,recommend,popular,live,random,catnav' && ks(d) === DEF, 'swap 换位、不改原数组');
     ok(H.swap(d, 'random', 'zzz') === d && H.swap(d, 'fav', 'fav') === d, 'swap 不认得的键 / 同一个 → 原样返回');
     ok(H.isDefault(d) && !H.isDefault(sw) && !H.isDefault(H.normalize([{ k: 'history', on: false }])), 'isDefault:顺序和开关都是默认才算');
     ok(H.info('live').l === '直播频道' && H.info('nope') === null, 'info 查名字');
@@ -56,7 +56,7 @@ console.log('① 纯函数');
     ok(ks(H.normalize(null, RK)) === DEF_R, '给了 rowKeys:默认 = 板块 + 固定榜单按默认顺序,全开');
     const withRows = H.normalize([{ k: 'row:tvRow', on: false }, { k: 'history' }, { k: 'row:goneRow' }, { k: 'row:movieRow' }], RK);
     const wr = ks(withRows);
-    ok(wr.startsWith('row:tvRow(关),history,') && !wr.includes('goneRow') && wr.indexOf('row:movieRow') < wr.indexOf('row:cnRow') && wr.endsWith(',row:historyRow') && withRows.length === 8 + 19,
+    ok(wr.startsWith('row:tvRow(关),history,') && !wr.includes('goneRow') && wr.indexOf('row:movieRow') < wr.indexOf('row:cnRow') && wr.endsWith(',row:historyRow') && withRows.length === 9 + 19,
         '榜单按存的顺序 / 开关留下;已经没有的榜单丢掉;没存到的榜单补在最后', ks(withRows));
     ok(ks(H.normalize([{ k: 'row:whatever' }])).includes('row:whatever'), '没给 rowKeys:row: 原样留着(不知道有哪些榜单)');
     const C = (id, extra) => Object.assign({ k: 'crow:' + id, type: 'tv', sel: { region: 'kr', genre: 'romance' }, l: '韩剧 · 爱情' }, extra || {});
@@ -72,7 +72,7 @@ console.log('① 纯函数');
     const base = H.normalize(null, RK);
     const added = H.addCustom(base, 'tv', { region: 'kr' }, '剧集 · 韩国');
     const at = added.findIndex(s => H.isCustom(s.k));
-    ok(added.length === base.length + 1 && at === 8 && added[at].l === '剧集 · 韩国' && added[at].on && base.length === 8 + 19, 'addCustom:插在最后一个板块后面、固定榜单前面,不改原数组', at);
+    ok(added.length === base.length + 1 && at === 9 && added[at].l === '剧集 · 韩国' && added[at].on && base.length === 9 + 19, 'addCustom:插在最后一个板块后面、固定榜单前面,不改原数组', at);
     ok(H.addCustom(added, 'tv', { region: 'kr' }, 'x') === added, 'addCustom:已经有了 → 原样返回');
     let full = base;
     for (let i = 0; i < 6; i++) full = H.addCustom(full, 'movie', { year: String(2000 + i) }, 'y' + i);
@@ -93,10 +93,10 @@ console.log('② 模板接线');
 
     // 首页:一个 v-for 按 homeBlocks 排,七种块各一个分支,榜单行是最后的 v-else
     ok(/<div v-show="!offHome" class="home-flow">\s*(?:<!--[\s\S]*?-->\s*)?<template v-for="\(\{ id, k, key, config \}, bi\) in homeBlocks" :key="id">/.test(TPL), '首页内容区:<template v-for … in homeBlocks :key="id">');
-    for (const k of ['history', 'fav', 'calendar', 'recommend', 'popular', 'live']) ok(new RegExp(`<div v-(?:else-)?if="k === '${k}'" class="section-container home-sec`).test(TPL), `板块 ${k} 是 homeBlocks 的一个分支,用统一间距(home-sec)`);
+    for (const k of ['history', 'fav', 'lists', 'calendar', 'recommend', 'popular', 'live']) ok(new RegExp(`<div v-(?:else-)?if="k === '${k}'" class="section-container home-sec`).test(TPL), `板块 ${k} 是 homeBlocks 的一个分支,用统一间距(home-sec)`);
     ok(/<section v-else-if="k === 'catnav'" class="catnav/.test(TPL), '分类栏是一个分支');
     ok(/<div v-else class="section-container animate__animated animate__fadeInUp" :class="\{ 'home-first': bi === 0 \}"\s*:ref="key \+ '-section'" :data-row-key="key">/.test(TPL), '榜单行(随机盲盒 + 其余分类)是 v-else 分支,ref / data-row-key 照旧');
-    ok((TPL.match(/'home-first': bi === 0/g) || []).length === 8, '八种块都会在排第一时拿到 home-first(上边距 60)');
+    ok((TPL.match(/'home-first': bi === 0/g) || []).length === 9, '九种块都会在排第一时拿到 home-first(上边距 60)');
     ok(!/v-for="\(config, key, index\) in rowConfigs"/.test(TPL) && !/key === 'randomRow' && hideRandomRow/.test(TPL), '不再直接遍历 rowConfigs、不再用 v-show 藏随机盲盒');
     ok(!/style="margin-top: 60px; margin-bottom: 10px;"/.test(TPL) && !/marginTop: watchHistory\.length \? '48px' : '60px'/.test(TPL), '旧的"按上面是谁"写死的边距删掉了');
     ok(/\.home-flow > \.home-sec \{ margin-top: 48px; margin-bottom: 44px; \}/.test(HTML) && /\.home-flow > \.home-first \{ margin-top: 60px; \}/.test(HTML), '间距 CSS:板块 48/44,第一个 60');
@@ -161,8 +161,8 @@ console.log('② 模板接线');
     const flow = app && findBy(app, hasCls('home-flow'));
     const loop = flow && kidsOf(flow);
     const branches = loop && loop.length === 1 && loop[0].nodeName === 'template' ? kidsOf(loop[0]).map(n => n.nodeName + ' ' + (attr(n, 'v-if') !== null ? 'if ' + attr(n, 'v-if') : attr(n, 'v-else-if') !== null ? 'elif ' + attr(n, 'v-else-if') : attr(n, 'v-else') !== null ? 'else' : '?')) : null;
-    ok(JSON.stringify(branches) === JSON.stringify(["div if k === 'history'", "div elif k === 'fav'", "div elif k === 'recommend'", "div elif k === 'calendar'", "div elif k === 'popular'", "div elif k === 'live'", "section elif k === 'catnav'", 'div else']),
-        '浏览器解析后:首页内容区里只有那一个 v-for,下面正好是八个分支(闭合标签没放错)', branches);
+    ok(JSON.stringify(branches) === JSON.stringify(["div if k === 'history'", "div elif k === 'fav'", "div elif k === 'lists'", "div elif k === 'recommend'", "div elif k === 'calendar'", "div elif k === 'popular'", "div elif k === 'live'", "section elif k === 'catnav'", 'div else']),
+        '浏览器解析后:首页内容区里只有那一个 v-for,下面正好是九个分支(闭合标签没放错)', branches);
     const sm = app && findBy(app, hasCls('settings-modal'));
     const smKids = sm ? kidsOf(sm).map(n => attr(n, 'class')) : null;
     const body = sm && findBy(sm, hasCls('settings-body'));
@@ -238,7 +238,7 @@ ok(D && Array.isArray(D.homeLayout) && ks(D.homeLayout) === DEF_R && D.hideRando
 function makeApp(over) {
     const app = Object.assign({
         homeLayout: H.normalize(null), homeLayoutMsg: '',
-        watchHistory: [], favoritesEnabled: true, favList: [], recommendList: [], popularList: [], liveEnabled: true, liveChannels: [],
+        watchHistory: [], favoritesEnabled: true, favList: [], plLists: [], recommendList: [], popularList: [], liveEnabled: true, liveChannels: [],
         rowConfigs: { randomRow: {}, movieRow: { title: '电影榜', icon: 'fa-film' }, tvRow: { title: '剧集榜' }, cnRow: { title: '国产剧' } }, rowLists: {},
         cal: { enabled: null, data: null, day: '', cat: '', loading: false, open: false }, calMore: { key: '', items: [], total: 0, loading: false, done: false, err: false },
         browse: { open: false, type: '', sel: {} }, filterNsfw: true,
@@ -261,8 +261,10 @@ const ids = app => app.homeBlocks.map(b => b.id).join(',');
     a.homeLayout = H.normalize([{ k: 'random', on: false }, { k: 'catnav', on: false }]);
     ok(ids(a) === 'history,fav,live,row:movieRow,row:tvRow,row:cnRow' && a.hideRandomRow === true, '随机盲盒 / 分类栏都关:都不渲染;hideRandomRow 跟着变', ids(a));
     const e = makeApp({ favoritesEnabled: false, liveEnabled: false, homeLayout: H.normalize(null) });
-    ok(e.homeLayoutView.map(s => s.k).join(',') === 'history,calendar,recommend,popular,catnav,random' && e.homeLayoutView[0].l === '继续观看' && e.homeLayoutView[0].on === true,
+    ok(e.homeLayoutView.map(s => s.k).join(',') === 'history,lists,calendar,recommend,popular,catnav,random' && e.homeLayoutView[0].l === '继续观看' && e.homeLayoutView[0].on === true,
         '设置里不列站长没开的收藏 / 直播', e.homeLayoutView.map(s => s.k));
+    const pl = makeApp({ watchHistory: [1], plLists: [{ id: 'l1', name: '周末', items: [] }] });
+    ok(ids(pl).startsWith('history,lists,catnav,') && !ids(makeApp({ watchHistory: [1] })).includes('lists'), '有片单:「我的片单」排在继续观看 / 收藏后面;一个片单都没有不出', ids(pl));
     const e2 = makeApp({ cal: { enabled: false, data: null } });
     ok(!e2.homeLayoutView.some(s => s.k === 'calendar'), '服务器没开追剧日历:设置里也不列');
 }
@@ -284,16 +286,16 @@ const ids = app => app.homeBlocks.map(b => b.id).join(',');
     focused.length = 0;
     a.moveHomeSection('catnav', -1);
     const view = () => a.homeLayoutView.map(s => s.k).join(',');
-    ok(view() === 'history,fav,calendar,recommend,catnav,popular,random' && ks(a.homeLayout) === 'history,fav,calendar,recommend,catnav,live,popular,random',
+    ok(view() === 'history,fav,lists,calendar,recommend,catnav,popular,random' && ks(a.homeLayout) === 'history,fav,lists,calendar,recommend,catnav,live,popular,random',
         '直播没列出:分类栏上移一位换到大家都在看前面(和列表里的上一项换,直播留在原位置)', [view(), ks(a.homeLayout)]);
-    ok(/分类栏 已移到第 5 位/.test(a.homeLayoutMsg) && focused[0] === '[data-home-mv="catnav:-1"]', '播报"已移到第 5 位",焦点留在它的上移按钮', [a.homeLayoutMsg, focused[0]]);
+    ok(/分类栏 已移到第 6 位/.test(a.homeLayoutMsg) && focused[0] === '[data-home-mv="catnav:-1"]', '播报"已移到第 6 位",焦点留在它的上移按钮', [a.homeLayoutMsg, focused[0]]);
     a.moveHomeSection('history', -1);
-    ok(ks(a.homeLayout) === 'history,fav,calendar,recommend,catnav,live,popular,random', '第一个再上移:不动');
+    ok(ks(a.homeLayout) === 'history,fav,lists,calendar,recommend,catnav,live,popular,random', '第一个再上移:不动');
     for (let i = 0; i < 4; i++) a.moveHomeSection('random', -1);
-    ok(view() === 'history,fav,random,calendar,recommend,catnav,popular', '随机盲盒连按四次上移', view());
+    ok(view() === 'history,fav,lists,random,calendar,recommend,catnav,popular', '随机盲盒连按四次上移', view());
     focused.length = 0;
-    a.moveHomeSection('random', -1); a.moveHomeSection('random', -1);
-    ok(ks(a.homeLayout).startsWith('random,') && focused[1] === '[data-home-mv="random:1"]', '移到最前后焦点换到它的下移按钮(上移按钮已变灰)', [ks(a.homeLayout), focused]);
+    a.moveHomeSection('random', -1); a.moveHomeSection('random', -1); a.moveHomeSection('random', -1);
+    ok(ks(a.homeLayout).startsWith('random,') && focused[2] === '[data-home-mv="random:1"]', '移到最前后焦点换到它的下移按钮(上移按钮已变灰)', [ks(a.homeLayout), focused]);
     const z = makeApp({});
     focused.length = 0;
     z.moveHomeSection('catnav', 1);
@@ -331,7 +333,7 @@ const ids = app => app.homeBlocks.map(b => b.id).join(',');
     const a = makeApp({ syncEnabled: true, syncToken: 'tk' });
     ctxObj._pullData = { sync_enabled: true, settings: { homeLayout: [{ k: 'live' }, { k: 'zzz' }, { k: 'random', on: false }] } };
     await a.pullUserSettings();
-    ok(ks(a.homeLayout).startsWith('history,fav,calendar,recommend,popular,live,catnav,random(关),row:movieRow') && store.get('donggua_home_layout') === JSON.stringify(a.homeLayout), '拉到服务器布局:规整后应用并存本机', ks(a.homeLayout));
+    ok(ks(a.homeLayout).startsWith('history,fav,lists,calendar,recommend,popular,live,catnav,random(关),row:movieRow') && store.get('donggua_home_layout') === JSON.stringify(a.homeLayout), '拉到服务器布局:规整后应用并存本机', ks(a.homeLayout));
     timers.length = 0;
     a.moveHomeSection('catnav', -1);
     const mine = ks(a.homeLayout);
