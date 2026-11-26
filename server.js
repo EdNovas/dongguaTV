@@ -1104,6 +1104,43 @@ if (!process.env.VERCEL) {
         titleIndex.start();   // 启动 90s 后第一轮,之后每分钟
     } catch (e) { console.warn('[TitleIndex] 模块加载失败,关了搜索的站继续搜不到:', e.message); titleIndex = null; }
 }
+// 📅 全站追剧周表(见 lib/update-calendar):每 30 分钟拉几个大资源站「最近 N 小时更新」(?ac=detail&h=),按资源站的更新日期归天、
+//    按片名去重,分 电视剧/动漫/综艺/电影/纪录片/短剧 存进 cache.db;首页「追剧日历」读 /api/calendar。
+//    需 CACHE_TYPE=sqlite。CALENDAR_SITES=站点key,逗号分隔 指定更新源(默认从 速播/红牛/非凡/最大/极速 里挑现有的前 3 个);CALENDAR_DISABLE=1 关。
+const CALENDAR_ENABLED = !envFlag('CALENDAR_DISABLE');
+const CALENDAR_PREFER = ['subocaiji', 'hongniuzy', 'ffzy', 'zuid', 'jisu'];
+function calendarSites() {
+    const all = allSites().filter(s => s && s.active !== false && !(kazumi && kazumi.isKzSite(s)) && /^https?:\/\//i.test(String(s.api || '')));
+    const want = String(process.env.CALENDAR_SITES || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (want.length) return want.map(k => all.find(s => s.key === k)).filter(Boolean);
+    const pref = CALENDAR_PREFER.map(k => all.find(s => s.key === k)).filter(Boolean);
+    return (pref.length ? pref : all).slice(0, 3);
+}
+let updateCalendar = null;
+if (!process.env.VERCEL && CALENDAR_ENABLED) {
+    try {
+        updateCalendar = require('./lib/update-calendar').createCalendar({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            sites: calendarSites,
+            httpGet: async (url, timeout) => (await axios.get(url, { timeout, responseType: 'text', transformResponse: [(x) => x], maxContentLength: 8 * 1024 * 1024 })).data,
+            log: (...a) => console.log('[Calendar]', ...a)
+        });
+        updateCalendar.start();   // 启动 2 分钟后第一轮(第一次补 3 天),之后每 30 分钟
+    } catch (e) { console.warn('[Calendar] 模块加载失败,追剧周表已禁用:', e.message); updateCalendar = null; }
+}
+app.get('/api/calendar', (req, res) => {
+    const w = updateCalendar && updateCalendar.week(String(req.query.day || ''), req.query.limit);
+    if (!w) return res.json({ enabled: false });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(Object.assign({ enabled: true }, w));
+});
+app.get('/api/calendar/list', (req, res) => {
+    const r = updateCalendar && updateCalendar.list(String(req.query.day || ''), String(req.query.cat || ''), req.query.offset, req.query.limit);
+    if (!r) return res.json({ enabled: false, items: [], total: 0 });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(Object.assign({ enabled: true }, r));
+});
+
 // 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback
 async function siteSearchFetch(site, kw) {
     if (titleIndex && titleIndex.useFor(site)) {

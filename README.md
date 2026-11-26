@@ -178,6 +178,8 @@ node server.js                       # 或 pm2 start server.js --name donggua-tv
 | `SITES_JSON` | — | 仅 Vercel：直接填 JSON 或 Base64 的站点配置，优先于 `REMOTE_DB_URL` |
 | `TITLE_INDEX_DISABLE` | — | `1` = 关闭片名索引。不关时，服务器每天自动检查哪些资源站把关键词搜索关了（回「暂不支持搜索」），把这些站的片名表爬到本地，搜索时先本地查再取详情，它们的线路才会出现在搜索结果里；站长后台「片库」页看进度。db.json 里给某个站写 `"search": false` / `true` 可强制走 / 不走索引 |
 | `TITLE_INDEX_DB` | `./title-index.db` | 片名索引库位置。它是纯缓存，丢了会自己重新爬（每站约 1~2 小时）；Docker 想保留就把它也挂载出来 |
+| `CALENDAR_DISABLE` | — | `1` = 关闭首页「追剧日历」。不关时（需 `CACHE_TYPE=sqlite`），服务器每 30 分钟从 2~3 个大资源站拉最近更新，按天、按分类（电视剧 / 动漫 / 综艺 / 电影 / 纪录片 / 短剧）整理成一周的更新表，存在 cache.db 里，保留 9 周 |
+| `CALENDAR_SITES` | 自动 | 追剧日历用哪些资源站当更新源，填 db.json 里的站点 key，逗号分隔。默认从 速播 / 红牛 / 非凡 / 最大 / 极速 里挑现有的前 3 个，都没有就用前 3 个站 |
 | `CORS_PROXY_URL` | — | Cloudflare Worker CORS 代理，**边缘去广告与直播都靠它**。可逗号分隔多个，第一个是主代理，故障时前端自动换备用 |
 | `TMDB_PROXY_URL` | — | TMDB 反代。图片与搜索翻译设了就用；`/api/tmdb-proxy` 按访客 IP 判断大陆才走 |
 | `SERVER_IN_CHINA` | — | 设 `true`：服务器自己发起的 TMDB 请求（分享卡片、预览、SEO 页、sitemap）强制走反代 |
