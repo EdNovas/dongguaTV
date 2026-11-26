@@ -91,6 +91,7 @@ await cal.tick();
     const d26 = w.days.find(x => x.day === '2026-11-26'), d25 = w.days.find(x => x.day === '2026-11-25'), d24 = w.days.find(x => x.day === '2026-11-24');
     ok(d26.total === 3 && d26.counts.short === 1 && d25.total === 1 && d24.counts.doc === 1, '每天的数量(total 不算短剧)', [d26, d25, d24]);
     ok(w.days.filter(x => x.future).map(x => x.day).join() === '2026-11-27,2026-11-28,2026-11-29', '今天以后的标 future');
+    ok(w.oldest === '2026-11-24', 'oldest = 最早有数据的那天(刚部署只有几天数据时「上一周」翻不到空白周)', w.oldest);
     ok(!tv[0].isNew && !w.cats.variety.items[0].isNew, '第一次跑:全部当以前就有,不标「新上」');
     ok(db.prepare('SELECT count(*) AS c FROM cal_seen').get().c === 5 && db.prepare("SELECT last_day FROM cal_seen WHERE nk = '繁花'").get().last_day === '2026-11-26', '首轮那批「以前就有」的记录清理时没被删掉(否则下一轮又当首轮、永远不出「新上」)');
     const st = cal.status();

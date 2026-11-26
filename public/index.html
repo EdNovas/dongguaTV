@@ -2345,7 +2345,13 @@
             .cal-day { padding: 6px 0 7px; border-radius: 10px; }
             .cal-dow { font-size: 12px; }
             .cal-md { display: none; }
-            .cal-week { margin-left: 0; }
+            /* 窄屏标题一行放下:展开只留箭头、周切换收紧 */
+            .cal-head { flex-wrap: nowrap; gap: 6px; }
+            .cal-week { margin-left: 2px; gap: 2px; }
+            .cal-wk-btn { width: 26px; height: 26px; }
+            .cal-wk-lbl { min-width: 40px; font-size: 12px; white-space: nowrap; }
+            .cal-exp-txt { display: none; }
+            .cal-head .cal-expand { flex: none; padding-left: 10px; padding-right: 10px; }
         }
         .browse-filters {
             padding: 6px 16px;
@@ -5377,7 +5383,7 @@
                         <button type="button" class="cal-wk-btn" :disabled="!calCanNext || cal.loading" @click="calWeek(1)" aria-label="下一周"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                     </div>
                     <span class="expand-toggle cal-expand" :class="{ expanded: cal.open }" role="button" tabindex="0"
-                        @click="calToggleOpen" @keydown.enter="calToggleOpen">{{ cal.open ? '收起' : '展开' }} <i class="fas fa-chevron-down"></i></span>
+                        @click="calToggleOpen" @keydown.enter="calToggleOpen" :aria-label="cal.open ? '收起' : '展开全部'"><span class="cal-exp-txt">{{ cal.open ? '收起' : '展开' }} </span><i class="fas fa-chevron-down"></i></span>
                 </div>
                 <div class="cal-days" role="tablist" aria-label="日期">
                     <button v-for="d in calDays" :key="d.day" type="button" role="tab" class="cal-day"
@@ -5428,7 +5434,7 @@
                         <div class="movie-date">{{ calSub(it) }}</div>
                     </div>
                     <div class="cal-more-foot">
-                        <button v-if="!calMore.done" type="button" class="cal-more-btn" :disabled="calMore.loading" @click="calLoadMore">
+                        <button v-if="!calMore.done" type="button" class="cal-more-btn" :disabled="calMore.loading" @click="calLoadMore()">
                             <i v-if="calMore.loading" class="fas fa-spinner fa-spin" aria-hidden="true"></i> {{ calMore.loading ? '加载中…' : (calMore.err ? '没加载出来,再试一次' : '再看 ' + Math.min(30, calMore.total - calMore.items.length) + ' 部') }}</button>
                         <span v-else class="cal-more-end">这天{{ calCatLabel }}一共 {{ calMore.total }} 部</span>
                     </div>
@@ -12082,7 +12088,7 @@
                     popularCanScrollLeft: false,
                     popularCanScrollRight: true,
                     // 📅 追剧日历:enabled null = 还没问过服务器 / false = 服务器没开;data = /api/calendar 的一周;open = 展开成网格
-                    cal: { enabled: null, data: null, day: '', cat: '', loading: false, open: false },
+                    cal: { enabled: null, data: null, day: '', cat: '', loading: false, open: false, seen: false },
                     calMore: { key: '', items: [], total: 0, loading: false, done: false, err: false },
                     calCanScrollLeft: false,
                     calCanScrollRight: true,
@@ -12555,7 +12561,8 @@
                 },
                 homeLayoutIsDefault() { return DgHome.isDefault(this.homeLayout, HOME_ROW_KEYS); },
                 // 📅 追剧日历
-                calHas() { const d = this.cal.data; return this.cal.enabled !== false && !!d && d.days.some(x => x.total > 0 || (x.counts.short || 0) > 0); },
+                // 有过数据就一直显示(翻到没数据的那周时整块消失,就翻不回来了)
+                calHas() { const d = this.cal.data; return this.cal.enabled !== false && !!d && (this.cal.seen || d.days.some(x => x.total > 0 || (x.counts.short || 0) > 0)); },
                 calDays() {
                     const d = this.cal.data;
                     if (!d) return [];
@@ -12575,8 +12582,7 @@
                     if (!d) return '';
                     if (d.days.some(x => x.day === d.today)) return '本周';
                     if (calAddDays(d.next, 0) <= d.today && d.today <= calAddDays(d.next, 6)) return '上周';
-                    const md = x => +x.slice(5, 7) + '/' + +x.slice(8);
-                    return md(d.monday) + '–' + md(calAddDays(d.monday, 6));
+                    return +d.monday.slice(5, 7) + '/' + +d.monday.slice(8) + ' 起';
                 },
                 calCanPrev() { const d = this.cal.data; return !!d && calAddDays(d.prev, 6) >= d.oldest; },
                 calCanNext() { const d = this.cal.data; return !!d && d.next <= d.today; },
@@ -16842,6 +16848,7 @@
                         for (const k of Object.keys(d.cats || {})) d.cats[k].items = (d.cats[k].items || []).map(it => Object.freeze(it));
                         c.enabled = true;
                         c.data = Object.freeze(d);
+                        if (d.days.some(x => x.total > 0 || (x.counts.short || 0) > 0)) c.seen = true;
                         c.day = d.day;
                         if (!(d.cats[c.cat] && d.cats[c.cat].n > 0)) { const f = CAL_CATS.find(([k]) => d.cats[k] && d.cats[k].n > 0); c.cat = f ? f[0] : 'tv'; }
                         this._calAt = Date.now();
