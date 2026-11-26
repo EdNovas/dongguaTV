@@ -1141,6 +1141,40 @@ app.get('/api/calendar/list', (req, res) => {
     res.json(Object.assign({ enabled: true }, r));
 });
 
+// ========== ☁️ Cloudflare Workers AI(语音搜索 / AI 找片 / 以后评论审核共用,见 lib/cf-ai) ==========
+//    CF_AI_ACCOUNT_ID + CF_AI_TOKEN 都配了才开;CF_AI_DAILY_LIMIT 每天最多调用几次(默认 3000,防刷);VOICE_DISABLE=1 只关语音
+const cfAi = require('./lib/cf-ai').createCfAi({
+    accountId: process.env.CF_AI_ACCOUNT_ID, token: process.env.CF_AI_TOKEN,
+    opts: Number(process.env.CF_AI_DAILY_LIMIT) > 0 ? { dailyLimit: Number(process.env.CF_AI_DAILY_LIMIT) } : {},
+});
+const VOICE_ENABLED = cfAi.enabled() && !envFlag('VOICE_DISABLE');
+// 需要登录的站只给登录了的人用(按 /api/auth/check 同一条规则:配了 ACCESS_PASSWORD 才要登录)
+function aiCaller(req) {
+    const token = typeof (req.body && req.body.token) === 'string' ? req.body.token : '';
+    if (ACCESS_PASSWORDS.length && !Object.prototype.hasOwnProperty.call(PASSWORD_HASH_MAP, token)) return { status: 401, error: '请先登录' };
+    if (token && isBanned(token)) return { status: 403, error: 'banned' };
+    return null;
+}
+// 🎙️ 语音搜索:前端录音转成 16k 单声道 WAV(base64)→ Whisper 转文字。一次最多 ~45 秒
+const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 12, keyGenerator: ipKey, message: { error: '说得太频繁了,歇一会儿再试' } });
+app.post('/api/voice/transcribe', voiceLimiter, async (req, res) => {
+    if (!VOICE_ENABLED) return res.status(404).json({ error: 'disabled' });
+    const bad = aiCaller(req);
+    if (bad) return res.status(bad.status).json({ error: bad.error });
+    const audio = req.body && req.body.audio;
+    // base64 的 WAV 以 "UklGR"(RIFF)开头
+    if (typeof audio !== 'string' || audio.length < 2000 || audio.length > 1600000 || audio.slice(0, 5) !== 'UklGR' || !/^[A-Za-z0-9+/]+=*$/.test(audio.slice(-64))) {
+        return res.status(400).json({ error: '录音格式不对' });
+    }
+    try {
+        const text = await cfAi.transcribe(audio);
+        res.json({ text: text.slice(0, 200) });
+    } catch (e) {
+        console.warn('[Voice] 转文字失败:', e.message);
+        res.status(e.code === 'quota' ? 429 : 502).json({ error: e.code === 'quota' ? '今天的语音识别次数用完了' : '识别服务暂时不可用' });
+    }
+});
+
 // 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback
 async function siteSearchFetch(site, kw) {
     if (titleIndex && titleIndex.useFor(site)) {
@@ -1661,6 +1695,8 @@ app.get('/api/config', (req, res) => {
         // 🔔 推送可用(需 sqlite + web-push 依赖;密钥自动生成)/ ❤️ 服务器收藏可用(需 sqlite;没开就只用本机收藏)
         push_enabled: !!(webPush && webPush.enabled()),
         favorites_enabled: !!(favorites && favorites.enabled()),
+        // 🎙️ 语音搜索走服务器转文字(配了 Workers AI 才有;没有时前端退回浏览器自带的识别)
+        voice_asr: VOICE_ENABLED,
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });

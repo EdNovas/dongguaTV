@@ -94,7 +94,7 @@ console.log('② CSS');
     const kids = app ? app.childNodes.filter(c => c.attrs) : [];
     const matches = (n, sel) => sel[0] === '#' ? attr(n, 'id') === sel.slice(1) : (' ' + (attr(n, 'class') || '') + ' ').includes(' ' + sel.slice(1) + ' ');
     ok(sels.length && sels.every(s => kids.some(k => matches(k, s))), '列出的每一项都是 #app 的直接子节点', sels.filter(s => !kids.some(k => matches(k, s))));
-    const keep = ['.detail-overlay', '.info-modal-overlay', '.ban-lock', '.tv-mode-float-btn'];
+    const keep = ['.detail-overlay', '.info-modal-overlay', '.ban-lock', '.tv-mode-float-btn', '.voice-mask'];   // 语音搜索浮层也是弹窗
     ok(!sels.some(s => keep.includes(s)), '覆盖层 / 弹窗 / 封禁锁 / TV 悬浮钮不藏', sels);
     const notHome = (k) => k.nodeName === 'teleport' || keep.some(s => matches(k, s));
     const missed = kids.filter(k => !notHome(k) && !sels.some(s => matches(k, s))).map(k => k.nodeName + '.' + (attr(k, 'class') || '') + '#' + (attr(k, 'id') || ''));

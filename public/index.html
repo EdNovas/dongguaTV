@@ -2291,6 +2291,33 @@
         .browse-pin:hover:not(:disabled) { background: rgba(229, 9, 20, 0.3); }
         .browse-pin.added { border-color: rgba(70, 211, 105, 0.45); background: rgba(70, 211, 105, 0.1); color: #8fe3a6; cursor: default; }
         @media (max-width: 576px) { .browse-pin span { display: none; } .browse-pin { width: 34px; padding: 0; justify-content: center; } }
+        /* 🎙️ 语音搜索 */
+        .search-mic {
+            flex: none; width: 44px; height: 44px; margin-right: 8px; border-radius: 50%; border: none; background: transparent;
+            color: #aaa; font-size: 17px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s;
+        }
+        .search-mic:hover, .search-mic:focus-visible { background: rgba(255, 255, 255, 0.1); color: #fff; }
+        .search-box-wrapper.compact .search-mic { width: 32px; height: 32px; font-size: 13px; margin-right: 4px; }
+        .voice-mask {
+            position: fixed; inset: 0; z-index: 3000; background: rgba(0, 0, 0, 0.72);
+            display: flex; align-items: center; justify-content: center; padding: 16px;
+        }
+        .voice-card {
+            width: min(360px, 100%); padding: 34px 24px 20px; border-radius: 22px; text-align: center;
+            background: #181818; border: 1px solid rgba(255, 255, 255, 0.1); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        }
+        .voice-orb {
+            --lv: 0; width: 96px; height: 96px; border-radius: 50%; border: none; cursor: pointer; color: #fff; font-size: 34px;
+            background: linear-gradient(135deg, #e50914, #ff6a00);
+            box-shadow: 0 0 0 calc(6px + var(--lv) * 26px) rgba(229, 9, 20, 0.22), 0 0 0 calc(12px + var(--lv) * 44px) rgba(229, 9, 20, 0.1);
+            transition: box-shadow 0.1s linear;
+        }
+        .voice-orb.is-busy { background: #333; box-shadow: none; cursor: default; }
+        .voice-orb.is-err { background: #333; box-shadow: none; }
+        .voice-text { margin-top: 30px; min-height: 28px; color: #fff; font-size: 19px; font-weight: 600; word-break: break-all; }
+        .voice-sub { margin-top: 6px; color: #888; font-size: 13px; }
+        .voice-cancel { margin-top: 18px; height: 36px; padding: 0 22px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.18); background: transparent; color: #bbb; font-size: 14px; cursor: pointer; }
+        .voice-cancel:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); }
         /* 📅 追剧日历 */
         .cal-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .cal-week { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
@@ -5189,6 +5216,7 @@
                 <i class="fas fa-search search-icon" @click="submitSearch(true)"></i>
                 <input type="text" v-model="keyword" @keyup.enter="submitSearch(true)" @input="debouncedSearch"
                     class="search-input" placeholder="输入片名或分类（如 泰剧、韩综）">
+                <button v-if="voiceAvail" type="button" class="search-mic" @click="voiceStart" aria-label="语音搜索" title="语音搜索"><i class="fas fa-microphone" aria-hidden="true"></i></button>
             </div>
         </div>
 
@@ -5677,6 +5705,21 @@
                     </div>
                 </div>
             </section>
+        </div>
+
+        <!-- 🎙️ 语音搜索:听(音量跟着跳)→ 识别中 → 填进搜索框直接搜;说完停顿一秒多自动结束,点麦克风也能提前结束 -->
+        <div v-if="voice.on" class="voice-mask" @click.self="voiceCancel" @keydown.esc="voiceCancel" role="dialog" aria-modal="true" aria-label="语音搜索">
+            <div class="voice-card">
+                <button type="button" class="voice-orb" :class="['is-' + voice.phase]" :style="{ '--lv': voice.level.toFixed(2) }"
+                    :disabled="voice.phase === 'busy'" @click="voice.phase === 'listen' ? voiceStop() : voiceStart()"
+                    :aria-label="voice.phase === 'listen' ? '说完了' : voice.phase === 'err' ? '再试一次' : '识别中'" ref="voiceOrb">
+                    <i :class="['fas', voice.phase === 'busy' ? 'fa-spinner fa-spin' : voice.phase === 'err' ? 'fa-rotate-right' : 'fa-microphone']" aria-hidden="true"></i>
+                </button>
+                <div class="voice-text" aria-live="polite">{{ voice.text || (voice.phase === 'listen' ? '请说片名或演员…' : voice.phase === 'busy' ? '识别中…' : voice.msg) }}</div>
+                <div class="voice-sub" v-if="voice.phase === 'listen'">说完停一下就会自动搜索</div>
+                <div class="voice-sub" v-else-if="voice.phase === 'err' && voice.text">{{ voice.msg }}</div>
+                <button type="button" class="voice-cancel" @click="voiceCancel">取消</button>
+            </div>
         </div>
 
         <!-- 🗂️ 分类浏览页(分类栏标签 / 榜单「全部」/ 搜「泰剧」这类分类词 / 分类大全进来)。从这里点海报去搜索时只是藏起来:
@@ -11761,10 +11804,61 @@
             return { SECTIONS, MAX_CUSTOM, info: k => BY_K[k] || null, isRow, isCustom, normalize, initial, swap, isDefault, customId, addCustom, removeCustom };
         })();
         // </dg-home-core>
-        // 首页固定榜单(rowConfigs 里除随机盲盒以外的键,顺序 = 默认顺序)。rowConfigs 加 / 删榜单要同步改这里
+        // <dg-voice-core>
+        // 🎙️ 语音搜索的纯函数(scripts/voice-test.mjs 直接测这一段):识别结果 → 搜索词、录音降采样、编码 WAV
+        const DgVoice = (() => {
+            const CN_NUM = { 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+            // 「我想看狂飙。」→ 狂飙;「胡歌演的繁花」→ 繁花;「流浪地球二」→ 流浪地球2(资源站片名用阿拉伯数字)
+            function clean(t) {
+                const raw = String(t || '').replace(/\s+/g, ' ').trim();
+                let s = raw.replace(/^[，,。.、\s]+/, '').replace(/[。，,.!！?？、~～\s]+$/, '');
+                s = s.replace(/^(?:请|麻烦)?(?:帮我|给我)?我?(?:想|要)(?:看看|看一下|看|搜索|搜一下|搜|找一下|找)?/, '')
+                    .replace(/^(?:请|麻烦)?(?:帮我|给我)(?:搜索|搜一下|搜|找一下|找|放一下|放|播放)?/, '')
+                    .replace(/^(?:搜索|搜一下|播放|打开)\s*/, '')
+                    .replace(/(?:吧|呢|啊|呀|哈)$/, '').trim();
+                const m = /^(.{1,12}?)(?:主演|导演|演|拍)的(.{2,})$/.exec(s);
+                if (m) s = m[2];
+                const n = /^(.*[\u4e00-\u9fff]{2})([一二三四五六七八九])$/.exec(s);
+                if (n && !/[第十零〇一二三四五六七八九]$/.test(n[1])) s = n[1] + CN_NUM[n[2]];
+                return s.trim() || raw;
+            }
+            // Float32 片段 → 16k 单声道 Int16(线性插值;录音时的采样率一般是 44.1k / 48k)
+            function downsample(chunks, fromRate, toRate) {
+                let len = 0;
+                for (const c of chunks) len += c.length;
+                const all = new Float32Array(len);
+                let o = 0;
+                for (const c of chunks) { all.set(c, o); o += c.length; }
+                const ratio = fromRate / toRate, outLen = Math.max(0, Math.floor(len / ratio));
+                const out = new Int16Array(outLen);
+                for (let i = 0; i < outLen; i++) {
+                    const x = i * ratio, i0 = Math.floor(x), i1 = Math.min(i0 + 1, len - 1), f = x - i0;
+                    const v = Math.max(-1, Math.min(1, all[i0] * (1 - f) + all[i1] * f));
+                    out[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+                }
+                return out;
+            }
+            function wav(pcm, rate) {
+                const buf = new ArrayBuffer(44 + pcm.length * 2), d = new DataView(buf);
+                const str = (off, t) => { for (let i = 0; i < t.length; i++) d.setUint8(off + i, t.charCodeAt(i)); };
+                str(0, 'RIFF'); d.setUint32(4, 36 + pcm.length * 2, true); str(8, 'WAVE'); str(12, 'fmt ');
+                d.setUint32(16, 16, true); d.setUint16(20, 1, true); d.setUint16(22, 1, true); d.setUint32(24, rate, true);
+                d.setUint32(28, rate * 2, true); d.setUint16(32, 2, true); d.setUint16(34, 16, true); str(36, 'data'); d.setUint32(40, pcm.length * 2, true);
+                new Int16Array(buf, 44).set(pcm);
+                return new Uint8Array(buf);
+            }
+            function b64(bytes) {
+                let s = '';
+                for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+                return btoa(s);
+            }
+            return { clean, downsample, wav, b64 };
+        })();
+        // </dg-voice-core>
         // 📅 追剧日历的分类(顺序 = 分类标签顺序)与日期加减(YYYY-MM-DD,按 UTC 算不受本机时区影响)
         const CAL_CATS = [['tv', '电视剧'], ['anime', '动漫'], ['variety', '综艺'], ['movie', '电影'], ['doc', '纪录片'], ['short', '短剧']];
         const calAddDays = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+        // 首页固定榜单(rowConfigs 里除随机盲盒以外的键,顺序 = 默认顺序)。rowConfigs 加 / 删榜单要同步改这里
         const HOME_ROW_KEYS = ['movieRow', 'tvRow', 'cnRow', 'usRow', 'krjpRow', 'animeRow', 'scifiRow', 'actionRow', 'comedyRow', 'crimeRow', 'romanceRow', 'familyRow', 'docRow', 'warRow', 'horrorRow', 'mysteryRow', 'fantasyRow', 'varietyRow', 'historyRow'];
 
         // <dg-trial-core>
@@ -12092,6 +12186,9 @@
                     calMore: { key: '', items: [], total: 0, loading: false, done: false, err: false },
                     calCanScrollLeft: false,
                     calCanScrollRight: true,
+                    // 🎙️ 语音搜索:phase listen / busy / err;voiceAsr = 服务器能转文字(/api/config.voice_asr)
+                    voice: { on: false, phase: 'listen', level: 0, text: '', msg: '' },
+                    voiceAsr: false,
                     // 🔔 Web Push 更新提醒
                     pushEnabled: false,             // 来自 /api/config(push_enabled)
                     pushSubscribed: false,          // 本浏览器当前是否已订阅(打开偏好设置时按 pushManager 实况刷新)
@@ -12604,6 +12701,11 @@
                     return this.homeLayout.filter(s => DgHome.isCustom(s.k)).length >= DgHome.MAX_CUSTOM ? 'full' : 'can';
                 },
                 homeCustomMax() { return DgHome.MAX_CUSTOM; },
+                // 🎙️ 有服务器转文字 + 能录音,或者浏览器自带语音识别,才出麦克风按钮
+                voiceAvail() {
+                    const rec = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext));
+                    return (this.voiceAsr && rec) || !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+                },
                 browseSummary() { return DgCatalog.summary(this.browse.type, this.browse.sel); },
                 // ⭐ 详情页这部是否已收藏(♥ 实心)。只依赖 favList 与 currentGroup 的名字/签名,播放中不会反复重算
                 curFav() {
@@ -13066,6 +13168,7 @@
                         }
                         // ⭐ 收藏 / 🔔 推送(都要服务器 sqlite;没有就整个入口隐藏)
                         this.favoritesEnabled = !!config.favorites_enabled;
+                        this.voiceAsr = !!config.voice_asr;   // 🎙️ 语音搜索走服务器转文字
                         this.pushEnabled = !!config.push_enabled;
                         // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
                         this.liveEnabled = !!config.live_enabled;
@@ -16820,6 +16923,122 @@
                     if (Array.isArray(row)) row = row[0];   // 首页板块在 v-for 里(可调顺序),ref 是数组
                     if (row) row.scrollBy({ left: dir * row.clientWidth * 0.8, behavior: 'smooth' });
                 },
+                // ========== 🎙️ 语音搜索 ==========
+                // 服务器能转文字时一律自己录音(浏览器自带的识别在 Chrome 上要连谷歌,国内用不了);否则退回浏览器自带识别
+                voiceStart() {
+                    const v = this.voice;
+                    if (v.on && v.phase !== 'err') return;
+                    Object.assign(v, { on: true, phase: 'listen', level: 0, text: '', msg: '' });
+                    this.$nextTick(() => { const b = this.$refs.voiceOrb; if (b && b.focus) b.focus(); });
+                    const rec = navigator.mediaDevices && navigator.mediaDevices.getUserMedia && (window.AudioContext || window.webkitAudioContext);
+                    if (this.voiceAsr && rec) return this._voiceRecord();
+                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    if (SR) return this._voiceBrowser(SR);
+                    Object.assign(v, { phase: 'err', msg: '这个浏览器不支持语音输入' });
+                },
+                voiceStop() { if (this._voiceRec) this._voiceRec.finish(false); else if (this._voiceSR) { try { this._voiceSR.stop(); } catch (e) { } } },
+                voiceCancel() {
+                    if (this._voiceRec) this._voiceRec.finish(true);
+                    if (this._voiceSR) { const r = this._voiceSR; this._voiceSR = null; try { r.abort(); } catch (e) { } }
+                    this._voiceSeq = (this._voiceSeq || 0) + 1;   // 还在识别的请求回来也不用了
+                    this.voice.on = false;
+                },
+                async _voiceRecord() {
+                    const v = this.voice, seq = (this._voiceSeq = (this._voiceSeq || 0) + 1);
+                    let stream;
+                    try {
+                        stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+                    } catch (e) {
+                        if (seq !== this._voiceSeq) return;
+                        Object.assign(v, { phase: 'err', msg: e && e.name === 'NotAllowedError' ? '没有麦克风权限:在浏览器设置里允许本站使用麦克风' : '打不开麦克风' });
+                        return;
+                    }
+                    if (seq !== this._voiceSeq || !v.on) { stream.getTracks().forEach(t => t.stop()); return; }
+                    const AC = window.AudioContext || window.webkitAudioContext, ctx = new AC();
+                    const src = ctx.createMediaStreamSource(stream), proc = ctx.createScriptProcessor(4096, 1, 1);
+                    const chunks = [], rate = ctx.sampleRate;
+                    let total = 0, speech = false, quiet = 0, floor = 0, n = 0, done = false;
+                    const finish = (cancel) => {
+                        if (done) return;
+                        done = true;
+                        this._voiceRec = null;
+                        try { proc.disconnect(); src.disconnect(); } catch (e) { }
+                        stream.getTracks().forEach(t => t.stop());
+                        try { ctx.close(); } catch (e) { }
+                        if (cancel || seq !== this._voiceSeq) return;
+                        if (!speech) { Object.assign(v, { phase: 'err', level: 0, msg: '没听到声音,点一下再说一次' }); return; }
+                        this._voiceSend(chunks, rate, seq);
+                    };
+                    this._voiceRec = { finish };
+                    proc.onaudioprocess = (e) => {
+                        if (done) return;
+                        const d = e.inputBuffer.getChannelData(0);
+                        chunks.push(new Float32Array(d));
+                        total += d.length;
+                        let sum = 0;
+                        for (let i = 0; i < d.length; i++) sum += d[i] * d[i];
+                        const rms = Math.sqrt(sum / d.length);
+                        if (n < 4) { floor = (floor * n + rms) / (n + 1); n++; }   // 前 ~0.35 秒当底噪
+                        const th = Math.max(0.012, floor * 2.5);
+                        v.level = Math.min(1, rms / Math.max(th * 4, 0.05));
+                        if (rms > th) { speech = true; quiet = 0; } else if (speech) quiet += d.length / rate;
+                        const sec = total / rate;
+                        if ((speech && quiet > 1.3) || sec > 12 || (!speech && sec > 7)) finish(false);
+                    };
+                    src.connect(proc);
+                    proc.connect(ctx.destination);   // ScriptProcessor 不接到输出 Chrome 不回调(输出是静音)
+                },
+                async _voiceSend(chunks, rate, seq) {
+                    const v = this.voice;
+                    Object.assign(v, { phase: 'busy', level: 0 });
+                    try {
+                        const audio = DgVoice.b64(DgVoice.wav(DgVoice.downsample(chunks, rate, 16000), 16000));
+                        const r = await fetchT('/api/voice/transcribe', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ audio, token: localStorage.getItem('emax_auth_hash') || '' }),
+                        }, 20000);
+                        const j = await r.json().catch(() => ({}));
+                        if (seq !== this._voiceSeq) return;
+                        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+                        this._voiceApply(j.text || '');
+                    } catch (e) {
+                        if (seq !== this._voiceSeq) return;
+                        Object.assign(v, { phase: 'err', msg: /登录|频繁|用完/.test(e.message) ? e.message : '没识别出来,点一下再说一次' });
+                    }
+                },
+                _voiceBrowser(SR) {
+                    const v = this.voice, seq = (this._voiceSeq = (this._voiceSeq || 0) + 1);
+                    const r = new SR();
+                    this._voiceSR = r;
+                    r.lang = 'zh-CN'; r.interimResults = true; r.maxAlternatives = 1;
+                    let final = '';
+                    r.onresult = (e) => {
+                        let t = '';
+                        for (let i = 0; i < e.results.length; i++) { t += e.results[i][0].transcript; if (e.results[i].isFinal) final = t; }
+                        v.text = t;
+                    };
+                    r.onerror = (e) => {
+                        if (seq !== this._voiceSeq) return;
+                        const k = e && e.error;
+                        Object.assign(v, { phase: 'err', msg: k === 'not-allowed' || k === 'service-not-allowed' ? '没有麦克风权限' : k === 'network' ? '语音识别连不上(浏览器自带的识别要连外网)' : '没听清,点一下再说一次' });
+                    };
+                    r.onend = () => {
+                        if (seq !== this._voiceSeq || this._voiceSR !== r) return;
+                        this._voiceSR = null;
+                        if (final || v.text) this._voiceApply(final || v.text);
+                        else if (v.phase === 'listen') Object.assign(v, { phase: 'err', msg: '没听清,点一下再说一次' });
+                    };
+                    try { r.start(); } catch (e) { Object.assign(v, { phase: 'err', msg: '语音识别启动失败' }); }
+                },
+                // 识别结果 → 搜索框 → 直接搜
+                _voiceApply(text) {
+                    const v = this.voice, q = DgVoice.clean(text);
+                    if (!q) { Object.assign(v, { phase: 'err', text: '', msg: '没听清,点一下再说一次' }); return; }
+                    v.on = false;
+                    this.keyword = q;
+                    this.submitSearch(true);
+                },
+
                 // ========== 📅 追剧日历 ==========
                 // day 空 = 今天(今天更新还不到 12 部时先看昨天,早上打开不至于一片空)
                 async loadCalendar(day) {
