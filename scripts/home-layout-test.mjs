@@ -119,7 +119,7 @@ console.log('② 模板接线');
     for (const m of ["v-model=\"filterNsfw\" @change=\"saveSettings('filterNsfw')\"", "v-model=\"introSkipShow\" @change=\"saveSettings('introSkipShow')\"", "v-model=\"introSkipAuto\" @change=\"saveSettings('introSkipAuto')\"",
         '@click="setCoverScale(lv.v)"', 'v-if="pushUi !== \'hidden\'"', '@change="togglePush($event)"', '@change="showSettingsModal = false; toggleTVMode()"', '@click="refreshV2boardInfo"'])
         ok(modal.includes(m), '弹窗里原有的设置项还在:' + m);
-    ok(/<i class="fas fa-user-circle" style="margin-right: 8px; color: #e50914;"><\/i>机场账户/.test(modal), '机场账户卡片的图标样式没丢');
+    ok(/<i class="fas fa-user-circle" style="margin-right: 8px; color: var\(--accent\);"><\/i>机场账户/.test(modal), '机场账户卡片的图标样式没丢');
 
     // 设置的存取:本机 donggua_home_layout,同步账号推 / 拉 user_settings.homeLayout
     ok(/homeLayout: \(function \(\) \{ try \{ return DgHome\.initial\(localStorage\.getItem\('donggua_home_layout'\), localStorage\.getItem\('donggua_hide_random'\) === 'true', HOME_ROW_KEYS\);/.test(HTML), 'data:homeLayout 从本机读(带上固定榜单),没存过时迁移老的隐藏随机盲盒');
