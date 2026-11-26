@@ -1301,6 +1301,42 @@ app.post('/api/admin/ai/bench', (req, res) => {
     catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
+// 📱 短剧竖屏刷(见 lib/shorts-feed):每 30 分钟从各站的短剧分类拉最新的,只收一集一集的(「全集」单文件不收)、每部留一条 m3u8 选集,
+//    按片名去重存进 cache.db(没 sqlite 放内存)。首页「短剧」整屏刷读 /api/shorts/feed?offset=&limit=,播放照常走前端的去广告代理 + 线路分级。
+//    SHORTS_SITES=站点key,逗号分隔 只用这些站;SHORTS_DISABLE=1 关。
+const SHORTS_ENABLED = !envFlag('SHORTS_DISABLE');
+let shortsFeed = null;
+if (!process.env.VERCEL && SHORTS_ENABLED) {
+    try {
+        shortsFeed = require('./lib/shorts-feed').createShortsFeed({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            sites: () => allSites().filter(s => s && s.active !== false && !(kazumi && kazumi.isKzSite(s))),
+            only: process.env.SHORTS_SITES || '',
+            tierOf: (() => {   // 同一部的线路按广告分级排(无广告在前);一批里要问几百次,站表 60s 一取
+                let at = 0, m = new Map();
+                return (key) => {
+                    if (Date.now() - at > 60e3) { at = Date.now(); m = new Map(allSites().map(s => [s.key, (profOf(s) || {}).tier || 'unknown'])); }
+                    return m.get(key) || 'unknown';
+                };
+            })(),
+            httpGet: async (url, timeout) => (await axios.get(url, { timeout, responseType: 'text', transformResponse: [(x) => x], maxContentLength: 8 * 1024 * 1024 })).data,
+            log: (...a) => console.log('[Shorts]', ...a)
+        });
+        shortsFeed.start();   // 启动 75s 后第一轮,之后每 30 分钟;片库空着时有人来刷会提前开一轮
+    } catch (e) { console.warn('[Shorts] 模块加载失败,短剧竖屏刷已禁用:', e.message); shortsFeed = null; }
+}
+app.get('/api/shorts/feed', (req, res) => {
+    if (!shortsFeed) return res.json({ enabled: false, items: [], total: 0 });
+    shortsFeed.kick();   // 片库还空着(刚启动)才会真的开一轮
+    const r = shortsFeed.feed(req.query.offset, req.query.limit);
+    const byKey = new Map(allSites().map(s => [s.key, s]));
+    const items = r.items.map(it => Object.assign({}, it, {
+        srcs: it.srcs.filter(x => byKey.has(x.site_key)).map(x => { const s = byKey.get(x.site_key); return Object.assign({}, x, { site_name: s.name, site_profile: profOf(s) }); })
+    })).filter(it => it.srcs.length);
+    res.set('Cache-Control', r.total ? 'public, max-age=60' : 'no-store');
+    res.json(Object.assign({ enabled: true }, r, { items }));
+});
+
 // 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback
 async function siteSearchFetch(site, kw) {
     if (titleIndex && titleIndex.useFor(site)) {

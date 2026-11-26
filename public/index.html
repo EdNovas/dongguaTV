@@ -5209,6 +5209,87 @@
                 font-size: 12px;
             }
         }
+
+        /* ========== 📱 短剧竖屏刷(DgShorts) ==========
+           三层(海报 / 视频 / 文字按钮)都按 --sh-dy 平移;拖动时 .sh-drag 关过渡,松手 .sh-anim 开过渡。高于播放页(9999)和 .close-btn(10005),
+           低于 teleport 的弹窗和 showMiniToast */
+        html.shorts-open, body.shorts-open { overflow: hidden !important; overscroll-behavior: none; }
+        html.shorts-open body { overflow: visible !important; }
+        .shorts-page {
+            position: fixed; inset: 0; z-index: 10010; background: #000; color: #fff; overflow: hidden;
+            touch-action: none; overscroll-behavior: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none;
+            -webkit-tap-highlight-color: transparent; outline: none; --sh-dy: 0px;
+        }
+        .shorts-page:focus, .shorts-page:focus-visible { outline: none !important; box-shadow: none !important; }
+        .sh-mv { position: absolute; inset: 0; transform: translate3d(0, var(--sh-dy), 0); will-change: transform; }
+        .shorts-page.sh-anim .sh-mv { transition: transform .28s cubic-bezier(.2, .75, .25, 1); }
+        .sh-slide { position: absolute; left: 0; right: 0; height: 100%; overflow: hidden; }
+        .sh-pbg { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(28px) brightness(.38); }
+        .sh-pic { position: absolute; inset: 0; background-size: contain; background-repeat: no-repeat; background-position: center; opacity: .55; }
+        .sh-vl { pointer-events: none; }
+        .sh-vl video { display: block; width: 100%; height: 100%; object-fit: contain; background: transparent; opacity: 0; transition: opacity .18s; }
+        .sh-vl.ready video { opacity: 1; }
+        .sh-fg { pointer-events: none; }
+        .sh-inner { position: absolute; inset: 0; max-width: 620px; margin: 0 auto; }
+        .sh-info, .sh-side, .sh-empty { pointer-events: auto; }
+        .sh-info {
+            position: absolute; left: 14px; right: 86px; bottom: calc(30px + env(safe-area-inset-bottom, 0px));
+            text-shadow: 0 1px 4px rgba(0, 0, 0, .8);
+        }
+        .sh-title { font-size: 17px; font-weight: 700; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .sh-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; font-size: 13px; color: rgba(255, 255, 255, .88); }
+        .sh-chip { padding: 1px 7px; border-radius: 4px; background: rgba(229, 9, 20, .85); font-size: 12px; text-shadow: none; }
+        .sh-blurb { margin-top: 6px; font-size: 13px; line-height: 1.5; color: rgba(255, 255, 255, .72); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .sh-side { position: absolute; right: 8px; bottom: calc(92px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; align-items: center; gap: 16px; }
+        .sh-btn { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 64px; padding: 0; border: 0; background: none; color: #fff; font-size: 12px; cursor: pointer; text-shadow: 0 1px 3px rgba(0, 0, 0, .7); }
+        .sh-btn i { display: flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 50%; background: rgba(0, 0, 0, .38); font-size: 19px; transition: transform .15s, color .15s; }
+        .sh-btn:active i { transform: scale(.9); }
+        .sh-btn.on i { color: #e50914; }
+        .sh-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #aaa; font-size: 14px; }
+        .sh-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 24px; background: linear-gradient(rgba(0, 0, 0, .5), transparent); pointer-events: none; }
+        @supports (top: max(1px, 2px)) {
+            .sh-top { padding-top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px), calc(var(--dg-sb-guard, 0px) + 6px)); }
+        }
+        .sh-top > * { pointer-events: auto; }
+        .sh-top-t { font-size: 16px; font-weight: 700; letter-spacing: 2px; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
+        .sh-ibtn { width: 40px; height: 40px; border-radius: 50%; border: 0; background: rgba(0, 0, 0, .38); color: #fff; font-size: 17px; cursor: pointer; }
+        .sh-note { position: absolute; left: 50%; top: 70px; z-index: 3; transform: translateX(-50%); max-width: 86%; padding: 6px 14px; border-radius: 16px; background: rgba(0, 0, 0, .62); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+        .sh-unmute { position: absolute; left: 50%; top: 110px; z-index: 3; transform: translateX(-50%); padding: 7px 16px; border: 0; border-radius: 18px; background: rgba(229, 9, 20, .9); color: #fff; font-size: 13px; cursor: pointer; }
+        .sh-center { position: absolute; left: 50%; top: 50%; z-index: 2; transform: translate(-50%, -50%); text-align: center; pointer-events: none; }
+        .sh-play-ic { font-size: 60px; color: rgba(255, 255, 255, .82); text-shadow: 0 2px 12px rgba(0, 0, 0, .5); }
+        .sh-spin { width: 40px; height: 40px; margin: 0 auto; border: 3px solid rgba(255, 255, 255, .22); border-top-color: #fff; border-radius: 50%; animation: shSpin .8s linear infinite; }
+        @keyframes shSpin { to { transform: rotate(360deg); } }
+        .sh-err { pointer-events: auto; min-width: 220px; padding: 16px 18px; border-radius: 14px; background: rgba(20, 20, 20, .88); font-size: 14px; }
+        .sh-err-btns { display: flex; justify-content: center; gap: 10px; margin-top: 12px; }
+        .sh-err-btns button { padding: 6px 16px; border: 1px solid rgba(255, 255, 255, .25); border-radius: 16px; background: none; color: #fff; font-size: 13px; cursor: pointer; }
+        .sh-err-btns button:first-child { border-color: transparent; background: #e50914; }
+        .sh-prog { position: absolute; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0px); z-index: 3; height: 18px; cursor: pointer; }
+        .sh-prog::before, .sh-prog i { content: ''; position: absolute; left: 0; right: 0; bottom: 7px; height: 2px; }
+        .sh-prog::before { background: rgba(255, 255, 255, .2); }
+        .sh-prog i { background: rgba(255, 255, 255, .9); transform-origin: left center; transform: scaleX(0); }
+        .sh-drawer-mask { position: absolute; inset: 0; z-index: 6; background: rgba(0, 0, 0, .35); touch-action: pan-y; }
+        .sh-drawer {
+            position: absolute; left: 0; right: 0; bottom: 0; max-width: 620px; max-height: 62%; margin: 0 auto; display: flex; flex-direction: column;
+            padding: 14px 14px calc(14px + env(safe-area-inset-bottom, 0px)); border-radius: 16px 16px 0 0; background: #1c1c1e; animation: shUp .22s ease-out;
+        }
+        @keyframes shUp { from { transform: translateY(40%); opacity: .4; } to { transform: none; opacity: 1; } }
+        .sh-dr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 14px; }
+        .sh-dr-head b { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; }
+        .sh-dr-head span { flex: none; color: #999; font-size: 12px; }
+        .sh-dr-x { flex: none; margin-left: auto; padding: 0 6px; border: 0; background: none; color: #999; font-size: 26px; line-height: 1; cursor: pointer; }
+        .sh-dr-lines { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; overflow-x: auto; font-size: 12px; color: #999; }
+        .sh-dr-lines span { flex: none; }
+        .sh-dr-lines button { flex: none; height: 28px; padding: 0 12px; border: 1px solid rgba(255, 255, 255, .14); border-radius: 14px; background: none; color: #ccc; font-size: 12px; cursor: pointer; }
+        .sh-dr-lines button.on { border-color: #e50914; color: #fff; background: rgba(229, 9, 20, .2); }
+        .sh-dr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 8px; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 4px; }
+        .sh-dr-grid button { height: 40px; border: 1px solid transparent; border-radius: 8px; background: rgba(255, 255, 255, .08); color: #ddd; font-size: 14px; cursor: pointer; }
+        .sh-dr-grid button.on { background: #e50914; color: #fff; }
+        .catnav-q.is-shorts i { color: #ff4d5a; }
+        .cal-shorts-go { display: inline-flex; align-items: center; gap: 8px; margin: -2px 0 12px; padding: 7px 14px; border: 1px solid rgba(229, 9, 20, .45); border-radius: 18px; background: rgba(229, 9, 20, .12); color: #fff; font-size: 13px; cursor: pointer; }
+        .cal-shorts-go .fa-chevron-right { font-size: 11px; opacity: .7; }
+        .cal-shorts-go:focus:not(:focus-visible) { outline: none !important; box-shadow: none !important; }
+        /* 鼠标 / 手指点过的按钮不留全站 TV 焦点红框(遥控器 / 键盘焦点 :focus-visible 照常有) */
+        .shorts-page button:focus:not(:focus-visible) { outline: none !important; box-shadow: none !important; }
     </style>
 </head>
 
@@ -5333,6 +5414,82 @@
             </div>
         </div>
     </div>
+
+    <!-- 📱 短剧竖屏刷(组件 DgShorts 的模板;放在 #app 外面,根应用不编译它)。整屏一部一部往上刷:只渲染当前 ±1 三张卡,
+         <video> 只有一个,夹在海报层和文字层之间;拖动时三层一起按 --sh-dy 平移(直接写 style,不经过 Vue) -->
+    <template id="dg-shorts-tpl">
+        <div class="shorts-page" ref="page" role="dialog" aria-modal="true" aria-label="短剧" tabindex="-1"
+            @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @click="onTap">
+            <div class="sh-mv sh-bg" aria-hidden="true">
+                <div v-for="s in slides" :key="s.key" class="sh-slide" :style="{ top: (s.off * 100) + '%' }">
+                    <template v-if="s.it && s.it.pic">
+                        <div class="sh-pbg" :style="{ backgroundImage: 'url(' + JSON.stringify(s.it.pic) + ')' }"></div>
+                        <div class="sh-pic" :style="{ backgroundImage: 'url(' + JSON.stringify(s.it.pic) + ')' }"></div>
+                    </template>
+                </div>
+            </div>
+            <div class="sh-mv sh-vl" :class="{ ready: vReady }">
+                <video ref="v" playsinline webkit-playsinline x5-playsinline preload="auto"></video>
+            </div>
+            <div class="sh-mv sh-fg">
+                <div v-for="s in slides" :key="s.key" class="sh-slide" :style="{ top: (s.off * 100) + '%' }">
+                    <div class="sh-inner" v-if="s.it">
+                        <div class="sh-info">
+                            <div class="sh-title">{{ s.it.title }}</div>
+                            <div class="sh-meta">
+                                <span class="sh-ep">第 {{ (s.off === 0 ? epIdx : startEpOf(s.it)) + 1 }} 集 / 共 {{ s.off === 0 ? curEps.length : epCountOf(s.it) }} 集</span>
+                                <span class="sh-chip" v-if="s.it.remarks">{{ s.it.remarks }}</span>
+                            </div>
+                            <div class="sh-blurb" v-if="s.it.blurb">{{ s.it.blurb }}</div>
+                        </div>
+                        <div class="sh-side" v-if="s.off === 0">
+                            <button type="button" class="sh-btn" @click.stop="drawer = true" aria-label="选集"><i class="fas fa-list-ol" aria-hidden="true"></i><span>选集</span></button>
+                            <button v-if="favOk" type="button" class="sh-btn" :class="{ on: favOn }" @click.stop="fav()" :aria-label="favOn ? '取消收藏' : '收藏'">
+                                <i class="fas fa-heart" aria-hidden="true"></i><span>{{ favOn ? '已收藏' : '收藏' }}</span></button>
+                            <button type="button" class="sh-btn" @click.stop="share()" aria-label="分享"><i class="fas fa-share" aria-hidden="true"></i><span>分享</span></button>
+                            <button type="button" class="sh-btn" @click.stop="full()" aria-label="完整播放"><i class="fas fa-up-right-and-down-left-from-center" aria-hidden="true"></i><span>完整播放</span></button>
+                        </div>
+                    </div>
+                    <div class="sh-inner sh-empty" v-else-if="s.i >= items.length">
+                        <div class="sh-spin" v-if="!done && !listMsg"></div>
+                        <div class="sh-empty-t">{{ listMsg || (done ? '没有更多了' : '正在加载更多…') }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="sh-top">
+                <button type="button" class="sh-ibtn" @click.stop="back()" aria-label="返回"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
+                <span class="sh-top-t">短剧</span>
+                <button type="button" class="sh-ibtn" @click.stop="toggleMute()" :aria-label="muted ? '打开声音' : '静音'">
+                    <i :class="['fas', muted ? 'fa-volume-xmark' : 'fa-volume-high']" aria-hidden="true"></i></button>
+            </div>
+            <div class="sh-note" v-if="note">{{ note }}</div>
+            <button type="button" class="sh-unmute" v-if="needTap" @click.stop="toggleMute()"><i class="fas fa-volume-xmark" aria-hidden="true"></i> 点一下打开声音</button>
+            <div class="sh-center" v-if="cur">
+                <div class="sh-err" v-if="err">
+                    <div>{{ err }}</div>
+                    <div class="sh-err-btns"><button type="button" @click.stop="retry()">重试</button><button type="button" @click.stop="go(1)">下一部</button></div>
+                </div>
+                <div class="sh-spin" v-else-if="loading"></div>
+                <i class="fas fa-play sh-play-ic" v-else-if="paused" aria-hidden="true"></i>
+            </div>
+            <div class="sh-prog" ref="prog" @click.stop="seekBar" @pointerdown.stop aria-hidden="true"><i ref="bar"></i></div>
+            <div class="sh-drawer-mask" v-if="drawer && cur" @click.stop.self="drawer = false">
+                <div class="sh-drawer" role="dialog" aria-label="选集">
+                    <div class="sh-dr-head">
+                        <b>{{ cur.title }}</b><span>共 {{ curEps.length }} 集</span>
+                        <button type="button" class="sh-dr-x" @click.stop="drawer = false" aria-label="关闭">×</button>
+                    </div>
+                    <div class="sh-dr-lines" v-if="curSrcs.length > 1">
+                        <span>线路</span>
+                        <button v-for="(x, i) in curSrcs" :key="x.site_key" type="button" :class="{ on: i === srcIdx }" @click.stop="pickSrc(i)">{{ x.site_name }}</button>
+                    </div>
+                    <div class="sh-dr-grid">
+                        <button v-for="(e, i) in curEps" :key="i" type="button" :class="{ on: i === epIdx }" @click.stop="pickEp(i)">{{ epNum(e.name, i) }}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
 
     <div id="app" v-cloak>
 
@@ -5633,6 +5790,9 @@
                     <button v-for="c in calCats" :key="c.k" type="button" role="tab" class="cal-cat" :class="{ active: c.k === cal.cat }"
                         :aria-selected="c.k === cal.cat ? 'true' : 'false'" @click="calPickCat(c.k)">{{ c.l }}<span>{{ c.n }}</span></button>
                 </div>
+                <!-- 📱 看短剧这一栏时给个入口:竖屏一部一部刷 -->
+                <button v-if="cal.cat === 'short' && calCats.length" type="button" class="cal-shorts-go" @click="openShorts()">
+                    <i class="fas fa-mobile-screen-button" aria-hidden="true"></i>竖屏刷短剧，一集一两分钟<i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 <div v-if="!calCats.length" class="cal-empty">这天资源站还没有更新</div>
                 <div class="scroll-container" v-else-if="!cal.open">
                     <button class="scroll-btn left" v-show="calCanScrollLeft" @click="scrollRowBy('calRow', -1)"
@@ -5766,6 +5926,8 @@
                             @click="catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}</button>
                     </div>
                     <div class="catnav-quick">
+                        <button type="button" class="catnav-q is-shorts" @click="openShorts()">
+                            <i class="fas fa-mobile-screen-button" aria-hidden="true"></i>刷短剧</button>
                         <button v-if="!hideRandomRow" type="button" class="catnav-q is-random" @click="catNavJump('random')">
                             <i class="fas fa-dice" aria-hidden="true"></i>随机盲盒</button>
                         <button v-if="recommendList.length > 0 && homeOn.recommend" type="button" class="catnav-q is-rec" @click="catNavJump('recommend')">
@@ -6602,6 +6764,8 @@
         </div>
 
         <!-- ★★★ 播放详情页 (影院布局) ★★★ -->
+        <!-- 📱 短剧竖屏刷(组件 DgShorts,模板 #dg-shorts-tpl) -->
+        <dg-shorts v-if="shortsOpen" ref="shortsComp" @close="closeShorts()"></dg-shorts>
         <div class="detail-overlay" :class="{ active: showDetail }">
             <div v-if="!previewLocked" class="close-btn" tabindex="1" role="button" aria-label="关闭" @click="closeDetail"
                 @keydown.enter="closeDetail"><i class="fas fa-times"></i></div>
@@ -8148,6 +8312,681 @@
         });
     </script>
 
+    <script data-cfasync="false">
+        // ========== 📱 短剧竖屏刷(DgShorts 组件,模板 #dg-shorts-tpl;根应用 openShorts / closeShorts 开关) ==========
+        //   单独一个子组件:播放中频繁变的状态(加载圈/暂停/第几集)只重渲染这一小块,不碰首页那棵 ~600 张卡的大模板(perf-jank 铁律)。
+        //   片库:/api/shorts/feed(lib/shorts-feed,服务器按片名去重、每部带 1~3 条 m3u8 线路)。
+        //   播放:自己一个 <video>,和播放页同一套路由 —— 去广告 worker(?url=,开关 AdFilter、源站封 worker 的站 _adProxyBad 直连)、
+        //     打了补丁的 hls.min.js(buildOfflineHlsConfig:backBufferLength 90 / maxMaxBufferLength 120 / 播放前剪插播 _CutHlsLoader)、
+        //     缓冲小洞跳过器;Safari / iOS 走浏览器原生 HLS。换片 / 换集先把旧 hls 实例销毁;hls.js 的 ERROR 一律接住:
+        //     过滤代理出错 → 按播放页的分诊(worker 探一次:正常重试一次 / 过滤清空走 nofilter / 源站封 worker 记账后直连 / worker 故障直连),
+        //     直连也不行 → 换这部的下一条线路 → 都不行跳下一部(连续 3 部播不了就停下来等用户)。
+        //     ⚠️ 播放中按分辨率突变跳插播(adClipSkip)绑死了播放页的 dp,这里没有:clip 站(如意/非凡)靠播放前剪掉;原生 HLS 通道剪不了,
+        //     那些站在 iOS 上排到后面。
+        //   预加载:当前这集缓冲够了(前面 ≥20s 或已缓冲到结尾)才去拉下一部(或下一集)的清单(+ clip 站预扫插播),不拉分片、不建第二个播放器。
+        //   历史:看了 ≥20 秒 / 到第二集 / 本来就在历史里的才记(一扫而过的不进「继续观看」),记法和播放页一样(addToWatchHistory,时间按原时间轴)。
+        window.DgShortsMem = { items: [], ids: new Set(), idx: 0, next: 0, done: false, at: 0 };
+        window.DgShorts = {
+            template: '#dg-shorts-tpl',
+            emits: ['close'],
+            data() {
+                const M = window.DgShortsMem;
+                return { items: M.items, idx: M.idx, epIdx: 0, srcIdx: 0, done: M.done, more: false, listMsg: '',
+                    loading: false, vReady: false, paused: false, muted: false, needTap: false, err: '', note: '', drawer: false };
+            },
+            computed: {
+                cur() { return this.items[this.idx] || null; },
+                slides() {
+                    return [-1, 0, 1].map(off => {
+                        const i = this.idx + off, it = i >= 0 ? (this.items[i] || null) : null;
+                        return { off, i, it, key: it ? 'd' + it.id : 'x' + i };
+                    }).filter(s => s.i >= 0);
+                },
+                curSrcs() { return this.cur ? this._srcs(this.cur) : []; },
+                curEps() { const s = this.curSrcs[this.srcIdx]; return s ? this._eps(s) : []; },
+                favOk() { const r = this.$root; return !!(r.favoritesEnabled && !r.trial.on); },
+                favOn() {
+                    const r = this.$root;
+                    return !!(this.cur && r.favoritesEnabled && r._favFind({ name: this.cur.title, sources: this.curSrcs }));
+                },
+            },
+            watch: {
+                note(v) { clearTimeout(this._noteT); if (v) this._noteT = setTimeout(() => { this.note = ''; }, 2600); },
+            },
+            mounted() {
+                this._s = { tok: 0, hls: null, cur: null, drag: null, anim: false, navigating: false, wd: 0, ld: 0, triage: 0,
+                    wheelAt: 0, wheelAcc: 0, wheelLock: false, clickBlock: 0, watched: 0, lastTU: 0, saveAt: 0, warmed: new Set(), warmBusy: false, failRun: 0, unbind: [] };
+                this._bindVideo();
+                this._onKeyFn = (e) => this.onKey(e);
+                window.addEventListener('keydown', this._onKeyFn, true);
+                this._onVisFn = () => { if (document.hidden) this._save(); };
+                document.addEventListener('visibilitychange', this._onVisFn);
+                try { this.$refs.page.focus({ preventScroll: true }); } catch (e) { }
+                const M = window.DgShortsMem;
+                if (M.items.length && Date.now() - M.at < 30 * 60e3) this._startCur();
+                else {   // 头一次 / 隔了半小时:拿一份新的(服务器 30 分钟一更新)
+                    M.items.splice(0); M.ids = new Set(); M.idx = 0; M.next = 0; M.done = false;
+                    this.idx = 0; this.done = false;
+                    this._loadMore().then(() => this._startCur());
+                }
+            },
+            beforeUnmount() {
+                this._save();
+                this._stop();
+                const S = this._s;
+                clearTimeout(S.ld); clearTimeout(this._noteT); clearTimeout(this._retryT); clearTimeout(this._skipT);
+                S.unbind.forEach(f => { try { f(); } catch (e) { } });
+                window.removeEventListener('keydown', this._onKeyFn, true);
+                document.removeEventListener('visibilitychange', this._onVisFn);
+                window.DgShortsMem.idx = this.idx;
+                this._dead = true;
+            },
+            methods: {
+                // ---------- 数据 ----------
+                async _loadMore() {
+                    const M = window.DgShortsMem;
+                    if (this.more || M.done || this._dead) return;
+                    this.more = true;
+                    try {
+                        const r = await fetchT('/api/shorts/feed?offset=' + M.next + '&limit=8', null, 15000);
+                        const d = r.ok ? await r.json() : null;
+                        if (this._dead) return;
+                        if (!d || d.enabled === false) { this.listMsg = '短剧暂时没有开放'; M.done = this.done = true; return; }
+                        if (!d.total) {   // 服务器刚启动、片库还在拉(十几秒):过一会儿再要
+                            this.listMsg = '短剧片库正在准备，稍等十几秒…';
+                            this._tries = (this._tries || 0) + 1;
+                            if (this._tries < 10) { clearTimeout(this._retryT); this._retryT = setTimeout(() => { this.more = false; this._loadMore().then(() => { if (!this._s.cur) this._startCur(); }); }, 6000); }
+                            return;
+                        }
+                        this.listMsg = '';
+                        const raw = Vue.markRaw || (x => x);
+                        (d.items || []).forEach(x => {
+                            if (!x || !x.id || M.ids.has(x.id) || !(x.srcs || []).length) return;
+                            M.ids.add(x.id);
+                            this.items.push(raw(x));
+                        });
+                        M.next = d.next == null ? M.next + (d.items || []).length : d.next;
+                        M.done = this.done = d.next == null;
+                        M.at = Date.now();
+                    } catch (e) {
+                        if (!this.items.length) this.listMsg = '加载失败，检查一下网络';
+                    } finally { if (this.listMsg !== '短剧片库正在准备，稍等十几秒…') this.more = false; }
+                },
+                // 这部的线路:按广告分级(与播放页线路分组同一套,运行时降级也算上)→ 集数多的在前。
+                //   原生 HLS 通道剪不了插播:clip 站(如意/非凡的中插只能剪/跳)当「有插播」排
+                _srcs(it) {
+                    if (it._srcs) return it._srcs;
+                    const r = this.$root, native = !!(window._dgPreferNativeHls || !(window.Hls && Hls.isSupported()));
+                    const rank = s => { try { const p = r.srcProfile(s); const k = SRC_TIER_RANK[p.tier]; return (native && p.clip && k < SRC_TIER_RANK.insert) ? SRC_TIER_RANK.insert : k; } catch (e) { return 3; } };
+                    const list = (it.srcs || []).map(s => Object.assign({}, s, { vod_play_url: s.url, vod_name: it.title }));
+                    list.forEach(s => { s._rank = rank(s) + (this._isBad(s.site_key) ? 10 : 0); });
+                    return (it._srcs = list.sort((a, b) => (a._rank - b._rank) || (b.n - a.n)));
+                },
+                // 本机刚播不了的站(分片拉不到:海外打不开的国内 CDN / 封 IP 等)记 6 小时:排到后面;一部剧只剩这种线路就直接跳过。
+                //   测速 / 线路分组那套是播放页按设备测出来的,这里没有测速,就靠真播失败来学(播放页的测速缓存有「只能服务器通」的也算)
+                _badMap() {
+                    if (!this._badM) { try { this._badM = JSON.parse(localStorage.getItem('donggua_shorts_bad') || '{}') || {}; } catch (e) { this._badM = {}; } }
+                    return this._badM;
+                },
+                _isBad(site) {
+                    if (!site) return false;
+                    const t = this._badMap()[site];
+                    if (t && Date.now() - t < 6 * 3600e3) return true;
+                    try { const h = this.$root._siteHealthGet && this.$root._siteHealthGet(site); if (h && (h._srvOnly || h.latency >= 9000)) return true; } catch (e) { }
+                    return false;
+                },
+                _markBad(site) {
+                    if (!site) return;
+                    const m = this._badMap();
+                    m[site] = Date.now();
+                    try { localStorage.setItem('donggua_shorts_bad', JSON.stringify(m)); } catch (e) { }
+                    this.items.forEach(x => { if (x !== this.cur) delete x._srcs; });   // 别的剧按新账重排(正在播的这部不动,srcIdx 还指着它)
+                },
+                _allBad(it) { return !!it && (it.srcs || []).length > 0 && it.srcs.every(s => this._isBad(s.site_key)); },
+                // 从 i 往 dir 方向找第一部有能播线路的(最多跳 15 部;都不行就还是 i,照样试一下)
+                _nextGood(i, dir) {
+                    for (let k = 0, j = i; k < 15 && j >= 0 && j < this.items.length; k++, j += dir) if (!this._allBad(this.items[j])) return j;
+                    return i;
+                },
+                _eps(src) {
+                    if (src._eps) return src._eps;
+                    return (src._eps = String(src.url || '').split('#').filter(Boolean).map((seg, i) => {
+                        const k = seg.indexOf('$');
+                        return { name: k > 0 ? seg.slice(0, k) : '第' + (i + 1) + '集', url: k >= 0 ? seg.slice(k + 1) : seg };
+                    }));
+                },
+                epCountOf(it) { const s = this._srcs(it)[0]; return s ? this._eps(s).length : 0; },
+                startEpOf(it) { try { return this._startOf(it).ei; } catch (e) { return 0; } },
+                epNum(name, i) {
+                    const s = String(name || '');
+                    const m = /第\s*0*(\d+)\s*[集话話]/.exec(s) || /^0*(\d+)$/.exec(s.trim());
+                    return m ? m[1] : (s.length <= 4 ? s : String(i + 1));
+                },
+                _matchEp(eps, name, fb) {
+                    if (!name) return fb;
+                    const r = this.$root;
+                    let i = eps.findIndex(e => e.name === name);
+                    if (i < 0) { const wk = r._epMatchKey(name), wc = wk.split('|')[0]; i = eps.findIndex(e => r._epMatchKey(e.name) === wk); if (i < 0 && wc) i = eps.findIndex(e => r._epMatchKey(e.name).split('|')[0] === wc); }
+                    return i >= 0 ? i : fb;
+                },
+                // 从哪开始:看过 → 上次的线路 + 集 + 位置(那集快看完了就从下一集开始);没看过 → 第一集
+                _startOf(it) {
+                    const srcs = this._srcs(it);
+                    const h = (this.$root.watchHistory || []).find(x => x && x.name === it.title);
+                    let si = 0, ei = 0, seek = 0;
+                    if (h && h.lastSourceKey) { const k = srcs.findIndex(s => s.site_key === h.lastSourceKey); if (k >= 0) si = k; }
+                    if (h && h.episode && srcs[si]) {
+                        const eps = this._eps(srcs[si]);
+                        ei = this._matchEp(eps, h.episode, 0);
+                        const t = +h.progressTime || 0, d = +h.progressDuration || 0;
+                        if (d && t >= d - 5) { if (ei + 1 < eps.length) ei++; }
+                        else if (t > 3) seek = t;
+                    }
+                    return { si, ei, seek, resumed: !!h };
+                },
+                _groupData(it) {
+                    return {
+                        name: it.title, pic: it.pic,
+                        sources: this._srcs(it).map(s => ({
+                            vod_id: s.vod_id, vod_name: it.title, vod_pic: it.pic, vod_play_url: s.url, vod_content: it.blurb || '',
+                            site_name: s.site_name, site_key: s.site_key, site_profile: s.site_profile, type_name: it.type || '短剧', vod_year: it.year ? String(it.year) : '', latency: 500
+                        }))
+                    };
+                },
+                // ---------- 播放 ----------
+                _bindVideo() {
+                    const v = this.$refs.v, S = this._s;
+                    const on = (ev, fn) => { v.addEventListener(ev, fn); S.unbind.push(() => v.removeEventListener(ev, fn)); };
+                    const mine = () => S.cur && S.cur.tok === S.tok;
+                    on('playing', () => {
+                        if (!mine()) return;
+                        S.cur.started = true; S.failRun = 0;
+                        this.vReady = true; this.paused = false; this.err = ''; this._setLoading(false);
+                    });
+                    on('play', () => { if (mine()) this.paused = false; });
+                    on('pause', () => { if (mine() && S.cur.started && !v.ended) { this.paused = true; this._save(); } });
+                    on('waiting', () => { if (mine() && S.cur.started && !v.paused) this._setLoading(true); });
+                    on('canplay', () => { if (mine() && S.cur.started) this._setLoading(false); });
+                    on('loadedmetadata', () => this._onMeta());
+                    on('timeupdate', () => this._onTime());
+                    on('ended', () => this._onEnded());
+                    on('error', () => { if (mine() && v.error) this._onErr(S.tok, 'video:' + v.error.code); });
+                },
+                _setLoading(b) {
+                    const S = this._s;
+                    clearTimeout(S.ld);
+                    if (b) S.ld = setTimeout(() => { this.loading = true; }, 450);   // 一闪而过的缓冲不出圈
+                    else if (this.loading) this.loading = false;
+                },
+                _stop() {
+                    const S = this._s, v = this.$refs.v;
+                    clearTimeout(S.wd);
+                    if (S.hls) { const h = S.hls; S.hls = null; try { h.destroy(); } catch (e) { } }   // 旧实例立刻销毁(两个 hls 抢同一个 video = 风暴)
+                    if (v) {
+                        try { v.pause(); } catch (e) { }
+                        if (v.getAttribute('src')) { v.removeAttribute('src'); try { v.load(); } catch (e) { } }
+                    }
+                    S.cur = null;
+                },
+                _routeOf(src) {
+                    const r = this.$root;
+                    return (r.corsProxyUrl && window.AdFilter && window.AdFilter.isEnabled() && !r._adProxyBad(src.site_key)) ? 'worker' : 'direct';
+                },
+                _urlFor(url, route) {
+                    const p = this.$root.corsProxyUrl;
+                    if (route === 'worker' && p) return p + '/?url=' + encodeURIComponent(url);
+                    if (route === 'nofilter' && p) return p + '/?nofilter=1&url=' + encodeURIComponent(url);
+                    return url;
+                },
+                // 播放前剪插播(window.adCut)的会话:档案标了 clip 的站 / 本机学会的站;自己建会话(adCut.session() 看的是播放页的线路)
+                _cutSess(src) {
+                    try {
+                        const C = window.adCut, site = src && src.site_key;
+                        if (!C || !C.ready() || !site || C._blocked[site] > Date.now()) return null;
+                        const p = this.$root.srcProfile(src);
+                        if (!(p && p.clip) && !C.learned(site)) return null;
+                        return { want: true, site, tok: 'shorts', variants: 0, result: null, dead: false, late: false };
+                    } catch (e) { return null; }
+                },
+                _cuts() { const c = this._s.cur, s = c && c.sess; return (s && s.result && !s.late && s.result.cuts && s.result.cuts.length) ? s.result.cuts : null; },
+                _toBase(t) { const c = this._cuts(); return (c && window.AdClipCore && isFinite(t)) ? AdClipCore.fromCutTime(t, c) : t; },
+                _toPlay(t) { const c = this._cuts(); return (c && window.AdClipCore && isFinite(t)) ? AdClipCore.toCutTime(t, c) : t; },
+                _startCur() {
+                    if (!this.cur || this._dead) return;
+                    if (this._allBad(this.cur)) { const g = this._nextGood(this.idx, 1); if (g !== this.idx) { this.idx = g; window.DgShortsMem.idx = g; } }
+                    const st = this._startOf(this.cur);
+                    this.srcIdx = st.si; this.epIdx = st.ei; this._s.watched = 0;
+                    this._play({ seekTo: st.seek });
+                    if (st.resumed && (st.ei > 0 || st.seek)) this.note = '接着上次看 第' + (st.ei + 1) + '集';
+                },
+                _play(o) {
+                    o = o || {};
+                    const S = this._s, v = this.$refs.v, it = this.cur;
+                    if (!v || !it || this._dead) return;
+                    this._stop();
+                    const tok = ++S.tok;
+                    const src = this._srcs(it)[this.srcIdx];
+                    if (!src) { this._dramaFail(tok); return; }
+                    const eps = this._eps(src);
+                    if (this.epIdx >= eps.length) this.epIdx = Math.max(0, eps.length - 1);
+                    const ep = eps[this.epIdx];
+                    if (!ep) { this._dramaFail(tok); return; }
+                    const route = o.route || this._routeOf(src);
+                    const url = this._urlFor(ep.url, route);
+                    const native = !!(window._dgPreferNativeHls || !(window.Hls && Hls.isSupported()));
+                    const sess = native ? null : this._cutSess(src);
+                    S.cur = { tok, it, src, ep, route, url, native, sess, retried: !!o.retried, fragRetried: !!o.fragRetried, seekTo: o.seekTo || 0, started: false, manifestOk: false };
+                    this.vReady = false; this.err = ''; this.paused = false; this.loading = false; this._setLoading(true);
+                    if (this.$refs.bar) this.$refs.bar.style.transform = 'scaleX(0)';
+                    v.muted = this.muted;
+                    if (native) {
+                        v.src = url;
+                    } else {
+                        // 重试次数调低:刷短剧时一条线路打不开要几秒内就知道(默认分片重试 6 次、指数退避,要一分钟)
+                        const hls = new Hls(Object.assign({}, buildOfflineHlsConfig(), { fragLoadingMaxRetry: 2, manifestLoadingMaxRetry: 1, levelLoadingMaxRetry: 2 }, sess ? { _dgCut: sess } : {}));
+                        S.hls = hls;
+                        hls.on(Hls.Events.MANIFEST_PARSED, () => { if (S.cur && S.cur.tok === tok) S.cur.manifestOk = true; });
+                        hls.on(Hls.Events.ERROR, (e, d) => {
+                            if (S.hls !== hls || !d) return;
+                            if (d.fatal) this._onErr(tok, 'hls:' + d.type + '/' + d.details);
+                            else if (d.details === 'levelEmptyError') this._onErr(tok, 'empty');   // 0 分片清单只报这个非致命错,不接住就永远转圈
+                        });
+                        hls.on(Hls.Events.DESTROYING, () => { if (sess) sess.dead = true; });
+                        hls.loadSource(url);
+                        hls.attachMedia(v);
+                        try { hls._dgHole = dgHoleWatch(hls, v, { destroying: Hls.Events.DESTROYING, gone: () => S.hls !== hls }); } catch (e) { }
+                    }
+                    this._tryPlay(tok);
+                    this._armWd(tok, 12000);
+                    console.log('[短剧] ▶ ' + it.title + ' ' + ep.name + ' · ' + src.site_key + ' · ' + route + (native ? ' · 原生HLS' : '') + (sess ? ' · 播放前剪插播' : ''));
+                },
+                _tryPlay(tok) {
+                    const S = this._s, v = this.$refs.v;
+                    let p;
+                    try { p = v.play(); } catch (e) { return; }
+                    if (!p || !p.catch) return;
+                    p.catch(err => {
+                        if (tok !== S.tok || !err || err.name !== 'NotAllowedError') return;
+                        // 没点过就不让出声(iOS / 部分安卓):先静音播,顶上提示「点一下打开声音」
+                        if (!v.muted) {
+                            v.muted = true; this.muted = true; this.needTap = true;
+                            const p2 = v.play();
+                            if (p2 && p2.catch) p2.catch(() => { if (tok === S.tok) { this.paused = true; this._setLoading(false); } });
+                        } else { this.paused = true; this._setLoading(false); }
+                    });
+                },
+                // 起播看门狗:12s 还没起来算失败。页面隐藏时 Chrome 不开 MediaSource → 只等不判;播放前剪插播还在扫 → 等它
+                _armWd(tok, ms) {
+                    const S = this._s;
+                    clearTimeout(S.wd);
+                    S.wd = setTimeout(() => {
+                        const v = this.$refs.v;
+                        if (tok !== S.tok || !v || this._dead) return;
+                        if (document.hidden) return this._armWd(tok, 3000);
+                        if (window.adCut && (adCut.busy() || adCut.graceLeft() > 0)) return this._armWd(tok, 2000);
+                        if (this.paused && v.paused) return;   // 自动播放被拦 / 用户暂停:不算失败
+                        if (v.readyState < 3 && !(v.currentTime > 0)) this._onErr(tok, 'timeout');
+                    }, ms);
+                },
+                _onMeta() {
+                    const S = this._s, c = S.cur, v = this.$refs.v;
+                    if (!c || c.tok !== S.tok) return;
+                    c.manifestOk = true;
+                    if (!c.seekTo) return;
+                    const t = this._toPlay(c.seekTo);
+                    c.seekTo = 0;
+                    if (t > 1 && (!isFinite(v.duration) || t < v.duration - 3)) { try { v.currentTime = t; } catch (e) { } }
+                },
+                _onTime() {
+                    const S = this._s, c = S.cur, v = this.$refs.v;
+                    if (!c || c.tok !== S.tok) return;
+                    const d = v.duration;
+                    if (this.$refs.bar && isFinite(d) && d > 0) this.$refs.bar.style.transform = 'scaleX(' + Math.min(1, v.currentTime / d).toFixed(4) + ')';
+                    const now = Date.now();
+                    if (S.lastTU && !v.paused) { const dt = (now - S.lastTU) / 1000; if (dt > 0 && dt < 2) S.watched += dt; }
+                    S.lastTU = now;
+                    if (now - S.saveAt > 10000) { S.saveAt = now; this._save(); }
+                    this._maybeWarm();
+                },
+                _onEnded() {
+                    const S = this._s, c = S.cur;
+                    if (!c || c.tok !== S.tok) return;
+                    this._save(true);
+                    if (this.epIdx + 1 < this.curEps.length) { this.epIdx++; this._play(); return; }
+                    this.note = '全剧终 · 下一部';
+                    const tok = S.tok;
+                    clearTimeout(this._skipT);
+                    this._skipT = setTimeout(() => { if (tok === S.tok && !this.drawer) this.go(1); }, 1200);
+                },
+                // 出错分诊(播放页 handleError 的精简版,见文件头):先弄清楚是过滤代理的问题还是源的问题,再决定怎么退
+                async _onErr(tok, why) {
+                    const S = this._s, c = S.cur, v = this.$refs.v;
+                    if (!c || tok !== S.tok || S.triage === tok || this._dead) return;
+                    const at = (v && v.currentTime > 1) ? this._toBase(v.currentTime) : c.seekTo || 0;
+                    console.warn('[短剧] 播放出错(' + why + '):' + c.src.site_key + ' 走' + c.route);
+                    // 清单拿到了、分片拉不下来(海外打不开的国内 CDN 多是这样):清单走不走 worker 都一样(分片总是直连 CDN),不用分诊 ——
+                    //   播起来之后才断的先原地再试一次(网络抖一下),没起来 / 再断 → 记这个站、换线路
+                    if (c.manifestOk && (why === 'timeout' || /frag|networkError\/(?!manifest|level)/i.test(why))) {
+                        if (c.started && !c.fragRetried) return this._play({ route: c.route, retried: c.retried, fragRetried: true, seekTo: at });
+                        if (!c.started) this._markBad(c.src.site_key);
+                        return this._nextSrc(tok, at);
+                    }
+                    if (c.route === 'worker') {
+                        S.triage = tok;
+                        let cls = 'workerdown';
+                        try { cls = await this._probe(c.url); } catch (e) { cls = 'workerdown'; }
+                        S.triage = 0;
+                        if (tok !== S.tok || this._dead) return;
+                        if (why === 'empty' && cls === 'ok') cls = 'stripped';
+                        console.log('[短剧] 过滤代理探测:' + cls);
+                        if (cls === 'ok' && !c.retried) return this._play({ route: 'worker', retried: true, seekTo: at });
+                        if (cls === 'stripped') return this._play({ route: 'nofilter', seekTo: at });
+                        if (cls === 'siteblock') { try { this.$root._adProxyBadMark(c.src.site_key); } catch (e) { } }   // 与播放页同一本账(12h)
+                        return this._play({ route: 'direct', seekTo: at });
+                    }
+                    if (c.route === 'nofilter') return this._play({ route: 'direct', seekTo: at });
+                    if (!c.started) this._markBad(c.src.site_key);   // 直连也打不开(源站封 worker + CDN 不给跨域 / 海外打不开):本机 6 小时内排后面
+                    this._nextSrc(tok, at);
+                },
+                // 经 worker 再取一次本集清单(跟到子清单,数 EXTINF),分:正常 / 清空 / 源站封 worker / worker 自身故障
+                async _probe(u) {
+                    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
+                    try {
+                        let url = u;
+                        for (let depth = 0; depth < 3; depth++) {
+                            const r = await fetch(url, { cache: 'no-store', signal: ctl.signal });
+                            if (r.status >= 500 || r.status === 429) return 'workerdown';
+                            if (!r.ok) return 'siteblock';
+                            const txt = await r.text();
+                            if (!/#EXTM3U/.test(txt)) return 'siteblock';
+                            if (/#EXT-X-STREAM-INF/.test(txt)) {
+                                const sub = txt.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                                if (sub) { url = new URL(sub, r.url || url).href; continue; }
+                            }
+                            return /#EXTINF:/.test(txt) ? 'ok' : 'stripped';
+                        }
+                        return 'ok';
+                    } finally { clearTimeout(t); }
+                },
+                _nextSrc(tok, at) {
+                    const srcs = this.curSrcs, c = this._s.cur;
+                    if (this.srcIdx + 1 < srcs.length) {
+                        const name = c && c.ep && c.ep.name;
+                        this.srcIdx++;
+                        this.epIdx = this._matchEp(this._eps(srcs[this.srcIdx]), name, this.epIdx);
+                        this.note = '这条线路播不了，换到「' + (srcs[this.srcIdx].site_name || '下一条') + '」';
+                        return this._play({ seekTo: at });
+                    }
+                    this._dramaFail(tok);
+                },
+                _dramaFail(tok) {
+                    const S = this._s;
+                    this._setLoading(false); this.loading = false;
+                    S.failRun++;
+                    S.exhausted = true;
+                    if (S.failRun >= 3) { this.err = '连着几部都播不了，网络好像不太好'; return; }
+                    this.err = '这部暂时播不了';
+                    clearTimeout(this._skipT);
+                    this._skipT = setTimeout(() => { if (tok === S.tok && this.err && !this.drawer && !S.drag) this.go(1); }, 1800);
+                },
+                retry() {
+                    const S = this._s, v = this.$refs.v;
+                    const at = (S.cur && v && v.currentTime > 1) ? this._toBase(v.currentTime) : 0;
+                    S.failRun = 0;
+                    if (S.exhausted) { S.exhausted = false; this.srcIdx = 0; }   // 线路都试过了:从头再来一遍
+                    this.err = '';
+                    this._play({ seekTo: at });
+                },
+                // 预加载:这一集缓冲够了才动(不和正在播的抢带宽),只拉清单 —— 临近片尾拉下一集,否则拉下一部开始的那集
+                _maybeWarm() {
+                    const S = this._s, v = this.$refs.v, c = S.cur;
+                    if (S.warmBusy || !c || !c.started) return;
+                    const d = v.duration, b = v.buffered;
+                    const end = b && b.length ? b.end(b.length - 1) : 0;
+                    if (!((end - v.currentTime >= 20) || (isFinite(d) && d > 0 && end >= d - 0.5))) return;
+                    let src = c.src, ep = null;
+                    if (isFinite(d) && d - v.currentTime < 30 && this.epIdx + 1 < this.curEps.length) ep = this.curEps[this.epIdx + 1];
+                    else {
+                        const nx = this.items[this.idx + 1 < this.items.length ? this._nextGood(this.idx + 1, 1) : -1];
+                        if (!nx) return;
+                        const st = this._startOf(nx);
+                        src = this._srcs(nx)[st.si];
+                        ep = src && this._eps(src)[st.ei];
+                    }
+                    if (!src || !ep || S.warmed.has(ep.url)) return;
+                    S.warmed.add(ep.url);
+                    S.warmBusy = true;
+                    this._warm(src, ep.url).finally(() => { S.warmBusy = false; });
+                },
+                async _warm(src, epUrl) {
+                    try {
+                        const route = this._routeOf(src);
+                        if (route !== 'worker') return;   // 直连多半没有 CORS 读不到内容,不白跑
+                        let url = this._urlFor(epUrl, route);
+                        let r = await fetch(url);
+                        if (!r.ok) return;
+                        let text = await r.text(), master = null;
+                        if (/#EXT-X-STREAM-INF/.test(text)) {
+                            master = text;
+                            const sub = text.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('#'));
+                            if (!sub) return;
+                            url = new URL(sub, r.url || url).href;
+                            r = await fetch(url);
+                            if (!r.ok) return;
+                            text = await r.text();
+                        }
+                        const C = window.adCut, native = !!(window._dgPreferNativeHls || !(window.Hls && Hls.isSupported()));
+                        if (!native && C && this._cutSess(src) && !(master && ((master.match(/#EXT-X-STREAM-INF/gi) || []).length > 1 || C._altRenditions(master)))) {
+                            await C.plan(text, r.url || url, src.site_key, 3, C.PREFETCH_BUDGET);   // 结果进会话缓存,切过去时清单直接剪好
+                        }
+                        console.log('[短剧] 预加载清单 ✓ ' + src.site_key);
+                    } catch (e) { }
+                },
+                // 记进「继续观看」(与播放页同一个 addToWatchHistory;时间换回原时间轴)。一扫而过(<20s、第一集、本来不在历史里)的不记
+                _save(final) {
+                    const S = this._s, c = S.cur, v = this.$refs.v, r = this.$root;
+                    if (!c || !v || !c.started) return;
+                    const name = c.it.title;
+                    if (S.watched < 20 && this.epIdx === 0 && !(r.watchHistory || []).some(h => h && h.name === name)) return;
+                    let t = v.currentTime || 0, d = v.duration;
+                    if (!(isFinite(d) && d > 0)) d = 0;
+                    const cuts = this._cuts();
+                    t = this._toBase(t);
+                    if (d && cuts) d += cuts.reduce((a, x) => a + x.dur, 0);
+                    if ((final || v.ended) && d) t = d;
+                    try { r.addToWatchHistory(name, c.it.pic, c.ep.name, t, d, this._groupData(c.it), c.src.site_key); } catch (e) { }
+                },
+                // ---------- 翻页 ----------
+                go(dir) {
+                    const S = this._s, page = this.$refs.page;
+                    if (S.anim || !page) return;
+                    this.drawer = false;
+                    let to = this.idx + dir;
+                    if (to >= 0 && to < this.items.length) {
+                        const g = this._nextGood(to, dir);
+                        if (g !== to) { this.note = '跳过了 ' + Math.abs(g - to) + ' 部这里播不了的'; to = g; }
+                    }
+                    if (to < 0) { this._snap(); this.note = '已经是第一部了'; return; }
+                    if (to >= this.items.length) { this._snap(); if (this.done) this.note = '没有更多了'; else this._loadMore(); return; }
+                    this._save();
+                    S.anim = true;
+                    clearTimeout(this._skipT);
+                    page.classList.remove('sh-drag');
+                    page.classList.add('sh-anim');
+                    page.style.setProperty('--sh-dy', (-dir * page.clientHeight) + 'px');
+                    try { this.$refs.v.pause(); } catch (e) { }
+                    setTimeout(() => {
+                        if (this._dead) return;
+                        this.idx = to;
+                        window.DgShortsMem.idx = to;
+                        this.vReady = false;
+                        this.err = '';
+                        this.$nextTick(() => {
+                            page.classList.remove('sh-anim');
+                            page.style.setProperty('--sh-dy', '0px');
+                            S.anim = false;
+                            this._startCur();
+                        });
+                        if (to >= this.items.length - 3) this._loadMore();
+                    }, 290);
+                },
+                _snap() {
+                    const page = this.$refs.page;
+                    if (!page) return;
+                    page.classList.remove('sh-drag');
+                    page.classList.add('sh-anim');
+                    page.style.setProperty('--sh-dy', '0px');
+                    clearTimeout(this._snapT);
+                    this._snapT = setTimeout(() => { if (!this._s.anim) page.classList.remove('sh-anim'); }, 300);
+                },
+                onDown(e) {
+                    const S = this._s;
+                    if (S.anim || this.drawer || (e.button != null && e.button > 0)) return;
+                    if (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-prog')) return;
+                    S.drag = { id: e.pointerId, y0: e.clientY, x0: e.clientX, dy: 0, moved: false, lastY: e.clientY, lastT: performance.now(), vy: 0 };
+                },
+                onMove(e) {
+                    const S = this._s, d = S.drag, page = this.$refs.page;
+                    if (!d || e.pointerId !== d.id) return;
+                    const dy = e.clientY - d.y0, dx = e.clientX - d.x0;
+                    if (!d.moved) {
+                        if (Math.abs(dy) < 10 || Math.abs(dy) < Math.abs(dx)) { if (Math.abs(dx) > 30) S.drag = null; return; }
+                        d.moved = true;
+                        page.classList.remove('sh-anim');
+                        page.classList.add('sh-drag');
+                        try { page.setPointerCapture(e.pointerId); } catch (x) { }
+                    }
+                    const now = performance.now();
+                    d.vy = (e.clientY - d.lastY) / Math.max(1, now - d.lastT);
+                    d.lastY = e.clientY; d.lastT = now;
+                    const edge = (this.idx === 0 && dy > 0) || (this.idx >= this.items.length - 1 && dy < 0 && this.done);
+                    d.dy = edge ? dy * 0.3 : dy;
+                    page.style.setProperty('--sh-dy', d.dy + 'px');
+                },
+                onUp(e) {
+                    const S = this._s, d = S.drag, page = this.$refs.page;
+                    if (!d || e.pointerId !== d.id) return;
+                    S.drag = null;
+                    if (!d.moved) return;   // 没拖 = 点按,交给 onTap
+                    S.clickBlock = Date.now();
+                    const H = page.clientHeight || 1;
+                    const fling = Math.abs(d.vy) > 0.45 && Math.sign(d.vy) === Math.sign(d.dy);
+                    if (e.type !== 'pointercancel' && (fling || Math.abs(d.dy) > H * 0.2)) this.go(d.dy < 0 ? 1 : -1);
+                    else this._snap();
+                },
+                onWheel(e) {
+                    if (this.drawer || (e.target && e.target.closest && e.target.closest('.sh-drawer-mask'))) return;
+                    e.preventDefault();
+                    const S = this._s, now = Date.now(), gap = now - S.wheelAt;
+                    S.wheelAt = now;
+                    if (S.wheelLock) { if (gap < 200) return; S.wheelLock = false; }   // 触控板惯性还在滚:等它停一下再认下一次
+                    if (gap > 250) S.wheelAcc = 0;
+                    S.wheelAcc += e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 600 : 1);
+                    if (Math.abs(S.wheelAcc) >= 60) { const dir = S.wheelAcc > 0 ? 1 : -1; S.wheelAcc = 0; S.wheelLock = true; this.go(dir); }
+                },
+                onTap(e) {
+                    const S = this._s;
+                    if (Date.now() - S.clickBlock < 400) return;
+                    if (e.target && e.target.closest && e.target.closest('button, a, .sh-drawer-mask, .sh-prog')) return;
+                    if (this.needTap) { this.toggleMute(); return; }
+                    this.togglePause();
+                },
+                togglePause() {
+                    const v = this.$refs.v;
+                    if (!v || !this.cur) return;
+                    if (this.err) { this.retry(); return; }
+                    if (v.paused) { this.paused = false; this._tryPlay(this._s.tok); }
+                    else v.pause();
+                },
+                toggleMute() {
+                    const v = this.$refs.v;
+                    this.muted = !this.muted;
+                    this.needTap = false;
+                    if (v) {
+                        v.muted = this.muted;
+                        if (!this.muted && v.paused && this.cur && !this.err) this._tryPlay(this._s.tok);
+                    }
+                },
+                seekBar(e) {
+                    const v = this.$refs.v, el = this.$refs.prog;
+                    if (!v || !el || !isFinite(v.duration) || !(v.duration > 0)) return;
+                    const rc = el.getBoundingClientRect();
+                    const p = Math.max(0, Math.min(1, (e.clientX - rc.left) / (rc.width || 1)));
+                    try { v.currentTime = p * v.duration; } catch (x) { }
+                },
+                onKey(e) {
+                    if (e.defaultPrevented || this._dead) return;
+                    const k = e.key, t = e.target;
+                    if (t && /^(input|textarea|select)$/i.test(t.tagName || '')) return;
+                    const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
+                    if (k === 'Escape' || k === 'Esc' || k === 'GoBack' || k === 'BrowserBack') { stop(); this.back(); return; }
+                    if (this.drawer) return;   // 选集面板:方向键 / 确认键交给焦点
+                    const side = (this.$root.isTVMode && t && t.closest) ? t.closest('.sh-side') : null;
+                    if (side) {   // 遥控器:焦点在右侧按钮上 → 上下在按钮间走,左键回到画面,确认键按按钮(鼠标点过按钮留下的焦点不算,方向键照常翻页)
+                        const bs = Array.from(side.querySelectorAll('button')), i = bs.indexOf(t);
+                        if (k === 'ArrowUp' || k === 'ArrowDown') { stop(); const n = bs[i + (k === 'ArrowUp' ? -1 : 1)]; if (n) n.focus(); return; }
+                        if (k === 'ArrowLeft') { stop(); try { this.$refs.page.focus({ preventScroll: true }); } catch (x) { } return; }
+                        if (k === 'Enter' || k === ' ') return;
+                    }
+                    if ((k === 'Enter' || k === ' ') && t && t.tagName === 'BUTTON') return;   // 键盘焦点在按钮上:按按钮
+                    if (k === 'ArrowDown' || k === 'PageDown') { stop(); this.go(1); }
+                    else if (k === 'ArrowUp' || k === 'PageUp') { stop(); this.go(-1); }
+                    else if (k === 'ArrowRight' && this.$root.isTVMode) { stop(); const b = this.$refs.page.querySelector('.sh-side button'); if (b) b.focus(); }
+                    else if (k === 'ArrowRight' || k === 'ArrowLeft') { stop(); const v = this.$refs.v; if (v && isFinite(v.duration)) { try { v.currentTime = Math.max(0, Math.min(v.duration - 0.5, v.currentTime + (k === 'ArrowRight' ? 5 : -5))); } catch (x) { } } }
+                    else if (k === ' ' || k === 'Enter' || k === 'k' || k === 'MediaPlayPause') { stop(); this.togglePause(); }
+                    else if (k === 'm') { stop(); this.toggleMute(); }
+                },
+                // 返回:选集面板开着先关面板,否则关掉整页(根应用 closeShorts:退掉压的那条历史)
+                back() {
+                    if (this.drawer) { this.drawer = false; return; }
+                    this.$emit('close');
+                },
+                pickEp(i) {
+                    this.drawer = false;
+                    if (i === this.epIdx && this._s.cur && !this.err) return;
+                    this._save();
+                    this.epIdx = i;
+                    this._s.watched = Math.max(this._s.watched, 20);   // 自己挑了集 = 在追这部
+                    this._play();
+                },
+                pickSrc(i) {
+                    if (i === this.srcIdx) return;
+                    const v = this.$refs.v, c = this._s.cur;
+                    const name = c && c.ep && c.ep.name, at = (v && v.currentTime > 1) ? this._toBase(v.currentTime) : 0;
+                    this.srcIdx = i;
+                    this.epIdx = this._matchEp(this.curEps, name, this.epIdx);
+                    this._play({ seekTo: at });
+                },
+                // ---------- 右侧按钮 ----------
+                fav() {
+                    const it = this.cur;
+                    if (!it) return;
+                    const c = this._s.cur, src = (c && c.src) || this.curSrcs[this.srcIdx];
+                    this._s.watched = Math.max(this._s.watched, 20);
+                    this.$root.toggleFavorite({ g: { name: it.title, pic: it.pic, sources: this._groupData(it).sources }, cs: src, eps: this.curEps, quiet: true });
+                },
+                share() {
+                    const it = this.cur;
+                    if (!it) return;
+                    const ep = this.curEps[this.epIdx];
+                    const url = DgFrameShare.link({ origin: location.origin, name: it.title, ep: (ep && this.curEps.length > 1) ? ep.name : '' });
+                    if (navigator.share) { navigator.share({ title: it.title + ' - E视界', text: '在 E视界 刷到一部短剧《' + it.title + '》', url }).catch(() => { }); return; }
+                    this.$root.copyShareLink(url).then(ok => this.$root.showMiniToast(ok ? '🔗 链接已复制，发给朋友就能看' : '复制失败：' + url));
+                },
+                full() {
+                    const it = this.cur;
+                    if (!it) return;
+                    this._s.watched = Math.max(this._s.watched, 20);
+                    this._save();
+                    const src = this.curSrcs[this.srcIdx] || this.curSrcs[0], ep = this.curEps[this.epIdx];
+                    const item = { name: it.title, poster: it.pic, episode: ep ? ep.name : null, lastSourceKey: src ? src.site_key : null, groupData: this._groupData(it) };
+                    const r = this.$root;
+                    r.closeShorts();
+                    r.$nextTick(() => r.playFromHistory(item));
+                },
+            },
+        };
+    </script>
     <script data-cfasync="false">
         const { createApp, reactive } = Vue;
         // TMDb API 配置 (从服务端获取)
@@ -13031,6 +13870,7 @@
                     popularCanScrollRight: true,
                     // 📅 追剧日历:enabled null = 还没问过服务器 / false = 服务器没开;data = /api/calendar 的一周;open = 展开成网格
                     cal: { enabled: null, data: null, day: '', cat: '', loading: false, open: false, seen: false },
+                    shortsOpen: false,   // 📱 短剧竖屏刷开着(组件 DgShorts;只在开 / 关时变,刷的过程中不碰根应用的响应式状态)
                     calMore: { key: '', items: [], total: 0, loading: false, done: false, err: false },
                     calCanScrollLeft: false,
                     calCanScrollRight: true,
@@ -13304,6 +14144,12 @@
                     if (e.key === 'Backspace' && e.target && (/^(input|textarea)$/i.test(e.target.tagName || '') || e.target.isContentEditable)) return;
                     // TV 模式全局返回键处理
                     if (self.isTVMode && (e.key === 'Escape' || e.key === 'Backspace')) {
+                        // 📱 短剧竖屏刷开着:选集面板 → 整页,一次退一层(它自己的按键监听看到 defaultPrevented 就不再处理)
+                        if (self.shortsOpen) {
+                            e.preventDefault();
+                            self._shortsBackKey();
+                            return false;
+                        }
                         // 检查是否有弹窗
                         const popup = document.getElementById('tv-episode-popup');
                         if (popup) {
@@ -13464,9 +14310,9 @@
 
                 // Store reference to app instance for external access
                 // 🗂️ 安卓 App 的返回键(MainActivity.onBackPressed 注入的 JS,装好的 App 改不了)只认 showDetail / searched 两种状态:
-                //    分类浏览页 / 分类大全开着时对它说 searched = true → 它调 goHome() 退一层;否则在这两页按返回直接退出 App
+                //    分类浏览页 / 分类大全 / 短剧竖屏刷开着时对它说 searched = true → 它调 goHome() 退一层;否则在这几页按返回直接退出 App
                 window.vueApp = new Proxy(this, {
-                    get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen || (t.plPage && t.plPage.open)) : Reflect.get(t, k)),
+                    get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen || (t.plPage && t.plPage.open) || t.shortsOpen) : Reflect.get(t, k)),
                 });
 
                 // 定义 startApp 函数供密码验证成功后调用
@@ -14723,7 +15569,8 @@
                 },
 
                 // 添加到观看历史（包含 groupData 用于直接播放）
-                addToWatchHistory(name, poster, episode, progress, duration, groupData) {
+                // srcKey:调用方自己指定「上次用的线路」(短剧竖屏刷不经过 currentSource);不传 = 当前播放页的线路
+                addToWatchHistory(name, poster, episode, progress, duration, groupData, srcKey) {
                     // 🎟️ 试看(没登录)不记:没加载本机历史,这时写进去会把这台设备原有的历史整个盖掉
                     if (this.trial.on) return;
                     // 重新观看 → 作废该剧的删除墓碑(否则同步时会被压制成"已删")
@@ -14774,7 +15621,7 @@
                         progressDuration: Math.round(duration) || 0,
                         watchedAt: new Date().toISOString(),
                         // 记住用户最后使用的资源站
-                        lastSourceKey: this.currentSource?.site_key || null,
+                        lastSourceKey: srcKey || this.currentSource?.site_key || null,
                         // 保存播放所需的数据（用于直接播放）
                         groupData: groupData ? {
                             name: groupData.name,
@@ -16922,6 +17769,12 @@
                 //   (之后再开弹窗、点关闭时不会把它当成自己压的那条去 history.back());进退到它由常驻的 _onHistPop 把地址栏对齐
                 _histBoot() {
                     try {
+                        // 📱 短剧竖屏刷开着时刷新:它压的那条历史留着,去掉标记(之后的进退由 _onHistPop 常规处理)
+                        if (history.state && history.state.dgShorts) {
+                            const s0 = Object.assign({}, history.state);
+                            delete s0.dgShorts;
+                            history.replaceState(Object.keys(s0).length ? s0 : null, '');
+                        }
                         if (history.state && history.state.dgFrameShare) {
                             const s = Object.assign({}, history.state);
                             delete s.dgFrameShare;
@@ -16939,6 +17792,23 @@
                 //   ③ 弹窗没开:上次弹窗开着时刷新/标签页被回收,留下那条历史(启动时已去掉标记);退回/前进到它 → 页面不动,只把地址栏
                 //      对齐:播放页开着写当前集,没开着清掉 ?play=/?live=(以前首页顶着上一部的深链,刷新又打开它)
                 _onHistPop() {
+                    // 📱 短剧竖屏刷:点 ← 关页时自己退掉的那条(1.5s 内)→ 只把地址栏对齐(「完整播放」关页后紧接着开了播放页)
+                    if (this._shortsBack) {
+                        const mine = Date.now() - this._shortsBack < 1500;
+                        this._shortsBack = 0;
+                        if (mine) { if (this.showDetail) this.syncShareUrl(); return; }
+                    }
+                    // 开着时用户按返回 / 侧滑返回(退到了它那条下面):选集面板开着只关面板(把那条历史压回去,下次返回关整页),否则关整页
+                    if (this.shortsOpen && !(history.state && history.state.dgShorts)) {
+                        const c = this.$refs.shortsComp;
+                        if (c && c.drawer) {
+                            c.drawer = false;
+                            try { history.pushState(Object.assign({}, history.state || {}, { dgShorts: 1 }), ''); this._shortsHist = true; } catch (e) { }
+                            return;
+                        }
+                        this.closeShorts(true);
+                        return;
+                    }
                     if (this._plOnPop()) return;   // 📚 片单页自己那条历史(见 _plOnPop)
                     if (this._frameShareBack) {
                         this._frameShareBack = 0;
@@ -17539,7 +18409,41 @@
 
                 scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); },
 
+                // ========== 📱 短剧竖屏刷(组件 DgShorts,见 #dg-shorts-tpl 上面的脚本) ==========
+                //   打开压一条历史(手机返回键 / 侧滑返回 → _onHistPop 关);点 ← 关时自己退掉那条(_shortsBack 认领那次 popstate)
+                openShorts() {
+                    if (this.shortsOpen || this.showDetail) return;
+                    this._shortsOpener = document.activeElement;
+                    this._shortsBack = 0;
+                    this.shortsOpen = true;
+                    document.documentElement.classList.add('shorts-open');
+                    document.body.classList.add('shorts-open');
+                    this._shortsHist = false;
+                    try { history.pushState(Object.assign({}, history.state || {}, { dgShorts: 1 }), ''); this._shortsHist = true; } catch (e) { }
+                },
+                closeShorts(fromPop) {
+                    if (!this.shortsOpen) return;
+                    this.shortsOpen = false;
+                    document.documentElement.classList.remove('shorts-open');
+                    document.body.classList.remove('shorts-open');
+                    const mine = this._shortsHist;
+                    this._shortsHist = false;
+                    if (!fromPop && mine) {
+                        try { if (history.state && history.state.dgShorts) { this._shortsBack = Date.now(); history.back(); } } catch (e) { }
+                    }
+                    const op = this._shortsOpener;
+                    this._shortsOpener = null;
+                    if (this.isTVMode && op && op.isConnected) this.$nextTick(() => { try { op.focus({ preventScroll: true }); } catch (e) { } });
+                },
+                // 返回键(TV 遥控 / 安卓 App / Esc):选集面板开着先关面板,否则关整页
+                _shortsBackKey() {
+                    const c = this.$refs.shortsComp;
+                    if (c && c.back) c.back(); else this.closeShorts();
+                },
+
                 goHome() {
+                    // 📱 短剧竖屏刷开着(安卓 App 返回键经 vueApp.searched 走到这里):先退一层
+                    if (this.shortsOpen && !this.showDetail) { this._shortsBackKey(); return; }
                     // 📚 片单页开着:搜索结果 → 片单页,片单页 → 首页(一次退一层,同分类浏览页)
                     if (this.plPage.open && !this.showDetail) {
                         if (this.searched) this._plFromSearch();
@@ -18376,13 +19280,15 @@
                     if (Date.now() - (this._favLoadedAt || 0) < 10 * 60 * 1000) return;
                     this.loadFavorites();
                 },
-                // 详情页 ♥
-                async toggleFavorite() {
-                    const g = this.currentGroup;
+                // 详情页 ♥。ctx = { g, cs, eps, quiet }:收藏的不是播放页这部时传(短剧竖屏刷);quiet = 不弹「开启更新提醒？」小卡片
+                //   (模板里 @click="toggleFavorite" 会把点击事件当第一个参数传进来 —— 没有 g 的一律当没传)
+                async toggleFavorite(ctx) {
+                    const c = (ctx && ctx.g && ctx.g.name) ? ctx : null;
+                    const g = c ? c.g : this.currentGroup;
                     if (!g || !g.name || this.favBusy || !this.favoritesEnabled) return;
                     // 同步状态还没确认(弱网/服务器出错/启动检查还没回来):不知道该写服务器还是本机 → 先不写
                     if (!this._favBooted) { this.showMiniToast('网络异常，稍后再试'); this._favRetryBoot(false); return; }
-                    const cur = this.curFav;
+                    const cur = c ? this._favFind(g) : this.curFav;
                     if (cur) {
                         this.favBusy = true;
                         try { await this.removeFavorite(cur); } finally { this.favBusy = false; }
@@ -18390,7 +19296,7 @@
                     }
                     const full = () => this.showMiniToast('收藏已满 ' + this.favLimit + ' 部，请先删掉一些');
                     if (this.favList.length >= this.favLimit) { full(); return; }
-                    const data = this._favBuildItem(g, this.currentSource, this.episodeList);
+                    const data = c ? this._favBuildItem(g, c.cs, c.eps) : this._favBuildItem(g, this.currentSource, this.episodeList);
                     if (!data.name) return;
                     const entry = { fav_id: this._favIdOf(data.name, data.workSig), data, added_at: Date.now(), seen_count: data.addedEpCount || 0, status: null };
                     this.favBusy = true;
@@ -18420,7 +19326,7 @@
                         else {
                             // 🔔 本页第一次 ♥ 成功:够条件就在这条 toast 消失后弹「开启更新提醒？」小卡片(那样 toast 就不用再说"去偏好设置开")
                             let ask = false;
-                            try { ask = this._pushAskQueue('fav'); } catch (e) { }
+                            try { if (!(c && c.quiet)) ask = this._pushAskQueue('fav'); } catch (e) { }
                             this.showMiniToast(this.pushUi === 'ok' && !on && !ask ? '❤️ 已收藏（偏好设置里可开启更新推送）' : '❤️ 已收藏，有更新会在首页「我的收藏」提醒');
                         }
                         this.$nextTick(() => this.onFavPopRowScroll('favRow', 'fav'));
@@ -25760,7 +26666,7 @@
                     }
                 }
             }
-        }).component('dg-comments', window.DgComments).mount('#app');   // 💬 评论区组件(定义在 #app 后面那段 <script>)
+        }).component('dg-comments', window.DgComments).component('dg-shorts', window.DgShorts).mount('#app');   // 💬 评论区组件(定义在 #app 后面那段 <script>)
     </script>
 
     <!-- Register Service Worker with Auto-Update -->
