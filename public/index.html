@@ -128,6 +128,64 @@
     <script data-cfasync="false" src="libs/js/bootstrap.bundle.min.js" defer></script>
 
     <style>
+        /* 🎨 主题色板(design tokens)—— 全站颜色 / 圆角 / 字体都从这里取,主题 = <html data-theme="…"> 上换一套值。
+           默认值 = 原来的暗色外观(逐个颜色对过,一模一样)。主题列表、各主题的值和额外样式在本 <style> 最后的「🎨 主题」段。
+
+           新写 CSS 怎么用(别再写死颜色,否则亮色 / 杂志风等主题下会是一块黑):
+             页面底色      var(--bg)                      半透明页面底   rgba(var(--bg-rgb), .95)
+             面板 / 卡片   var(--panel) = surface-4       抬高一层(按钮 / 输入框底)var(--panel-2) = surface-7
+             文字          var(--text-1) 主 / var(--text-sub) 次 / var(--text-muted) 弱 / var(--text-faint) 更弱
+             细线 / 浅底   rgba(var(--fg-rgb), .1)  —— fg-rgb = 前景色通道(暗色下是白,亮色下是黑),悬停底 / 分割线 / 描边都用它配不同透明度
+             主色          var(--accent) / rgba(var(--accent-rgb), .3) / 渐变 var(--accent-grad);主色底上的字 var(--on-accent)
+             状态          var(--success) var(--warn) var(--danger) var(--info)(各有 -rgb 版配透明度)
+             阴影          rgba(var(--shadow-rgb), .4)    圆角  var(--radius-sm|md|lg) 或 calc(Npx * var(--radius-k))(极简 / 杂志主题 k=0 = 直角)
+             字体          var(--font-ui) 正文 / var(--font-display) 大标题(杂志 / 胶片主题是衬线)
+           不跟主题走的:画在海报 / 剧照 / 播放器画面上的东西(角标、播放按钮、DPlayer 内部菜单)保持原来的黑底白字,只有主色跟着变。
+
+           全部色板(暗色值):
+             底色   --bg #141414 · --bg-deep #0a0a0a · --bg-sunken #111 · --surface-0 #000(搜索框聚焦)
+             层级   --surface-1 #181818 · -2 #1a1a1a · -3 #1c1c1e · -4 #1f1f1f · -5 #222 · -6 #262628 · -7 #2a2a2a · -8 #2e2e31 · -9 #333 · -10 #444 · -11 #555 · -12 #666
+             玻璃   --glass-rgb 30,30,30 · --glass-2-rgb 40,40,40 · --glass-3-rgb 50,50,50
+             文字   --text-1 #fff · -2 #eee · -3 #ddd · -4 #ccc · -5 #bbb · --text-sub #b3b3b3 · -6 #aaa · -7 #999 · -8 #888 · -9 #777 · -10 #666 · -11 #555 · -12 #444 · -13 #333
+             反色   --inv-bg #fff / --inv-fg #000(白底黑字的选中态:选集、日历分类)
+             线     --line-1 #333 · -2 #3a3a3a · -3 #444 · -4 #555 · -5 #666 · -6 #888
+             主色   --accent #e50914 · --accent-deep #b00610 · --accent-bright #ff4757 · --accent-soft #ff6b81 · --accent-text #ff6b6b(暗底上的红字)· --accent-text-2 #ff8a8a · --accent-warm #ff6a00
+             状态   --success #46d369 · --danger #ef4444 · --warn #fbbf24 · --info #60a5fa · --gold #f3c969(试看 / 提示条)
+           旧名照留:--bg-color --panel-bg --text-main --border(= 上面的别名) */
+        :root,
+        [data-theme="dark"] {
+            --bg: #141414; --bg-rgb: 20, 20, 20; --bg-deep: #0a0a0a; --bg-sunken: #111;
+            --surface-0: #000; --surface-1: #181818; --surface-2: #1a1a1a; --surface-3: #1c1c1e; --surface-4: #1f1f1f; --surface-5: #222;
+            --surface-6: #262628; --surface-7: #2a2a2a; --surface-8: #2e2e31; --surface-9: #333; --surface-10: #444; --surface-11: #555; --surface-12: #666;
+            --glass-rgb: 30, 30, 30; --glass-2-rgb: 40, 40, 40; --glass-3-rgb: 50, 50, 50;
+            --login-mid: #1a1a2e; --login-card-rgb: 30, 30, 40;
+            --fg-rgb: 255, 255, 255;
+            --inv-bg: #fff; --inv-fg: #000;
+            --text-1: #fff; --text-2: #eee; --text-3: #ddd; --text-4: #ccc; --text-5: #bbb; --text-sub: #b3b3b3; --text-6: #aaa;
+            --text-7: #999; --text-8: #888; --text-9: #777; --text-10: #666; --text-11: #555; --text-12: #444; --text-13: #333;
+            --line-1: #333; --line-2: #3a3a3a; --line-3: #444; --line-4: #555; --line-5: #666; --line-6: #888;
+            --accent: #e50914; --accent-rgb: 229, 9, 20; --accent-deep: #b00610; --accent-deep-rgb: 180, 0, 15; --accent-dark-rgb: 139, 0, 0;
+            --accent-bright: #ff4757; --accent-soft: #ff6b81; --accent-soft-rgb: 255, 107, 129; --accent-text: #ff6b6b; --accent-text-2: #ff8a8a; --accent-warm: #ff6a00;
+            --on-accent: #fff; --on-accent-rgb: 255, 255, 255;
+            --success: #46d369; --success-rgb: 70, 211, 105; --success-soft: #8fe3a6;
+            --danger: #ef4444; --danger-rgb: 239, 68, 68; --danger-soft: #f87171;
+            --warn: #fbbf24; --warn-rgb: 251, 191, 36; --warn-soft: #fcd34d; --info: #60a5fa;
+            --gold: #f3c969; --gold-rgb: 243, 201, 105; --gold-2: #e6c074; --gold-3: #c9a96a; --gold-4: #e3a857;
+            --shadow-rgb: 0, 0, 0;
+            --radius-k: 1;
+            --font-ui: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            --font-display: var(--font-ui);
+            /* 语义别名(新 CSS 用这些) */
+            --panel: var(--surface-4); --panel-2: var(--surface-7);
+            --text-muted: var(--text-8); --text-faint: var(--text-10);
+            --line: rgba(var(--fg-rgb), 0.1);
+            --accent-grad: linear-gradient(135deg, var(--accent), var(--accent-deep));
+            --radius-sm: calc(6px * var(--radius-k)); --radius-md: calc(10px * var(--radius-k)); --radius-lg: calc(14px * var(--radius-k));
+            --shadow-1: 0 4px 10px rgba(var(--shadow-rgb), 0.4); --shadow-2: 0 20px 60px rgba(var(--shadow-rgb), 0.5);
+            /* 旧名 */
+            --bg-color: var(--bg); --panel-bg: var(--surface-4); --text-main: var(--text-1); --border: rgba(var(--fg-rgb), 0.1);
+        }
+
         /* ♿ "减少动态效果"偏好：只在【手机端】削弱动画(手机也顺带省电省性能)；桌面端保留完整动效——
            大屏不易引发晕动症、且高配电脑的动效是体验一部分。这正好实现"电脑加动效、手机减少"。 */
         @media (prefers-reduced-motion: reduce) and (max-width: 768px) {
@@ -165,38 +223,38 @@
             }
         }
         /* 🔗 分享面板社交按钮（YouTube 风格） */
-        .share-soc { background:none; border:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:7px; min-width:62px; color:#bbb; font-size:12px; padding:0; flex:0 0 auto; }
+        .share-soc { background:none; border:none; cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:7px; min-width:62px; color:var(--text-5); font-size:12px; padding:0; flex:0 0 auto; }
         .share-soc .ico { width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:23px; color:#fff; transition:transform .15s; }
         .share-soc:hover .ico { transform:scale(1.08); }
-        .share-soc:hover { color:#fff; }
+        .share-soc:hover { color:var(--text-1); }
         .share-soc-row { display:flex; gap:14px; overflow-x:auto; padding:4px 2px 16px; -webkit-overflow-scrolling:touch; }
         .share-soc-row::-webkit-scrollbar { height:0; }
         /* 📸 截帧分享:分享面板里的入口 + 卡片弹窗(层级在分享面板之上、mini toast 之下) */
-        .fshare-entry { width:100%; display:flex; align-items:center; gap:12px; background:#262628; border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:12px 14px; margin:0 0 14px; color:#fff; cursor:pointer; text-align:left; font-size:14px; font-weight:bold; }
-        .fshare-entry:hover { background:#2e2e31; }
-        .fshare-entry > .fa-camera { width:36px; height:36px; border-radius:50%; background:#e50914; display:flex; align-items:center; justify-content:center; font-size:16px; flex:none; }
+        .fshare-entry { width:100%; display:flex; align-items:center; gap:12px; background:var(--surface-6); border:1px solid rgba(var(--fg-rgb), .08); border-radius:calc(12px * var(--radius-k)); padding:12px 14px; margin:0 0 14px; color:var(--text-1); cursor:pointer; text-align:left; font-size:14px; font-weight:bold; }
+        .fshare-entry:hover { background:var(--surface-8); }
+        .fshare-entry > .fa-camera { width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:16px; flex:none; }
         .fshare-entry-t { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
-        .fshare-entry-t small { font-weight:normal; color:#999; font-size:12px; }
-        .fshare-entry-arrow { color:#666; font-size:12px; }
+        .fshare-entry-t small { font-weight:normal; color:var(--text-7); font-size:12px; }
+        .fshare-entry-arrow { color:var(--text-10); font-size:12px; }
         /* 弹窗 teleport 到 body 下:高于播放页 .detail-overlay(9999,网页全屏的播放器在它里面)、低于 showMiniToast(2147483600,"已复制"要压在弹窗上) */
         .fshare-mask { position:fixed; inset:0; background:rgba(0,0,0,.72); z-index:2147483550; display:flex; align-items:center; justify-content:center; padding:16px; }
-        .fshare-box { background:#1c1c1e; border:1px solid rgba(255,255,255,.1); border-radius:16px; padding:16px; width:100%; max-width:440px; max-height:100%; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(0,0,0,.6); color:#fff; outline:none; }
+        .fshare-box { background:var(--surface-3); border:1px solid rgba(var(--fg-rgb), .1); border-radius:calc(16px * var(--radius-k)); padding:16px; width:100%; max-width:440px; max-height:100%; overflow-y:auto; overscroll-behavior:contain; display:flex; flex-direction:column; box-shadow:0 20px 60px rgba(var(--shadow-rgb), .6); color:var(--text-1); outline:none; }
         /* 打开时焦点落在弹窗框本身(tabindex=-1,不是能按的东西):全站 TV 焦点规则 [tabindex]:focus 的红框 + 红光晕(!important)会把它整个框住、
            顶掉阴影 → 这里同样 !important、选择器多一层(0,3,0 高过 0,2,0,不受先后顺序影响)压回去;框里的按钮照常有焦点红框 */
-        .fshare-mask .fshare-box:focus { outline:none !important; box-shadow:0 20px 60px rgba(0,0,0,.6) !important; }
+        .fshare-mask .fshare-box:focus { outline:none !important; box-shadow:0 20px 60px rgba(var(--shadow-rgb), .6) !important; }
         .fshare-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; flex:none; }
         .fshare-ttl { font-size:16px; font-weight:bold; }
-        .fshare-ttl .fa-camera { color:#e50914; margin-right:6px; }
-        .fshare-x { background:none; border:none; color:#888; font-size:24px; line-height:1; cursor:pointer; padding:0 4px; }
-        .fshare-stage { flex:1 1 auto; min-height:120px; display:flex; align-items:center; justify-content:center; background:#111; border-radius:10px; overflow:hidden; }
+        .fshare-ttl .fa-camera { color:var(--accent); margin-right:6px; }
+        .fshare-x { background:none; border:none; color:var(--text-8); font-size:24px; line-height:1; cursor:pointer; padding:0 4px; }
+        .fshare-stage { flex:1 1 auto; min-height:120px; display:flex; align-items:center; justify-content:center; background:var(--bg-sunken); border-radius:calc(10px * var(--radius-k)); overflow:hidden; }
         /* body 关了 -webkit-touch-callout(防长按选中),卡片图片要打开:iOS / 微信里长按才有"保存图片 / 发送给朋友" */
         .fshare-img { display:block; max-width:100%; max-height:calc(100vh - 230px); max-height:calc(100dvh - 230px); width:auto; height:auto; -webkit-touch-callout:default !important; -webkit-user-select:auto; user-select:auto; pointer-events:auto; }
-        .fshare-wait { color:#aaa; font-size:14px; padding:40px 16px; text-align:center; }
-        .fshare-note { color:#f5c26b; font-size:12px; margin-top:10px; flex:none; }
-        .fshare-tip { color:#888; font-size:12px; margin-top:8px; text-align:center; flex:none; }
+        .fshare-wait { color:var(--text-6); font-size:14px; padding:40px 16px; text-align:center; }
+        .fshare-note { color:var(--gold); font-size:12px; margin-top:10px; flex:none; }
+        .fshare-tip { color:var(--text-8); font-size:12px; margin-top:8px; text-align:center; flex:none; }
         .fshare-btns { display:flex; gap:8px; margin-top:12px; flex:none; }
-        .fshare-btns button { flex:1; min-width:0; background:#2a2a2a; border:1px solid #3a3a3a; color:#eee; border-radius:10px; padding:11px 6px; font-size:13px; font-weight:bold; cursor:pointer; white-space:nowrap; }
-        .fshare-btns button.pri { background:linear-gradient(135deg,#e50914,#b00610); border-color:transparent; color:#fff; }
+        .fshare-btns button { flex:1; min-width:0; background:var(--surface-7); border:1px solid var(--line-2); color:var(--text-2); border-radius:calc(10px * var(--radius-k)); padding:11px 6px; font-size:13px; font-weight:bold; cursor:pointer; white-space:nowrap; }
+        .fshare-btns button.pri { background:linear-gradient(135deg,var(--accent),var(--accent-deep)); border-color:transparent; color:var(--on-accent); }
         .fshare-btns button:disabled { opacity:.45; cursor:default; }
         /* 手机横屏(从全屏点进来,地址栏+状态栏一占只剩 ~280px 高):图在左、标题/提示/按钮在右,按钮不再被挤出屏幕;再放不下就在框里滚 */
         @media (max-height: 420px) and (orientation: landscape) {
@@ -215,15 +273,6 @@
         .player-box.dg-no-frame #dplayer .dplayer-frame-icon,
         .player-box.dg-no-frame #dplayer .dg-mob-row[data-dg="frame"] { display:none !important; }
 
-        :root {
-            --bg-color: #141414;
-            --panel-bg: #1f1f1f;
-            --accent: #e50914;
-            --text-main: #ffffff;
-            --text-sub: #b3b3b3;
-            --border: rgba(255, 255, 255, 0.1);
-        }
-
         [v-cloak] {
             display: none !important;
         }
@@ -236,7 +285,7 @@
         body {
             background-color: var(--bg-color);
             color: var(--text-main);
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-family: var(--font-ui);
             min-height: 100vh;
             padding-bottom: 60px;
             overflow-x: hidden;
@@ -292,9 +341,9 @@
         button:focus,
         a:focus,
         [tabindex]:focus {
-            outline: 3px solid #e50914 !important;
+            outline: 3px solid var(--accent) !important;
             outline-offset: 2px !important;
-            box-shadow: 0 0 0 6px rgba(229, 9, 20, 0.3) !important;
+            box-shadow: 0 0 0 6px rgba(var(--accent-rgb), 0.3) !important;
         }
 
         /* 播放器控制按钮焦点样式 */
@@ -320,9 +369,9 @@
         }
 
         .dplayer-icon:focus {
-            outline: 3px solid #e50914 !important;
+            outline: 3px solid var(--accent) !important;
             outline-offset: 2px !important;
-            background: rgba(229, 9, 20, 0.3) !important;
+            background: rgba(var(--accent-rgb), 0.3) !important;
             border-radius: 4px !important;
         }
 
@@ -331,7 +380,7 @@
         #tv-select-episode:hover,
         #tv-switch-source:focus,
         #tv-select-episode:focus {
-            background: rgba(229, 9, 20, 0.5) !important;
+            background: rgba(var(--accent-rgb), 0.5) !important;
         }
 
 
@@ -394,7 +443,7 @@
         img {
             content-visibility: auto;
             /* 图片占位背景 */
-            background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%);
+            background: linear-gradient(135deg, var(--surface-2) 0%, var(--surface-7) 100%);
         }
 
         /* 性能优化：懒加载区域 */
@@ -405,7 +454,7 @@
 
         /* 修复 Firefox 滚动时的黑色方块 */
         * {
-            scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+            scrollbar-color: rgba(var(--fg-rgb), 0.2) transparent;
             scrollbar-width: thin;
             /* 禁用点击高亮背景 */
             -webkit-tap-highlight-color: transparent;
@@ -464,7 +513,7 @@
             background: rgba(255, 255, 255, 0.12);
         }
         #dplayer .dm-font-item.dm-font-cur {
-            color: #ff5566;
+            color: var(--accent-text);
         }
         #dplayer .dm-set-arrow {
             margin-left: auto;
@@ -530,7 +579,7 @@
             flex: 1;
             min-width: 0;
             height: 4px;
-            accent-color: #e50914;
+            accent-color: var(--accent);
             cursor: pointer;
         }
         #dplayer .dm-set-val {
@@ -553,7 +602,7 @@
             flex-shrink: 0;
         }
         #dplayer .dm-toggle.dm-on {
-            background: #e50914;
+            background: var(--accent);
         }
         #dplayer .dm-toggle .dm-knob {
             position: absolute;
@@ -627,7 +676,7 @@
             touch-action: manipulation;
         }
         #dplayer .dm-off-btn:active {
-            background: rgba(229, 9, 20, 0.7);
+            background: rgba(var(--accent-rgb), 0.7);
         }
         #dplayer .dm-off-hint {
             margin-top: 6px;
@@ -664,7 +713,7 @@
 
         /* 2. 进度条美化 - 渐变效果 */
         .dplayer-bar-wrap .dplayer-played {
-            background: linear-gradient(90deg, #e50914, #ff4757, #ff6b81) !important;
+            background: linear-gradient(90deg, var(--accent), var(--accent-bright), var(--accent-soft)) !important;
         }
 
         /* 进度条高度 */
@@ -781,7 +830,7 @@
                 transition: background .25s;
                 flex: none;
             }
-            #dplayer .dg-mob-toggle.on { background: #e50914; }
+            #dplayer .dg-mob-toggle.on { background: var(--accent); }
             #dplayer .dg-mob-toggle::after {
                 content: '';
                 position: absolute;
@@ -822,24 +871,24 @@
         .offline-entry-btn {
             margin-left: 8px;
             font-size: 12px;
-            color: #888;
+            color: var(--text-8);
             cursor: pointer;
             padding: 2px 8px;
-            border-radius: 4px;
-            border: 1px solid #444;
+            border-radius: calc(4px * var(--radius-k));
+            border: 1px solid var(--line-3);
             transition: all 0.2s;
         }
 
         .offline-entry-btn:hover,
         .offline-entry-btn.active {
-            color: #fff;
-            border-color: #888;
+            color: var(--text-1);
+            border-color: var(--line-6);
         }
 
         .offline-panel {
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
+            background: rgba(var(--fg-rgb), 0.04);
+            border: 1px solid rgba(var(--fg-rgb), 0.08);
+            border-radius: calc(10px * var(--radius-k));
             padding: 10px 12px;
             margin: 10px 0 12px;
             font-size: 13px;
@@ -854,7 +903,7 @@
         }
 
         .offline-row+.offline-row {
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(var(--fg-rgb), 0.05);
         }
 
         .offline-info {
@@ -863,30 +912,30 @@
         }
 
         .offline-name {
-            color: #eee;
+            color: var(--text-2);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
 
         .offline-ep {
-            color: #999;
+            color: var(--text-7);
             font-size: 12px;
             margin-left: 6px;
         }
 
         .offline-sub {
-            color: #777;
+            color: var(--text-9);
             font-size: 11px;
             margin-top: 2px;
         }
 
         .offline-btn {
             flex-shrink: 0;
-            background: linear-gradient(135deg, #e50914, #b00710);
-            color: #fff;
+            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+            color: var(--on-accent);
             border: none;
-            border-radius: 6px;
+            border-radius: calc(6px * var(--radius-k));
             padding: 6px 14px;
             font-size: 12px;
             cursor: pointer;
@@ -898,20 +947,20 @@
         }
 
         .offline-btn.downloading {
-            background: #555;
+            background: var(--surface-11);
         }
 
         .offline-progress {
             height: 4px;
-            border-radius: 2px;
-            background: rgba(255, 255, 255, 0.1);
+            border-radius: calc(2px * var(--radius-k));
+            background: rgba(var(--fg-rgb), 0.1);
             overflow: hidden;
             margin: 4px 0 8px;
         }
 
         .offline-progress-inner {
             height: 100%;
-            background: linear-gradient(90deg, #e50914, #ff6b81);
+            background: linear-gradient(90deg, var(--accent), var(--accent-soft));
             transition: width 0.3s;
         }
 
@@ -920,37 +969,37 @@
         }
 
         .offline-del {
-            color: #777;
+            color: var(--text-9);
             cursor: pointer;
             padding: 4px 8px;
             flex-shrink: 0;
         }
 
         .offline-del:hover {
-            color: #ef4444;
+            color: var(--danger);
         }
 
         .offline-footer {
             display: flex;
             justify-content: space-between;
-            color: #666;
+            color: var(--text-10);
             font-size: 11px;
             padding-top: 8px;
-            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-top: 1px solid rgba(var(--fg-rgb), 0.05);
             margin-top: 4px;
         }
 
         .offline-clear {
-            color: #888;
+            color: var(--text-8);
             cursor: pointer;
         }
 
         .offline-clear:hover {
-            color: #ef4444;
+            color: var(--danger);
         }
 
         .offline-empty {
-            color: #666;
+            color: var(--text-10);
             font-size: 12px;
             padding: 6px 0 2px;
         }
@@ -958,41 +1007,41 @@
         /* 📮 求片弹窗 */
         .req-modal { max-width: 560px; width: 92%; max-height: 86vh; overflow-y: auto; }
         .req-body { padding: 26px 24px 22px; }
-        .req-h { color: #fff; font-size: 20px; margin: 0 0 6px; }
-        .req-sub { color: #999; font-size: 13px; line-height: 1.6; margin: 0 0 18px; }
-        .req-need-login { color: #bbb; text-align: center; padding: 20px; }
+        .req-h { color: var(--text-1); font-size: 20px; margin: 0 0 6px; }
+        .req-sub { color: var(--text-7); font-size: 13px; line-height: 1.6; margin: 0 0 18px; }
+        .req-need-login { color: var(--text-5); text-align: center; padding: 20px; }
         .req-need-login p { margin-bottom: 12px; }
         .req-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
         .req-input {
-            width: 100%; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14);
-            border-radius: 8px; color: #eee; padding: 10px 12px; font-size: 14px; outline: none;
+            width: 100%; background: rgba(var(--fg-rgb), 0.06); border: 1px solid rgba(var(--fg-rgb), 0.14);
+            border-radius: calc(8px * var(--radius-k)); color: var(--text-2); padding: 10px 12px; font-size: 14px; outline: none;
         }
-        .req-input:focus { border-color: #e50914; }
+        .req-input:focus { border-color: var(--accent); }
         textarea.req-input { resize: vertical; }
         .req-sec-title {
-            display: flex; align-items: center; color: #ddd; font-size: 14px; font-weight: 600;
-            margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex; align-items: center; color: var(--text-3); font-size: 14px; font-weight: 600;
+            margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid rgba(var(--fg-rgb), 0.08);
         }
         .req-list { display: flex; flex-direction: column; gap: 10px; }
-        .req-item { background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 10px; padding: 10px 12px; }
+        .req-item { background: rgba(var(--fg-rgb), 0.04); border: 1px solid rgba(var(--fg-rgb), 0.07); border-radius: calc(10px * var(--radius-k)); padding: 10px 12px; }
         .req-row { display: flex; align-items: center; gap: 8px; }
-        .req-name { color: #eee; font-size: 14px; font-weight: 500; }
-        .req-who { margin-left: auto; color: #777; font-size: 11px; }
-        .req-badge { font-size: 11px; padding: 1px 8px; border-radius: 10px; }
-        .rb-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-        .rb-fulfilled { background: rgba(70, 211, 105, 0.2); color: #46d369; }
-        .rb-rejected { background: rgba(239, 68, 68, 0.2); color: #f87171; }
-        .rb-need_info { background: rgba(251, 191, 36, 0.18); color: #fcd34d; }
-        .req-hint { color: #8a8a8a; font-size: 12px; margin: -2px 0 2px; line-height: 1.5; }
-        .req-hint .fa-lightbulb { color: #fbbf24; margin-right: 4px; }
+        .req-name { color: var(--text-2); font-size: 14px; font-weight: 500; }
+        .req-who { margin-left: auto; color: var(--text-9); font-size: 11px; }
+        .req-badge { font-size: 11px; padding: 1px 8px; border-radius: calc(10px * var(--radius-k)); }
+        .rb-pending { background: rgba(245, 158, 11, 0.2); color: var(--warn); }
+        .rb-fulfilled { background: rgba(var(--success-rgb), 0.2); color: var(--success); }
+        .rb-rejected { background: rgba(var(--danger-rgb), 0.2); color: var(--danger-soft); }
+        .rb-need_info { background: rgba(var(--warn-rgb), 0.18); color: var(--warn-soft); }
+        .req-hint { color: var(--text-8); font-size: 12px; margin: -2px 0 2px; line-height: 1.5; }
+        .req-hint .fa-lightbulb { color: var(--warn); margin-right: 4px; }
         .req-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (max-width: 480px) { .req-grid2 { grid-template-columns: 1fr; } }
-        .req-meta { color: #8b8b8b; font-size: 12px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 8px; }
+        .req-meta { color: var(--text-8); font-size: 12px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 8px; }
         .req-meta span { white-space: nowrap; }
         .req-needinfo { margin-top: 6px; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-        .req-note { color: #999; font-size: 12px; margin-top: 4px; word-break: break-all; }
+        .req-note { color: var(--text-7); font-size: 12px; margin-top: 4px; word-break: break-all; }
         .req-fulfill { margin-top: 6px; }
-        .req-dl { color: #46d369; font-size: 13px; text-decoration: none; }
+        .req-dl { color: var(--success); font-size: 13px; text-decoration: none; }
         .req-dl:hover { text-decoration: underline; }
         .req-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 
@@ -1009,18 +1058,18 @@
         /* 🔔 「开启更新提醒？」小卡片:不加遮罩。桌面在右下角 ⚙ 按钮左边;手机贴底、右边给 ⚙ / 返回顶部按钮让出一列。
            z-index 高于播放页(9999)和 TV 控制条,低于分享面板(2147483500)/ 截帧弹窗 / toast */
         .pask { position: fixed; right: 104px; bottom: 40px; z-index: 2147483400; width: 340px; max-width: calc(100vw - 32px); box-sizing: border-box;
-            display: flex; gap: 12px; align-items: flex-start; background: #1c1c1e; border: 1px solid rgba(255,255,255,.12); border-radius: 14px;
-            padding: 14px; box-shadow: 0 12px 40px rgba(0,0,0,.55); color: #fff; animation: paskIn .22s ease-out; }
+            display: flex; gap: 12px; align-items: flex-start; background: var(--surface-3); border: 1px solid rgba(var(--fg-rgb), .12); border-radius: calc(14px * var(--radius-k));
+            padding: 14px; box-shadow: 0 12px 40px rgba(var(--shadow-rgb), .55); color: var(--text-1); animation: paskIn .22s ease-out; }
         @keyframes paskIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-        .pask-ico { flex: none; width: 34px; height: 34px; border-radius: 50%; background: rgba(229,9,20,.15); color: #e50914; display: flex; align-items: center; justify-content: center; font-size: 15px; }
+        .pask-ico { flex: none; width: 34px; height: 34px; border-radius: 50%; background: rgba(var(--accent-rgb), .15); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 15px; }
         .pask-main { flex: 1; min-width: 0; }
-        .pask-t { font-size: 14px; line-height: 1.5; color: #eee; word-break: break-word; }
+        .pask-t { font-size: 14px; line-height: 1.5; color: var(--text-2); word-break: break-word; }
         .pask-btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
-        .pask-btns button { border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: bold; cursor: pointer; border: 1px solid #3a3a3a; background: #2a2a2a; color: #ddd; white-space: nowrap; }
-        .pask-btns button.pri { background: #e50914; border-color: #e50914; color: #fff; }
+        .pask-btns button { border-radius: calc(999px * var(--radius-k)); padding: 7px 16px; font-size: 13px; font-weight: bold; cursor: pointer; border: 1px solid var(--line-2); background: var(--surface-7); color: var(--text-3); white-space: nowrap; }
+        .pask-btns button.pri { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
         .pask-btns button.busy { opacity: .7; cursor: default; }
         /* 全站焦点规则是红框:红色按钮上看不出来 → 「开启」的焦点框改白色(TV 遥控器要看得见焦点在哪) */
-        .pask .pask-btns button.pri:focus { outline-color: #fff !important; }
+        .pask .pask-btns button.pri:focus { outline-color: var(--on-accent) !important; }
         @media (min-width: 769px) {
             body.tv-mode .pask { width: 440px; }
             body.tv-mode .pask-t { font-size: 18px; }
@@ -1035,16 +1084,16 @@
         /* 设置：封面/文字大小分段选择 */
         .scale-seg { display: flex; gap: 8px; }
         .scale-seg button {
-            flex: 1; padding: 8px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.14);
-            background: rgba(255,255,255,0.05); color: #bbb; font-size: 13px; cursor: pointer; transition: all 0.18s;
+            flex: 1; padding: 8px 0; border-radius: calc(8px * var(--radius-k)); border: 1px solid rgba(var(--fg-rgb), 0.14);
+            background: rgba(var(--fg-rgb), 0.05); color: var(--text-5); font-size: 13px; cursor: pointer; transition: all 0.18s;
         }
-        .scale-seg button:hover { background: rgba(255,255,255,0.1); color: #eee; }
-        .scale-seg button.active { background: rgba(229,9,20,0.2); border-color: rgba(229,9,20,0.5); color: #fff; font-weight: 600; }
+        .scale-seg button:hover { background: rgba(var(--fg-rgb), 0.1); color: var(--text-2); }
+        .scale-seg button.active { background: rgba(var(--accent-rgb), 0.2); border-color: rgba(var(--accent-rgb), 0.5); color: var(--text-1); font-weight: 600; }
 
         /* 3. 进度条拖动点 - 发光效果 */
         .dplayer-bar-wrap .dplayer-thumb {
             background: #fff !important;
-            box-shadow: 0 0 12px rgba(229, 9, 20, 0.9), 0 0 25px rgba(229, 9, 20, 0.5) !important;
+            box-shadow: 0 0 12px rgba(var(--accent-rgb), 0.9), 0 0 25px rgba(var(--accent-rgb), 0.5) !important;
             transform: scale(1.3) !important;
             border: 2px solid rgba(255, 255, 255, 0.9) !important;
         }
@@ -1062,14 +1111,14 @@
 
         /* 5. 大播放按钮美化 */
         .dplayer-bezel-icon {
-            background: rgba(229, 9, 20, 0.9) !important;
+            background: rgba(var(--accent-rgb), 0.9) !important;
             border-radius: 50% !important;
-            box-shadow: 0 0 40px rgba(229, 9, 20, 0.6) !important;
+            box-shadow: 0 0 40px rgba(var(--accent-rgb), 0.6) !important;
         }
 
         /* 6. 音量条美化 */
         .dplayer-volume-bar-wrap .dplayer-volume-bar .dplayer-volume-bar-inner {
-            background: linear-gradient(90deg, #e50914, #ff6b81) !important;
+            background: linear-gradient(90deg, var(--accent), var(--accent-soft)) !important;
         }
 
         /* 7. 设置面板毛玻璃效果 */
@@ -1088,16 +1137,16 @@
         }
 
         .dplayer-setting-box .dplayer-setting-item:hover {
-            background: rgba(229, 9, 20, 0.3) !important;
+            background: rgba(var(--accent-rgb), 0.3) !important;
         }
 
         /* 8. 加载动画美化 */
         .dplayer-loading-icon {
-            filter: drop-shadow(0 0 15px rgba(229, 9, 20, 0.6));
+            filter: drop-shadow(0 0 15px rgba(var(--accent-rgb), 0.6));
         }
 
         .dplayer-loading-icon svg path {
-            fill: #e50914 !important;
+            fill: var(--accent) !important;
         }
 
         /* 9. 顶部信息栏渐变 */
@@ -1119,7 +1168,7 @@
         }
 
         .dplayer-menu-item:hover {
-            background: rgba(229, 9, 20, 0.4) !important;
+            background: rgba(var(--accent-rgb), 0.4) !important;
         }
 
         /* 隐藏关于作者及版本号 (通常是最后两项) */
@@ -1194,7 +1243,7 @@
             position: absolute;
             top: 20px;
             right: 20px;
-            background: rgba(229, 9, 20, 0.9);
+            background: rgba(var(--accent-rgb), 0.9);
             color: #fff;
             padding: 6px 14px;
             border-radius: 20px;
@@ -1244,12 +1293,12 @@
         }
 
         .dplayer-icon:hover svg path {
-            fill: #ff6b81 !important;
+            fill: var(--accent-soft) !important;
         }
 
         /* 16. 播放/暂停按钮特殊高亮与动效 */
         .dplayer-icon.dplayer-play-icon {
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.4), rgba(255, 107, 129, 0.2)) !important;
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.4), rgba(var(--accent-soft-rgb), 0.2)) !important;
             border-radius: 50% !important;
             padding: 8px !important;
             margin: 0 5px !important;
@@ -1257,8 +1306,8 @@
         }
 
         .dplayer-icon.dplayer-play-icon:hover {
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.8), rgba(255, 107, 129, 0.6)) !important;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.6) !important;
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.8), rgba(var(--accent-soft-rgb), 0.6)) !important;
+            box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.6) !important;
             transform: scale(1.15) !important;
         }
 
@@ -1276,7 +1325,7 @@
             transform: translate(-50%, -50%) scale(0.8);
             width: 75px;
             height: 75px;
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 15, 0.85));
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.9), rgba(var(--accent-deep-rgb), 0.85));
             backdrop-filter: blur(12px);
             border-radius: 50%;
             display: flex;
@@ -1289,8 +1338,8 @@
             pointer-events: none;
             border: 3px solid rgba(255, 255, 255, 0.3);
             box-shadow:
-                0 0 40px rgba(229, 9, 20, 0.5),
-                0 0 80px rgba(229, 9, 20, 0.25),
+                0 0 40px rgba(var(--accent-rgb), 0.5),
+                0 0 80px rgba(var(--accent-rgb), 0.25),
                 inset 0 2px 12px rgba(255, 255, 255, 0.2),
                 0 8px 30px rgba(0, 0, 0, 0.4);
         }
@@ -1333,7 +1382,7 @@
             width: 100%;
             height: 100%;
             border-radius: 50%;
-            border: 2px solid rgba(229, 9, 20, 0.5);
+            border: 2px solid rgba(var(--accent-rgb), 0.5);
             animation: mobilePulse 1.8s ease-out infinite;
             pointer-events: none;
         }
@@ -1374,7 +1423,7 @@
             transform: translate(-50%, -50%) scale(0.8);
             width: 90px;
             height: 90px;
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 15, 0.85));
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.9), rgba(var(--accent-deep-rgb), 0.85));
             backdrop-filter: blur(12px);
             border-radius: 50%;
             display: flex;
@@ -1387,8 +1436,8 @@
             pointer-events: none;
             border: 3px solid rgba(255, 255, 255, 0.3);
             box-shadow:
-                0 0 50px rgba(229, 9, 20, 0.5),
-                0 0 100px rgba(229, 9, 20, 0.3),
+                0 0 50px rgba(var(--accent-rgb), 0.5),
+                0 0 100px rgba(var(--accent-rgb), 0.3),
                 inset 0 2px 15px rgba(255, 255, 255, 0.2),
                 0 10px 40px rgba(0, 0, 0, 0.4);
             cursor: pointer;
@@ -1405,8 +1454,8 @@
         .desktop-play-overlay:hover {
             transform: translate(-50%, -50%) scale(1.1);
             box-shadow:
-                0 0 70px rgba(229, 9, 20, 0.7),
-                0 0 140px rgba(229, 9, 20, 0.4),
+                0 0 70px rgba(var(--accent-rgb), 0.7),
+                0 0 140px rgba(var(--accent-rgb), 0.4),
                 inset 0 2px 20px rgba(255, 255, 255, 0.3);
         }
 
@@ -1433,7 +1482,7 @@
             width: 100%;
             height: 100%;
             border-radius: 50%;
-            border: 2px solid rgba(229, 9, 20, 0.6);
+            border: 2px solid rgba(var(--accent-rgb), 0.6);
             animation: desktopPulse 2s ease-out infinite;
             pointer-events: none;
         }
@@ -1506,7 +1555,7 @@
 
         /* 20. 图标颜色渐变效果 */
         .dplayer-icons .dplayer-icon:hover svg path {
-            fill: #ff6b81 !important;
+            fill: var(--accent-soft) !important;
             transition: fill 0.2s ease;
         }
 
@@ -1519,11 +1568,11 @@
         .dplayer-bezel-icon {
             width: 70px !important;
             height: 70px !important;
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.95), rgba(180, 0, 15, 0.9)) !important;
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.95), rgba(var(--accent-deep-rgb), 0.9)) !important;
             border-radius: 50% !important;
             box-shadow:
-                0 0 40px rgba(229, 9, 20, 0.6),
-                0 0 80px rgba(229, 9, 20, 0.3),
+                0 0 40px rgba(var(--accent-rgb), 0.6),
+                0 0 80px rgba(var(--accent-rgb), 0.3),
                 inset 0 2px 10px rgba(255, 255, 255, 0.2) !important;
             border: 2px solid rgba(255, 255, 255, 0.2) !important;
             display: flex !important;
@@ -1535,8 +1584,8 @@
         .dplayer-bezel-icon:hover {
             transform: scale(1.1) !important;
             box-shadow:
-                0 0 60px rgba(229, 9, 20, 0.8),
-                0 0 100px rgba(229, 9, 20, 0.4) !important;
+                0 0 60px rgba(var(--accent-rgb), 0.8),
+                0 0 100px rgba(var(--accent-rgb), 0.4) !important;
         }
 
         .dplayer-bezel-icon svg {
@@ -1556,15 +1605,15 @@
         }
 
         .dplayer-setting-speed-item:hover {
-            background: rgba(229, 9, 20, 0.4) !important;
+            background: rgba(var(--accent-rgb), 0.4) !important;
             transform: translateX(5px) !important;
         }
 
         .dplayer-setting-speed-item.dplayer-setting-speed-current {
-            background: linear-gradient(90deg, rgba(229, 9, 20, 0.6), transparent) !important;
-            color: #ff6b81 !important;
+            background: linear-gradient(90deg, rgba(var(--accent-rgb), 0.6), transparent) !important;
+            color: var(--accent-soft) !important;
             font-weight: bold !important;
-            border-left: 3px solid #e50914 !important;
+            border-left: 3px solid var(--accent) !important;
         }
 
         /* 24. 加载动画自定义 */
@@ -1574,7 +1623,7 @@
         }
 
         .dplayer-loading-icon svg circle {
-            stroke: #e50914 !important;
+            stroke: var(--accent) !important;
             stroke-width: 3 !important;
         }
 
@@ -1642,13 +1691,13 @@
                 justify-content: center !important;
                 width: 80px !important;
                 height: 80px !important;
-                background: linear-gradient(135deg, rgba(229, 9, 20, 0.9), rgba(180, 0, 15, 0.85)) !important;
+                background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.9), rgba(var(--accent-deep-rgb), 0.85)) !important;
                 backdrop-filter: blur(10px) !important;
                 border-radius: 50% !important;
                 border: 3px solid rgba(255, 255, 255, 0.25) !important;
                 box-shadow:
-                    0 0 40px rgba(229, 9, 20, 0.6),
-                    0 0 80px rgba(229, 9, 20, 0.3),
+                    0 0 40px rgba(var(--accent-rgb), 0.6),
+                    0 0 80px rgba(var(--accent-rgb), 0.3),
                     inset 0 2px 15px rgba(255, 255, 255, 0.2),
                     0 8px 32px rgba(0, 0, 0, 0.4) !important;
                 animation: bezelAppear 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
@@ -1659,8 +1708,8 @@
             .dplayer-bezel-icon:hover {
                 transform: scale(1.1) !important;
                 box-shadow:
-                    0 0 60px rgba(229, 9, 20, 0.8),
-                    0 0 120px rgba(229, 9, 20, 0.4),
+                    0 0 60px rgba(var(--accent-rgb), 0.8),
+                    0 0 120px rgba(var(--accent-rgb), 0.4),
                     inset 0 2px 20px rgba(255, 255, 255, 0.3) !important;
             }
 
@@ -1704,7 +1753,7 @@
                 height: 100%;
                 border-radius: 50%;
                 background: transparent;
-                border: 2px solid rgba(229, 9, 20, 0.5);
+                border: 2px solid rgba(var(--accent-rgb), 0.5);
                 animation: bezelPulse 1.5s ease-out infinite;
                 pointer-events: none;
             }
@@ -1760,16 +1809,16 @@
         }
 
         ::-webkit-scrollbar-track {
-            background: #141414;
+            background: var(--bg);
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #333;
-            border-radius: 4px;
+            background: var(--surface-9);
+            border-radius: calc(4px * var(--radius-k));
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: #555;
+            background: var(--surface-11);
         }
 
         /* 导航 */
@@ -1788,8 +1837,8 @@
         }
 
         .navbar-custom.scrolled {
-            background: #141414;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            background: var(--bg);
+            box-shadow: 0 4px 20px rgba(var(--shadow-rgb), 0.6);
         }
 
         .brand {
@@ -1844,7 +1893,7 @@
         .hero-dot {
             width: 26px;
             height: 4px;
-            border-radius: 3px;
+            border-radius: calc(3px * var(--radius-k));
             background: rgba(255, 255, 255, 0.35);
             cursor: pointer;
             border: none;
@@ -1869,7 +1918,7 @@
         .hero-overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(to top, #141414 0%, transparent 60%), linear-gradient(to right, rgba(0, 0, 0, 0.8) 0%, transparent 50%);
+            background: linear-gradient(to top, var(--bg) 0%, transparent 60%), linear-gradient(to right, rgba(0, 0, 0, 0.8) 0%, transparent 50%);
             display: flex;
             align-items: center;
             padding-left: 5%;
@@ -1884,7 +1933,7 @@
         .hero-tag {
             background: rgba(255, 255, 255, 0.2);
             padding: 4px 10px;
-            border-radius: 4px;
+            border-radius: calc(4px * var(--radius-k));
             font-size: 11px;
             font-weight: bold;
             text-transform: uppercase;
@@ -1920,7 +1969,7 @@
             padding: 10px 30px;
             font-size: 1.2rem;
             font-weight: 700;
-            border-radius: 4px;
+            border-radius: calc(4px * var(--radius-k));
             display: flex;
             align-items: center;
             gap: 10px;
@@ -1939,7 +1988,7 @@
             padding: 10px 30px;
             font-size: 1.2rem;
             font-weight: 700;
-            border-radius: 4px;
+            border-radius: calc(4px * var(--radius-k));
             display: flex;
             align-items: center;
             gap: 10px;
@@ -1984,18 +2033,18 @@
 
         .search-box-wrapper {
             pointer-events: auto;
-            background: rgba(20, 20, 20, 0.95);
+            background: rgba(var(--bg-rgb), 0.95);
             /* 加深背景，防止透视干扰（背景已 95% 不透明，强模糊几乎不可见却昂贵，降到 8px 省重绘） */
-            border: 1px solid rgba(255, 255, 255, 0.15);
+            border: 1px solid rgba(var(--fg-rgb), 0.15);
             backdrop-filter: blur(8px);
             -webkit-backdrop-filter: blur(8px);
-            border-radius: 50px;
+            border-radius: calc(50px * var(--radius-k));
             /* 更圆润 */
             display: flex;
             align-items: center;
             /* 仅过渡实际变化的属性，避免 transition:all 在 focus/compact 时跟踪并重算所有属性 */
             transition: max-width 0.3s, height 0.3s, background-color 0.3s, border-color 0.3s;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 10px 30px rgba(var(--shadow-rgb), 0.5);
             width: 100%;
             /* 撑满 */
             max-width: none;
@@ -2010,8 +2059,8 @@
             margin-right: 0;
             /* 右对齐 */
             margin-left: auto;
-            background: rgba(40, 40, 40, 0.95);
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(var(--glass-2-rgb), 0.95);
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
         }
 
         .search-box-wrapper.compact .search-input {
@@ -2030,14 +2079,14 @@
             right: 40px;
             width: 50px;
             height: 50px;
-            background: linear-gradient(135deg, #e50914, #b20710);
-            color: #fff;
+            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
+            color: var(--on-accent);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 20px;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 10px 20px rgba(var(--shadow-rgb), 0.4);
             cursor: pointer;
             z-index: 1000;
             border: none;
@@ -2055,7 +2104,7 @@
 
         .btn-top:hover {
             transform: translateY(-5px) scale(1.1);
-            box-shadow: 0 15px 30px rgba(229, 9, 20, 0.5);
+            box-shadow: 0 15px 30px rgba(var(--accent-rgb), 0.5);
         }
 
         /* ⚙️ 右下角常驻"偏好设置"按钮(以前只在页脚,太难找);返回顶部按钮叠在它上面 */
@@ -2066,21 +2115,21 @@
             right: 40px;
             width: 50px;
             height: 50px;
-            background: rgba(40, 40, 40, 0.92);
-            color: #fff;
-            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(var(--glass-2-rgb), 0.92);
+            color: var(--text-1);
+            border: 1px solid rgba(var(--fg-rgb), 0.14);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 20px;
-            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 10px 20px rgba(var(--shadow-rgb), 0.4);
             cursor: pointer;
             z-index: 1000;
             transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.2s;
         }
-        .btn-settings:hover { transform: rotate(45deg) scale(1.08); background: #e50914; }
-        .btn-settings:focus-visible { outline: 3px solid rgba(255, 255, 255, 0.6); outline-offset: 2px; }
+        .btn-settings:hover { transform: rotate(45deg) scale(1.08); background: var(--accent); }
+        .btn-settings:focus-visible { outline: 3px solid rgba(var(--fg-rgb), 0.6); outline-offset: 2px; }
         @media (max-width: 768px) {
             .btn-settings { right: 16px; bottom: 20px; width: 44px; height: 44px; font-size: 18px; }
             .btn-top { right: 16px; bottom: 76px; width: 44px; height: 44px; font-size: 18px; }
@@ -2090,12 +2139,12 @@
 
         .search-box-wrapper:focus-within {
             border-color: var(--accent);
-            background: #000;
+            background: var(--surface-0);
         }
 
         .search-icon {
             padding: 0 20px;
-            color: #888;
+            color: var(--text-8);
             font-size: 18px;
             cursor: pointer;
         }
@@ -2105,7 +2154,7 @@
             height: 60px;
             background: transparent;
             border: none;
-            color: #fff;
+            color: var(--text-1);
             font-size: 18px;
             outline: none;
         }
@@ -2115,12 +2164,12 @@
             position: relative;
             margin: 0 5% 44px;
             padding: 16px 18px 10px;
-            border-radius: 18px;
+            border-radius: calc(18px * var(--radius-k));
             background:
-                radial-gradient(120% 160% at 0% 0%, rgba(229, 9, 20, 0.11) 0%, transparent 46%),
-                linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+                radial-gradient(120% 160% at 0% 0%, rgba(var(--accent-rgb), 0.11) 0%, transparent 46%),
+                linear-gradient(180deg, rgba(var(--fg-rgb), 0.045), rgba(var(--fg-rgb), 0.015));
+            border: 1px solid rgba(var(--fg-rgb), 0.08);
+            box-shadow: 0 12px 32px rgba(var(--shadow-rgb), 0.28);
         }
         .catnav-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         /* 不设 overflow:滚动容器会把焦点框(遥控器)和选中标签的光晕上下裁掉;只在小屏横滑(见 ≤480) */
@@ -2132,10 +2181,10 @@
             gap: 8px;
             height: 40px;
             padding: 0 18px;
-            border-radius: 20px;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            background: rgba(255, 255, 255, 0.04);
-            color: #bbb;
+            border-radius: calc(20px * var(--radius-k));
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
+            background: rgba(var(--fg-rgb), 0.04);
+            color: var(--text-5);
             font-size: 15px;
             font-weight: 600;
             letter-spacing: 0.5px;
@@ -2143,13 +2192,13 @@
             transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.15s;
         }
         .cat-tab i { font-size: 14px; opacity: 0.8; }
-        .cat-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.09); }
+        .cat-tab:hover { color: var(--text-1); background: rgba(var(--fg-rgb), 0.09); }
         .cat-tab:active { transform: scale(0.96); }
         .cat-tab.active {
-            color: #fff;
+            color: var(--on-accent);
             border-color: transparent;
-            background: linear-gradient(135deg, #e50914 0%, #ff4d5a 100%);
-            filter: drop-shadow(0 6px 14px rgba(229, 9, 20, 0.35));
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-bright) 100%);
+            filter: drop-shadow(0 6px 14px rgba(var(--accent-rgb), 0.35));
         }
         .cat-tab.active i { opacity: 1; }
         .catnav-quick { display: flex; gap: 8px; margin-left: auto; }
@@ -2159,34 +2208,34 @@
             gap: 7px;
             height: 34px;
             padding: 0 14px;
-            border-radius: 17px;
-            border: 1px dashed rgba(255, 255, 255, 0.2);
+            border-radius: calc(17px * var(--radius-k));
+            border: 1px dashed rgba(var(--fg-rgb), 0.2);
             background: transparent;
-            color: #aaa;
+            color: var(--text-6);
             font-size: 13px;
             cursor: pointer;
             transition: color 0.2s, border-color 0.2s, background 0.2s;
         }
         .catnav-q.is-random i { color: #f5af19; }
         .catnav-q.is-rec i { color: #c084fc; }
-        .catnav-q:hover { color: #fff; border-color: rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.05); }
-        .catnav-body { margin-top: 14px; padding-top: 6px; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+        .catnav-q:hover { color: var(--text-1); border-color: rgba(var(--fg-rgb), 0.4); background: rgba(var(--fg-rgb), 0.05); }
+        .catnav-body { margin-top: 14px; padding-top: 6px; border-top: 1px solid rgba(var(--fg-rgb), 0.06); }
         .catnav-row { display: flex; align-items: flex-start; gap: 14px; padding: 7px 0; }
-        .catnav-label { flex: none; width: 2.6em; line-height: 30px; color: #999; font-size: 13px; letter-spacing: 1px; }
+        .catnav-label { flex: none; width: 2.6em; line-height: 30px; color: var(--text-7); font-size: 13px; letter-spacing: 1px; }
         .catnav-chips { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
         .cat-chip {
             height: 30px;
             padding: 0 14px;
-            border-radius: 15px;
-            border: 1px solid rgba(255, 255, 255, 0.07);
-            background: rgba(255, 255, 255, 0.05);
-            color: #d0d0d0;
+            border-radius: calc(15px * var(--radius-k));
+            border: 1px solid rgba(var(--fg-rgb), 0.07);
+            background: rgba(var(--fg-rgb), 0.05);
+            color: var(--text-4);
             font-size: 13px;
             white-space: nowrap;
             cursor: pointer;
             transition: background 0.18s, border-color 0.18s, color 0.18s, transform 0.18s;
         }
-        .cat-chip:hover { color: #fff; background: rgba(229, 9, 20, 0.16); border-color: rgba(229, 9, 20, 0.55); }
+        .cat-chip:hover { color: var(--text-1); background: rgba(var(--accent-rgb), 0.16); border-color: rgba(var(--accent-rgb), 0.55); }
         @media (hover: hover) { .cat-chip:hover { transform: translateY(-1px); } }
         .cat-chip:active { transform: scale(0.96); }
         .catnav-foot { display: flex; justify-content: flex-end; }
@@ -2197,14 +2246,14 @@
             border: 0;
             background: none;
             padding: 6px 2px;
-            color: #ddd;
+            color: var(--text-3);
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
         }
-        .catnav-all-sub { color: #8a8a8a; font-weight: 400; }
+        .catnav-all-sub { color: var(--text-8); font-weight: 400; }
         .catnav-all i { color: var(--accent); transition: transform 0.2s; }
-        .catnav-all:hover { color: #fff; }
+        .catnav-all:hover { color: var(--text-1); }
         .catnav-all:hover i { transform: translateX(3px); }
         /* 榜单标题旁的「全部」与「展开」并排靠右 */
         .row-all + .expand-toggle { margin-left: 8px; }
@@ -2215,12 +2264,12 @@
         .browse-sticky button:focus:not(:focus-visible) { outline: none !important; box-shadow: none !important; }
         /* 遥控器焦点落在选中(红底)的标签上:红框看不出来,换成白框(老 WebView 不认 :focus-visible 就退回全站红框) */
         body.tv-mode .cat-tab.active:focus-visible, body.tv-mode .browse-fopt.active:focus-visible {
-            outline-color: #fff !important;
-            box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.25) !important;
+            outline-color: var(--on-accent) !important;
+            box-shadow: 0 0 0 6px rgba(var(--on-accent-rgb), 0.25) !important;
         }
-        body.tv-mode .catnav-label, body.tv-mode .browse-flabel { font-size: 14px; color: #aaa; }
+        body.tv-mode .catnav-label, body.tv-mode .browse-flabel { font-size: 14px; color: var(--text-6); }
         @media (max-width: 768px) {
-            .catnav { margin: 0 4% 34px; padding: 12px 12px 6px; border-radius: 14px; }
+            .catnav { margin: 0 4% 34px; padding: 12px 12px 6px; border-radius: calc(14px * var(--radius-k)); }
             .catnav-head { gap: 10px; }
             .cat-tabs { width: 100%; gap: 6px; }
             .cat-tab { height: 36px; padding: 0 14px; font-size: 14px; gap: 6px; }
@@ -2268,116 +2317,116 @@
         .browse-top { display: flex; flex-wrap: wrap; align-items: center; gap: 14px 24px; margin: 4px 0 16px; }
         .browse-titlebar { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 16px; }
         .browse-types .cat-tab { height: 36px; padding: 0 14px; font-size: 14px; gap: 7px; }
-        .browse-back { flex: none; color: #fff !important; border-color: rgba(255, 255, 255, 0.3) !important; }
+        .browse-back { flex: none; color: var(--text-1) !important; border-color: rgba(var(--fg-rgb), 0.3) !important; }
         .browse-title {
             margin: 0;
             min-width: 0;
             font-size: 1.6rem;
             font-weight: 800;
             letter-spacing: 0.5px;
-            color: #fff;
+            color: var(--text-1);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
         }
-        .browse-count { flex: none; margin-left: auto; color: #888; font-size: 13px; }
+        .browse-count { flex: none; margin-left: auto; color: var(--text-8); font-size: 13px; }
         /* 📌 把这组筛选加成首页的一行 */
         .browse-pin {
-            flex: none; margin-left: auto; height: 34px; padding: 0 14px; border-radius: 999px; cursor: pointer;
-            border: 1px solid rgba(229, 9, 20, 0.55); background: rgba(229, 9, 20, 0.12); color: #fff; font-size: 13px;
+            flex: none; margin-left: auto; height: 34px; padding: 0 14px; border-radius: calc(999px * var(--radius-k)); cursor: pointer;
+            border: 1px solid rgba(var(--accent-rgb), 0.55); background: rgba(var(--accent-rgb), 0.12); color: var(--text-1); font-size: 13px;
             display: inline-flex; align-items: center; gap: 7px; transition: background 0.15s;
         }
         .browse-count + .browse-pin { margin-left: 0; }
-        .browse-pin:hover:not(:disabled) { background: rgba(229, 9, 20, 0.3); }
-        .browse-pin.added { border-color: rgba(70, 211, 105, 0.45); background: rgba(70, 211, 105, 0.1); color: #8fe3a6; cursor: default; }
+        .browse-pin:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.3); }
+        .browse-pin.added { border-color: rgba(var(--success-rgb), 0.45); background: rgba(var(--success-rgb), 0.1); color: var(--success-soft); cursor: default; }
         @media (max-width: 576px) { .browse-pin span { display: none; } .browse-pin { width: 34px; padding: 0; justify-content: center; } }
         /* 📅 追剧日历 */
         .cal-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .cal-week { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; }
         .cal-wk-btn {
-            width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, 0.14); background: rgba(255, 255, 255, 0.04);
-            color: #ccc; font-size: 11px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+            width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(var(--fg-rgb), 0.14); background: rgba(var(--fg-rgb), 0.04);
+            color: var(--text-4); font-size: 11px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
         }
-        .cal-wk-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: #fff; }
+        .cal-wk-btn:hover:not(:disabled) { background: rgba(var(--fg-rgb), 0.12); color: var(--text-1); }
         .cal-wk-btn:disabled { opacity: 0.3; cursor: default; }
-        .cal-wk-lbl { min-width: 56px; text-align: center; color: #aaa; font-size: 13px; font-variant-numeric: tabular-nums; }
+        .cal-wk-lbl { min-width: 56px; text-align: center; color: var(--text-6); font-size: 13px; font-variant-numeric: tabular-nums; }
         .cal-head .cal-expand { margin-left: auto; }
         .cal-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin: 2px 0 12px; max-width: 760px; }
         .cal-day {
-            display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px 8px; border-radius: 12px; min-width: 0;
-            border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(255, 255, 255, 0.03); color: #bbb; cursor: pointer;
+            display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 7px 2px 8px; border-radius: calc(12px * var(--radius-k)); min-width: 0;
+            border: 1px solid rgba(var(--fg-rgb), 0.08); background: rgba(var(--fg-rgb), 0.03); color: var(--text-5); cursor: pointer;
             transition: background 0.15s, border-color 0.15s, color 0.15s;
         }
-        .cal-day:hover:not(:disabled):not(.active) { background: rgba(255, 255, 255, 0.08); color: #fff; }
-        .cal-day.today:not(.active) { border-color: rgba(229, 9, 20, 0.55); color: #fff; }
-        .cal-day.active { background: linear-gradient(135deg, #e50914, #ff6a00); border-color: transparent; color: #fff; box-shadow: 0 4px 14px rgba(229, 9, 20, 0.3); }
+        .cal-day:hover:not(:disabled):not(.active) { background: rgba(var(--fg-rgb), 0.08); color: var(--text-1); }
+        .cal-day.today:not(.active) { border-color: rgba(var(--accent-rgb), 0.55); color: var(--text-1); }
+        .cal-day.active { background: linear-gradient(135deg, var(--accent), var(--accent-warm)); border-color: transparent; color: var(--on-accent); box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.3); }
         .cal-day:disabled { opacity: 0.32; cursor: default; }
         .cal-dow { font-size: 13px; font-weight: 700; white-space: nowrap; }
         .cal-md { font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums; }
-        .cal-n { font-size: 11px; min-width: 22px; padding: 0 6px; border-radius: 999px; background: rgba(255, 255, 255, 0.08); font-variant-numeric: tabular-nums; }
+        .cal-n { font-size: 11px; min-width: 22px; padding: 0 6px; border-radius: calc(999px * var(--radius-k)); background: rgba(var(--fg-rgb), 0.08); font-variant-numeric: tabular-nums; }
         .cal-day.active .cal-n { background: rgba(0, 0, 0, 0.22); }
         .cal-cats { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 0 12px; padding-bottom: 2px; }
         .cal-cats::-webkit-scrollbar { display: none; }
         .cal-cat {
-            flex: none; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.12);
-            background: transparent; color: #bbb; font-size: 13px; cursor: pointer; transition: background 0.15s, color 0.15s;
+            flex: none; height: 30px; padding: 0 12px; border-radius: calc(999px * var(--radius-k)); border: 1px solid rgba(var(--fg-rgb), 0.12);
+            background: transparent; color: var(--text-5); font-size: 13px; cursor: pointer; transition: background 0.15s, color 0.15s;
         }
         .cal-cat span { margin-left: 5px; opacity: 0.6; font-size: 12px; font-variant-numeric: tabular-nums; }
-        .cal-cat:hover:not(.active) { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
-        .cal-cat.active { background: #fff; color: #111; border-color: #fff; font-weight: 600; }
+        .cal-cat:hover:not(.active) { color: var(--text-1); border-color: rgba(var(--fg-rgb), 0.3); }
+        .cal-cat.active { background: var(--inv-bg); color: var(--inv-fg); border-color: var(--text-1); font-weight: 600; }
         .cal-card .poster-wrap { position: relative; }
-        .cal-new { position: absolute; top: 6px; left: 6px; z-index: 2; padding: 1px 7px; border-radius: 6px; background: #e50914; color: #fff; font-size: 11px; font-weight: 700; }
+        .cal-new { position: absolute; top: 6px; left: 6px; z-index: 2; padding: 1px 7px; border-radius: calc(6px * var(--radius-k)); background: var(--accent); color: #fff; font-size: 11px; font-weight: 700; }
         .cal-ep {
             position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 22px 8px 6px; color: #fff; font-size: 12px;
             background: linear-gradient(transparent, rgba(0, 0, 0, 0.88)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-        .cal-more-wrap { display: flex; align-items: center; justify-content: center; text-align: center; color: #bbb; font-size: 13px; line-height: 1.9;
-            background: rgba(255, 255, 255, 0.04) !important; border: 1px dashed rgba(255, 255, 255, 0.18); }
-        .cal-more-wrap i { font-size: 20px; color: #e50914; }
-        .cal-more-card:hover .cal-more-wrap { color: #fff; border-color: rgba(255, 255, 255, 0.4); }
-        .cal-empty { color: #777; font-size: 13px; padding: 16px 0 6px; }
+        .cal-more-wrap { display: flex; align-items: center; justify-content: center; text-align: center; color: var(--text-5); font-size: 13px; line-height: 1.9;
+            background: rgba(var(--fg-rgb), 0.04) !important; border: 1px dashed rgba(var(--fg-rgb), 0.18); }
+        .cal-more-wrap i { font-size: 20px; color: var(--accent); }
+        .cal-more-card:hover .cal-more-wrap { color: var(--text-1); border-color: rgba(var(--fg-rgb), 0.4); }
+        .cal-empty { color: var(--text-9); font-size: 13px; padding: 16px 0 6px; }
         .cal-more-foot { flex: 0 0 100%; display: flex; justify-content: center; padding: 8px 0 4px; }
-        .cal-more-btn { height: 36px; padding: 0 20px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, 0.18); background: rgba(255, 255, 255, 0.05); color: #ddd; font-size: 13px; cursor: pointer; }
-        .cal-more-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: #fff; }
-        .cal-more-end { color: #777; font-size: 12px; }
+        .cal-more-btn { height: 36px; padding: 0 20px; border-radius: calc(999px * var(--radius-k)); border: 1px solid rgba(var(--fg-rgb), 0.18); background: rgba(var(--fg-rgb), 0.05); color: var(--text-3); font-size: 13px; cursor: pointer; }
+        .cal-more-btn:hover:not(:disabled) { background: rgba(var(--fg-rgb), 0.12); color: var(--text-1); }
+        .cal-more-end { color: var(--text-9); font-size: 12px; }
         @media (max-width: 576px) {
             .cal-days { gap: 4px; }
-            .cal-day { padding: 6px 0 7px; border-radius: 10px; }
+            .cal-day { padding: 6px 0 7px; border-radius: calc(10px * var(--radius-k)); }
             .cal-dow { font-size: 12px; }
             .cal-md { display: none; }
             .cal-week { margin-left: 0; }
         }
         .browse-filters {
             padding: 6px 16px;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: calc(16px * var(--radius-k));
+            background: rgba(var(--fg-rgb), 0.03);
+            border: 1px solid rgba(var(--fg-rgb), 0.07);
         }
         .browse-frow { display: flex; align-items: flex-start; gap: 14px; padding: 8px 0; }
-        .browse-frow + .browse-frow { border-top: 1px dashed rgba(255, 255, 255, 0.06); }
-        .browse-flabel { flex: none; width: 2.6em; line-height: 30px; color: #999; font-size: 13px; letter-spacing: 1px; }
+        .browse-frow + .browse-frow { border-top: 1px dashed rgba(var(--fg-rgb), 0.06); }
+        .browse-flabel { flex: none; width: 2.6em; line-height: 30px; color: var(--text-7); font-size: 13px; letter-spacing: 1px; }
         .browse-fopts { display: flex; flex-wrap: wrap; gap: 4px 6px; min-width: 0; }
         .browse-fopt {
             height: 30px;
             padding: 0 12px;
-            border-radius: 15px;
+            border-radius: calc(15px * var(--radius-k));
             border: 1px solid transparent;
             background: none;
-            color: #bbb;
+            color: var(--text-5);
             font-size: 13px;
             white-space: nowrap;
             cursor: pointer;
             transition: color 0.15s, background 0.15s, border-color 0.15s;
         }
-        .browse-fopt:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
-        .browse-fopt.active { color: #fff; font-weight: 600; background: rgba(229, 9, 20, 0.2); border-color: rgba(229, 9, 20, 0.6); }
-        .browse-kwhint { margin-top: 10px; color: #999; font-size: 12px; }
+        .browse-fopt:hover { color: var(--text-1); background: rgba(var(--fg-rgb), 0.06); }
+        .browse-fopt.active { color: var(--text-1); font-weight: 600; background: rgba(var(--accent-rgb), 0.2); border-color: rgba(var(--accent-rgb), 0.6); }
+        .browse-kwhint { margin-top: 10px; color: var(--text-7); font-size: 12px; }
         .browse-link {
             border: 0;
             background: none;
             padding: 8px 4px;
             margin: -8px -2px;
-            color: #ff6b6b;
+            color: var(--accent-text);
             font-size: 12px;
             text-decoration: underline;
             text-underline-offset: 3px;
@@ -2393,33 +2442,33 @@
         .browse-card { min-width: 0; cursor: pointer; scroll-margin-top: 72px; transition: transform 0.25s cubic-bezier(0.25, 0.8, 0.25, 1); }
         @media (hover: hover) {
             .browse-card:hover { transform: translateY(-6px); }
-            .browse-card:hover .poster-wrap { box-shadow: 0 14px 32px rgba(0, 0, 0, 0.7), 0 0 0 2px var(--accent), 0 0 22px 3px rgba(229, 9, 20, 0.5); }
+            .browse-card:hover .poster-wrap { box-shadow: 0 14px 32px rgba(var(--shadow-rgb), 0.7), 0 0 0 2px var(--accent), 0 0 22px 3px rgba(var(--accent-rgb), 0.5); }
         }
         /* 卡片只在 TV 模式可聚焦:焦点画在海报上,不要全站 [tabindex] 红框框住整张卡。
            用 :focus 不用 :focus-visible —— 老 WebView(Chromium < 86,不少电视盒子)不认,整条规则会被丢掉,焦点就完全看不见了 */
         .browse-card:focus { outline: none !important; box-shadow: none !important; transform: translateY(-6px); }
-        .browse-card:focus .poster-wrap { box-shadow: 0 14px 32px rgba(0, 0, 0, 0.7), 0 0 0 3px #fff, 0 0 22px 3px rgba(229, 9, 20, 0.6); }
+        .browse-card:focus .poster-wrap { box-shadow: 0 14px 32px rgba(var(--shadow-rgb), 0.7), 0 0 0 3px var(--text-1), 0 0 22px 3px rgba(var(--accent-rgb), 0.6); }
         .browse-card.is-skel { cursor: default; pointer-events: none; }
-        .browse-card .skel-line { width: 80%; height: 12px; margin: 12px auto 0; border-radius: 6px; background: #222; }
+        .browse-card .skel-line { width: 80%; height: 12px; margin: 12px auto 0; border-radius: calc(6px * var(--radius-k)); background: var(--surface-5); }
         .browse-card .skel-line.short { width: 40%; height: 10px; margin-top: 8px; }
         .browse-foot { min-height: 80px; display: flex; align-items: center; justify-content: center; padding: 30px 0 10px; }
-        .browse-state { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; color: #aaa; font-size: 14px; }
-        .browse-state.muted { color: #888; font-size: 13px; }
+        .browse-state { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 12px; color: var(--text-6); font-size: 14px; }
+        .browse-state.muted { color: var(--text-8); font-size: 13px; }
         .browse-btn {
             height: 36px;
             padding: 0 20px;
-            border-radius: 18px;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            background: rgba(255, 255, 255, 0.06);
-            color: #eee;
+            border-radius: calc(18px * var(--radius-k));
+            border: 1px solid rgba(var(--fg-rgb), 0.18);
+            background: rgba(var(--fg-rgb), 0.06);
+            color: var(--text-2);
             font-size: 13px;
             cursor: pointer;
             transition: background 0.2s, border-color 0.2s, color 0.2s;
         }
-        .browse-btn:hover { color: #fff; background: rgba(229, 9, 20, 0.18); border-color: rgba(229, 9, 20, 0.6); }
-        .browse-empty { padding: 30px 0; text-align: center; color: #888; }
-        .browse-empty > i { margin-bottom: 16px; font-size: 44px; color: #333; }
-        .browse-empty-t { margin-bottom: 6px; color: #bbb; font-size: 16px; }
+        .browse-btn:hover { color: var(--text-1); background: rgba(var(--accent-rgb), 0.18); border-color: rgba(var(--accent-rgb), 0.6); }
+        .browse-empty { padding: 30px 0; text-align: center; color: var(--text-8); }
+        .browse-empty > i { margin-bottom: 16px; font-size: 44px; color: var(--text-13); }
+        .browse-empty-t { margin-bottom: 6px; color: var(--text-5); font-size: 16px; }
         .browse-empty-s { margin-bottom: 18px; font-size: 13px; }
         .browse-empty-btns { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; }
         /* 筛选区滚出屏幕后顶上的摘要条 */
@@ -2434,9 +2483,9 @@
             gap: 12px;
             padding: 10px 5%;
             padding-top: calc(10px + env(safe-area-inset-top, 0px));
-            background: rgba(20, 20, 20, 0.96);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+            background: rgba(var(--bg-rgb), 0.96);
+            border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
+            box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.5);
             animation: browse-sticky-in 0.22s ease-out;
         }
         @keyframes browse-sticky-in { from { transform: translateY(-100%); } to { transform: none; } }
@@ -2445,9 +2494,9 @@
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            background: rgba(255, 255, 255, 0.05);
-            color: #fff;
+            border: 1px solid rgba(var(--fg-rgb), 0.2);
+            background: rgba(var(--fg-rgb), 0.05);
+            color: var(--text-1);
             cursor: pointer;
         }
         .browse-sticky-main {
@@ -2459,12 +2508,12 @@
             padding: 0;
             border: 0;
             background: none;
-            color: #fff;
+            color: var(--text-1);
             text-align: left;
             cursor: pointer;
         }
         .browse-sticky-text { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .browse-sticky-edit { flex: none; color: #ff6b6b; font-size: 13px; }
+        .browse-sticky-edit { flex: none; color: var(--accent-text); font-size: 13px; }
         /* 电视(1080p 盒子多按 960×540 排版):筛选区收紧,首屏能露出第一排海报 */
         body.tv-mode .browse-top { margin-bottom: 12px; }
         body.tv-mode .browse-frow { padding: 4px 0; }
@@ -2474,7 +2523,7 @@
             .browse-top { gap: 12px; margin-bottom: 14px; }
             .browse-titlebar { flex-basis: 100%; gap: 12px; }
             .browse-title { font-size: 1.25rem; }
-            .browse-filters { padding: 4px 10px; border-radius: 12px; }
+            .browse-filters { padding: 4px 10px; border-radius: calc(12px * var(--radius-k)); }
             .browse-frow { gap: 8px; padding: 6px 0; align-items: center; }
             .browse-flabel { width: 2.4em; line-height: 30px; font-size: 12px; }
             .browse-fopts {
@@ -2496,8 +2545,8 @@
         }
 
         /* 🗂️「全部分类」入口 + 分类大全页 */
-        .cat-tab.cat-tab-all { color: #fff; border-color: rgba(229, 9, 20, 0.55); background: rgba(229, 9, 20, 0.12); }
-        .cat-tab.cat-tab-all:hover { background: rgba(229, 9, 20, 0.22); }
+        .cat-tab.cat-tab-all { color: var(--text-1); border-color: rgba(var(--accent-rgb), 0.55); background: rgba(var(--accent-rgb), 0.12); }
+        .cat-tab.cat-tab-all:hover { background: rgba(var(--accent-rgb), 0.22); }
         /* 手机:6 个按钮一行放下(360px 宽):「全部分类」只留图标,其余收紧 */
         @media (max-width: 480px) {
             .cat-tab.cat-tab-all { padding: 0 11px; }
@@ -2511,9 +2560,9 @@
         .catdir-page { padding: 0 5% 30px; min-height: 60vh; }
         .catdir-head { display: flex; align-items: center; gap: 16px; margin: 4px 0 22px; }
         .catdir-heading { min-width: 0; }
-        .catdir-sub { margin-top: 6px; color: #999; font-size: 13px; }
+        .catdir-sub { margin-top: 6px; color: var(--text-7); font-size: 13px; }
         .catdir-section { margin-bottom: 22px; }
-        .catdir-section-title { margin-bottom: 12px; color: #ddd; font-size: 15px; font-weight: 700; }
+        .catdir-section-title { margin-bottom: 12px; color: var(--text-3); font-size: 15px; font-weight: 700; }
         .catdir-section-title i { margin-right: 6px; color: #ff6b35; }
         /* 16 个入口:宽屏 8 列 / 窄一些 4 列,都正好排满(自动列数会剩最后一行孤零零一个) */
         .catdir-hot { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 12px; }
@@ -2524,7 +2573,7 @@
             height: 72px;
             padding: 0 16px;
             border: 0;
-            border-radius: 14px;
+            border-radius: calc(14px * var(--radius-k));
             display: flex;
             align-items: center;
             color: #fff;
@@ -2546,23 +2595,23 @@
         .catdir-card {
             margin-bottom: 16px;
             padding: 14px 18px 8px;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid rgba(255, 255, 255, 0.07);
+            border-radius: calc(16px * var(--radius-k));
+            background: rgba(var(--fg-rgb), 0.03);
+            border: 1px solid rgba(var(--fg-rgb), 0.07);
         }
-        .catdir-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+        .catdir-card-head { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; padding-bottom: 8px; border-bottom: 1px solid rgba(var(--fg-rgb), 0.06); }
         .catdir-card-icon {
             width: 30px;
             height: 30px;
-            border-radius: 9px;
+            border-radius: calc(9px * var(--radius-k));
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            background: linear-gradient(135deg, #e50914, #ff4d5a);
-            color: #fff;
+            background: linear-gradient(135deg, var(--accent), var(--accent-bright));
+            color: var(--on-accent);
             font-size: 14px;
         }
-        .catdir-card-title { color: #fff; font-size: 17px; font-weight: 700; }
+        .catdir-card-title { color: var(--text-1); font-size: 17px; font-weight: 700; }
         .catdir-card-head .catnav-all { margin-left: auto; }
         .catdir-card .catnav-row { align-items: flex-start; }
         .catdir-chips { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
@@ -2570,9 +2619,9 @@
             .catdir-page { padding: 0 4% 24px; }
             .catdir-head { gap: 12px; margin-bottom: 16px; }
             .catdir-hot { gap: 8px; }
-            .catdir-tile { height: 54px; padding: 0 10px; border-radius: 12px; font-size: 13px; letter-spacing: 0; }
+            .catdir-tile { height: 54px; padding: 0 10px; border-radius: calc(12px * var(--radius-k)); font-size: 13px; letter-spacing: 0; }
             .catdir-tile i { font-size: 36px; }
-            .catdir-card { padding: 12px 12px 6px; border-radius: 14px; }
+            .catdir-card { padding: 12px 12px 6px; border-radius: calc(14px * var(--radius-k)); }
             .catdir-chips { gap: 6px; }
             .catdir-chips .cat-chip { height: 30px; padding: 0 11px; }
         }
@@ -2614,9 +2663,9 @@
             font-size: 10px;
             font-weight: 900;
             padding: 1px 4px;
-            border-radius: 3px;
-            background: rgba(255, 255, 255, 0.1);
-            color: rgba(255, 255, 255, 0.4);
+            border-radius: calc(3px * var(--radius-k));
+            background: rgba(var(--fg-rgb), 0.1);
+            color: rgba(var(--fg-rgb), 0.4);
             margin-left: 8px;
             vertical-align: middle;
             letter-spacing: 0.5px;
@@ -2637,14 +2686,14 @@
             width: 4px;
             height: 22px;
             background: var(--accent);
-            border-radius: 2px;
+            border-radius: calc(2px * var(--radius-k));
             margin-right: 12px;
         }
 
         .section-title {
             font-size: 1.4rem;
             font-weight: 700;
-            color: #fff;
+            color: var(--text-1);
             margin: 0;
             line-height: 1;
             display: flex;
@@ -2706,10 +2755,10 @@
             transform: translateY(-50%);
             width: 36px;
             height: 80px;
-            background: linear-gradient(135deg, rgba(30, 30, 30, 0.95) 0%, rgba(50, 50, 50, 0.9) 100%);
+            background: linear-gradient(135deg, rgba(var(--glass-rgb), 0.95) 0%, rgba(var(--glass-3-rgb), 0.9) 100%);
             border: none;
-            border-radius: 8px;
-            color: #fff;
+            border-radius: calc(8px * var(--radius-k));
+            color: var(--text-1);
             font-size: 18px;
             cursor: pointer;
             z-index: 20;
@@ -2718,24 +2767,24 @@
             justify-content: center;
             transition: all 0.25s ease;
             opacity: 0.6;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 15px rgba(var(--shadow-rgb), 0.4);
         }
 
         .scroll-btn:hover {
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.9) 0%, rgba(180, 0, 15, 0.85) 100%);
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.9) 0%, rgba(var(--accent-deep-rgb), 0.85) 100%);
             opacity: 1;
             transform: translateY(-50%) scale(1.05);
-            box-shadow: 0 6px 20px rgba(229, 9, 20, 0.4);
+            box-shadow: 0 6px 20px rgba(var(--accent-rgb), 0.4);
         }
 
         .scroll-btn.left {
             left: -5px;
-            border-radius: 0 8px 8px 0;
+            border-radius: 0 calc(8px * var(--radius-k)) calc(8px * var(--radius-k)) 0;
         }
 
         .scroll-btn.right {
             right: -5px;
-            border-radius: 8px 0 0 8px;
+            border-radius: calc(8px * var(--radius-k)) 0 0 calc(8px * var(--radius-k));
         }
 
         @media (max-width: 768px) {
@@ -2774,10 +2823,10 @@
         /* 🌟 弹出高亮：海报红色描边环 + 外发光 + 抬升投影（纯 paint，z-index 已抬升盖过相邻卡片，不重排兄弟节点） */
         .hot-card:hover .poster-wrap {
             box-shadow:
-                0 14px 32px rgba(0, 0, 0, 0.7),
+                0 14px 32px rgba(var(--shadow-rgb), 0.7),
                 0 0 0 2px var(--accent),
-                0 0 22px 3px rgba(229, 9, 20, 0.5);
-            border-color: rgba(255, 255, 255, 0.35);
+                0 0 22px 3px rgba(var(--accent-rgb), 0.5);
+            border-color: rgba(var(--fg-rgb), 0.35);
         }
 
         /* 📺 直播频道卡片 */
@@ -2791,10 +2840,10 @@
             position: sticky;
             top: 88px;
             height: 120px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            color: #ccc;
+            background: rgba(var(--fg-rgb), 0.05);
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
+            border-radius: calc(12px * var(--radius-k));
+            color: var(--text-4);
             font-size: 20px;
             cursor: pointer;
             display: flex;
@@ -2802,7 +2851,7 @@
             justify-content: center;
             transition: all 0.18s;
         }
-        .live-page-btn:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
+        .live-page-btn:hover:not(:disabled) { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
         .live-page-btn:disabled { opacity: 0.28; cursor: default; }
         .live-pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 14px; font-size: 13px; }
         .live-grid {
@@ -2831,17 +2880,17 @@
             position: relative;
             width: 100%;
             height: calc(74px * var(--ui-scale, 1));
-            border-radius: 10px;
-            background: linear-gradient(135deg, #1c1c22, #2a2a32);
-            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: calc(10px * var(--radius-k));
+            background: linear-gradient(135deg, var(--surface-3), var(--surface-7));
+            border: 1px solid rgba(var(--fg-rgb), 0.08);
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
         }
         .live-card:hover .live-logo {
-            border-color: rgba(229, 9, 20, 0.6);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--accent);
+            border-color: rgba(var(--accent-rgb), 0.6);
+            box-shadow: 0 8px 20px rgba(var(--shadow-rgb), 0.5), 0 0 0 1px var(--accent);
         }
         .live-card.active .live-logo {
             border-color: var(--accent);
@@ -2876,15 +2925,15 @@
         .live-recent-del:hover { background: var(--accent); border-color: var(--accent); }
         .live-recent-clear {
             margin-left: 8px;
-            color: #888;
+            color: var(--text-8);
             font-size: calc(12.5px * var(--ui-scale, 1));
             cursor: pointer;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 10px;
+            border: 1px solid rgba(var(--fg-rgb), 0.15);
+            border-radius: calc(10px * var(--radius-k));
             padding: 3px 10px;
             line-height: 1.2;
         }
-        .live-recent-clear:hover { color: #fff; border-color: var(--accent); }
+        .live-recent-clear:hover { color: var(--text-1); border-color: var(--accent); }
         .live-logo img {
             max-width: 84%;
             max-height: 78%;
@@ -2894,14 +2943,14 @@
         }
         .live-logo-fallback {
             position: absolute;
-            color: #555;
+            color: var(--text-11);
             font-size: calc(28px * var(--ui-scale, 1));
             z-index: 0;
         }
         .live-name {
             margin-top: 7px;
             font-size: calc(13px * var(--ui-scale, 1));
-            color: #ddd;
+            color: var(--text-3);
             text-align: center;
             line-height: 1.3;
             max-height: 2.6em;
@@ -2911,37 +2960,37 @@
             -webkit-box-orient: vertical;
         }
         .live-filter-btn {
-            background: rgba(255, 255, 255, 0.06);
-            color: #ccc;
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            border-radius: 20px;
+            background: rgba(var(--fg-rgb), 0.06);
+            color: var(--text-4);
+            border: 1px solid rgba(var(--fg-rgb), 0.12);
+            border-radius: calc(20px * var(--radius-k));
             padding: 8px 20px;
             font-size: 15px;
             line-height: 1.2;
             cursor: pointer;
             transition: all 0.2s;
         }
-        .live-filter-btn:hover { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+        .live-filter-btn:hover { color: var(--text-1); border-color: rgba(var(--fg-rgb), 0.3); }
         .live-filter-btn.active {
-            background: linear-gradient(135deg, #e50914, #ff6a00);
-            color: #fff;
+            background: linear-gradient(135deg, var(--accent), var(--accent-warm));
+            color: var(--on-accent);
             border-color: transparent;
         }
-        .live-filter-label { color: #888; font-size: 12px; margin-right: 2px; flex: 0 0 auto; }
+        .live-filter-label { color: var(--text-8); font-size: 12px; margin-right: 2px; flex: 0 0 auto; }
         .live-cctv-hint {
             margin: 8px 0 4px;
             padding: 8px 12px;
             font-size: 12px;
             line-height: 1.6;
-            color: #c9a96a;
+            color: var(--gold-3);
             background: rgba(229, 170, 60, 0.08);
             border: 1px solid rgba(229, 170, 60, 0.22);
-            border-radius: 8px;
+            border-radius: calc(8px * var(--radius-k));
         }
-        .live-cctv-hint b { color: #e6c074; font-weight: 600; }
+        .live-cctv-hint b { color: var(--gold-2); font-weight: 600; }
         .live-sub-label {
             font-size: calc(14px * var(--ui-scale, 1));
-            color: #999;
+            color: var(--text-7);
             margin: 10px 0 8px;
             display: flex;
             align-items: center;
@@ -2956,7 +3005,7 @@
             width: 7px;
             height: 7px;
             border-radius: 50%;
-            background: #46d369;
+            background: var(--success);
             margin-right: 2px;
             animation: livePulse 1.6s infinite;
         }
@@ -3007,7 +3056,7 @@
         }
 
         .history-delete-btn:hover {
-            background: rgba(229, 9, 20, 0.9) !important;
+            background: rgba(var(--accent-rgb), 0.9) !important;
         }
 
         /* 移动端：始终显示删除按钮 */
@@ -3026,7 +3075,7 @@
             transform: translate(-50%, -50%);
             width: 40px;
             height: 40px;
-            background: rgba(229, 9, 20, 0.9);
+            background: rgba(var(--accent-rgb), 0.9);
             border-radius: 50%;
             display: flex;
             align-items: center;
@@ -3057,13 +3106,13 @@
         .poster-wrap {
             width: 100%;
             aspect-ratio: 2/3;
-            border-radius: 6px;
+            border-radius: calc(6px * var(--radius-k));
             overflow: hidden;
-            background: linear-gradient(110deg, #1a1a1a 8%, #2a2a2a 18%, #1a1a1a 33%);
+            background: linear-gradient(110deg, var(--surface-2) 8%, var(--surface-7) 18%, var(--surface-2) 33%);
             background-size: 200% 100%;
             animation: skeleton-shimmer 1.5s infinite ease-in-out;
             position: relative;
-            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+            box-shadow: 0 4px 10px rgba(var(--shadow-rgb), 0.4);
             border: 1px solid var(--border);
             transition: box-shadow 0.25s ease, border-color 0.25s ease;
         }
@@ -3083,7 +3132,7 @@
         .poster-wrap:has(img.loaded),
         .poster-wrap.img-loaded {
             animation: none;
-            background: #222;
+            background: var(--surface-5);
         }
 
         .poster-wrap img {
@@ -3114,10 +3163,10 @@
             left: -8px;
             font-size: 64px;
             font-weight: 900;
-            color: #141414;
-            -webkit-text-stroke: 2px #666;
+            color: var(--bg);
+            -webkit-text-stroke: 2px var(--line-5);
             font-family: impact, sans-serif;
-            text-shadow: 2px 2px 0px #eee;
+            text-shadow: 2px 2px 0px var(--text-2);
             z-index: 10;
             pointer-events: none;
             line-height: 1;
@@ -3129,12 +3178,12 @@
             right: 6px;
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(4px);
-            color: #46d369;
+            color: var(--success);
             font-weight: bold;
             font-size: 11px;
             padding: 2px 6px;
-            border-radius: 4px;
-            border: 1px solid rgba(70, 211, 105, 0.3);
+            border-radius: calc(4px * var(--radius-k));
+            border: 1px solid rgba(var(--success-rgb), 0.3);
         }
 
         .poster-fallback {
@@ -3144,20 +3193,20 @@
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            background: linear-gradient(135deg, #333 0%, #111 100%);
+            background: linear-gradient(135deg, var(--surface-9) 0%, var(--bg-sunken) 100%);
             padding: 5px;
             text-align: center;
         }
 
         .fallback-text {
             font-size: 12px;
-            color: #999;
+            color: var(--text-7);
         }
 
         .movie-name {
             margin-top: 10px;
             font-size: calc(clamp(14px, 0.95vw, 16px) * var(--ui-scale, 1));
-            color: #eee;
+            color: var(--text-2);
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -3169,7 +3218,7 @@
         .movie-work-label {
             margin-top: 2px;
             font-size: calc(11px * var(--ui-scale, 1));
-            color: #999;
+            color: var(--text-7);
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
@@ -3185,12 +3234,12 @@
             display: flex;
             align-items: center;
             gap: 4px;
-            background: #e50914;
+            background: var(--accent);
             color: #fff;
             font-size: 10px;
             font-weight: 600;
             padding: 2px 6px;
-            border-radius: 4px;
+            border-radius: calc(4px * var(--radius-k));
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -3210,7 +3259,7 @@
             line-height: 1.45;
             min-height: 1.45em;
             margin-top: 1px;
-            color: #e3a857;
+            color: var(--gold-4);
             text-align: center;
             white-space: nowrap;
             overflow: hidden;
@@ -3236,11 +3285,11 @@
         }
         .fav-week::-webkit-scrollbar { height: 0; }
         @media (hover: hover) and (pointer: fine) {
-            .fav-week { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }
+            .fav-week { scrollbar-width: thin; scrollbar-color: rgba(var(--fg-rgb), .18) transparent; }
             .fav-week::-webkit-scrollbar { height: 4px; }
-            .fav-week::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .18); border-radius: 2px; }
+            .fav-week::-webkit-scrollbar-thumb { background: rgba(var(--fg-rgb), .18); border-radius: calc(2px * var(--radius-k)); }
         }
-        .fav-week-title { flex: none; color: #888; font-size: 12px; }
+        .fav-week-title { flex: none; color: var(--text-8); font-size: 12px; }
         .fav-week-title i { margin-right: 2px; }
         .fav-week-day {
             flex: none;
@@ -3249,14 +3298,14 @@
             gap: 4px;
             height: 28px;
             padding: 0 3px 0 10px;
-            border-radius: 14px;
-            background: rgba(255, 255, 255, .05);
-            border: 1px solid rgba(255, 255, 255, .08);
+            border-radius: calc(14px * var(--radius-k));
+            background: rgba(var(--fg-rgb), .05);
+            border: 1px solid rgba(var(--fg-rgb), .08);
         }
         .fav-week-day.empty { padding-right: 10px; opacity: .45; }
-        .fav-week-day.today { background: rgba(229, 9, 20, .14); border-color: rgba(229, 9, 20, .55); }
-        .fav-week-lbl { font-size: 12px; font-weight: 600; color: #aaa; margin-right: 2px; }
-        .fav-week-day.today .fav-week-lbl { color: #ff6b6b; }
+        .fav-week-day.today { background: rgba(var(--accent-rgb), .14); border-color: rgba(var(--accent-rgb), .55); }
+        .fav-week-lbl { font-size: 12px; font-weight: 600; color: var(--text-6); margin-right: 2px; }
+        .fav-week-day.today .fav-week-lbl { color: var(--accent-text); }
         .fav-week-show {
             display: inline-block;
             max-width: 9em;
@@ -3264,16 +3313,16 @@
             line-height: 22px;
             padding: 0 8px;
             border: 0;
-            border-radius: 11px;
-            background: rgba(255, 255, 255, .1);
-            color: #e6e6e6;
+            border-radius: calc(11px * var(--radius-k));
+            background: rgba(var(--fg-rgb), .1);
+            color: var(--text-2);
             font-size: 12px;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             cursor: pointer;
         }
-        .fav-week-show:hover, .fav-week-show:focus-visible { background: rgba(255, 255, 255, .2); color: #fff; outline: none; }
+        .fav-week-show:hover, .fav-week-show:focus-visible { background: rgba(var(--fg-rgb), .2); color: var(--text-1); outline: none; }
         /* 详情页标题旁的 ♥ 收藏按钮 */
         .video-title-row { display: flex; align-items: center; gap: 12px; }
         .fav-heart {
@@ -3281,9 +3330,9 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, .15);
-            background: rgba(255, 255, 255, .08);
-            color: #ddd;
+            border: 1px solid rgba(var(--fg-rgb), .15);
+            background: rgba(var(--fg-rgb), .08);
+            color: var(--text-3);
             font-size: 18px;
             display: inline-flex;
             align-items: center;
@@ -3291,14 +3340,14 @@
             cursor: pointer;
             transition: transform .15s, background .2s, color .2s;
         }
-        .fav-heart:hover { background: rgba(255, 255, 255, .16); }
+        .fav-heart:hover { background: rgba(var(--fg-rgb), .16); }
         .fav-heart:active { transform: scale(.9); }
-        .fav-heart.on { color: #e50914; border-color: rgba(229, 9, 20, .45); background: rgba(229, 9, 20, .12); }
+        .fav-heart.on { color: var(--accent); border-color: rgba(var(--accent-rgb), .45); background: rgba(var(--accent-rgb), .12); }
         .fav-heart:disabled { opacity: .5; cursor: default; }
 
         .movie-date {
             font-size: calc(12px * var(--ui-scale, 1));
-            color: #666;
+            color: var(--text-10);
             text-align: center;
             margin-top: 2px;
         }
@@ -3331,7 +3380,7 @@
             left: 0;
             width: auto;
             height: auto;
-            background: #141414;
+            background: var(--bg);
             z-index: 9999;
             display: none;
             overflow-y: auto;
@@ -3394,21 +3443,21 @@
             right: 30px;
             width: 44px;
             height: 44px;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(var(--fg-rgb), 0.1);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #fff;
+            color: var(--text-1);
             cursor: pointer;
             z-index: 10005;
             backdrop-filter: blur(10px);
             transition: 0.2s;
-            border: 1px solid rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
         }
 
         .close-btn:hover {
-            background: rgba(255, 255, 255, 0.25);
+            background: rgba(var(--fg-rgb), 0.25);
             transform: rotate(90deg);
         }
 
@@ -3468,8 +3517,8 @@
             width: 50px;
             height: 50px;
             border-radius: 50%;
-            border: 4px solid rgba(229, 9, 20, 0.25);
-            border-top-color: #e50914;
+            border: 4px solid rgba(var(--accent-rgb), 0.25);
+            border-top-color: var(--accent);
             animation: dl-spin 0.8s linear infinite;
         }
 
@@ -3558,7 +3607,7 @@
 
         .preview-lock-card > .fa-lock {
             font-size: 40px;
-            color: #e50914;
+            color: var(--accent);
             margin-bottom: 14px;
         }
 
@@ -3577,7 +3626,7 @@
         }
 
         .preview-lock-btn {
-            background: linear-gradient(135deg, #e50914, #b00610);
+            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
             color: #fff;
             border: none;
             border-radius: 22px;
@@ -3585,7 +3634,7 @@
             font-size: 14px;
             font-weight: 700;
             cursor: pointer;
-            box-shadow: 0 4px 14px rgba(229, 9, 20, 0.4);
+            box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.4);
         }
 
         .preview-lock-btn:hover {
@@ -3595,16 +3644,16 @@
         /* 🔒 线路/选集锁定占位提示 */
         .preview-locked-note {
             font-size: 13px;
-            color: #999;
+            color: var(--text-7);
             padding: 14px;
-            background: rgba(255, 255, 255, 0.04);
-            border: 1px dashed #444;
-            border-radius: 8px;
+            background: rgba(var(--fg-rgb), 0.04);
+            border: 1px dashed var(--line-3);
+            border-radius: calc(8px * var(--radius-k));
             text-align: center;
         }
 
         .preview-locked-note .fa-lock {
-            color: #e50914;
+            color: var(--accent);
             margin-right: 6px;
         }
 
@@ -3621,13 +3670,13 @@
         .video-title {
             font-size: 2.2rem;
             font-weight: 800;
-            color: #fff;
+            color: var(--text-1);
             margin-bottom: 5px;
             line-height: 1.2;
         }
 
         .video-meta {
-            color: #888;
+            color: var(--text-8);
             font-size: 14px;
         }
 
@@ -3636,22 +3685,22 @@
         .player-box.trial-ended .desktop-play-overlay { display: none; }
         .trial-bar {
             display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;
-            padding: 6px 8px 6px 12px; border-radius: 999px; font-size: 13px; color: #f3c969;
-            background: rgba(243, 201, 105, 0.1); border: 1px solid rgba(243, 201, 105, 0.3);
+            padding: 6px 8px 6px 12px; border-radius: calc(999px * var(--radius-k)); font-size: 13px; color: var(--gold);
+            background: rgba(var(--gold-rgb), 0.1); border: 1px solid rgba(var(--gold-rgb), 0.3);
         }
-        .trial-bar b { color: #fff; font-variant-numeric: tabular-nums; }
+        .trial-bar b { color: var(--text-1); font-variant-numeric: tabular-nums; }
         .trial-login {
-            border: none; border-radius: 999px; padding: 4px 12px; font-size: 12px; font-weight: 600; color: #fff; cursor: pointer;
-            background: linear-gradient(135deg, #e50914, #b00610);
+            border: none; border-radius: calc(999px * var(--radius-k)); padding: 4px 12px; font-size: 12px; font-weight: 600; color: var(--on-accent); cursor: pointer;
+            background: linear-gradient(135deg, var(--accent), var(--accent-deep));
         }
 
         /* 投屏按钮 */
         .btn-cast {
             padding: 10px 20px;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 30px;
-            color: #fff;
+            background: rgba(var(--fg-rgb), 0.1);
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
+            border-radius: calc(30px * var(--radius-k));
+            color: var(--text-1);
             font-weight: 600;
             display: flex;
             align-items: center;
@@ -3662,22 +3711,22 @@
         }
 
         .btn-cast:hover {
-            background: rgba(255, 255, 255, 0.2);
+            background: rgba(var(--fg-rgb), 0.2);
             transform: translateY(-2px);
         }
 
         /* 控制区域 (下半部分) */
         .controls-area {
-            background: #1f1f1f;
-            border-radius: 12px;
+            background: var(--surface-4);
+            border-radius: calc(12px * var(--radius-k));
             padding: 30px;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(var(--fg-rgb), 0.05);
         }
 
         /* 线路选择 (横向滚动) */
         .panel-title {
             font-size: 14px;
-            color: #888;
+            color: var(--text-8);
             font-weight: 700;
             margin-bottom: 15px;
             text-transform: uppercase;
@@ -3699,10 +3748,10 @@
             min-height: 44px;
             /* ♿ 移动端触控目标 ≥44px */
             box-sizing: border-box;
-            border-radius: 6px;
-            background: #2a2a2a;
-            border: 1px solid #333;
-            color: #ccc;
+            border-radius: calc(6px * var(--radius-k));
+            background: var(--surface-7);
+            border: 1px solid var(--line-1);
+            color: var(--text-4);
             cursor: pointer;
             transition: 0.2s;
             display: flex;
@@ -3713,16 +3762,16 @@
         }
 
         .source-pill:hover {
-            background: #333;
-            border-color: #666;
-            color: #fff;
+            background: var(--surface-9);
+            border-color: var(--line-5);
+            color: var(--text-1);
         }
 
         .source-pill.active {
             background: var(--accent);
             border-color: var(--accent);
-            color: #fff;
-            box-shadow: 0 4px 15px rgba(229, 9, 20, 0.3);
+            color: var(--on-accent);
+            box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.3);
         }
 
         /* 选集 (大网格) */
@@ -3734,9 +3783,9 @@
         }
 
         .ep-btn {
-            background: #2a2a2a;
+            background: var(--surface-7);
             border: 1px solid transparent;
-            color: #ddd;
+            color: var(--text-3);
             padding: 12px 5px;
             min-height: 44px;
             /* ♿ 移动端触控目标 ≥44px */
@@ -3745,7 +3794,7 @@
             align-items: center;
             justify-content: center;
             text-align: center;
-            border-radius: 6px;
+            border-radius: calc(6px * var(--radius-k));
             font-size: 14px;
             cursor: pointer;
             transition: 0.2s;
@@ -3779,16 +3828,16 @@
         }
 
         .ep-btn:hover {
-            background: #333;
-            color: #fff;
-            border-color: #555;
+            background: var(--surface-9);
+            color: var(--text-1);
+            border-color: var(--line-4);
         }
 
         .ep-btn.active {
-            background: #fff;
-            color: #000;
+            background: var(--inv-bg);
+            color: var(--inv-fg);
             font-weight: bold;
-            border-color: #fff;
+            border-color: var(--text-1);
         }
 
         /* 状态灯 */
@@ -3799,8 +3848,8 @@
         }
 
         .dot-green {
-            background: #46d369;
-            box-shadow: 0 0 5px #46d369;
+            background: var(--success);
+            box-shadow: 0 0 5px var(--success);
         }
 
         .dot-yellow {
@@ -3835,7 +3884,7 @@
             display: inline-flex;
             align-items: center;
             padding: 1px 5px;
-            border-radius: 3px;
+            border-radius: calc(3px * var(--radius-k));
             font-size: 10px;
             line-height: 1.5;
             font-weight: 600;
@@ -3855,7 +3904,7 @@
             display: inline-flex;
             align-items: center;
             padding: 0 4px;
-            border-radius: 3px;
+            border-radius: calc(3px * var(--radius-k));
             font-size: 9px;
             line-height: 1.6;
             white-space: nowrap;
@@ -3864,8 +3913,8 @@
         }
 
         .src-res.hd {
-            color: #fff;
-            border-color: rgba(255, 255, 255, 0.45);
+            color: var(--text-1);
+            border-color: rgba(var(--fg-rgb), 0.45);
             font-weight: 600;
         }
 
@@ -3884,9 +3933,9 @@
         .source-pill.active .src-tag,
         .source-pill.active .src-res,
         .source-pill.active .src-geo {
-            color: #fff;
+            color: var(--on-accent);
             background: rgba(0, 0, 0, 0.22);
-            border-color: rgba(255, 255, 255, 0.4);
+            border-color: rgba(var(--on-accent-rgb), 0.4);
         }
 
         .source-pill.slow:not(.active) {
@@ -3945,14 +3994,14 @@
         .expand-toggle {
             font-size: 12px;
             font-weight: 500;
-            color: #aaa;
+            color: var(--text-6);
             cursor: pointer;
             margin-left: auto;
             white-space: nowrap;
             padding: 6px 14px;
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px;
+            background: rgba(var(--fg-rgb), 0.05);
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
+            border-radius: calc(20px * var(--radius-k));
             transition: all 0.25s ease;
             display: flex;
             align-items: center;
@@ -3960,10 +4009,10 @@
         }
 
         .expand-toggle:hover {
-            color: #fff;
-            background: rgba(229, 9, 20, 0.15);
-            border-color: rgba(229, 9, 20, 0.4);
-            box-shadow: 0 4px 12px rgba(229, 9, 20, 0.2);
+            color: var(--text-1);
+            background: rgba(var(--accent-rgb), 0.15);
+            border-color: rgba(var(--accent-rgb), 0.4);
+            box-shadow: 0 4px 12px rgba(var(--accent-rgb), 0.2);
             z-index: 10;
             position: relative;
         }
@@ -3978,9 +4027,9 @@
         }
 
         .expand-toggle.expanded {
-            background: rgba(229, 9, 20, 0.1);
-            border-color: rgba(229, 9, 20, 0.3);
-            color: #ff6b6b;
+            background: rgba(var(--accent-rgb), 0.1);
+            border-color: rgba(var(--accent-rgb), 0.3);
+            color: var(--accent-text);
         }
 
         .expand-toggle.expanded i {
@@ -3988,7 +4037,7 @@
         }
 
         .expand-toggle.expanded:hover {
-            background: rgba(229, 9, 20, 0.2);
+            background: rgba(var(--accent-rgb), 0.2);
         }
 
         /* 网格展开布局 - 使用 flexbox 保持固定卡片宽度 */
@@ -4018,14 +4067,14 @@
             width: 40px;
             height: 40px;
             border-radius: 50%;
-            border: 1px solid rgba(255, 255, 255, 0.18);
-            background: rgba(255, 255, 255, 0.06);
-            color: #fff;
+            border: 1px solid rgba(var(--fg-rgb), 0.18);
+            background: rgba(var(--fg-rgb), 0.06);
+            color: var(--text-1);
             cursor: pointer;
             transition: background 0.2s ease, transform 0.2s ease;
         }
         .rec-pager-btn:hover:not(:disabled) {
-            background: rgba(255, 255, 255, 0.16);
+            background: rgba(var(--fg-rgb), 0.16);
             transform: scale(1.08);
         }
         .rec-pager-btn:disabled {
@@ -4034,7 +4083,7 @@
         }
         .rec-pager-info {
             font-size: 14px;
-            color: rgba(255, 255, 255, 0.75);
+            color: rgba(var(--fg-rgb), 0.75);
             min-width: 48px;
             text-align: center;
         }
@@ -4052,9 +4101,9 @@
         .page-btn {
             width: 44px;
             height: 44px;
-            background: rgba(255, 255, 255, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            color: #fff;
+            background: rgba(var(--fg-rgb), 0.08);
+            border: 1px solid rgba(var(--fg-rgb), 0.15);
+            color: var(--text-1);
             border-radius: 50%;
             cursor: pointer;
             font-size: 16px;
@@ -4065,8 +4114,8 @@
         }
 
         .page-btn:hover:not(:disabled) {
-            background: rgba(255, 255, 255, 0.15);
-            border-color: rgba(255, 255, 255, 0.3);
+            background: rgba(var(--fg-rgb), 0.15);
+            border-color: rgba(var(--fg-rgb), 0.3);
             transform: scale(1.1);
         }
 
@@ -4077,14 +4126,14 @@
         }
 
         .page-info {
-            color: #888;
+            color: var(--text-8);
             font-size: 13px;
             min-width: 100px;
             text-align: center;
         }
 
         .page-info .page-num {
-            color: #fff;
+            color: var(--text-1);
             font-weight: 600;
             font-size: 15px;
         }
@@ -4092,7 +4141,7 @@
         .footer {
             text-align: center;
             font-size: 12px;
-            color: #444;
+            color: var(--text-12);
             margin-top: 80px;
             padding-bottom: 20px;
         }
@@ -4104,10 +4153,10 @@
             gap: 8px;
             padding: 10px 20px;
             margin-bottom: 12px;
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.1) 0%, rgba(139, 0, 0, 0.15) 100%);
-            border: 1px solid rgba(229, 9, 20, 0.3);
-            border-radius: 25px;
-            color: #e50914;
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.1) 0%, rgba(var(--accent-dark-rgb), 0.15) 100%);
+            border: 1px solid rgba(var(--accent-rgb), 0.3);
+            border-radius: calc(25px * var(--radius-k));
+            color: var(--accent);
             font-size: 13px;
             font-weight: 500;
             cursor: pointer;
@@ -4124,7 +4173,7 @@
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            background: linear-gradient(90deg, transparent, rgba(var(--fg-rgb), 0.1), transparent);
             transition: left 0.5s ease;
         }
 
@@ -4133,9 +4182,9 @@
         }
 
         .tv-mode-toggle:hover {
-            background: linear-gradient(135deg, rgba(229, 9, 20, 0.25) 0%, rgba(139, 0, 0, 0.3) 100%);
-            border-color: rgba(229, 9, 20, 0.6);
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.3), 0 5px 15px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(135deg, rgba(var(--accent-rgb), 0.25) 0%, rgba(var(--accent-dark-rgb), 0.3) 100%);
+            border-color: rgba(var(--accent-rgb), 0.6);
+            box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.3), 0 5px 15px rgba(var(--shadow-rgb), 0.3);
             transform: translateY(-2px);
         }
 
@@ -4145,7 +4194,7 @@
 
         .tv-mode-toggle i {
             font-size: 16px;
-            filter: drop-shadow(0 0 3px rgba(229, 9, 20, 0.5));
+            filter: drop-shadow(0 0 3px rgba(var(--accent-rgb), 0.5));
         }
 
         /* 设置开关样式 */
@@ -4170,9 +4219,9 @@
             left: 0;
             right: 0;
             bottom: 0;
-            background-color: rgba(255, 255, 255, 0.2);
+            background-color: rgba(var(--fg-rgb), 0.2);
             transition: 0.3s;
-            border-radius: 26px;
+            border-radius: calc(26px * var(--radius-k));
         }
 
         .settings-slider:before {
@@ -4185,11 +4234,11 @@
             background-color: white;
             transition: 0.3s;
             border-radius: 50%;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 2px 5px rgba(var(--shadow-rgb), 0.3);
         }
 
         .settings-switch input:checked+.settings-slider {
-            background: linear-gradient(135deg, #e50914, #ff4757);
+            background: linear-gradient(135deg, var(--accent), var(--accent-bright));
         }
 
         .settings-switch input:checked+.settings-slider:before {
@@ -4212,10 +4261,10 @@
             position: relative;
             max-width: 800px;
             width: 100%;
-            background: #181818;
-            border-radius: 12px;
+            background: var(--surface-1);
+            border-radius: calc(12px * var(--radius-k));
             overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 20px 60px rgba(var(--shadow-rgb), 0.5);
         }
 
         .info-modal-close {
@@ -4246,52 +4295,52 @@
             max-height: calc(100vh - 40px);
             max-height: calc(100dvh - 40px);
         }
-        .settings-head { flex: none; padding: 20px 64px 14px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
-        .settings-h { margin: 0; color: #fff; font-size: 1.35rem; font-weight: 600; line-height: 1.3; }
-        .settings-h i { margin-right: 10px; color: #e50914; }
+        .settings-head { flex: none; padding: 20px 64px 14px 24px; border-bottom: 1px solid rgba(var(--fg-rgb), 0.08); }
+        .settings-h { margin: 0; color: var(--text-1); font-size: 1.35rem; font-weight: 600; line-height: 1.3; }
+        .settings-h i { margin-right: 10px; color: var(--accent); }
         .settings-modal .info-modal-close { top: 13px; right: 14px; }
         .settings-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 6px 24px 20px; }
         .set-row {
             display: flex; justify-content: space-between; align-items: center; gap: 16px;
-            padding: 14px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 14px 0; border-bottom: 1px solid rgba(var(--fg-rgb), 0.1);
         }
-        button.set-row { width: 100%; background: none; border: 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); color: inherit; font: inherit; text-align: left; }
+        button.set-row { width: 100%; background: none; border: 0; border-bottom: 1px solid rgba(var(--fg-rgb), 0.1); color: inherit; font: inherit; text-align: left; }
         .set-row.is-link { cursor: pointer; }
-        .set-block { padding: 14px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-        .set-title { display: block; color: #fff; font-size: 15px; font-weight: 500; }
-        .set-title i { margin-right: 8px; color: #e50914; }
-        .set-desc { display: block; color: #888; font-size: 12px; margin-top: 4px; line-height: 1.5; }
+        .set-block { padding: 14px 0; border-bottom: 1px solid rgba(var(--fg-rgb), 0.1); }
+        .set-title { display: block; color: var(--text-1); font-size: 15px; font-weight: 500; }
+        .set-title i { margin-right: 8px; color: var(--accent); }
+        .set-desc { display: block; color: var(--text-8); font-size: 12px; margin-top: 4px; line-height: 1.5; }
         .set-tip {
-            margin-top: 18px; padding: 12px 14px; border-radius: 10px; color: #ff6b6b; font-size: 13px;
-            background: rgba(229, 9, 20, 0.1); border: 1px solid rgba(229, 9, 20, 0.2);
+            margin-top: 18px; padding: 12px 14px; border-radius: calc(10px * var(--radius-k)); color: var(--accent-text); font-size: 13px;
+            background: rgba(var(--accent-rgb), 0.1); border: 1px solid rgba(var(--accent-rgb), 0.2);
         }
         .set-tip i { margin-right: 8px; }
         /* 🧩 首页板块:每行 图标 名称 ↑ ↓ 开关 */
-        .home-layout { list-style: none; margin: 10px 0 0; padding: 0; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 10px; overflow: hidden; }
-        .home-layout-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; background: rgba(255, 255, 255, 0.03); }
-        .home-layout-item + .home-layout-item { border-top: 1px solid rgba(255, 255, 255, 0.06); }
-        .home-layout-ic { width: 18px; text-align: center; color: #e50914; font-size: 13px; }
-        .home-layout-name { flex: 1; min-width: 0; color: #eee; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .home-layout { list-style: none; margin: 10px 0 0; padding: 0; border: 1px solid rgba(var(--fg-rgb), 0.08); border-radius: calc(10px * var(--radius-k)); overflow: hidden; }
+        .home-layout-item { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; background: rgba(var(--fg-rgb), 0.03); }
+        .home-layout-item + .home-layout-item { border-top: 1px solid rgba(var(--fg-rgb), 0.06); }
+        .home-layout-ic { width: 18px; text-align: center; color: var(--accent); font-size: 13px; }
+        .home-layout-name { flex: 1; min-width: 0; color: var(--text-2); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .home-layout-item.off .home-layout-ic, .home-layout-item.off .home-layout-name { opacity: 0.4; }
         .home-layout-mv {
-            flex: none; width: 32px; height: 32px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12);
-            background: rgba(255, 255, 255, 0.05); color: #ccc; font-size: 12px; cursor: pointer;
+            flex: none; width: 32px; height: 32px; border-radius: calc(8px * var(--radius-k)); border: 1px solid rgba(var(--fg-rgb), 0.12);
+            background: rgba(var(--fg-rgb), 0.05); color: var(--text-4); font-size: 12px; cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center; transition: background 0.15s, color 0.15s;
         }
-        .home-layout-mv:hover:not(:disabled) { background: rgba(255, 255, 255, 0.12); color: #fff; }
+        .home-layout-mv:hover:not(:disabled) { background: rgba(var(--fg-rgb), 0.12); color: var(--text-1); }
         .home-layout-mv:disabled { opacity: 0.3; cursor: default; }
         .home-layout-item .settings-switch { margin-left: 6px; }
         .home-layout-reset {
-            margin-top: 10px; padding: 6px 12px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14);
-            background: transparent; color: #bbb; font-size: 12px; cursor: pointer;
+            margin-top: 10px; padding: 6px 12px; border-radius: calc(8px * var(--radius-k)); border: 1px solid rgba(var(--fg-rgb), 0.14);
+            background: transparent; color: var(--text-5); font-size: 12px; cursor: pointer;
         }
-        .home-layout-reset:hover:not(:disabled) { color: #fff; border-color: rgba(255, 255, 255, 0.3); }
+        .home-layout-reset:hover:not(:disabled) { color: var(--text-1); border-color: rgba(var(--fg-rgb), 0.3); }
         .home-layout-reset:disabled { opacity: 0.4; cursor: default; }
         body.tv-mode .home-layout-mv { width: 40px; height: 40px; font-size: 14px; }
-        .home-layout-del { margin-left: 6px; width: 50px; color: #ff8a8a; }   /* 和开关一样宽:上移 / 下移按钮对齐 */
-        .home-layout-del:hover:not(:disabled) { background: rgba(229, 9, 20, 0.18); color: #fff; }
+        .home-layout-del { margin-left: 6px; width: 50px; color: var(--accent-text-2); }   /* 和开关一样宽:上移 / 下移按钮对齐 */
+        .home-layout-del:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.18); color: var(--text-1); }
         .home-layout-tip { margin-top: 10px; }
-        .home-layout-tip i { color: #e50914; margin-right: 4px; }
+        .home-layout-tip i { color: var(--accent); margin-right: 4px; }
         /* 矮屏(小屏笔记本、横屏手机):标题栏和行距收紧,一屏多放几项 */
         @media (max-height: 760px) {
             .settings-head { padding: 13px 56px 10px 20px; }
@@ -4321,7 +4370,7 @@
             content: '';
             position: absolute;
             inset: 0;
-            background: linear-gradient(to bottom, transparent, #181818);
+            background: linear-gradient(to bottom, transparent, var(--surface-1));
         }
 
         .info-modal-content {
@@ -4339,8 +4388,8 @@
 
         .info-modal-poster img {
             width: 100%;
-            border-radius: 8px;
-            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.5);
+            border-radius: calc(8px * var(--radius-k));
+            box-shadow: 0 8px 25px rgba(var(--shadow-rgb), 0.5);
         }
 
         .info-modal-details {
@@ -4350,14 +4399,14 @@
         .info-modal-details h2 {
             font-size: 1.8rem;
             margin-bottom: 12px;
-            color: #fff;
+            color: var(--text-1);
         }
 
         .info-modal-meta {
             display: flex;
             gap: 15px;
             font-size: 14px;
-            color: #aaa;
+            color: var(--text-6);
             margin-bottom: 15px;
         }
 
@@ -4367,7 +4416,7 @@
         }
 
         .info-overview {
-            color: #bbb;
+            color: var(--text-5);
             font-size: 14px;
             line-height: 1.7;
             max-height: 120px;
@@ -4414,7 +4463,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: #0a0a0a;
+            background: var(--bg-deep);
             /* Deep dark background */
             z-index: 9999;
             display: flex;
@@ -4433,7 +4482,7 @@
         .loader-logo {
             font-size: 3rem;
             font-weight: 800;
-            background: linear-gradient(45deg, #e50914, #ff5151);
+            background: linear-gradient(45deg, var(--accent), var(--accent-bright));
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -4445,8 +4494,8 @@
         .loader-spinner {
             width: 50px;
             height: 50px;
-            border: 4px solid rgba(255, 255, 255, 0.1);
-            border-top-color: #e50914;
+            border: 4px solid rgba(var(--fg-rgb), 0.1);
+            border-top-color: var(--accent);
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
@@ -4470,7 +4519,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+            background: linear-gradient(135deg, var(--bg-deep) 0%, var(--login-mid) 50%, var(--bg-deep) 100%);
             z-index: 10000;
             display: flex;
             flex-direction: column;
@@ -4502,15 +4551,15 @@
         }
 
         .password-container {
-            background: rgba(30, 30, 40, 0.8);
+            background: rgba(var(--login-card-rgb), 0.8);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 24px;
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
+            border-radius: calc(24px * var(--radius-k));
             padding: 50px 40px;
             width: 100%;
             max-width: 420px;
             margin: 20px;
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5), 0 0 100px rgba(229, 9, 20, 0.1);
+            box-shadow: 0 25px 50px rgba(var(--shadow-rgb), 0.5), 0 0 100px rgba(var(--accent-rgb), 0.1);
             animation: floatIn 0.8s ease-out;
         }
 
@@ -4534,7 +4583,7 @@
         .password-logo-text {
             font-size: 2.5rem;
             font-weight: 800;
-            background: linear-gradient(45deg, #e50914, #ff5151);
+            background: linear-gradient(45deg, var(--accent), var(--accent-bright));
             -webkit-background-clip: text;
             background-clip: text;
             -webkit-text-fill-color: transparent;
@@ -4542,7 +4591,7 @@
         }
 
         .password-logo-subtitle {
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(var(--fg-rgb), 0.5);
             font-size: 14px;
             margin-top: 10px;
         }
@@ -4556,21 +4605,21 @@
             width: 100%;
             padding: 18px 50px 18px 20px;
             background: rgba(0, 0, 0, 0.4);
-            border: 2px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            color: #fff;
+            border: 2px solid rgba(var(--fg-rgb), 0.1);
+            border-radius: calc(12px * var(--radius-k));
+            color: var(--text-1);
             font-size: 16px;
             transition: all 0.3s ease;
             outline: none;
         }
 
         .password-input:focus {
-            border-color: #e50914;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.2);
+            border-color: var(--accent);
+            box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.2);
         }
 
         .password-input::placeholder {
-            color: rgba(255, 255, 255, 0.4);
+            color: rgba(var(--fg-rgb), 0.4);
         }
 
         .password-toggle {
@@ -4580,23 +4629,23 @@
             transform: translateY(-50%);
             background: none;
             border: none;
-            color: rgba(255, 255, 255, 0.5);
+            color: rgba(var(--fg-rgb), 0.5);
             cursor: pointer;
             font-size: 18px;
             transition: color 0.2s;
         }
 
         .password-toggle:hover {
-            color: #fff;
+            color: var(--text-1);
         }
 
         .password-submit {
             width: 100%;
             padding: 16px;
-            background: linear-gradient(135deg, #e50914 0%, #b20710 100%);
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-deep) 100%);
             border: none;
-            border-radius: 12px;
-            color: #fff;
+            border-radius: calc(12px * var(--radius-k));
+            color: var(--on-accent);
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
@@ -4609,7 +4658,7 @@
 
         .password-submit:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(229, 9, 20, 0.4);
+            box-shadow: 0 10px 30px rgba(var(--accent-rgb), 0.4);
         }
 
         .password-submit:disabled {
@@ -4619,12 +4668,12 @@
         }
 
         .password-error {
-            background: rgba(229, 9, 20, 0.2);
-            border: 1px solid rgba(229, 9, 20, 0.4);
-            border-radius: 8px;
+            background: rgba(var(--accent-rgb), 0.2);
+            border: 1px solid rgba(var(--accent-rgb), 0.4);
+            border-radius: calc(8px * var(--radius-k));
             padding: 12px 15px;
             margin-bottom: 20px;
-            color: #ff6b6b;
+            color: var(--accent-text);
             font-size: 14px;
             display: flex;
             align-items: center;
@@ -4654,7 +4703,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            color: rgba(255, 255, 255, 0.6);
+            color: rgba(var(--fg-rgb), 0.6);
             font-size: 14px;
             margin-bottom: 25px;
             cursor: pointer;
@@ -4663,7 +4712,7 @@
         .password-remember input[type="checkbox"] {
             width: 18px;
             height: 18px;
-            accent-color: #e50914;
+            accent-color: var(--accent);
             cursor: pointer;
         }
 
@@ -4673,7 +4722,7 @@
             right: 15px;
             top: 50%;
             transform: translateY(-50%);
-            color: rgba(255, 255, 255, 0.35);
+            color: rgba(var(--fg-rgb), 0.35);
             font-size: 16px;
             pointer-events: none;
         }
@@ -4699,7 +4748,7 @@
             height: 232px;
             padding: 12px;
             background: #fff;
-            border-radius: 16px;
+            border-radius: calc(16px * var(--radius-k));
             box-sizing: content-box;
         }
 
@@ -4716,13 +4765,13 @@
 
         .qr-login-tip {
             margin: 14px 0 6px;
-            color: rgba(255, 255, 255, 0.75);
+            color: rgba(var(--fg-rgb), 0.75);
             font-size: 14px;
             line-height: 1.6;
         }
 
         .qr-login-tip.err {
-            color: #ff6b6b;
+            color: var(--accent-text);
         }
 
         /* 手机上确认"让电视登录"的弹窗(外壳复用求片弹窗的 .req-body / .req-h / .req-sub) */
@@ -4732,7 +4781,7 @@
         }
 
         .tvl-warn {
-            color: #fbbf24;
+            color: var(--warn);
             font-size: 13px;
             line-height: 1.6;
             margin: 0 0 18px;
@@ -4749,10 +4798,10 @@
             align-items: center;
             gap: 8px;
             padding: 10px 22px;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            border-radius: 20px;
-            color: rgba(255, 255, 255, 0.7);
+            background: linear-gradient(135deg, rgba(var(--fg-rgb), 0.05), rgba(var(--fg-rgb), 0.02));
+            border: 1px solid rgba(var(--fg-rgb), 0.15);
+            border-radius: calc(20px * var(--radius-k));
+            color: rgba(var(--fg-rgb), 0.7);
             font-size: 13px;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -4764,9 +4813,9 @@
             content: '';
             position: absolute;
             inset: 0;
-            border-radius: 20px;
+            border-radius: calc(20px * var(--radius-k));
             padding: 1px;
-            background: linear-gradient(135deg, #e50914, #ff6b6b, #e50914);
+            background: linear-gradient(135deg, var(--accent), var(--accent-text), var(--accent));
             -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
             -webkit-mask-composite: xor;
@@ -4776,11 +4825,11 @@
         }
 
         .mode-switch-btn:hover {
-            color: #fff;
-            background: rgba(229, 9, 20, 0.1);
-            border-color: rgba(229, 9, 20, 0.4);
+            color: var(--text-1);
+            background: rgba(var(--accent-rgb), 0.1);
+            border-color: rgba(var(--accent-rgb), 0.4);
             transform: translateY(-1px);
-            box-shadow: 0 4px 15px rgba(229, 9, 20, 0.15);
+            box-shadow: 0 4px 15px rgba(var(--accent-rgb), 0.15);
         }
 
         .mode-switch-btn:hover::before {
@@ -4796,11 +4845,11 @@
             margin-top: 18px;
             text-align: center;
             font-size: 13px;
-            color: rgba(255, 255, 255, 0.4);
+            color: rgba(var(--fg-rgb), 0.4);
         }
 
         .login-register-link a {
-            color: #e50914;
+            color: var(--accent);
             text-decoration: none;
             font-weight: 500;
             margin-left: 6px;
@@ -4808,8 +4857,8 @@
         }
 
         .login-register-link a:hover {
-            color: #ff5151;
-            text-shadow: 0 0 8px rgba(229, 9, 20, 0.4);
+            color: var(--accent-bright);
+            text-shadow: 0 0 8px rgba(var(--accent-rgb), 0.4);
         }
 
         .login-register-link a i {
@@ -4896,14 +4945,14 @@
             align-items: center;
             gap: 10px;
             padding: 10px 18px;
-            background: rgba(30, 30, 30, 0.6);
+            background: rgba(var(--glass-rgb), 0.6);
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 50px;
+            border: 1px solid rgba(var(--fg-rgb), 0.1);
+            border-radius: calc(50px * var(--radius-k));
             cursor: pointer;
             transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 8px 32px rgba(var(--shadow-rgb), 0.3);
             overflow: hidden;
             user-select: none;
             outline: none;
@@ -4911,34 +4960,34 @@
 
         /* 焦点状态 (遥控器选中) */
         .tv-mode-float-btn:focus {
-            border-color: #fff;
-            box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.5), 0 8px 32px rgba(0, 0, 0, 0.3);
+            border-color: var(--text-1);
+            box-shadow: 0 0 0 3px rgba(var(--fg-rgb), 0.5), 0 8px 32px rgba(var(--shadow-rgb), 0.3);
             transform: scale(1.05);
         }
 
         /* 悬停效果 */
         .tv-mode-float-btn:hover {
-            background: rgba(40, 40, 40, 0.8);
+            background: rgba(var(--glass-2-rgb), 0.8);
             transform: translateY(-2px) scale(1.05);
-            border-color: rgba(229, 9, 20, 0.5);
-            box-shadow: 0 15px 40px rgba(229, 9, 20, 0.2);
+            border-color: rgba(var(--accent-rgb), 0.5);
+            box-shadow: 0 15px 40px rgba(var(--accent-rgb), 0.2);
         }
 
         /* 激活状态 (TV 模式开启) */
         .tv-mode-float-btn.tv-active {
-            background: rgba(229, 9, 20, 0.15);
-            border-color: #e50914;
-            box-shadow: 0 0 20px rgba(229, 9, 20, 0.4), inset 0 0 10px rgba(229, 9, 20, 0.2);
+            background: rgba(var(--accent-rgb), 0.15);
+            border-color: var(--accent);
+            box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.4), inset 0 0 10px rgba(var(--accent-rgb), 0.2);
         }
 
         .tv-mode-float-btn.tv-active .tv-icon-wrapper i {
-            color: #e50914;
-            text-shadow: 0 0 10px rgba(229, 9, 20, 0.8);
+            color: var(--accent);
+            text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.8);
         }
 
         .tv-mode-float-btn.tv-active .tv-text {
-            color: #fff;
-            text-shadow: 0 0 8px rgba(229, 9, 20, 0.6);
+            color: var(--text-1);
+            text-shadow: 0 0 8px rgba(var(--accent-rgb), 0.6);
         }
 
         /* 图标包装 */
@@ -4952,7 +5001,7 @@
 
         .tv-icon-wrapper i {
             font-size: 18px;
-            color: #ccc;
+            color: var(--text-4);
             transition: all 0.3s ease;
         }
 
@@ -4960,7 +5009,7 @@
         .tv-text {
             font-size: 14px;
             font-weight: 600;
-            color: #ccc;
+            color: var(--text-4);
             letter-spacing: 0.5px;
             transition: all 0.3s ease;
         }
@@ -4972,7 +5021,7 @@
             left: -100%;
             width: 50%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+            background: linear-gradient(90deg, transparent, rgba(var(--fg-rgb), 0.1), transparent);
             transform: skewX(-25deg);
             transition: left 0.5s;
             pointer-events: none;
@@ -5010,11 +5059,11 @@
     <!-- Initial Loading Screen (Buffer) -->
     <div id="app-loader" class="app-loader">
         <div class="loader-logo" style="display: flex; align-items: center; justify-content: center;"><img
-                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: 10px;">视界
-            <span style="font-size:1.2rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span>
+                src="icon.png" style="height: 42px; margin-right: 8px; border-radius: calc(10px * var(--radius-k));">视界
+            <span style="font-size:1.2rem; -webkit-text-fill-color: var(--text-1); opacity:0.8;">MAX</span>
         </div>
         <div class="loader-spinner"></div>
-        <div id="loader-status" style="margin-top: 20px; color: #666; font-size: 13px; text-align: center;">正在初始化...
+        <div id="loader-status" style="margin-top: 20px; color: var(--text-10); font-size: 13px; text-align: center;">正在初始化...
         </div>
     </div>
 
@@ -5022,12 +5071,12 @@
     <div id="password-screen" class="password-screen" style="display: none;">
         <!-- 🔗 深链预览模式下可关闭登录框，回看背景框架(仅 deeplink-mode 显示) -->
         <button type="button" id="deeplink-login-close" onclick="dismissDeepLinkLogin()" aria-label="关闭"
-            style="position:absolute; top:18px; right:20px; background:rgba(255,255,255,0.12); border:none; color:#fff; width:40px; height:40px; border-radius:50%; font-size:22px; line-height:1; cursor:pointer; z-index:2;">&times;</button>
+            style="position:absolute; top:18px; right:20px; background:rgba(var(--fg-rgb), 0.12); border:none; color:var(--text-1); width:40px; height:40px; border-radius:50%; font-size:22px; line-height:1; cursor:pointer; z-index:2;">&times;</button>
         <div class="password-container">
             <div class="password-logo">
                 <div class="password-logo-text" style="display: flex; align-items: center; justify-content: center;">
-                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: 8px;">视界 <span
-                        style="font-size:1rem; -webkit-text-fill-color: #fff; opacity:0.8;">MAX</span>
+                    <img src="icon.png" style="height: 32px; margin-right: 8px; border-radius: calc(8px * var(--radius-k));">视界 <span
+                        style="font-size:1rem; -webkit-text-fill-color: var(--text-1); opacity:0.8;">MAX</span>
                 </div>
                 <div class="password-logo-subtitle"><i class="fas fa-shield-alt"></i> <span id="login-subtitle-text">请登录以继续</span></div>
             </div>
@@ -5116,14 +5165,14 @@
 
             <!-- 购买引导（精简版） -->
             <div id="register-link" class="login-register-link" style="text-align:center;">
-                <div style="font-size:12px; color:#aaa; line-height:1.5; margin-bottom:9px;">
-                    🎬 <b style="color:#eee;">机场套餐用户专属影视福利</b>，有效期内全站免费畅看
+                <div style="font-size:12px; color:var(--text-6); line-height:1.5; margin-bottom:9px;">
+                    🎬 <b style="color:var(--text-2);">机场套餐用户专属影视福利</b>，有效期内全站免费畅看
                 </div>
                 <a href="https://ednovas.me" target="_blank" rel="noopener noreferrer"
-                    style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg,#e50914,#b00610); color:#fff; padding:8px 18px; border-radius:18px; font-size:13px; font-weight:600; text-decoration:none; box-shadow:0 3px 10px rgba(229,9,20,.3);">
+                    style="display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg,var(--accent),var(--accent-deep)); color:var(--on-accent); padding:8px 18px; border-radius:calc(18px * var(--radius-k)); font-size:13px; font-weight:600; text-decoration:none; box-shadow:0 3px 10px rgba(var(--accent-rgb), .3);">
                     <i class="fas fa-ticket-alt"></i> 购买套餐 · 解锁全站
                 </a>
-                <div style="font-size:11px; color:#777; margin-top:8px;">已购套餐？用上方「机场账户登录」观看</div>
+                <div style="font-size:11px; color:var(--text-9); margin-top:8px;">已购套餐？用上方「机场账户登录」观看</div>
             </div>
         </div>
     </div>
@@ -5132,8 +5181,8 @@
 
         <nav class="navbar-custom" v-show="!offHome">
             <div class="brand" @click="goHome" style="cursor: pointer; display: flex; align-items: center;"><img
-                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: 6px;">视界 <span
-                    style="font-size:12px; color:#666; font-weight:normal; margin-left: 2px;">MAX</span></div>
+                    src="icon.png" style="height: 28px; margin-right: 6px; border-radius: calc(6px * var(--radius-k));">视界 <span
+                    style="font-size:12px; color:var(--text-10); font-weight:normal; margin-left: 2px;">MAX</span></div>
         </nav>
 
         <!-- Back to Top Button -->
@@ -5201,15 +5250,15 @@
                     <span v-if="syncEnabled" style="margin-left: 8px; font-size: 12px; opacity: 0.6; cursor: pointer;"
                         :title="syncStatus === 'syncing' ? '正在同步...' : syncStatus === 'success' ? '已同步' : syncStatus === 'error' ? '同步失败' : '云同步已启用 (双击退出)'"
                         @dblclick="confirmLogout">
-                        <i v-if="syncStatus === 'syncing'" class="fas fa-sync-alt fa-spin" style="color: #60a5fa;"></i>
+                        <i v-if="syncStatus === 'syncing'" class="fas fa-sync-alt fa-spin" style="color: var(--info);"></i>
                         <i v-else-if="syncStatus === 'success'" class="fas fa-cloud-upload-alt"
-                            style="color: #46d369;"></i>
+                            style="color: var(--success);"></i>
                         <i v-else-if="syncStatus === 'error'" class="fas fa-exclamation-triangle"
-                            style="color: #ef4444;"></i>
-                        <i v-else class="fas fa-cloud" style="color: #888;"></i>
+                            style="color: var(--danger);"></i>
+                        <i v-else class="fas fa-cloud" style="color: var(--text-8);"></i>
                     </span>
                     <span class="expand-toggle" @click="clearWatchHistory"
-                        style="margin-left: auto; color: #888; font-size: 12px;">
+                        style="margin-left: auto; color: var(--text-8); font-size: 12px;">
                         <i class="fas fa-trash-alt"></i> 清除全部
                     </span>
                 </div>
@@ -5238,7 +5287,7 @@
                                 </div>
                                 <!-- 集数标签 -->
                                 <div v-if="item.episode"
-                                    style="position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,0.8); color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 4px;">
+                                    style="position: absolute; top: 6px; left: 6px; background: rgba(0,0,0,0.8); color: #fff; font-size: 10px; padding: 2px 6px; border-radius: calc(4px * var(--radius-k));">
                                     {{ item.episode }}
                                 </div>
                                 <!-- 播放图标 -->
@@ -5259,10 +5308,10 @@
             <div v-else-if="k === 'fav'" class="section-container home-sec animate__animated animate__fadeInUp"
                 :class="{ 'home-first': bi === 0 }">
                 <div class="section-header" style="display: flex; align-items: center;">
-                    <div class="section-line" style="background: linear-gradient(135deg, #ff4b6e, #e50914);"></div>
+                    <div class="section-line" style="background: linear-gradient(135deg, #ff4b6e, var(--accent));"></div>
                     <div class="section-title"><i class="fas fa-heart"></i> 我的收藏</div>
-                    <span v-if="favUpdateCount > 0" style="margin-left: 12px; color: #ff6b6b; font-size: 12px;">{{ favUpdateCount }} 部有更新</span>
-                    <span style="margin-left: auto; color: #777; font-size: 12px;">{{ favList.length }} / {{ favLimit }}</span>
+                    <span v-if="favUpdateCount > 0" style="margin-left: 12px; color: var(--accent-text); font-size: 12px;">{{ favUpdateCount }} 部有更新</span>
+                    <span style="margin-left: auto; color: var(--text-9); font-size: 12px;">{{ favList.length }} / {{ favLimit }}</span>
                 </div>
                 <!-- 📅 本周更新:今天起 7 天,每天列出预计更新的收藏(TMDB 下一集日期 / 服务器推出的更新规律);一部都没有时整条隐藏。
                      固定一行高、横向滑动:内容变了不挤动下面的收藏行 -->
@@ -5308,7 +5357,7 @@
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #f5af19, #f12711);"></div>
                     <div class="section-title"><i class="fas fa-magic"></i> 为你推荐</div>
-                    <span style="margin-left: 12px; color: #777; font-size: 12px;">根据你的观看记录</span>
+                    <span style="margin-left: 12px; color: var(--text-9); font-size: 12px;">根据你的观看记录</span>
                     <span class="expand-toggle" :class="{ expanded: recommendExpanded }"
                         @click="recommendExpanded = !recommendExpanded" style="margin-left: auto;">
                         {{ recommendExpanded ? '收起' : '展开' }}
@@ -5369,7 +5418,7 @@
             <div v-else-if="k === 'calendar'" class="section-container home-sec cal-sec animate__animated animate__fadeInUp"
                 :class="{ 'home-first': bi === 0 }">
                 <div class="section-header cal-head">
-                    <div class="section-line" style="background: linear-gradient(135deg, #f7971e, #e50914);"></div>
+                    <div class="section-line" style="background: linear-gradient(135deg, #f7971e, var(--accent));"></div>
                     <div class="section-title"><i class="fas fa-calendar-days"></i> 追剧日历</div>
                     <div class="cal-week" role="group" aria-label="切换周">
                         <button type="button" class="cal-wk-btn" :disabled="!calCanPrev || cal.loading" @click="calWeek(-1)" aria-label="上一周"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
@@ -5441,7 +5490,7 @@
                 <div class="section-header" style="display: flex; align-items: center;">
                     <div class="section-line" style="background: linear-gradient(135deg, #00c6ff, #0072ff);"></div>
                     <div class="section-title"><i class="fas fa-users"></i> 大家都在看</div>
-                    <span style="margin-left: 12px; color: #777; font-size: 12px;">本站用户最近 7 天常看</span>
+                    <span style="margin-left: 12px; color: var(--text-9); font-size: 12px;">本站用户最近 7 天常看</span>
                 </div>
                 <div class="scroll-container">
                     <button class="scroll-btn left" v-show="popularCanScrollLeft" @click="scrollRowBy('popularRow', -1)"
@@ -5466,7 +5515,7 @@
             <div v-else-if="k === 'live'" class="section-container home-sec animate__animated animate__fadeInUp"
                 :class="{ 'home-first': bi === 0 }">
                 <div class="section-header" style="display: flex; align-items: center;">
-                    <div class="section-line" style="background: linear-gradient(135deg, #e50914, #ff6a00);"></div>
+                    <div class="section-line" style="background: linear-gradient(135deg, var(--accent), var(--accent-warm));"></div>
                     <div class="section-title"><i class="fas fa-tower-broadcast"></i> 直播频道</div>
                 </div>
                 <div class="live-cctv-hint">
@@ -5565,7 +5614,7 @@
                         </span>
                     </div>
                     <!-- 加载中提示 -->
-                    <span v-if="!rowLists[key]" style="margin-left: 15px; color: #666; font-size: 12px; white-space: nowrap;">
+                    <span v-if="!rowLists[key]" style="margin-left: 15px; color: var(--text-10); font-size: 12px; white-space: nowrap;">
                         <i class="fas fa-spinner fa-spin"></i> 加载中...
                     </span>
                     <!-- 🗂️ 进分类浏览页看这一类的全部(可再按地区/年份/评分筛) -->
@@ -5768,7 +5817,7 @@
         <div id="search-result-anchor" class="section-container" v-show="searched">
             <div class="d-flex align-items-center gap-2 mb-5 mt-2">
                 <button class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2" @click="goHome"
-                    style="color: #fff; border-color: rgba(255,255,255,0.3);">
+                    style="color: var(--text-1); border-color: rgba(var(--fg-rgb), 0.3);">
                     <i class="fas fa-arrow-left me-0 me-md-2"></i><span class="d-none d-md-inline">{{ browse.open || catDirOpen ? '返回分类' : '返回首页' }}</span>
                 </button>
                 <div class="section-header mb-0 ms-3 ms-md-4">
@@ -5792,9 +5841,9 @@
                             @error="handleImgError(posterKey(group), group.name); $event.target.classList.add('loaded'); $event.target.parentElement && $event.target.parentElement.classList.add('img-loaded')">
                         <div v-else class="poster-fallback">
                             <i class="fas fa-film mb-2 opacity-50"></i>
-                            <div style="font-size:12px; color:#999">{{ group.name }}</div>
+                            <div style="font-size:12px; color:var(--text-7)">{{ group.name }}</div>
                         </div>
-                        <div class="rating-badge" style="background:var(--accent); color:#fff; border:none;">
+                        <div class="rating-badge" style="background:var(--accent); color:var(--on-accent); border:none;">
                             {{ group.sources.length }} 源
                         </div>
                     </div>
@@ -5815,20 +5864,20 @@
 
             <div v-if="!loading && groupedList.length === 0" class="text-center"
                 style="padding: 60px 20px; margin-top: -20px;">
-                <i class="fas fa-search" style="font-size: 48px; color: #444; margin-bottom: 20px;"></i>
-                <h4 style="color: #888; margin-bottom: 15px;">暂未找到「{{ keyword }}」的相关资源</h4>
-                <div style="color: #666; font-size: 14px; line-height: 1.8; max-width: 400px; margin: 0 auto;">
+                <i class="fas fa-search" style="font-size: 48px; color: var(--text-12); margin-bottom: 20px;"></i>
+                <h4 style="color: var(--text-8); margin-bottom: 15px;">暂未找到「{{ keyword }}」的相关资源</h4>
+                <div style="color: var(--text-10); font-size: 14px; line-height: 1.8; max-width: 400px; margin: 0 auto;">
                     <p style="margin-bottom: 8px;">📌 新上映的电影/剧集可能需要等待1-2周才有资源</p>
                     <p style="margin-bottom: 8px;">💡 尝试搜索电影的中文名</p>
                     <p>🔍 或尝试搜索其他热门影片</p>
                 </div>
                 <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap; margin-top:24px;">
                     <button v-if="requestsEnabled" class="btn btn-danger" @click="openRequestModal(keyword)"
-                        style="border-radius: 20px; padding: 8px 25px;">
+                        style="border-radius: calc(20px * var(--radius-k)); padding: 8px 25px;">
                         <i class="fas fa-paper-plane"></i> 求这部片
                     </button>
                     <button class="btn btn-outline-danger" @click="clearSearch"
-                        style="border-radius: 20px; padding: 8px 25px;">
+                        style="border-radius: calc(20px * var(--radius-k)); padding: 8px 25px;">
                         <i class="fas fa-home"></i> 返回首页
                     </button>
                 </div>
@@ -5879,22 +5928,22 @@
 
                     <!-- V2Board 账户信息 -->
                     <div v-if="v2boardAccount"
-                        style="padding: 15px; margin-bottom: 20px; background: rgba(229, 9, 20, 0.08); border-radius: 10px; border: 1px solid rgba(229, 9, 20, 0.15);">
-                        <div style="color: #fff; font-size: 14px; font-weight: 600; margin-bottom: 10px;">
-                            <i class="fas fa-user-circle" style="margin-right: 8px; color: #e50914;"></i>机场账户
+                        style="padding: 15px; margin-bottom: 20px; background: rgba(var(--accent-rgb), 0.08); border-radius: calc(10px * var(--radius-k)); border: 1px solid rgba(var(--accent-rgb), 0.15);">
+                        <div style="color: var(--text-1); font-size: 14px; font-weight: 600; margin-bottom: 10px;">
+                            <i class="fas fa-user-circle" style="margin-right: 8px; color: var(--accent);"></i>机场账户
                         </div>
-                        <div style="display: grid; gap: 6px; font-size: 13px; color: #aaa;">
-                            <div><i class="fas fa-envelope" style="width: 18px; color: #666;"></i> {{
+                        <div style="display: grid; gap: 6px; font-size: 13px; color: var(--text-6);">
+                            <div><i class="fas fa-envelope" style="width: 18px; color: var(--text-10);"></i> {{
                                 v2boardAccount.email }}</div>
-                            <div><i class="fas fa-box" style="width: 18px; color: #666;"></i> {{ v2boardAccount.planName
+                            <div><i class="fas fa-box" style="width: 18px; color: var(--text-10);"></i> {{ v2boardAccount.planName
                                 }}</div>
-                            <div><i class="fas fa-clock" style="width: 18px; color: #666;"></i> {{
+                            <div><i class="fas fa-clock" style="width: 18px; color: var(--text-10);"></i> {{
                                 v2boardAccount.expiryText }}</div>
-                            <div><i class="fas fa-chart-pie" style="width: 18px; color: #666;"></i> {{
+                            <div><i class="fas fa-chart-pie" style="width: 18px; color: var(--text-10);"></i> {{
                                 v2boardAccount.trafficText }}</div>
                         </div>
                         <button @click="refreshV2boardInfo" :disabled="v2bRefreshing"
-                            style="margin-top: 12px; width: 100%; padding: 8px; background: rgba(229,9,20,0.15); border: 1px solid rgba(229,9,20,0.3); border-radius: 8px; color: #ff6b6b; font-size: 13px; cursor: pointer; transition: all 0.2s;"
+                            style="margin-top: 12px; width: 100%; padding: 8px; background: rgba(var(--accent-rgb), 0.15); border: 1px solid rgba(var(--accent-rgb), 0.3); border-radius: calc(8px * var(--radius-k)); color: var(--accent-text); font-size: 13px; cursor: pointer; transition: all 0.2s;"
                             onmouseover="this.style.background='rgba(229,9,20,0.25)'"
                             onmouseout="this.style.background='rgba(229,9,20,0.15)'">
                             <i :class="v2bRefreshing ? 'fas fa-spinner fa-spin' : 'fas fa-sync-alt'"
@@ -5984,7 +6033,7 @@
                             <span class="set-title"><i class="fas fa-paper-plane" aria-hidden="true"></i>求片 / 我的求片</span>
                             <span class="set-desc">站内没有想看的剧？提交求片，站长会贴链接</span>
                         </span>
-                        <i class="fas fa-chevron-right" style="color: #666;" aria-hidden="true"></i>
+                        <i class="fas fa-chevron-right" style="color: var(--text-10);" aria-hidden="true"></i>
                     </button>
 
                     <!-- 🔔 更新提醒推送(服务器开了 push 且浏览器支持才显示;iOS 只有"添加到主屏幕"后的 PWA 才有推送) -->
@@ -5999,16 +6048,16 @@
                                 <span class="settings-slider"></span>
                             </label>
                         </div>
-                        <div v-if="pushUi === 'ios-hint'" style="color: #888; font-size: 12px; margin-top: 8px;">
+                        <div v-if="pushUi === 'ios-hint'" style="color: var(--text-8); font-size: 12px; margin-top: 8px;">
                             iPhone/iPad 需先添加到主屏幕（Safari 分享按钮 → 添加到主屏幕），从主屏幕图标打开后才能开启推送
                         </div>
-                        <div v-else-if="pushUi === 'need-sync'" style="color: #888; font-size: 12px; margin-top: 8px;">
+                        <div v-else-if="pushUi === 'need-sync'" style="color: var(--text-8); font-size: 12px; margin-top: 8px;">
                             需使用支持云同步的账号登录后才能开启
                         </div>
                         <div v-if="pushUi === 'ok' && pushSubscribed" style="margin-top: 10px;">
                             <button class="btn btn-outline-light btn-sm" :disabled="pushBusy" @click="pushTest"><i class="fas fa-paper-plane"></i> 发送测试通知</button>
                         </div>
-                        <div v-if="pushMsg" style="color: #fbbf24; font-size: 12px; margin-top: 8px;">{{ pushMsg }}</div>
+                        <div v-if="pushMsg" style="color: var(--warn); font-size: 12px; margin-top: 8px;">{{ pushMsg }}</div>
                     </div>
 
                     <!-- 📺 TV 模式(以前只在页脚) -->
@@ -6030,7 +6079,7 @@
                             <span class="set-title"><i class="fas fa-sign-out-alt" aria-hidden="true"></i>退出登录</span>
                             <span class="set-desc">切换账号；本机观看历史会一并清除</span>
                         </span>
-                        <i class="fas fa-chevron-right" style="color: #666;" aria-hidden="true"></i>
+                        <i class="fas fa-chevron-right" style="color: var(--text-10);" aria-hidden="true"></i>
                     </button>
 
                     <!-- 提示信息 -->
@@ -6087,10 +6136,10 @@
                                     <a :href="safeLink(r.fulfill_link)" target="_blank" rel="noopener" class="req-dl"><i class="fas fa-play-circle"></i> 前往观看 / 下载（点此自取）</a>
                                     <div v-if="r.fulfill_note" class="req-note">{{ r.fulfill_note }}</div>
                                 </div>
-                                <div v-else-if="r.status === 'fulfilled'" class="req-note" style="color:#46d369;"><i class="fas fa-circle-check"></i> {{ r.fulfill_note || '站长已标记为已提供' }}</div>
-                                <div v-else-if="r.status === 'rejected'" class="req-note" style="color:#f87171;"><i class="fas fa-circle-xmark"></i> {{ r.fulfill_note || '暂时无法提供（可能暂无资源）' }}</div>
+                                <div v-else-if="r.status === 'fulfilled'" class="req-note" style="color:var(--success);"><i class="fas fa-circle-check"></i> {{ r.fulfill_note || '站长已标记为已提供' }}</div>
+                                <div v-else-if="r.status === 'rejected'" class="req-note" style="color:var(--danger-soft);"><i class="fas fa-circle-xmark"></i> {{ r.fulfill_note || '暂时无法提供（可能暂无资源）' }}</div>
                                 <div v-else-if="r.status === 'need_info'" class="req-needinfo">
-                                    <div class="req-note" style="color:#fbbf24;"><i class="fas fa-circle-info"></i> {{ r.fulfill_note || '信息不足，无法确定是哪部，请补充更多信息（年份/外文名/导演主演）' }}</div>
+                                    <div class="req-note" style="color:var(--warn);"><i class="fas fa-circle-info"></i> {{ r.fulfill_note || '信息不足，无法确定是哪部，请补充更多信息（年份/外文名/导演主演）' }}</div>
                                     <button class="btn btn-outline-warning btn-sm" @click="refillRequest(r)"><i class="fas fa-pen"></i> 补充信息重新提交</button>
                                 </div>
                                 <div v-else-if="r.status === 'pending'" class="req-actions">
@@ -6120,11 +6169,11 @@
                         </div>
                     </template>
                     <template v-else-if="tvLogin.state === 'done'">
-                        <p class="req-sub"><i class="fas fa-circle-check" style="color: #46d369;"></i> 已确认，那台设备马上就会登录。</p>
+                        <p class="req-sub"><i class="fas fa-circle-check" style="color: var(--success);"></i> 已确认，那台设备马上就会登录。</p>
                         <div class="tvl-btns"><button type="button" class="btn btn-danger" @click="tvLoginCancel">好的</button></div>
                     </template>
                     <template v-else>
-                        <p class="req-sub" style="color: #f87171;">{{ tvLogin.msg }}</p>
+                        <p class="req-sub" style="color: var(--danger-soft);">{{ tvLogin.msg }}</p>
                         <div class="tvl-btns"><button type="button" class="btn btn-outline-secondary" @click="tvLoginCancel">关闭</button></div>
                     </template>
                 </div>
@@ -6199,12 +6248,12 @@
             <!-- 🔗 分享面板 -->
             <div v-if="showSharePanel" @click.self="showSharePanel = false"
                 style="position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:2147483500; display:flex; align-items:center; justify-content:center; padding:20px;">
-                <div style="background:#1c1c1e; border:1px solid rgba(255,255,255,0.1); border-radius:16px; padding:22px; width:100%; max-width:480px; box-shadow:0 20px 60px rgba(0,0,0,0.6);">
+                <div style="background:var(--surface-3); border:1px solid rgba(var(--fg-rgb), 0.1); border-radius:calc(16px * var(--radius-k)); padding:22px; width:100%; max-width:480px; box-shadow:0 20px 60px rgba(var(--shadow-rgb), 0.6);">
                     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:16px;">
-                        <div style="font-size:16px; font-weight:bold; color:#fff;">
-                            <i class="fas fa-share-alt" style="color:#e50914; margin-right:8px;"></i>分享《{{ currentGroup && currentGroup.name }}》
+                        <div style="font-size:16px; font-weight:bold; color:var(--text-1);">
+                            <i class="fas fa-share-alt" style="color:var(--accent); margin-right:8px;"></i>分享《{{ currentGroup && currentGroup.name }}》
                         </div>
-                        <button @click="showSharePanel = false" aria-label="关闭" style="background:none; border:none; color:#888; font-size:22px; line-height:1; cursor:pointer;">&times;</button>
+                        <button @click="showSharePanel = false" aria-label="关闭" style="background:none; border:none; color:var(--text-8); font-size:22px; line-height:1; cursor:pointer;">&times;</button>
                     </div>
 
                     <!-- 社交平台快捷分享 -->
@@ -6229,14 +6278,14 @@
                     <!-- 复制链接 -->
                     <div style="display:flex; gap:8px; margin-bottom:14px;">
                         <input readonly :value="shareUrl" onclick="this.select()" @copy="onShareInputCopy"
-                            style="flex:1; min-width:0; box-sizing:border-box; background:#2a2a2a; border:1px solid #3a3a3a; color:#ccc; border-radius:10px; padding:11px 12px; font-size:12px;">
-                        <button @click="confirmShare" style="background:linear-gradient(135deg,#e50914,#b00610); color:#fff; border:none; border-radius:10px; padding:11px 20px; font-weight:bold; cursor:pointer; white-space:nowrap;">复制</button>
+                            style="flex:1; min-width:0; box-sizing:border-box; background:var(--surface-7); border:1px solid var(--line-2); color:var(--text-4); border-radius:calc(10px * var(--radius-k)); padding:11px 12px; font-size:12px;">
+                        <button @click="confirmShare" style="background:linear-gradient(135deg,var(--accent),var(--accent-deep)); color:var(--on-accent); border:none; border-radius:calc(10px * var(--radius-k)); padding:11px 20px; font-weight:bold; cursor:pointer; white-space:nowrap;">复制</button>
                     </div>
 
                     <!-- 开始时间 -->
-                    <label v-if="shareSeconds > 0" style="display:flex; align-items:center; gap:8px; cursor:pointer; color:#ddd; font-size:13px;">
-                        <input type="checkbox" v-model="shareIncludeTime" style="width:16px; height:16px; accent-color:#e50914;">
-                        <span>开始时间 <b style="color:#fff;">{{ formatSeconds(shareSeconds) }}</b></span>
+                    <label v-if="shareSeconds > 0" style="display:flex; align-items:center; gap:8px; cursor:pointer; color:var(--text-3); font-size:13px;">
+                        <input type="checkbox" v-model="shareIncludeTime" style="width:16px; height:16px; accent-color:var(--accent);">
+                        <span>开始时间 <b style="color:var(--text-1);">{{ formatSeconds(shareSeconds) }}</b></span>
                     </label>
                 </div>
             </div>
@@ -6281,7 +6330,7 @@
                             </button>
                         </div>
                         <div class="video-meta">
-                            <template v-if="previewLocked"><i class="fas fa-lock" style="color:#e50914;"></i> 登录后即可观看</template>
+                            <template v-if="previewLocked"><i class="fas fa-lock" style="color:var(--accent);"></i> 登录后即可观看</template>
                             <template v-else-if="currentSource">正在播放: <span class="text-white fw-bold">{{ currentSource.site_name }}</span><span v-if="!currentGroup._isLive && !currentGroup._offlineCtx" class="src-tag" :class="'t-' + srcGroupOf(currentSource)" :title="srcTitle(currentSource)">{{ srcTierLabel(currentSource) }}</span></template>
                             <template v-else><i class="fas fa-spinner fa-spin"></i> 正在加载…</template>
                         </div>
@@ -6338,10 +6387,10 @@
                     </div>
                     <!-- 自动切换线路提示 -->
                     <div v-if="autoRetryMessage" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-                               background: rgba(0,0,0,0.9); padding: 20px 30px; border-radius: 10px; 
+                               background: rgba(0,0,0,0.9); padding: 20px 30px; border-radius: calc(10px * var(--radius-k)); 
                                text-align: center; z-index: 100; border: 1px solid rgba(255,255,255,0.1);">
                         <i class="fas fa-sync-alt fa-spin"
-                            style="font-size: 24px; color: #e50914; margin-bottom: 10px;"></i>
+                            style="font-size: 24px; color: var(--accent); margin-bottom: 10px;"></i>
                         <div style="color: #fff; font-weight: bold;">{{ autoRetryMessage }}</div>
                         <div style="color: #888; font-size: 12px; margin-top: 5px;">正在自动切换...</div>
                     </div>
@@ -6353,7 +6402,7 @@
                     <div class="mb-4" v-if="currentSource">
                         <div class="panel-title">剧情简介</div>
                         <p
-                            style="color: #999; font-size: 13px; line-height: 1.7; max-height: 80px; overflow-y: auto; margin: 0;">
+                            style="color: var(--text-7); font-size: 13px; line-height: 1.7; max-height: 80px; overflow-y: auto; margin: 0;">
                             <span v-if="loadingDetail"><i class="fas fa-spinner fa-spin"></i> 加载中...</span>
                             <span v-else>{{ stripHtml(currentSource.vod_content) || (previewLocked ? '登录后查看完整简介' : '暂无简介信息') }}</span>
                         </p>
@@ -6364,11 +6413,11 @@
                         <div class="panel-title" style="display: flex; align-items: center;">
                             切换线路
                             <span v-if="isTestingSources"
-                                style="font-size: 12px; color: #888; font-weight: normal; margin-left: 10px;">
+                                style="font-size: 12px; color: var(--text-8); font-weight: normal; margin-left: 10px;">
                                 <i class="fas fa-spinner fa-spin"></i> 正在测速...
                             </span>
                             <span v-else-if="!previewLocked" @click="refreshSources"
-                                style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
+                                style="margin-left: 10px; font-size: 12px; color: var(--text-8); cursor: pointer; padding: 2px 8px; border-radius: calc(4px * var(--radius-k)); border: 1px solid var(--line-3); transition: all 0.2s;"
                                 :style="{ opacity: refreshingSources ? 0.5 : 1, pointerEvents: refreshingSources ? 'none' : 'auto' }"
                                 @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
                                 @mouseleave="$event.target.style.color='#888'; $event.target.style.borderColor='#444'">
@@ -6415,10 +6464,10 @@
                         <!-- 全部不可用提示 -->
                         <div v-else-if="!isTestingSources && !previewLocked && fastSources.length === 0 && slowSources.length === 0"
                             class="text-center py-4"
-                            style="background: rgba(255,0,0,0.1); border-radius: 8px; border: 1px solid rgba(255,0,0,0.2);">
+                            style="background: rgba(255,0,0,0.1); border-radius: calc(8px * var(--radius-k)); border: 1px solid rgba(255,0,0,0.2);">
                             <i class="fas fa-exclamation-triangle text-warning" style="font-size: 24px;"></i>
-                            <div class="mt-2" style="color: #ff6b6b;">所有采集站均不可用</div>
-                            <div class="mt-1" style="font-size: 12px; color: #888;">请稍后重试或尝试搜索其他资源</div>
+                            <div class="mt-2" style="color: var(--accent-text);">所有采集站均不可用</div>
+                            <div class="mt-1" style="font-size: 12px; color: var(--text-8);">请稍后重试或尝试搜索其他资源</div>
                         </div>
                     </div>
 
@@ -6432,7 +6481,7 @@
                                 离线缓存<span v-if="offlineList.length"> ({{ offlineList.length }})</span>
                             </span>
                             <span v-if="!previewLocked" @click="refreshEpisodes"
-                                style="margin-left: 10px; font-size: 12px; color: #888; cursor: pointer; padding: 2px 8px; border-radius: 4px; border: 1px solid #444; transition: all 0.2s;"
+                                style="margin-left: 10px; font-size: 12px; color: var(--text-8); cursor: pointer; padding: 2px 8px; border-radius: calc(4px * var(--radius-k)); border: 1px solid var(--line-3); transition: all 0.2s;"
                                 :style="{ opacity: refreshingEpisodes ? 0.5 : 1, pointerEvents: refreshingEpisodes ? 'none' : 'auto', marginLeft: trial.on ? 'auto' : null }"
                                 @mouseenter="$event.target.style.color='#fff'; $event.target.style.borderColor='#888'"
                                 @mouseleave="$event.target.style.color='#888'; $event.target.style.borderColor='#444'">
@@ -6455,10 +6504,10 @@
                                     <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'downloading'">
                                         正在缓存 {{ dlProgress.done }}/{{ dlProgress.total }} · {{ formatBytes(dlProgress.bytes) }}
                                     </div>
-                                    <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'error'" style="color: #ef4444;">
+                                    <div class="offline-sub" v-else-if="dlProgressIsCurrent() && dlProgress.status === 'error'" style="color: var(--danger);">
                                         {{ dlProgress.msg }}
                                     </div>
-                                    <div class="offline-sub" v-else-if="offlineHasCurrent()" style="color: #46d369;">
+                                    <div class="offline-sub" v-else-if="offlineHasCurrent()" style="color: var(--success);">
                                         <i class="fas fa-check-circle"></i> 本集已缓存，播放自动走本地
                                     </div>
                                     <div class="offline-sub" v-else>缓存后可离线/秒开播放(经去广告代理下载)</div>
@@ -6531,11 +6580,11 @@
                 <div class="controls-area" v-if="currentGroup && currentGroup._isLive">
                     <div class="mb-4">
                         <div class="panel-title"><i class="fas fa-broadcast-tower"></i> 正在直播</div>
-                        <div style="color: #bbb; font-size: 13px;">
+                        <div style="color: var(--text-5); font-size: 13px;">
                             {{ currentGroup.name }}
-                            <span v-if="liveTesting" style="color: #888; margin-left: 8px;"><i
+                            <span v-if="liveTesting" style="color: var(--text-8); margin-left: 8px;"><i
                                     class="fas fa-spinner fa-spin"></i> 正在挑选可用线路…</span>
-                            <span v-else style="color: #46d369; margin-left: 8px;"><span class="live-dot"></span> LIVE</span>
+                            <span v-else style="color: var(--success); margin-left: 8px;"><span class="live-dot"></span> LIVE</span>
                         </div>
                     </div>
                     <!-- 线路切换(多线路才显示) -->
@@ -6581,7 +6630,7 @@
                                 @click="livePage < liveTotalPages && livePage++" aria-label="下一页"><i class="fas fa-chevron-right"></i></button>
                         </div>
                         <div class="live-pager">
-                            <span style="color:#777;">{{ filteredLiveChannels.length }} / 共 {{ liveChannels.length }} 频道</span>
+                            <span style="color:var(--text-9);">{{ filteredLiveChannels.length }} / 共 {{ liveChannels.length }} 频道</span>
                             <template v-if="liveTotalPages > 1">
                                 <button class="rec-pager-btn" :disabled="livePage <= 1" @click="livePage > 1 && livePage--"><i class="fas fa-chevron-left"></i></button>
                                 <span class="rec-pager-info">{{ livePage }} / {{ liveTotalPages }}</span>
@@ -6995,7 +7044,7 @@
                     // 显示具体错误
                     let errorMsg = data.message || '登录失败';
                     if (data.expired) {
-                        errorMsg = '⚠️ ' + errorMsg + '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:#ff6b6b;text-decoration:underline;">domain.ednovas.xyz</a> 续费';
+                        errorMsg = '⚠️ ' + errorMsg + '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:var(--accent-text);text-decoration:underline;">domain.ednovas.xyz</a> 续费';
                     }
                     if (data.trafficExhausted) {
                         errorMsg = '⚠️ ' + errorMsg;
@@ -7196,7 +7245,7 @@
                             setTimeout(() => {
                                 let msg = renewResult.message;
                                 if (renewResult.expired) {
-                                    msg += '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:#ff6b6b;text-decoration:underline;">domain.ednovas.xyz</a> 续费';
+                                    msg += '<br>请前往 <a href="https://domain.ednovas.xyz" target="_blank" style="color:var(--accent-text);text-decoration:underline;">domain.ednovas.xyz</a> 续费';
                                 }
                                 showPasswordError('⚠️ 登录已过期: ' + msg);
                             }, 200);
@@ -20203,7 +20252,7 @@
                         console.log('[播放器] 创建新的 DPlayer 实例');
                         dp = new DPlayer({
                             container: document.getElementById('dplayer'),
-                            theme: '#e50914',
+                            theme: (function () { try { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#e50914'; } catch (e) { return '#e50914'; } })(),   // 🎨 主题主色(主题切换后进度条等由 CSS 变量接管)
                             lang: 'zh-cn',           // 中文界面
                             hotkey: true,            // 快捷键支持
                             preload: 'auto',         // 自动预加载

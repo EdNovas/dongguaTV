@@ -963,10 +963,10 @@ console.log('④c 第二轮审查回归:SW 占位图不当剧照 / 返回键关�
 {
     // F3 打开时焦点落在弹窗框(tabindex=-1)上:全站 [tabindex]:focus 的红框/红光晕(!important)不能把整个框住
     const css = /\n\s*(\.fshare-mask \.fshare-box:focus) \{([^}]*)\}/.exec(HTML);
-    ok(css && /outline:\s*none !important/.test(css[2]) && /box-shadow:\s*0 20px 60px rgba\(0,\s*0,\s*0,\s*\.6\) !important/.test(css[2]), 'F3 .fshare-box:focus 去掉红框、保留原阴影(都 !important)', css && css[2]);
+    ok(css && /outline:\s*none !important/.test(css[2]) && /box-shadow:\s*0 20px 60px rgba\(var\(--shadow-rgb\),\s*\.6\) !important/.test(css[2]), 'F3 .fshare-box:focus 去掉红框、保留原阴影(都 !important)', css && css[2]);
     const spec = (sel) => { const a = (sel.match(/\.[\w-]+|\[[^\]]+\]|:[\w-]+/g) || []).length; return a; };
     const glob = /\n(\s*\.close-btn:focus,[\s\S]*?\[tabindex\]:focus) \{([^}]*)\}/.exec(HTML);
-    ok(glob && /outline: 3px solid #e50914 !important/.test(glob[2]) && css && spec(css[1]) > spec('[tabindex]:focus'), 'F3 选择器比全站的 [tabindex]:focus 多一层(不看先后顺序都压得住)', [css && css[1], spec(css ? css[1] : '')]);
+    ok(glob && /outline: 3px solid var\(--accent\) !important/.test(glob[2]) && css && spec(css[1]) > spec('[tabindex]:focus'), 'F3 选择器比全站的 [tabindex]:focus 多一层(不看先后顺序都压得住)', [css && css[1], spec(css ? css[1] : '')]);
 }
 {
     // F10 焦点陷阱:Tab/Shift+Tab 在弹窗按钮间循环;焦点在弹窗外时回车/空格不按下背后的按钮(♥ 会直接取消收藏)
