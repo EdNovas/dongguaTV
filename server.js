@@ -1143,10 +1143,26 @@ app.get('/api/calendar/list', (req, res) => {
 
 // ========== ☁️ Cloudflare Workers AI(语音搜索 / AI 找片 / 以后评论审核共用,见 lib/cf-ai) ==========
 //    CF_AI_ACCOUNT_ID + CF_AI_TOKEN 都配了才开;CF_AI_DAILY_LIMIT 每天最多调用几次(默认 3000,防刷);VOICE_DISABLE=1 只关语音
+//    用哪个模型由站长后台「AI 模型」页管(见 lib/ai-models):每天同步 Cloudflare 模型目录、手动排顺序、快速测评;下架的自动跳过
+let aiModels = null;
 const cfAi = require('./lib/cf-ai').createCfAi({
     accountId: process.env.CF_AI_ACCOUNT_ID, token: process.env.CF_AI_TOKEN,
-    opts: Number(process.env.CF_AI_DAILY_LIMIT) > 0 ? { dailyLimit: Number(process.env.CF_AI_DAILY_LIMIT) } : {},
+    opts: Object.assign({ asrModel: () => (aiModels ? aiModels.asrModel() : '') },
+        Number(process.env.CF_AI_DAILY_LIMIT) > 0 ? { dailyLimit: Number(process.env.CF_AI_DAILY_LIMIT) } : {}),
 });
+if (cfAi.enabled()) {
+    try {
+        const tmdbImg = process.env['TMDB_PROXY_URL'] ? process.env['TMDB_PROXY_URL'].replace(/\/$/, '') + '/t/p/w780' : 'https://image.tmdb.org/t/p/w780';
+        aiModels = require('./lib/ai-models').createAiModels({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            ai: cfAi, accountId: process.env.CF_AI_ACCOUNT_ID, token: process.env.CF_AI_TOKEN,
+            imageBase: tmdbImg,
+            log: (...a) => console.log('[AiModels]', ...a),
+            opts: { envTextModel: /^@cf\/[\w.-]+\/[\w.-]+$/.test(process.env.CF_AI_FIND_MODEL || '') ? process.env.CF_AI_FIND_MODEL : '' },
+        });
+        aiModels.start();   // 启动 60s 后同步一次模型目录,之后每 24 小时(读库推到下一轮事件循环,避开 REQ_DB_OK 的 TDZ)
+    } catch (e) { console.warn('[AiModels] 模块加载失败,AI 找片 / 语音用内置默认模型:', e.message); aiModels = null; }
+}
 const VOICE_ENABLED = cfAi.enabled() && !envFlag('VOICE_DISABLE');
 // 需要登录的站只给登录了的人用(按 /api/auth/check 同一条规则:配了 ACCESS_PASSWORD 才要登录)
 function aiCaller(req) {
@@ -1176,7 +1192,8 @@ app.post('/api/voice/transcribe', voiceLimiter, async (req, res) => {
 });
 
 // ✨ AI 找片:描述剧情 / 演员 / 台词 / 画面,或上传截图 → Workers AI 给候选 → TMDB 核实(编造的片名筛掉)→ 前端点了照常搜线路。
-//    AI_FIND_DISABLE=1 关;CF_AI_FIND_MODEL 换文字主模型(默认 glm-5.3;截图用 deepseek-v4.1-flash;主模型不可用时按顺序换备用)
+//    AI_FIND_DISABLE=1 关;CF_AI_FIND_MODEL 换默认文字主模型(默认 glm-5.3;截图用 deepseek-v4.1-flash;主模型不可用时按顺序换备用)。
+//    站长后台选了模型就按后台的(每次请求现取,改了不用重启)
 const AI_FIND_ENABLED = cfAi.enabled() && !envFlag('AI_FIND_DISABLE');
 async function tmdbGetServer(p, params) {
     const key = process.env.TMDB_API_KEY;
@@ -1190,8 +1207,9 @@ const aiFind = AI_FIND_ENABLED ? require('./lib/ai-find').createAiFind({
     ai: cfAi,
     tmdbGet: process.env.TMDB_API_KEY ? tmdbGetServer : null,
     log: (...a) => console.log('[AiFind]', ...a),
-    opts: /^@cf\/[\w.-]+\/[\w.-]+$/.test(process.env.CF_AI_FIND_MODEL || '')
-        ? { textModels: [{ id: process.env.CF_AI_FIND_MODEL, extra: {} }, { id: '@cf/deepseek-ai/deepseek-v4.1-flash-1017', extra: { reasoning_effort: 'none' } }] } : {},
+    opts: aiModels ? { textModels: () => aiModels.textModels(), imageModels: () => aiModels.imageModels() }
+        : /^@cf\/[\w.-]+\/[\w.-]+$/.test(process.env.CF_AI_FIND_MODEL || '')
+            ? { textModels: [{ id: process.env.CF_AI_FIND_MODEL, extra: {} }, { id: '@cf/deepseek-ai/deepseek-v4.1-flash-1017', extra: { reasoning_effort: 'none' } }] } : {},
 }) : null;
 const aiFindLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, keyGenerator: ipKey, message: { error: '问得太频繁了,歇一会儿再试' } });
 const AI_IMG_RE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]{16}/;
@@ -1211,6 +1229,36 @@ app.post('/api/ai/find', aiFindLimiter, async (req, res) => {
         console.warn('[AiFind] 失败:', e.message);
         res.status(e.code === 'quota' ? 429 : 502).json({ error: e.code === 'quota' ? '今天的 AI 次数用完了,明天再来' : e.code === 'timeout' ? 'AI 想太久了,再试一次' : 'AI 暂时不可用,稍后再试' });
     }
+});
+
+// 🤖 站长后台「AI 模型」页(见 lib/ai-models):模型目录 + 测评评级 + 手动选模型 + 快速测评。都要 ADMIN_TOKEN
+const aiAdminState = (st) => Object.assign({ enabled: cfAi.enabled(), usage: cfAi.usage() },
+    st || (aiModels ? aiModels.state() : { catalogAt: 0, catalogErr: cfAi.enabled() ? 'AI 模型管理模块没加载' : '没配 CF_AI_ACCOUNT_ID / CF_AI_TOKEN', models: [] }));
+function aiAdminGuard(req, res) {
+    res.set('Cache-Control', 'no-store');
+    if (!adminAuthed(req)) { res.status(403).json({ error: 'Forbidden' }); return false; }
+    if (!aiModels) { res.status(400).json({ error: cfAi.enabled() ? 'AI 模型管理模块没加载' : '没配 Workers AI(CF_AI_ACCOUNT_ID / CF_AI_TOKEN)' }); return false; }
+    return true;
+}
+app.get('/api/admin/ai', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    res.json(aiAdminState());
+});
+app.post('/api/admin/ai/refresh', async (req, res) => {
+    if (!aiAdminGuard(req, res)) return;
+    try { await aiModels.refresh(); res.json(aiAdminState()); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/ai/settings', (req, res) => {
+    if (!aiAdminGuard(req, res)) return;
+    try { res.json(aiAdminState(aiModels.saveSettings(req.body || {}))); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+app.post('/api/admin/ai/bench', (req, res) => {
+    if (!aiAdminGuard(req, res)) return;
+    try { res.json(aiAdminState(aiModels.queueBench((req.body || {}).names))); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 });
 
 // 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback

@@ -114,6 +114,85 @@
         .s-need_info { background: rgba(253, 186, 116, .15); color: var(--serious); }
         .s-fulfilled { background: rgba(134, 239, 172, .14); color: var(--good); }
         .s-rejected { background: rgba(255, 255, 255, .09); color: #cfcfd8; }
+        /* 🤖 AI 模型：评级 S 金 / A 绿 / B 蓝 / C 灰 / D 红 */
+        .grade { min-width: 26px; justify-content: center; font-weight: 800; font-size: 12.5px; padding: 4px 7px; border-radius: 7px; letter-spacing: .3px; cursor: default; }
+        .g-S { background: rgba(251, 191, 36, .22); color: #fcd34d; box-shadow: inset 0 0 0 1px rgba(252, 211, 77, .45); }
+        .g-A { background: rgba(25, 158, 112, .24); color: #86efac; }
+        .g-B { background: rgba(96, 165, 250, .2); color: #a9d0ff; }
+        .g-C { background: rgba(255, 255, 255, .1); color: #cfcfd8; }
+        .g-D { background: rgba(248, 113, 113, .2); color: var(--bad); }
+        .b-new { background: rgba(185, 168, 255, .18); color: #d4caff; }
+        .b-rec { background: rgba(251, 191, 36, .15); color: #fcd34d; }
+        .b-paid { background: rgba(253, 186, 116, .14); color: var(--serious); }
+        .b-soon { background: rgba(252, 211, 77, .15); color: var(--warn); }
+        .kpi .k-v.sm { font-size: 15px; line-height: 1.35; margin-top: 7px; }
+        .kpi .k-u { font-size: 13px; font-weight: 600; color: var(--muted); }
+        .ai-run { display: flex; gap: 10px; align-items: flex-start; }
+        .ai-run .spin { margin-top: 2px; }
+        .ai-run-b { flex: 1; min-width: 0; }
+        .ai-roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: start; }
+        @media (max-width: 1060px) { .ai-roles { grid-template-columns: minmax(0, 1fr); } }
+        .ai-role { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+        .ai-role h3 { font-size: 14px; font-weight: 700; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
+        .ai-role h3 .muted { font-size: 12px; font-weight: 400; }
+        .ai-role select { width: 100%; }
+        .ai-slots { display: flex; flex-direction: column; gap: 6px; }
+        .ai-slot { display: grid; grid-template-columns: 2.4em minmax(0, 1fr) auto; gap: 6px; align-items: center; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 6px 6px 8px; }
+        .ai-slot.bad { border-color: rgba(252, 211, 77, .42); }
+        .ai-slot .si { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+        .ai-slot .si.p { color: #fff; font-weight: 700; }
+        .ai-slot .sn { min-width: 0; }
+        .ai-slot .sn b { font-weight: 600; overflow-wrap: anywhere; display: block; }
+        .ai-slot .sm { font-size: 11.5px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 3px 8px; align-items: center; margin-top: 3px; }
+        .ai-slot .sa { display: flex; gap: 2px; }
+        .ai-slot .sa .btn { min-width: 26px; padding: 2px 6px; }
+        .ai-warn { color: var(--warn); }
+        .ai-rec { font-size: 12.5px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 5px 6px; align-items: center; }
+        .ai-rec .chip { display: inline-flex; gap: 5px; align-items: center; }
+        .ai-rec .chip .grade { padding: 2px 5px; min-width: 0; font-size: 11px; }
+        .ai-eff { font-size: 12.5px; padding: 8px 10px; }
+        .ai-tbl td { font-size: 13px; }
+        .ai-tbl .c-chk { width: 34px; padding-right: 0; }
+        .ai-tbl .c-model { min-width: 210px; max-width: 300px; }
+        .ai-tbl .c-bench { min-width: 190px; }
+        .ai-tbl .c-caps { min-width: 150px; }
+        .ai-tbl .c-grade { white-space: nowrap; }
+        .ai-tbl tr.gone td { opacity: .6; }
+        .ai-mn { font-weight: 600; overflow-wrap: anywhere; }
+        .ai-caps { display: flex; flex-wrap: wrap; gap: 4px; }
+        .cap { font-size: 11px; line-height: 1.3; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--line-2); color: var(--text-2); white-space: nowrap; }
+        .cap.c-img { border-color: rgba(140, 196, 255, .35); color: #b8dbff; }
+        .cap.c-asr { border-color: rgba(134, 239, 172, .32); color: #bdf5d0; }
+        .cap.c-think { border-color: rgba(185, 168, 255, .35); color: #d4caff; }
+        .ai-bench b { font-variant-numeric: tabular-nums; font-weight: 700; }
+        .ai-note { color: var(--text-2); }
+        .ai-fams { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+        .ai-fam { border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+        .ai-fam.t1 { border-color: rgba(252, 211, 77, .35); }
+        .ai-fam.t3 { opacity: .78; }
+        .ai-fam-h { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+        .ai-fam .sub { line-height: 1.55; }
+        .ai-fam-line { color: var(--text-2); }
+        .fam-v { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 6px; font-size: 11px; background: rgba(255, 255, 255, .08); color: var(--text-2); }
+        .fam-v.t1 { background: rgba(251, 191, 36, .15); color: #fcd34d; }
+        .fam-v.t3 { background: rgba(248, 113, 113, .14); color: var(--bad); }
+        .badge.grade.est { background: transparent; box-shadow: inset 0 0 0 1px currentColor; opacity: .8; }
+        @media (max-width: 520px) { .ai-fams { grid-template-columns: 1fr; } }
+        .ai-acts { display: flex; flex-wrap: wrap; gap: 4px; }
+        .ai-card { cursor: default; }
+        .ai-card:hover { border-color: var(--line); }
+        .ai-card.gone { opacity: .7; }
+        .ai-card .uc-h input { flex: none; }
+        .ai-card .uc-name { flex: 1; }
+        .ai-card .uc-stats b { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; }
+        .ai-how summary { cursor: pointer; font-weight: 700; font-size: 15px; list-style: none; display: flex; align-items: center; gap: 8px; }
+        .ai-how summary::-webkit-details-marker { display: none; }
+        .ai-how summary::before { content: "▸"; color: var(--muted); font-size: 12px; }
+        .ai-how[open] summary::before { content: "▾"; }
+        .ai-how ul { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-2); line-height: 1.6; }
+        .ai-how li { padding-left: 14px; position: relative; overflow-wrap: anywhere; }
+        .ai-how li::before { content: "·"; position: absolute; left: 3px; color: var(--muted); }
+        .ai-how b { color: var(--text); }
 
         /* 🔑 登录 */
         .login { min-height: 100vh; display: flex; align-items: flex-start; justify-content: center; padding: 14vh 16px 40px; }
@@ -138,10 +217,12 @@
         @media (max-width: 820px) {
             .top-in { flex-wrap: wrap; gap: 8px 10px; padding: 8px 12px; }
             .brand { flex: 1; }
-            .tabs { order: 3; flex: 1 1 100%; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); }
+            .tabs { order: 3; flex: 1 1 100%; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); }
             .tabs button { justify-content: center; padding: 7px 2px; font-size: 13px; gap: 4px; }
             .hide-narrow { display: none; }
         }
+        /* 手机：6 个分区排成 3 × 2，免得一行挤 6 个 */
+        @media (max-width: 520px) { .tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 
         .wrap { max-width: 1280px; margin: 0 auto; padding: 16px 16px 90px; }
         @media (max-width: 480px) { .wrap { padding: 12px 12px 90px; } }
@@ -914,6 +995,260 @@
                             </template>
                         </template>
                     </section>
+
+                    <!-- ======================= 🤖 AI 模型 ======================= -->
+                    <section v-show="tab === 'ai'" class="sec" aria-label="AI 模型">
+                        <p class="since">「描述找片」「截图找片」和搜索框的语音输入都走 Cloudflare Workers AI。这里是 Cloudflare 现有的模型(服务器每天自动同步一次)，配上我们自己的找片测评和评级；在「正在使用」里决定实际用哪几个、按什么顺序兜底。</p>
+                        <load-state :st="ai" :has="!!ai.data" label="加载模型列表" @retry="loadAi"></load-state>
+                        <template v-if="ai.data">
+                            <div v-if="!ai.data.enabled" class="note-banner warn">AI 功能没启用：服务器要设置环境变量 <code>CF_AI_ACCOUNT_ID</code>(Cloudflare 账户 ID)和 <code>CF_AI_TOKEN</code>(带 Workers AI 权限的 API 令牌)，重启后生效。没启用时也可以先在这里选好模型，启用后按这里的设置跑。</div>
+                            <div v-if="ai.data.catalogErr && (ai.data.enabled || ai.data.models.length)" class="note-banner warn">同步模型列表失败：{{ ai.data.catalogErr }}<template v-if="ai.data.catalogAt">。下面是 {{ fmtRel(ai.data.catalogAt) }}同步的列表。</template></div>
+                            <div class="kpis">
+                                <div class="kpi" :class="{ warn: !ai.data.enabled }"><div class="k-l">状态</div><div class="k-v">{{ ai.data.enabled ? '已启用' : '未启用' }}</div><div class="k-s">Cloudflare Workers AI</div></div>
+                                <div class="kpi" :class="{ warn: aiUsagePct >= 90 }">
+                                    <div class="k-l">今日调用</div>
+                                    <div class="k-v">{{ fmtNum(ai.data.usage.count) }}<span class="k-u"> / {{ ai.data.usage.limit ? fmtNum(ai.data.usage.limit) : '不限' }}</span></div>
+                                    <div v-if="ai.data.usage.limit" class="ti-prog" role="progressbar" :aria-valuenow="aiUsagePct" aria-valuemin="0" aria-valuemax="100" aria-label="今日调用占上限"><i :style="{ width: aiUsagePct + '%' }"></i></div>
+                                    <div class="k-s">{{ ai.data.usage.day ? '北京时间 ' + ai.data.usage.day : '按北京时间算' }} · 含测评</div>
+                                </div>
+                                <div class="kpi"><div class="k-l">可用模型</div><div class="k-v">{{ aiCounts.usable }}</div><div class="k-s">文字 {{ aiCounts.text }} · 看图 {{ aiCounts.image }} · 语音 {{ aiCounts.asr }}</div></div>
+                                <div class="kpi"><div class="k-l">已测评</div><div class="k-v">{{ aiCounts.bench }}</div><div class="k-s">{{ aiCounts.untested ? '新模型 ' + aiCounts.untested + ' 个还没测' : '没有待测的新模型' }}</div></div>
+                                <div class="kpi"><div class="k-l">测评推荐</div><div class="k-v sm wrapany">{{ aiShort(ai.data.recommended.text) || '—' }}</div><div class="k-s">截图 {{ aiShort(ai.data.recommended.image) || '—' }} · 性价比 {{ aiShort(ai.data.recommended.value) || '—' }}</div></div>
+                                <div class="kpi" :class="{ warn: !!ai.data.catalogErr }"><div class="k-l">模型列表</div><div class="k-v sm" :title="fmtAbs(ai.data.catalogAt)">{{ ai.data.catalogAt ? fmtRel(ai.data.catalogAt) + '同步' : '还没同步' }}</div><div class="k-s">{{ ai.data.catalogErr ? '上次同步失败' : '每天自动同步' }}</div></div>
+                            </div>
+                            <div class="toolbar">
+                                <button type="button" class="btn btn-sm" :disabled="ai.busy.refresh" @click="aiRefresh">{{ ai.busy.refresh ? '同步中…' : '↻ 刷新模型列表' }}</button>
+                                <span class="muted" style="font-size:12.5px">立刻从 Cloudflare 拉一次；新出现的模型标「新」，不在列表里的标「已下架」</span>
+                            </div>
+
+                            <!-- 测评进度 -->
+                            <div v-if="aiRunning" class="note-banner info ai-run" role="status">
+                                <span class="spin" aria-hidden="true"></span>
+                                <div class="ai-run-b">
+                                    <div>
+                                        <template v-if="ai.data.bench.running">正在测评 <b>{{ aiShort(ai.data.bench.running) }}</b><template v-if="ai.data.bench.progress"> · {{ ai.data.bench.progress.done }} / {{ ai.data.bench.progress.total }}</template></template>
+                                        <template v-else>准备测评…</template>
+                                        <template v-if="aiQueue.length"> · 还在排队 {{ aiQueue.length }} 个：{{ aiQueue.map(aiShort).join('、') }}</template>
+                                    </div>
+                                    <div v-if="ai.data.bench.progress" class="ti-prog" style="max-width:420px"><i :style="{ width: aiProgPct + '%' }"></i></div>
+                                    <div class="sub">每 2 秒自动刷新进度；切到别的分区就停止刷新(测评在服务器上照常跑)，测评用掉的次数算进今日调用。</div>
+                                </div>
+                            </div>
+
+                            <div v-if="!ai.data.models.length" class="panel empty">{{ ai.data.enabled ? '还没有模型列表：点上面「刷新模型列表」从 Cloudflare 拉一次。' : '配好 Workers AI 并重启后，这里会列出 Cloudflare 的模型、测评评级，并能挑选实际用哪个。' }}</div>
+                            <template v-else>
+                            <!-- 正在使用 -->
+                            <div class="panel">
+                                <div class="panel-h">
+                                    <h2>正在使用</h2>
+                                    <span class="muted">从上往下依次尝试：出错或答得不好就换下一个</span>
+                                    <span class="sp"></span>
+                                    <span v-if="aiDirty" class="badge b-soon">有未保存的修改</span>
+                                    <span v-else-if="aiUsingDefaults" class="badge b-unk">还没改过，用的是默认推荐</span>
+                                </div>
+                                <div class="ai-roles">
+                                    <div v-for="r in K.AI_ROLES" :key="r.id" class="ai-role">
+                                        <h3>{{ r.label }} <span class="muted">{{ r.hint }}</span></h3>
+                                        <template v-if="r.id !== 'asr'">
+                                            <ol class="ai-slots">
+                                                <li v-for="(n, i) in ai.draft[r.id]" :key="n" class="ai-slot" :class="{ bad: !!aiSlotWarn(n) }">
+                                                    <span class="si" :class="{ p: i === 0 }">{{ i === 0 ? '主' : '备 ' + i }}</span>
+                                                    <span class="sn">
+                                                        <b :title="n">{{ aiShort(n) }}</b>
+                                                        <span class="sm">
+                                                            <span v-if="aiGradeOf(n, r.id)" class="badge grade" :class="'g-' + aiGradeOf(n, r.id).letter" :title="aiRoleLabel(r.id) + ' ' + aiScore(aiGradeOf(n, r.id).score) + ' 分'">{{ aiGradeOf(n, r.id).letter }}</span>
+                                                            <span v-else>未测评</span>
+                                                            <span>{{ aiPriceShort(aiByName[n]) }}</span>
+                                                            <span v-if="aiSlotWarn(n)" class="ai-warn">⚠ {{ aiSlotWarn(n) }}</span>
+                                                        </span>
+                                                    </span>
+                                                    <span class="sa">
+                                                        <button type="button" class="btn btn-xs btn-ghost" :disabled="i === 0" :aria-label="'上移 ' + aiShort(n)" title="上移" @click="aiMove(r.id, i, -1)">↑</button>
+                                                        <button type="button" class="btn btn-xs btn-ghost" :disabled="i === ai.draft[r.id].length - 1" :aria-label="'下移 ' + aiShort(n)" title="下移" @click="aiMove(r.id, i, 1)">↓</button>
+                                                        <button type="button" class="btn btn-xs btn-ghost" :aria-label="'移除 ' + aiShort(n)" title="移除" @click="aiRemove(r.id, i)">✕</button>
+                                                    </span>
+                                                </li>
+                                                <li v-if="!ai.draft[r.id].length" class="empty-s">还没选，保存前至少要选一个</li>
+                                            </ol>
+                                            <select v-if="ai.draft[r.id].length < r.max" :aria-label="'给' + r.label + '添加模型'" @change="aiAdd(r.id, $event)">
+                                                <option value="">＋ 添加{{ ai.draft[r.id].length ? '备用' : '' }}模型…</option>
+                                                <option v-for="m in aiRoleOptions(r.id)" :key="m.name" :value="m.name">{{ aiOptLabel(m, r.id) }}</option>
+                                            </select>
+                                            <div v-else class="sub">已满 {{ r.max }} 个，要换先移除一个</div>
+                                        </template>
+                                        <template v-else>
+                                            <select v-model="ai.draft.asr" aria-label="语音转文字模型">
+                                                <option v-if="!ai.draft.asr" value="">选一个模型…</option>
+                                                <option v-if="ai.draft.asr && !aiByName[ai.draft.asr]" :value="ai.draft.asr">{{ aiShort(ai.draft.asr) }}(不在模型列表里)</option>
+                                                <option v-for="m in aiRoleOptions('asr')" :key="m.name" :value="m.name">{{ aiOptLabel(m, 'asr') }}</option>
+                                            </select>
+                                            <div v-if="ai.draft.asr && aiSlotWarn(ai.draft.asr)" class="sub ai-warn">⚠ {{ aiSlotWarn(ai.draft.asr) }}</div>
+                                        </template>
+                                        <div v-if="aiRecFor(r.id).length" class="ai-rec">
+                                            <span class="muted">测评推荐</span>
+                                            <button v-for="p in aiRecFor(r.id)" :key="p.k" type="button" class="chip" :title="r.id === 'asr' ? '选这个' : '放到第一位(还要点保存)'" @click="aiUseRec(r.id, p.name)">
+                                                {{ p.label }} {{ aiShort(p.name) }}<span v-if="aiGradeOf(p.name, r.id)" class="badge grade" :class="'g-' + aiGradeOf(p.name, r.id).letter">{{ aiGradeOf(p.name, r.id).letter }}</span>
+                                            </button>
+                                        </div>
+                                        <div v-if="aiEffNote(r.id)" class="note-banner ai-eff" :class="aiEffNote(r.id).warn ? 'warn' : 'info'">
+                                            <div>{{ aiEffNote(r.id).warn ? '⚠ ' : '' }}实际在跑：{{ aiEffNote(r.id).chain }}</div>
+                                            <div v-if="aiEffNote(r.id).why" class="sub" style="color:inherit;opacity:.85">{{ aiEffNote(r.id).why }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="rc-acts" style="margin-top:12px">
+                                    <button type="button" class="btn btn-primary" :disabled="!aiDirty || ai.saving" @click="aiSave">{{ ai.saving ? '保存中…' : '保存' }}</button>
+                                    <button v-if="aiDirty" type="button" class="btn" :disabled="ai.saving" @click="aiDiscard">撤销修改</button>
+                                    <button type="button" class="btn btn-ghost" :disabled="ai.saving" @click="aiReset">恢复推荐</button>
+                                    <span class="muted" style="font-size:12.5px">保存后下一次找片就按新顺序，不用重启</span>
+                                </div>
+                            </div>
+
+                            <!-- 系列总评:同一系列的新版本一般差别不大,没测过的按同系列估计 -->
+                            <div v-if="ai.data.families && ai.data.families.length" class="panel">
+                                <div class="panel-h"><h2>系列总评</h2><span class="muted">同一系列出了新版本一般差别不大：没测过的先按同系列估计评级，点「测评」后以实测为准</span></div>
+                                <div class="ai-fams">
+                                    <div v-for="f in ai.data.families" :key="f.key" class="ai-fam" :class="'t' + f.tier">
+                                        <div class="ai-fam-h">
+                                            <span class="badge" :class="f.tier === 1 ? 'b-rec' : f.tier === 3 ? 'b-ban' : 'b-unk'">{{ f.verdict }}</span>
+                                            <b>{{ f.label }}</b>
+                                            <span v-if="f.best" class="badge grade" :class="'g-' + f.best.letter" :title="'实测最好：' + aiShort(f.best.name) + ' ' + aiScore(f.best.score) + ' 分'">{{ f.best.letter }}</span>
+                                            <span class="muted">{{ f.models.length }} 个</span>
+                                        </div>
+                                        <div class="sub">{{ f.reason }}</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 模型列表 -->
+                            <div class="panel">
+                                <div class="panel-h"><h2>模型列表</h2><span class="muted">{{ aiList.length }} / {{ ai.data.models.length }} 个 · 默认按评级排，同级便宜的在前</span></div>
+                                <div class="toolbar" style="margin-bottom:10px">
+                                    <div class="seg" role="group" aria-label="筛选模型">
+                                        <button v-for="f in K.AI_FILTERS" :key="f.id" type="button" :class="{ on: ai.filter === f.id }" :aria-pressed="ai.filter === f.id" @click="ai.filter = f.id">{{ f.label }}<span class="seg-n">{{ aiFilterCounts[f.id] }}</span></button>
+                                    </div>
+                                </div>
+                                <div class="toolbar" style="margin-bottom:10px">
+                                    <input class="search" type="search" v-model="ai.q" placeholder="🔍 搜索模型名 / 说明" aria-label="搜索模型">
+                                    <span v-if="narrow" class="sortbox">
+                                        <select v-model="ai.sort" aria-label="排序">
+                                            <option v-for="o in K.AI_SORTS" :key="o[0]" :value="o[0]">{{ o[1] }}</option>
+                                        </select>
+                                        <button type="button" class="btn btn-icon" :aria-label="ai.order === 'desc' ? '降序(点击切换升序)' : '升序(点击切换降序)'" @click="ai.order = ai.order === 'desc' ? 'asc' : 'desc'">{{ ai.order === 'desc' ? '↓' : '↑' }}</button>
+                                    </span>
+                                    <button type="button" class="btn btn-sm" :disabled="!aiSelNames.length || ai.busy.bench" @click="aiBench(aiSelNames)" title="勾选左边的方框，一次最多 6 个，按顺序一个个测">测评选中{{ aiSelNames.length ? '(' + aiSelNames.length + ')' : '' }}</button>
+                                    <button v-if="aiSelNames.length" type="button" class="btn btn-sm btn-ghost" @click="ai.sel = {}">取消勾选</button>
+                                </div>
+
+                                <div v-if="!aiList.length" class="empty">没有符合条件的模型</div>
+                                <!-- 桌面：表格 -->
+                                <div v-else-if="!narrow" class="table-wrap">
+                                    <table class="tbl ai-tbl">
+                                        <thead>
+                                            <tr>
+                                                <th class="c-chk"><span class="sr-only">勾选测评</span></th>
+                                                <th v-for="c in K.AI_COLS" :key="c.label" :class="{ num: c.num }" :aria-sort="c.sort && ai.sort === c.sort ? (ai.order === 'desc' ? 'descending' : 'ascending') : null">
+                                                    <button v-if="c.sort" type="button" class="th-sort" :class="{ on: ai.sort === c.sort }" @click="aiSortBy(c.sort)">{{ c.label }}<span class="arr" aria-hidden="true">{{ ai.sort === c.sort ? (ai.order === 'desc' ? '↓' : '↑') : '↕' }}</span></button>
+                                                    <template v-else>{{ c.label }}</template>
+                                                </th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr v-for="m in aiList" :key="m.name" :class="{ gone: m.gone }">
+                                                <td class="c-chk"><input type="checkbox" :checked="!!ai.sel[m.name]" :disabled="!aiCanBench(m) || (!ai.sel[m.name] && aiSelNames.length >= 6)" :aria-label="'勾选测评 ' + aiShort(m.name)" @change="aiToggleSel(m.name, $event.target.checked)"></td>
+                                                <td class="c-model">
+                                                    <div class="ai-mn">{{ aiShort(m.name) }}</div>
+                                                    <div class="sub wrapany">{{ m.name }}</div>
+                                                    <div v-if="aiBadges(m).length" class="u-badges"><span v-for="b in aiBadges(m)" :key="b[0]" class="badge" :class="b[1]" :title="b[2] || null">{{ b[0] }}</span></div>
+                                                    <div v-if="aiFam(m)" class="sub clip2 ai-fam-line" :title="m.family.label + '：' + m.family.reason"><span class="fam-v" :class="'t' + m.family.tier">{{ m.family.verdict }}</span>{{ m.family.reason }}</div>
+                                                    <div v-else-if="m.desc" class="sub clip2" :title="m.desc">{{ m.desc }}</div>
+                                                </td>
+                                                <td class="c-caps">
+                                                    <div class="ai-caps"><span v-for="c in aiCaps(m)" :key="c[0]" class="cap" :class="c[1]" :title="c[2] || null">{{ c[0] }}</span></div>
+                                                    <div v-if="aiReqText(m)" class="sub" :title="aiReqTitle(m)">调用：{{ aiReqText(m) }}</div>
+                                                </td>
+                                                <td class="num"><div>{{ aiPriceMain(m) }}</div><div class="sub">{{ aiPriceSub(m) }}</div></td>
+                                                <td class="num">{{ aiCtx(m.ctx) }}</td>
+                                                <td class="c-bench ai-bench">
+                                                    <template v-if="m.bench">
+                                                        <div v-if="m.bench.textN">文字 <b>{{ m.bench.textTop1 }}/{{ m.bench.textN }}</b> <span class="muted">前三 {{ m.bench.textTop3 }}</span> · 推荐 <b>{{ aiPct(m.bench.rec) }}</b></div>
+                                                        <div v-if="m.bench.imgN">截图 <b>{{ m.bench.imgTop1 }}/{{ m.bench.imgN }}</b> <span class="muted">前三 {{ m.bench.imgTop3 }}</span></div>
+                                                        <div class="sub">中位 {{ aiMs(m.bench.latMedian) }}<template v-if="m.bench.latP90"> · P90 {{ aiMs(m.bench.latP90) }}</template><template v-if="aiCost(m)"> · 每千次 {{ aiCost(m) }}</template></div>
+                                                        <div class="sub" :title="fmtAbs(m.bench.at)">{{ m.bench.source === 'seed' ? '基准测评' : '快速测评' }} · {{ aiDay(m.bench.at) }}</div>
+                                                        <div v-if="m.bench.notes" class="sub clip2 ai-note" :title="m.bench.notes">{{ m.bench.notes }}</div>
+                                                    </template>
+                                                    <span v-else class="muted">{{ aiCanBench(m) ? '未测评' : '—' }}</span>
+                                                </td>
+                                                <td class="c-grade">
+                                                    <template v-if="m.grade && m.grade.overall">
+                                                        <span class="badge grade" :class="['g-' + m.grade.overall.letter, { est: m.grade.estimated }]" :title="aiGradeTip(m)">{{ m.grade.overall.letter }}<template v-if="m.grade.estimated">估</template></span>
+                                                        <div class="sub">{{ m.grade.estimated ? '按同系列估计' : aiScore(m.grade.overall.score) + ' 分' }}</div>
+                                                    </template>
+                                                    <span v-else class="muted">—</span>
+                                                </td>
+                                                <td>
+                                                    <div class="ai-acts">
+                                                        <button v-if="aiCanBench(m)" type="button" class="btn btn-xs" :disabled="!!aiBenchState(m.name) || ai.busy.bench" @click="aiBench([m.name])">{{ aiBenchState(m.name) || (m.bench ? '重新测评' : '测评') }}</button>
+                                                        <button v-if="aiCanPrimary(m, 'text')" type="button" class="btn btn-xs" :disabled="ai.saving" @click="aiSetPrimary('text', m)">设为文字主模型</button>
+                                                        <button v-if="aiCanPrimary(m, 'image')" type="button" class="btn btn-xs" :disabled="ai.saving" @click="aiSetPrimary('image', m)">设为截图主模型</button>
+                                                        <button v-if="aiCanPrimary(m, 'asr')" type="button" class="btn btn-xs" :disabled="ai.saving" @click="aiSetPrimary('asr', m)">设为语音模型</button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <!-- 手机：卡片 -->
+                                <div v-else class="cards">
+                                    <article v-for="m in aiList" :key="m.name" class="ucard ai-card" :class="{ gone: m.gone }">
+                                        <div class="uc-h">
+                                            <input v-if="aiCanBench(m)" type="checkbox" :checked="!!ai.sel[m.name]" :disabled="!ai.sel[m.name] && aiSelNames.length >= 6" :aria-label="'勾选测评 ' + aiShort(m.name)" @change="aiToggleSel(m.name, $event.target.checked)">
+                                            <span class="uc-name">{{ aiShort(m.name) }}</span>
+                                            <span v-if="m.grade && m.grade.overall" class="badge grade" :class="['g-' + m.grade.overall.letter, { est: m.grade.estimated }]" :title="aiGradeTip(m)">{{ m.grade.overall.letter }}<template v-if="m.grade.estimated">估</template></span>
+                                        </div>
+                                        <div class="sub wrapany">{{ m.name }}</div>
+                                        <div class="u-badges">
+                                            <span v-for="c in aiCaps(m)" :key="'c' + c[0]" class="cap" :class="c[1]">{{ c[0] }}</span>
+                                            <span v-for="b in aiBadges(m)" :key="b[0]" class="badge" :class="b[1]">{{ b[0] }}</span>
+                                        </div>
+                                        <div class="uc-stats">
+                                            <div><b>{{ aiPriceMain(m).replace(' / ', '/') }}</b><span>{{ aiPriceSub(m) }}</span></div>
+                                            <div><b>{{ m.bench && m.bench.textN ? m.bench.textTop1 + '/' + m.bench.textN : (m.bench && m.bench.imgN ? m.bench.imgTop1 + '/' + m.bench.imgN : '—') }}</b><span>{{ m.bench && m.bench.textN ? '文字命中' : (m.bench && m.bench.imgN ? '截图命中' : (aiCanBench(m) ? '未测评' : '不测评')) }}</span></div>
+                                            <div><b>{{ m.bench ? aiMs(m.bench.latMedian) : aiCtx(m.ctx) }}</b><span>{{ m.bench ? '中位延迟' : '上下文' }}</span></div>
+                                        </div>
+                                        <div v-if="m.bench" class="uc-line">
+                                            <template v-if="m.bench.textN">推荐 {{ aiPct(m.bench.rec) }} · 前三 {{ m.bench.textTop3 }}/{{ m.bench.textN }}</template><template v-if="m.bench.imgN"> · 截图 {{ m.bench.imgTop1 }}/{{ m.bench.imgN }}</template><template v-if="aiCost(m)"> · 每千次 {{ aiCost(m) }}</template>
+                                            <span class="muted"> · {{ m.bench.source === 'seed' ? '基准' : '快速' }} {{ aiDay(m.bench.at) }}</span>
+                                        </div>
+                                        <div v-if="aiFam(m)" class="uc-line ai-fam-line"><span class="fam-v" :class="'t' + m.family.tier">{{ m.family.verdict }}</span>{{ m.family.reason }}</div>
+                                        <div v-if="m.bench && m.bench.notes" class="uc-line muted">{{ m.bench.notes }}</div>
+                                        <div v-else-if="!m.bench && m.desc" class="uc-line muted clip2">{{ m.desc }}</div>
+                                        <div class="ai-acts" style="margin-top:8px">
+                                            <button v-if="aiCanBench(m)" type="button" class="btn btn-xs" :disabled="!!aiBenchState(m.name) || ai.busy.bench" @click="aiBench([m.name])">{{ aiBenchState(m.name) || (m.bench ? '重新测评' : '测评') }}</button>
+                                            <button v-if="aiCanPrimary(m, 'text')" type="button" class="btn btn-xs" :disabled="ai.saving" @click="aiSetPrimary('text', m)">设为文字主模型</button>
+                                            <button v-if="aiCanPrimary(m, 'image')" type="button" class="btn btn-xs" :disabled="ai.saving" @click="aiSetPrimary('image', m)">设为截图主模型</button>
+                                            <button v-if="aiCanPrimary(m, 'asr')" type="button" class="btn btn-xs" :disabled="ai.saving" @click="aiSetPrimary('asr', m)">设为语音模型</button>
+                                        </div>
+                                    </article>
+                                </div>
+                            </div>
+                            </template>
+
+                            <details class="panel ai-how">
+                                <summary>评级怎么算的</summary>
+                                <ul>
+                                    <li><b>测什么</b>：真实的「找片」题。文字题是用户那种说法(只记得剧情、演员、台词)，看模型给出的候选片名第一个对不对(Top1)、前三个里有没有(Top3)，以及经 TMDB 核对后最后推荐给用户的那部对不对(推荐率)；截图题是剧照/截图认片，只有能看图的模型才测。</li>
+                                    <li><b>文字分</b> = 100 × (70% × Top1 命中率 + 15% × Top3 命中率 + 15% × 推荐率) × 速度系数</li>
+                                    <li><b>截图分</b> = 100 × (80% × Top1 命中率 + 20% × Top3 命中率) × 速度系数</li>
+                                    <li><b>速度系数</b>看中位延迟：1.5 秒以内 ×1，3 秒以内 ×0.95，6 秒以内 ×0.85，更慢 ×0.7。</li>
+                                    <li><b>评级</b>取文字分和截图分里高的那个：S ≥ 90，A ≥ 80，B ≥ 65，C ≥ 50，其余 D。鼠标停在评级上能看到两项分数。</li>
+                                    <li><b>系列</b>：同一系列(GLM、DeepSeek Flash、Gemma、Qwen…)出新版本一般差别不大，没测过的新模型先按同系列里实测最好的那个估计评级(标「估」)，推荐只看实测分；哪天新版本差别大了，测一下就会以实测为准。</li>
+                                    <li><b>推荐</b>：每个用途挑这一项分最高的(同分挑便宜的)；「性价比」是文字分 ≥ 75 里最便宜的。已下架或过了下架日期的不参与推荐。</li>
+                                    <li><b>数据来源</b>：「基准测评」是 2026-11-26 那一轮(12 个模型 × 25 道题)；「快速测评」是在这里点「测评」跑的小题量，题少分数波动大，只作参考。每千次成本按测评里实际用掉的 token 和 Cloudflare 公布的单价算。</li>
+                                </ul>
+                            </details>
+                        </template>
+                    </section>
                 </main>
             </template>
 
@@ -1090,7 +1425,15 @@
             const CH_LABEL = Object.fromEntries(CHANNELS);
             const SOURCE_PRESET = ['微信', '企业微信', 'QQ', 'QQ浏览器', '微博', '钉钉', '飞书', '抖音/TikTok', '小红书', '百度App', 'Telegram', 'Facebook', 'Instagram', 'LINE', 'X', 'Google', '百度', 'Bing', '直接打开'];
             const K = Object.freeze({
-                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }, { id: 'library', label: '片库', icon: '🗂️' }],
+                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }, { id: 'library', label: '片库', icon: '🗂️' }, { id: 'ai', label: 'AI 模型', icon: '🤖' }],
+                AI_ROLES: [
+                    { id: 'text', label: '文字找片', hint: '最多 4 个 · 用户描述剧情/台词找片', max: 4 },
+                    { id: 'image', label: '截图找片', hint: '最多 3 个 · 只能选能看图的', max: 3 },
+                    { id: 'asr', label: '语音转文字', hint: '搜索框的语音输入', max: 1 }
+                ],
+                AI_FILTERS: [{ id: 'all', label: '全部' }, { id: 'text', label: '文字' }, { id: 'image', label: '能看图' }, { id: 'asr', label: '语音' }, { id: 'bench', label: '有测评' }, { id: 'new', label: '新模型' }, { id: 'dep', label: '即将下架' }],
+                AI_COLS: [{ label: '模型', sort: 'name' }, { label: '能力' }, { label: '价格', sort: 'price', num: true }, { label: '上下文', sort: 'ctx', num: true }, { label: '测评', sort: 'bench' }, { label: '评级', sort: 'grade' }, { label: '操作' }],
+                AI_SORTS: [['grade', '按评级'], ['price', '按价格'], ['bench', '按文字命中'], ['ctx', '按上下文'], ['name', '按名称']],
                 TI_MODE: { nosearch: ['走索引', 'b-idx'], ok: ['搜索正常', 'b-ok'], unknown: ['未确认', 'b-unk'] },
                 USER_STATUS: [['all', '全部状态'], ['active1', '今日活跃'], ['active7', '7 日活跃'], ['active30', '30 日活跃'], ['dormant', '沉睡 30 天+'], ['never', '从未观看'], ['banned', '已封禁'], ['requests', '有求片'], ['shares', '有分享']],
                 USER_SORTS: [['last_active', '最近活跃'], ['last_login', '最近登录'], ['watch', '观看时长'], ['episodes', '观看集数'], ['shows', '看过剧数'], ['last_watch', '最近观看'], ['first_seen', '首次出现'], ['share_opens', '分享带来打开'], ['shares', '分享次数'], ['requests', '求片数']],
@@ -1155,6 +1498,44 @@
                 const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || '');
                 if (!m) return day || '';
                 return day + ' ' + WEEK[new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])).getUTCDay()];
+            }
+
+            // ========== 🤖 AI 模型：纯函数 ==========
+            const bjDay = ts => new Date(ts + 8 * 3600000).toISOString().slice(0, 10);   // 北京时间的日期(下架日期按它比)
+            // '@cf/zai-org/glm-5.3' → 'glm-5.3'
+            const aiShortName = n => String(n || '').split('/').pop();
+            // 价格排序键：文字模型 = 入 + 出(每百万 token)；语音 = 每分钟价 × 1000(和文字放一起排时大致可比)；没价格 = null(排最后)
+            function aiPriceKey(m) {
+                const p = (m && m.price) || {};
+                if (p.in != null || p.out != null) return (+p.in || 0) + (+p.out || 0);
+                if (p.minute != null) return +p.minute * 1000;
+                return null;
+            }
+            function fmtUsd(n) {
+                if (n == null || !isFinite(+n)) return '—';
+                n = +n;
+                if (n === 0) return '$0';
+                return '$' + (n >= 0.1 ? n.toFixed(2) : String(+n.toPrecision(2)));
+            }
+            // 下架日期距今天(北京时间)还有几天；没有日期 = null
+            function daysUntil(day) {
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(day || '')) return null;
+                return Math.round((Date.parse(day + 'T00:00:00Z') - Date.parse(bjDay(Date.now()) + 'T00:00:00Z')) / DAY);
+            }
+            function aiIsRunning(d) { const b = d && d.bench; return !!(b && (b.running || (b.queue && b.queue.length))); }
+            // 接口返回补齐默认值：后端少给字段时页面也不报错
+            function aiNorm(d) {
+                if (!d || typeof d !== 'object') throw new ApiError('服务器返回了无法解析的数据', 'parse');
+                d.models = Array.isArray(d.models) ? d.models.filter(m => m && m.name) : [];
+                d.models.forEach(m => {
+                    m.roles = Array.isArray(m.roles) ? m.roles : [];
+                    m.efforts = Array.isArray(m.efforts) ? m.efforts : [];
+                    m.price = m.price || {};
+                });
+                ['settings', 'effective', 'recommended', 'defaults', 'usage'].forEach(k => { if (!d[k] || typeof d[k] !== 'object') d[k] = {}; });
+                if (!d.bench || typeof d.bench !== 'object') d.bench = {};
+                d.bench.queue = Array.isArray(d.bench.queue) ? d.bench.queue : [];
+                return d;
             }
 
             // ========== 📈 柱状图工具 ==========
@@ -1411,6 +1792,8 @@
             // ========== 🛡️ 主应用 ==========
             let qTimerU = null, qTimerR = null, lastFocus = null, cfResolve = null, toastSeq = 0;
             const st0 = () => ({ loading: false, error: '', data: null, at: 0 });
+            // AI 分区的界面状态(登出时整个重置)：draft = 「正在使用」里还没保存的编辑；baseJson = 服务器上已保存(或默认)的那份
+            const aiState0 = () => ({ filter: 'all', q: '', sort: 'grade', order: 'desc', sel: {}, draft: { text: [], image: [], asr: '' }, baseJson: '', busy: {}, saving: false, pend: {}, pollFails: 0 });
             // 隐私模式/禁用站点数据时 sessionStorage 可能抛异常 → 一律兜住，只是不记住令牌
             const ssGet = k => { try { return sessionStorage.getItem(k) || ''; } catch (e) { return ''; } };
             const ssSet = (k, v) => { try { if (v) sessionStorage.setItem(k, v); else sessionStorage.removeItem(k); } catch (e) { } };
@@ -1433,13 +1816,61 @@
                         rq: Object.assign(st0(), { status: 'pending', qInput: '', q: '', sort: 'new', sel: {}, open: null, drafts: {}, busy: {}, badPoster: {}, bulkNote: '', bulkLink: '', bulkBusy: false, bulkExtra: false }),
                         sh: Object.assign(st0(), { channel: '', source: '', page: 1 }),
                         ti: Object.assign(st0(), { busy: {}, showAll: false, trySite: '', tryQ: '', tryRes: null, tryBusy: false }),
+                        ai: Object.assign(st0(), aiState0()),
                         dw: Object.assign(st0(), { open: false, token: '', seed: null, sub: 'shows', exp: {}, banBusy: false }),
                         cf: { open: false, title: '', message: '', ok: '确定', danger: false },
                         toasts: []
                     };
                 },
                 computed: {
-                    curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh, library: this.ti }; return !!(m[this.tab] && m[this.tab].loading); },
+                    curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh, library: this.ti, ai: this.ai }; return !!(m[this.tab] && m[this.tab].loading); },
+                    // ---- AI 模型 ----
+                    aiByName() { const o = Object.create(null); ((this.ai.data && this.ai.data.models) || []).forEach(m => { o[m.name] = m; }); return o; },
+                    aiRunning() { return aiIsRunning(this.ai.data); },
+                    aiQueue() { const b = this.ai.data && this.ai.data.bench; return b ? b.queue.filter(n => n !== b.running) : []; },
+                    aiProgPct() { const p = this.ai.data && this.ai.data.bench.progress; return p && p.total ? Math.min(100, Math.round(p.done / p.total * 100)) : 0; },
+                    aiUsagePct() { const u = this.ai.data && this.ai.data.usage; return u && u.limit ? Math.min(100, Math.round((+u.count || 0) / u.limit * 100)) : 0; },
+                    aiDirty() { return !!this.ai.baseJson && JSON.stringify(this.ai.draft) !== this.ai.baseJson; },
+                    aiUsingDefaults() { const s = this.ai.data && this.ai.data.settings; return !!s && !(s.text && s.text.length) && !(s.image && s.image.length) && !s.asr; },
+                    aiCounts() {
+                        const c = { usable: 0, text: 0, image: 0, asr: 0, bench: 0, untested: 0 };
+                        ((this.ai.data && this.ai.data.models) || []).forEach(m => {
+                            if (m.bench) c.bench++;
+                            if (m.isNew && !m.bench) c.untested++;
+                            if (m.gone) return;
+                            c.usable++;
+                            ['text', 'image', 'asr'].forEach(r => { if (m.roles.includes(r)) c[r]++; });
+                        });
+                        return c;
+                    },
+                    aiFilterCounts() {
+                        const o = {}, list = (this.ai.data && this.ai.data.models) || [];
+                        K.AI_FILTERS.forEach(f => { o[f.id] = list.filter(m => this.aiMatch(m, f.id)).length; });
+                        return o;
+                    },
+                    // 筛选 + 搜索 + 排序；已下架的永远沉底
+                    aiList() {
+                        const d = this.ai.data; if (!d) return [];
+                        const q = this.ai.q.trim().toLowerCase(), f = this.ai.filter, k = this.ai.sort, dir = this.ai.order === 'asc' ? 1 : -1;
+                        const coll = new Intl.Collator('zh-CN', { numeric: true });
+                        const val = m => {
+                            if (k === 'grade') return m.grade && m.grade.overall ? +m.grade.overall.score : null;
+                            if (k === 'price') return aiPriceKey(m);
+                            if (k === 'ctx') return m.ctx ? +m.ctx : null;
+                            if (k === 'bench') return m.bench && m.bench.textN ? m.bench.textTop1 / m.bench.textN : null;
+                            return null;
+                        };
+                        const byPrice = (a, b) => { const pa = aiPriceKey(a), pb = aiPriceKey(b); return pa == null || pb == null ? (pa == null) - (pb == null) : pa - pb; };
+                        return d.models.filter(m => this.aiMatch(m, f) && (!q || (m.name + ' ' + (m.desc || '')).toLowerCase().indexOf(q) >= 0)).sort((a, b) => {
+                            if (!!a.gone !== !!b.gone) return a.gone ? 1 : -1;
+                            if (k === 'name') return coll.compare(aiShortName(a.name), aiShortName(b.name)) * dir;
+                            const va = val(a), vb = val(b);
+                            if (va == null || vb == null) { if (va != null || vb != null) return va == null ? 1 : -1; }
+                            else if (va !== vb) return (va - vb) * dir;
+                            return byPrice(a, b) || coll.compare(aiShortName(a.name), aiShortName(b.name));
+                        });
+                    },
+                    aiSelNames() { return Object.keys(this.ai.sel).filter(n => this.ai.sel[n] && this.aiByName[n] && this.aiCanBench(this.aiByName[n])).slice(0, 6); },
                     // ---- 片库 ----
                     tiRows() {
                         const d = this.ti.data; if (!d || !Array.isArray(d.sites)) return [];
@@ -1700,6 +2131,8 @@
                         Object.assign(this.sh, st0(), { page: 1 });
                         clearTimeout(this._tiTimer);
                         Object.assign(this.ti, st0(), { busy: {}, tryRes: null, tryBusy: false });
+                        clearTimeout(this._aiPoll);
+                        Object.assign(this.ai, st0(), aiState0());
                         this.dw.open = false; this.dw.data = null;
                         if (this.cf.open) this.cfDone(false);
                     },
@@ -1730,10 +2163,11 @@
                         else if (id === 'requests' && !this.rq.data && !this.rq.loading) this.loadRequests();
                         else if (id === 'shares' && !this.sh.data && !this.sh.loading) this.loadShares();
                         else if (id === 'library' && !this.ti.loading) this.loadTitleIndex();
+                        else if (id === 'ai' && !this.ai.loading) this.loadAi();
                     },
                     refresh() {
                         if (this.tab === 'overview') this.loadOverview();
-                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares, library: this.loadTitleIndex })[this.tab].call(this); }
+                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares, library: this.loadTitleIndex, ai: this.loadAi })[this.tab].call(this); }
                     },
                     goKpi(go) {
                         if (go.tab === 'users') {
@@ -1851,6 +2285,334 @@
                         } catch (e) {
                             if (e.code !== 'auth') this.toast('试搜失败：' + e.message, 'err');
                         } finally { this.ti.tryBusy = false; }
+                    },
+
+                    // ---------- 🤖 AI 模型 ----------
+                    loadAi() {
+                        clearTimeout(this._aiPoll);
+                        return runLoad('ai', this.ai, signal => api('/api/admin/ai', { signal }).then(aiNorm)).then(d => { if (d) this.aiApply(d); });
+                    },
+                    // 所有接口(GET / refresh / settings / bench)都回同一个形状 → 统一从这里落地。
+                    // force：刚保存过，用服务器那份覆盖草稿；否则只有草稿没改过时才跟着服务器走(轮询不会冲掉正在编辑的顺序)
+                    aiApply(d, force) {
+                        const a = this.ai;
+                        a.data = d; a.at = Date.now(); a.error = '';
+                        const bj = JSON.stringify(this.aiBaseOf(d));
+                        if (force || !a.baseJson || JSON.stringify(a.draft) === a.baseJson) a.draft = JSON.parse(bj);
+                        a.baseJson = bj;
+                        // 上次还在跑/排队、这次不在了的 = 测完了，逐个报结果。bench.last 只记最后一个，
+                        // 两次轮询之间测完两个时，前一个靠 bench.at 变新来判断成功
+                        const b = d.bench, last = b.last || {}, by = this.aiByName;
+                        const pendNow = [b.running].concat(b.queue).filter(Boolean);
+                        Object.keys(a.pend).forEach(n => {
+                            if (pendNow.includes(n)) return;
+                            const m = by[n], at = m && m.bench ? m.bench.at : 0, g = m && m.grade && m.grade.overall;
+                            if (last.name === n && last.ok === false) this.toast('测评失败：' + aiShortName(n) + (last.error ? '(' + last.error + ')' : ''), 'err');
+                            else if ((at && at !== a.pend[n]) || (last.name === n && last.ok)) this.toast('测评完成：' + aiShortName(n) + (g ? ' → ' + g.letter + ' 级(' + this.aiScore(g.score) + ' 分)' : ''), 'ok');
+                            else this.toast('测评结束：' + aiShortName(n) + ' 没有出新结果', 'err');
+                        });
+                        const pend = {};
+                        pendNow.forEach(n => { pend[n] = by[n] && by[n].bench ? by[n].bench.at : 0; });
+                        a.pend = pend;
+                        if (pendNow.length) this.aiSchedulePoll(); else clearTimeout(this._aiPoll);
+                    },
+                    // 测评期间每 2 秒拉一次；不在 AI 分区就停(回来时 ensureTab 会重新加载并接着轮询)
+                    aiSchedulePoll() {
+                        clearTimeout(this._aiPoll);
+                        if (!this.authed || this.tab !== 'ai') return;
+                        this._aiPoll = setTimeout(async () => {
+                            if (!this.authed || this.tab !== 'ai' || RUNS.ai) return;   // 正在整页加载：它落地时会自己接着排
+                            try {
+                                const d = aiNorm(await api('/api/admin/ai'));
+                                this.ai.pollFails = 0;
+                                if (this.authed && !RUNS.ai) this.aiApply(d);
+                            } catch (e) {
+                                if (e.code === 'auth') return;
+                                if (++this.ai.pollFails < 5) this.aiSchedulePoll();
+                                else this.toast('测评进度刷新失败：' + e.message + '(点右上角刷新再看)', 'err');
+                            }
+                        }, 2000);
+                    },
+                    // 服务器上保存的选择；没保存过的用途用默认
+                    aiBaseOf(d) {
+                        const s = (d && d.settings) || {}, df = (d && d.defaults) || {};
+                        const arr = (a, b) => (Array.isArray(a) && a.length ? a : (Array.isArray(b) ? b : [])).slice();
+                        return { text: arr(s.text, df.text), image: arr(s.image, df.image), asr: s.asr || df.asr || '' };
+                    },
+                    aiShort(n) { return aiShortName(n); },
+                    aiScore(s) { return s == null || !isFinite(+s) ? '—' : String(Math.round(+s * 10) / 10); },
+                    aiPct(v) { return v == null || !isFinite(+v) ? '—' : Math.round(+v * 100) + '%'; },
+                    aiMs(ms) { ms = +ms; if (!(ms > 0)) return '—'; return ms < 1000 ? Math.round(ms) + 'ms' : (ms / 1000).toFixed(1) + 's'; },
+                    aiDay(ts) { return fmtAbs(ts).slice(0, 10) || '—'; },
+                    aiCtx(n) { n = +n; if (!(n > 0)) return '—'; return n >= 1e6 ? +(n / 1e6).toFixed(1) + 'M' : Math.round(n / 1024) + 'K'; },
+                    aiRoleLabel(r) { return { text: '文字', image: '截图', asr: '语音' }[r] || r; },
+                    aiMatch(m, f) {
+                        switch (f) {
+                            case 'text': return m.roles.includes('text');
+                            case 'image': return m.roles.includes('image');
+                            case 'asr': return m.roles.includes('asr');
+                            case 'bench': return !!m.bench;
+                            case 'new': return !!m.isNew;
+                            case 'dep': return !!(m.deprecation || m.deprecated || m.gone);
+                            default: return true;
+                        }
+                    },
+                    aiGradeOf(n, role) {
+                        const m = this.aiByName[n], g = m && m.grade;
+                        if (!g) return null;
+                        return role === 'text' ? g.text || null : role === 'image' ? g.image || null : null;
+                    },
+                    // 有系列总评的才显示(认不出系列的「其它」不显示)
+                    aiFam(m) { return !!(m && m.family && m.family.key && m.family.key !== 'other'); },
+                    aiGradeTip(m) {
+                        const g = m.grade || {}, L = [];
+                        if (g.estimated) L.push('还没测过：按同系列' + (g.from ? '「' + this.aiShort(g.from) + '」的实测' : '的经验') + '估计，点「测评」看实测');
+                        if (g.text) L.push('文字 ' + this.aiScore(g.text.score) + ' 分(' + g.text.letter + ')');
+                        if (g.image) L.push('截图 ' + this.aiScore(g.image.score) + ' 分(' + g.image.letter + ')');
+                        if (g.overall) L.push('综合 ' + this.aiScore(g.overall.score) + ' 分 = 两项里高的那个');
+                        L.push('S ≥ 90 · A ≥ 80 · B ≥ 65 · C ≥ 50 · 其余 D');
+                        return L.join('\n');
+                    },
+                    aiPriceMain(m) {
+                        const p = (m && m.price) || {};
+                        if (p.in != null || p.out != null) return fmtUsd(p.in) + ' / ' + fmtUsd(p.out);
+                        if (p.minute != null) return fmtUsd(p.minute);
+                        return '—';
+                    },
+                    aiPriceSub(m) {
+                        const p = (m && m.price) || {};
+                        if (p.in != null || p.out != null) return '每百万 token 入 / 出';
+                        if (p.minute != null) return '每分钟音频';
+                        return '没公布价格';
+                    },
+                    aiPriceShort(m) {
+                        const p = (m && m.price) || {};
+                        if (p.in != null || p.out != null) return fmtUsd(p.in) + '/' + fmtUsd(p.out);
+                        if (p.minute != null) return fmtUsd(p.minute) + '/分钟';
+                        return '';
+                    },
+                    aiCost(m) {
+                        const b = m.bench; if (!b) return '';
+                        const L = [];
+                        if (b.costPer1kText != null) L.push((b.imgN ? '文字 ' : '') + fmtUsd(b.costPer1kText));
+                        if (b.costPer1kImg != null && b.imgN) L.push('截图 ' + fmtUsd(b.costPer1kImg));
+                        return L.join(' · ');
+                    },
+                    aiCaps(m) {
+                        const out = [];
+                        if (m.task === 'Text Generation') out.push(['文字', '']);
+                        if (m.vision || m.task === 'Image-to-Text') out.push(['看图', 'c-img']);
+                        if (m.task === 'Automatic Speech Recognition') out.push(['语音', 'c-asr']);
+                        if (m.reasoning) out.push(['思考', 'c-think', m.efforts.length ? '思考档位：' + m.efforts.join(' / ') : '带思考(没有档位，只能开关)']);
+                        if (!out.length && m.task) out.push([m.task, '']);
+                        return out;
+                    },
+                    // ai-find 实际怎么调它(服务器按约定的映射表算好的)
+                    aiReqText(m) {
+                        const r = m.request;
+                        if (!r || !(m.roles.includes('text') || m.roles.includes('image'))) return '';
+                        const x = r.extra || {}, L = [];
+                        if (x.reasoning_effort) L.push('思考 ' + x.reasoning_effort);
+                        else if (x.chat_template_kwargs && x.chat_template_kwargs.enable_thinking === false) L.push('关思考');
+                        else if (m.reasoning) L.push('思考默认');
+                        if (r.maxTokens) L.push('上限 ' + r.maxTokens);
+                        return L.join(' · ');
+                    },
+                    aiReqTitle(m) { const r = m.request || {}; return 'extra: ' + JSON.stringify(r.extra || {}) + '\nmax_tokens: ' + (r.maxTokens || '默认'); },
+                    aiBadges(m) {
+                        const d = this.ai.data, rec = (d && d.recommended) || {}, out = [];
+                        if (m.isNew) out.push(['新', 'b-new', '最近 7 天新出现在 Cloudflare 模型列表里']);
+                        if (rec.text === m.name) out.push(['测评推荐·文字', 'b-rec', '文字找片得分最高']);
+                        if (rec.image === m.name) out.push(['测评推荐·截图', 'b-rec', '截图找片得分最高']);
+                        if (rec.asr === m.name) out.push(['推荐·语音', 'b-rec', '']);
+                        if (rec.value === m.name) out.push(['性价比', 'b-ok', '文字分 ≥ 75 里最便宜的']);
+                        if (m.gone) out.push(['已下架', 'b-ban', '已经不在 Cloudflare 的模型列表里，选了也会被跳过']);
+                        else if (m.deprecated) out.push(['已过下架日期 ' + m.deprecation, 'b-ban', 'Cloudflare 宣布 ' + m.deprecation + ' 下架，选了也会被跳过']);
+                        else if (m.deprecation) {
+                            const dd = daysUntil(m.deprecation);
+                            out.push(dd != null && dd <= 30 ? ['下架 ' + m.deprecation.slice(5) + (dd >= 0 ? '(' + dd + ' 天后)' : ''), 'b-soon', 'Cloudflare 宣布 ' + m.deprecation + ' 下架'] : ['计划 ' + m.deprecation + ' 下架', 'b-unk', '']);
+                        }
+                        if (m.beta) out.push(['Beta', 'b-unk', 'Cloudflare 标了 Beta：可能不稳定、随时改']);
+                        if (m.paidOnly) out.push(['需付费版', 'b-paid', '只有 Workers 付费版账户能调用，免费账户会 403']);
+                        if (m.hosted === 'partner') out.push(['第三方', 'b-unk', '合作方托管：请求会经 Cloudflare 转给第三方']);
+                        const use = this.aiInUse(m.name);
+                        if (use) out.push(['在用 · ' + use, 'b-live', '实际在跑的顺序里有它']);
+                        return out;
+                    },
+                    // 在「实际在跑」的顺序里排第几(文字 主 / 截图 备1 …)
+                    aiInUse(n) {
+                        const e = (this.ai.data && this.ai.data.effective) || {}, L = [];
+                        ['text', 'image'].forEach(r => { const i = Array.isArray(e[r]) ? e[r].indexOf(n) : -1; if (i >= 0) L.push(this.aiRoleLabel(r) + (i === 0 ? '主' : '备' + i)); });
+                        if (e.asr === n) L.push('语音');
+                        return L.join(' / ');
+                    },
+                    aiCanBench(m) { return !m.gone && (m.roles.includes('text') || m.roles.includes('image')); },
+                    aiBenchState(n) {
+                        const b = this.ai.data && this.ai.data.bench; if (!b) return '';
+                        if (b.running === n) return '测评中…';
+                        return b.queue.includes(n) ? '排队中' : '';
+                    },
+                    aiCanPrimary(m, role) {
+                        if (!m.roles.includes(role) || m.gone || m.deprecated || !this.ai.data) return false;
+                        const base = this.aiBaseOf(this.ai.data);
+                        return role === 'asr' ? base.asr !== m.name : base[role][0] !== m.name;
+                    },
+                    aiToggleSel(n, on) { const s = Object.assign({}, this.ai.sel); if (on) s[n] = true; else delete s[n]; this.ai.sel = s; },
+                    aiSortBy(k) {
+                        if (this.ai.sort === k) this.ai.order = this.ai.order === 'desc' ? 'asc' : 'desc';
+                        else { this.ai.sort = k; this.ai.order = (k === 'price' || k === 'name') ? 'asc' : 'desc'; }
+                    },
+                    // 选模型的下拉：只给这个用途能用、还没选上、没下架的；按这个用途的分数排
+                    aiRoleOptions(role) {
+                        const d = this.ai.data; if (!d) return [];
+                        const cur = role === 'asr' ? [] : this.ai.draft[role];
+                        const sc = m => { const g = this.aiGradeOf(m.name, role); return g ? +g.score : -1; };
+                        return d.models.filter(m => m.roles.includes(role) && !m.gone && !cur.includes(m.name))
+                            .sort((a, b) => (sc(b) - sc(a)) || ((aiPriceKey(a) == null ? 1e9 : aiPriceKey(a)) - (aiPriceKey(b) == null ? 1e9 : aiPriceKey(b))));
+                    },
+                    aiOptLabel(m, role) {
+                        const g = this.aiGradeOf(m.name, role), dd = daysUntil(m.deprecation);
+                        return [aiShortName(m.name), role === 'asr' ? '' : (g ? g.letter + ' 级' + (m.grade && m.grade.estimated ? '(按同系列估计)' : '') : '未测评'), this.aiPriceShort(m),
+                            m.deprecated ? '已过下架日期' : (dd != null && dd <= 30 ? dd + ' 天后下架' : ''), m.paidOnly ? '需付费版' : ''].filter(Boolean).join(' · ');
+                    },
+                    // 服务器只收模型列表里有、没下架的
+                    aiSavable(n) { const m = this.aiByName[n]; return !!m && !m.gone; },
+                    aiSlotWarn(n) {
+                        const m = this.aiByName[n];
+                        if (!m) return '模型列表里没有，会被跳过';
+                        if (m.gone) return '已下架，会被跳过';
+                        if (m.deprecated) return '过了下架日期，会被跳过';
+                        const dd = daysUntil(m.deprecation);
+                        if (dd != null && dd <= 30) return dd + ' 天后下架';
+                        return '';
+                    },
+                    aiRecFor(role) {
+                        const rec = (this.ai.data && this.ai.data.recommended) || {}, out = [];
+                        if (role === 'text') { if (rec.text) out.push({ k: 'r', label: '最好', name: rec.text }); if (rec.value && rec.value !== rec.text) out.push({ k: 'v', label: '性价比', name: rec.value }); }
+                        else if (rec[role]) out.push({ k: 'r', label: '最好', name: rec[role] });
+                        return out;
+                    },
+                    // 已保存的顺序 vs 实际在跑的顺序(服务器会跳过下架/过期的，再在后面补默认兜底)
+                    aiEffNote(role) {
+                        const d = this.ai.data; if (!d) return null;
+                        const eff = d.effective[role], base = this.aiBaseOf(d)[role];
+                        const why = n => { const m = this.aiByName[n]; return !m ? '不在模型列表里' : m.gone ? '已下架' : m.deprecated ? '过了下架日期' : '暂时不可用'; };
+                        if (role === 'asr') {
+                            if (!eff || eff === base) return null;
+                            return { warn: true, chain: aiShortName(eff), why: base ? '已保存的 ' + aiShortName(base) + ' ' + why(base) + '，改用默认' : '' };
+                        }
+                        if (!Array.isArray(eff) || JSON.stringify(eff) === JSON.stringify(base)) return null;
+                        const dropped = base.filter(n => !eff.includes(n)), extra = eff.filter(n => !base.includes(n));
+                        const L = [];
+                        if (dropped.length) L.push('跳过 ' + dropped.map(n => aiShortName(n) + '(' + why(n) + ')').join('、'));
+                        if (extra.length) L.push('最后 ' + extra.length + ' 个是自动补上的默认兜底');
+                        if (!dropped.length && !extra.length) L.push('顺序和保存的不一样');
+                        return { warn: dropped.length > 0, chain: eff.length ? eff.map(aiShortName).join(' → ') : '(没有可用的模型)', why: L.join('；') };
+                    },
+                    aiMove(role, i, dir) {
+                        const l = this.ai.draft[role].slice(), j = i + dir;
+                        if (j < 0 || j >= l.length) return;
+                        const t = l[i]; l[i] = l[j]; l[j] = t;
+                        this.ai.draft[role] = l;
+                    },
+                    aiRemove(role, i) { const l = this.ai.draft[role].slice(); l.splice(i, 1); this.ai.draft[role] = l; },
+                    aiAdd(role, e) {
+                        const v = e.target.value; e.target.value = '';
+                        const r = K.AI_ROLES.find(x => x.id === role), l = this.ai.draft[role];
+                        if (v && !l.includes(v) && l.length < r.max) this.ai.draft[role] = l.concat([v]);
+                    },
+                    aiUseRec(role, n) {
+                        if (role === 'asr') { this.ai.draft.asr = n; return; }
+                        const r = K.AI_ROLES.find(x => x.id === role);
+                        this.ai.draft[role] = [n].concat(this.ai.draft[role].filter(x => x !== n)).slice(0, r.max);
+                    },
+                    aiDiscard() { if (this.ai.baseJson) this.ai.draft = JSON.parse(this.ai.baseJson); },
+                    // settings 类接口(force)保存后草稿以服务器为准；refresh / bench 不动正在编辑的草稿
+                    async aiPost(path, body, okMsg) {
+                        const d = aiNorm(await api(path, { method: 'POST', body }));
+                        this.aiApply(d, path === '/api/admin/ai/settings');
+                        if (okMsg) this.toast(okMsg, 'ok');
+                        if (Array.isArray(d.warnings)) d.warnings.slice(0, 3).forEach(w => this.toast(String(w), 'err'));   // 保存成功但有提醒(如过了下架日期)
+                        return d;
+                    },
+                    async aiSave() {
+                        const dr = this.ai.draft;
+                        if (!dr.text.length) { this.toast('文字找片至少要选一个模型', 'err'); return; }
+                        if (!dr.image.length) { this.toast('截图找片至少要选一个模型', 'err'); return; }
+                        if (!dr.asr) { this.toast('语音转文字要选一个模型', 'err'); return; }
+                        // 已下架 / 列表里没有的服务器不收 → 保存时去掉；只是过了下架日期的可以存(实际会跳过)
+                        const all = [].concat(dr.text, dr.image, [dr.asr]).filter((n, i, a) => a.indexOf(n) === i);
+                        const gone = all.filter(n => !this.aiSavable(n)), skip = all.filter(n => this.aiSavable(n) && /会被跳过/.test(this.aiSlotWarn(n)));
+                        const body = { text: dr.text.filter(this.aiSavable).slice(0, 4), image: dr.image.filter(this.aiSavable).slice(0, 3), asr: dr.asr };
+                        if (!this.aiSavable(dr.asr)) { this.toast('语音模型 ' + aiShortName(dr.asr) + ' 已下架，换一个再保存', 'err'); return; }
+                        if (!body.text.length || !body.image.length) { this.toast((body.text.length ? '截图' : '文字') + '找片去掉已下架的就没有模型了，先添加一个', 'err'); return; }
+                        if (gone.length || skip.length) {
+                            const L = [];
+                            if (gone.length) L.push('这些已下架，会从列表里去掉：\n' + gone.map(aiShortName).join('、'));
+                            if (skip.length) L.push('这些过了下架日期，实际会被跳过：\n' + skip.map(aiShortName).join('、'));
+                            const ok = await this.ask({ title: '有模型不能用', message: L.join('\n\n') + '\n\n照样保存？', ok: '保存' });
+                            if (!ok) return;
+                        }
+                        this.ai.saving = true;
+                        try { await this.aiPost('/api/admin/ai/settings', body, '已保存，下一次找片就按新顺序'); }
+                        catch (e) { if (e.code !== 'auth') this.toast('保存失败：' + e.message, 'err'); }
+                        finally { this.ai.saving = false; }
+                    },
+                    async aiReset() {
+                        const df = (this.ai.data && this.ai.data.defaults) || {};
+                        const ok = await this.ask({
+                            title: '恢复推荐',
+                            message: '清掉保存过的选择，回到默认推荐：\n文字找片：' + (df.text || []).map(aiShortName).join(' → ') + '\n截图找片：' + (df.image || []).map(aiShortName).join(' → ') + '\n语音转文字：' + aiShortName(df.asr) + (this.aiDirty ? '\n\n「正在使用」里没保存的修改也会丢掉。' : ''),
+                            ok: '恢复推荐'
+                        });
+                        if (!ok) return;
+                        this.ai.saving = true;
+                        try { await this.aiPost('/api/admin/ai/settings', { reset: true }, '已恢复默认推荐'); }
+                        catch (e) { if (e.code !== 'auth') this.toast('恢复失败：' + e.message, 'err'); }
+                        finally { this.ai.saving = false; }
+                    },
+                    // 表格里的快捷键：把它放到第一位并立刻保存(只改这一个用途)
+                    async aiSetPrimary(role, m) {
+                        const base = this.aiBaseOf(this.ai.data), r = K.AI_ROLES.find(x => x.id === role);
+                        if (role !== 'asr') base[role] = base[role].filter(this.aiSavable);   // 已下架的服务器不收，顺手去掉
+                        const val = role === 'asr' ? m.name : [m.name].concat(base[role].filter(n => n !== m.name)).slice(0, r.max);
+                        const ok = await this.ask({
+                            title: role === 'asr' ? '设为语音模型' : '设为' + r.label + '主模型',
+                            message: role === 'asr' ? '语音转文字改用「' + aiShortName(m.name) + '」？' : '把「' + aiShortName(m.name) + '」放到' + r.label + '的第一位？\n新顺序：' + val.map(aiShortName).join(' → ') + (base[role].length >= r.max && !base[role].includes(m.name) ? '\n(已满 ' + r.max + ' 个，最后一个 ' + aiShortName(base[role][r.max - 1]) + ' 会被挤掉)' : '') + (this.aiDirty ? '\n\n「正在使用」里没保存的修改会丢掉。' : ''),
+                            ok: '保存'
+                        });
+                        if (!ok) return;
+                        this.ai.saving = true;
+                        try { await this.aiPost('/api/admin/ai/settings', { [role]: val }, aiShortName(m.name) + ' 已设为' + (role === 'asr' ? '语音模型' : r.label + '主模型')); }
+                        catch (e) { if (e.code !== 'auth') this.toast('保存失败：' + e.message, 'err'); }
+                        finally { this.ai.saving = false; }
+                    },
+                    async aiRefresh() {
+                        this.ai.busy = Object.assign({}, this.ai.busy, { refresh: true });
+                        try {
+                            const before = new Set(((this.ai.data && this.ai.data.models) || []).map(m => m.name));
+                            const d = await this.aiPost('/api/admin/ai/refresh', {});
+                            const added = d.models.filter(m => !before.has(m.name)).length;
+                            if (d.catalogErr) this.toast('同步失败：' + d.catalogErr, 'err');
+                            else this.toast('模型列表已更新，共 ' + d.models.filter(m => !m.gone).length + ' 个可用' + (added ? '，新增 ' + added + ' 个' : ''), 'ok');
+                        } catch (e) {
+                            if (e.code !== 'auth') this.toast('同步失败：' + e.message, 'err');
+                        } finally { const b = Object.assign({}, this.ai.busy); delete b.refresh; this.ai.busy = b; }
+                    },
+                    async aiBench(names) {
+                        names = (names || []).filter(n => this.aiByName[n] && this.aiCanBench(this.aiByName[n]) && !this.aiBenchState(n)).slice(0, 6);
+                        if (!names.length) { this.toast('选中的模型都已经在测评队列里了', 'err'); return; }
+                        if (names.length > 1) {
+                            const ok = await this.ask({ title: '测评 ' + names.length + ' 个模型', message: names.map(aiShortName).join('、') + '\n\n按顺序一个一个跑，每个都会用掉一些今日调用次数。', ok: '开始测评' });
+                            if (!ok) return;
+                        }
+                        this.ai.busy = Object.assign({}, this.ai.busy, { bench: true });
+                        try {
+                            await this.aiPost('/api/admin/ai/bench', { names }, names.length > 1 ? '已排进测评队列：' + names.length + ' 个' : '开始测评 ' + aiShortName(names[0]));
+                            this.ai.sel = {};
+                        } catch (e) {
+                            if (e.code !== 'auth') this.toast('测评没开始：' + e.message, 'err');
+                        } finally { const b = Object.assign({}, this.ai.busy); delete b.bench; this.ai.busy = b; }
                     },
 
                     // ---------- 用户详情抽屉 ----------
@@ -2432,6 +3194,205 @@
                     };
                 }
 
+                // 🤖 AI 模型示例(形状 = GET /api/admin/ai)：评级 / 推荐 / 实际顺序按约定的公式在这里现算。
+                //    &aioff=1 模拟没配 CF_AI_*；&aierr=1 模拟同步模型列表失败。
+                //    点「测评」：排队 → 每 0.45 秒推进一题 → 出结果；需付费版的模型会失败(演练失败提示)
+                const AI_OFF = QS.get('aioff') === '1', AI_ERR = QS.get('aierr') === '1';
+                const AI_FIRST = NOW - 40 * DAY;        // 第一次同步(这一批不算「新」)
+                const AI_SEED_AT = NOW - 7 * HOUR;      // 基准测评那一轮
+                const AI_STEP = 450;
+                function aiM(name, task, desc, o, bench) {
+                    o = o || {};
+                    const b = bench ? Object.assign({ at: AI_SEED_AT, source: 'seed', textTop1: 0, textTop3: 0, textN: 0, rec: 0, imgTop1: 0, imgTop3: 0, imgN: 0, latMedian: 0, latP90: 0, costPer1kText: null, costPer1kImg: null, notes: '' }, bench) : null;
+                    return {
+                        name, task, desc, hosted: o.partner ? 'partner' : 'cloudflare', vision: !!o.vision, reasoning: !!o.reasoning, efforts: o.efforts || [], ctx: o.ctx || 0,
+                        price: { in: o.price ? o.price[0] : null, out: o.price ? o.price[1] : null, minute: o.minute != null ? o.minute : null },
+                        paidOnly: !!o.paid, beta: !!o.beta, deprecation: o.dep || '', gone: !!o.gone, first_seen: o.first || AI_FIRST,
+                        qual: o.qual != null ? o.qual : (b && b.textN ? b.textTop1 / b.textN : 0.7), bench: b
+                    };
+                }
+                const TG = 'Text Generation', ASR = 'Automatic Speech Recognition';
+                const AI_MODELS = [
+                    aiM('@cf/zai-org/glm-5.3', TG, '智谱 GLM-5.3：中文影视知识最好的一档，冷门国产剧也认得。思考只能从 low 起步。', { reasoning: true, efforts: ['low', 'medium', 'high'], ctx: 131072, price: [0.6, 2.2] },
+                        { textTop1: 24, textTop3: 25, textN: 25, rec: 0.94, latMedian: 2600, latP90: 5400, costPer1kText: 1.62, notes: '思考档最低只有 low，偶尔 5 秒以上' }),
+                    aiM('@cf/deepseek-ai/deepseek-v4.1-flash-1017', TG, 'DeepSeek V4.1 Flash：快，能看图，可以完全关掉思考。', { vision: true, reasoning: true, efforts: ['none', 'low', 'high'], ctx: 163840, price: [0.27, 1.1] },
+                        { textTop1: 21, textTop3: 23, textN: 25, rec: 0.88, imgTop1: 10, imgTop3: 11, imgN: 12, latMedian: 1300, latImg: 1450, latP90: 2900, costPer1kText: 0.48, costPer1kImg: 0.9 }),
+                    aiM('@cf/google/gemma-4-26b-a4b-it', TG, 'Gemma 4 26B(MoE，激活 4B)：便宜又快，能看图。', { vision: true, reasoning: true, ctx: 131072, price: [0.1, 0.3] },
+                        { textTop1: 18, textTop3: 21, textN: 25, rec: 0.82, imgTop1: 7, imgTop3: 9, imgN: 12, latMedian: 1100, latImg: 1700, latP90: 2300, costPer1kText: 0.09, costPer1kImg: 0.21, notes: '冷门老片常答成同名新片' }),
+                    aiM('@cf/qwen/qwen3.8-27b', TG, '通义千问 3.8 27B：长上下文，能看图，思考档位齐全。', { vision: true, reasoning: true, efforts: ['none', 'low', 'medium', 'high'], ctx: 262144, price: [0.2, 0.8] },
+                        { textTop1: 20, textTop3: 23, textN: 25, rec: 0.86, imgTop1: 8, imgTop3: 10, imgN: 12, latMedian: 1700, latImg: 2400, latP90: 3600, costPer1kText: 0.31, costPer1kImg: 0.55 }),
+                    aiM('@cf/clairic/clairic-8b', TG, 'Clairic 8B：小模型，最快最便宜。', { ctx: 32768, price: [0.05, 0.15] },
+                        { textTop1: 14, textTop3: 17, textN: 25, rec: 0.6, latMedian: 600, latP90: 1100, costPer1kText: 0.03, notes: '续集 / 翻拍分不清，常把第一季当答案；不支持思考开关' }),
+                    aiM('@cf/meta/llama-4-scout-17b-16e-instruct', TG, 'Llama 4 Scout：能看图，中文一般。', { vision: true, ctx: 131072, price: [0.27, 0.85], dep: bjDay(NOW + 14 * DAY) },
+                        { textTop1: 10, textTop3: 14, textN: 25, rec: 0.48, imgTop1: 5, imgTop3: 7, imgN: 12, latMedian: 900, latP90: 1900, costPer1kText: 0.22, costPer1kImg: 0.4, notes: '中文片名经常给英文名或拼音' }),
+                    aiM('@cf/qwen/qwen3-30b-a3b-fp8', TG, '通义千问 3 30B-A3B(FP8)。', { reasoning: true, ctx: 32768, price: [0.05, 0.34], dep: '2026-11-20', gone: true },
+                        { textTop1: 16, textTop3: 20, textN: 25, rec: 0.76, latMedian: 1800, latP90: 4200, costPer1kText: 0.12 }),
+                    aiM('@cf/mistralai/mistral-small-4-24b-instruct', TG, 'Mistral Small 4 24B：新上架，能看图。', { vision: true, ctx: 131072, price: [0.1, 0.3], beta: true, first: NOW - 2 * DAY, qual: 0.76 }),
+                    aiM('@cf/moonshotai/kimi-k2.6', TG, 'Kimi K2.6：合作方托管的大模型，只有付费版能用。', { reasoning: true, efforts: ['none', 'low', 'high'], ctx: 262144, price: [0.6, 2.5], partner: true, paid: true, first: NOW - 5 * DAY, qual: 0.9 }),
+                    aiM('@cf/llava-hf/llava-1.5-7b-hf', 'Image-to-Text', 'LLaVA 1.5 7B：只会看图说话，认片能力弱。', { beta: true, qual: 0.35 }),
+                    aiM('@cf/openai/whisper-large-v3-turbo', ASR, 'Whisper large-v3-turbo：中文识别准，速度快。', { minute: 0.00051 }),
+                    aiM('@cf/openai/whisper', ASR, '老版 Whisper：中文常出繁体 / 同音字。', { minute: 0.00045 }),
+                    aiM('@cf/deepgram/nova-3', ASR, 'Deepgram Nova-3：合作方托管，按分钟计费。', { minute: 0.0052, partner: true, paid: true })
+                ];
+                const AI_DEF = { text: ['@cf/zai-org/glm-5.3', '@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/google/gemma-4-26b-a4b-it'], image: ['@cf/deepseek-ai/deepseek-v4.1-flash-1017', '@cf/google/gemma-4-26b-a4b-it'], asr: '@cf/openai/whisper-large-v3-turbo' };
+                // 已保存的里故意带一个已下架的(qwen3-30b) → 演示「实际在跑」与保存的不一样
+                let aiSaved = { text: ['@cf/zai-org/glm-5.3', '@cf/qwen/qwen3-30b-a3b-fp8', '@cf/google/gemma-4-26b-a4b-it'], image: ['@cf/deepseek-ai/deepseek-v4.1-flash-1017'], asr: '@cf/openai/whisper-large-v3-turbo' };
+                let aiCatAt = NOW - 5 * HOUR, aiUsage = 137;
+                const aiQ = { running: null, queue: [], t0: 0, total: 0, last: null };
+                const aiSpeed = ms => !(ms > 0) || ms <= 1500 ? 1 : ms <= 3000 ? 0.95 : ms <= 6000 ? 0.85 : 0.7;
+                const aiLetter = s => s >= 90 ? 'S' : s >= 80 ? 'A' : s >= 65 ? 'B' : s >= 50 ? 'C' : 'D';
+                const aiVis = m => m.vision || m.task === 'Image-to-Text';
+                function aiGrade(m) {
+                    const b = m.bench; if (!b) return null;
+                    const r1 = x => Math.round(x * 10) / 10;
+                    const t = b.textN ? r1(100 * (0.7 * b.textTop1 / b.textN + 0.15 * b.textTop3 / b.textN + 0.15 * (b.rec || 0)) * aiSpeed(b.latMedian)) : null;
+                    const i = aiVis(m) && b.imgN ? r1(100 * (0.8 * b.imgTop1 / b.imgN + 0.2 * b.imgTop3 / b.imgN) * aiSpeed(b.latImg || b.latMedian)) : null;
+                    if (t == null && i == null) return null;
+                    const g = s => s == null ? null : { score: s, letter: aiLetter(s) };
+                    return { text: g(t), image: g(i), overall: g(Math.max(t == null ? -1 : t, i == null ? -1 : i)) };
+                }
+                function aiReq(m) {
+                    if (m.task === ASR) return null;
+                    const OVR = { 'glm-5.3': [{ reasoning_effort: 'low' }, 3000], 'deepseek-v4.1-flash-1017': [{ reasoning_effort: 'none' }, 700], 'gemma-4-26b-a4b-it': [{ chat_template_kwargs: { enable_thinking: false } }, 700] };
+                    const k = m.name.split('/').pop(), e = m.efforts || [];
+                    if (OVR[k]) return { extra: OVR[k][0], maxTokens: OVR[k][1] };
+                    if (e.includes('none')) return { extra: { reasoning_effort: 'none' }, maxTokens: 700 };
+                    if (e.includes('low')) return { extra: { reasoning_effort: 'low' }, maxTokens: 3000 };
+                    if (m.reasoning) return { extra: { chat_template_kwargs: { enable_thinking: false } }, maxTokens: 700 };
+                    return { extra: {}, maxTokens: 700 };
+                }
+                const aiPk = m => !m ? Infinity : m.price.in != null ? (m.price.in || 0) + (m.price.out || 0) : m.price.minute != null ? m.price.minute * 1000 : Infinity;
+                // 快速测评：10 道文字题(+ 能看图的 4 道截图题)，按模型的「真实水平」qual 加点随机
+                function aiQuick(m) {
+                    const vis = aiVis(m), tN = m.task === TG ? 10 : 0, iN = vis ? 4 : 0;
+                    const cl = (x, a, b) => Math.max(a, Math.min(b, x)), j = () => (rnd() - 0.5) * 0.16;
+                    const t1 = cl(Math.round((m.qual + j()) * tN), 0, tN), i1 = cl(Math.round((m.qual - 0.1 + j()) * iN), 0, iN);
+                    const lat = Math.round((m.bench && m.bench.latMedian ? m.bench.latMedian : 1500) * (0.85 + rnd() * 0.3));
+                    return {
+                        at: Date.now(), source: 'quick', textTop1: t1, textTop3: cl(t1 + ri(0, 2), 0, tN), textN: tN, rec: tN ? +cl(m.qual - 0.04 + j(), 0, 1).toFixed(2) : 0,
+                        imgTop1: i1, imgTop3: cl(i1 + ri(0, 1), 0, iN), imgN: iN, latMedian: lat, latP90: Math.round(lat * 2.1),
+                        costPer1kText: tN && m.price.in != null ? +(m.price.in * 0.9 + m.price.out * 0.3).toFixed(3) : null, costPer1kImg: iN && m.price.in != null ? +(m.price.in * 1.8 + m.price.out * 0.3).toFixed(3) : null,
+                        notes: '快速测评：' + (tN ? tN + ' 道文字题' : '') + (tN && iN ? ' + ' : '') + (iN ? iN + ' 道截图题' : '') + '，题少，只作参考'
+                    };
+                }
+                function aiTick() {
+                    for (let guard = 0; guard < 20; guard++) {
+                        const t = Date.now();
+                        if (!aiQ.running) {
+                            if (!aiQ.queue.length) return;
+                            aiQ.running = aiQ.queue.shift(); aiQ.t0 = t;
+                            const m0 = AI_MODELS.find(x => x.name === aiQ.running);
+                            aiQ.total = (m0.task === TG ? 10 : 0) + (aiVis(m0) ? 4 : 0);
+                        }
+                        const m = AI_MODELS.find(x => x.name === aiQ.running);
+                        if (m.paidOnly && t - aiQ.t0 > 1500) { aiQ.last = { name: m.name, ok: false, error: 'Cloudflare 返回 403：这个模型只有 Workers 付费版能用' }; aiUsage += 1; aiQ.running = null; continue; }
+                        if (t - aiQ.t0 < aiQ.total * AI_STEP) return;
+                        m.bench = aiQuick(m); aiUsage += aiQ.total;
+                        aiQ.last = { name: m.name, ok: true, error: '' }; aiQ.running = null;
+                    }
+                }
+                // 系列总评(和服务器 lib/ai-models/families.js 同口径,示例只放用到的几个)
+                const AI_FAMS = [
+                    [/zai-org\/glm-/, { key: 'glm', label: '智谱 GLM', tier: 1, verdict: '文字找片首选', reason: '用户记错细节的描述也能认对(补测 8/8)、中位约 1 秒;不认截图;思考关不掉要多给 token' }, { text: 88 }],
+                    [/deepseek-v[\d.]+-flash/, { key: 'deepseek-flash', label: 'DeepSeek Flash', tier: 1, verdict: '截图找片首选 · 文字备用', reason: '认截图最准(8/10)、约 1.4 秒、便宜;开思考会慢到 6~25 秒,一定要关' }, { text: 80, image: 80 }],
+                    [/google\/gemma-/, { key: 'gemma', label: 'Google Gemma', tier: 2, verdict: '便宜后备 · 免费额度', reason: '最便宜、不用付费版,免费额度能跑最多次;准确度差一档,截图常认错;适合当兜底' }, { text: 65, image: 45 }],
+                    [/\/qwen\//, { key: 'qwen', label: '通义千问 Qwen', tier: 2, verdict: '备选', reason: '中文好、能看图,但同档里偏贵、首次调用慢;旧版本下架快' }, { text: 75, image: 60 }],
+                    [/kimi|moonshot/, { key: 'kimi', label: 'Kimi', tier: 2, verdict: '备选', reason: '中文好;目录里的版本多是思考型、偏慢、要付费版' }, { text: 70 }],
+                    [/llama-/, { key: 'llama', label: 'Meta Llama', tier: 3, verdict: '不推荐', reason: '中文片名常错(英文名对、中文名配错),JSON 不稳' }, { text: 45, image: 30 }],
+                    [/mistral/, { key: 'mistral', label: 'Mistral', tier: 3, verdict: '不推荐', reason: '中文片名错得多,输出格式不稳' }, { text: 40, image: 40 }],
+                    [/clairic/, { key: 'clairic', label: 'Cloudflare Clairic', tier: 3, verdict: '不适合找片', reason: '最快,但不是聊天模型:只回一个片名,flash 版会编片名' }, null],
+                    [/whisper/, { key: 'whisper', label: 'OpenAI Whisper', tier: 1, verdict: '语音识别首选', reason: 'large-v3-turbo 中文识别准、1~4 秒、每分钟约 $0.0005' }, null],
+                    [/deepgram/, { key: 'deepgram', label: 'Deepgram', tier: 3, verdict: '暂不支持', reason: '请求格式不一样还没接;价格约是 Whisper 的 10 倍' }, null],
+                    [/llava/, { key: 'vision-small', label: '看图小模型', tier: 3, verdict: '不适合找片', reason: '只会描述图片内容,不认得是哪部片' }, null],
+                ];
+                const aiFamOf = n => AI_FAMS.find(f => f[0].test(n)) || null;
+                function aiEst(o, list) {
+                    const f = aiFamOf(o.name); if (!f) return null;
+                    let best = null;
+                    list.forEach(x => { if (x.name !== o.name && !x.gone && x.bench && aiFamOf(x.name) === f) { const g = aiGrade(x); if (g && (!best || g.overall.score > best.g.overall.score)) best = { n: x.name, g }; } });
+                    const mk = sc => sc == null ? null : { score: sc, letter: aiLetter(sc) };
+                    const t = best ? best.g.text : f[2] ? mk(f[2].text) : null, i = aiVis(o) ? (best ? best.g.image : f[2] ? mk(f[2].image) : null) : null;
+                    if (!t && !i) return null;
+                    const top = Math.max(t ? t.score : -1, i ? i.score : -1);
+                    return { text: t, image: i, overall: { score: top, letter: aiLetter(top) }, estimated: true, from: best ? best.n : '' };
+                }
+                function aiFamilies(list) {
+                    const by = {};
+                    list.forEach(m => {
+                        if (m.gone || !m.family || m.family.key === 'other') return;
+                        const f = by[m.family.key] || (by[m.family.key] = Object.assign({}, m.family, { models: [], best: null }));
+                        f.models.push(m.name);
+                        const g = m.grade && !m.grade.estimated ? m.grade.overall : null;
+                        if (g && (!f.best || g.score > f.best.score)) f.best = { name: m.name, score: g.score, letter: g.letter };
+                    });
+                    return Object.values(by).sort((a, b) => (a.tier - b.tier) || ((b.best ? b.best.score : -1) - (a.best ? a.best.score : -1)));
+                }
+                function aiList() {
+                    const today = bjDay(Date.now());
+                    return AI_MODELS.map(r => {
+                        const o = {
+                            name: r.name, task: r.task, desc: r.desc, hosted: r.hosted, vision: r.vision, reasoning: r.reasoning, efforts: r.efforts.slice(), ctx: r.ctx, price: clone(r.price),
+                            paidOnly: r.paidOnly, beta: r.beta, deprecation: r.deprecation, deprecated: !!r.deprecation && r.deprecation <= today, gone: r.gone,
+                            isNew: r.first_seen !== AI_FIRST && Date.now() - r.first_seen < 7 * DAY, bench: r.bench ? clone(r.bench) : null
+                        };
+                        o.roles = r.task === TG ? (r.vision ? ['text', 'image'] : ['text']) : r.task === 'Image-to-Text' ? ['image'] : r.task === ASR ? ['asr'] : [];
+                        o.grade = aiGrade(o); o.request = aiReq(o);
+                        const f = aiFamOf(r.name);
+                        o.family = f ? clone(f[1]) : { key: 'other', label: '其它', tier: 2, verdict: '没测过', reason: '这个系列还没测过,点「测评」看看' };
+                        return o;
+                    }).map((o, _i, all) => { if (!o.grade) o.grade = aiEst(o, all); return o; });
+                }
+                function aiOut() {
+                    aiTick();
+                    const list = aiList(), by = {}; list.forEach(m => { by[m.name] = m; });
+                    const usable = (n, role) => by[n] && !by[n].gone && !by[n].deprecated && by[n].roles.includes(role);
+                    const chain = role => {
+                        const out = [];
+                        (aiSaved[role].length ? aiSaved[role] : AI_DEF[role]).concat(AI_DEF[role]).forEach(n => { if (usable(n, role) && !out.includes(n)) out.push(n); });
+                        if (!out.length) { const f = list.find(m => usable(m.name, role)); if (f) out.push(f.name); }
+                        return out;
+                    };
+                    const live = list.filter(m => !m.gone && !m.deprecated);
+                    const best = role => { let b = null; live.forEach(m => { const g = m.grade && m.grade[role]; if (!g || !m.roles.includes(role)) return; const bs = b ? b.grade[role].score : -1; if (g.score > bs || (g.score === bs && aiPk(m) < aiPk(b))) b = m; }); return b ? b.name : null; };
+                    const val = live.filter(m => m.grade && m.grade.text && m.grade.text.score >= 75).sort((a, b) => aiPk(a) - aiPk(b))[0];
+                    return {
+                        enabled: !AI_OFF, usage: { day: bjDay(Date.now()), count: aiUsage, limit: 2000 },
+                        catalogAt: aiCatAt, catalogErr: AI_ERR ? 'Cloudflare 返回 401：令牌没有 Workers AI 读取权限' : '',
+                        settings: clone(aiSaved),
+                        effective: { text: chain('text'), image: chain('image'), asr: usable(aiSaved.asr, 'asr') ? aiSaved.asr : AI_DEF.asr },
+                        recommended: { text: best('text'), image: best('image'), value: val ? val.name : null, asr: AI_DEF.asr },
+                        defaults: clone(AI_DEF),
+                        families: aiFamilies(list),
+                        bench: { running: aiQ.running, queue: aiQ.queue.slice(), progress: aiQ.running ? { done: Math.min(aiQ.total, Math.floor((Date.now() - aiQ.t0) / AI_STEP)), total: aiQ.total } : null, last: aiQ.last ? clone(aiQ.last) : null },
+                        models: list
+                    };
+                }
+                function aiSettings(body) {
+                    if (body.reset) { aiSaved = { text: [], image: [], asr: '' }; return ok(aiOut()); }
+                    const by = {}; aiList().forEach(m => { by[m.name] = m; });
+                    const LBL = { text: '文字找片', image: '截图找片', asr: '语音转文字' }, MAX = { text: 4, image: 3 };
+                    const bad = (n, role) => !by[n] ? '没有这个模型：' + n : by[n].gone ? n + ' 已下架' : !by[n].roles.includes(role) ? n + ' 不能用于' + LBL[role] : '';
+                    const next = clone(aiSaved);
+                    for (const role of ['text', 'image']) {
+                        if (body[role] === undefined) continue;
+                        const l = body[role];
+                        if (!Array.isArray(l) || !l.length || l.length > MAX[role] || new Set(l).size !== l.length) return { status: 400, data: { error: LBL[role] + '要选 1~' + MAX[role] + ' 个不重复的模型' } };
+                        for (const n of l) { const e = bad(n, role); if (e) return { status: 400, data: { error: e } }; }
+                        next[role] = l.slice();
+                    }
+                    if (body.asr !== undefined) { const e = bad(body.asr, 'asr'); if (e) return { status: 400, data: { error: e } }; next.asr = body.asr; }
+                    aiSaved = next;
+                    return ok(aiOut());
+                }
+                function aiBenchStart(body) {
+                    aiTick();
+                    const names = Array.isArray(body.names) ? body.names.slice(0, 6) : [];
+                    const add = names.filter(n => { const m = AI_MODELS.find(x => x.name === n); return m && !m.gone && m.task !== ASR && aiQ.running !== n && !aiQ.queue.includes(n); });
+                    if (!add.length) return { status: 400, data: { error: '没有可以测评的模型(不存在 / 已下架 / 语音模型 / 已在队列里)' } };
+                    aiQ.queue.push(...add);
+                    return ok(aiOut());
+                }
+
                 async function handle(path, method, body, signal) {
                     await sleep(SLOW ? 20000 : 120 + Math.random() * 380, signal);
                     const url = new URL(path, location.origin), p = url.searchParams, route = url.pathname;
@@ -2446,12 +3407,16 @@
                         if (route === '/api/admin/shares') return ok(sharesList(p));
                         if (route === '/api/admin/requests') return ok(requestsList(p));
                         if (route === '/api/admin/title-index') return ok(tiMock());
+                        if (route === '/api/admin/ai') return ok(aiOut());
                         if (route === '/api/admin/title-index/sample') {
                             const q = String(p.get('q') || '');
                             return ok({ items: [{ vod_id: '168324', name: q + '(示例)', tname: '国产剧', t: Date.now() }, { vod_id: '115089', name: q + ' 第二季', tname: '国产剧', t: Date.now() - 86400000 }] });
                         }
                     } else if (method === 'POST') {
                         body = body || {};
+                        if (route === '/api/admin/ai/refresh') { aiCatAt = Date.now(); return ok(aiOut()); }
+                        if (route === '/api/admin/ai/settings') return aiSettings(body);
+                        if (route === '/api/admin/ai/bench') return aiBenchStart(body);
                         if (route === '/api/admin/title-index/action') {
                             const keys = body.site ? [body.site] : TI_SITES.map(s => s.key);
                             for (const k of keys) {

@@ -184,7 +184,7 @@ node server.js                       # 或 pm2 start server.js --name donggua-tv
 | `CF_AI_DAILY_LIMIT` | `3000` | 每天最多调用 Workers AI 几次（全站合计，按北京日期），防止被刷爆账单 |
 | `VOICE_DISABLE` | — | `1` = 只关语音搜索（AI 找片照常） |
 | `AI_FIND_DISABLE` | — | `1` = 只关 AI 找片。不关时（需配 `CF_AI_*`），搜索框旁 ✨ 按钮、搜不到时「让 AI 找找」、语音说一段描述，都会把剧情 / 演员 / 台词 / 截图交给 AI 给出候选，再到 TMDB 核实（编造的片名会被筛掉），点一部就在本站搜线路。文字默认 glm-5.3（约 $0.45/千次），截图用 deepseek-v4.1-flash（约 $0.22/千次） |
-| `CF_AI_FIND_MODEL` | — | 换 AI 找片的文字主模型（填 Workers AI 模型名，如 `@cf/deepseek-ai/deepseek-v4.1-flash-1017`）；主模型下架或不可用时会自动换备用 |
+| `CF_AI_FIND_MODEL` | — | 换 AI 找片的默认文字主模型（填 Workers AI 模型名，如 `@cf/deepseek-ai/deepseek-v4.1-flash-1017`）；主模型下架或不可用时会自动换备用。站长后台「AI 模型」页选了模型就以后台为准 |
 | `CORS_PROXY_URL` | — | Cloudflare Worker CORS 代理，**边缘去广告与直播都靠它**。可逗号分隔多个，第一个是主代理，故障时前端自动换备用 |
 | `TMDB_PROXY_URL` | — | TMDB 反代。图片与搜索翻译设了就用；`/api/tmdb-proxy` 按访客 IP 判断大陆才走 |
 | `SERVER_IN_CHINA` | — | 设 `true`：服务器自己发起的 TMDB 请求（分享卡片、预览、SEO 页、sitemap）强制走反代 |
@@ -429,6 +429,11 @@ DPlayer + hls.js（打过补丁，修正 Chrome 长时间播放后声音变低�
   - 按状态分栏计数，可搜索、按"最多人想看"排序，同一部片多人求会显示"N 人想看"；
   - 处理时可用常用回复模板，支持批量处理。
 - **分享**：每条分享的渠道、带来的打开次数（去重）、打开来源、带来的登录。
+- **AI 模型**（配了 `CF_AI_*` 才有）：
+  - 每天同步一次 Cloudflare Workers AI 的模型目录（只看文字生成 / 看图 / 语音转文字），标出新上的、已下架的、过了计划下架日期的，以及价格、是否认图、是否要 Workers Paid；
+  - 每个模型有测评评级（S/A/B/C/D，准确率 × 速度：文字题看排第一和前三的命中、推荐题看给的是不是真的同类片，截图题只测认图的模型），并给出文字 / 截图 / 语音的推荐模型和一个「性价比」之选。底分是 2026-11-26 的实测；
+  - 可以手动排 AI 找片的文字模型（最多 4 个）、截图模型（最多 3 个）和语音识别模型，改完马上生效；选的模型下架或过期会自动跳过，后面补上默认模型兜底；
+  - 「快速测评」用线上同一套提示词跑 10 条文字 + 1 条推荐 + 6 张截图（一个模型约 17 次调用，不到 1 美分，计入 `CF_AI_DAILY_LIMIT`），一次跑一个、最多排 6 个。没有 SQLite 时设置和测评只存在内存里，重启就没了。
 
 **观看时长是实测的**：
 
@@ -539,6 +544,7 @@ cp /opt/dongguaTV/db.json /root/backup/
 | `node scripts/danmaku-offset-test.mjs` | 弹幕时间映射与手动偏移（插播累计、不重复扣已剪的段、换集清零、存储上限） |
 | `node scripts/danmaku-auto-test.mjs` | 弹幕按集自动校正（众数聚类、判定、音频两个锚点、来源缺失不启用、让路与中止、本机记录；两个后端的来源字段） |
 | `node scripts/user-stats-test.mjs` | 观看与分享统计、站长后台接口 |
+| `node scripts/ai-models-test.mjs` | 后台「AI 模型」：目录同步与下架标记、生效模型与兜底、设置校验、评级、快速测评、AI 找片 / 语音现取模型 |
 | `node scripts/watch-meter-test.mjs` | 播放页观看计时（只在真的在播时计、离线合并补发） |
 | `node scripts/history-sync-test.mjs` | 观看历史增量同步（只推变化的、瘦身、双设备端到端） |
 | `node scripts/favorites-test.mjs` | 收藏接口、上限、后台更新检查（模拟采集站，确认不拉 m3u8） |
