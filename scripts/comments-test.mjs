@@ -3,6 +3,9 @@
 //  ② lib/comments(SQLite 内存库):登录闸门(非同步账号/封禁)、跨线路同一集、时间原样、HTML 转义、长度、屏蔽词/网址/联系方式、
 //     限速/每日上限/10 分钟同话、reviewText(hold 只作者可见 / reject / 抛错与超时放行)、封禁后别人看不到;
 //     评论 发/回复(一层)/点赞开关/举报 3 次自动收起/最新最热/删自己的;评论区弹幕页;站长 列表/筛选/隐藏/恢复/删除/屏蔽词
+//  ②b AI 审核(createAiReviewer + 假 Workers AI):ok / hold / block 映射、回答解析、超时 / 出错 / 额度 / 看不懂 → 放行、
+//     10 分钟缓存(超时晚到的答案也记)、同时来的合并、≤3 字和单字重复不问、每分钟 / 每天上限、站长选的模型现取、
+//     接进 createComments(block 拒收不进库、hold 存原因给后台看、屏蔽词先拦不问 AI)、老库补 review_note 列、server.js 接线
 //  ③ 路由:express 真 HTTP —— /api/udanmaku/v3/ GET 是 DPlayer v3 格式、POST 回 code;配了访问密码时读要令牌
 import { createRequire } from 'module';
 import path from 'path';
@@ -15,7 +18,7 @@ const dep = (m) => { try { return require(path.join(ROOT, 'node_modules', m)); }
 const Database = dep('better-sqlite3');
 const express = dep('express');
 const K = require(path.join(ROOT, 'public/libs/js/ucomm-key.js'));
-const { createComments, normMatch, hasLink } = require(path.join(ROOT, 'lib/comments'));
+const { createComments, normMatch, hasLink, createAiReviewer, parseVerdict, REVIEW_SYS, REVIEW_MODEL } = require(path.join(ROOT, 'lib/comments'));
 
 let pass = 0, fail = 0;
 const ok = (c, msg, extra) => { if (c) pass++; else { fail++; console.log('  ✗ ' + msg + (extra !== undefined ? '  ->  ' + JSON.stringify(extra).slice(0, 400) : '')); } };
@@ -152,6 +155,170 @@ const ID = (title, ep, n) => encodeURIComponent(title + '|' + ep + '|v5|k:tv|y:2
     ok(r.ok && r.held && r.item.hidden, '评论 hold');
     ok(cr.listComments(K.showKey('剧C'), TOK.d, 'new', 1).total === 0 && cr.listComments(K.showKey('剧C'), TOK.a, 'new', 1).total === 1, '评论 hold 只作者可见');
     ok(seen.includes('danmaku') && seen.includes('comment'), 'review ctx.kind');
+}
+
+// ---------------- ②b AI 审核 ----------------
+{
+    // 回答解析
+    const C = (s) => ({ choices: [{ message: { content: s } }] });
+    let v = parseVerdict({ response: '{"verdict":"block","reason":"赌博"}' });
+    ok(v && v.action === 'reject' && v.reason === '赌博', '老式 response 字段 + block → reject', v);
+    v = parseVerdict(C('hold'));
+    ok(v && v.action === 'hold' && v.reason === '拿不准', '只回一个词也认;hold 没给原因 → 拿不准', v);
+    v = parseVerdict({ response: { verdict: 'OK' } });
+    ok(v && v.action === 'allow' && v.reason === '', 'response 是对象 / 大小写', v);
+    v = parseVerdict(C('<think>要不要 block 呢</think>\n```json\n{"verdict":"ok"}\n```'));
+    ok(v && v.action === 'allow', '去掉 <think> 和 ``` 围栏', v);
+    ok(parseVerdict(C('{"verdict":"ok 或 hold 或 block"}')) === null && parseVerdict(C('我觉得还行')) === null && parseVerdict(null) === null, '照抄模板 / 不是 JSON / 空 → 看不懂(null)');
+    ok(parseVerdict(C('{"verdict":"block","reason":"' + '很长的原因'.repeat(20) + '"}')).reason.length === 30, '原因截到 30 字');
+
+    let clock = Date.UTC(2026, 10, 26, 4, 0);
+    const runs = [];
+    const reply = (o) => C(typeof o === 'string' ? o : JSON.stringify(o));
+    const fakeAi = {
+        run: async (model, body, ro) => {
+            runs.push({ model, body, ro });
+            const m = /<<<([\s\S]*)>>>$/.exec(body.messages[1].content), text = m ? m[1] : '';
+            if (text.includes('广告')) return reply({ verdict: 'block', reason: '广告引流' });
+            if (text.includes('骂人')) return reply('```json\n{"verdict":"hold","reason":"人身攻击"}\n```');
+            if (text.includes('超时')) { await sleep(150); return reply({ verdict: 'block', reason: '晚到' }); }
+            if (text.includes('炸了')) throw Object.assign(new Error('HTTP 500'), { status: 500 });
+            if (text.includes('额度')) throw Object.assign(new Error('今天的 AI 调用次数用完了'), { code: 'quota' });
+            if (text.includes('乱答')) return reply('我觉得还行吧');
+            if (text.includes('同时')) await sleep(20);
+            return reply({ verdict: 'ok', reason: '' });
+        }
+    };
+    let on = true;
+    const logs = [];
+    const G47 = '@cf/zai-org/glm-4.7-flash';
+    let model = () => ({ id: G47, extra: { chat_template_kwargs: { enable_thinking: false } }, maxTokens: 700 });
+    const R = createAiReviewer({ ai: fakeAi, model: () => model(), enabled: () => on, now: () => clock, log: (m) => logs.push(m), opts: { timeoutMs: 60 } });
+    const ctx = { kind: 'danmaku', title: '剧F', token: TOK.a };
+    let r = await R.review('这集真好看啊', ctx);
+    ok(r.action === 'allow' && runs.length === 1, 'ok → allow', r);
+    const b = runs[0].body;
+    ok(runs[0].model === G47 && b.messages[0].content === REVIEW_SYS && b.messages[1].content === '弹幕(剧:《剧F》):\n<<<这集真好看啊>>>' && b.temperature === 0 && b.max_tokens === 200
+        && b.chat_template_kwargs.enable_thinking === false && runs[0].ro.timeoutMs === 60, '请求:站长选的模型 + 它的调用参数、审核提示词、内容放 <<< >>> 里、不思考的给 200 token、4 秒级超时', { model: runs[0].model, b, ro: runs[0].ro });
+    ok(/广告引流/.test(REVIEW_SYS) && /剧透/.test(REVIEW_SYS) && /"verdict"/.test(REVIEW_SYS), '提示词:要 JSON、列了 block 的几类、剧透算 ok');
+    r = await R.review('看广告领红包', ctx);
+    ok(r.action === 'reject' && r.reason === '广告引流', 'block → reject + 原因', r);
+    r = await R.review('你这个骂人的家伙', { kind: 'comment', title: '剧F', token: TOK.b });
+    ok(r.action === 'hold' && r.reason === '人身攻击' && /^评论\(剧:《剧F》\):/.test(runs[runs.length - 1].body.messages[1].content), 'hold(带 ``` 围栏)→ hold + 原因', r);
+    const n0 = runs.length;
+    for (const t of ['回答乱答的', '服务器炸了吗', '额度没了吗']) ok((await R.review(t, ctx)).action === 'allow', '放行:' + t);
+    ok(runs.length === n0 + 3 && R.status().today.failed === 3, '看不懂 / 出错 / 额度用完 → 放行、记失败', R.status().today);
+    ok(logs.some(m => /放行/.test(m)), '失败会记日志', logs);
+    // 超时:先放行;晚到的答案进缓存,下一条同样的话直接用(不再问)
+    const t0 = Date.now();
+    r = await R.review('这条会超时', ctx);
+    ok(r.action === 'allow' && Date.now() - t0 < 140 && R.status().today.failed === 4, '超时 → 放行(不等 AI)', [r, Date.now() - t0]);
+    await sleep(200);
+    const n1 = runs.length;
+    r = await R.review('这条会超时', ctx);
+    ok(r.action === 'reject' && r.reason === '晚到' && runs.length === n1, '超时后晚到的答案也记进缓存', r);
+    // 缓存:10 分钟内同样的话只问一次;同时来的合并成一次
+    r = await R.review('这集真好看啊', ctx);
+    ok(r.action === 'allow' && runs.length === n1, '缓存命中不再问');
+    r = await R.review('看广告领红包', ctx);
+    ok(r.action === 'reject' && runs.length === n1, '缓存里的 block 也照样拒收');
+    const [x1, x2] = await Promise.all([R.review('两条同时来的', ctx), R.review('两条同时来的', ctx)]);
+    ok(x1.action === 'allow' && x2.action === 'allow' && runs.length === n1 + 1, '同时来的同一句只问一次', runs.length - n1);
+    clock += 10 * 60e3 + 1;
+    await R.review('这集真好看啊', ctx);
+    ok(runs.length === n1 + 2, '过了 10 分钟再问一次');
+    // 太短 / 单字重复不问
+    const n2 = runs.length, sk0 = R.status().today.skipped;
+    for (const t of ['好看啊', '哈哈哈哈哈哈', '6 6 6 6 6', '  ', '前方']) ok((await R.review(t, ctx)).action === 'allow', '不问:' + JSON.stringify(t));
+    ok(runs.length === n2 && R.status().today.skipped === sk0 + 5, '≤3 字、同一个字重复的不送 AI', R.status().today);
+    await R.review('前方高能', ctx);
+    ok(runs.length === n2 + 1, '4 个字就问');
+    // 关着(没配 Workers AI)→ 不问
+    on = false;
+    ok((await R.review('看广告领红包啊', ctx)).action === 'allow' && runs.length === n2 + 1 && R.status().enabled === false, '关着:全部放行、不调用');
+    on = true;
+    // 模型现取:字符串 / 思考型给够 token / 取不到 → 内置 gemma-4
+    model = () => '@cf/qwen/qwen3.8-27b';
+    await R.review('换个模型试试', ctx);
+    let last = runs[runs.length - 1];
+    ok(last.model === '@cf/qwen/qwen3.8-27b' && last.body.max_tokens === 200 && !('chat_template_kwargs' in last.body), '模型名字符串也行');
+    model = () => ({ id: '@cf/zai-org/glm-5.3', extra: { reasoning_effort: 'low' }, maxTokens: 3000 });
+    await R.review('思考型模型试试', ctx);
+    last = runs[runs.length - 1];
+    ok(last.model === '@cf/zai-org/glm-5.3' && last.body.reasoning_effort === 'low' && last.body.max_tokens === 3000, '思考关不掉的模型按它的 maxTokens 给');
+    model = () => { throw new Error('x'); };
+    await R.review('取模型出错了', ctx);
+    last = runs[runs.length - 1];
+    ok(last.model === REVIEW_MODEL && REVIEW_MODEL === '@cf/google/gemma-4-26b-a4b-it' && last.body.chat_template_kwargs.enable_thinking === false, '取模型出错 → 内置 gemma-4(关思考)');
+    model = () => ({ id: '../evil' });
+    await R.review('模型名不对呢', ctx);
+    ok(runs[runs.length - 1].model === REVIEW_MODEL && R.status().model === REVIEW_MODEL, '模型名不对 → 内置 gemma-4');
+    // 状态
+    const s = R.status();
+    // block 3 次 = 广告(问)+ 超时晚到的(缓存)+ 广告(缓存):用缓存的也算、也进「最近拒收」
+    ok(s.enabled && s.perMinute === 120 && s.dailyMax === 0 && s.today.block === 3 && s.today.hold === 1 && s.today.failed === 4 && s.today.asked === runs.length, '状态:今天问了几次、各判了多少', s.today);
+    ok(s.recent.length === 3 && s.recent[0].text === '看广告领红包' && s.recent[0].reason === '广告引流' && s.recent[0].token === TOK.a && s.recent[0].kind === 'danmaku' && s.recent[1].text === '这条会超时'
+        && s.recent.every(x => x.reason !== '人身攻击'), '最近拒收的,新的在前(hold 的不在这,在库里)', s.recent);
+    clock += 86400e3;
+    ok(R.status().today.asked === 0 && R.status().today.day !== s.today.day, '过了北京日期计数清零');
+
+    // 每分钟上限 / 每天上限:超了直接放行,不问
+    const R2 = createAiReviewer({ ai: fakeAi, now: () => clock, opts: { perMinute: 3 } });
+    const m0 = runs.length;
+    for (const t of ['第一条评论', '第二条评论', '第三条评论', '第四条评论']) ok((await R2.review(t, {})).action === 'allow', '限流:' + t);
+    ok(runs.length === m0 + 3 && R2.status().today.throttled === 1, '每分钟最多 3 次,第 4 条直接放行', R2.status().today);
+    await R2.review('第一条评论', {});
+    ok(runs.length === m0 + 3, '缓存命中不占名额');
+    clock += 60e3;
+    await R2.review('第五条评论', {});
+    ok(runs.length === m0 + 4, '过了一分钟又能问');
+    const R3 = createAiReviewer({ ai: fakeAi, now: () => clock, opts: { dailyMax: 2 } });
+    for (const t of ['每天一号', '每天二号', '每天三号']) await R3.review(t, {});
+    ok(runs.length === m0 + 6 && R3.status().today.throttled === 1, '每天最多 2 次');
+    clock += 86400e3;
+    await R3.review('每天三号', {});
+    ok(runs.length === m0 + 7, '第二天又能问');
+
+    // 接进 createComments
+    const d = mkDb();
+    const R4 = createAiReviewer({ ai: fakeAi, now: () => clock });
+    const c = mk(d, { reviewText: (t, x) => R4.review(t, x), reviewStatus: () => R4.status() });
+    r = await c.postDanmaku({ token: TOK.a, id: ID('剧F', '第1集'), time: 3, text: '看广告领红包' });
+    ok(r.error === 'review' && /没通过审核/.test(r.msg) && d.prepare('SELECT COUNT(*) n FROM uc_danmaku').get().n === 0, 'AI block → 拒收,不进库', r);
+    r = await c.postComment({ token: TOK.b, title: '剧F', text: '楼上就是骂人的' });
+    ok(r.ok && r.held && r.item.hidden, 'AI hold → 收下只给作者看', r);
+    ok(c.listComments(K.showKey('剧F'), TOK.c, 'new', 1).total === 0, '别人看不到 hold 的');
+    let ad = c.adminList({ kind: 'c', filter: 'hidden' });
+    ok(ad.items.length === 1 && ad.items[0].status === 3 && ad.items[0].review === '人身攻击', '后台:hold 的带 AI 给的原因', ad.items[0]);
+    ok(ad.review && ad.review.enabled && ad.review.recent.length === 1 && ad.review.recent[0].reason === '广告引流' && ad.review.recent[0].who === 'id:' + TOK.a.slice(0, 10)
+        && ad.review.recent[0].nick.startsWith('观众') && ad.review.recent[0].banned === false, '后台:AI 审核状态 + 最近拒收的(带作者是谁)', ad.review);
+    r = await c.postDanmaku({ token: TOK.a, id: ID('剧F', '第1集'), time: 4, text: '这集真好看啊' });
+    ok(r.ok && !r.held && c.adminList({ kind: 'd' }).items[0].review === '', 'AI ok → 照常发,没有原因');
+    const n3 = runs.length;
+    r = await c.postDanmaku({ token: TOK.a, id: ID('剧F', '第1集'), time: 5, text: '加 微 信 一起看' });
+    ok(r.error === 'word' && runs.length === n3, '屏蔽词先拦下,不送 AI');
+    c.adminAction({ kind: 'c', id: ad.items[0].id, action: 'show' });
+    ok(c.listComments(K.showKey('剧F'), TOK.c, 'new', 1).total === 1 && c.adminList({ kind: 'c' }).items[0].review === '人身攻击', '站长恢复后大家都看得到,原因留着');
+    ok(mk(mkDb()).adminList({ kind: 'c' }).review === null, '没接审核状态 → review: null');
+    // 老库(没有 review_note 列)→ 自动补上
+    const od = mkDb();
+    mk(od).enabled();
+    od.exec('ALTER TABLE uc_danmaku DROP COLUMN review_note; ALTER TABLE uc_comments DROP COLUMN review_note;');
+    od.prepare("INSERT INTO uc_comments (show_key, title, text, user_token, created_at) VALUES (?, '剧G', '老评论', ?, ?)").run(K.showKey('剧G'), TOK.a, Date.now());
+    const oc = mk(od, { reviewText: async () => ({ action: 'hold', reason: '测试' }) });
+    r = await oc.postComment({ token: TOK.c, title: '剧G', text: '新评论' });
+    const cols = od.prepare('PRAGMA table_info(uc_comments)').all().map(x => x.name);
+    ok(r.ok && r.held && cols.includes('review_note') && od.prepare('PRAGMA table_info(uc_danmaku)').all().some(x => x.name === 'review_note'), '老库自动补 review_note 列', cols);
+    ok(oc.adminList({ kind: 'c' }).items.map(x => x.review).join() === '测试,', '老评论原因为空、新的有');
+
+    // server.js 接线
+    const SERVER = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8').split('\r\n').join('\n');
+    ok(/let commentReviewer = null;\nasync function reviewText\(text, ctx\) \{ return commentReviewer \? commentReviewer\.review\(text, ctx\) : \{ action: 'allow' \}; \}/.test(SERVER), 'server.js:reviewText 交给 commentReviewer,没有就放行');
+    ok(/const COMMENT_AI_REVIEW = String\(process\.env\.COMMENT_AI_REVIEW \?\? ''\)\.trim\(\) === '' \|\| envFlag\('COMMENT_AI_REVIEW'\);/.test(SERVER) && /if \(comments && cfAi\.enabled\(\) && COMMENT_AI_REVIEW\) \{/.test(SERVER), 'server.js:配了 Workers AI 默认开,COMMENT_AI_REVIEW=0 关');
+    ok(/createAiReviewer\(\{\n\s+ai: cfAi,\n\s+model: \(\) => \(aiModels \? aiModels\.reviewCall\(\) : null\),/.test(SERVER) && /reviewStatus: \(\) => commentReviewer \? commentReviewer\.status\(\)/.test(SERVER), 'server.js:模型从后台现取、状态给后台');
+    const envFlag = (v) => { v = String(v ?? '').trim().toLowerCase(); return v !== '' && v !== '0' && v !== 'false' && v !== 'no' && v !== 'off'; };
+    const on2 = (v) => String(v ?? '').trim() === '' || envFlag(v);
+    ok(on2(undefined) && on2('') && on2('1') && on2('true') && !on2('0') && !on2('false') && !on2('off'), 'COMMENT_AI_REVIEW:不填 = 开、0/false/off = 关');
 }
 
 // 评论

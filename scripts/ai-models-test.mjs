@@ -9,6 +9,8 @@
 //  ⑥ 快速测评:同一套提示词、打分、截图取图、延迟 / 花费、排队一个一个跑、进度、出错
 //  ⑦ lib/ai-find / lib/cf-ai 每次请求现取模型(后台改了不用重启)
 //  ⑧ server.js 接线
+//  ⑨ 系列总评 + 新版本按同系列估计
+//  ⑩ 评论审核模型(review):默认 gemma-4 → glm-4.7-flash → 文字分 ≥ 60 里最便宜的;任何聊天模型都能选;存库 / 重启 / reset
 // 改 lib/ai-models、lib/ai-find 的模型参数、或后台 AI 接口后必跑。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -368,6 +370,47 @@ console.log('⑨ 系列总评 + 新版本按同系列估计');
     const fg = fam.find((f) => f.key === 'glm');
     ok(fg.best && fg.best.name === GLM && fg.best.letter === 'S' && fg.models.includes(NEW_GLM), '系列里列出成员和实测最好的那个');
     delete RAW[NEW_GLM]; delete RAW[NEW_QWEN]; delete RAW[KIMI];
+}
+
+console.log('⑩ 评论审核模型');
+{
+    ok(DEFAULT_IDS.GLM47 === G47, 'glm-4.7-flash 是审核的后备');
+    catalogNames = Object.keys(RAW);
+    const rdb = new Database(':memory:');
+    const R = mk(rdb);
+    ok(R.state().effective.review === GEMMA && R.reviewModel() === GEMMA && R.state().defaults.review === GEMMA && R.state().settings.review === '', '还没同步:默认 gemma-4');
+    await R.refresh();
+    let s = R.state();
+    ok(s.effective.review === GEMMA && s.recommended.review === GEMMA, '推荐:文字分 ≥ 60 里最便宜的(gemma-4 72 分 $0.03/千次)', s.recommended);
+    const call = R.reviewCall();
+    ok(call.id === GEMMA && call.extra.chat_template_kwargs.enable_thinking === false && call.maxTokens === 700, 'reviewCall() 带调用参数(和 textModels 同形)', call);
+    const err = (p) => { try { R.saveSettings(p); return ''; } catch (e) { return e.status + ' ' + e.message; } };
+    R.saveSettings({ review: G47 });
+    ok(R.reviewModel() === G47 && R.state().settings.review === G47 && R.reviewCall().extra.chat_template_kwargs.enable_thinking === false, '站长选 glm-4.7-flash,马上生效');
+    R.saveSettings({ review: SEA });
+    ok(R.reviewModel() === SEA && R.state().effective.text.join() === [GLM, DS, GEMMA].join(), '任何聊天模型都能审(不认图的也行),不影响找片');
+    ok(/^400 .*不能用来评论审核/.test(err({ review: CLAIRIC })) && /^400 .*不能用来评论审核/.test(err({ review: WHISPER })) && /^400 .*不能用来评论审核/.test(err({ review: LLAVA })), '非聊天模型 / 语音 / 只会看图的不能审');
+    ok(/^400 .*模型名不对/.test(err({ review: '../x' })) && /^400 .*不在 Cloudflare/.test(err({ review: '@cf/no/such' })) && R.state().settings.review === SEA, '名字不对 / 目录里没有 → 拒绝,不改');
+    ok(mk(rdb).reviewModel() === SEA && mk(rdb).state().settings.review === SEA, '重启后从库里读回');
+    // 选的下架 → gemma-4;gemma 也没了 → glm-4.7-flash;都没了 → 文字分 ≥ 60 里最便宜的
+    catalogNames = Object.keys(RAW).filter((n) => n !== SEA);
+    await R.refresh();
+    ok(R.reviewModel() === GEMMA, '选的下架了 → 默认 gemma-4');
+    catalogNames = Object.keys(RAW).filter((n) => n !== SEA && n !== GEMMA);
+    await R.refresh();
+    ok(R.reviewModel() === G47 && R.state().recommended.review === G47, 'gemma-4 也没了 → glm-4.7-flash(推荐跟着变:69 分 $0.09)', R.state().recommended);
+    catalogNames = Object.keys(RAW).filter((n) => ![SEA, GEMMA, G47].includes(n));
+    await R.refresh();
+    ok(R.reviewModel() === DS && R.reviewCall().extra.reasoning_effort === 'none', '都没了 → 文字分 ≥ 60 里最便宜的(deepseek 92 分 $0.14)');
+    catalogNames = Object.keys(RAW);
+    await R.refresh();
+    ok(R.reviewModel() === SEA, '回来了 → 又用站长选的');
+    R.saveSettings({ review: '' });
+    ok(R.reviewModel() === GEMMA && R.state().settings.review === '', '传空 = 用默认');
+    R.saveSettings({ review: SEA });
+    R.saveSettings({ reset: true });
+    ok(R.state().settings.review === '' && R.reviewModel() === GEMMA, 'reset 也清掉评论审核');
+    ok(/reviewModel: \(\) => effective\(\)\.review/.test(fs.readFileSync(path.join(ROOT, 'lib/ai-models/index.js'), 'utf8')), '每次现取(后台改了下一条评论就用新的)');
 }
 
 console.log(fail ? `\nFAILED: ${pass} passed, ${fail} failed` : `\nALL PASSED: ${pass} passed, 0 failed`);

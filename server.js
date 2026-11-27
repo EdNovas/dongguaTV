@@ -1103,9 +1103,12 @@ try {
 //    (播放器经 danmaku.addition 取 /api/udanmaku/v3/,和平台弹幕合进一个列表);站长后台「评论」页隐藏 / 删除 / 封作者 / 改屏蔽词。
 //    需 CACHE_TYPE=sqlite(否则 /api/config.comments_enabled=false,前端整块不显示);COMMENTS_DISABLE=1 关。
 // 🤖 审核钩子:每条评论 / 弹幕过了屏蔽词之后调一次 reviewText(text, ctx) —— 回 { action:'allow' } 照常发、'reject' 拒收(提示没通过审核)、
-//    'hold' 收下但只给作者自己看(站长后台「已隐藏」里能看到、恢复)。超过 4 秒或出错一律放行。
-//    ctx = { kind:'comment'|'reply'|'danmaku', token, title, ep }。现在是空桩(全部放行),之后接 Cloudflare Workers AI。
-async function reviewText(text, ctx) { return { action: 'allow' }; }   // eslint-disable-line no-unused-vars
+//    'hold' 收下但只给作者自己看(站长后台「已隐藏」里能看到原因、恢复)。超过 4 秒或出错一律放行。
+//    ctx = { kind:'comment'|'reply'|'danmaku', token, title, ep }。
+//    配了 Workers AI 就交给 AI 审(lib/comments createAiReviewer,在下面 Workers AI 一节建好):模型在后台「AI 模型」页「评论审核」选,
+//    默认 gemma-4(最便宜)。COMMENT_AI_REVIEW=0 关(只剩屏蔽词);COMMENT_AI_DAILY_LIMIT 每天最多审几条(默认 CF_AI_DAILY_LIMIT 的一半)。
+let commentReviewer = null;
+async function reviewText(text, ctx) { return commentReviewer ? commentReviewer.review(text, ctx) : { action: 'allow' }; }
 const COMMENTS_ENABLED = !envFlag('COMMENTS_DISABLE');
 let comments = null;
 try {
@@ -1118,7 +1121,9 @@ try {
             isBanned: (token) => isBanned(token),
             adminAuthed: (req) => adminAuthed(req),
             identity: (token, label) => userIdentity(token, label),
-            reviewText: (text, ctx) => reviewText(text, ctx)
+            reviewText: (text, ctx) => reviewText(text, ctx),
+            reviewStatus: () => commentReviewer ? commentReviewer.status()
+                : { enabled: false, why: !cfAi.enabled() ? '没配 Workers AI(CF_AI_ACCOUNT_ID / CF_AI_TOKEN)' : !COMMENT_AI_REVIEW ? 'COMMENT_AI_REVIEW=0 关了' : 'AI 审核模块没加载' }
         });
         comments.registerRoutes(app);
     }
@@ -1202,6 +1207,21 @@ if (cfAi.enabled()) {
         });
         aiModels.start();   // 启动 60s 后同步一次模型目录,之后每 24 小时(读库推到下一轮事件循环,避开 REQ_DB_OK 的 TDZ)
     } catch (e) { console.warn('[AiModels] 模块加载失败,AI 找片 / 语音用内置默认模型:', e.message); aiModels = null; }
+}
+// 💬 评论 / 弹幕 AI 审核(钩子见上面「评论 + 用户弹幕」一节):配了 Workers AI 默认开,COMMENT_AI_REVIEW=0 关。
+//    出错 / 超时(4 秒)/ 额度用完 / 每分钟超过 120 条一律放行;同样的话 10 分钟内只问一次;≤ 3 个字的不问。
+//    每天最多审 COMMENT_AI_DAILY_LIMIT 条(默认 CF_AI_DAILY_LIMIT 的一半),给 AI 找片 / 语音留额度
+const COMMENT_AI_REVIEW = String(process.env.COMMENT_AI_REVIEW ?? '').trim() === '' || envFlag('COMMENT_AI_REVIEW');
+if (comments && cfAi.enabled() && COMMENT_AI_REVIEW) {
+    try {
+        commentReviewer = require('./lib/comments').createAiReviewer({
+            ai: cfAi,
+            model: () => (aiModels ? aiModels.reviewCall() : null),   // 后台改了下一条就用新的;没 aiModels → 内置 gemma-4
+            enabled: () => cfAi.enabled(),
+            log: (...a) => console.warn('[CommentAI]', ...a),
+            opts: { dailyMax: Number(process.env.COMMENT_AI_DAILY_LIMIT) > 0 ? Math.floor(Number(process.env.COMMENT_AI_DAILY_LIMIT)) : Math.max(1, Math.floor(cfAi.usage().limit / 2)) },
+        });
+    } catch (e) { console.warn('[CommentAI] 模块加载失败,评论只过屏蔽词:', e.message); commentReviewer = null; }
 }
 const VOICE_ENABLED = cfAi.enabled() && !envFlag('VOICE_DISABLE');
 // 需要登录的站只给登录了的人用(按 /api/auth/check 同一条规则:配了 ACCESS_PASSWORD 才要登录)
