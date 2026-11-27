@@ -5541,6 +5541,39 @@
         .sh-dr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(54px, 1fr)); gap: 8px; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 4px; }
         .sh-dr-grid button { height: 40px; border: 1px solid transparent; border-radius: calc(8px * var(--radius-k)); background: rgba(var(--fg-rgb), .08); color: var(--text-3); font-size: 14px; cursor: pointer; }
         .sh-dr-grid button.on { background: var(--accent); color: var(--on-accent); }
+        /* 🖱️ 电脑(鼠标)上:根上 .sh-desk(组件按 (hover: hover) and (pointer: fine) 挂,电视 / 手机没有)。不自动清屏;
+           视频那一列右边一列按钮(收藏 / 选集 / 分享 / 设置 / 完整播放),页面右边缘上一部 / 下一部,底下一条播放条(播放 · 时间 | 倍速 · 静音 · 清屏 · 全屏),
+           进度细条贴在播放条上面。「清屏」(根上 .sh-clean-on)把这些都收起来,只剩右下角「退出清屏」 */
+        .shorts-page.sh-desk .sh-info { bottom: 74px; }
+        .shorts-page.sh-desk .sh-side { bottom: 84px; }
+        .shorts-page.sh-desk .sh-top-mute { display: none; }   /* 静音在下面的播放条上 */
+        .shorts-page.sh-desk > .sh-prog { left: 50%; right: auto; width: min(620px, 100%); bottom: 44px; transform: translateX(-50%); }
+        .shorts-page.sh-desk .sh-scrub { bottom: 118px; }
+        @media (min-width: 960px) {
+            .shorts-page.sh-desk .sh-info { right: 14px; }
+            .shorts-page.sh-desk .sh-side { right: -84px; bottom: 74px; }   /* 宽屏:按钮列放到视频那一列外面 */
+        }
+        .sh-dk-shade { position: absolute; left: 0; right: 0; bottom: 0; height: 160px; background: linear-gradient(to top, rgba(0, 0, 0, .62), rgba(0, 0, 0, .28) 50%, transparent); pointer-events: none; }
+        .sh-dk-bar { position: absolute; left: 50%; bottom: 0; z-index: 3; width: min(620px, 100%); height: 50px; padding: 0 8px 6px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; color: #fff; }
+        .sh-dk-sp { flex: 1; }
+        .sh-dk-btn { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 38px; padding: 0 9px; border: 0; border-radius: calc(19px * var(--radius-k)); background: none; color: #fff; font-size: 16px; cursor: pointer; transition: background .15s, color .15s; }
+        .sh-dk-btn.on { color: var(--sh-acc); }
+        .sh-dk-time { margin-left: 4px; font-size: 13px; color: rgba(255, 255, 255, .86); font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .sh-dk-rate { min-width: 50px; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+        .sh-dk-ratew { position: relative; flex: none; }
+        .sh-dk-rates { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%); display: flex; flex-direction: column-reverse; gap: 2px; padding: 6px; border-radius: calc(12px * var(--radius-k)); background: rgba(22, 22, 24, .95); box-shadow: 0 6px 24px rgba(0, 0, 0, .45); }
+        .sh-dk-rates button { width: 66px; height: 30px; border: 0; border-radius: calc(8px * var(--radius-k)); background: none; color: rgba(255, 255, 255, .88); font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; }
+        .sh-dk-rates button.on { background: rgba(var(--sh-acc-rgb), .9); color: var(--sh-on-acc); }
+        .sh-dk-nav { position: absolute; right: 24px; top: 50%; z-index: 3; transform: translateY(-50%); display: flex; flex-direction: column; gap: 14px; }
+        .sh-dk-nav button { width: 46px; height: 46px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, .1); color: #fff; font-size: 17px; cursor: pointer; transition: background .15s, opacity .15s; }
+        .sh-dk-nav button:disabled { opacity: .25; cursor: default; }
+        @media (max-width: 779px) { .sh-dk-nav { display: none; } }   /* 窄窗口会压到按钮列上;滚轮 / ↑↓ 照样换 */
+        .sh-dk-unclean { position: absolute; right: 20px; bottom: 20px; z-index: 3; display: flex; align-items: center; gap: 6px; padding: 7px 14px; border: 0; border-radius: calc(16px * var(--radius-k)); background: rgba(0, 0, 0, .5); color: rgba(255, 255, 255, .88); font-size: 13px; cursor: pointer; opacity: .7; transition: opacity .15s, background .15s; }
+        @media (hover: hover) {
+            .sh-dk-btn:hover, .sh-dk-rates button:not(.on):hover, .sh-dk-nav button:not(:disabled):hover { background: rgba(255, 255, 255, .16); }
+            .sh-dk-unclean:hover { opacity: 1; background: rgba(0, 0, 0, .7); }
+        }
+        .shorts-page.sh-clean-on .sh-info, .shorts-page.sh-clean-on .sh-side, .shorts-page.sh-clean-on .sh-top, .shorts-page.sh-clean-on > .sh-prog { visibility: hidden; opacity: 0; pointer-events: none; }
         /* 🎨 各风格的小差别(颜色本身都走变量) */
         html[data-tone="light"] .sh-note { background: rgba(var(--bg-rgb), .94); color: var(--text-1); }
         html[data-style="mono"] .sh-btn.on i { background: var(--sh-acc); color: var(--sh-on-acc); }   /* 已收藏 = 白底黑心(白心和平时分不出) */
@@ -5557,6 +5590,8 @@
         html[data-style="neon"] .sh-err { border: 1px solid rgba(var(--neon-cyan-rgb), .3); }
         html[data-style="neon"] .sh-dr-lines button.on { box-shadow: 0 0 10px rgba(var(--accent-rgb), .55); }
         html[data-style="neon"] .sh-dr-grid button.on { box-shadow: 0 0 14px rgba(var(--neon-cyan-rgb), .7); }
+        html[data-style="neon"] .sh-dk-rates button.on { box-shadow: 0 0 10px rgba(var(--accent-rgb), .55); }
+        html[data-style="neon"] .sh-dk-rates { border: 1px solid rgba(var(--neon-cyan-rgb), .3); }
         html[data-style="film"] .sh-chip { font-family: var(--font-type); }
         html[data-style="film"] .sh-drawer { border-top: 1px solid rgba(var(--accent-rgb), .3); }
         html[data-style="magazine"] .sh-drawer { border-top: 3px solid var(--accent); }
@@ -7764,10 +7799,11 @@
             <div class="sh-mv sh-vl" :class="{ ready: vReady }">
                 <video ref="v" playsinline webkit-playsinline x5-playsinline preload="auto"></video>
             </div>
+            <div class="sh-dk-shade" v-if="desk && !clean && !pm" aria-hidden="true"></div>
             <div class="sh-mv sh-fg">
                 <div v-for="s in slides" :key="s.key" class="sh-slide" :style="{ top: (s.off * 100) + '%' }">
                     <div class="sh-inner" v-if="s.it">
-                        <div class="sh-info" :class="{ dim: s.off === 0 && !infoOn }">
+                        <div class="sh-info" :class="{ dim: s.off === 0 && !infoOn && !desk }">
                             <div class="sh-title">{{ s.it.title }}</div>
                             <div class="sh-meta">
                                 <span class="sh-ep">第 {{ (s.off === 0 ? epIdx : startEpOf(s.it)) + 1 }} 集 / 共 {{ s.off === 0 ? curEps.length : epCountOf(s.it) }} 集</span>
@@ -7775,13 +7811,17 @@
                             </div>
                             <div class="sh-blurb" v-if="s.it.blurb">{{ s.it.blurb }}</div>
                         </div>
-                        <!-- 右侧按钮只给电视遥控器(没法长按);手机 / 电脑是清屏竖屏,设置都在长按出来的播放器页里 -->
-                        <div class="sh-side" v-if="s.off === 0 && $root.isTVMode">
-                            <button type="button" class="sh-btn" @click.stop="drawer = true" aria-label="选集"><i class="fas fa-list-ol" aria-hidden="true"></i><span>选集</span></button>
-                            <button v-if="favOk" type="button" class="sh-btn" :class="{ on: favOn }" @click.stop="fav()" :aria-label="favOn ? '取消收藏' : '收藏'">
+                        <!-- 右侧按钮给电视遥控器(没法长按)和电脑(鼠标,desk);手机是清屏竖屏,设置都在长按出来的播放器页里。
+                             电脑上的顺序:收藏 / 选集 / 分享 / 设置(= 播放器页)/ 完整播放;电视上的顺序照旧(选集在最上面,遥控器右键先落到它) -->
+                        <div class="sh-side" v-if="s.off === 0 && ($root.isTVMode || desk)">
+                            <button v-if="favOk && desk" type="button" class="sh-btn sh-b-fav" :class="{ on: favOn }" @click.stop="fav()" :aria-label="favOn ? '取消收藏' : '收藏'">
                                 <i class="fas fa-heart" aria-hidden="true"></i><span>{{ favOn ? '已收藏' : '收藏' }}</span></button>
-                            <button type="button" class="sh-btn" @click.stop="share()" aria-label="分享"><i class="fas fa-share" aria-hidden="true"></i><span>分享</span></button>
-                            <button type="button" class="sh-btn" @click.stop="full()" aria-label="完整播放"><i class="fas fa-up-right-and-down-left-from-center" aria-hidden="true"></i><span>完整播放</span></button>
+                            <button type="button" class="sh-btn sh-b-eps" @click.stop="drawer = true" aria-label="选集"><i class="fas fa-list-ol" aria-hidden="true"></i><span>选集</span></button>
+                            <button v-if="favOk && !desk" type="button" class="sh-btn sh-b-fav" :class="{ on: favOn }" @click.stop="fav()" :aria-label="favOn ? '取消收藏' : '收藏'">
+                                <i class="fas fa-heart" aria-hidden="true"></i><span>{{ favOn ? '已收藏' : '收藏' }}</span></button>
+                            <button type="button" class="sh-btn sh-b-share" @click.stop="share()" aria-label="分享"><i class="fas fa-share" aria-hidden="true"></i><span>分享</span></button>
+                            <button v-if="desk" type="button" class="sh-btn sh-b-set" @click.stop="pmOpen()" aria-label="设置" title="倍速 · 线路 · 选集(P)"><i class="fas fa-sliders" aria-hidden="true"></i><span>设置</span></button>
+                            <button type="button" class="sh-btn sh-b-full" @click.stop="full()" aria-label="完整播放"><i class="fas fa-up-right-and-down-left-from-center" aria-hidden="true"></i><span>完整播放</span></button>
                         </div>
                     </div>
                     <div class="sh-inner sh-empty" v-else-if="s.i >= items.length">
@@ -7792,12 +7832,12 @@
             </div>
             <div class="sh-top">
                 <button type="button" class="sh-ibtn" @click.stop="back()" aria-label="返回"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
-                <button type="button" class="sh-ibtn" @click.stop="toggleMute()" :aria-label="muted ? '打开声音' : '静音'">
+                <button type="button" class="sh-ibtn sh-top-mute" @click.stop="toggleMute()" :aria-label="muted ? '打开声音' : '静音'">
                     <i :class="['fas', muted ? 'fa-volume-xmark' : 'fa-volume-high']" aria-hidden="true"></i></button>
             </div>
             <div class="sh-note" v-if="note">{{ note }}</div>
             <button type="button" class="sh-unmute" v-if="needTap" @click.stop="toggleMute()"><i class="fas fa-volume-xmark" aria-hidden="true"></i> 点一下打开声音</button>
-            <div class="sh-speed" v-if="holdRate || lockRate" :class="{ locked: !holdRate }" @pointerdown.stop @click.stop="holdRate || unlockRate()"
+            <div class="sh-speed" v-if="speedOn" :class="{ locked: !holdRate }" @pointerdown.stop @click.stop="holdRate || unlockRate()"
                 :role="holdRate ? null : 'button'" :aria-label="holdRate ? null : '恢复正常速度'">
                 <i :class="['fas', (!holdRate || holdLocked) ? 'fa-lock' : 'fa-forward']" aria-hidden="true"></i>
                 <b>{{ rateText(holdRate || lockRate) }}</b>
@@ -7814,6 +7854,28 @@
             </div>
             <div class="sh-prog" ref="prog" :class="{ scrub: !!scrub && !pm }" @click.stop @pointerdown.stop="scrubDown($event, 'prog')" @pointermove="scrubMove" @pointerup="scrubUp" @pointercancel="scrubUp" aria-hidden="true"><i ref="bar"></i><b ref="knob"></b></div>
             <div class="sh-scrub" v-if="scrub && !pm"><b>{{ scrub.t }}</b> / {{ scrub.d }}</div>
+            <!-- 🖱️ 电脑(鼠标)上才有:右边缘上一部 / 下一部、底下播放条(播放 · 时间 | 倍速 · 静音 · 清屏 · 全屏);清屏时只剩右下角「退出清屏」 -->
+            <template v-if="desk && !pm">
+                <div class="sh-dk-nav" v-if="!clean">
+                    <button type="button" class="sh-arw-up" @click.stop="go(-1)" :disabled="idx <= 0" aria-label="上一部" title="上一部(↑)"><i class="fas fa-chevron-up" aria-hidden="true"></i></button>
+                    <button type="button" class="sh-arw-dn" @click.stop="go(1)" :disabled="done && idx >= items.length - 1" aria-label="下一部" title="下一部(↓)"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                </div>
+                <div class="sh-dk-bar" v-if="!clean" @click.stop>
+                    <button type="button" class="sh-dk-btn sh-dk-play" @click.stop="togglePause()" :aria-label="paused ? '播放' : '暂停'" :title="paused ? '播放(空格)' : '暂停(空格)'"><i :class="['fas', paused ? 'fa-play' : 'fa-pause']" aria-hidden="true"></i></button>
+                    <span class="sh-dk-time">{{ pmTime || '00:00 / --:--' }}</span>
+                    <span class="sh-dk-sp"></span>
+                    <span class="sh-dk-ratew">
+                        <button type="button" class="sh-dk-btn sh-dk-rate" :class="{ on: !!lockRate }" @click.stop="rateOpen = !rateOpen" aria-label="倍速" title="倍速" :aria-expanded="rateOpen ? 'true' : 'false'">{{ rateText(lockRate || 1) }}</button>
+                        <span class="sh-dk-rates" v-if="rateOpen" role="menu" aria-label="倍速">
+                            <button v-for="r in pmRates" :key="r" type="button" role="menuitemradio" :aria-checked="(lockRate || 1) === r ? 'true' : 'false'" :class="{ on: (lockRate || 1) === r }" @click.stop="setRate(r); rateOpen = false">{{ rateText(r) }}</button>
+                        </span>
+                    </span>
+                    <button type="button" class="sh-dk-btn sh-dk-mute" @click.stop="toggleMute()" :aria-label="muted ? '打开声音' : '静音'" :title="muted ? '打开声音(M)' : '静音(M)'"><i :class="['fas', muted ? 'fa-volume-xmark' : 'fa-volume-high']" aria-hidden="true"></i></button>
+                    <button type="button" class="sh-dk-btn sh-dk-clean" @click.stop="toggleClean()" aria-label="清屏" title="清屏(C)"><i class="fas fa-eye-slash" aria-hidden="true"></i></button>
+                    <button type="button" class="sh-dk-btn sh-dk-fs" @click.stop="toggleFs()" :aria-label="fsOn ? '退出全屏' : '全屏'" :title="fsOn ? '退出全屏' : '全屏'"><i :class="['fas', fsOn ? 'fa-compress' : 'fa-expand']" aria-hidden="true"></i></button>
+                </div>
+                <button type="button" class="sh-dk-unclean" v-else @click.stop="toggleClean()" title="退出清屏(C)"><i class="fas fa-eye" aria-hidden="true"></i>退出清屏</button>
+            </template>
             <!-- 长按画面中间出来的「播放器页」:视频缩进上面(电脑上在左边)的播放框里接着放,下面(右边)是进度、倍速、线路、选集、收藏分享完整播放 -->
             <div class="sh-pm" v-if="pm && cur" @pointerdown.stop>
                 <div class="sh-pm-head">
@@ -10653,7 +10715,9 @@
                     // holdRate:按住时的倍速(0 = 没按住);holdLocked:按住时已上滑到锁定;lockRate:锁定的倍速(0 = 正常速度)
                     // scrub:拖进度条时显示的 { t, d };pm:长按出来的播放器页开着;pmTime:播放器页上的「当前 / 总时长」
                     // infoOn:片名那块露着(每集开头露 3 秒、暂停时露,其余时间清屏)
-                    coverOn: true, holdRate: 0, holdLocked: false, lockRate: 0, scrub: null, pm: false, pmTime: '', infoOn: true };
+                    // deskMq:鼠标设备((hover: hover) and (pointer: fine),变了跟着变);clean:电脑上点了「清屏」;rateOpen:播放条倍速小菜单开着;fsOn:浏览器全屏中
+                    coverOn: true, holdRate: 0, holdLocked: false, lockRate: 0, scrub: null, pm: false, pmTime: '', infoOn: true,
+                    deskMq: !!(window.matchMedia && window.matchMedia('(hover: hover) and (pointer: fine)').matches), clean: false, rateOpen: false, fsOn: false };
             },
             computed: {
                 cur() { return this.items[this.idx] || null; },
@@ -10670,8 +10734,11 @@
                     const r = this.$root;
                     return !!(this.cur && r.favoritesEnabled && r._favFind({ name: this.cur.title, sources: this.curSrcs }));
                 },
-                speedOn() { return !!(this.holdRate || this.lockRate); },
+                // 顶上的倍速提示条:按住时 / 锁定了倍速时;电脑上锁定的倍速看播放条上的倍速按钮(亮主色),不再多一条
+                speedOn() { return !!(this.holdRate || (this.lockRate && !this.desk)); },
                 pmRates() { return DG_SHORTS_PM_RATES; },
+                // 🖱️ 电脑(鼠标)上:不自动清屏 + 右侧按钮列 + 上下一部 + 底部播放条(电视有自己的遥控器那一套,手机是长按 / 清屏那一套)
+                desk() { return this.deskMq && !this.$root.isTVMode; },
             },
             watch: {
                 note(v) { clearTimeout(this._noteT); if (v) this._noteT = setTimeout(() => { this.note = ''; }, v.length > 14 ? 4200 : 2600); },
@@ -10680,6 +10747,8 @@
                 paused(v) { if (v) { clearTimeout(this._infoT); this.infoOn = true; } else this._flashInfo(2500); },
                 speedOn(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-has-speed', !!v); },
                 scrub(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-scrubbing', !!v); },
+                desk(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-desk', !!v); if (v) this._updPmTime(); else { this.clean = false; this.rateOpen = false; } },
+                clean(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-clean-on', !!v); if (v) this.rateOpen = false; },
             },
             mounted() {
                 this._s = { tok: 0, hls: null, cur: null, drag: null, anim: false, navigating: false, wd: 0, ld: 0, triage: 0, lpT: 0, scrub: null,
@@ -10690,11 +10759,23 @@
                 this._onVisFn = () => { if (document.hidden) this._save(); };
                 document.addEventListener('visibilitychange', this._onVisFn);
                 try { this.$refs.page.focus({ preventScroll: true }); } catch (e) { }
-                // 头两次打开:提示一下手势(竖屏刷默认清屏,不提示不知道设置在哪)
+                // 鼠标设备(电脑):根上挂 .sh-desk;插拔鼠标 / 平板接触控板时跟着变
+                if (this.desk) this.$refs.page.classList.add('sh-desk');
+                if (window.matchMedia) {
+                    const mq = window.matchMedia('(hover: hover) and (pointer: fine)'), fn = () => { this.deskMq = mq.matches; };
+                    if (mq.addEventListener) { mq.addEventListener('change', fn); this._s.unbind.push(() => mq.removeEventListener('change', fn)); }
+                    else if (mq.addListener) { mq.addListener(fn); this._s.unbind.push(() => mq.removeListener(fn)); }
+                }
+                const onFs = () => { this.fsOn = !!(document.fullscreenElement || document.webkitFullscreenElement); };
+                ['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => { document.addEventListener(ev, onFs); this._s.unbind.push(() => document.removeEventListener(ev, onFs)); });
+                onFs();
+                // 头两次打开:提示一下手势(竖屏刷默认清屏,不提示不知道设置在哪);电脑上提示的是滚轮 / 键盘和右侧「设置」(单独记次数)
                 if (!this.$root.isTVMode) {
                     try {
-                        const n = +localStorage.getItem('donggua_shorts_tip') || 0;
-                        if (n < 2) { localStorage.setItem('donggua_shorts_tip', String(n + 1)); this._tipT = setTimeout(() => { if (!this._dead && !this.pm) this.note = '长按画面：播放器和设置 · 按住两侧：2 倍速'; }, 2500); }
+                        const key = this.desk ? 'donggua_shorts_tip_pc' : 'donggua_shorts_tip';
+                        const tip = this.desk ? '滚轮 / ↑↓ 换一部 · 空格暂停 · 右侧「设置」有倍速和选集' : '长按画面：播放器和设置 · 按住两侧：2 倍速';
+                        const n = +localStorage.getItem(key) || 0;
+                        if (n < 2) { localStorage.setItem(key, String(n + 1)); this._tipT = setTimeout(() => { if (!this._dead && !this.pm) this.note = tip; }, 2500); }
                     } catch (e) { }
                 }
                 const M = window.DgShortsMem;
@@ -10727,6 +10808,8 @@
                 S.unbind.forEach(f => { try { f(); } catch (e) { } });
                 window.removeEventListener('keydown', this._onKeyFn, true);
                 document.removeEventListener('visibilitychange', this._onVisFn);
+                // 播放条上点的全屏:关页(含「完整播放」)时退出来
+                if (S.fsMine && (document.fullscreenElement || document.webkitFullscreenElement)) { try { (document.exitFullscreen || document.webkitExitFullscreen).call(document); } catch (e) { } }
                 window.DgShortsMem.idx = this.idx;
                 this._dead = true;
             },
@@ -10968,6 +11051,7 @@
                     this.vReady = false; this.err = ''; this.paused = false; this.loading = false; this._setLoading(true);
                     if (this.$refs.bar) this.$refs.bar.style.transform = 'scaleX(0)';
                     this._drawBar(0);
+                    if (this.desk) this.pmTime = '00:00 / --:--';
                     clearTimeout(this._infoT); this.infoOn = true;
                     v.muted = this.muted;
                     if (native) {
@@ -11023,6 +11107,7 @@
                     const S = this._s, c = S.cur, v = this.$refs.v;
                     if (!c || c.tok !== S.tok) return;
                     c.manifestOk = true;
+                    if (this.desk) this._updPmTime();
                     if (!c.seekTo) return;
                     const t = this._toPlay(c.seekTo);
                     c.seekTo = 0;
@@ -11032,7 +11117,7 @@
                     const S = this._s, c = S.cur, v = this.$refs.v;
                     if (!c || c.tok !== S.tok) return;
                     const d = v.duration;
-                    if (!S.scrub && isFinite(d) && d > 0) { this._drawBar(v.currentTime / d); if (this.pm) this._updPmTime(); }   // 正在拖进度条:条跟着手指,不跟视频
+                    if (!S.scrub && isFinite(d) && d > 0) { this._drawBar(v.currentTime / d); if (this.pm || this.desk) this._updPmTime(); }   // 正在拖进度条:条跟着手指,不跟视频
                     const now = Date.now();
                     if (S.lastTU && !v.paused) { const dt = (now - S.lastTU) / 1000; if (dt > 0 && dt < 2) S.watched += dt; }
                     S.lastTU = now;
@@ -11193,7 +11278,7 @@
                 go(dir) {
                     const S = this._s, page = this.$refs.page;
                     if (S.anim || !page) return;
-                    this.drawer = false;
+                    this.drawer = false; this.rateOpen = false;
                     let to = this.idx + dir;
                     if (to >= 0 && to < this.items.length) {
                         const g = this._nextGood(to, dir);
@@ -11235,7 +11320,7 @@
                 onDown(e) {
                     const S = this._s;
                     if (S.anim || this.drawer || this.pm || (e.button != null && e.button > 0)) return;
-                    if (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-prog, .sh-speed, .sh-pm')) return;
+                    if (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-prog, .sh-speed, .sh-pm, .sh-side, .sh-dk-nav, .sh-dk-bar, .sh-dk-unclean')) return;
                     S.drag = { id: e.pointerId, y0: e.clientY, x0: e.clientX, cx: e.clientX, cy: e.clientY, dy: 0, moved: false, lastY: e.clientY, lastT: performance.now(), vy: 0, hold: null };
                     // 按住不动(不在按钮上):两侧(左右各 1/4)约 0.4 秒 → 倍速;中间约 0.45 秒 → 播放器页(设置都在里面)。先动了就是翻页
                     clearTimeout(S.lpT);
@@ -11256,7 +11341,7 @@
                 },
                 pmOpen() {
                     if (!this.cur) return;
-                    this.drawer = false; this.holdRate = 0; this.holdLocked = false;
+                    this.drawer = false; this.holdRate = 0; this.holdLocked = false; this.rateOpen = false;
                     this.pm = true;
                 },
                 pmClose() { this.pm = false; try { this.$refs.page.focus({ preventScroll: true }); } catch (e) { } },
@@ -11350,7 +11435,8 @@
                 onTap(e) {
                     const S = this._s;
                     if (Date.now() - S.clickBlock < 400) return;
-                    if (e.target && e.target.closest && e.target.closest('button, a, .sh-drawer-mask, .sh-prog, .sh-speed, .sh-pm')) return;
+                    if (e.target && e.target.closest && e.target.closest('button, a, .sh-drawer-mask, .sh-prog, .sh-speed, .sh-pm, .sh-dk-bar, .sh-dk-nav')) return;
+                    if (this.rateOpen) { this.rateOpen = false; return; }   // 倍速小菜单开着:点画面先收起菜单(不暂停)
                     if (this.needTap) { this.toggleMute(); return; }
                     this.togglePause();
                 },
@@ -11409,13 +11495,13 @@
                     S.clickBlock = Date.now();
                     if (e.type !== 'pointercancel' && v && isFinite(v.duration) && v.duration > 0) { try { v.currentTime = Math.min(v.duration - 0.3, sc.p * v.duration); } catch (x) { } }
                     else if (v && isFinite(v.duration) && v.duration > 0) this._drawBar(v.currentTime / v.duration);
-                    if (this.pm) this._updPmTime();
+                    if (this.pm || this.desk) this._updPmTime();
                 },
                 _scrubShow() {
                     const S = this._s, v = this.$refs.v, d = v.duration;
                     this._drawBar(S.scrub.p);
                     this.scrub = { t: this._fmt(S.scrub.p * d), d: this._fmt(d) };
-                    if (this.pm) this._updPmTime();
+                    if (this.pm || this.desk) this._updPmTime();
                 },
                 onKey(e) {
                     if (e.defaultPrevented || this._dead) return;
@@ -11440,12 +11526,29 @@
                     else if (k === 'ArrowRight' || k === 'ArrowLeft') { stop(); const v = this.$refs.v; if (v && isFinite(v.duration)) { try { v.currentTime = Math.max(0, Math.min(v.duration - 0.5, v.currentTime + (k === 'ArrowRight' ? 5 : -5))); } catch (x) { } } }
                     else if (k === ' ' || k === 'Enter' || k === 'k' || k === 'MediaPlayPause') { stop(); this.togglePause(); }
                     else if (k === 'm') { stop(); this.toggleMute(); }
+                    else if ((k === 'c' || k === 'C') && this.desk && !this.pm && !e.ctrlKey && !e.metaKey && !e.altKey) { stop(); this.toggleClean(); }
                 },
-                // 返回:选集面板开着先关面板,播放器页开着先回竖屏刷,否则关掉整页(根应用 closeShorts:退掉压的那条历史)
+                // 返回:选集面板开着先关面板,播放器页开着先回竖屏刷,(电脑)倍速小菜单 / 清屏先收起,否则关掉整页(根应用 closeShorts:退掉压的那条历史)
                 back() {
                     if (this.drawer) { this.drawer = false; return; }
                     if (this.pm) { this.pmClose(); return; }
+                    if (this.rateOpen) { this.rateOpen = false; return; }
+                    if (this.clean) { this.clean = false; return; }
                     this.$emit('close');
+                },
+                // ---------- 🖱️ 电脑上的播放条:清屏 / 全屏 ----------
+                toggleClean() { this.clean = !this.clean; },
+                // 全屏整个网页(不只这一层:「链接已复制」这类提示、收藏的小卡片都在这一层外面,只全屏这一层就看不到了)
+                toggleFs() {
+                    const d = document, el = d.documentElement;
+                    try {
+                        if (d.fullscreenElement || d.webkitFullscreenElement) { (d.exitFullscreen || d.webkitExitFullscreen).call(d); return; }
+                        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+                        if (!req) { this.note = '这个浏览器不支持全屏'; return; }
+                        this._s.fsMine = true;
+                        const p = req.call(el);
+                        if (p && p.catch) p.catch(() => { this._s.fsMine = false; });
+                    } catch (e) { }
                 },
                 pickEp(i) {
                     this.drawer = false;
