@@ -16765,6 +16765,10 @@
         // 📅 追剧日历的分类(顺序 = 分类标签顺序)与日期加减(YYYY-MM-DD,按 UTC 算不受本机时区影响)
         const CAL_CATS = [['tv', '电视剧'], ['anime', '动漫'], ['variety', '综艺'], ['movie', '电影'], ['doc', '纪录片'], ['short', '短剧']];
         const calAddDays = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 864e5).toISOString().slice(0, 10);
+        // 📅 追剧日历按浏览器所在时区分天(海外用户的「今天」不是北京的今天);拿不到就不传 = 服务器按北京时间
+        const CAL_TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (e) { return ''; } })();
+        // 再带上此刻真实的 UTC 偏移:服务器的时区库跟浏览器不一致时(比如卑诗省改全年 UTC-7)按浏览器的算
+        const calTzQ = () => (CAL_TZ ? '&tz=' + encodeURIComponent(CAL_TZ) : '') + '&tzo=' + (-new Date().getTimezoneOffset());
         // 首页固定榜单(rowConfigs 里除随机盲盒以外的键,顺序 = 默认顺序)。rowConfigs 加 / 删榜单要同步改这里
         const HOME_ROW_KEYS = ['movieRow', 'tvRow', 'cnRow', 'usRow', 'krjpRow', 'animeRow', 'scifiRow', 'actionRow', 'comedyRow', 'crimeRow', 'romanceRow', 'familyRow', 'docRow', 'warRow', 'horrorRow', 'mysteryRow', 'fantasyRow', 'varietyRow', 'historyRow'];
 
@@ -22379,7 +22383,7 @@
                     c.loading = true;
                     try {
                         const get = async (d) => {
-                            const r = await fetch('/api/calendar?limit=24' + (d ? '&day=' + encodeURIComponent(d) : ''));
+                            const r = await fetch('/api/calendar?limit=24' + calTzQ() + (d ? '&day=' + encodeURIComponent(d) : ''));
                             if (!r.ok) throw new Error('HTTP ' + r.status);
                             return r.json();
                         };
@@ -22440,7 +22444,7 @@
                     if (m.loading || m.done) return;
                     m.loading = true; m.err = false;
                     try {
-                        const r = await fetch('/api/calendar/list?day=' + encodeURIComponent(this.cal.day) + '&cat=' + encodeURIComponent(this.cal.cat) + '&offset=' + m.items.length + '&limit=30');
+                        const r = await fetch('/api/calendar/list?day=' + encodeURIComponent(this.cal.day) + '&cat=' + encodeURIComponent(this.cal.cat) + '&offset=' + m.items.length + '&limit=30' + calTzQ());
                         const j = await r.json();
                         if (m.key !== key) return;
                         const have = new Set(m.items.map(x => x.title));
@@ -22465,11 +22469,11 @@
                 },
                 // 左上角标:资源站头一回更新 = 新上;TMDB 排期里的第 1 集 = 首播 / 新季
                 calBadge(it) { return it.isNew ? '新上' : (it.plan && it.tag) || ''; },
-                // 卡片第二行:更新时间(北京时间)· 地区;还没更新的写「待播」(TMDB 排期)/「预计更新」(按前两周规律猜的)
+                // 卡片第二行:更新时间(本机时区,跟日期分天一致)· 地区;还没更新的写「待播」(TMDB 排期)/「预计更新」(按前两周规律猜的)
                 calSub(it) {
                     const parts = [];
                     if (it.plan) parts.push(it.plan === 'guess' ? '预计更新' : '待播');
-                    if (it.t) { const d = new Date(it.t + 8 * 3600e3); parts.push(String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0')); }
+                    if (it.t) { const d = new Date(it.t); parts.push(String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0')); }
                     if (it.area) parts.push(String(it.area).split(/[,，/ ]/)[0]);
                     return parts.join(' · ');
                 },
