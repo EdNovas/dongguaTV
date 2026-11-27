@@ -5428,7 +5428,8 @@
         .sh-btn:active i { transform: scale(.9); }
         .sh-btn.on i { color: var(--sh-acc); }
         .sh-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; color: #aaa; font-size: 14px; }
-        .sh-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 24px; background: linear-gradient(rgba(0, 0, 0, .5), transparent); pointer-events: none; }
+        .sh-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 24px; pointer-events: none; }
+        .sh-top .sh-ibtn { opacity: .75; }
         @supports (top: max(1px, 2px)) {
             .sh-top { padding-top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px), calc(var(--dg-sb-guard, 0px) + 6px)); }
         }
@@ -5466,12 +5467,47 @@
         .sh-speed span { color: rgba(255, 255, 255, .75); }
         .sh-speed.locked { pointer-events: auto; cursor: pointer; }
         .shorts-page.sh-has-speed .sh-note { top: 116px; }
-        /* 清屏:字、按钮、顶栏、进度条都藏起来只剩画面;右下角留一个淡淡的小按钮退出 */
+        /* 竖屏刷默认就是清屏:片名一集开头露 3 秒就淡掉(暂停时回来),顶上只剩返回和声音两个半透明小按钮 */
         .sh-fg, .sh-top { transition: opacity .2s; }
-        .shorts-page.sh-clean .sh-fg, .shorts-page.sh-clean .sh-top, .shorts-page.sh-clean .sh-prog { opacity: 0; pointer-events: none; }
-        .shorts-page.sh-clean .sh-fg *, .shorts-page.sh-clean .sh-top > * { pointer-events: none; }
-        .sh-unclean { position: absolute; right: 14px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 4; width: 40px; height: 40px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .38); color: rgba(255, 255, 255, .8); font-size: 16px; opacity: .55; cursor: pointer; }
-        .sh-unclean:hover, .sh-unclean:focus-visible { opacity: 1; }
+        .sh-info { transition: opacity .35s; }
+        .sh-info.dim { opacity: 0; pointer-events: none; }
+        /* 长按出来的播放器页(.sh-pm):手机上视频缩到上面 40vh 的播放框,下面是设置;宽屏电脑上视频在左,设置面板在右 420px。永远深色 */
+        .sh-vl { transition: top .25s ease, bottom .25s ease, height .25s ease, right .25s ease; }
+        .shorts-page.sh-pm-on .sh-vl { top: calc(52px + env(safe-area-inset-top, 0px)); bottom: auto; height: 40vh; transform: none; }
+        .shorts-page.sh-pm-on .sh-bg, .shorts-page.sh-pm-on .sh-fg, .shorts-page.sh-pm-on .sh-top, .shorts-page.sh-pm-on > .sh-prog, .shorts-page.sh-pm-on .sh-speed, .shorts-page.sh-pm-on > .sh-center { display: none; }
+        .sh-pm { position: absolute; inset: 0; z-index: 5; pointer-events: none; color: #fff; }
+        .sh-pm > * { pointer-events: auto; }
+        .sh-pm-head { position: absolute; left: 0; right: 0; top: 0; height: calc(52px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 8px 0; display: flex; align-items: center; gap: 8px; background: #000; }
+        .sh-pm-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+        .sh-pm-t b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--font-display); font-size: 15px; }
+        .sh-pm-t span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: rgba(255, 255, 255, .6); }
+        .sh-pm-video { position: absolute; left: 0; right: 0; top: calc(52px + env(safe-area-inset-top, 0px)); height: 40vh; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .sh-pmp { position: absolute; left: 0; right: 0; top: calc(52px + env(safe-area-inset-top, 0px) + 40vh); bottom: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+            padding: 12px 14px calc(18px + env(safe-area-inset-bottom, 0px)); background: #111; animation: shUp .22s ease-out; }
+        .sh-pm-tr { display: flex; align-items: center; gap: 12px; }
+        .sh-pm-play { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(var(--sh-acc-rgb), .9); color: var(--sh-on-acc); font-size: 17px; cursor: pointer; }
+        .sh-pm-time { font-size: 14px; color: rgba(255, 255, 255, .8); font-variant-numeric: tabular-nums; }
+        .sh-pmp .sh-pm-prog { position: relative; left: auto; right: auto; bottom: auto; margin: 4px 0 2px; }
+        .sh-pm-sec { margin-top: 14px; }
+        .sh-pm-l { display: block; margin-bottom: 8px; font-size: 13px; color: rgba(255, 255, 255, .6); }
+        .sh-pm-l em { font-style: normal; margin-left: 6px; color: rgba(255, 255, 255, .4); }
+        .sh-pm-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .sh-pm-chips button { height: 32px; padding: 0 14px; border: 1px solid rgba(255, 255, 255, .18); border-radius: calc(16px * var(--radius-k)); background: none; color: #fff; font-size: 13px; cursor: pointer; }
+        .sh-pm-chips button.on { border-color: transparent; background: rgba(var(--sh-acc-rgb), .9); color: var(--sh-on-acc); }
+        .sh-pmp .sh-dr-grid { overflow: visible; }
+        .sh-pmp .sh-dr-grid button { background: rgba(255, 255, 255, .08); color: rgba(255, 255, 255, .85); }
+        .sh-pmp .sh-dr-grid button.on { background: var(--sh-acc); color: var(--sh-on-acc); }
+        .sh-pm-acts { display: flex; gap: 10px; margin-top: 18px; }
+        .sh-pm-acts button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 4px; border: 0; border-radius: calc(12px * var(--radius-k)); background: rgba(255, 255, 255, .06); color: #fff; font-size: 12px; cursor: pointer; }
+        .sh-pm-acts button i { font-size: 18px; }
+        .sh-pm-acts button.on i { color: var(--sh-acc); }
+        .sh-pm-tip { margin-top: 16px; font-size: 12px; color: rgba(255, 255, 255, .4); text-align: center; }
+        @media (min-width: 900px) and (orientation: landscape) {
+            .shorts-page.sh-pm-on .sh-vl { top: 0; bottom: 0; height: auto; right: 420px; }
+            .sh-pm-video { top: 0; bottom: 0; height: auto; right: 420px; }
+            .sh-pm-head { left: auto; width: 420px; background: #111; border-bottom: 1px solid rgba(255, 255, 255, .06); }
+            .sh-pmp { left: auto; width: 420px; top: calc(52px + env(safe-area-inset-top, 0px)); }
+        }
         .sh-drawer-mask { position: absolute; inset: 0; z-index: 6; background: rgba(0, 0, 0, .35); touch-action: pan-y; }
         .sh-drawer {
             position: absolute; left: 0; right: 0; bottom: 0; max-width: 620px; max-height: 62%; margin: 0 auto; display: flex; flex-direction: column;
@@ -7761,7 +7797,7 @@
             <div class="sh-mv sh-fg">
                 <div v-for="s in slides" :key="s.key" class="sh-slide" :style="{ top: (s.off * 100) + '%' }">
                     <div class="sh-inner" v-if="s.it">
-                        <div class="sh-info">
+                        <div class="sh-info" :class="{ dim: s.off === 0 && !infoOn }">
                             <div class="sh-title">{{ s.it.title }}</div>
                             <div class="sh-meta">
                                 <span class="sh-ep">第 {{ (s.off === 0 ? epIdx : startEpOf(s.it)) + 1 }} 集 / 共 {{ s.off === 0 ? curEps.length : epCountOf(s.it) }} 集</span>
@@ -7769,12 +7805,12 @@
                             </div>
                             <div class="sh-blurb" v-if="s.it.blurb">{{ s.it.blurb }}</div>
                         </div>
-                        <div class="sh-side" v-if="s.off === 0">
+                        <!-- 右侧按钮只给电视遥控器(没法长按);手机 / 电脑是清屏竖屏,设置都在长按出来的播放器页里 -->
+                        <div class="sh-side" v-if="s.off === 0 && $root.isTVMode">
                             <button type="button" class="sh-btn" @click.stop="drawer = true" aria-label="选集"><i class="fas fa-list-ol" aria-hidden="true"></i><span>选集</span></button>
                             <button v-if="favOk" type="button" class="sh-btn" :class="{ on: favOn }" @click.stop="fav()" :aria-label="favOn ? '取消收藏' : '收藏'">
                                 <i class="fas fa-heart" aria-hidden="true"></i><span>{{ favOn ? '已收藏' : '收藏' }}</span></button>
                             <button type="button" class="sh-btn" @click.stop="share()" aria-label="分享"><i class="fas fa-share" aria-hidden="true"></i><span>分享</span></button>
-                            <button type="button" class="sh-btn" @click.stop="clean = true" aria-label="清屏"><i class="fas fa-eye-slash" aria-hidden="true"></i><span>清屏</span></button>
                             <button type="button" class="sh-btn" @click.stop="full()" aria-label="完整播放"><i class="fas fa-up-right-and-down-left-from-center" aria-hidden="true"></i><span>完整播放</span></button>
                         </div>
                     </div>
@@ -7786,7 +7822,6 @@
             </div>
             <div class="sh-top">
                 <button type="button" class="sh-ibtn" @click.stop="back()" aria-label="返回"><i class="fas fa-arrow-left" aria-hidden="true"></i></button>
-                <span class="sh-top-t">短剧</span>
                 <button type="button" class="sh-ibtn" @click.stop="toggleMute()" :aria-label="muted ? '打开声音' : '静音'">
                     <i :class="['fas', muted ? 'fa-volume-xmark' : 'fa-volume-high']" aria-hidden="true"></i></button>
             </div>
@@ -7799,7 +7834,6 @@
                 <span v-if="holdRate">{{ holdLocked ? '已锁定，松手保持' : '左右滑调速 · 上滑锁定' }}</span>
                 <span v-else>点这里恢复正常速度</span>
             </div>
-            <button type="button" class="sh-unclean" v-if="clean" @click.stop="clean = false" aria-label="退出清屏" title="退出清屏"><i class="fas fa-eye" aria-hidden="true"></i></button>
             <div class="sh-center" v-if="cur">
                 <div class="sh-err" v-if="err">
                     <div>{{ err }}</div>
@@ -7808,8 +7842,50 @@
                 <div class="sh-spin" v-else-if="loading"></div>
                 <i class="fas fa-play sh-play-ic" v-else-if="paused" aria-hidden="true"></i>
             </div>
-            <div class="sh-prog" ref="prog" :class="{ scrub: !!scrub }" @click.stop @pointerdown.stop="scrubDown" @pointermove="scrubMove" @pointerup="scrubUp" @pointercancel="scrubUp" aria-hidden="true"><i ref="bar"></i><b ref="knob"></b></div>
-            <div class="sh-scrub" v-if="scrub"><b>{{ scrub.t }}</b> / {{ scrub.d }}</div>
+            <div class="sh-prog" ref="prog" :class="{ scrub: !!scrub && !pm }" @click.stop @pointerdown.stop="scrubDown($event, 'prog')" @pointermove="scrubMove" @pointerup="scrubUp" @pointercancel="scrubUp" aria-hidden="true"><i ref="bar"></i><b ref="knob"></b></div>
+            <div class="sh-scrub" v-if="scrub && !pm"><b>{{ scrub.t }}</b> / {{ scrub.d }}</div>
+            <!-- 长按画面中间出来的「播放器页」:视频缩进上面(电脑上在左边)的播放框里接着放,下面(右边)是进度、倍速、线路、选集、收藏分享完整播放 -->
+            <div class="sh-pm" v-if="pm && cur" @pointerdown.stop>
+                <div class="sh-pm-head">
+                    <button type="button" class="sh-ibtn" @click.stop="pmClose()" aria-label="回到竖屏刷" title="回到竖屏刷"><i class="fas fa-chevron-down" aria-hidden="true"></i></button>
+                    <div class="sh-pm-t"><b>{{ cur.title }}</b><span>第 {{ epIdx + 1 }} 集 / 共 {{ curEps.length }} 集<template v-if="cur.remarks"> · {{ cur.remarks }}</template></span></div>
+                    <button type="button" class="sh-ibtn" @click.stop="toggleMute()" :aria-label="muted ? '打开声音' : '静音'">
+                        <i :class="['fas', muted ? 'fa-volume-xmark' : 'fa-volume-high']" aria-hidden="true"></i></button>
+                </div>
+                <div class="sh-pm-video" @click.stop="togglePause()">
+                    <div class="sh-err" v-if="err">
+                        <div>{{ err }}</div>
+                        <div class="sh-err-btns"><button type="button" @click.stop="retry()">重试</button><button type="button" @click.stop="pmClose(); go(1)">下一部</button></div>
+                    </div>
+                    <div class="sh-spin" v-else-if="loading"></div>
+                    <i class="fas fa-play sh-play-ic" v-else-if="paused" aria-hidden="true"></i>
+                </div>
+                <div class="sh-pmp" @click.stop>
+                    <div class="sh-pm-tr">
+                        <button type="button" class="sh-pm-play" @click.stop="togglePause()" :aria-label="paused ? '播放' : '暂停'"><i :class="['fas', paused ? 'fa-play' : 'fa-pause']" aria-hidden="true"></i></button>
+                        <span class="sh-pm-time">{{ pmTime }}</span>
+                    </div>
+                    <div class="sh-prog sh-pm-prog" ref="pmprog" :class="{ scrub: !!scrub && pm }" @pointerdown.stop="scrubDown($event, 'pmprog')" @pointermove="scrubMove" @pointerup="scrubUp" @pointercancel="scrubUp" aria-hidden="true"><i ref="pmbar"></i><b ref="pmknob"></b></div>
+                    <div class="sh-pm-sec">
+                        <span class="sh-pm-l">倍速</span>
+                        <div class="sh-pm-chips"><button v-for="r in pmRates" :key="r" type="button" :class="{ on: (lockRate || 1) === r }" @click.stop="setRate(r)">{{ rateText(r) }}</button></div>
+                    </div>
+                    <div class="sh-pm-sec" v-if="curSrcs.length > 1">
+                        <span class="sh-pm-l">线路</span>
+                        <div class="sh-pm-chips"><button v-for="(x, i) in curSrcs" :key="x.site_key" type="button" :class="{ on: i === srcIdx }" @click.stop="pickSrc(i)">{{ x.site_name }}</button></div>
+                    </div>
+                    <div class="sh-pm-sec">
+                        <span class="sh-pm-l">选集 <em>共 {{ curEps.length }} 集</em></span>
+                        <div class="sh-dr-grid"><button v-for="(e, i) in curEps" :key="i" type="button" :class="{ on: i === epIdx }" @click.stop="pickEp(i)">{{ epNum(e.name, i) }}</button></div>
+                    </div>
+                    <div class="sh-pm-acts">
+                        <button v-if="favOk" type="button" :class="{ on: favOn }" @click.stop="fav()"><i class="fas fa-heart" aria-hidden="true"></i><span>{{ favOn ? '已收藏' : '收藏' }}</span></button>
+                        <button type="button" @click.stop="share()"><i class="fas fa-share" aria-hidden="true"></i><span>分享</span></button>
+                        <button type="button" @click.stop="full()"><i class="fas fa-up-right-and-down-left-from-center" aria-hidden="true"></i><span>完整播放</span></button>
+                    </div>
+                    <div class="sh-pm-tip">点左上角回到竖屏刷 · 竖屏时按住画面两侧 = 2 倍速</div>
+                </div>
+            </div>
             <div class="sh-drawer-mask" v-if="drawer && cur" @click.stop.self="drawer = false">
                 <div class="sh-drawer" role="dialog" aria-label="选集">
                     <div class="sh-dr-head">
@@ -10873,7 +10949,8 @@
         //   预加载:当前这集缓冲够了(前面 ≥20s 或已缓冲到结尾)才去拉下一部(或下一集)的清单(+ clip 站预扫插播),不拉分片、不建第二个播放器。
         //   历史:看了 ≥20 秒 / 到第二集 / 本来就在历史里的才记(一扫而过的不进「继续观看」),记法和播放页一样(addToWatchHistory,时间按原时间轴)。
         window.DgShortsMem = { items: [], ids: new Set(), idx: 0, next: 0, done: false, at: 0 };
-        const DG_SHORTS_RATES = [1.5, 2, 3];   // 按住倍速:按住 = 中间那档,左右滑换档
+        const DG_SHORTS_RATES = [1.5, 2, 3];   // 按住两侧倍速:按住 = 中间那档,左右滑换档
+        const DG_SHORTS_PM_RATES = [0.75, 1, 1.25, 1.5, 2, 3];   // 播放器页里的倍速档
         window.DgShorts = {
             template: '#dg-shorts-tpl',
             emits: ['close'],
@@ -10883,8 +10960,9 @@
                     loading: false, vReady: false, paused: false, muted: false, needTap: false, err: '', note: '', drawer: false,
                     // coverOn:这部刚开始加载、画面还没出来(只有换「部」才垫封面,同一部换集不闪封面)
                     // holdRate:按住时的倍速(0 = 没按住);holdLocked:按住时已上滑到锁定;lockRate:锁定的倍速(0 = 正常速度)
-                    // clean:清屏;scrub:拖进度条时显示的 { t, d }
-                    coverOn: true, holdRate: 0, holdLocked: false, lockRate: 0, clean: false, scrub: null };
+                    // scrub:拖进度条时显示的 { t, d };pm:长按出来的播放器页开着;pmTime:播放器页上的「当前 / 总时长」
+                    // infoOn:片名那块露着(每集开头露 3 秒、暂停时露,其余时间清屏)
+                    coverOn: true, holdRate: 0, holdLocked: false, lockRate: 0, scrub: null, pm: false, pmTime: '', infoOn: true };
             },
             computed: {
                 cur() { return this.items[this.idx] || null; },
@@ -10902,11 +10980,13 @@
                     return !!(this.cur && r.favoritesEnabled && r._favFind({ name: this.cur.title, sources: this.curSrcs }));
                 },
                 speedOn() { return !!(this.holdRate || this.lockRate); },
+                pmRates() { return DG_SHORTS_PM_RATES; },
             },
             watch: {
-                note(v) { clearTimeout(this._noteT); if (v) this._noteT = setTimeout(() => { this.note = ''; }, 2600); },
-                // 页面根节点的 sh-anim / sh-drag 是直接改 classList 的,这两个也走 classList(用 :class 绑定会在重渲染时把它们冲掉)
-                clean(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-clean', !!v); },
+                note(v) { clearTimeout(this._noteT); if (v) this._noteT = setTimeout(() => { this.note = ''; }, v.length > 14 ? 4200 : 2600); },
+                // 页面根节点的 sh-anim / sh-drag 是直接改 classList 的,这几个也走 classList(用 :class 绑定会在重渲染时把它们冲掉)
+                pm(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-pm-on', !!v); if (v) this._updPmTime(); },
+                paused(v) { if (v) { clearTimeout(this._infoT); this.infoOn = true; } else this._flashInfo(2500); },
                 speedOn(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-has-speed', !!v); },
                 scrub(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-scrubbing', !!v); },
             },
@@ -10919,6 +10999,13 @@
                 this._onVisFn = () => { if (document.hidden) this._save(); };
                 document.addEventListener('visibilitychange', this._onVisFn);
                 try { this.$refs.page.focus({ preventScroll: true }); } catch (e) { }
+                // 头两次打开:提示一下手势(竖屏刷默认清屏,不提示不知道设置在哪)
+                if (!this.$root.isTVMode) {
+                    try {
+                        const n = +localStorage.getItem('donggua_shorts_tip') || 0;
+                        if (n < 2) { localStorage.setItem('donggua_shorts_tip', String(n + 1)); this._tipT = setTimeout(() => { if (!this._dead && !this.pm) this.note = '长按画面：播放器和设置 · 按住两侧：2 倍速'; }, 2500); }
+                    } catch (e) { }
+                }
                 const M = window.DgShortsMem;
                 if (M.items.length && Date.now() - M.at < 30 * 60e3) this._startCur();
                 else {   // 头一次 / 隔了半小时:拿一份新的(服务器 30 分钟一更新)
@@ -10931,7 +11018,7 @@
                 this._save();
                 this._stop();
                 const S = this._s;
-                clearTimeout(S.ld); clearTimeout(S.lpT); clearTimeout(this._noteT); clearTimeout(this._retryT); clearTimeout(this._skipT);
+                clearTimeout(S.ld); clearTimeout(S.lpT); clearTimeout(this._noteT); clearTimeout(this._retryT); clearTimeout(this._skipT); clearTimeout(this._infoT); clearTimeout(this._tipT);
                 S.unbind.forEach(f => { try { f(); } catch (e) { } });
                 window.removeEventListener('keydown', this._onKeyFn, true);
                 document.removeEventListener('visibilitychange', this._onVisFn);
@@ -11060,6 +11147,7 @@
                         S.cur.started = true; S.failRun = 0;
                         this.vReady = true; this.paused = false; this.err = ''; this._setLoading(false);
                         this.coverOn = false;
+                        if (!S.cur.infoShown) { S.cur.infoShown = true; this._flashInfo(); }   // 这一集刚出画面:片名露 3 秒再清屏
                         const r = this.holdRate || this.lockRate || 1;   // 换源 / 换集会把倍速重置成默认值:补回去
                         if (v.playbackRate !== r) { try { v.playbackRate = r; } catch (e) { } }
                     });
@@ -11139,7 +11227,8 @@
                     S.cur = { tok, it, src, ep, route, url, native, sess, retried: !!o.retried, fragRetried: !!o.fragRetried, seekTo: o.seekTo || 0, started: false, manifestOk: false };
                     this.vReady = false; this.err = ''; this.paused = false; this.loading = false; this._setLoading(true);
                     if (this.$refs.bar) this.$refs.bar.style.transform = 'scaleX(0)';
-                    if (this.$refs.knob) this.$refs.knob.style.transform = 'translateX(0px)';
+                    this._drawBar(0);
+                    clearTimeout(this._infoT); this.infoOn = true;
                     v.muted = this.muted;
                     if (native) {
                         v.src = url;
@@ -11203,7 +11292,7 @@
                     const S = this._s, c = S.cur, v = this.$refs.v;
                     if (!c || c.tok !== S.tok) return;
                     const d = v.duration;
-                    if (!S.scrub && isFinite(d) && d > 0) this._drawBar(v.currentTime / d);   // 正在拖进度条:条跟着手指,不跟视频
+                    if (!S.scrub && isFinite(d) && d > 0) { this._drawBar(v.currentTime / d); if (this.pm) this._updPmTime(); }   // 正在拖进度条:条跟着手指,不跟视频
                     const now = Date.now();
                     if (S.lastTU && !v.paused) { const dt = (now - S.lastTU) / 1000; if (dt > 0 && dt < 2) S.watched += dt; }
                     S.lastTU = now;
@@ -11403,13 +11492,44 @@
                 },
                 onDown(e) {
                     const S = this._s;
-                    if (S.anim || this.drawer || (e.button != null && e.button > 0)) return;
-                    if (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-prog, .sh-speed, .sh-unclean')) return;
+                    if (S.anim || this.drawer || this.pm || (e.button != null && e.button > 0)) return;
+                    if (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-prog, .sh-speed, .sh-pm')) return;
                     S.drag = { id: e.pointerId, y0: e.clientY, x0: e.clientX, cx: e.clientX, cy: e.clientY, dy: 0, moved: false, lastY: e.clientY, lastT: performance.now(), vy: 0, hold: null };
-                    // 按住画面(不在按钮上、不动)约 0.4 秒 → 倍速;先动了就是翻页
+                    // 按住不动(不在按钮上):两侧(左右各 1/4)约 0.4 秒 → 倍速;中间约 0.45 秒 → 播放器页(设置都在里面)。先动了就是翻页
                     clearTimeout(S.lpT);
                     const onBtn = e.target && e.target.closest && e.target.closest('button, a, .sh-top');
-                    if (!onBtn && this.cur && !this.err) { const id = e.pointerId; S.lpT = setTimeout(() => this._holdStart(id), 380); }
+                    if (!onBtn && this.cur && !this.err && !this.$root.isTVMode) {
+                        const id = e.pointerId, rc = this.$refs.page.getBoundingClientRect(), rel = (e.clientX - rc.left) / (rc.width || 1);
+                        if (rel < 0.25 || rel > 0.75) S.lpT = setTimeout(() => this._holdStart(id), 380);
+                        else S.lpT = setTimeout(() => this._pmLong(id), 450);
+                    }
+                },
+                // ---------- 长按中间:播放器页 ----------
+                _pmLong(id) {
+                    const S = this._s, d = S.drag;
+                    if (!d || d.id !== id || d.moved || S.anim || this.drawer || !this.cur) return;
+                    S.drag = null;
+                    S.clickBlock = Date.now();   // 松手那一下的 click 不算点按(不暂停)
+                    this.pmOpen();
+                },
+                pmOpen() {
+                    if (!this.cur) return;
+                    this.drawer = false; this.holdRate = 0; this.holdLocked = false;
+                    this.pm = true;
+                },
+                pmClose() { this.pm = false; try { this.$refs.page.focus({ preventScroll: true }); } catch (e) { } },
+                _updPmTime() {
+                    const v = this.$refs.v;
+                    if (!v) return;
+                    const d = isFinite(v.duration) && v.duration > 0 ? v.duration : 0;
+                    this.pmTime = this._fmt(this._s.scrub && d ? this._s.scrub.p * d : v.currentTime) + ' / ' + (d ? this._fmt(d) : '--:--');
+                },
+                setRate(r) { this.lockRate = r === 1 ? 0 : r; this._applyRate(r); },
+                // 片名那块:露 ms 毫秒后淡掉(暂停时一直露着)
+                _flashInfo(ms) {
+                    clearTimeout(this._infoT);
+                    this.infoOn = true;
+                    this._infoT = setTimeout(() => { if (!this.paused && !this._dead) this.infoOn = false; }, ms || 3000);
                 },
                 // ---------- 按住倍速(抖音式):按住 2×,左右滑 1.5× / 2× / 3×,上滑锁定(松手保持),顶上提示条点一下恢复 ----------
                 _holdStart(id) {
@@ -11476,7 +11596,7 @@
                     else this._snap();
                 },
                 onWheel(e) {
-                    if (this.drawer || (e.target && e.target.closest && e.target.closest('.sh-drawer-mask'))) return;
+                    if (this.drawer || this.pm || (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-pm'))) return;
                     e.preventDefault();
                     const S = this._s, now = Date.now(), gap = now - S.wheelAt;
                     S.wheelAt = now;
@@ -11488,7 +11608,7 @@
                 onTap(e) {
                     const S = this._s;
                     if (Date.now() - S.clickBlock < 400) return;
-                    if (e.target && e.target.closest && e.target.closest('button, a, .sh-drawer-mask, .sh-prog, .sh-speed')) return;
+                    if (e.target && e.target.closest && e.target.closest('button, a, .sh-drawer-mask, .sh-prog, .sh-speed, .sh-pm')) return;
                     if (this.needTap) { this.toggleMute(); return; }
                     this.togglePause();
                 },
@@ -11509,32 +11629,35 @@
                     }
                 },
                 // ---------- 进度条:点一下跳,按住拖(拖的时候条变粗、出圆点、屏幕下方显示时间,松手才真的跳) ----------
-                _drawBar(p) {
+                _drawBar(p) {   // 竖屏的细条和播放器页的条一起画
                     p = Math.max(0, Math.min(1, p || 0));
-                    const bar = this.$refs.bar, knob = this.$refs.knob, el = this.$refs.prog;
-                    if (bar) bar.style.transform = 'scaleX(' + p.toFixed(4) + ')';
-                    if (knob && el) knob.style.transform = 'translateX(' + (p * el.clientWidth).toFixed(1) + 'px)';
+                    [['bar', 'knob', 'prog'], ['pmbar', 'pmknob', 'pmprog']].forEach(([b, k, w]) => {
+                        const bar = this.$refs[b], knob = this.$refs[k], el = this.$refs[w];
+                        if (bar) bar.style.transform = 'scaleX(' + p.toFixed(4) + ')';
+                        if (knob && el) knob.style.transform = 'translateX(' + (p * el.clientWidth).toFixed(1) + 'px)';
+                    });
                 },
                 _fmt(s) {
                     s = Math.max(0, Math.floor(s || 0));
                     const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60, two = n => (n < 10 ? '0' : '') + n;
                     return (h ? h + ':' + two(m) : two(m)) + ':' + two(x);
                 },
-                _scrubAt(e) {
-                    const el = this.$refs.prog, rc = el.getBoundingClientRect();
+                _scrubAt(e, which) {
+                    const el = this.$refs[which || 'prog'], rc = el.getBoundingClientRect();
                     return Math.max(0, Math.min(1, (e.clientX - rc.left) / (rc.width || 1)));
                 },
-                scrubDown(e) {
+                scrubDown(e, which) {
                     const v = this.$refs.v, S = this._s;
-                    if (!v || !this.cur || (e.button != null && e.button > 0) || !isFinite(v.duration) || !(v.duration > 0)) return;
-                    S.scrub = { id: e.pointerId, p: this._scrubAt(e) };
-                    try { this.$refs.prog.setPointerCapture(e.pointerId); } catch (x) { }
+                    which = which || 'prog';
+                    if (!v || !this.cur || !this.$refs[which] || (e.button != null && e.button > 0) || !isFinite(v.duration) || !(v.duration > 0)) return;
+                    S.scrub = { id: e.pointerId, el: which, p: this._scrubAt(e, which) };
+                    try { this.$refs[which].setPointerCapture(e.pointerId); } catch (x) { }
                     this._scrubShow();
                 },
                 scrubMove(e) {
                     const S = this._s;
                     if (!S.scrub || e.pointerId !== S.scrub.id) return;
-                    S.scrub.p = this._scrubAt(e);
+                    S.scrub.p = this._scrubAt(e, S.scrub.el);
                     this._scrubShow();
                 },
                 scrubUp(e) {
@@ -11544,11 +11667,13 @@
                     S.clickBlock = Date.now();
                     if (e.type !== 'pointercancel' && v && isFinite(v.duration) && v.duration > 0) { try { v.currentTime = Math.min(v.duration - 0.3, sc.p * v.duration); } catch (x) { } }
                     else if (v && isFinite(v.duration) && v.duration > 0) this._drawBar(v.currentTime / v.duration);
+                    if (this.pm) this._updPmTime();
                 },
                 _scrubShow() {
                     const S = this._s, v = this.$refs.v, d = v.duration;
                     this._drawBar(S.scrub.p);
                     this.scrub = { t: this._fmt(S.scrub.p * d), d: this._fmt(d) };
+                    if (this.pm) this._updPmTime();
                 },
                 onKey(e) {
                     if (e.defaultPrevented || this._dead) return;
@@ -11557,6 +11682,8 @@
                     const stop = () => { e.preventDefault(); e.stopImmediatePropagation(); };
                     if (k === 'Escape' || k === 'Esc' || k === 'GoBack' || k === 'BrowserBack') { stop(); this.back(); return; }
                     if (this.drawer) return;   // 选集面板:方向键 / 确认键交给焦点
+                    if (this.pm && (k === 'ArrowUp' || k === 'ArrowDown' || k === 'PageUp' || k === 'PageDown')) return;   // 播放器页开着不翻页
+                    if (k === 'p' && !this.$root.isTVMode) { stop(); if (this.pm) this.pmClose(); else this.pmOpen(); return; }
                     const side = (this.$root.isTVMode && t && t.closest) ? t.closest('.sh-side') : null;
                     if (side) {   // 遥控器:焦点在右侧按钮上 → 上下在按钮间走,左键回到画面,确认键按按钮(鼠标点过按钮留下的焦点不算,方向键照常翻页)
                         const bs = Array.from(side.querySelectorAll('button')), i = bs.indexOf(t);
@@ -11571,12 +11698,11 @@
                     else if (k === 'ArrowRight' || k === 'ArrowLeft') { stop(); const v = this.$refs.v; if (v && isFinite(v.duration)) { try { v.currentTime = Math.max(0, Math.min(v.duration - 0.5, v.currentTime + (k === 'ArrowRight' ? 5 : -5))); } catch (x) { } } }
                     else if (k === ' ' || k === 'Enter' || k === 'k' || k === 'MediaPlayPause') { stop(); this.togglePause(); }
                     else if (k === 'm') { stop(); this.toggleMute(); }
-                    else if (k === 'c') { stop(); this.clean = !this.clean; }
                 },
-                // 返回:选集面板开着先关面板,清屏中先退出清屏,否则关掉整页(根应用 closeShorts:退掉压的那条历史)
+                // 返回:选集面板开着先关面板,播放器页开着先回竖屏刷,否则关掉整页(根应用 closeShorts:退掉压的那条历史)
                 back() {
                     if (this.drawer) { this.drawer = false; return; }
-                    if (this.clean) { this.clean = false; return; }
+                    if (this.pm) { this.pmClose(); return; }
                     this.$emit('close');
                 },
                 pickEp(i) {
