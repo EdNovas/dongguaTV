@@ -2,11 +2,11 @@
 
 https://github.com/user-attachments/assets/8100fd07-46cd-4f16-9228-90a09075ac54
 
-# E视界 (DongguaTV Enhanced Edition)
+# E视界
 
 影视聚合播放器：TMDb 提供资料，多个 Maccms 采集站提供播放源。Node.js + Express + Vue 3。
 
-基于 [Minerchu/dongguaTV](https://github.com/Minerchu/dongguaTV) 重构，主要增加：两级去广告、按广告情况分组的线路、跳过片头片尾、弹幕与评论、刷短剧、直播、离线缓存、多用户同步、站长后台、TV 模式与 Android App。
+最早从 [Minerchu/dongguaTV](https://github.com/Minerchu/dongguaTV)（冬瓜TV）起步，现已整体重写，主要增加：两级去广告、按广告情况分组的线路、跳过片头片尾、弹幕与评论、刷短剧、直播、离线缓存、多用户同步、站长后台、TV 模式与 Android App。
 
 **演示**：https://ednovas.video
 
@@ -94,6 +94,7 @@ https://github.com/user-attachments/assets/8100fd07-46cd-4f16-9228-90a09075ac54
 - 停用站点只能删除（`active` 字段不生效）。
 - `ad_tier` / `profile`：覆盖线路分组，见[线路](#线路分组与自动选源)。
 - `search: false` / `true`：强制走 / 不走片名索引。
+- `shorts_types`：短剧放在认不出来的分类里时手动指定，如 `"96-116"`（追加）、`"=24,50"`（只用这些）。
 - 远程加载：`REMOTE_DB_URL`（5 分钟缓存，失败回退本地）；Vercel 用 `SITES_JSON`。
 
 ### 2. 部署
@@ -154,7 +155,7 @@ services:
 #### 一键脚本
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ednovas/dongguaTV/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ednovas/e-show/main/install.sh | bash
 ```
 
 脚本会询问 TMDb Key、反代、端口、缓存类型、访问密码、安装目录，用 PM2 启动（进程名 `donggua-tv`）。CORS 代理、弹幕、站长令牌之后在 `.env` 里补。
@@ -162,7 +163,7 @@ curl -fsSL https://raw.githubusercontent.com/ednovas/dongguaTV/main/install.sh |
 #### 手动 / PM2 / 宝塔
 
 ```bash
-git clone https://github.com/ednovas/dongguaTV.git && cd dongguaTV
+git clone https://github.com/ednovas/e-show.git && cd e-show
 npm install                          # 无预编译包时需 build-essential python3
 cp .env.example .env && nano .env    # 至少填 TMDB_API_KEY
 node server.js                       # 或 pm2 start server.js --name donggua-tv
@@ -172,7 +173,7 @@ node server.js                       # 或 pm2 start server.js --name donggua-tv
 
 #### Vercel
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fednovas%2FdongguaTV&env=TMDB_API_KEY,SITES_JSON,REMOTE_DB_URL,ACCESS_PASSWORD,TMDB_PROXY_URL&envDescription=TMDB_API_KEY%20is%20required.%20Use%20SITES_JSON%20(Base64)%20or%20REMOTE_DB_URL%20for%20site%20config.&envLink=https%3A%2F%2Fgithub.com%2Fednovas%2FdongguaTV%23vercel)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fednovas%2Fe-show&env=TMDB_API_KEY,SITES_JSON,REMOTE_DB_URL,ACCESS_PASSWORD,TMDB_PROXY_URL&envDescription=TMDB_API_KEY%20is%20required.%20Use%20SITES_JSON%20(Base64)%20or%20REMOTE_DB_URL%20for%20site%20config.&envLink=https%3A%2F%2Fgithub.com%2Fednovas%2Fe-show%23vercel)
 
 填 `TMDB_API_KEY`，以及 `SITES_JSON`（db.json 内容，JSON 或 Base64）或 `REMOTE_DB_URL`。改变量后要 **Redeploy**。
 

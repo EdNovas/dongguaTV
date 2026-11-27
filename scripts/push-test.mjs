@@ -104,7 +104,7 @@ console.log('① 纯函数');
     let p = cleanPayload({ title: '《剧》更新了\u0000\n', body: 'x'.repeat(500), url: '/?play=%E5%89%A7&ep=1', tag: 'fav:剧' });
     ok(p.title === '《剧》更新了' && p.body.length === DEF.bodyMax && p.url === '/?play=%E5%89%A7&ep=1' && p.tag === 'fav:剧', '通知内容清洗', p);
     for (const u of ['https://evil.com', '//evil.com', '/\\evil.com', 'javascript:alert(1)', '/x\ny', 123, '/' + 'a'.repeat(700)]) ok(cleanPayload({ url: u }).url === '/', '外链/怪地址 → /: ' + String(u).slice(0, 30));
-    ok(cleanPayload(null).title === '冬瓜TV' && !('tag' in cleanPayload({})), '缺省标题、无 tag 不带');
+    ok(cleanPayload(null).title === 'E视界' && !('tag' in cleanPayload({})), '缺省标题、无 tag 不带');
 }
 
 // ---------------- 本地假推送服务 ----------------

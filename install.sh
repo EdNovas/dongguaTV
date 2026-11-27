@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ========================================
-# 冬瓜TV MAX 一键安装脚本
+# E视界 一键安装脚本
 # 适用于 Ubuntu/Debian/CentOS 系统
 # ========================================
 
@@ -121,7 +121,7 @@ install_git() {
 get_user_input() {
     echo ""
     echo "=========================================="
-    echo "        冬瓜TV MAX 配置向导"
+    echo "        E视界 配置向导"
     echo "=========================================="
     echo ""
     
@@ -138,7 +138,7 @@ get_user_input() {
     # TMDB Proxy URL
     echo ""
     print_info "如果您部署在大陆服务器或主要面向大陆用户，请配置 TMDB 反代地址"
-    print_info "反代部署说明：https://github.com/ednovas/dongguaTV#大陆用户配置"
+    print_info "反代部署说明：https://github.com/ednovas/e-show#tmdb-反代"
     read -p "请输入 TMDB 反代地址 (可选，回车跳过): " TMDB_PROXY_URL
     
     # 端口
@@ -210,7 +210,7 @@ download_project() {
     sudo mkdir -p "$INSTALL_DIR"
     sudo chown $USER:$USER "$INSTALL_DIR"
     
-    git clone https://github.com/ednovas/dongguaTV.git "$INSTALL_DIR"
+    git clone https://github.com/ednovas/e-show.git "$INSTALL_DIR"
     print_success "项目下载完成"
 }
 
@@ -227,7 +227,7 @@ configure_env() {
     print_info "正在配置环境变量..."
     
     cat > "$INSTALL_DIR/.env" << EOF
-# 冬瓜TV MAX 配置文件
+# E视界 配置文件
 # 由一键安装脚本自动生成
 
 # TMDb API Key (必填)
@@ -304,7 +304,7 @@ show_complete() {
 main() {
     echo ""
     echo "=========================================="
-    echo "     冬瓜TV MAX 一键安装脚本 v1.1"
+    echo "     E视界 一键安装脚本 v1.1"
     echo "=========================================="
     echo ""
     
