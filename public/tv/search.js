@@ -62,7 +62,7 @@
             TV.each(words, function (w, i) {
                 var label = typeof w === 'string' ? w : w.title;
                 var sub = typeof w === 'string' ? '' : (w.year || w.sub || '');
-                h += '<div class="sl-i f" data-w="' + TV.esc(label) + '"><span class="sl-n' + (i < 3 && kind === 'hot' ? ' top' : '') + '">' + (i + 1) + '</span>' + TV.esc(label) + (sub ? '<span class="dim"> ' + TV.esc(sub) + '</span>' : '') + '</div>';
+                h += '<div class="sl-i f" data-w="' + TV.esc(label) + '"><span class="sl-n' + (i < 3 && kind === 'hot' ? ' hot' : '') + '">' + (i + 1) + '</span>' + TV.esc(label) + (sub ? '<span class="dim"> ' + TV.esc(sub) + '</span>' : '') + '</div>';
             });
             return h + '</div>';
         }

@@ -32,7 +32,7 @@
             TV.each(TV.$$('.lg-in', el), function (x) {
                 var k = x.getAttribute('data-k'), v = vals[k] || '';
                 TV.$('.lg-v', x).textContent = k === 'pwd' ? (v ? new Array(v.length + 1).join('•') : '按 OK 输入') : (v || '按 OK 输入');
-                x.classList.toggle('empty', !v);
+                x.classList.toggle('blank', !v);
             });
             TV.$('[data-k="email"]', el).style.display = pwdOnly ? 'none' : '';
             TV.$('[data-k="pwd"] .lg-lb', el).textContent = pwdOnly ? '访问密码' : '密码';

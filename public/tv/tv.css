@@ -150,7 +150,7 @@ img { border: 0; }
 .sl-i.fo { background: #fff; color: #111; }
 .sl-i.fo .dim { color: #666; }
 .sl-n { display: inline-block; width: 2.2rem; color: #6d6d78; font-weight: 700; }
-.sl-n.top { color: #ff5a5f; }
+.sl-n.hot { color: #ff5a5f; }   /* 别叫 .top / .empty 这类通用名:会吃到顶栏 .top(绝对定位到左上角)、空状态 .empty 的样式 */
 .sl-k { font-size: 1.1rem; margin-left: .8rem; padding: .1rem .5rem; border-radius: .3rem; background: rgba(255,255,255,.1); color: #a5a5ae; }
 .sl-go { color: #ff6b6e; }
 .sl-clr { font-size: 1.3rem; color: #8d8d96; margin-top: .6rem; }
@@ -278,7 +278,7 @@ img { border: 0; }
 .lg-in { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; height: 5.6rem; padding: 0 1.8rem; border-radius: 1rem; background: #1f1f26; margin-bottom: 1.4rem; font-size: 1.8rem; }
 .lg-lb { width: 7rem; color: #8d8d96; font-size: 1.5rem; }
 .lg-v { -webkit-flex: 1; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lg-in.empty .lg-v { color: #6d6d78; }
+.lg-in.blank .lg-v { color: #6d6d78; }
 .lg-in.fo { box-shadow: 0 0 0 .3rem #fff; background: #2a2a33; }
 .lg-form .btn { margin-top: .6rem; padding-left: 4rem; padding-right: 4rem; }
 .lg-msg { font-size: 1.5rem; min-height: 2.2rem; margin-top: 1.4rem; color: #a5a5ae; }
