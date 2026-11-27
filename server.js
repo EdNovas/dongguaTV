@@ -1153,13 +1153,14 @@ if (!process.env.VERCEL && CALENDAR_ENABLED) {
     } catch (e) { console.warn('[Calendar] 模块加载失败,追剧周表已禁用:', e.message); updateCalendar = null; }
 }
 app.get('/api/calendar', (req, res) => {
-    const w = updateCalendar && updateCalendar.week(String(req.query.day || ''), req.query.limit);
+    // tz = 浏览器时区(IANA 名)+ tzo = 浏览器此刻的 UTC 偏移(分钟):「今天」和每条落在哪天都按看的人当地时间算;不传 = 北京时间
+    const w = updateCalendar && updateCalendar.week(String(req.query.day || ''), req.query.limit, String(req.query.tz || ''), req.query.tzo);
     if (!w) return res.json({ enabled: false });
     res.set('Cache-Control', 'public, max-age=60');
     res.json(Object.assign({ enabled: true }, w));
 });
 app.get('/api/calendar/list', (req, res) => {
-    const r = updateCalendar && updateCalendar.list(String(req.query.day || ''), String(req.query.cat || ''), req.query.offset, req.query.limit);
+    const r = updateCalendar && updateCalendar.list(String(req.query.day || ''), String(req.query.cat || ''), req.query.offset, req.query.limit, String(req.query.tz || ''), req.query.tzo);
     if (!r) return res.json({ enabled: false, items: [], total: 0 });
     res.set('Cache-Control', 'public, max-age=60');
     res.json(Object.assign({ enabled: true }, r));
