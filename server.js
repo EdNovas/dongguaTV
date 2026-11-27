@@ -1151,6 +1151,7 @@ if (!process.env.VERCEL) {
 }
 // 📅 全站追剧周表(见 lib/update-calendar):每 30 分钟拉几个大资源站「最近 N 小时更新」(?ac=detail&h=),按资源站的更新日期归天、
 //    按片名去重,分 电视剧/动漫/综艺/电影/纪录片/短剧 存进 cache.db;首页「追剧日历」读 /api/calendar。
+//    今天以后的日子(资源站还没有)用 TMDB 排期 + 按前两周规律预计补上,标「待播」。
 //    需 CACHE_TYPE=sqlite。CALENDAR_SITES=站点key,逗号分隔 指定更新源(默认从 速播/红牛/非凡/最大/极速 里挑现有的前 3 个);CALENDAR_DISABLE=1 关。
 const CALENDAR_ENABLED = !envFlag('CALENDAR_DISABLE');
 const CALENDAR_PREFER = ['subocaiji', 'hongniuzy', 'ffzy', 'zuid', 'jisu'];
@@ -1168,7 +1169,10 @@ if (!process.env.VERCEL && CALENDAR_ENABLED) {
             db: () => REQ_DB_OK() ? cacheManager.db : null,
             sites: calendarSites,
             httpGet: async (url, timeout) => (await axios.get(url, { timeout, responseType: 'text', transformResponse: [(x) => x], maxContentLength: 8 * 1024 * 1024 })).data,
-            log: (...a) => console.log('[Calendar]', ...a)
+            // 今天以后的日子:TMDB 排期(每 6 小时一轮,没配 TMDB_API_KEY 就只有「按规律预计」)
+            tmdbGet: process.env.TMDB_API_KEY ? tmdbGetServer : null,
+            log: (...a) => console.log('[Calendar]', ...a),
+            opts: { tmdbImg: process.env['TMDB_PROXY_URL'] ? process.env['TMDB_PROXY_URL'].replace(/\/$/, '') + '/t/p' : 'https://image.tmdb.org/t/p' }
         });
         updateCalendar.start();   // 启动 2 分钟后第一轮(第一次补 3 天),之后每 30 分钟
     } catch (e) { console.warn('[Calendar] 模块加载失败,追剧周表已禁用:', e.message); updateCalendar = null; }

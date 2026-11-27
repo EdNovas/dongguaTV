@@ -2610,6 +2610,7 @@
         .cal-day.today:not(.active) { border-color: rgba(var(--accent-rgb), 0.55); color: var(--text-1); }
         .cal-day.active { background: linear-gradient(135deg, var(--accent), var(--accent-warm)); border-color: transparent; color: var(--on-accent); box-shadow: 0 4px 14px rgba(var(--accent-rgb), 0.3); }
         .cal-day:disabled { opacity: 0.32; cursor: default; }
+        .cal-day.plan:not(.active) { border-style: dashed; }   /* 今天以后 = 待播(排期 / 预计),虚线框和已更新的区分开 */
         .cal-dow { font-size: 13px; font-weight: 700; white-space: nowrap; }
         .cal-md { font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums; }
         .cal-n { font-size: 11px; min-width: 22px; padding: 0 6px; border-radius: calc(999px * var(--radius-k)); background: rgba(var(--fg-rgb), 0.08); font-variant-numeric: tabular-nums; }
@@ -8316,18 +8317,18 @@
                 </section>
                 <!-- 追剧日历 → 本周播出表 -->
                 <section v-else-if="b.k === 'calendar'" :id="'mag-' + b.id" class="mag-sec mag-cal">
-                    <h3 class="mag-sec-h"><span>本周播出</span><small>资源站这一周每天更新了什么</small></h3>
+                    <h3 class="mag-sec-h"><span>本周播出</span><small>每天更新了什么、接下来播什么</small></h3>
                     <div class="mag-cal-days" role="tablist" aria-label="日期">
-                        <button v-for="d in calDays" :key="d.day" type="button" role="tab" :class="{ on: d.active }" :disabled="d.future"
+                        <button v-for="d in calDays" :key="d.day" type="button" role="tab" :class="{ on: d.active }" :disabled="d.future && !d.total"
                             :aria-selected="d.active ? 'true' : 'false'" @click="calPickDay(d.day)">{{ d.today ? '今天' : d.dow }}<small>{{ d.md }}</small></button>
                     </div>
                     <div class="mag-cal-cats" v-if="calCats.length">
                         <button v-for="c in calCats" :key="c.k" type="button" :class="{ on: c.k === cal.cat }" @click="calPickCat(c.k)">{{ c.l }}<small>{{ c.n }}</small></button>
                     </div>
                     <ul v-if="calItems.length" class="mag-cal-list">
-                        <li v-for="it in calItems" :key="'mc-' + it.title" @click="autoSearch(it.title)"><b>{{ it.title }}</b><span v-if="it.remarks">{{ it.remarks }}</span><em v-if="it.isNew">新上</em></li>
+                        <li v-for="it in calItems" :key="'mc-' + it.title" @click="autoSearch(it.title)"><b>{{ it.title }}</b><span v-if="it.remarks">{{ it.remarks }}</span><em v-if="calBadge(it)">{{ calBadge(it) }}</em></li>
                     </ul>
-                    <div v-else class="mag-empty">这天资源站还没有更新</div>
+                    <div v-else class="mag-empty">{{ calEmptyText }}</div>
                 </section>
                 <!-- 直播 -->
                 <section v-else-if="b.k === 'live'" :id="'mag-' + b.id" class="mag-sec">
@@ -8602,7 +8603,7 @@
                 </div>
             </div>
 
-            <!-- 📅 追剧日历:资源站这一周每天更新了哪些(全站同一份,服务器每 30 分钟从 2~3 个大站拉一次)。
+            <!-- 📅 追剧日历:资源站这一周每天更新了哪些(全站同一份,服务器每 30 分钟从 2~3 个大站拉一次);今天以后 = 待播(TMDB 排期 + 按规律预计)。
                  选日期 / 分类;「展开」= 这天这类全部(分页拉);上一周 / 下一周最多回看 9 周。没开(需 sqlite)/ 整周没数据时隐藏 -->
             <div v-else-if="k === 'calendar'" class="section-container home-sec cal-sec animate__animated animate__fadeInUp"
                 :class="{ 'home-first': bi === 0 }">
@@ -8619,11 +8620,11 @@
                 </div>
                 <div class="cal-days" role="tablist" aria-label="日期">
                     <button v-for="d in calDays" :key="d.day" type="button" role="tab" class="cal-day"
-                        :class="{ active: d.active, today: d.today }" :disabled="d.future" :aria-selected="d.active ? 'true' : 'false'"
+                        :class="{ active: d.active, today: d.today, plan: d.future }" :disabled="d.future && !d.total" :aria-selected="d.active ? 'true' : 'false'"
                         @click="calPickDay(d.day)">
                         <span class="cal-dow">{{ d.today ? '今天' : d.dow }}</span>
                         <span class="cal-md">{{ d.md }}</span>
-                        <span class="cal-n">{{ d.future ? '·' : (d.total || 0) }}</span>
+                        <span class="cal-n">{{ d.future && !d.total ? '·' : (d.total || 0) }}</span>
                     </button>
                 </div>
                 <div class="cal-cats" role="tablist" aria-label="分类" v-if="calCats.length">
@@ -8635,7 +8636,7 @@
                     <i class="fas fa-mobile-screen-button" aria-hidden="true"></i>竖屏刷短剧，一集一两分钟<i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 <button v-if="cal.cat === 'short' && calCats.length" type="button" class="cal-shorts-go" @click="openShortsLib()">
                     <i class="fas fa-table-cells" aria-hidden="true"></i>全部短剧，按题材找<i class="fas fa-chevron-right" aria-hidden="true"></i></button>
-                <div v-if="!calCats.length" class="cal-empty">这天资源站还没有更新</div>
+                <div v-if="!calCats.length" class="cal-empty">{{ calEmptyText }}</div>
                 <div class="scroll-container" v-else-if="!cal.open">
                     <button class="scroll-btn left" v-show="calCanScrollLeft" @click="scrollRowBy('calRow', -1)"
                         aria-label="向左滚动追剧日历"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
@@ -8645,7 +8646,7 @@
                             <div class="poster-wrap">
                                 <img :src="calPic(it)" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt=""
                                     @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')" @error="calPicErr">
-                                <span class="cal-new" v-if="it.isNew">新上</span>
+                                <span class="cal-new" v-if="calBadge(it)">{{ calBadge(it) }}</span>
                                 <span class="cal-ep" v-if="it.remarks">{{ it.remarks }}</span>
                             </div>
                             <div class="movie-name">{{ it.title }}</div>
@@ -8664,7 +8665,7 @@
                         <div class="poster-wrap">
                             <img :src="calPic(it)" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt=""
                                 @load="$event.target.classList.add('loaded'); $event.target.parentElement.classList.add('img-loaded')" @error="calPicErr">
-                            <span class="cal-new" v-if="it.isNew">新上</span>
+                            <span class="cal-new" v-if="calBadge(it)">{{ calBadge(it) }}</span>
                             <span class="cal-ep" v-if="it.remarks">{{ it.remarks }}</span>
                         </div>
                         <div class="movie-name">{{ it.title }}</div>
@@ -17723,10 +17724,13 @@
                     if (!d) return '';
                     if (d.days.some(x => x.day === d.today)) return '本周';
                     if (calAddDays(d.next, 0) <= d.today && d.today <= calAddDays(d.next, 6)) return '上周';
+                    if (d.prev <= d.today && d.today <= calAddDays(d.prev, 6)) return '下周';
                     return +d.monday.slice(5, 7) + '/' + +d.monday.slice(8) + ' 起';
                 },
                 calCanPrev() { const d = this.cal.data; return !!d && calAddDays(d.prev, 6) >= d.oldest; },
-                calCanNext() { const d = this.cal.data; return !!d && d.next <= d.today; },
+                // 下一周:本周以前随便翻;今天以后翻到排期排到的那天(last)为止
+                calCanNext() { const d = this.cal.data; return !!d && (d.next <= d.today || (!!d.last && d.next <= d.last)); },
+                calEmptyText() { const d = this.cal.data; return d && this.cal.day > d.today ? '这天还没有排期' : '这天资源站还没有更新'; },
                 trialLeftText() { return DgTrial.fmt(DgTrial.left(this.trial.limit, this.trial.used)); },
                 trialLimitText() { const s = this.trial.limit; return s % 60 ? DgTrial.fmt(s) : (s / 60) + ' 分钟'; },
                 catTypes() { return DgCatalog.TYPES; },
@@ -22384,11 +22388,12 @@
                         if (!d || !d.enabled || !Array.isArray(d.days)) { if (d && d.enabled === false) c.enabled = false; return; }
                         if (!day) {
                             const t = d.days.find(x => x.day === d.today);
-                            if (t && t.total < 12) {
+                            const real = x => (x.real != null ? x.real : x.total);   // 待播的不算(早上今天全是待播也该先看昨天)
+                            if (t && real(t) < 12) {
                                 const y = await get(calAddDays(d.today, -1)).catch(() => null);
                                 if (seq !== this._calSeq) return;
                                 const yt = y && y.days && y.days.find(x => x.day === y.day);
-                                if (yt && yt.total > t.total) d = y;
+                                if (yt && real(yt) > real(t)) d = y;
                             }
                         }
                         for (const k of Object.keys(d.cats || {})) d.cats[k].items = (d.cats[k].items || []).map(it => Object.freeze(it));
@@ -22413,13 +22418,15 @@
                     if (this.cal.open) this.calLoadMore(true);
                     this.$nextTick(() => { const row = this.$refs.calRow; const el = Array.isArray(row) ? row[0] : row; if (el) el.scrollLeft = 0; this.onFavPopRowScroll('calRow', 'cal'); });
                 },
-                // 上一周 → 那周的周日;下一周 → 那周的同一天(碰到今天以后就停在今天)
+                // 上一周 → 那周的周日;下一周 → 那周的同一天(翻回本周碰到今天以后就停在今天;往后翻的同一天没排期就看那周周一)
                 calWeek(dir) {
                     const d = this.cal.data;
                     if (!d || (dir < 0 ? !this.calCanPrev : !this.calCanNext)) return;
                     if (dir < 0) return this.loadCalendar(calAddDays(d.prev, 6));
                     const same = calAddDays(d.next, d.days.findIndex(x => x.day === d.day));
-                    this.loadCalendar(same > d.today ? '' : same);
+                    if (same <= d.today) return this.loadCalendar(same);
+                    if (d.next <= d.today) return this.loadCalendar('');
+                    this.loadCalendar(same <= (d.last || d.today) ? same : d.next);
                 },
                 calToggleOpen() {
                     this.cal.open = !this.cal.open;
@@ -22456,9 +22463,12 @@
                     img.classList.add('loaded');
                     if (img.parentElement) img.parentElement.classList.add('img-loaded');
                 },
-                // 卡片第二行:更新时间(北京时间)· 地区;好几个站都更新了的标出来
+                // 左上角标:资源站头一回更新 = 新上;TMDB 排期里的第 1 集 = 首播 / 新季
+                calBadge(it) { return it.isNew ? '新上' : (it.plan && it.tag) || ''; },
+                // 卡片第二行:更新时间(北京时间)· 地区;还没更新的写「待播」(TMDB 排期)/「预计更新」(按前两周规律猜的)
                 calSub(it) {
                     const parts = [];
+                    if (it.plan) parts.push(it.plan === 'guess' ? '预计更新' : '待播');
                     if (it.t) { const d = new Date(it.t + 8 * 3600e3); parts.push(String(d.getUTCHours()).padStart(2, '0') + ':' + String(d.getUTCMinutes()).padStart(2, '0')); }
                     if (it.area) parts.push(String(it.area).split(/[,，/ ]/)[0]);
                     return parts.join(' · ');
