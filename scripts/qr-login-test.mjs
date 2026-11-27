@@ -483,7 +483,7 @@ const pstore = mkStore(), hist = [], posts = [], proutes = {};
 const ploc = { href: 'https://site.example/', search: '', pathname: '/', hash: '', origin: 'https://site.example' };
 const setUrl = (u) => { const x = new URL(u); ploc.href = x.href; ploc.search = x.search; ploc.pathname = x.pathname; ploc.hash = x.hash; };
 const pctx = {
-    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, config: {} }; } },
+    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, component() { return this; }, config: {} }; } },
     console: { log() { }, warn() { }, error() { }, info() { } },
     localStorage: pstore, sessionStorage: mkStore(), location: ploc,
     history: { state: null, replaceState(s, t, u) { hist.push(String(u)); setUrl(new URL(String(u), ploc.href).href); } },

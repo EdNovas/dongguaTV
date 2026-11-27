@@ -1058,6 +1058,51 @@ try {
     favorites.registerRoutes(app);
     favorites.start();   // 启动 60s 后第一轮,之后每 10 分钟(模块内部到下一轮事件循环才判开关,避开 TDZ)
 } catch (e) { console.warn('[Favorites] 模块加载失败,收藏与更新提醒已禁用:', e.message); favorites = null; }
+// 📚 片单(见 lib/playlists):同步账号存服务器(每人 50 个 × 每个 500 部、总共 3000 部),可设公开拿分享链接 /?list=<id>。
+//    需 sqlite;没有就只存本机(前端看 /api/config 的 playlists_enabled)。写接口按令牌 90 次/分 + 每 IP 120 次/分;
+//    公开片单每 IP 60 次/分,配了访问密码时要有效令牌
+let playlists = null;
+try {
+    playlists = require('./lib/playlists').createPlaylists({
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        authRequired: () => ACCESS_PASSWORDS.length > 0,
+        tokenOk: ownToken,
+        isBanned: (token) => isBanned(token),
+        writeLimiter: rateLimit({ windowMs: 60 * 1000, max: 120, keyGenerator: ipKey, message: { ok: false, error: 'rate' } }),
+        readLimiter: rateLimit({ windowMs: 60 * 1000, max: 60, keyGenerator: ipKey, message: { ok: false, error: 'rate' } })
+    });
+    playlists.registerRoutes(app);
+} catch (e) { console.warn('[Playlists] 模块加载失败,片单只存本机:', e.message); playlists = null; }
+
+// 💬 评论 + 用户弹幕(见 lib/comments):登录的同步账号能发评论 / 回复 / 点赞 / 举报,播放器发的弹幕存下来给同一集的所有人
+//    (播放器经 danmaku.addition 取 /api/udanmaku/v3/,和平台弹幕合进一个列表);站长后台「评论」页隐藏 / 删除 / 封作者 / 改屏蔽词。
+//    需 CACHE_TYPE=sqlite(否则 /api/config.comments_enabled=false,前端整块不显示);COMMENTS_DISABLE=1 关。
+// 🤖 审核钩子:每条评论 / 弹幕过了屏蔽词之后调一次 reviewText(text, ctx) —— 回 { action:'allow' } 照常发、'reject' 拒收(提示没通过审核)、
+//    'hold' 收下但只给作者自己看(站长后台「已隐藏」里能看到原因、恢复)。超过 4 秒或出错一律放行。
+//    ctx = { kind:'comment'|'reply'|'danmaku', token, title, ep }。
+//    配了 Workers AI 就交给 AI 审(lib/comments createAiReviewer,在下面 Workers AI 一节建好):模型在后台「AI 模型」页「评论审核」选,
+//    默认 gemma-4(最便宜)。COMMENT_AI_REVIEW=0 关(只剩屏蔽词);COMMENT_AI_DAILY_LIMIT 每天最多审几条(默认 CF_AI_DAILY_LIMIT 的一半)。
+let commentReviewer = null;
+async function reviewText(text, ctx) { return commentReviewer ? commentReviewer.review(text, ctx) : { action: 'allow' }; }
+const COMMENTS_ENABLED = !envFlag('COMMENTS_DISABLE');
+let comments = null;
+try {
+    if (COMMENTS_ENABLED) {
+        comments = require('./lib/comments').createComments({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            authRequired: () => ACCESS_PASSWORDS.length > 0,
+            tokenOk: ownToken,
+            tokenInfo: (token) => ownToken(token) ? PASSWORD_HASH_MAP[token] : null,
+            isBanned: (token) => isBanned(token),
+            adminAuthed: (req) => adminAuthed(req),
+            identity: (token, label) => userIdentity(token, label),
+            reviewText: (text, ctx) => reviewText(text, ctx),
+            reviewStatus: () => commentReviewer ? commentReviewer.status()
+                : { enabled: false, why: !cfAi.enabled() ? '没配 Workers AI(CF_AI_ACCOUNT_ID / CF_AI_TOKEN)' : !COMMENT_AI_REVIEW ? 'COMMENT_AI_REVIEW=0 关了' : 'AI 审核模块没加载' }
+        });
+        comments.registerRoutes(app);
+    }
+} catch (e) { console.warn('[Comments] 模块加载失败,评论与用户弹幕已禁用:', e.message); comments = null; }
 
 // 🗂️ 片名索引(见 lib/title-index):资源站关了关键词搜索(?wd= 回「暂不支持搜索」)但列表 / 详情还开着 →
 //    后台把它的片名表爬进本地 SQLite(title-index.db,纯缓存,丢了会自己重爬),搜索时本地查出 vod_id 再 ?ac=detail&ids= 取详情。
@@ -1079,6 +1124,214 @@ if (!process.env.VERCEL) {
         titleIndex.start();   // 启动 90s 后第一轮,之后每分钟
     } catch (e) { console.warn('[TitleIndex] 模块加载失败,关了搜索的站继续搜不到:', e.message); titleIndex = null; }
 }
+// 📅 全站追剧周表(见 lib/update-calendar):每 30 分钟拉几个大资源站「最近 N 小时更新」(?ac=detail&h=),按资源站的更新日期归天、
+//    按片名去重,分 电视剧/动漫/综艺/电影/纪录片/短剧 存进 cache.db;首页「追剧日历」读 /api/calendar。
+//    需 CACHE_TYPE=sqlite。CALENDAR_SITES=站点key,逗号分隔 指定更新源(默认从 速播/红牛/非凡/最大/极速 里挑现有的前 3 个);CALENDAR_DISABLE=1 关。
+const CALENDAR_ENABLED = !envFlag('CALENDAR_DISABLE');
+const CALENDAR_PREFER = ['subocaiji', 'hongniuzy', 'ffzy', 'zuid', 'jisu'];
+function calendarSites() {
+    const all = allSites().filter(s => s && s.active !== false && !(kazumi && kazumi.isKzSite(s)) && /^https?:\/\//i.test(String(s.api || '')));
+    const want = String(process.env.CALENDAR_SITES || '').split(',').map(s => s.trim()).filter(Boolean);
+    if (want.length) return want.map(k => all.find(s => s.key === k)).filter(Boolean);
+    const pref = CALENDAR_PREFER.map(k => all.find(s => s.key === k)).filter(Boolean);
+    return (pref.length ? pref : all).slice(0, 3);
+}
+let updateCalendar = null;
+if (!process.env.VERCEL && CALENDAR_ENABLED) {
+    try {
+        updateCalendar = require('./lib/update-calendar').createCalendar({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            sites: calendarSites,
+            httpGet: async (url, timeout) => (await axios.get(url, { timeout, responseType: 'text', transformResponse: [(x) => x], maxContentLength: 8 * 1024 * 1024 })).data,
+            log: (...a) => console.log('[Calendar]', ...a)
+        });
+        updateCalendar.start();   // 启动 2 分钟后第一轮(第一次补 3 天),之后每 30 分钟
+    } catch (e) { console.warn('[Calendar] 模块加载失败,追剧周表已禁用:', e.message); updateCalendar = null; }
+}
+app.get('/api/calendar', (req, res) => {
+    const w = updateCalendar && updateCalendar.week(String(req.query.day || ''), req.query.limit);
+    if (!w) return res.json({ enabled: false });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(Object.assign({ enabled: true }, w));
+});
+app.get('/api/calendar/list', (req, res) => {
+    const r = updateCalendar && updateCalendar.list(String(req.query.day || ''), String(req.query.cat || ''), req.query.offset, req.query.limit);
+    if (!r) return res.json({ enabled: false, items: [], total: 0 });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(Object.assign({ enabled: true }, r));
+});
+
+// ========== ☁️ Cloudflare Workers AI(语音搜索 / AI 找片 / 以后评论审核共用,见 lib/cf-ai) ==========
+//    CF_AI_ACCOUNT_ID + CF_AI_TOKEN 都配了才开;CF_AI_DAILY_LIMIT 每天最多调用几次(默认 3000,防刷);VOICE_DISABLE=1 只关语音
+//    用哪个模型由站长后台「AI 模型」页管(见 lib/ai-models):每天同步 Cloudflare 模型目录、手动排顺序、快速测评;下架的自动跳过
+let aiModels = null;
+const cfAi = require('./lib/cf-ai').createCfAi({
+    accountId: process.env.CF_AI_ACCOUNT_ID, token: process.env.CF_AI_TOKEN,
+    opts: Object.assign({ asrModel: () => (aiModels ? aiModels.asrModel() : '') },
+        Number(process.env.CF_AI_DAILY_LIMIT) > 0 ? { dailyLimit: Number(process.env.CF_AI_DAILY_LIMIT) } : {}),
+});
+if (cfAi.enabled()) {
+    try {
+        const tmdbImg = process.env['TMDB_PROXY_URL'] ? process.env['TMDB_PROXY_URL'].replace(/\/$/, '') + '/t/p/w780' : 'https://image.tmdb.org/t/p/w780';
+        aiModels = require('./lib/ai-models').createAiModels({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            ai: cfAi, accountId: process.env.CF_AI_ACCOUNT_ID, token: process.env.CF_AI_TOKEN,
+            imageBase: tmdbImg,
+            log: (...a) => console.log('[AiModels]', ...a),
+            opts: { envTextModel: /^@cf\/[\w.-]+\/[\w.-]+$/.test(process.env.CF_AI_FIND_MODEL || '') ? process.env.CF_AI_FIND_MODEL : '' },
+        });
+        aiModels.start();   // 启动 60s 后同步一次模型目录,之后每 24 小时(读库推到下一轮事件循环,避开 REQ_DB_OK 的 TDZ)
+    } catch (e) { console.warn('[AiModels] 模块加载失败,AI 找片 / 语音用内置默认模型:', e.message); aiModels = null; }
+}
+// 💬 评论 / 弹幕 AI 审核(钩子见上面「评论 + 用户弹幕」一节):配了 Workers AI 默认开,COMMENT_AI_REVIEW=0 关。
+//    出错 / 超时(4 秒)/ 额度用完 / 每分钟超过 120 条一律放行;同样的话 10 分钟内只问一次;≤ 3 个字的不问。
+//    每天最多审 COMMENT_AI_DAILY_LIMIT 条(默认 CF_AI_DAILY_LIMIT 的一半),给 AI 找片 / 语音留额度
+const COMMENT_AI_REVIEW = String(process.env.COMMENT_AI_REVIEW ?? '').trim() === '' || envFlag('COMMENT_AI_REVIEW');
+if (comments && cfAi.enabled() && COMMENT_AI_REVIEW) {
+    try {
+        commentReviewer = require('./lib/comments').createAiReviewer({
+            ai: cfAi,
+            model: () => (aiModels ? aiModels.reviewCall() : null),   // 后台改了下一条就用新的;没 aiModels → 内置 gemma-4
+            enabled: () => cfAi.enabled(),
+            log: (...a) => console.warn('[CommentAI]', ...a),
+            opts: { dailyMax: Number(process.env.COMMENT_AI_DAILY_LIMIT) > 0 ? Math.floor(Number(process.env.COMMENT_AI_DAILY_LIMIT)) : Math.max(1, Math.floor(cfAi.usage().limit / 2)) },
+        });
+    } catch (e) { console.warn('[CommentAI] 模块加载失败,评论只过屏蔽词:', e.message); commentReviewer = null; }
+}
+const VOICE_ENABLED = cfAi.enabled() && !envFlag('VOICE_DISABLE');
+// 需要登录的站只给登录了的人用(按 /api/auth/check 同一条规则:配了 ACCESS_PASSWORD 才要登录)
+function aiCaller(req) {
+    const token = typeof (req.body && req.body.token) === 'string' ? req.body.token : '';
+    if (ACCESS_PASSWORDS.length && !Object.prototype.hasOwnProperty.call(PASSWORD_HASH_MAP, token)) return { status: 401, error: '请先登录' };
+    if (token && isBanned(token)) return { status: 403, error: 'banned' };
+    return null;
+}
+// 🎙️ 语音搜索:前端录音转成 16k 单声道 WAV(base64)→ Whisper 转文字。一次最多 ~45 秒
+const voiceLimiter = rateLimit({ windowMs: 60 * 1000, max: 12, keyGenerator: ipKey, message: { error: '说得太频繁了,歇一会儿再试' } });
+app.post('/api/voice/transcribe', voiceLimiter, async (req, res) => {
+    if (!VOICE_ENABLED) return res.status(404).json({ error: 'disabled' });
+    const bad = aiCaller(req);
+    if (bad) return res.status(bad.status).json({ error: bad.error });
+    const audio = req.body && req.body.audio;
+    // base64 的 WAV 以 "UklGR"(RIFF)开头
+    if (typeof audio !== 'string' || audio.length < 2000 || audio.length > 1600000 || audio.slice(0, 5) !== 'UklGR' || !/^[A-Za-z0-9+/]+=*$/.test(audio.slice(-64))) {
+        return res.status(400).json({ error: '录音格式不对' });
+    }
+    try {
+        const text = await cfAi.transcribe(audio);
+        res.json({ text: text.slice(0, 200) });
+    } catch (e) {
+        console.warn('[Voice] 转文字失败:', e.message);
+        res.status(e.code === 'quota' ? 429 : 502).json({ error: e.code === 'quota' ? '今天的语音识别次数用完了' : '识别服务暂时不可用' });
+    }
+});
+
+// ✨ AI 找片:描述剧情 / 演员 / 台词 / 画面,或上传截图 → Workers AI 给候选 → TMDB 核实(编造的片名筛掉)→ 前端点了照常搜线路。
+//    AI_FIND_DISABLE=1 关;CF_AI_FIND_MODEL 换默认文字主模型(默认 glm-5.3;截图用 deepseek-v4.1-flash;主模型不可用时按顺序换备用)。
+//    站长后台选了模型就按后台的(每次请求现取,改了不用重启)
+const AI_FIND_ENABLED = cfAi.enabled() && !envFlag('AI_FIND_DISABLE');
+async function tmdbGetServer(p, params) {
+    const key = process.env.TMDB_API_KEY;
+    if (!key) return null;
+    const proxy = process.env['TMDB_PROXY_URL'];
+    const base = proxy ? `${proxy.replace(/\/$/, '')}/api/3` : 'https://api.themoviedb.org/3';
+    const r = await axios.get(base + p, { params: Object.assign({ api_key: key }, params), timeout: 6000 });
+    return r.data;
+}
+const aiFind = AI_FIND_ENABLED ? require('./lib/ai-find').createAiFind({
+    ai: cfAi,
+    tmdbGet: process.env.TMDB_API_KEY ? tmdbGetServer : null,
+    log: (...a) => console.log('[AiFind]', ...a),
+    opts: aiModels ? { textModels: () => aiModels.textModels(), imageModels: () => aiModels.imageModels() }
+        : /^@cf\/[\w.-]+\/[\w.-]+$/.test(process.env.CF_AI_FIND_MODEL || '')
+            ? { textModels: [{ id: process.env.CF_AI_FIND_MODEL, extra: {} }, { id: '@cf/deepseek-ai/deepseek-v4.1-flash-1017', extra: { reasoning_effort: 'none' } }] } : {},
+}) : null;
+const aiFindLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, keyGenerator: ipKey, message: { error: '问得太频繁了,歇一会儿再试' } });
+const AI_IMG_RE = /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]{16}/;
+app.post('/api/ai/find', aiFindLimiter, async (req, res) => {
+    if (!aiFind) return res.status(404).json({ error: 'disabled' });
+    const bad = aiCaller(req);
+    if (bad) return res.status(bad.status).json({ error: bad.error });
+    const q = typeof req.body.q === 'string' ? req.body.q.trim().slice(0, 300) : '';
+    const image = req.body.image == null || req.body.image === '' ? '' : req.body.image;
+    if (image && (typeof image !== 'string' || image.length > 2000000 || !AI_IMG_RE.test(image) || !/^[A-Za-z0-9+/]*={0,2}$/.test(image.slice(-64)))) {
+        return res.status(400).json({ error: '图片格式不对(支持 jpg / png / webp,最大约 1.5MB)' });
+    }
+    if (!q && !image) return res.status(400).json({ error: '说说想找什么,或者传一张截图' });
+    try {
+        res.json(await aiFind.find({ q, image }));
+    } catch (e) {
+        console.warn('[AiFind] 失败:', e.message);
+        res.status(e.code === 'quota' ? 429 : 502).json({ error: e.code === 'quota' ? '今天的 AI 次数用完了,明天再来' : e.code === 'timeout' ? 'AI 想太久了,再试一次' : 'AI 暂时不可用,稍后再试' });
+    }
+});
+
+// 🤖 站长后台「AI 模型」页(见 lib/ai-models):模型目录 + 测评评级 + 手动选模型 + 快速测评。都要 ADMIN_TOKEN
+const aiAdminState = (st) => Object.assign({ enabled: cfAi.enabled(), usage: cfAi.usage() },
+    st || (aiModels ? aiModels.state() : { catalogAt: 0, catalogErr: cfAi.enabled() ? 'AI 模型管理模块没加载' : '没配 CF_AI_ACCOUNT_ID / CF_AI_TOKEN', models: [] }));
+function aiAdminGuard(req, res) {
+    res.set('Cache-Control', 'no-store');
+    if (!adminAuthed(req)) { res.status(403).json({ error: 'Forbidden' }); return false; }
+    if (!aiModels) { res.status(400).json({ error: cfAi.enabled() ? 'AI 模型管理模块没加载' : '没配 Workers AI(CF_AI_ACCOUNT_ID / CF_AI_TOKEN)' }); return false; }
+    return true;
+}
+app.get('/api/admin/ai', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    if (!adminAuthed(req)) return res.status(403).json({ error: 'Forbidden' });
+    res.json(aiAdminState());
+});
+app.post('/api/admin/ai/refresh', async (req, res) => {
+    if (!aiAdminGuard(req, res)) return;
+    try { await aiModels.refresh(); res.json(aiAdminState()); }
+    catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/admin/ai/settings', (req, res) => {
+    if (!aiAdminGuard(req, res)) return;
+    try { res.json(aiAdminState(aiModels.saveSettings(req.body || {}))); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+app.post('/api/admin/ai/bench', (req, res) => {
+    if (!aiAdminGuard(req, res)) return;
+    try { res.json(aiAdminState(aiModels.queueBench((req.body || {}).names))); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+});
+
+// 📱 短剧竖屏刷(见 lib/shorts-feed):每 30 分钟从各站的短剧分类拉最新的,只收一集一集的(「全集」单文件不收)、每部留一条 m3u8 选集,
+//    按片名去重存进 cache.db(没 sqlite 放内存)。首页「短剧」整屏刷读 /api/shorts/feed?offset=&limit=,播放照常走前端的去广告代理 + 线路分级。
+//    SHORTS_SITES=站点key,逗号分隔 只用这些站;SHORTS_DISABLE=1 关。
+const SHORTS_ENABLED = !envFlag('SHORTS_DISABLE');
+let shortsFeed = null;
+if (!process.env.VERCEL && SHORTS_ENABLED) {
+    try {
+        shortsFeed = require('./lib/shorts-feed').createShortsFeed({
+            db: () => REQ_DB_OK() ? cacheManager.db : null,
+            sites: () => allSites().filter(s => s && s.active !== false && !(kazumi && kazumi.isKzSite(s))),
+            only: process.env.SHORTS_SITES || '',
+            tierOf: (() => {   // 同一部的线路按广告分级排(无广告在前);一批里要问几百次,站表 60s 一取
+                let at = 0, m = new Map();
+                return (key) => {
+                    if (Date.now() - at > 60e3) { at = Date.now(); m = new Map(allSites().map(s => [s.key, (profOf(s) || {}).tier || 'unknown'])); }
+                    return m.get(key) || 'unknown';
+                };
+            })(),
+            httpGet: async (url, timeout) => (await axios.get(url, { timeout, responseType: 'text', transformResponse: [(x) => x], maxContentLength: 8 * 1024 * 1024 })).data,
+            log: (...a) => console.log('[Shorts]', ...a)
+        });
+        shortsFeed.start();   // 启动 75s 后第一轮,之后每 30 分钟;片库空着时有人来刷会提前开一轮
+    } catch (e) { console.warn('[Shorts] 模块加载失败,短剧竖屏刷已禁用:', e.message); shortsFeed = null; }
+}
+app.get('/api/shorts/feed', (req, res) => {
+    if (!shortsFeed) return res.json({ enabled: false, items: [], total: 0 });
+    shortsFeed.kick();   // 片库还空着(刚启动)才会真的开一轮
+    const r = shortsFeed.feed(req.query.offset, req.query.limit);
+    const byKey = new Map(allSites().map(s => [s.key, s]));
+    const items = r.items.map(it => Object.assign({}, it, {
+        srcs: it.srcs.filter(x => byKey.has(x.site_key)).map(x => { const s = byKey.get(x.site_key); return Object.assign({}, x, { site_name: s.name, site_profile: profOf(s) }); })
+    })).filter(it => it.srcs.length);
+    res.set('Cache-Control', r.total ? 'public, max-age=60' : 'no-store');
+    res.json(Object.assign({ enabled: true }, r, { items }));
+});
+
 // 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback
 async function siteSearchFetch(site, kw) {
     if (titleIndex && titleIndex.useFor(site)) {
@@ -1599,6 +1852,14 @@ app.get('/api/config', (req, res) => {
         // 🔔 推送可用(需 sqlite + web-push 依赖;密钥自动生成)/ ❤️ 服务器收藏可用(需 sqlite;没开就只用本机收藏)
         push_enabled: !!(webPush && webPush.enabled()),
         favorites_enabled: !!(favorites && favorites.enabled()),
+        // 🎙️ 语音搜索走服务器转文字(配了 Workers AI 才有;没有时前端退回浏览器自带的识别)
+        voice_asr: VOICE_ENABLED,
+        // ✨ AI 找片(配了 Workers AI 才有)
+        ai_find: !!aiFind,
+        // 📚 片单存服务器 / 分享可用(需 sqlite;没开就只存本机、不能分享)
+        playlists_enabled: !!(playlists && playlists.enabled()),
+        // 💬 评论 + 用户弹幕(需 sqlite;COMMENTS_DISABLE=1 关)
+        comments_enabled: !!(comments && comments.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏
         banned: isBanned(userToken)
     });

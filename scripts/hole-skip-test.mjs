@@ -482,8 +482,15 @@ function makeSkip(video) {
 
 console.log('⑦ 接线');
 {
+    // 全站只有两处 new Hls:播放页(_dgHlsCustomType)+ 短剧竖屏刷(DgShorts._play)—— 两处都要用 buildOfflineHlsConfig(缓冲上限 / 剪插播)并挂缓冲小洞跳过器
     const count = (HTML.match(/new Hls\(/g) || []).length;
-    ok(count === 1, '全站唯一的 new Hls', count);
+    ok(count === 2, '全站只有两处 new Hls(播放页 + 短剧竖屏刷)', count);
+    const s0 = HTML.indexOf('window.DgShorts = {');
+    const sh = s0 > 0 ? HTML.slice(s0, HTML.indexOf('\n        };', s0)) : '';
+    const shNew = sh.indexOf('new Hls(');
+    ok(shNew > 0 && /new Hls\(Object\.assign\(\{\}, buildOfflineHlsConfig\(\)/.test(sh), '短剧竖屏刷的 hls 用 buildOfflineHlsConfig(backBufferLength 90 / maxMaxBufferLength 120 / 剪插播 loader)');
+    ok(/hls\.attachMedia\(v\);\s*\n\s*try \{ hls\._dgHole = dgHoleWatch\(hls, v, \{ destroying: Hls\.Events\.DESTROYING, gone: \(\) => S\.hls !== hls \}\); \} catch \(e\) \{ \}/.test(sh), '…attachMedia 之后挂跳过器,被顶替就停');
+    ok(/hls\.on\(Hls\.Events\.ERROR,/.test(sh), '…ERROR 一律接住(不接就永远转圈)');
     const i0 = HTML.indexOf('window._dgHlsCustomType = function (video, player) {');
     const ct = HTML.slice(i0, HTML.indexOf('function buildOfflineHlsConfig()'));
     ok(i0 > 0 && HTML.indexOf('// <dg-hole-core>') < i0, '核心段定义在 _dgHlsCustomType 之前');

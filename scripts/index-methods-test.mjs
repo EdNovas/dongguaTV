@@ -178,7 +178,7 @@ function any() {
 }
 let captured = null;
 const ctxObj = {
-    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, config: {} }; } },
+    Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, component() { return this; }, config: {} }; } },
     console: { log() { }, warn() { }, error() { }, info() { } },
     setTimeout: () => 0, clearTimeout() { }, setInterval: () => 0, clearInterval() { },
     requestAnimationFrame: () => 0, Promise, JSON, Math, Date, Object, Array, String, Number, Boolean, RegExp, Map, Set, WeakMap, WeakSet, Symbol, Error, TypeError,
@@ -225,7 +225,7 @@ console.log('② 首页横向行的滚动处理');
     const calls1 = [...HTML.matchAll(/onRowScroll\(([^)]*)\)/g)].map(m => m[1].trim());
     ok(calls1.every(a => !a.includes(',')), '没有地方再用两个参数调 onRowScroll:' + JSON.stringify(calls1.filter(a => a.includes(','))));
     const calls2 = [...HTML.matchAll(/onFavPopRowScroll\(([^)]*)\)/g)].map(m => m[1].trim()).filter(a => !/^ref, key$/.test(a));
-    ok(calls2.length >= 8 && calls2.every(a => /^'(favRow|popularRow)', '(fav|popular)'$/.test(a)), 'onFavPopRowScroll 的调用都是 (favRow, fav) / (popularRow, popular):' + JSON.stringify(calls2));
+    ok(calls2.length >= 8 && calls2.every(a => /^'(favRow|popularRow|calRow|plRow)', '(fav|popular|cal|pl)'$/.test(a)), 'onFavPopRowScroll 的调用都是 (favRow, fav) / (popularRow, popular) / (calRow, cal) / (plRow, pl):' + JSON.stringify(calls2));
 }
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} 通过, ${fail} 失败`);

@@ -492,6 +492,7 @@ function makeApp(o) {
         $nextTick: (f) => { f && f(); }, $refs: { fshareBox: null },
         frameShare: { show: false, busy: false, img: '', note: '', link: '', title: '', canFiles: false, err: '', tip: '' },
         showMiniToast: (m) => S.toasts.push(m),
+        _plOnPop: () => false,   // 📚 片单页的 popstate 钩子(这里没开片单页;片单另有 scripts/playlists-test.mjs)
         syncShareUrl: () => { S.synced++; },
         _cutToBase: (t) => t + 30,   // 片头前剪掉了 30 秒插播:进度条 12:34 = 原时间轴 13:04
     };
@@ -963,10 +964,10 @@ console.log('④c 第二轮审查回归:SW 占位图不当剧照 / 返回键关�
 {
     // F3 打开时焦点落在弹窗框(tabindex=-1)上:全站 [tabindex]:focus 的红框/红光晕(!important)不能把整个框住
     const css = /\n\s*(\.fshare-mask \.fshare-box:focus) \{([^}]*)\}/.exec(HTML);
-    ok(css && /outline:\s*none !important/.test(css[2]) && /box-shadow:\s*0 20px 60px rgba\(0,\s*0,\s*0,\s*\.6\) !important/.test(css[2]), 'F3 .fshare-box:focus 去掉红框、保留原阴影(都 !important)', css && css[2]);
+    ok(css && /outline:\s*none !important/.test(css[2]) && /box-shadow:\s*0 20px 60px rgba\(var\(--shadow-rgb\),\s*\.6\) !important/.test(css[2]), 'F3 .fshare-box:focus 去掉红框、保留原阴影(都 !important)', css && css[2]);
     const spec = (sel) => { const a = (sel.match(/\.[\w-]+|\[[^\]]+\]|:[\w-]+/g) || []).length; return a; };
     const glob = /\n(\s*\.close-btn:focus,[\s\S]*?\[tabindex\]:focus) \{([^}]*)\}/.exec(HTML);
-    ok(glob && /outline: 3px solid #e50914 !important/.test(glob[2]) && css && spec(css[1]) > spec('[tabindex]:focus'), 'F3 选择器比全站的 [tabindex]:focus 多一层(不看先后顺序都压得住)', [css && css[1], spec(css ? css[1] : '')]);
+    ok(glob && /outline: 3px solid var\(--accent\) !important/.test(glob[2]) && css && spec(css[1]) > spec('[tabindex]:focus'), 'F3 选择器比全站的 [tabindex]:focus 多一层(不看先后顺序都压得住)', [css && css[1], spec(css ? css[1] : '')]);
 }
 {
     // F10 焦点陷阱:Tab/Shift+Tab 在弹窗按钮间循环;焦点在弹窗外时回车/空格不按下背后的按钮(♥ 会直接取消收藏)
@@ -1062,7 +1063,7 @@ console.log('⑤ 静态接线');
     ok(/v-if="frameShare\.canFiles"/.test(HTML), '「分享…」只在能分享文件时显示');
     ok(/if \(this\.frameShare && this\.frameShare\.show\) \{ this\.closeFrameShare\(\); return; \}/.test(methodSrc('closeDetail').body), '关播放页(返回键)时弹窗开着:先只关弹窗');
     const sw = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
-    ok(/const CACHE_VERSION = 'v43'/.test(sw), 'sw.js 升到 v43(v39 起预缓存二维码库)');
+    ok(/const CACHE_VERSION = 'v44'/.test(sw), 'sw.js 升到 v44(v39 起预缓存二维码库)');
     ok(sw.includes("'./libs/js/qrcode-generator.min.js?v=2.0.4'"), 'sw.js 预缓存二维码库(与页面同一个 ?v=)');
     ok(/s\.src = 'libs\/js\/qrcode-generator\.min\.js\?v=2\.0\.4'/.test(HTML), '页面按需加载的 ?v= 与预缓存一致');
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));

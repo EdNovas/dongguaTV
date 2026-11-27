@@ -1471,6 +1471,12 @@ app.get('/api/favorites', (req, res) => res.set('Cache-Control', 'no-store').jso
 app.post('/api/favorites/status', (req, res) => res.set('Cache-Control', 'no-store').json({ enabled: false, status: {} }));
 app.post(['/api/favorites/add', '/api/favorites/remove', '/api/favorites/seen'], (req, res) => res.set('Cache-Control', 'no-store').json({ ok: false, enabled: false }));
 app.get('/api/popular', (req, res) => res.set('Cache-Control', 'no-store').json({ window: '7d', items: [] }));
+// 💬 评论 / 用户弹幕(见 lib/comments)要 SQLite → 无状态后端关闭:/api/config 报 comments_enabled:false 前端不显示评论区;
+//    播放器的 danmaku.addition 只在开启时才挂,万一来了(旧缓存页面)回空列表 / 发不出去
+app.get('/api/udanmaku/v3/', (req, res) => res.set('Cache-Control', 'no-store').json({ code: 0, version: 3, data: [], msg: '' }));
+app.post('/api/udanmaku/v3/', (req, res) => res.set('Cache-Control', 'no-store').json({ code: 1, error: 'disabled', msg: '本站没开弹幕发送' }));
+app.get(['/api/comments', '/api/comments/replies', '/api/comments/danmaku'], (req, res) => res.set('Cache-Control', 'no-store').json({ enabled: false, items: [], total: 0, page: 1, pages: 1 }));
+app.post(['/api/comments', '/api/comments/like', '/api/comments/report', '/api/comments/delete'], (req, res) => res.set('Cache-Control', 'no-store').json({ ok: false, error: 'disabled', msg: '本站没开评论' }));
 
 // ========== API: /api/config ==========
 app.get('/api/config', (req, res) => {
@@ -1490,7 +1496,8 @@ app.get('/api/config', (req, res) => {
         hls_cut: false,  // ✂️ 无状态后端托管不了剪后的清单(见 lib/hls-cut)
         watch_stats: false,  // 📊 观看/分享统计要 SQLite(见 lib/user-stats)→ 前端不计时、分享链不带 s=
         push_enabled: false,       // 🔔 推送订阅要 SQLite(见 lib/webpush)
-        favorites_enabled: false   // ❤️ 服务器收藏/更新检查要 SQLite + 常驻进程(见 lib/favorites)→ 前端只用本机收藏
+        favorites_enabled: false,  // ❤️ 服务器收藏/更新检查要 SQLite + 常驻进程(见 lib/favorites)→ 前端只用本机收藏
+        comments_enabled: false    // 💬 评论 / 用户弹幕要 SQLite(见 lib/comments)
     });
 });
 

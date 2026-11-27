@@ -76,4 +76,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- 🎙️ 语音搜索(网页 getUserMedia 录音,Capacitor 的 WebChromeClient 运行时再向用户要权限) -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 </manifest>

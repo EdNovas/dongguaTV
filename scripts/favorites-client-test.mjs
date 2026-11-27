@@ -106,6 +106,8 @@ function makeVm(opts) {
         currentGroup: null, currentSource: null, episodeList: [], imageMap: {}, watchHistory: [], _liveActive: false,
         pushEnabled: !!opts.push, isNativeApp: false, pushSubscribed: false, pushBusy: false, pushMsg: '',
         pushAsk: { show: false, kind: '', msg: '' }, isTVMode: false, frameShare: { show: false }, showRequestModal: false, showSettingsModal: false,
+        // 📚 片单挂在收藏启动 / popstate 上的两个钩子:这里只测收藏,片单另有 scripts/playlists-test.mjs
+        _plBoot() { }, _plOnPop() { return false; }, _plRefreshMaybe() { }, plPage: { open: false },
         showInfoModal: false, showSharePanel: false, showOfflinePanel: false, userBanned: false, previewLocked: false,
         _favBooted: opts.booted !== false,
         showMiniToast: m => toasts.push(m),
@@ -330,7 +332,7 @@ console.log('② 推送辅助');
 console.log('③ sw.js');
 {
     const src = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
-    ok(/const CACHE_VERSION = 'v43'/.test(src), 'CACHE_VERSION v43');
+    ok(/const CACHE_VERSION = 'v44'/.test(src), 'CACHE_VERSION v44');
     const handlers = {};
     const shown = [];
     const wins = [];
@@ -988,7 +990,7 @@ await T(async () => {
     const tq = new Map();
     let captured = null;
     const ctxObj = {
-        Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, config: {} }; } },
+        Vue: { createApp(o) { captured = o; return { mount() { return {}; }, use() { return this; }, component() { return this; }, config: {} }; } },
         console: { log() { }, warn() { }, error() { }, info() { } },
         setTimeout: (f) => { const id = ++tid; tq.set(id, f); return id; }, clearTimeout: (id) => { tq.delete(id); }, setInterval: () => 0, clearInterval() { },
         requestAnimationFrame: () => 0, Promise, JSON, Math, Date, Object, Array, String, Number, Boolean, RegExp, Map, Set, WeakMap, WeakSet, Symbol, Error, TypeError,
@@ -1010,7 +1012,7 @@ await T(async () => {
             showDetail: false, currentGroup: null, currentSource: null, episodeList: [], currentUrl: '', previewLocked: false, deepLinkLoading: false,
             isTestingSources: false, deepLinkSourceCount: 0, offlineList: [], groupedList: [], introBtn: { show: false }, _liveOpenSeq: 0,
             watchHistory: [], searched: false, keyword: '', rawList: [], loading: false, isTVMode: false, refreshingEpisodes: false, showOfflinePanel: false,
-            liveChannelId: null, liveTesting: false, _liveActive: false, browse: { open: false },
+            liveChannelId: null, liveTesting: false, _liveActive: false, browse: { open: false }, plPage: { open: false },
             $nextTick(f) { if (f) f(); return Promise.resolve(); },
             handleImgError() { }, _introRenderBtn() { }, _openOfflineContext() { }, releaseWakeLock() { }, syncShareUrl() { },
         };

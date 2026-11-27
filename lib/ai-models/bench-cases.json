@@ -1,0 +1,28 @@
+{
+ "_说明": "站长后台「快速测评」用的题目:文字 10 条(8 条是用户记错细节的说法 + 2 条原题)、推荐 1 条、截图 6 张(TMDB 剧照路径)。accept 里任何一个片名(或原名)排第一算对,排前三算前三;片名比较时去掉空格和标点、不分大小写。",
+ "text": [
+  { "id": "t1", "q": "男主每次坐公交车都会爆炸,然后重新醒来", "accept": ["开端", "Reset"] },
+  { "id": "t2", "q": "女主坐公交车爆炸后一直循环", "accept": ["开端"] },
+  { "id": "t3", "q": "太阳要毁灭了,人类给地球装发动机推出太阳系,有太空电梯的那一部", "accept": ["流浪地球2", "流浪地球Ⅱ", "The Wandering Earth 2", "The Wandering Earth II"] },
+  { "id": "t4", "q": "宫斗剧,女主一开始很单纯后来当了太后", "accept": ["甄嬛传", "后宫·甄嬛传", "后宫甄嬛传"] },
+  { "id": "t5", "q": "老电影,男主在船上画女主,船后来沉了", "accept": ["泰坦尼克号", "铁达尼号", "Titanic"] },
+  { "id": "t6", "q": "周星驰演的,踢足球的", "accept": ["少林足球", "Shaolin Soccer"] },
+  { "id": "t7", "q": "动画片,一只老鼠在巴黎餐厅当厨师", "accept": ["美食总动员", "料理鼠王", "Ratatouille"] },
+  { "id": "t8", "q": "张译和张颂文演的扫黑剧,卖鱼的后来成了老大", "accept": ["狂飙", "The Knockout"] },
+  { "id": "t9", "q": "刘德华和梁朝伟演卧底,最后在天台对峙", "accept": ["无间道", "Infernal Affairs"] },
+  { "id": "t10", "q": "日本动画,小女孩的爸妈吃了东西变成猪,她在澡堂打工", "accept": ["千与千寻", "神隐少女", "Spirited Away"] }
+ ],
+ "rec": {
+  "id": "r1", "q": "推荐几部像《开端》一样的时间循环剧",
+  "known": ["明日边缘", "源代码", "土拨鼠之日", "忌日快乐", "恐怖游轮", "棕榈泉", "暗黑", "俄罗斯套娃", "前目的地", "穿越时空的少女", "想见你", "时空线索", "重启人生", "今天暂时停止", "偷天情缘", "轮回派对", "开端",
+   "Edge of Tomorrow", "Source Code", "Groundhog Day", "Happy Death Day", "Triangle", "Palm Springs", "Dark", "Russian Doll", "Predestination", "Deja Vu", "Brush Up Life"]
+ },
+ "image": [
+  { "id": "i1", "path": "/3J8HmgR16MKX2iT71mB4EIDdV2x.jpg", "accept": ["繁花", "Blossoms Shanghai"] },
+  { "id": "i2", "path": "/i4xRsWEAwGgL5wMm8jrBbxxXKEI.jpg", "accept": ["狂飙", "The Knockout"] },
+  { "id": "i3", "path": "/94cS0mzODEoNIXFT7nhPcI8V4IJ.jpg", "accept": ["流浪地球2", "流浪地球Ⅱ", "The Wandering Earth 2", "The Wandering Earth II"] },
+  { "id": "i4", "path": "/dyJvKsNs2KP8qQnAXbRwDjblViy.jpg", "accept": ["千与千寻", "神隐少女", "Spirited Away"] },
+  { "id": "i5", "path": "/2meX1nMdScFOoV4370rqHWKmXhY.jpg", "accept": ["鱿鱼游戏", "Squid Game"] },
+  { "id": "i6", "path": "/8sNiAPPYU14PUepFNeSNGUTiHW.jpg", "accept": ["星际穿越", "Interstellar"] }
+ ]
+}
