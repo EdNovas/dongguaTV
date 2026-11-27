@@ -8,7 +8,7 @@ https://github.com/user-attachments/assets/8100fd07-46cd-4f16-9228-90a09075ac54
 
 最早从 [Minerchu/dongguaTV](https://github.com/Minerchu/dongguaTV)（冬瓜TV）起步，现已整体重写，主要增加：两级去广告、按广告情况分组的线路、跳过片头片尾、弹幕与评论、刷短剧、直播、离线缓存、多用户同步、站长后台、TV 模式与 Android App。
 
-**演示**：https://ednovas.video
+**演示**：https://e.show
 
 <img width="2547" height="1226" alt="image" src="https://github.com/user-attachments/assets/15392a90-9078-45b6-828d-829402669950" />
 
