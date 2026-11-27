@@ -55,6 +55,7 @@ console.log('① 默认开关');
     const calls = [];
     const a = createAppDownload({ axios: fakeAxios(calls), env: {} });
     ok(a._sourceFor(req('ednovas.video')) === OFFICIAL_JSON, 'ednovas.video 默认用官方清单');
+    ok(a._sourceFor(req('e.show')) === OFFICIAL_JSON && a._sourceFor(req('www.e.show')) === OFFICIAL_JSON, 'e.show(同一个网站的另一个域名)也默认用官方清单');
     ok(a._sourceFor(req('example.com')) === '', '别的站默认不推荐(官方 App 打开的是 ednovas.video)');
     ok(a.configField(req('example.com')) === null, '…/api/config 的 app_download 为 null');
     const b = createAppDownload({ axios: fakeAxios(calls), env: { APP_DOWNLOAD_JSON: 'https://my.site/app/latest.json' } });
