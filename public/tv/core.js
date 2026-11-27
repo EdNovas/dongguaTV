@@ -229,8 +229,12 @@
                 if (p.classList.contains('sy')) {
                     var pr2 = p.getBoundingClientRect(), r2 = el.getBoundingClientRect();
                     var padY = Math.min(pr2.height * 0.18, 160);
-                    var keepTop = p.getAttribute('data-sy-top');   // 例如首页:焦点在第一行时滚回顶
-                    if (keepTop && el.closest && el.closest(keepTop)) p.scrollTop = 0;
+                    // data-sy-top = 选择器:焦点在页面里【第一个】匹配它的元素里时滚回顶(首页:第一排)。
+                    // 只认第一个:首页「继续观看 / 我的追剧」下面的推荐区里也有 .row:first-child,
+                    // 以前用 closest 命中它 → 焦点进「热门剧集」也滚回顶,选中的卡跑到屏幕外
+                    var keepTop = p.getAttribute('data-sy-top');
+                    var topEl = keepTop ? p.querySelector(keepTop) : null;
+                    if (topEl && topEl.contains(el)) p.scrollTop = 0;
                     else if (r2.top < pr2.top + padY) p.scrollTop -= (pr2.top + padY - r2.top);
                     else if (r2.bottom > pr2.bottom - padY) p.scrollTop += (r2.bottom - (pr2.bottom - padY));
                 }
