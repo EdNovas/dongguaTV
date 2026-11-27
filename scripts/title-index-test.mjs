@@ -140,6 +140,20 @@ await ti.tick();
 ok(!ti.useFor(SITES[0]) && ti.status().sites.find((s) => s.key === 'sa').mode === 'ok', '探测到搜索恢复 → 不再走索引');
 
 ti.stop();
+
+console.log('8. 爬完的站不占名额(每轮 1 个站时,排在后面的站也轮得到)');
+{
+    const P = makeSite(['p1', 'p2']), Q = makeSite(['q1', 'q2']);
+    HOSTS['p.test'] = P; HOSTS['q.test'] = Q;
+    const d3 = fs.mkdtempSync(path.join(os.tmpdir(), 'tidx-q-'));
+    const t3 = createTitleIndex({ dbFile: path.join(d3, 'q.db'), httpGet, now, opts: { ...OPTS, sitesPerTick: 1, pagesPerTick: 5 },
+        sites: () => [{ key: 'sp', name: 'P', api: 'https://p.test/api.php/provide/vod' }, { key: 'sq', name: 'Q', api: 'https://q.test/api.php/provide/vod' }] });
+    for (let i = 0; i < 4; i++) await t3.tick();
+    const s3 = t3.status().sites;
+    ok(s3.find((s) => s.key === 'sp').rows === 2 && s3.find((s) => s.key === 'sq').rows === 2, 'P 爬完后 Q 接着爬 → 两个都有片名');
+    t3.stop(); fs.rmSync(d3, { recursive: true, force: true });
+}
+
 fs.rmSync(dir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
