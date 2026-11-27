@@ -493,6 +493,7 @@ function makeApp(o) {
         frameShare: { show: false, busy: false, img: '', note: '', link: '', title: '', canFiles: false, err: '', tip: '' },
         showMiniToast: (m) => S.toasts.push(m),
         _plOnPop: () => false,   // 📚 片单页的 popstate 钩子(这里没开片单页;片单另有 scripts/playlists-test.mjs)
+        _slOnPop: () => false,   // 🎞️「短剧」分类页的 popstate 钩子(这里没开分类页)
         syncShareUrl: () => { S.synced++; },
         _cutToBase: (t) => t + 30,   // 片头前剪掉了 30 秒插播:进度条 12:34 = 原时间轴 13:04
     };
@@ -1063,7 +1064,7 @@ console.log('⑤ 静态接线');
     ok(/v-if="frameShare\.canFiles"/.test(HTML), '「分享…」只在能分享文件时显示');
     ok(/if \(this\.frameShare && this\.frameShare\.show\) \{ this\.closeFrameShare\(\); return; \}/.test(methodSrc('closeDetail').body), '关播放页(返回键)时弹窗开着:先只关弹窗');
     const sw = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
-    ok(/const CACHE_VERSION = 'v44'/.test(sw), 'sw.js 升到 v44(v39 起预缓存二维码库)');
+    { const v = /const CACHE_VERSION = 'v(\d+)'/.exec(sw); ok(v && +v[1] >= 44, 'sw.js 至少 v44(v39 起预缓存二维码库)', v && v[1]); }
     ok(sw.includes("'./libs/js/qrcode-generator.min.js?v=2.0.4'"), 'sw.js 预缓存二维码库(与页面同一个 ?v=)');
     ok(/s\.src = 'libs\/js\/qrcode-generator\.min\.js\?v=2\.0\.4'/.test(HTML), '页面按需加载的 ?v= 与预缓存一致');
     const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));

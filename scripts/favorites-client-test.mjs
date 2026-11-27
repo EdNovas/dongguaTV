@@ -108,6 +108,7 @@ function makeVm(opts) {
         pushAsk: { show: false, kind: '', msg: '' }, isTVMode: false, frameShare: { show: false }, showRequestModal: false, showSettingsModal: false,
         // 📚 片单挂在收藏启动 / popstate 上的两个钩子:这里只测收藏,片单另有 scripts/playlists-test.mjs
         _plBoot() { }, _plOnPop() { return false; }, _plRefreshMaybe() { }, plPage: { open: false },
+        _slOnPop() { return false; },   // 🎞️「短剧」分类页的 popstate 钩子(这里没开分类页)
         showInfoModal: false, showSharePanel: false, showOfflinePanel: false, userBanned: false, previewLocked: false,
         _favBooted: opts.booted !== false,
         showMiniToast: m => toasts.push(m),
@@ -332,7 +333,7 @@ console.log('② 推送辅助');
 console.log('③ sw.js');
 {
     const src = fs.readFileSync(path.join(ROOT, 'public/sw.js'), 'utf8');
-    ok(/const CACHE_VERSION = 'v44'/.test(src), 'CACHE_VERSION v44');
+    { const v = /const CACHE_VERSION = 'v(\d+)'/.exec(src); ok(v && +v[1] >= 44, 'CACHE_VERSION ≥ v44(现在 ' + (v && v[1]) + ')'); }
     const handlers = {};
     const shown = [];
     const wins = [];
