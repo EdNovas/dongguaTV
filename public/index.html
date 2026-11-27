@@ -5405,8 +5405,9 @@
         .sh-mv { position: absolute; inset: 0; transform: translate3d(0, var(--sh-dy), 0); will-change: transform; }
         .shorts-page.sh-anim .sh-mv { transition: transform .28s cubic-bezier(.2, .75, .25, 1); }
         .sh-slide { position: absolute; left: 0; right: 0; height: 100%; overflow: hidden; }
-        .sh-pbg { position: absolute; inset: -40px; background-size: cover; background-position: center; filter: blur(28px) brightness(.38); }
-        .sh-pic { position: absolute; inset: 0; background-size: contain; background-repeat: no-repeat; background-position: center; opacity: .55; }
+        /* 底色一律纯黑(像抖音);封面只在这部刚开始加载、画面还没出来时垫着,出画面就淡掉(当前这张 .off),上下邻居卡还没加载,滑动时露的是封面 */
+        .sh-pic { position: absolute; inset: 0; background-size: contain; background-repeat: no-repeat; background-position: center; transition: opacity .2s; }
+        .sh-pic.off { opacity: 0; }
         .sh-vl { pointer-events: none; }
         .sh-vl video { display: block; width: 100%; height: 100%; object-fit: contain; background: transparent; opacity: 0; transition: opacity .18s; }
         .sh-vl.ready video { opacity: 1; }
@@ -5444,10 +5445,33 @@
         .sh-err-btns { display: flex; justify-content: center; gap: 10px; margin-top: 12px; }
         .sh-err-btns button { padding: 6px 16px; border: 1px solid rgba(var(--fg-rgb), .25); border-radius: calc(16px * var(--radius-k)); background: none; color: var(--text-1); font-size: 13px; cursor: pointer; }
         .sh-err-btns button:first-child { border-color: transparent; background: var(--accent); color: var(--on-accent); }
-        .sh-prog { position: absolute; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0px); z-index: 3; height: 18px; cursor: pointer; }
-        .sh-prog::before, .sh-prog i { content: ''; position: absolute; left: 0; right: 0; bottom: 7px; height: 2px; }
+        /* 进度条:触控区 28px 高;按住能拖(拖的时候变粗 + 圆点 + 屏幕下方大号时间),电脑上指上去也变粗 */
+        .sh-prog { position: absolute; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0px); z-index: 3; height: 28px; cursor: pointer; touch-action: none; transition: opacity .2s; }
+        .sh-prog::before, .sh-prog i { content: ''; position: absolute; left: 0; right: 0; bottom: 9px; height: 2px; transition: height .15s; }
         .sh-prog::before { background: rgba(255, 255, 255, .2); }
         .sh-prog i { background: rgba(255, 255, 255, .9); transform-origin: left center; transform: scaleX(0); }
+        .sh-prog b { position: absolute; left: 0; bottom: 5px; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: #fff; box-shadow: 0 0 6px rgba(0, 0, 0, .5); opacity: 0; transition: opacity .15s; pointer-events: none; }
+        .sh-prog.scrub::before, .sh-prog.scrub i { height: 4px; }
+        .sh-prog.scrub b { opacity: 1; }
+        @media (hover: hover) {
+            .sh-prog:hover::before, .sh-prog:hover i { height: 4px; }
+            .sh-prog:hover b { opacity: 1; }
+        }
+        .sh-scrub { position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); z-index: 4; transform: translateX(-50%); font-size: 18px; color: rgba(255, 255, 255, .7); text-shadow: 0 1px 6px rgba(0, 0, 0, .8); white-space: nowrap; pointer-events: none; font-variant-numeric: tabular-nums; }
+        .sh-scrub b { font-size: 30px; color: #fff; }
+        .shorts-page.sh-scrubbing .sh-fg { opacity: 0; }   /* 拖进度条时片名和按钮先让开(像抖音) */
+        /* 按住倍速:顶上一条提示;上滑锁定后提示留着,点它恢复正常速度 */
+        .sh-speed { position: absolute; left: 50%; top: 64px; z-index: 4; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; padding: 7px 16px; border: 0; border-radius: calc(18px * var(--radius-k)); background: rgba(0, 0, 0, .62); color: #fff; font-size: 13px; white-space: nowrap; pointer-events: none; }
+        .sh-speed b { font-size: 16px; font-variant-numeric: tabular-nums; }
+        .sh-speed span { color: rgba(255, 255, 255, .75); }
+        .sh-speed.locked { pointer-events: auto; cursor: pointer; }
+        .shorts-page.sh-has-speed .sh-note { top: 116px; }
+        /* 清屏:字、按钮、顶栏、进度条都藏起来只剩画面;右下角留一个淡淡的小按钮退出 */
+        .sh-fg, .sh-top { transition: opacity .2s; }
+        .shorts-page.sh-clean .sh-fg, .shorts-page.sh-clean .sh-top, .shorts-page.sh-clean .sh-prog { opacity: 0; pointer-events: none; }
+        .shorts-page.sh-clean .sh-fg *, .shorts-page.sh-clean .sh-top > * { pointer-events: none; }
+        .sh-unclean { position: absolute; right: 14px; bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 4; width: 40px; height: 40px; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .38); color: rgba(255, 255, 255, .8); font-size: 16px; opacity: .55; cursor: pointer; }
+        .sh-unclean:hover, .sh-unclean:focus-visible { opacity: 1; }
         .sh-drawer-mask { position: absolute; inset: 0; z-index: 6; background: rgba(0, 0, 0, .35); touch-action: pan-y; }
         .sh-drawer {
             position: absolute; left: 0; right: 0; bottom: 0; max-width: 620px; max-height: 62%; margin: 0 auto; display: flex; flex-direction: column;
@@ -7728,10 +7752,7 @@
             @pointerdown="onDown" @pointermove="onMove" @pointerup="onUp" @pointercancel="onUp" @wheel="onWheel" @click="onTap">
             <div class="sh-mv sh-bg" aria-hidden="true">
                 <div v-for="s in slides" :key="s.key" class="sh-slide" :style="{ top: (s.off * 100) + '%' }">
-                    <template v-if="s.it && s.it.pic">
-                        <div class="sh-pbg" :style="{ backgroundImage: 'url(' + JSON.stringify(s.it.pic) + ')' }"></div>
-                        <div class="sh-pic" :style="{ backgroundImage: 'url(' + JSON.stringify(s.it.pic) + ')' }"></div>
-                    </template>
+                    <div v-if="s.it && s.it.pic" class="sh-pic" :class="{ off: s.off === 0 && !coverOn }" :style="{ backgroundImage: 'url(' + JSON.stringify(s.it.pic) + ')' }"></div>
                 </div>
             </div>
             <div class="sh-mv sh-vl" :class="{ ready: vReady }">
@@ -7753,6 +7774,7 @@
                             <button v-if="favOk" type="button" class="sh-btn" :class="{ on: favOn }" @click.stop="fav()" :aria-label="favOn ? '取消收藏' : '收藏'">
                                 <i class="fas fa-heart" aria-hidden="true"></i><span>{{ favOn ? '已收藏' : '收藏' }}</span></button>
                             <button type="button" class="sh-btn" @click.stop="share()" aria-label="分享"><i class="fas fa-share" aria-hidden="true"></i><span>分享</span></button>
+                            <button type="button" class="sh-btn" @click.stop="clean = true" aria-label="清屏"><i class="fas fa-eye-slash" aria-hidden="true"></i><span>清屏</span></button>
                             <button type="button" class="sh-btn" @click.stop="full()" aria-label="完整播放"><i class="fas fa-up-right-and-down-left-from-center" aria-hidden="true"></i><span>完整播放</span></button>
                         </div>
                     </div>
@@ -7770,6 +7792,14 @@
             </div>
             <div class="sh-note" v-if="note">{{ note }}</div>
             <button type="button" class="sh-unmute" v-if="needTap" @click.stop="toggleMute()"><i class="fas fa-volume-xmark" aria-hidden="true"></i> 点一下打开声音</button>
+            <div class="sh-speed" v-if="holdRate || lockRate" :class="{ locked: !holdRate }" @pointerdown.stop @click.stop="holdRate || unlockRate()"
+                :role="holdRate ? null : 'button'" :aria-label="holdRate ? null : '恢复正常速度'">
+                <i :class="['fas', (!holdRate || holdLocked) ? 'fa-lock' : 'fa-forward']" aria-hidden="true"></i>
+                <b>{{ rateText(holdRate || lockRate) }}</b>
+                <span v-if="holdRate">{{ holdLocked ? '已锁定，松手保持' : '左右滑调速 · 上滑锁定' }}</span>
+                <span v-else>点这里恢复正常速度</span>
+            </div>
+            <button type="button" class="sh-unclean" v-if="clean" @click.stop="clean = false" aria-label="退出清屏" title="退出清屏"><i class="fas fa-eye" aria-hidden="true"></i></button>
             <div class="sh-center" v-if="cur">
                 <div class="sh-err" v-if="err">
                     <div>{{ err }}</div>
@@ -7778,7 +7808,8 @@
                 <div class="sh-spin" v-else-if="loading"></div>
                 <i class="fas fa-play sh-play-ic" v-else-if="paused" aria-hidden="true"></i>
             </div>
-            <div class="sh-prog" ref="prog" @click.stop="seekBar" @pointerdown.stop aria-hidden="true"><i ref="bar"></i></div>
+            <div class="sh-prog" ref="prog" :class="{ scrub: !!scrub }" @click.stop @pointerdown.stop="scrubDown" @pointermove="scrubMove" @pointerup="scrubUp" @pointercancel="scrubUp" aria-hidden="true"><i ref="bar"></i><b ref="knob"></b></div>
+            <div class="sh-scrub" v-if="scrub"><b>{{ scrub.t }}</b> / {{ scrub.d }}</div>
             <div class="sh-drawer-mask" v-if="drawer && cur" @click.stop.self="drawer = false">
                 <div class="sh-drawer" role="dialog" aria-label="选集">
                     <div class="sh-dr-head">
@@ -10842,13 +10873,18 @@
         //   预加载:当前这集缓冲够了(前面 ≥20s 或已缓冲到结尾)才去拉下一部(或下一集)的清单(+ clip 站预扫插播),不拉分片、不建第二个播放器。
         //   历史:看了 ≥20 秒 / 到第二集 / 本来就在历史里的才记(一扫而过的不进「继续观看」),记法和播放页一样(addToWatchHistory,时间按原时间轴)。
         window.DgShortsMem = { items: [], ids: new Set(), idx: 0, next: 0, done: false, at: 0 };
+        const DG_SHORTS_RATES = [1.5, 2, 3];   // 按住倍速:按住 = 中间那档,左右滑换档
         window.DgShorts = {
             template: '#dg-shorts-tpl',
             emits: ['close'],
             data() {
                 const M = window.DgShortsMem;
                 return { items: M.items, idx: M.idx, epIdx: 0, srcIdx: 0, done: M.done, more: false, listMsg: '',
-                    loading: false, vReady: false, paused: false, muted: false, needTap: false, err: '', note: '', drawer: false };
+                    loading: false, vReady: false, paused: false, muted: false, needTap: false, err: '', note: '', drawer: false,
+                    // coverOn:这部刚开始加载、画面还没出来(只有换「部」才垫封面,同一部换集不闪封面)
+                    // holdRate:按住时的倍速(0 = 没按住);holdLocked:按住时已上滑到锁定;lockRate:锁定的倍速(0 = 正常速度)
+                    // clean:清屏;scrub:拖进度条时显示的 { t, d }
+                    coverOn: true, holdRate: 0, holdLocked: false, lockRate: 0, clean: false, scrub: null };
             },
             computed: {
                 cur() { return this.items[this.idx] || null; },
@@ -10865,12 +10901,17 @@
                     const r = this.$root;
                     return !!(this.cur && r.favoritesEnabled && r._favFind({ name: this.cur.title, sources: this.curSrcs }));
                 },
+                speedOn() { return !!(this.holdRate || this.lockRate); },
             },
             watch: {
                 note(v) { clearTimeout(this._noteT); if (v) this._noteT = setTimeout(() => { this.note = ''; }, 2600); },
+                // 页面根节点的 sh-anim / sh-drag 是直接改 classList 的,这两个也走 classList(用 :class 绑定会在重渲染时把它们冲掉)
+                clean(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-clean', !!v); },
+                speedOn(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-has-speed', !!v); },
+                scrub(v) { const p = this.$refs.page; if (p) p.classList.toggle('sh-scrubbing', !!v); },
             },
             mounted() {
-                this._s = { tok: 0, hls: null, cur: null, drag: null, anim: false, navigating: false, wd: 0, ld: 0, triage: 0,
+                this._s = { tok: 0, hls: null, cur: null, drag: null, anim: false, navigating: false, wd: 0, ld: 0, triage: 0, lpT: 0, scrub: null,
                     wheelAt: 0, wheelAcc: 0, wheelLock: false, clickBlock: 0, watched: 0, lastTU: 0, saveAt: 0, warmed: new Set(), warmBusy: false, failRun: 0, unbind: [] };
                 this._bindVideo();
                 this._onKeyFn = (e) => this.onKey(e);
@@ -10890,7 +10931,7 @@
                 this._save();
                 this._stop();
                 const S = this._s;
-                clearTimeout(S.ld); clearTimeout(this._noteT); clearTimeout(this._retryT); clearTimeout(this._skipT);
+                clearTimeout(S.ld); clearTimeout(S.lpT); clearTimeout(this._noteT); clearTimeout(this._retryT); clearTimeout(this._skipT);
                 S.unbind.forEach(f => { try { f(); } catch (e) { } });
                 window.removeEventListener('keydown', this._onKeyFn, true);
                 document.removeEventListener('visibilitychange', this._onVisFn);
@@ -11018,6 +11059,9 @@
                         if (!mine()) return;
                         S.cur.started = true; S.failRun = 0;
                         this.vReady = true; this.paused = false; this.err = ''; this._setLoading(false);
+                        this.coverOn = false;
+                        const r = this.holdRate || this.lockRate || 1;   // 换源 / 换集会把倍速重置成默认值:补回去
+                        if (v.playbackRate !== r) { try { v.playbackRate = r; } catch (e) { } }
                     });
                     on('play', () => { if (mine()) this.paused = false; });
                     on('pause', () => { if (mine() && S.cur.started && !v.ended) { this.paused = true; this._save(); } });
@@ -11072,6 +11116,7 @@
                     if (this._allBad(this.cur)) { const g = this._nextGood(this.idx, 1); if (g !== this.idx) { this.idx = g; window.DgShortsMem.idx = g; } }
                     const st = this._startOf(this.cur);
                     this.srcIdx = st.si; this.epIdx = st.ei; this._s.watched = 0;
+                    this.coverOn = true;
                     this._play({ seekTo: st.seek });
                     if (st.resumed && (st.ei > 0 || st.seek)) this.note = '接着上次看 第' + (st.ei + 1) + '集';
                 },
@@ -11094,6 +11139,7 @@
                     S.cur = { tok, it, src, ep, route, url, native, sess, retried: !!o.retried, fragRetried: !!o.fragRetried, seekTo: o.seekTo || 0, started: false, manifestOk: false };
                     this.vReady = false; this.err = ''; this.paused = false; this.loading = false; this._setLoading(true);
                     if (this.$refs.bar) this.$refs.bar.style.transform = 'scaleX(0)';
+                    if (this.$refs.knob) this.$refs.knob.style.transform = 'translateX(0px)';
                     v.muted = this.muted;
                     if (native) {
                         v.src = url;
@@ -11157,7 +11203,7 @@
                     const S = this._s, c = S.cur, v = this.$refs.v;
                     if (!c || c.tok !== S.tok) return;
                     const d = v.duration;
-                    if (this.$refs.bar && isFinite(d) && d > 0) this.$refs.bar.style.transform = 'scaleX(' + Math.min(1, v.currentTime / d).toFixed(4) + ')';
+                    if (!S.scrub && isFinite(d) && d > 0) this._drawBar(v.currentTime / d);   // 正在拖进度条:条跟着手指,不跟视频
                     const now = Date.now();
                     if (S.lastTU && !v.paused) { const dt = (now - S.lastTU) / 1000; if (dt > 0 && dt < 2) S.watched += dt; }
                     S.lastTU = now;
@@ -11358,13 +11404,50 @@
                 onDown(e) {
                     const S = this._s;
                     if (S.anim || this.drawer || (e.button != null && e.button > 0)) return;
-                    if (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-prog')) return;
-                    S.drag = { id: e.pointerId, y0: e.clientY, x0: e.clientX, dy: 0, moved: false, lastY: e.clientY, lastT: performance.now(), vy: 0 };
+                    if (e.target && e.target.closest && e.target.closest('.sh-drawer-mask, .sh-prog, .sh-speed, .sh-unclean')) return;
+                    S.drag = { id: e.pointerId, y0: e.clientY, x0: e.clientX, cx: e.clientX, cy: e.clientY, dy: 0, moved: false, lastY: e.clientY, lastT: performance.now(), vy: 0, hold: null };
+                    // 按住画面(不在按钮上、不动)约 0.4 秒 → 倍速;先动了就是翻页
+                    clearTimeout(S.lpT);
+                    const onBtn = e.target && e.target.closest && e.target.closest('button, a, .sh-top');
+                    if (!onBtn && this.cur && !this.err) { const id = e.pointerId; S.lpT = setTimeout(() => this._holdStart(id), 380); }
                 },
+                // ---------- 按住倍速(抖音式):按住 2×,左右滑 1.5× / 2× / 3×,上滑锁定(松手保持),顶上提示条点一下恢复 ----------
+                _holdStart(id) {
+                    const S = this._s, d = S.drag, v = this.$refs.v, page = this.$refs.page;
+                    if (!d || d.id !== id || d.moved || !v || v.paused || !S.cur || !S.cur.started || S.anim || this.drawer) return;
+                    d.hold = { x0: d.cx, y0: d.cy, idx: 1 };
+                    try { page.setPointerCapture(id); } catch (x) { }
+                    this.holdLocked = false;
+                    this.holdRate = DG_SHORTS_RATES[1];
+                    this._applyRate(this.holdRate);
+                },
+                _holdMove(d) {
+                    const h = d.hold, R = DG_SHORTS_RATES;
+                    const idx = Math.max(0, Math.min(R.length - 1, 1 + Math.round((d.cx - h.x0) / 80)));
+                    const dy = d.cy - h.y0;
+                    if (dy < -70) this.holdLocked = true;
+                    else if (dy > -40) this.holdLocked = false;
+                    if (idx !== h.idx) { h.idx = idx; this.holdRate = R[idx]; this._applyRate(this.holdRate); }
+                },
+                _holdEnd() {
+                    if (this.holdLocked) this.lockRate = this.holdRate === 1 ? 0 : this.holdRate;
+                    this.holdRate = 0; this.holdLocked = false;
+                    this._applyRate(this.lockRate || 1);
+                },
+                unlockRate() { this.lockRate = 0; this._applyRate(1); },
+                _applyRate(r) {
+                    const v = this.$refs.v;
+                    if (!v) return;
+                    try { v.playbackRate = r; v.defaultPlaybackRate = this.lockRate || 1; } catch (e) { }
+                },
+                rateText(r) { return (Math.round(r * 100) / 100) + '×'; },
                 onMove(e) {
                     const S = this._s, d = S.drag, page = this.$refs.page;
                     if (!d || e.pointerId !== d.id) return;
+                    d.cx = e.clientX; d.cy = e.clientY;
+                    if (d.hold) { this._holdMove(d); return; }
                     const dy = e.clientY - d.y0, dx = e.clientX - d.x0;
+                    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) clearTimeout(S.lpT);
                     if (!d.moved) {
                         if (Math.abs(dy) < 10 || Math.abs(dy) < Math.abs(dx)) { if (Math.abs(dx) > 30) S.drag = null; return; }
                         d.moved = true;
@@ -11383,6 +11466,8 @@
                     const S = this._s, d = S.drag, page = this.$refs.page;
                     if (!d || e.pointerId !== d.id) return;
                     S.drag = null;
+                    clearTimeout(S.lpT);
+                    if (d.hold) { S.clickBlock = Date.now(); this._holdEnd(); return; }   // 按住倍速松手:不算点按(不暂停)
                     if (!d.moved) return;   // 没拖 = 点按,交给 onTap
                     S.clickBlock = Date.now();
                     const H = page.clientHeight || 1;
@@ -11403,7 +11488,7 @@
                 onTap(e) {
                     const S = this._s;
                     if (Date.now() - S.clickBlock < 400) return;
-                    if (e.target && e.target.closest && e.target.closest('button, a, .sh-drawer-mask, .sh-prog')) return;
+                    if (e.target && e.target.closest && e.target.closest('button, a, .sh-drawer-mask, .sh-prog, .sh-speed')) return;
                     if (this.needTap) { this.toggleMute(); return; }
                     this.togglePause();
                 },
@@ -11423,12 +11508,47 @@
                         if (!this.muted && v.paused && this.cur && !this.err) this._tryPlay(this._s.tok);
                     }
                 },
-                seekBar(e) {
-                    const v = this.$refs.v, el = this.$refs.prog;
-                    if (!v || !el || !isFinite(v.duration) || !(v.duration > 0)) return;
-                    const rc = el.getBoundingClientRect();
-                    const p = Math.max(0, Math.min(1, (e.clientX - rc.left) / (rc.width || 1)));
-                    try { v.currentTime = p * v.duration; } catch (x) { }
+                // ---------- 进度条:点一下跳,按住拖(拖的时候条变粗、出圆点、屏幕下方显示时间,松手才真的跳) ----------
+                _drawBar(p) {
+                    p = Math.max(0, Math.min(1, p || 0));
+                    const bar = this.$refs.bar, knob = this.$refs.knob, el = this.$refs.prog;
+                    if (bar) bar.style.transform = 'scaleX(' + p.toFixed(4) + ')';
+                    if (knob && el) knob.style.transform = 'translateX(' + (p * el.clientWidth).toFixed(1) + 'px)';
+                },
+                _fmt(s) {
+                    s = Math.max(0, Math.floor(s || 0));
+                    const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60, two = n => (n < 10 ? '0' : '') + n;
+                    return (h ? h + ':' + two(m) : two(m)) + ':' + two(x);
+                },
+                _scrubAt(e) {
+                    const el = this.$refs.prog, rc = el.getBoundingClientRect();
+                    return Math.max(0, Math.min(1, (e.clientX - rc.left) / (rc.width || 1)));
+                },
+                scrubDown(e) {
+                    const v = this.$refs.v, S = this._s;
+                    if (!v || !this.cur || (e.button != null && e.button > 0) || !isFinite(v.duration) || !(v.duration > 0)) return;
+                    S.scrub = { id: e.pointerId, p: this._scrubAt(e) };
+                    try { this.$refs.prog.setPointerCapture(e.pointerId); } catch (x) { }
+                    this._scrubShow();
+                },
+                scrubMove(e) {
+                    const S = this._s;
+                    if (!S.scrub || e.pointerId !== S.scrub.id) return;
+                    S.scrub.p = this._scrubAt(e);
+                    this._scrubShow();
+                },
+                scrubUp(e) {
+                    const S = this._s, sc = S.scrub, v = this.$refs.v;
+                    if (!sc || e.pointerId !== sc.id) return;
+                    S.scrub = null; this.scrub = null;
+                    S.clickBlock = Date.now();
+                    if (e.type !== 'pointercancel' && v && isFinite(v.duration) && v.duration > 0) { try { v.currentTime = Math.min(v.duration - 0.3, sc.p * v.duration); } catch (x) { } }
+                    else if (v && isFinite(v.duration) && v.duration > 0) this._drawBar(v.currentTime / v.duration);
+                },
+                _scrubShow() {
+                    const S = this._s, v = this.$refs.v, d = v.duration;
+                    this._drawBar(S.scrub.p);
+                    this.scrub = { t: this._fmt(S.scrub.p * d), d: this._fmt(d) };
                 },
                 onKey(e) {
                     if (e.defaultPrevented || this._dead) return;
@@ -11451,10 +11571,12 @@
                     else if (k === 'ArrowRight' || k === 'ArrowLeft') { stop(); const v = this.$refs.v; if (v && isFinite(v.duration)) { try { v.currentTime = Math.max(0, Math.min(v.duration - 0.5, v.currentTime + (k === 'ArrowRight' ? 5 : -5))); } catch (x) { } } }
                     else if (k === ' ' || k === 'Enter' || k === 'k' || k === 'MediaPlayPause') { stop(); this.togglePause(); }
                     else if (k === 'm') { stop(); this.toggleMute(); }
+                    else if (k === 'c') { stop(); this.clean = !this.clean; }
                 },
-                // 返回:选集面板开着先关面板,否则关掉整页(根应用 closeShorts:退掉压的那条历史)
+                // 返回:选集面板开着先关面板,清屏中先退出清屏,否则关掉整页(根应用 closeShorts:退掉压的那条历史)
                 back() {
                     if (this.drawer) { this.drawer = false; return; }
+                    if (this.clean) { this.clean = false; return; }
                     this.$emit('close');
                 },
                 pickEp(i) {
