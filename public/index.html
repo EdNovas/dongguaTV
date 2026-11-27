@@ -3591,6 +3591,57 @@
         html[data-style="film"] .pl-collage { border: 4px solid var(--print); border-bottom-width: 12px; background: var(--print); box-shadow: 0 6px 14px rgba(var(--shadow-rgb), .55); }
         html[data-style="film"] .pl-collage img { filter: sepia(.28) saturate(.88) contrast(1.06); }
         html[data-style="film"] .pl-card:hover .pl-collage { box-shadow: 0 14px 30px rgba(var(--shadow-rgb), .7), 0 0 0 2px var(--accent); }
+        /* 🎞️「短剧」分类页:整屏盖住首页(同片单页 9000;播放页 9999 / 竖屏刷 10010 在它上面);颜色都走主题变量 */
+        body.sl-open { overflow: hidden; }
+        .sl-page { position: fixed; inset: 0; z-index: 9000; background: var(--bg); color: var(--text-1); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; outline: none; }
+        .sl-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 4% 60px; }
+        @supports (top: max(1px, 2px)) {
+            .sl-wrap { padding-top: max(24px, calc(env(safe-area-inset-top, 0px) + 12px), calc(var(--dg-sb-guard, 0px) + 12px)); }
+        }
+        .sl-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+        .sl-back { color: var(--text-1); border-color: rgba(var(--fg-rgb), .3); }
+        .sl-heading { flex: 1; min-width: 0; }
+        .sl-title { margin: 0; font-family: var(--font-display); font-size: 26px; font-weight: 700; line-height: 1.2; }
+        .sl-sub { margin-top: 3px; color: var(--text-7); font-size: 13px; }
+        .sl-swipe { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 16px; border: 0; border-radius: calc(19px * var(--radius-k)); background: var(--accent); color: var(--on-accent); font-size: 14px; font-weight: 600; cursor: pointer; }
+        .sl-search { position: relative; display: flex; align-items: center; max-width: 520px; margin-bottom: 14px; }
+        .sl-search > i { position: absolute; left: 15px; color: var(--text-7); font-size: 14px; pointer-events: none; }
+        /* 16px:iOS 上输入框字号小于 16px 会在聚焦时整页放大 */
+        .sl-search input { width: 100%; height: 42px; padding: 0 40px; border: 1px solid rgba(var(--fg-rgb), .15); border-radius: calc(21px * var(--radius-k)); background: var(--surface-5); color: var(--text-1); font-size: 16px; outline: none; }
+        .sl-search input:focus { border-color: var(--accent); }
+        .sl-search input::-webkit-search-cancel-button { display: none; }
+        .sl-q-x { position: absolute; right: 8px; width: 28px; height: 28px; border: 0; border-radius: 50%; background: none; color: var(--text-6); cursor: pointer; }
+        .sl-tabs { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; margin-bottom: 10px; scrollbar-width: none; }
+        .sl-tabs::-webkit-scrollbar { display: none; }
+        .sl-tabs button { flex: none; height: 34px; padding: 0 14px; border: 1px solid rgba(var(--fg-rgb), .15); border-radius: calc(17px * var(--radius-k)); background: none; color: var(--text-3); font-size: 14px; cursor: pointer; }
+        .sl-tabs button small { margin-left: 5px; color: var(--text-8); font-size: 11px; }
+        .sl-tabs button.on { border-color: transparent; background: var(--accent); color: var(--on-accent); }
+        .sl-tabs button.on small { color: inherit; opacity: .75; }
+        .sl-sorts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 18px; margin-bottom: 16px; font-size: 13px; }
+        .sl-sorts button { padding: 4px 0; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-6); font-size: 14px; cursor: pointer; }
+        .sl-sorts button.on { color: var(--text-1); border-bottom-color: var(--accent); font-weight: 600; }
+        .sl-only { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 0 auto; color: var(--text-6); cursor: pointer; }
+        .sl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 14px; }
+        .sl-card { display: block; min-width: 0; padding: 0; border: 0; background: none; color: var(--text-1); text-align: left; cursor: pointer; }
+        .sl-poster { position: relative; aspect-ratio: 3 / 4; overflow: hidden; border-radius: calc(10px * var(--radius-k)); background: var(--surface-5); }
+        .sl-poster img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .3s; }
+        @media (hover: hover) { .sl-card:hover .sl-poster img { transform: scale(1.04); } }
+        .sl-badge { position: absolute; left: 6px; top: 6px; max-width: calc(100% - 12px); padding: 1px 7px; border-radius: calc(4px * var(--radius-k)); background: rgba(var(--accent-rgb), .9); color: var(--on-accent); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sl-eps { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; background: linear-gradient(transparent, rgba(0, 0, 0, .75)); color: #fff; font-size: 12px; }
+        .sl-name { margin-top: 7px; font-size: 14px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .sl-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: calc(10px * var(--radius-k)); }
+        .sl-foot { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 90px; color: var(--text-7); font-size: 13px; }
+        .sl-foot .sh-spin { margin: 0; border-color: rgba(var(--fg-rgb), .18); border-top-color: var(--accent); }
+        .sl-retry { padding: 4px 12px; border: 1px solid rgba(var(--fg-rgb), .2); border-radius: calc(14px * var(--radius-k)); background: none; color: var(--text-3); cursor: pointer; }
+        .btn-back-shorts { border-color: rgba(var(--accent-rgb), .6) !important; }
+        .btn-back-shorts i { color: var(--accent); }
+        @media (max-width: 600px) {
+            .sl-wrap { padding-left: 12px; padding-right: 12px; }
+            .sl-title { font-size: 22px; }
+            .sl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 8px; }
+            .sl-name { font-size: 13px; }
+            .sl-only { margin-left: 0; }
+        }
         /* 片单页:整屏盖住首页(播放页 9999 / 加到片单弹窗 10010 在它上面);首页在后面不滚 */
         body.pl-open { overflow: hidden; }
         .pl-page { position: fixed; inset: 0; z-index: 9000; background: var(--bg); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
@@ -3751,6 +3802,7 @@
         body.detail-covered #app > .browse-page,
         body.detail-covered #app > .browse-sticky,
         body.detail-covered #app > .pl-page,
+        body.detail-covered #app > .sl-page,
         body.detail-covered #app > #search-result-anchor,
         body.detail-covered #app > .footer {
             visibility: hidden !important;
@@ -7822,6 +7874,53 @@
         </div>
     </template>
 
+    <!-- 🎞️「短剧」分类页(组件 DgShortsLib;放在 #app 外面,根应用不编译它):全部短剧按题材 / 最新最热 / 搜片名浏览,点一部进竖屏刷(接着刷同一个列表) -->
+    <template id="dg-shorts-lib-tpl">
+        <div class="sl-page" ref="page" role="dialog" aria-modal="true" aria-label="短剧" tabindex="-1">
+            <div class="sl-wrap">
+                <div class="sl-top">
+                    <button type="button" ref="back" class="btn btn-outline-secondary rounded-pill px-3 px-md-4 py-2 sl-back" @click="$emit('close')" aria-label="返回">
+                        <i class="fas fa-arrow-left me-0 me-md-2" aria-hidden="true"></i><span class="d-none d-md-inline">返回</span></button>
+                    <div class="sl-heading">
+                        <h2 class="sl-title">短剧</h2>
+                        <div class="sl-sub" v-if="cats.total">共 {{ cats.total }} 部<span style="white-space:nowrap"> · 分集 {{ cats.eps }} 部</span></div>
+                    </div>
+                    <button type="button" class="sl-swipe" @click="swipe()"><i class="fas fa-mobile-screen-button" aria-hidden="true"></i><span>竖屏刷</span></button>
+                </div>
+                <div class="sl-search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" v-model="qIn" @keydown.enter="doSearch()" @input="onQ()" placeholder="搜短剧片名" enterkeyhint="search" maxlength="30" aria-label="搜短剧片名">
+                    <button v-if="qIn" type="button" class="sl-q-x" @click="clearQ()" aria-label="清空"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+                </div>
+                <div class="sl-tabs" role="group" aria-label="题材">
+                    <button type="button" :class="{ on: !cat }" @click="setCat('')">全部</button>
+                    <button v-for="t in tabs" :key="t.k" type="button" :class="{ on: cat === t.k }" @click="setCat(t.k)">{{ t.l }}<small v-if="t.n">{{ t.n }}</small></button>
+                </div>
+                <div class="sl-sorts">
+                    <button type="button" :class="{ on: sort === 'new' }" @click="setSort('new')">最新更新</button>
+                    <button type="button" :class="{ on: sort === 'hot' }" @click="setSort('hot')">热门</button>
+                    <label class="sl-only"><input type="checkbox" :checked="onlyEps" @change="onlyEps = $event.target.checked; reload()"> 只看一集一集的</label>
+                </div>
+                <div class="sl-grid">
+                    <button v-for="(it, i) in items" :key="it.id" type="button" class="sl-card" @click="open(i)" :aria-label="it.title">
+                        <div class="sl-poster">
+                            <img :src="pic(it)" loading="lazy" decoding="async" referrerpolicy="no-referrer" alt="" @error="picErr">
+                            <span v-if="it.remarks" class="sl-badge">{{ it.remarks }}</span>
+                            <span class="sl-eps">{{ it.whole ? '全集' : '共 ' + it.eps + ' 集' }}</span>
+                        </div>
+                        <div class="sl-name">{{ it.title }}</div>
+                    </button>
+                </div>
+                <div class="sl-foot" ref="foot">
+                    <div class="sh-spin" v-if="loading"></div>
+                    <template v-else-if="msg">{{ msg }} <button type="button" class="sl-retry" @click="loadMore()">再试一次</button></template>
+                    <template v-else-if="!items.length">{{ q ? '没找到「' + q + '」' : (cats.total ? '这个题材还没有短剧' : '短剧片库正在准备，过一会儿再来看看') }}</template>
+                    <template v-else-if="next == null">没有更多了</template>
+                </div>
+            </div>
+        </div>
+    </template>
+
     <div id="app" v-cloak>
 
         <nav class="navbar-custom" v-show="!offHome">
@@ -8010,6 +8109,7 @@
                     <h3 class="mag-sec-h"><span>分类索引</span><small>按类型翻阅</small></h3>
                     <div class="mag-chips">
                         <button v-for="t in catTypes" :key="'mt-' + t.k" type="button" @click="openBrowse({ type: t.k, sel: {} })"><i :class="['fas', t.icon]" aria-hidden="true"></i> {{ t.l }}</button>
+                        <button type="button" @click="openShortsLib()"><i class="fas fa-mobile-screen-button" aria-hidden="true"></i> 短剧</button>
                         <button type="button" class="all" @click="openCatDir()"><i class="fas fa-table-cells-large" aria-hidden="true"></i> 全部分类</button>
                     </div>
                 </section>
@@ -8301,6 +8401,8 @@
                 <!-- 📱 看短剧这一栏时给个入口:竖屏一部一部刷 -->
                 <button v-if="cal.cat === 'short' && calCats.length" type="button" class="cal-shorts-go" @click="openShorts()">
                     <i class="fas fa-mobile-screen-button" aria-hidden="true"></i>竖屏刷短剧，一集一两分钟<i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                <button v-if="cal.cat === 'short' && calCats.length" type="button" class="cal-shorts-go" @click="openShortsLib()">
+                    <i class="fas fa-table-cells" aria-hidden="true"></i>全部短剧，按题材找<i class="fas fa-chevron-right" aria-hidden="true"></i></button>
                 <div v-if="!calCats.length" class="cal-empty">这天资源站还没有更新</div>
                 <div class="scroll-container" v-else-if="!cal.open">
                     <button class="scroll-btn left" v-show="calCanScrollLeft" @click="scrollRowBy('calRow', -1)"
@@ -8432,6 +8534,8 @@
                         <button v-for="t in catTypes" :key="t.k" type="button" class="cat-tab"
                             :class="{ active: catNavType === t.k }" :aria-pressed="catNavType === t.k ? 'true' : 'false'"
                             @click="catNavSelect(t.k)"><i :class="['fas', t.icon]" aria-hidden="true"></i>{{ t.l }}</button>
+                        <!-- 🎞️ 短剧不在 TMDB 里:直接进「短剧」分类页(全部短剧按题材浏览) -->
+                        <button type="button" class="cat-tab cat-tab-shorts" @click="openShortsLib()"><i class="fas fa-mobile-screen-button" aria-hidden="true"></i>短剧</button>
                     </div>
                     <div class="catnav-quick">
                         <button v-if="!hideRandomRow" type="button" class="catnav-q is-random" @click="catNavJump('random')">
@@ -8567,6 +8671,20 @@
                         @click="openBrowse({ type: h.type, sel: h.sel })">
                         <span class="catdir-tile-l">{{ h.l }}</span><i :class="['fas', h.icon]" aria-hidden="true"></i>
                     </button>
+                </div>
+            </section>
+            <!-- 🎞️ 短剧(不走 TMDB):按题材进「短剧」分类页 -->
+            <section class="catdir-card" aria-label="短剧">
+                <div class="catdir-card-head">
+                    <span class="catdir-card-icon"><i class="fas fa-mobile-screen-button" aria-hidden="true"></i></span>
+                    <span class="catdir-card-title">短剧</span>
+                    <button type="button" class="catnav-all" @click="openShortsLib()">全部短剧<i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+                </div>
+                <div class="catnav-row">
+                    <span class="catnav-label">题材</span>
+                    <div class="catdir-chips">
+                        <button v-for="t in shortsTags" :key="t.k" type="button" class="cat-chip" @click="openShortsLib({ cat: t.k })">{{ t.l }}</button>
+                    </div>
                 </div>
             </section>
             <section class="catdir-card" v-for="t in catDir.types" :key="t.k" :aria-label="t.l">
@@ -9272,6 +9390,8 @@
         <!-- ★★★ 播放详情页 (影院布局) ★★★ -->
         <!-- 📱 短剧竖屏刷(组件 DgShorts,模板 #dg-shorts-tpl) -->
         <dg-shorts v-if="shortsOpen" ref="shortsComp" @close="closeShorts()"></dg-shorts>
+        <!-- 🎞️「短剧」分类页(组件 DgShortsLib,模板 #dg-shorts-lib-tpl) -->
+        <dg-shorts-lib v-if="shortsLibOpen" ref="shortsLib" @close="closeShortsLib()"></dg-shorts-lib>
         <div class="detail-overlay" :class="{ active: showDetail }">
             <div v-if="!previewLocked" class="close-btn" tabindex="1" role="button" aria-label="关闭" @click="closeDetail"
                 @keydown.enter="closeDetail"><i class="fas fa-times"></i></div>
@@ -9381,6 +9501,10 @@
                     </div>
                     <!-- 分享 / 投屏:未登录预览与试看时不显示(投屏到电视上播不计试看时长) -->
                     <div v-if="!previewLocked && !trial.on" style="display: flex; gap: 10px; align-items: center;">
+                        <!-- 📱 从竖屏刷「完整播放」进来的这一部:一键回到刚才那一集接着刷 -->
+                        <button v-if="shortsReturn && currentGroup.name === shortsReturn" class="btn-cast btn-back-shorts" tabindex="2" @click="backToShorts" aria-label="返回刷短剧">
+                            <i class="fas fa-mobile-screen-button"></i> 返回刷短剧
+                        </button>
                         <button class="btn-cast" tabindex="2" @click="openSharePanel" aria-label="分享">
                             <i class="fas fa-share-alt"></i> 分享
                         </button>
@@ -10515,6 +10639,9 @@
         window.DgShortsMem = { items: [], ids: new Set(), idx: 0, next: 0, done: false, at: 0 };
         const DG_SHORTS_RATES = [1.5, 2, 3];   // 按住两侧倍速:按住 = 中间那档,左右滑换档
         const DG_SHORTS_PM_RATES = [0.75, 1, 1.25, 1.5, 2, 3];   // 播放器页里的倍速档
+        // 「短剧」分类页的题材(与 lib/shorts-feed 的 TAGS 同键同名)
+        const DG_SHORTS_TAGS = [{ k: 'dushi', l: '都市' }, { k: 'guzhuang', l: '古装' }, { k: 'tianchong', l: '甜宠' }, { k: 'nixi', l: '逆袭' },
+            { k: 'chuanyue', l: '重生穿越' }, { k: 'xuanyi', l: '悬疑' }, { k: 'jiating', l: '家庭' }];
         window.DgShorts = {
             template: '#dg-shorts-tpl',
             emits: ['close'],
@@ -10571,9 +10698,23 @@
                     } catch (e) { }
                 }
                 const M = window.DgShortsMem;
-                if (M.items.length && Date.now() - M.at < 30 * 60e3) this._startCur();
-                else {   // 头一次 / 隔了半小时:拿一份新的(服务器 30 分钟一更新)
-                    M.items.splice(0); M.ids = new Set(); M.idx = 0; M.next = 0; M.done = false;
+                // 打开方式(根应用 openShorts(o) 留下的):o.list = 从「短剧」分类页点了一部(接着刷同一个列表);o.resume = 从播放页「返回刷短剧」(原样接着刷)
+                const o = this.$root._shortsOpts || null;
+                this.$root._shortsOpts = null;
+                const raw = Vue.markRaw || (x => x);
+                if (o && o.list && (o.list.items || []).length) {
+                    const L = o.list;
+                    // 经过响应式代理改(this.items 就是 M.items):直接改 M.items 这个原始数组,cur / slides 这些 computed 不会重算,还指着旧列表
+                    this.items.splice(0, this.items.length, ...L.items.map(x => raw(Object.assign({}, x))));
+                    M.ids = new Set(L.items.map(x => x.id));
+                    M.idx = Math.max(0, Math.min(L.items.length - 1, L.start | 0));
+                    M.next = L.next == null ? L.items.length : L.next; M.done = L.next == null; M.at = Date.now();
+                    M.src = Object.assign({}, L.args || {});
+                    this.idx = M.idx; this.done = M.done; this.listMsg = '';
+                    this._startCur();
+                } else if (M.items.length && Date.now() - M.at < 30 * 60e3 && ((o && o.resume) || !M.src)) this._startCur();
+                else {   // 头一次 / 隔了半小时 / 上次刷的是分类页的列表:拿一份新的(服务器 30 分钟一更新)
+                    this.items.splice(0); M.ids = new Set(); M.idx = 0; M.next = 0; M.done = false; M.src = null;
                     this.idx = 0; this.done = false;
                     this._loadMore().then(() => this._startCur());
                 }
@@ -10596,10 +10737,15 @@
                     if (this.more || M.done || this._dead) return;
                     this.more = true;
                     try {
-                        const r = await fetchT('/api/shorts/feed?offset=' + M.next + '&limit=8', null, 15000);
+                        // 从分类页进来的:接着拿同一个列表(同题材 / 排序 / 搜索),带线路(full=1);否则是竖屏刷的推荐流
+                        const A = M.src;
+                        const url = A ? '/api/shorts/list?full=1&limit=8&offset=' + M.next + ['cat', 'sort', 'q', 'only'].filter(k => A[k]).map(k => '&' + k + '=' + encodeURIComponent(A[k])).join('')
+                            : '/api/shorts/feed?offset=' + M.next + '&limit=8';
+                        const r = await fetchT(url, null, 15000);
                         const d = r.ok ? await r.json() : null;
                         if (this._dead) return;
                         if (!d || d.enabled === false) { this.listMsg = '短剧暂时没有开放'; M.done = this.done = true; return; }
+                        if (A && !d.total) { M.done = this.done = true; return; }   // 分类页的列表到头了
                         if (!d.total) {   // 服务器刚启动、片库还在拉(十几秒):过一会儿再要
                             this.listMsg = '短剧片库正在准备，稍等十几秒…';
                             this._tries = (this._tries || 0) + 1;
@@ -10623,6 +10769,7 @@
                 // 这部的线路:按广告分级(与播放页线路分组同一套,运行时降级也算上)→ 集数多的在前。
                 //   原生 HLS 通道剪不了插播:clip 站(如意/非凡的中插只能剪/跳)当「有插播」排
                 _srcs(it) {
+                    if (!it || !it.srcs) return [];   // 从「短剧」分类页带过来的卡片还没有线路(_ensureFull 去拿):别把空表缓存住
                     if (it._srcs) return it._srcs;
                     const r = this.$root, native = !!(window._dgPreferNativeHls || !(window.Hls && Hls.isSupported()));
                     const rank = s => { try { const p = r.srcProfile(s); const k = SRC_TIER_RANK[p.tier]; return (native && p.clip && k < SRC_TIER_RANK.insert) ? SRC_TIER_RANK.insert : k; } catch (e) { return 3; } };
@@ -10663,7 +10810,7 @@
                         return { name: k > 0 ? seg.slice(0, k) : '第' + (i + 1) + '集', url: k >= 0 ? seg.slice(k + 1) : seg };
                     }));
                 },
-                epCountOf(it) { const s = this._srcs(it)[0]; return s ? this._eps(s).length : 0; },
+                epCountOf(it) { if (!it.srcs) return it.eps || 0; const s = this._srcs(it)[0]; return s ? this._eps(s).length : 0; },
                 startEpOf(it) { try { return this._startOf(it).ei; } catch (e) { return 0; } },
                 epNum(name, i) {
                     const s = String(name || '');
@@ -10763,8 +10910,37 @@
                 _cuts() { const c = this._s.cur, s = c && c.sess; return (s && s.result && !s.late && s.result.cuts && s.result.cuts.length) ? s.result.cuts : null; },
                 _toBase(t) { const c = this._cuts(); return (c && window.AdClipCore && isFinite(t)) ? AdClipCore.fromCutTime(t, c) : t; },
                 _toPlay(t) { const c = this._cuts(); return (c && window.AdClipCore && isFinite(t)) ? AdClipCore.toCutTime(t, c) : t; },
+                // 分类页带过来的卡片没有线路:按 id 拿整部,换掉列表里那一项(换成新对象,computed 才会重算)
+                _ensureFull(i) {
+                    const it = this.items[i];
+                    if (!it || it.srcs) return Promise.resolve(it || null);
+                    if (it._loading) return it._loading;
+                    const raw = Vue.markRaw || (x => x);
+                    return (it._loading = (async () => {
+                        try {
+                            const r = await fetchT('/api/shorts/item?id=' + encodeURIComponent(it.id), null, 12000);
+                            const d = r.ok ? await r.json() : null;
+                            if (!d || !(d.srcs || []).length || this._dead) return null;
+                            const full = raw(Object.assign({}, it, d, { _loading: null }));
+                            const j = this.items.indexOf(it);
+                            if (j >= 0) this.items.splice(j, 1, full);
+                            return full;
+                        } catch (e) { return null; } finally { it._loading = null; }
+                    })());
+                },
                 _startCur() {
                     if (!this.cur || this._dead) return;
+                    if (!this.cur.srcs) {   // 先把这一部的线路拿来再播
+                        const i = this.idx, tok = (this._fullTok = (this._fullTok || 0) + 1);
+                        this.coverOn = true; this.err = ''; this.vReady = false; this.loading = true;
+                        this._ensureFull(i).then(full => {
+                            if (this._dead || tok !== this._fullTok || this.idx !== i) return;
+                            this.loading = false;
+                            if (!full) { this.err = '这部短剧暂时打不开'; return; }
+                            this._startCur();
+                        });
+                        return;
+                    }
                     if (this._allBad(this.cur)) { const g = this._nextGood(this.idx, 1); if (g !== this.idx) { this.idx = g; window.DgShortsMem.idx = g; } }
                     const st = this._startOf(this.cur);
                     this.srcIdx = st.si; this.epIdx = st.ei; this._s.watched = 0;
@@ -10962,8 +11138,10 @@
                     let src = c.src, ep = null;
                     if (isFinite(d) && d - v.currentTime < 30 && this.epIdx + 1 < this.curEps.length) ep = this.curEps[this.epIdx + 1];
                     else {
-                        const nx = this.items[this.idx + 1 < this.items.length ? this._nextGood(this.idx + 1, 1) : -1];
+                        const ni = this.idx + 1 < this.items.length ? this._nextGood(this.idx + 1, 1) : -1;
+                        const nx = this.items[ni];
                         if (!nx) return;
+                        if (!nx.srcs) { this._ensureFull(ni); return; }   // 分类页带过来的:先把下一部的线路拿好,下一轮再预拉清单
                         const st = this._startOf(nx);
                         src = this._srcs(nx)[st.si];
                         ep = src && this._eps(src)[st.ei];
@@ -11309,9 +11487,107 @@
                     const src = this.curSrcs[this.srcIdx] || this.curSrcs[0], ep = this.curEps[this.epIdx];
                     const item = { name: it.title, poster: it.pic, episode: ep ? ep.name : null, lastSourceKey: src ? src.site_key : null, groupData: this._groupData(it) };
                     const r = this.$root;
+                    r.shortsReturn = it.title;   // 播放页标题栏出「返回刷短剧」(只对这一部)
                     r.closeShorts();
                     r.$nextTick(() => r.playFromHistory(item));
                 },
+            },
+        };
+
+        // ========== 🎞️「短剧」分类页(DgShortsLib 组件,模板 #dg-shorts-lib-tpl;根应用 openShortsLib / closeShortsLib 开关) ==========
+        //   /api/shorts/cats 题材计数 + /api/shorts/list 分页(一页 30 部、卡片不带线路);点一部 → 竖屏刷从这一部开始,接着刷同一个列表
+        window.DgShortsLib = {
+            template: '#dg-shorts-lib-tpl',
+            emits: ['close'],
+            data() {
+                return { cats: { total: 0, eps: 0, tags: [] }, cat: '', sort: 'new', q: '', qIn: '', onlyEps: false, items: [], next: 0, loading: false, msg: '' };
+            },
+            computed: {
+                // 有片的题材才出(片库还没统计好时全出)
+                tabs() {
+                    const n = new Map((this.cats.tags || []).map(t => [t.k, t.n]));
+                    return DG_SHORTS_TAGS.map(t => ({ k: t.k, l: t.l, n: n.get(t.k) || 0 })).filter(t => !this.cats.total || t.n > 0 || t.k === this.cat);
+                },
+            },
+            created() {
+                const i = this.$root._slInit;
+                this.$root._slInit = null;
+                if (i && i.cat) this.cat = i.cat;
+                this._seq = 0;
+            },
+            mounted() {
+                this.loadCats();
+                this.loadMore();
+                if ('IntersectionObserver' in window && this.$refs.foot) {
+                    this._io = new IntersectionObserver(es => { if (es.some(x => x.isIntersecting)) this.loadMore(); }, { root: this.$refs.page, rootMargin: '0px 0px 600px 0px' });
+                    this._io.observe(this.$refs.foot);
+                }
+                this.$nextTick(() => {
+                    try { (this.$root.isTVMode ? this.$refs.back : this.$refs.page).focus({ preventScroll: true }); } catch (e) { }
+                });
+            },
+            beforeUnmount() { if (this._io) this._io.disconnect(); clearTimeout(this._qT); this._dead = true; },
+            methods: {
+                async loadCats() {
+                    try { const r = await fetchT('/api/shorts/cats', null, 12000); const d = r.ok ? await r.json() : null; if (d && d.enabled !== false && !this._dead) this.cats = d; } catch (e) { }
+                },
+                args() {
+                    const a = { sort: this.sort };
+                    if (this.cat) a.cat = this.cat;
+                    if (this.q) a.q = this.q;
+                    if (this.onlyEps) a.only = 'eps';
+                    return a;
+                },
+                reload() {
+                    this._seq++;
+                    this.items = []; this.next = 0; this.msg = ''; this.loading = false;
+                    try { this.$refs.page.scrollTop = 0; } catch (e) { }
+                    this.loadMore();
+                },
+                async loadMore() {
+                    if (this.loading || this.next == null || this._dead) return;
+                    const seq = this._seq, a = this.args();
+                    this.loading = true; this.msg = '';
+                    try {
+                        const qs = Object.keys(a).map(k => k + '=' + encodeURIComponent(a[k])).join('&');
+                        const r = await fetchT('/api/shorts/list?' + qs + '&limit=30&offset=' + this.next, null, 15000);
+                        const d = r.ok ? await r.json() : null;
+                        if (seq !== this._seq || this._dead) return;
+                        if (!d) { this.msg = '加载失败'; return; }
+                        if (d.enabled === false) { this.msg = '短剧暂时没有开放'; this.next = null; return; }
+                        const have = new Set(this.items.map(x => x.id)), raw = Vue.markRaw || (x => x);
+                        this.items.push(...(d.items || []).filter(x => x && x.id && !have.has(x.id)).map(x => raw(x)));
+                        this.next = d.next == null ? null : d.next;
+                    } catch (e) {
+                        if (seq === this._seq) this.msg = '网络不太好，加载失败';
+                    } finally {
+                        if (seq === this._seq) { this.loading = false; this.$nextTick(() => this._fill()); }
+                    }
+                },
+                // 一页没铺满一屏(屏幕很高 / 这个题材片少):IntersectionObserver 不会再触发 → 自己再拿一页
+                _fill() {
+                    const p = this.$refs.page, f = this.$refs.foot;
+                    if (!p || !f || this.next == null || this.loading || this.msg || this._dead) return;
+                    if (f.getBoundingClientRect().top < p.getBoundingClientRect().bottom + 600) this.loadMore();
+                },
+                setCat(k) { if (this.cat === k) return; this.cat = k; this.reload(); },
+                setSort(s) { if (this.sort === s) return; this.sort = s; this.reload(); },
+                onQ() { clearTimeout(this._qT); this._qT = setTimeout(() => this.doSearch(), 500); },
+                doSearch() {
+                    clearTimeout(this._qT);
+                    const q = String(this.qIn || '').replace(/\s+/g, '').slice(0, 30);
+                    if (q === this.q) return;
+                    this.q = q;
+                    this.reload();
+                },
+                clearQ() { this.qIn = ''; this.doSearch(); },
+                pic(it) { return it.pic ? String(it.pic).replace(/^http:\/\//i, 'https://') : this.$root.getPosterUrl(''); },
+                picErr(e) { const img = e.target; if (!img || img.dataset.fb) return; img.dataset.fb = '1'; img.src = this.$root.getPosterUrl(''); },
+                open(i) {
+                    if (!this.items[i]) return;
+                    this.$root.openShorts({ list: { items: this.items.slice(), start: i, next: this.next, args: this.args() } });
+                },
+                swipe() { this.$root.openShorts(); },
             },
         };
     </script>
@@ -16198,6 +16474,8 @@
                     // 📅 追剧日历:enabled null = 还没问过服务器 / false = 服务器没开;data = /api/calendar 的一周;open = 展开成网格
                     cal: { enabled: null, data: null, day: '', cat: '', loading: false, open: false, seen: false },
                     shortsOpen: false,   // 📱 短剧竖屏刷开着(组件 DgShorts;只在开 / 关时变,刷的过程中不碰根应用的响应式状态)
+                    shortsLibOpen: false,   // 🎞️「短剧」分类页开着(组件 DgShortsLib;翻页 / 换题材只重渲染它自己)
+                    shortsReturn: '',   // 从竖屏刷「完整播放」进播放页的那一部的片名:播放页标题栏出「返回刷短剧」
                     calMore: { key: '', items: [], total: 0, loading: false, done: false, err: false },
                     calCanScrollLeft: false,
                     calCanScrollRight: true,
@@ -16474,6 +16752,10 @@
                         self.closePlSheet();
                         return;
                     }
+                    if (!self.isTVMode && (e.key === 'Escape' || e.key === 'Esc') && self.shortsLibOpen && !self.shortsOpen && !self.showDetail && !self.showSettingsModal) {
+                        self.closeShortsLib();
+                        return;
+                    }
                     if (!self.isTVMode && (e.key === 'Escape' || e.key === 'Esc') && self.plPage.open && !self.searched && !self.showDetail && !self.showSettingsModal) {
                         if (self.plPage.editing) { self.plPage.editing = false; return; }
                         self.closePlaylist();
@@ -16517,6 +16799,13 @@
                         if (self.plPage && self.plPage.open) {
                             e.preventDefault();
                             self.closePlaylist();
+                            return false;
+                        }
+
+                        // 🎞️ 在「短剧」分类页：返回首页
+                        if (self.shortsLibOpen) {
+                            e.preventDefault();
+                            self.closeShortsLib();
                             return false;
                         }
 
@@ -16651,7 +16940,7 @@
                 // 🗂️ 安卓 App 的返回键(MainActivity.onBackPressed 注入的 JS,装好的 App 改不了)只认 showDetail / searched 两种状态:
                 //    分类浏览页 / 分类大全 / 短剧竖屏刷开着时对它说 searched = true → 它调 goHome() 退一层;否则在这几页按返回直接退出 App
                 window.vueApp = new Proxy(this, {
-                    get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen || (t.plPage && t.plPage.open) || t.shortsOpen) : Reflect.get(t, k)),
+                    get: (t, k) => (k === 'searched' ? !!(t.searched || (t.browse && t.browse.open) || t.catDirOpen || (t.plPage && t.plPage.open) || t.shortsOpen || t.shortsLibOpen) : Reflect.get(t, k)),
                 });
 
                 // 定义 startApp 函数供密码验证成功后调用
@@ -16805,6 +17094,7 @@
                 trialLeftText() { return DgTrial.fmt(DgTrial.left(this.trial.limit, this.trial.used)); },
                 trialLimitText() { const s = this.trial.limit; return s % 60 ? DgTrial.fmt(s) : (s / 60) + ' 分钟'; },
                 catTypes() { return DgCatalog.TYPES; },
+                shortsTags() { return DG_SHORTS_TAGS; },
                 catDir() { return DgCatalog.directory(); },
                 catNavRows() { return DgCatalog.navRows(this.catNavType); },
                 catNavLabel() { const t = DgCatalog.typeOf(this.catNavType); return t ? t.l : ''; },
@@ -20125,6 +20415,12 @@
                             delete s0.dgShorts;
                             history.replaceState(Object.keys(s0).length ? s0 : null, '');
                         }
+                        // 🎞️「短剧」分类页开着时刷新:同上(否则之后再开分类页、按返回退到这条,会被当成分类页自己那条而关不掉)
+                        if (history.state && history.state.dgSl) {
+                            const s1 = Object.assign({}, history.state);
+                            delete s1.dgSl;
+                            history.replaceState(Object.keys(s1).length ? s1 : null, '');
+                        }
                         if (history.state && history.state.dgFrameShare) {
                             const s = Object.assign({}, history.state);
                             delete s.dgFrameShare;
@@ -20160,6 +20456,7 @@
                         return;
                     }
                     if (this._plOnPop()) return;   // 📚 片单页自己那条历史(见 _plOnPop)
+                    if (this._slOnPop()) return;   // 🎞️「短剧」分类页自己那条历史(见 _slOnPop)
                     if (this._frameShareBack) {
                         this._frameShareBack = 0;
                         if (this.showDetail && !this.frameShare.show) this.syncShareUrl();
@@ -20758,8 +21055,10 @@
 
                 // ========== 📱 短剧竖屏刷(组件 DgShorts,见 #dg-shorts-tpl 上面的脚本) ==========
                 //   打开压一条历史(手机返回键 / 侧滑返回 → _onHistPop 关);点 ← 关时自己退掉那条(_shortsBack 认领那次 popstate)
-                openShorts() {
+                //   o.list = { items, start, next, args }:从「短剧」分类页点一部,接着刷同一个列表;o.resume:从播放页「返回刷短剧」,原样接着刷
+                openShorts(o) {
                     if (this.shortsOpen || this.showDetail) return;
+                    this._shortsOpts = (o && (o.list || o.resume)) ? o : null;
                     this._shortsOpener = document.activeElement;
                     this._shortsBack = 0;
                     this.shortsOpen = true;
@@ -20787,10 +21086,60 @@
                     const c = this.$refs.shortsComp;
                     if (c && c.back) c.back(); else this.closeShorts();
                 },
+                // 播放页「返回刷短剧」(从竖屏刷点「完整播放」进来的那一部):关播放页、回到刚才那一集接着刷(看到哪集哪秒按观看记录接上)
+                backToShorts() {
+                    this.closeDetail();
+                    this.$nextTick(() => this.openShorts({ resume: true }));
+                },
+                // ========== 🎞️「短剧」分类页(组件 DgShortsLib):全部短剧按题材 / 最新最热 / 搜片名浏览,点一部进竖屏刷 ==========
+                //   整屏盖住首页(9000,同片单页:播放页 9999、竖屏刷 10010 都在它上面);打开压一条历史,返回键 / 侧滑返回关
+                openShortsLib(o) {
+                    if (this.shortsLibOpen) return;
+                    this._slInit = (o && o.cat) ? { cat: String(o.cat) } : null;   // 分类大全里点了某个题材:分类页直接停在那个题材
+                    this._slOpener = document.activeElement;
+                    this._slHomeY = window.scrollY || 0;
+                    this.shortsLibOpen = true;
+                    document.body.classList.add('sl-open');
+                    this._slPushHist();
+                },
+                closeShortsLib(fromPop) {
+                    if (!this.shortsLibOpen) return;
+                    this.shortsLibOpen = false;
+                    document.body.classList.remove('sl-open');
+                    if (this._slHist && !fromPop) { this._slBackAt = Date.now(); try { history.back(); } catch (e) { } }
+                    this._slHist = false;
+                    const y = this._slHomeY || 0, op = this._slOpener;
+                    this._slOpener = null;
+                    this.$nextTick(() => {
+                        this._jumpTo(y);
+                        if (this.isTVMode && op && op.isConnected) { try { op.focus({ preventScroll: true }); } catch (e) { } }
+                    });
+                },
+                _slPushHist() {
+                    try { history.pushState(Object.assign({}, history.state || {}, { dgSl: 1 }), ''); this._slHist = true; } catch (e) { this._slHist = false; }
+                },
+                // popstate(_onHistPop 在片单页之后问这里):返回 true = 这一下是分类页的。①自己 history.back() 退回那一下(1.5s 内);
+                //   ②退到了分类页那条下面:上面还盖着播放页 → 关播放页、把分类页那条压回去(一次退一层);否则关分类页
+                _slOnPop() {
+                    if (this._slBackAt) {
+                        const mine = Date.now() - this._slBackAt < 1500;
+                        this._slBackAt = 0;
+                        if (mine) return true;
+                    }
+                    if (!this.shortsLibOpen || !this._slHist) return false;
+                    const st = history.state;
+                    if (st && st.dgSl) return false;
+                    this._slHist = false;
+                    if (this.showDetail) { this.closeDetail(); this._slPushHist(); return true; }
+                    this.closeShortsLib(true);
+                    return true;
+                },
 
                 goHome() {
                     // 📱 短剧竖屏刷开着(安卓 App 返回键经 vueApp.searched 走到这里):先退一层
                     if (this.shortsOpen && !this.showDetail) { this._shortsBackKey(); return; }
+                    // 🎞️「短剧」分类页开着:关它回首页
+                    if (this.shortsLibOpen && !this.showDetail) { this.closeShortsLib(); return; }
                     // 📚 片单页开着:搜索结果 → 片单页,片单页 → 首页(一次退一层,同分类浏览页)
                     if (this.plPage.open && !this.showDetail) {
                         if (this.searched) this._plFromSearch();
@@ -23555,6 +23904,7 @@
                     document.body.classList.remove('detail-covered');   // 🌙 同步撤掉(侦听器要等下一次刷新):紧接着的 TV 焦点代码要能聚焦首页元素
                     document.documentElement.classList.remove('detail-open');
                     if (dp) dp.pause();
+                    this.shortsReturn = '';   // 「返回刷短剧」只管从竖屏刷进来的那一次
 
                     // 🧭 关闭详情：自增导航令牌，作废上一部剧残留的刷新/测速/回退定时器，
                     //    防止下次打开别的剧时被旧剧的异步回调串剧
@@ -29070,7 +29420,7 @@
                     }
                 }
             }
-        }).component('dg-comments', window.DgComments).component('dg-shorts', window.DgShorts).mount('#app');   // 💬 评论区组件(定义在 #app 后面那段 <script>)
+        }).component('dg-comments', window.DgComments).component('dg-shorts', window.DgShorts).component('dg-shorts-lib', window.DgShortsLib).mount('#app');   // 💬 评论区组件(定义在 #app 后面那段 <script>)
     </script>
 
     <!-- Register Service Worker with Auto-Update -->

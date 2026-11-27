@@ -2,8 +2,9 @@
 // 📱 短剧竖屏刷片库(lib/shorts-feed)回归(离线、零网络,内存 SQLite / 内存版 + 假资源站):
 //   node scripts/shorts-feed-test.mjs
 //  ① 纯函数:挑 m3u8 选集(分享页那一路不要)、短剧叶子分类(父分类 / 擦边 / AI 漫剧不要)、同名是不是同一部
-//  ② tick:多集的收、「全集」单文件不收、站点几乎全是单文件 → 3 天不拉;几个站的同一部并成一部(线路按广告分级排)、同名不同部不并
+//  ② tick:多集的进竖屏刷、「全集」单文件只进分类页(不再跳过整个站);几个站的同一部并成一部(线路按广告分级排、全集排后)、同名不同部不并
 //  ③ feed 分页 / 排序(热的往前)/ 没 sqlite 走内存;片库空着 kick 会开一轮
+//  ④ 分类页:题材标签 / list(题材、排序、搜片名、只看分集)/ item / cats;往后补老页(cursor);老 cache.db 的表自动补列、补标签
 // 改 lib/shorts-feed 后必跑。
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -88,8 +89,9 @@ const F = mk(db);
 await F.tick();
 const st = F.status();
 const S = Object.fromEntries(st.sites.map((s) => [s.site, s]));
-ok(st.items === 5, '片库 5 部(单文件 / AI / 擦边不收,同名并成一部,同名不同部留先来的)', st.items);
-ok(S.jisu && S.jisu.skip_until > NOW && /全集/.test(S.jisu.last_err), '几乎全是「全集」单文件的站:3 天不拉', S.jisu);
+ok(st.eps === 5, '竖屏刷 5 部(单文件 / AI / 擦边不进,同名并成一部,同名不同部留先来的)', st.eps);
+ok(st.items === 5 + 1 + 14, '片库还有 15 部「全集」单文件(rycj 1 部 + jisu 14 部),只进分类页', st.items);
+ok(S.jisu && !(S.jisu.skip_until > NOW) && S.jisu.whole === 14 && S.jisu.multi === 0, '几乎全是「全集」单文件的站:照样收(全集),不再跳过', S.jisu);
 ok(S.none && S.none.skip_until > NOW && /没有短剧分类/.test(S.none.last_err), '没有短剧分类的站:一周后再看', S.none);
 ok(S.bad && /boom/.test(S.bad.last_err) && S.bad.skip_until > NOW, '拉取失败的站:记错误、过一阵再试,不拖垮整轮', S.bad);
 ok(sites.rycj.calls() === 3, '第一次跑翻到最后一页就停(分类表 1 + 两页)', sites.rycj.calls());
@@ -110,10 +112,81 @@ ok(s0.vod_id === '2' && /^第01集\$https:\/\/cdn2\/v\/1\/index\.m3u8#/.test(s0.
 const idxOld = all.findIndex((x) => x.title === '我真得控制你了'), idxNew = all.findIndex((x) => x.title === '你是世间璀璨');
 ok(idxNew < idxOld, '新更新的在前(1 小时前 > 300 小时前)', all.map((x) => x.title));
 
-// 第二轮:只翻第一页;被跳过的站不再请求
-const before = { rycj: sites.rycj.calls(), jisu: sites.jisu.calls() };
+// 第二轮:只翻第一页(第一次就翻到底的分类不再往后补);跳过中的站(没短剧分类 / 刚出错)零请求
+const before = { rycj: sites.rycj.calls(), jisu: sites.jisu.calls(), none: sites.none.calls() };
 await F.tick();
-ok(sites.rycj.calls() - before.rycj === 1 && sites.jisu.calls() === before.jisu, '之后每轮每个分类只拉第一页(分类表有缓存);跳过中的站零请求', { r: sites.rycj.calls() - before.rycj, j: sites.jisu.calls() - before.jisu });
+ok(sites.rycj.calls() - before.rycj === 1 && sites.jisu.calls() - before.jisu === 1 && sites.none.calls() === before.none,
+    '之后每轮每个分类只拉第一页(分类表有缓存);跳过中的站零请求', { r: sites.rycj.calls() - before.rycj, j: sites.jisu.calls() - before.jisu, n: sites.none.calls() - before.none });
+
+console.log('④ 分类页');
+{
+    const { tagsOf } = require(path.join(ROOT, 'lib/shorts-feed'));
+    ok(tagsOf('古装仙侠', '', '随便') === ',guzhuang,', 'tagsOf:看分类名', tagsOf('古装仙侠', '', '随便'));
+    ok(tagsOf('短剧', '逆袭,都市', '') === ',dushi,nixi,', 'tagsOf:看 vod_class(可以几个)', tagsOf('短剧', '逆袭,都市', ''));
+    ok(tagsOf('短剧', '', '重生之我在七零当首富') === ',dushi,chuanyue,', 'tagsOf:分类名没信息才看片名', tagsOf('短剧', '', '重生之我在七零当首富'));
+    ok(tagsOf('短剧', '', '某剧') === '', 'tagsOf:都没有 → 空');
+
+    const all1 = F.list({ offset: 0, limit: 60 });
+    ok(all1.total === 20 && all1.items.length === 20 && !all1.items[0].srcs, 'list:全部 20 部(含全集),卡片不带选集串', { t: all1.total, s: !!all1.items[0].srcs });
+    const one = all1.items.find((x) => x.title === '全集一部');
+    ok(one && one.whole && one.eps === 1, 'list:「全集」单文件标 whole、1 集', one);
+    const eps = F.list({ only: 'eps', limit: 60 });
+    ok(eps.total === 5 && eps.items.every((x) => !x.whole), 'list only=eps:只要一集一集的', eps.total);
+    const newest = F.list({ sort: 'new', limit: 3 });
+    ok(newest.items[0].t >= newest.items[1].t && newest.items[1].t >= newest.items[2].t && newest.next === 3, 'list sort=new:按更新时间,next 翻页', newest.items.map((x) => x.t));
+    const hot = F.list({ sort: 'hot', limit: 1 });
+    ok(hot.items[0].title === '本官在此', 'list sort=hot:多站 + 日历热的在前', hot.items[0].title);
+    const q = F.list({ q: '世间 璀璨' });
+    ok(q.total === 1 && q.items[0].title === '你是世间璀璨', 'list q:搜片名(去空白)', q.items.map((x) => x.title));
+    ok(F.list({ q: '%' }).total === 0 && F.list({ cat: 'bogus' }).total === 20, 'list:% 不当通配;不认识的题材 = 全部');
+    const full = F.list({ only: 'eps', limit: 2, full: 1 });
+    ok(full.items[0].srcs && full.items[0].srcs[0].url, 'list full=1:带选集串(竖屏刷接着刷)', full.items[0]);
+    const it = F.item(by['本官在此'].id);
+    ok(it && it.title === '本官在此' && it.srcs.length === 2, 'item:按 id 拿整部', it && it.srcs.length);
+    ok(F.item('没有这部') === null, 'item:没有 → null');
+    const c = F.cats();
+    ok(c.total === 20 && c.eps === 5 && c.tags.length === 7 && c.tags.every((x) => x.k && x.l && typeof x.n === 'number'), 'cats:总数 / 分集数 / 7 个题材带计数', c);
+
+    // 「全集」+ 一集一集的同一部:并成一部,一集一集的线路排前面,不算 whole
+    const sites2 = {
+        a: fakeSite(SHORT, { 46: [[single(201, '合并测试', 3)]] }),
+        b: fakeSite(SHORT, { 46: [[V(202, '合并测试', 40, 4)]] }),
+    };
+    const G = createShortsFeed({ db: () => null, sites: () => ['a', 'b'].map((k) => ({ key: k, name: k, api: 'https://' + k + '/api.php/provide/vod' })), now: () => NOW,
+        httpGet: async (url) => sites2[/https:\/\/([^/]+)\//.exec(url)[1]].get(url), opts: { pageGapMs: 0, firstDelayMs: 1e9, tickMs: 1e9 } });
+    await G.tick();
+    const m = G.list({ limit: 5, full: 1 }).items;
+    ok(m.length === 1 && !m[0].whole && m[0].eps === 40 && m[0].srcs[0].site_key === 'b' && m[0].srcs[1].whole, '全集 + 分集的同一部:并成一部、分集线路在前', m);
+
+    // 往后补老页:第一次 5 页,之后每轮补 backfillPages 页,补到底记 -1
+    const pages = Array.from({ length: 9 }, (_, p) => [V(300 + p, '老剧' + p, 10, 100 + p)]);
+    const s3 = fakeSite(SHORT, { 46: pages });
+    const hdb = new Database(':memory:');
+    const H = createShortsFeed({ db: () => hdb, sites: () => [{ key: 'c', name: 'c', api: 'https://c/api.php/provide/vod' }], now: () => NOW,
+        httpGet: async (url) => s3.get(url), opts: { pageGapMs: 0, firstDelayMs: 1e9, tickMs: 1e9, backfillPages: 2 } });
+    await H.tick();
+    let cs = JSON.parse(H.status().sites[0].cursor);
+    ok(H.status().items === 7 && cs['46'] === 8, '第一次:前 5 页 + 补 2 页(到第 7 页),下次从第 8 页', { n: H.status().items, cs });
+    await H.tick();
+    cs = JSON.parse(H.status().sites[0].cursor);
+    ok(H.status().items === 9 && cs['46'] === -1, '第二次:补到第 9 页(最后一页)记 -1', { n: H.status().items, cs });
+}
+{
+    // 老 cache.db(没有 tags / whole / cursor 列):启动补列、按分类名 + 片名补标签,旧的「全集」跳过作废
+    const odb = new Database(':memory:');
+    odb.exec(`CREATE TABLE shorts_items (nk TEXT PRIMARY KEY, title TEXT NOT NULL, pic TEXT NOT NULL DEFAULT '', remarks TEXT NOT NULL DEFAULT '', blurb TEXT NOT NULL DEFAULT '',
+        year INTEGER NOT NULL DEFAULT 0, area TEXT NOT NULL DEFAULT '', type TEXT NOT NULL DEFAULT '', eps INTEGER NOT NULL DEFAULT 0, t INTEGER NOT NULL DEFAULT 0,
+        score INTEGER NOT NULL DEFAULT 0, srcs TEXT NOT NULL DEFAULT '[]') WITHOUT ROWID;
+        CREATE TABLE shorts_state (site TEXT PRIMARY KEY, api TEXT NOT NULL DEFAULT '', leaves TEXT NOT NULL DEFAULT '[]', classes_at INTEGER NOT NULL DEFAULT 0,
+        last_ok INTEGER NOT NULL DEFAULT 0, skip_until INTEGER NOT NULL DEFAULT 0, total INTEGER NOT NULL DEFAULT 0, multi INTEGER NOT NULL DEFAULT 0, last_err TEXT NOT NULL DEFAULT '');
+        INSERT INTO shorts_items (nk, title, type, eps, t, score, srcs) VALUES ('老一部', '老一部', '古装仙侠', 30, 1, 1, '[{"s":"x","id":"1","n":30,"t":1,"u":"第01集$https://a/1.m3u8"}]');
+        INSERT INTO shorts_state (site, skip_until, last_err) VALUES ('jisu', 99999999999999, '多为全集单文件');`);
+    const O = createShortsFeed({ db: () => odb, sites: () => [], now: () => NOW, httpGet: async () => null, opts: { firstDelayMs: 1e9, tickMs: 1e9 } });
+    const r = O.list({ cat: 'guzhuang' });
+    ok(r.total === 1 && r.items[0].tags[0] === 'guzhuang' && O.feed(0, 5).total === 1, '老表补列 + 补标签,照样能刷', r);
+    const js = O.status().sites.find((x) => x.site === 'jisu');
+    ok(js && js.skip_until === 0 && js.last_err === '', '旧的「多为全集单文件」跳过作废', js);
+}
 
 console.log('③ 内存版 / kick');
 {

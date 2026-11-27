@@ -86,13 +86,15 @@ console.log('② CSS');
     // 盖住后藏起的首页层:每个都是 #app 真实的直接子节点;覆盖层/弹窗/封禁锁/TV 悬浮钮一个都不能在里面;首页层一个都不能漏
     const cm = /((?:\s*body\.detail-covered #app > [^,{]+,?)+)\s*\{\s*visibility: hidden !important;\s*\}/.exec(HTML);
     const sels = cm ? cm[1].split(',').map(s => s.trim().replace(/^body\.detail-covered #app > /, '')).filter(Boolean) : [];
-    ok(sels.length === 14, '隐藏列表 14 项(含片单页 .pl-page、杂志风首页的刊头 .mag-mast / 正文 .mag)', sels);
+    ok(sels.length === 15, '隐藏列表 15 项(含片单页 .pl-page、短剧分类页 .sl-page、杂志风首页的刊头 .mag-mast / 正文 .mag)', sels);
     const parse5 = dep('parse5');
     const attr = (n, name) => { const a = (n.attrs || []).find(x => x.name === name); return a ? a.value : null; };
     const walk = function* (n) { yield n; for (const c of ((n.nodeName === 'template' ? n.content : n).childNodes || [])) yield* walk(c); };
     let app = null; for (const n of walk(parse5.parse(HTML))) if (n.attrs && attr(n, 'id') === 'app') { app = n; break; }
     const kids = app ? app.childNodes.filter(c => c.attrs) : [];
-    const matches = (n, sel) => sel[0] === '#' ? attr(n, 'id') === sel.slice(1) : (' ' + (attr(n, 'class') || '') + ' ').includes(' ' + sel.slice(1) + ' ');
+    // 组件标签在页面上渲染成它模板的根节点:<dg-shorts-lib> = .sl-page
+    const compRoot = { 'dg-shorts-lib': 'sl-page' };
+    const matches = (n, sel) => sel[0] === '#' ? attr(n, 'id') === sel.slice(1) : (' ' + (attr(n, 'class') || '') + ' ' + (compRoot[n.nodeName] || '') + ' ').includes(' ' + sel.slice(1) + ' ');
     ok(sels.length && sels.every(s => kids.some(k => matches(k, s))), '列出的每一项都是 #app 的直接子节点', sels.filter(s => !kids.some(k => matches(k, s))));
     const keep = ['.detail-overlay', '.info-modal-overlay', '.pl-sheet-overlay', '.ban-lock', '.tv-mode-float-btn', '.voice-mask', '.aif-mask'];   // 片单 / 语音搜索 / AI 找片浮层也是弹窗
     ok(!sels.some(s => keep.includes(s)), '覆盖层 / 弹窗 / 封禁锁 / TV 悬浮钮不藏', sels);

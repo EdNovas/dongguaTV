@@ -16,6 +16,7 @@ title-index.db-wal
 title-index.db-shm
 *.log
 db.json
+shorts-sites.json
 public/cache
 
 # IDE Config
