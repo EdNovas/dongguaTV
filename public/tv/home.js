@@ -62,7 +62,7 @@
         // ---------- 各页 ----------
         var PAGES = {
             home: function () {
-                var pg = TV.el('<div class="pg sy" data-sy-top=".row:first-child">' + TV.ui.loading() + '</div>');
+                var pg = TV.el('<div class="pg sy" data-sy-top=".row">' + TV.ui.loading() + '</div>');
                 var loaded = false, rowsBox = null, personalKey = '';
                 function paintPersonal() {
                     // 继续观看 / 我的追剧:每次回到首页都重画(看完一集回来进度要更新)
