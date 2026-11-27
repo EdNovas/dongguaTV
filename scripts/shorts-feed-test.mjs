@@ -14,7 +14,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
 const dep = (m) => { try { return require(path.join(ROOT, 'node_modules', m)); } catch (e) { return require(m); } };
 const Database = dep('better-sqlite3');
-const { createShortsFeed, pickLine, shortLeaves, sameWork } = require(path.join(ROOT, 'lib/shorts-feed'));
+const { createShortsFeed, pickLine, shortLeaves, siteLeaves, parseTypes, sameWork } = require(path.join(ROOT, 'lib/shorts-feed'));
 let pass = 0, fail = 0;
 const ok = (c, msg, extra) => { if (c) pass++; else { fail++; console.log('  ✗ ' + msg + (extra === undefined ? '' : '  ->  ' + JSON.stringify(extra))); } };
 
@@ -42,6 +42,10 @@ console.log('① 纯函数');
         { type_id: 73, type_pid: null, type_name: 'ai短剧' }, { type_id: 75, type_pid: null, type_name: '漫剧' },
     ]);
     ok(JSON.stringify(leaves) === JSON.stringify(['45', '46', '60', '36']), 'shortLeaves:父分类 / 擦边 / AI / 漫剧不要,父是短剧的子分类要,连续剧下的「短剧」要', leaves);
+    ok(JSON.stringify(parseTypes('96-98, 120,x')) === JSON.stringify({ replace: false, ids: ['96', '97', '98', '120'] }) && parseTypes('=5').replace, 'parseTypes:区间 / 逗号 / 坏的跳过 / = 表示只用这些');
+    ok(JSON.stringify(siteLeaves({ api: 'https://caiji.mgzyapi.com/api.php/provide/vod' }, ['24'])) === JSON.stringify(['24', '50', '51', '52', '53']), 'siteLeaves:芒果按主机补上 50–53');
+    ok(siteLeaves({ api: 'https://api.yzzy-api.com/inc/apijson.php' }, ['83']).length === 22, 'siteLeaves:优质补上 96–116');
+    ok(JSON.stringify(siteLeaves({ api: 'https://x.com/api.php', shorts_types: '7,8' }, ['3'])) === JSON.stringify(['3', '7', '8']) && JSON.stringify(siteLeaves({ api: 'https://api.yzzy-api.com/x', shorts_types: '=9' }, ['3'])) === JSON.stringify(['9']), 'siteLeaves:站点 shorts_types 追加,= 开头整个替换');
     ok(sameWork(63, 61) && sameWork(10, 13) && !sameWork(80, 40) && !sameWork(12, 30), 'sameWork:差一两集算同一部,差一倍不算');
 }
 
