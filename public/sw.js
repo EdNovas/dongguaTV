@@ -41,7 +41,9 @@
 //      最多 600 个,几 MB 一个)—— 主播放器和进度条预览的分片都一样;现在 XHR/fetch 一律不碰。老浏览器没有 Request.destination 时才按扩展名认。
 // v44: 一批新功能(追剧日历 / 自选分类行 / 语音搜索 / AI 找片 / 片单 / 评论 + 用户弹幕 / 刷短剧 / 主题)改了外壳 index.html,升版让 install 重新预缓存;
 //      预缓存评论区的剧集键脚本 libs/js/ucomm-key.js?v=1(defer,和页面同一个 ?v=)。
-const CACHE_VERSION = 'v44';
+// v45: 首页加了启动检测(老内核 / 电视 → 电视版 /tv/),升版让 install 重新预缓存外壳(老盒子上 4s 竞速输了会回旧外壳,又卡在「正在初始化」);
+//      电视版 /tv/ 的页面按 './tv/' 一份存(不按 ?参数 分开存),它的脚本 / 样式不进 SW(带指纹 ?v=,浏览器自己缓存)。
+const CACHE_VERSION = 'v45';
 const STATIC_CACHE = 'donggua-static-' + CACHE_VERSION;
 const IMAGE_CACHE = 'donggua-images-' + CACHE_VERSION;
 const LIVE_IMG_CACHE = 'donggua-live-img-' + CACHE_VERSION;   // 📺 直播台标(跨域，多域名)
@@ -138,6 +140,8 @@ self.addEventListener('fetch', event => {
     if (url.origin === self.location.origin && /^\/api\/(admin|requests|history|settings|stats|auth|favorites|push)(\/|$)/.test(url.pathname)) return;
     //    带 token 参数的请求(config?token=…)同理:按用户的,不缓存
     if (url.origin === self.location.origin && url.pathname.startsWith('/api/') && url.searchParams.has('token')) return;
+    // ⑨ 电视版的脚本 / 样式(/tv/*.js|css,带内容指纹 ?v=):交给浏览器 HTTP 缓存,不进 SW(v45)
+    if (url.origin === self.location.origin && url.pathname.startsWith('/tv/') && event.request.mode !== 'navigate' && /\.(js|css)$/.test(url.pathname)) return;
 
     // 策略1：TMDB 图片 (包含官方域名和本地反代) - Cache First
     if (IMAGE_HOSTS.some(host => url.hostname.includes(host)) || url.pathname.startsWith('/api/tmdb-image')) {
@@ -175,10 +179,11 @@ self.addEventListener('fetch', event => {
         event.respondWith((async () => {
             const cache = await caches.open(STATIC_CACHE);
             const isSpaRoot = event.request.mode === 'navigate' && url.pathname === '/';
+            const isTvRoot = event.request.mode === 'navigate' && (url.pathname === '/tv/' || url.pathname === '/tv');   // v45:电视版存一份
             // ⚠️ /?play=…(不带 _spa)对微信/QQ/微博等内置浏览器(server.js isSocialCrawler 认它们)回的是分享预览页(跳转到 &_spa=1),
             //    不是 SPA —— 绝不能写进外壳键,否则离线/弱网时外壳变成跳转页、来回跳(审查实测)
             const mayBeSharePage = isSpaRoot && url.searchParams.has('play') && !url.searchParams.has('_spa');
-            const key = isSpaRoot ? './' : event.request;
+            const key = isSpaRoot ? './' : isTvRoot ? './tv/' : event.request;
             const network = fetch(event.request).then(response => {
                 // ⚠️ 只缓存完整的 200 响应:206(分片)会让 cache.put 抛异常、opaque 无法校验 —— 一律跳过
                 if (response && response.status === 200 && response.type !== 'opaque' && !mayBeSharePage) {
@@ -188,7 +193,7 @@ self.addEventListener('fetch', event => {
             });
             const cached = isSpaRoot
                 ? ((await cache.match('./')) || (await cache.match('./index.html')))
-                : await cache.match(event.request);
+                : isTvRoot ? await cache.match('./tv/') : await cache.match(event.request);
             if (cached) {
                 // 计时要算到整页下载完(~1MB):只等到响应头就交出去,弱网下页面会卡在半截,还不如用缓存
                 const usable = network.then(r => {

@@ -1841,7 +1841,7 @@ console.log('[7] 原生通道 / SW 接线');
     ok(/const mayBeSharePage = isSpaRoot && url\.searchParams\.has\('play'\) && !url\.searchParams\.has\('_spa'\);/.test(s2) && /!mayBeSharePage\)/.test(s2), 'SW:分享预览页(/?play= 不带 _spa)不写外壳');
     ok(/url\.pathname === '\/sw\.js'\) return;/.test(sw), 'SW:sw.js 自身直达不缓存');
     ok(/r\.status < 500/.test(s2), 'SW:服务器 5xx(重启中)回缓存页面');
-    ok(/const key = isSpaRoot \? '\.\/' : event\.request/.test(s2), 'SW:深链统一存成一份外壳');
+    ok(/const key = isSpaRoot \? '\.\/' : (isTvRoot \? '\.\/tv\/' : )?event\.request/.test(s2), 'SW:深链统一存成一份外壳(电视版 /tv/ 另存一份)');
     const s3 = sw.slice(sw.indexOf('// 策略3'), sw.indexOf('// 策略4'));
     ok(/const exact = await cache\.match\(event\.request\);/.test(s3) && /ignoreSearch: true/.test(s3), 'SW:静态库先按完整 URL(含 ?v=)找,网络失败才回旧版本');
     for (const m of html.matchAll(/<script[^>]+src="(libs\/js\/[^"]+)"/g)) ok(sw.includes("'./" + m[1] + "'"), 'SW 预缓存键与页面引用一致:' + m[1]);

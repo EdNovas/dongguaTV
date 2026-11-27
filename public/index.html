@@ -30,9 +30,44 @@
     <meta name="twitter:description" content="现代化流媒体聚合播放器，免费观看最新电影、电视剧、综艺、动漫。">
     <meta name="twitter:image" content="https://ednovas.video/icons/icon-512.png">
 
-    <!-- 兼容性检测 (必须在所有脚本之前) -->
+    <!-- 兼容性检测 + 电视版分流 (必须在所有脚本之前;只写 ES5,老内核也要能跑这一段)
+         电视 / 盒子 → 独立的电视版 /tv/(public/tv,ES5 写的,老盒子也能跑);?tv=0 / ?tv=1 记住选择(force_tv_mode,和 detectTVMode 同一个键)。
+         主站脚本要 Chrome 80+(?. ?? 对象展开 async,Vue 本身还有 /s 正则要 62+):老内核(斐讯 T1 这类 Android 7 盒子自带的 ≈Chrome 52)
+         读不懂就整段不跑,页面永远停在「正在初始化...」—— 这里先用 new Function 试一下,读不懂就分流到电视版或者明确告诉用户 -->
     <script>
         (function () {
+            var ua = navigator.userAgent || '', q = location.search || '';
+            function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { } return null; }
+            var m = /[?&]tv=([01])(&|$)/.exec(q);
+            if (m) ls('force_tv_mode', m[1]);
+            var forced = ls('force_tv_mode');
+            var modern = true;
+            try { new Function('var o={a:1},p={...o};return o?.a??p.a'); new Function('return async function(){await 0}'); new RegExp('a', 's'); } catch (e) { modern = false; }
+            // 自家安卓 App:Chrome 55 以下 Capacitor 注入的脚本本身就读不懂(window.Capacitor 不存在),App 加的 AndroidFullscreen 接口什么版本都有
+            var isNative = !!(window.AndroidFullscreen || (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()));
+            var phone = /iphone|ipod|android.*mobile|windows phone/i.test(ua);
+            var tvUA = /android tv|googletv|aftt|aftm|aftb|firetv|chromecast|sabrina|boreal|roku|smarttv|smart-tv|tizen|webos|web0s|leanback|hbbtv|netcast|viera|bravia|aquos|mitv|mibox|hisense|skyworth|letv/i.test(ua);
+            var bigAndroid = /android/i.test(ua) && !phone;          // 平板 / 盒子(安卓 WebView 只有手机才带 Mobile)
+            var phoneSide = /[?&]tvlogin=/.test(q);                    // 手机扫电视上的登录码打开的页面,不是电视
+            var wantTV = !phoneSide && (forced === '1' || (forced !== '0' && (tvUA || (isNative && !phone) || (!modern && bigAndroid))));
+            if (wantTV) {
+                location.replace('/tv/' + q + location.hash);
+                // 剩下的页面别再解析了(1.2MB 的主脚本在老盒子上光解析就要好几秒);window.stop() 会把上面的跳转也停掉,所以用 plaintext 吞掉
+                document.write('<style>body{background:#0e0e11}</style><plaintext style="display:none">');
+                return;
+            }
+            if (!modern && !phoneSide) {
+                if (window.stop) window.stop();
+                var v = /Chrome\/(\d+)/.exec(ua);
+                document.write(
+                    '<div style="position:fixed;top:0;left:0;width:100%;height:100%;z-index:2147483647;background:#0e0e11;color:#fff;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:center;justify-content:center;-webkit-align-items:center;align-items:center;padding:40px;text-align:center;font-family:sans-serif;box-sizing:border-box;">' +
+                    '<h2 style="color:#ff4757;font-size:24px;margin:0 0 18px;">浏览器内核版本太旧</h2>' +
+                    '<p style="font-size:16px;line-height:1.7;color:#ccc;margin:0;">这台设备的浏览器内核' + (v ? '(Chrome ' + v[1] + ')' : '') + '读不懂网页版用到的新写法,网页版打不开。<br>可以先用简洁版(电视版),它专门为老设备写的;或者把系统的 Android System WebView / Chrome 升级到 80 以上再来。</p>' +
+                    '<a href="/tv/?tv=1" style="display:inline-block;margin-top:28px;padding:12px 34px;border-radius:24px;background:#e50914;color:#fff;font-size:18px;text-decoration:none;">进入简洁版</a>' +
+                    '</div>'
+                );
+                return;
+            }
             var missing = [];
             // Vue 3 核心依赖
             if (typeof Proxy === 'undefined') missing.push('Proxy');
@@ -7757,6 +7792,26 @@
         <div id="loader-status" style="margin-top: 20px; color: var(--text-10); font-size: 13px; text-align: center;">正在初始化...
         </div>
     </div>
+    <!-- 启动看门狗(ES5):<head> 里的启动检测只拦得住"语法读不懂";运行时出错(某个脚本没加载上、老内核缺个 API)主程序起不来,
+         页面也会永远停在「正在初始化」。20 秒后主程序还没起来、字还是这一句,就把原因写出来,再给一个进电视版(简洁版)的入口 -->
+    <script>
+        (function () {
+            var errs = [];
+            try {
+                window.addEventListener('error', function (e) {
+                    if (errs.length >= 3) return;
+                    var t = e && e.target;
+                    errs.push((e && e.message) || (t && (t.src || t.href) ? '加载失败 ' + String(t.src || t.href).split('?')[0].split('/').pop() : '出错'));
+                }, true);
+            } catch (e) { }
+            setTimeout(function () {
+                var st = document.getElementById('loader-status'), ld = document.getElementById('app-loader');
+                if (!st || !ld || ld.style.display === 'none' || window.vueApp || !/正在初始化/.test(st.textContent)) return;
+                st.innerHTML = '启动卡住了' + (errs.length ? '(' + String(errs[0]).replace(/[<>&"]/g, '').slice(0, 80) + ')' : '') +
+                    '<br><br><a href="javascript:location.reload()" style="color:#ff6b6b">刷新试试</a>&nbsp;&nbsp;·&nbsp;&nbsp;<a href="/tv/?tv=1" style="color:#ff6b6b">进入电视版(简洁版)</a>';
+            }, 20000);
+        })();
+    </script>
 
     <!-- Login Screen (V2Board + Standalone Password) -->
     <div id="password-screen" class="password-screen" style="display: none;">
