@@ -20,6 +20,10 @@
             "dest": "/public/index.html"
         },
         {
+            "src": "/tv/?",
+            "dest": "/public/tv/index.html"
+        },
+        {
             "src": "/(.*)",
             "dest": "/public/$1"
         }

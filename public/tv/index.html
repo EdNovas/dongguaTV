@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="theme-color" content="#0e0e11">
+    <meta name="robots" content="noindex">
+    <!-- 和网页版一样不带 Referer(有的资源站 / Kazumi 直链看 Referer 拒绝) -->
+    <meta name="referrer" content="no-referrer">
+    <title>E视界 电视版</title>
+    <link rel="icon" href="/icon.png" type="image/png">
+    <!-- 电视版:遥控器为主的简洁界面。只用 ES5 + 老内核认识的 CSS(见 scripts/tv-compat-test.mjs),
+         斐讯 T1 这类 Android 7 盒子自带的 WebView(≈Chrome 52)也要能跑。__TVV__ 由服务器换成 public/tv 文件的指纹 -->
+    <link rel="stylesheet" href="/tv/tv.css?v=__TVV__">
+    <style>
+        .boot { position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: -webkit-flex; display: flex; -webkit-flex-direction: column; flex-direction: column;
+            -webkit-align-items: center; align-items: center; -webkit-justify-content: center; justify-content: center; color: #9a9aa3; font-size: 18px; }
+        .boot img { width: 72px; height: 72px; border-radius: 16px; margin-bottom: 18px; }
+        .boot .err { color: #ff6b6e; font-size: 15px; margin-top: 14px; max-width: 80%; text-align: center; line-height: 1.6; }
+    </style>
+</head>
+<body>
+    <div id="app"><div class="boot" id="tv-boot"><img src="/icon.png" alt=""><div>E视界 · 正在启动</div><div class="err" id="tv-boot-err"></div></div></div>
+    <script>
+        // 启动看门狗:脚本出错或者 15 秒还没起来,把原因写在屏幕上(别再让人对着转圈干等)
+        (function () {
+            var errs = [];
+            window.__tvBootErr = function (msg) {
+                errs.push(msg);
+                var el = document.getElementById('tv-boot-err');
+                if (el) el.innerHTML = '启动出错:' + String(msg).replace(/[<>&]/g, '') + '<br>请把这行字拍给我们;按返回键退出后重开试试';
+            };
+            window.onerror = function (msg, src, line) {
+                if (window.TV && window.TV.started) return false;
+                window.__tvBootErr(msg + (src ? ' @' + String(src).split('/').pop() + ':' + line : ''));
+                return false;
+            };
+            setTimeout(function () {
+                if (!(window.TV && window.TV.started) && !errs.length) window.__tvBootErr('启动超时(网络太慢或脚本没加载上)');
+            }, 15000);
+        })();
+    </script>
+    <script src="/libs/js/hls.min.js?v=1.1.5-lc1"></script>
+    <script src="/libs/js/qrcode-generator.min.js?v=2.0.4"></script>
+    <script src="/libs/js/ad-clip-core.js?v=7"></script>
+    <script src="/tv/core.js?v=__TVV__"></script>
+    <script src="/tv/api.js?v=__TVV__"></script>
+    <script src="/tv/ui.js?v=__TVV__"></script>
+    <script src="/tv/play.js?v=__TVV__"></script>
+    <script src="/tv/home.js?v=__TVV__"></script>
+    <script src="/tv/search.js?v=__TVV__"></script>
+    <script src="/tv/detail.js?v=__TVV__"></script>
+    <script src="/tv/player.js?v=__TVV__"></script>
+    <script src="/tv/live.js?v=__TVV__"></script>
+    <script src="/tv/mine.js?v=__TVV__"></script>
+    <script src="/tv/login.js?v=__TVV__"></script>
+    <script src="/tv/app.js?v=__TVV__"></script>
+</body>
+</html>
