@@ -2257,9 +2257,37 @@
         }
         .btn-settings:hover { transform: rotate(45deg) scale(1.08); background: var(--accent); }
         .btn-settings:focus-visible { outline: 3px solid rgba(var(--fg-rgb), 0.6); outline-offset: 2px; }
+        /* 📱 下载 App:和⚙️同一个样子,叠在它上面;有它时返回顶部再往上一格 */
+        .btn-app {
+            position: fixed;
+            bottom: 104px;
+            right: 40px;
+            width: 50px;
+            height: 50px;
+            background: rgba(var(--glass-2-rgb), 0.92);
+            color: var(--text-1);
+            border: 1px solid rgba(var(--fg-rgb), 0.14);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+            text-decoration: none;
+            box-shadow: 0 10px 20px rgba(var(--shadow-rgb), 0.4);
+            cursor: pointer;
+            z-index: 1000;
+            transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), background 0.2s, color 0.2s;
+        }
+        .btn-app:hover { transform: scale(1.08); background: var(--accent); color: var(--on-accent); text-decoration: none; }
+        .btn-app:focus-visible { outline: 3px solid rgba(var(--fg-rgb), 0.6); outline-offset: 2px; }
+        .btn-app + .btn-top { bottom: 168px; }
         @media (max-width: 768px) {
             .btn-settings { right: 16px; bottom: 20px; width: 44px; height: 44px; font-size: 18px; }
             .btn-top { right: 16px; bottom: 76px; width: 44px; height: 44px; font-size: 18px; }
+            .btn-app { right: 16px; bottom: 76px; width: 44px; height: 44px; font-size: 12px; }
+            .btn-app + .btn-top { bottom: 132px; }
         }
 
 
@@ -3828,6 +3856,7 @@
         body.detail-covered #app > .navbar-custom,
         body.detail-covered #app > .btn-top,
         body.detail-covered #app > .btn-settings,
+        body.detail-covered #app > .btn-app,
         body.detail-covered #app > #heroCarousel,
         body.detail-covered #app > .search-section,
         body.detail-covered #app > .home-flow,
@@ -6431,6 +6460,7 @@
         html[data-style="magazine"] .catdir-card-title { font-family: var(--mag-serif); font-size: 19px; }
 
         /* ── 右下角悬浮按钮:方块、细线,不转圈 ── */
+        html[data-style="magazine"] .btn-app,
         html[data-style="magazine"] .btn-settings { border-radius: 0; background: var(--bg); border: 1px solid var(--text-1); box-shadow: none; }
         html[data-style="magazine"] .btn-settings:hover { transform: none; background: var(--inv-bg); color: var(--inv-fg); }
         html[data-style="magazine"] .btn-top { border-radius: 0; background: var(--accent); box-shadow: none; }
@@ -7047,10 +7077,10 @@
         html[data-style="mono"] .browse-card:focus .poster-wrap { outline: 3px solid var(--text-1); outline-offset: 3px; }
         html[data-style="mono"] .scroll-btn { background: var(--bg); border: 1px solid var(--text-1); opacity: 0.85; }
         html[data-style="mono"] .scroll-btn:hover { background: var(--text-1); color: var(--bg); opacity: 1; transform: translateY(-50%); }
-        html[data-style="mono"] .btn-top, html[data-style="mono"] .btn-settings { border-radius: 0; }
+        html[data-style="mono"] .btn-top, html[data-style="mono"] .btn-settings, html[data-style="mono"] .btn-app { border-radius: 0; }
         html[data-style="mono"] .btn-top { background: var(--text-1); color: var(--bg); }
         html[data-style="mono"] .btn-top:hover { transform: none; }
-        html[data-style="mono"] .btn-settings { background: var(--bg); border-color: var(--text-1); }
+        html[data-style="mono"] .btn-settings, html[data-style="mono"] .btn-app { background: var(--bg); border-color: var(--text-1); }
         html[data-style="mono"] .btn-settings:hover { background: var(--text-1); color: var(--bg); transform: none; }
         html[data-style="mono"] .expand-toggle { background: transparent; }
 
@@ -8130,6 +8160,9 @@
             <button type="button" class="nav-shorts" :class="{ 'nav-shorts-mini': pastCompactThreshold }" @click="openShorts()" title="刷短剧" aria-label="刷短剧"><i class="fas fa-mobile-screen-button" aria-hidden="true"></i><span>刷短剧</span></button>
         </nav>
 
+        <!-- 📱 下载 App(右下角,在⚙️设置上面;返回顶部按钮出现时再往上叠一格)。站点开了下载页(/api/config 的 app_download)
+             才有;已经在 App 里、旧 TV 模式里不显示。必须紧挨在 .btn-top 前面:.btn-app + .btn-top 靠它把返回顶部往上挪 -->
+        <a v-if="appDl && !isNativeApp && !isTVMode" class="btn-app" href="/app" target="_blank" rel="noopener" title="下载安卓 App(手机 / 电视盒子)" aria-label="下载安卓 App">APP</a>
         <!-- Back to Top Button -->
         <button class="btn-top" @click="scrollToTop">
             <i class="fas fa-arrow-up"></i>
@@ -17055,6 +17088,7 @@
                     // 📚 片单(像豆瓣豆列):同步账号存服务器(plEnabled = /api/config 的 playlists_enabled),其他人存本机 donggua_playlists;
                     //    形状见 <dg-pl-core>。plSheet = 「加到片单」弹窗;plPage = 片单页(自己的 / 分享链接 ?list= 进来的别人的)
                     plEnabled: false,
+                    appDl: null,          // 📱 /api/config 的 app_download({ page, version, size, minAndroid }),有才显示右下角 APP 按钮
                     plLists: [],
                     plLimits: { lists: 50, items: 500, total: 3000 },
                     plBusy: false,
@@ -18199,6 +18233,7 @@
                         this.aiFindOn = !!config.ai_find;     // ✨ AI 找片
                         this.pushEnabled = !!config.push_enabled;
                         this.plEnabled = !!config.playlists_enabled;   // 📚 片单存服务器 / 能分享(没有 = 只存本机)
+                        this.appDl = config.app_download || null;      // 📱 右下角 APP 按钮(站点开了 /app 下载页才有)
                         // 📺 直播开关（默认开；服务端 LIVE_TV_DISABLED=1 则关，前端隐藏直播区）
                         this.liveEnabled = !!config.live_enabled;
                         // 🚫 封禁锁屏（站长在后台封了这个用户）

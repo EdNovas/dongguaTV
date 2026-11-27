@@ -283,6 +283,11 @@
         .kpi.warn { border-color: rgba(252, 211, 77, .35); }
         .kpi.warn .k-v { color: var(--warn); }
         .since { font-size: 12.5px; color: var(--muted); }
+        .app-form { margin-top: 14px; max-width: 720px; }
+        .app-form > label { display: block; margin: 10px 0; font-size: 13px; color: var(--muted); }
+        .app-form > label > input[type=text] { display: block; margin-top: 5px; color: var(--text); }
+        .app-form .app-sw { color: var(--text); font-size: 14px; }
+        .app-form .app-tip { font-size: 12.5px; margin: -4px 0 8px; }
 
         /* 📈 图表 */
         .chart-cap { font-size: 12px; color: var(--text-2); margin: 6px 0 2px; }
@@ -1261,6 +1266,37 @@
                     </section>
 
                     <!-- ======================= 💬 评论 / 用户弹幕 ======================= -->
+                    <section v-show="tab === 'app'" class="sec" aria-label="App">
+                        <p class="since">网站右下角的「APP」按钮、下载页 <a href="/app" target="_blank" rel="noopener">/app</a>(电视版「我的」里的二维码也是)都按这里的设置。安装包在 GitHub Actions 里打包签名(签名密钥放在 GitHub Secrets,不放在网站服务器上),这里只填下载链接。</p>
+                        <load-state :st="ap" :has="!!ap.data" label="加载 App 设置" @retry="loadApp"></load-state>
+                        <template v-if="ap.data">
+                            <div v-if="ap.data.disabledByEnv" class="note-banner warn">服务器设置了 <code>APP_DOWNLOAD_DISABLE=1</code>,下载功能整个关着;去掉这个环境变量并重启后才能在这里开。</div>
+                            <div v-else-if="!ap.data.dbOk" class="note-banner warn">服务器没有 sqlite 缓存库(<code>CACHE_TYPE=sqlite</code>),这里改的设置只在内存里,重启就没了。</div>
+                            <div class="kpis">
+                                <div class="kpi" :class="{ warn: !ap.data.source }"><div class="k-l">状态</div><div class="k-v">{{ ap.data.source ? '在推荐' : '没推荐' }}</div><div class="k-s">{{ appSrcLabel }}</div></div>
+                                <div class="kpi"><div class="k-l">当前版本</div><div class="k-v sm">{{ (ap.data.info && ap.data.info.version) || '—' }}</div><div class="k-s">{{ ap.data.info && ap.data.info.size ? (ap.data.info.size / 1048576).toFixed(1) + ' MB' : '大小未知' }}{{ ap.data.info && ap.data.info.date ? ' · ' + ap.data.info.date : '' }}</div></div>
+                                <div class="kpi"><div class="k-l">安装包</div><div class="k-v sm wrapany">{{ ap.data.info ? (ap.data.info.versionUrl || ap.data.info.url) : '—' }}</div><div class="k-s">用户点「下载」拿到的就是这个</div></div>
+                            </div>
+                            <div v-if="ap.data.error" class="note-banner warn">下载信息读不到:{{ ap.data.error }}。链接打不开的话,用户点下载也会失败。</div>
+                            <div class="app-form">
+                                <label class="app-sw"><input type="checkbox" v-model="ap.draft.enabled"> 在网站上推荐安卓 App(右下角 APP 按钮 + 下载页)</label>
+                                <label>下载链接<input type="text" v-model.trim="ap.draft.link" placeholder="https://…/xxx.apk 或 https://…/latest.json" spellcheck="false"></label>
+                                <div class="muted app-tip">可以填安装包地址(.apk),也可以填 GitHub Actions 上传到 Cloudflare R2 的清单 <code>latest.json</code>(版本号、大小、校验值自动读,发新版不用回来改)。</div>
+                                <label v-if="!appIsManifest">版本号(选填,显示在下载按钮上)<input type="text" v-model.trim="ap.draft.version" placeholder="例如 v1.1.193" maxlength="32"></label>
+                                <div class="toolbar">
+                                    <button type="button" class="btn" :disabled="ap.busy || !appDirty" @click="appSave">{{ ap.busy ? '保存中…' : '保存' }}</button>
+                                    <button type="button" class="btn btn-sm" @click="ap.draft.link = ap.data.officialJson; ap.draft.enabled = true">填官方清单</button>
+                                    <a class="btn btn-sm" href="/app" target="_blank" rel="noopener">打开下载页 ↗</a>
+                                    <span v-if="!ap.data.saved && ap.data.source" class="muted" style="font-size:12.5px">还没在这里保存过,现在用的是默认({{ ap.data.defaultSource === 'env' ? '环境变量 APP_DOWNLOAD_JSON' : '官方清单' }})</span>
+                                </div>
+                            </div>
+                            <div class="note-banner info" style="margin-top:14px">
+                                <b>自建站怎么弄自己的 App:</b>官方 App 打开的是 ednovas.video,别的站别直接推荐它。在 GitHub 上 fork 本项目 → Actions →「Android Build & Release」→ Run workflow,Server URL 填你的网址 → 跑完后在 Releases 里复制 apk 的下载链接,填到上面。
+                                想让每个版本用同一个签名(用户才能覆盖安装、不丢登录和记录),在 fork 的 Secrets 里配好 <code>SIGNING_KEY</code> / <code>KEY_ALIAS</code> / <code>KEY_STORE_PASSWORD</code> / <code>KEY_PASSWORD</code>。
+                            </div>
+                        </template>
+                    </section>
+
                     <section v-show="tab === 'ucomm'" class="sec" aria-label="评论">
                         <p class="since">播放页的评论和观众自己发的弹幕。被 3 个不同的人举报会自动收起(只有作者自己还看得见)，等你决定恢复还是删除；封禁作者后他发过的全部不再显示，解封就回来。</p>
                         <div class="subtabs" role="group" aria-label="评论还是弹幕">
@@ -1532,7 +1568,7 @@
             const CH_LABEL = Object.fromEntries(CHANNELS);
             const SOURCE_PRESET = ['微信', '企业微信', 'QQ', 'QQ浏览器', '微博', '钉钉', '飞书', '抖音/TikTok', '小红书', '百度App', 'Telegram', 'Facebook', 'Instagram', 'LINE', 'X', 'Google', '百度', 'Bing', '直接打开'];
             const K = Object.freeze({
-                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }, { id: 'library', label: '片库', icon: '🗂️' }, { id: 'ucomm', label: '评论', icon: '💬' }, { id: 'ai', label: 'AI 模型', icon: '🤖' }],
+                TABS: [{ id: 'overview', label: '概览', icon: '📊' }, { id: 'users', label: '用户', icon: '👥' }, { id: 'requests', label: '求片', icon: '📮' }, { id: 'shares', label: '分享', icon: '🔗' }, { id: 'library', label: '片库', icon: '🗂️' }, { id: 'ucomm', label: '评论', icon: '💬' }, { id: 'ai', label: 'AI 模型', icon: '🤖' }, { id: 'app', label: 'App', icon: '📱' }],
                 AI_ROLES: [
                     { id: 'text', label: '文字找片', hint: '最多 4 个 · 用户描述剧情/台词找片', max: 4 },
                     { id: 'image', label: '截图找片', hint: '最多 3 个 · 只能选能看图的', max: 3 },
@@ -1930,6 +1966,7 @@
                         sh: Object.assign(st0(), { channel: '', source: '', page: 1 }),
                         ti: Object.assign(st0(), { busy: {}, showAll: false, trySite: '', tryQ: '', tryRes: null, tryBusy: false }),
                         ai: Object.assign(st0(), aiState0()),
+                        ap: Object.assign(st0(), { draft: { enabled: true, link: '', version: '' }, busy: false }),
                         uc: Object.assign(st0(), { kind: 'c', filter: 'all', qInput: '', q: '', page: 1, busy: {}, words: '', wordsDefault: [], wordsLoaded: false, wordsBusy: false }),
                         dw: Object.assign(st0(), { open: false, token: '', seed: null, sub: 'shows', exp: {}, banBusy: false }),
                         cf: { open: false, title: '', message: '', ok: '确定', danger: false },
@@ -1937,6 +1974,19 @@
                     };
                 },
                 computed: {
+                    appIsManifest() { return /\.json(\?|#|$)/i.test(this.ap.draft.link || ''); },
+                    appDirty() {
+                        const d = this.ap.data, x = this.ap.draft;
+                        if (!d) return false;
+                        if (!d.saved) return true;   // 默认状态也允许点保存(把默认写下来)
+                        return x.enabled !== !!d.settings.enabled || x.link !== (d.settings.link || '') || x.version !== (d.settings.version || '');
+                    },
+                    appSrcLabel() {
+                        const d = this.ap.data;
+                        if (!d || !d.source) return d && d.saved ? '后台关掉了' : '还没设置下载链接';
+                        if (!d.saved) return d.defaultSource === 'env' ? '默认:环境变量' : '默认:官方清单';
+                        return /\.json(\?|#|$)/i.test(d.source) ? '清单(自动读版本)' : '直接安装包';
+                    },
                     curLoading() { const m = { overview: this.ov, users: this.us, requests: this.rq, shares: this.sh, library: this.ti, ucomm: this.uc, ai: this.ai }; return !!(m[this.tab] && m[this.tab].loading); },
                     // ---- AI 模型 ----
                     aiByName() { const o = Object.create(null); ((this.ai.data && this.ai.data.models) || []).forEach(m => { o[m.name] = m; }); return o; },
@@ -2282,11 +2332,12 @@
                         else if (id === 'shares' && !this.sh.data && !this.sh.loading) this.loadShares();
                         else if (id === 'library' && !this.ti.loading) this.loadTitleIndex();
                         else if (id === 'ai' && !this.ai.loading) this.loadAi();
+                        else if (id === 'app' && !this.ap.loading) this.loadApp();
                         else if (id === 'ucomm' && !this.uc.data && !this.uc.loading) { this.loadUcomm(); this.loadUcWords(); }
                     },
                     refresh() {
                         if (this.tab === 'overview') this.loadOverview();
-                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares, library: this.loadTitleIndex, ucomm: this.loadUcomm, ai: this.loadAi })[this.tab].call(this); }
+                        else { this.ov.stale = true; ({ users: this.loadUsers, requests: this.loadRequests, shares: this.loadShares, library: this.loadTitleIndex, ucomm: this.loadUcomm, ai: this.loadAi, app: this.loadApp })[this.tab].call(this); }
                     },
                     goKpi(go) {
                         if (go.tab === 'users') {
@@ -2471,6 +2522,24 @@
                     },
 
                     // ---------- 🤖 AI 模型 ----------
+                    // 📱 App 页:读 / 存(服务器回同一个形状;保存后用服务器那份覆盖草稿)
+                    loadApp() {
+                        return runLoad('app', this.ap, signal => api('/api/admin/app', { signal })).then(d => { if (d) this.appApply(d); });
+                    },
+                    appApply(d) {
+                        this.ap.data = d;
+                        this.ap.draft = { enabled: !!d.settings.enabled, link: d.settings.link || '', version: d.settings.version || '' };
+                    },
+                    async appSave() {
+                        const a = this.ap;
+                        a.busy = true;
+                        try {
+                            const d = await api('/api/admin/app/settings', { method: 'POST', body: { enabled: a.draft.enabled, link: a.draft.link, version: a.draft.version } });
+                            this.appApply(d);
+                            this.toast(d.source ? 'App 下载设置已保存,网站上在推荐' : '已保存:网站上不再推荐 App', 'ok');
+                        } catch (e) { if (e.code !== 'auth') this.toast('保存失败:' + e.message, 'err'); }
+                        finally { a.busy = false; }
+                    },
                     loadAi() {
                         clearTimeout(this._aiPoll);
                         return runLoad('ai', this.ai, signal => api('/api/admin/ai', { signal }).then(aiNorm)).then(d => { if (d) this.aiApply(d); });
