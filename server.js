@@ -1324,18 +1324,46 @@ app.post('/api/admin/ai/bench', (req, res) => {
 // 📱 短剧竖屏刷(见 lib/shorts-feed):每 30 分钟从各站的短剧分类拉最新的,只收一集一集的(「全集」单文件不收)、每部留一条 m3u8 选集,
 //    按片名去重存进 cache.db(没 sqlite 放内存)。首页「短剧」整屏刷读 /api/shorts/feed?offset=&limit=,播放照常走前端的去广告代理 + 线路分级。
 //    SHORTS_SITES=站点key,逗号分隔 只用这些站;SHORTS_DISABLE=1 关。
+//    只收短剧的站(不进全站搜索 / 线路):放在 shorts-sites.json(与 db.json 同形状 {sites:[{key,name,api}]},gitignore,
+//    SHORTS_SITES_FILE 可指定路径);key 撞到 db.json 里已有的站就不要。一分钟看一次文件有没有改。
 const SHORTS_ENABLED = !envFlag('SHORTS_DISABLE');
+const SHORTS_SITES_FILE = process.env.SHORTS_SITES_FILE || path.join(__dirname, 'shorts-sites.json');
+let _shortsExtra = { at: 0, mtime: 0, sites: [] };
+function shortsExtraSites() {
+    const t = Date.now();
+    if (t - _shortsExtra.at < 60e3) return _shortsExtra.sites;
+    _shortsExtra.at = t;
+    try {
+        const st = fs.statSync(SHORTS_SITES_FILE);
+        if (st.mtimeMs !== _shortsExtra.mtime) {
+            const j = JSON.parse(fs.readFileSync(SHORTS_SITES_FILE, 'utf8').replace(/^﻿/, ''));
+            const main = new Set(allSites().map(s => s && s.key));
+            _shortsExtra.sites = ((j && j.sites) || []).filter(s => s && s.key && s.api && s.active !== false && !main.has(s.key) && /^https?:\/\//i.test(String(s.api)))
+                .map(s => ({ key: String(s.key), name: String(s.name || s.key), api: String(s.api), shortsOnly: true }));
+            _shortsExtra.mtime = st.mtimeMs;
+            console.log(`[Shorts] 只收短剧的站 ${_shortsExtra.sites.length} 个(${SHORTS_SITES_FILE})`);
+        }
+    } catch (e) { if (_shortsExtra.mtime) console.warn('[Shorts] shorts-sites.json 读不了:', e.message); _shortsExtra = { at: t, mtime: 0, sites: [] }; }
+    return _shortsExtra.sites;
+}
+const shortsAllSites = () => allSites().filter(s => s && s.active !== false && !(kazumi && kazumi.isKzSite(s))).concat(shortsExtraSites());
+// 片库里的线路 → 补上站名和广告分级档案;站被删了的线路不要
+function shortsMapItem(it, byKey) {
+    return Object.assign({}, it, {
+        srcs: (it.srcs || []).filter(x => byKey.has(x.site_key)).map(x => { const s = byKey.get(x.site_key); return Object.assign({}, x, { site_name: s.name, site_profile: profOf(s) }); })
+    });
+}
 let shortsFeed = null;
 if (!process.env.VERCEL && SHORTS_ENABLED) {
     try {
         shortsFeed = require('./lib/shorts-feed').createShortsFeed({
             db: () => REQ_DB_OK() ? cacheManager.db : null,
-            sites: () => allSites().filter(s => s && s.active !== false && !(kazumi && kazumi.isKzSite(s))),
+            sites: shortsAllSites,
             only: process.env.SHORTS_SITES || '',
             tierOf: (() => {   // 同一部的线路按广告分级排(无广告在前);一批里要问几百次,站表 60s 一取
                 let at = 0, m = new Map();
                 return (key) => {
-                    if (Date.now() - at > 60e3) { at = Date.now(); m = new Map(allSites().map(s => [s.key, (profOf(s) || {}).tier || 'unknown'])); }
+                    if (Date.now() - at > 60e3) { at = Date.now(); m = new Map(shortsAllSites().map(s => [s.key, (profOf(s) || {}).tier || 'unknown'])); }
                     return m.get(key) || 'unknown';
                 };
             })(),
@@ -1349,12 +1377,34 @@ app.get('/api/shorts/feed', (req, res) => {
     if (!shortsFeed) return res.json({ enabled: false, items: [], total: 0 });
     shortsFeed.kick();   // 片库还空着(刚启动)才会真的开一轮
     const r = shortsFeed.feed(req.query.offset, req.query.limit);
-    const byKey = new Map(allSites().map(s => [s.key, s]));
-    const items = r.items.map(it => Object.assign({}, it, {
-        srcs: it.srcs.filter(x => byKey.has(x.site_key)).map(x => { const s = byKey.get(x.site_key); return Object.assign({}, x, { site_name: s.name, site_profile: profOf(s) }); })
-    })).filter(it => it.srcs.length);
+    const byKey = new Map(shortsAllSites().map(s => [s.key, s]));
+    const items = r.items.map(it => shortsMapItem(it, byKey)).filter(it => it.srcs.length);
     res.set('Cache-Control', r.total ? 'public, max-age=60' : 'no-store');
     res.json(Object.assign({ enabled: true }, r, { items }));
+});
+// 🎞️「短剧」分类页:?cat=<题材>&sort=new|hot&q=<片名>&only=eps&offset=&limit=(卡片不带选集串;full=1 带,竖屏刷接着往下刷用)
+app.get('/api/shorts/list', (req, res) => {
+    if (!shortsFeed) return res.json({ enabled: false, items: [], total: 0 });
+    shortsFeed.kick();
+    const full = req.query.full === '1';
+    const r = shortsFeed.list({ cat: req.query.cat, sort: req.query.sort, q: req.query.q, only: req.query.only, offset: req.query.offset, limit: req.query.limit, full });
+    let items = r.items;
+    if (full) { const byKey = new Map(shortsAllSites().map(s => [s.key, s])); items = items.map(it => shortsMapItem(it, byKey)).filter(it => it.srcs.length); }
+    res.set('Cache-Control', r.total ? 'public, max-age=60' : 'no-store');
+    res.json(Object.assign({ enabled: true }, r, { items }));
+});
+app.get('/api/shorts/item', (req, res) => {
+    if (!shortsFeed) return res.status(404).json({ error: '短剧没开' });
+    const it = shortsFeed.item(req.query.id);
+    const out = it && shortsMapItem(it, new Map(shortsAllSites().map(s => [s.key, s])));
+    if (!out || !out.srcs.length) return res.status(404).json({ error: '没有这部' });
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(out);
+});
+app.get('/api/shorts/cats', (req, res) => {
+    if (!shortsFeed) return res.json({ enabled: false, total: 0, tags: [] });
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json(Object.assign({ enabled: true }, shortsFeed.cats()));
 });
 
 // 搜索一个站:正常站照旧 ?ac=detail&wd=;走索引的站 → 本地查 vod_id → ?ac=detail&ids=(一次最多 20 个)。返回形状同 fetchWithProxyFallback
