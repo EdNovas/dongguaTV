@@ -238,7 +238,8 @@
         return getJ('/api/auth/check', 8000).then(function (data) {
             data = data || {};
             lsSet('donggua_auth_required', data.requirePassword ? '1' : '0');
-            var base = { qrLogin: data.qrLogin === true, passwordMode: !!data.requirePassword, v2board: data.v2boardEnabled !== false };
+            // v2board(机场账号)登录只有 v2board 分支的服务器有,它会明说 v2boardEnabled:true;main 分支没有这个字段 → 只有访问密码
+            var base = { qrLogin: data.qrLogin === true, passwordMode: !!data.requirePassword, v2board: data.v2boardEnabled === true };
             function res(need, message) { var o = assign({ need: need }, base); if (message) o.message = message; if (!need) fire('tv:user'); return o; }
             if (!data.requirePassword) return res(false);
             var hash = lsRaw(K_HASH), expiry = lsRaw(K_EXP), type = lsRaw(K_TYPE);
