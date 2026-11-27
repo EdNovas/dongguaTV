@@ -1285,7 +1285,7 @@
                                 <label v-if="!appIsManifest">版本号(选填,显示在下载按钮上)<input type="text" v-model.trim="ap.draft.version" placeholder="例如 v1.1.193" maxlength="32"></label>
                                 <div class="toolbar">
                                     <button type="button" class="btn" :disabled="ap.busy || !appDirty" @click="appSave">{{ ap.busy ? '保存中…' : '保存' }}</button>
-                                    <button type="button" class="btn btn-sm" @click="ap.draft.link = ap.data.officialJson; ap.draft.enabled = true">填官方清单</button>
+                                    <button type="button" class="btn btn-sm" :disabled="ap.busy" @click="appUseOfficial" title="填入官方 R2 清单并马上保存(版本号会自动跟着新版本走)">使用官方清单</button>
                                     <a class="btn btn-sm" href="/app" target="_blank" rel="noopener">打开下载页 ↗</a>
                                     <span v-if="!ap.data.saved && ap.data.source" class="muted" style="font-size:12.5px">还没在这里保存过,现在用的是默认({{ ap.data.defaultSource === 'env' ? '环境变量 APP_DOWNLOAD_JSON' : '官方清单' }})</span>
                                 </div>
@@ -2529,6 +2529,15 @@
                     appApply(d) {
                         this.ap.data = d;
                         this.ap.draft = { enabled: !!d.settings.enabled, link: d.settings.link || '', version: d.settings.version || '' };
+                    },
+                    // 「使用官方清单」:填进去并马上保存。官方域名没保存过时输入框里本来就是官方清单(默认值),
+                    // 以前这个按钮只改输入框 → 看上去点了没反应、也没存下来
+                    appUseOfficial() {
+                        const d = this.ap.data;
+                        if (!d) return;
+                        if (d.saved && d.settings.enabled && d.settings.link === d.officialJson) { this.toast('已经在用官方清单了', 'ok'); return; }
+                        this.ap.draft = { enabled: true, link: d.officialJson, version: '' };
+                        this.appSave();
                     },
                     async appSave() {
                         const a = this.ap;
