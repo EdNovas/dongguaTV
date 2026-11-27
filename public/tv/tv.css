@@ -326,3 +326,8 @@ img { border: 0; }
     font-size: 2.2rem; color: #eee; white-space: nowrap; opacity: 0; -webkit-transition: opacity .15s; transition: opacity .15s; }
 .ply-jump b { color: #ff6b6e; font-size: 2.8rem; margin-right: .6rem; }
 .ply-jump.show { opacity: 1; }
+.appq { width: 62rem; }
+.appq-r { display: -webkit-flex; display: flex; -webkit-align-items: center; align-items: center; margin-bottom: 1.6rem; }
+.appq-qr { width: 20rem; height: 20rem; margin: 0 2.4rem 0 0; -webkit-flex: none; flex: none; }
+.appq-r .cfm-x { margin: 0; }
+.appq-r b { color: #ffd36b; }

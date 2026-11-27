@@ -1558,6 +1558,21 @@ app.get(['/', '/index.html'], async (req, res) => {
     }
 });
 
+// 📱 安卓 App 下载页 /app、直链 /app.apk、/api/app/latest + 站长后台「App」页(/api/admin/app),见 lib/app-download。
+//    下载链接在后台填(安装包或 R2 的 latest.json);后台没保存过时只有 ednovas.video / 设了 APP_DOWNLOAD_JSON 的站默认开 ——
+//    官方 App 打开的是 ednovas.video。安装包只在 GitHub Actions 里打包签名,网站服务器上不编译、不放签名密钥
+let appDownload = null;
+try {
+    // db / adminAuthed 定义在下面(构造时还在 TDZ),一律用闭包,请求进来时才取
+    appDownload = require('./lib/app-download').createAppDownload({
+        axios,
+        db: () => REQ_DB_OK() ? cacheManager.db : null,
+        adminAuthed: (req) => adminAuthed(req),
+        log: (...a) => console.log('[AppDownload]', ...a)
+    });
+    appDownload.registerRoutes(app);
+} catch (e) { console.warn('[AppDownload] 模块加载失败,下载页已禁用:', e.message); appDownload = null; }
+
 // 📺 电视版(public/tv,遥控器为主的独立页面;首页的启动检测把电视 / 盒子 / 老内核分流到这里)。
 //   页面本身不缓存;里面 ?v=__TVV__ 换成 public/tv 下文件(名字 + 大小 + 修改时间)的指纹 —— 改了脚本电视上立刻生效,
 //   不用等 1 小时的静态缓存过期,也不用重启(每次只 stat 十几个文件,指纹没变就用记住的页面)。
@@ -2050,6 +2065,8 @@ app.get('/api/config', (req, res) => {
         ai_find: !!aiFind,
         // 📚 片单存服务器 / 分享可用(需 sqlite;没开就只存本机、不能分享)
         playlists_enabled: !!(playlists && playlists.enabled()),
+        // 📱 安卓 App 下载({ page:'/app', version, size, minAndroid } 或 null;前端右下角的 APP 按钮看它)
+        app_download: appDownload ? appDownload.configField(req) : null,
         // 💬 评论 + 用户弹幕(需 sqlite;COMMENTS_DISABLE=1 关)
         comments_enabled: !!(comments && comments.enabled()),
         // 🚫 封禁：站长在后台封了这个用户 → 前端锁屏

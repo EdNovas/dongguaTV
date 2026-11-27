@@ -264,6 +264,45 @@ jobs:
           path: android/app/build/outputs/apk/release/*.apk
           retention-days: 30
 
+      # 上传到 Cloudflare R2:<桶>/<前缀>/<版本>/E-show-<版本>-universal.apk + <前缀>/latest/{E-show-latest-universal.apk, latest.json}。
+      # 网站后台「App」页把下载链接填成 latest.json,下载页 / 右下角 APP 按钮就自动跟着新版本走。
+      # 需要仓库 Secrets:R2_ACCOUNT_ID、R2_ACCESS_KEY_ID、R2_SECRET_ACCESS_KEY(R2 的 API 令牌,只给这个桶读写权限);
+      # 可选 Variables:R2_BUCKET(默认 ednovas)、R2_PREFIX(默认 e-show)、R2_PUBLIC_BASE(默认 https://storage.ednovas.org)。
+      # 没配 Secrets 就跳过;手动构建(可能填了别的服务器地址)不上传,免得覆盖官方的 latest。
+      - name: Upload APK to Cloudflare R2
+        id: r2
+        if: ${{ github.event_name == 'push' }}
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # 新版 aws cli 默认带的校验头 R2 不全认,只在必须时才算
+          AWS_REQUEST_CHECKSUM_CALCULATION: WHEN_REQUIRED
+          AWS_RESPONSE_CHECKSUM_VALIDATION: WHEN_REQUIRED
+          R2_BUCKET: ${{ vars.R2_BUCKET || 'ednovas' }}
+          R2_PREFIX: ${{ vars.R2_PREFIX || 'e-show' }}
+          R2_PUBLIC_BASE: ${{ vars.R2_PUBLIC_BASE || 'https://storage.ednovas.org' }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+            echo "R2 secrets not set, skip upload"; exit 0
+          fi
+          APK=$(ls android/app/build/outputs/apk/release/*.apk | head -1)
+          SIZE=$(stat -c %s "$APK"); SHA=$(sha256sum "$APK" | cut -d' ' -f1); DATE=$(date -u +%Y-%m-%d)
+          EP="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          VKEY="${R2_PREFIX}/${VERSION}/E-show-${VERSION}-universal.apk"
+          LKEY="${R2_PREFIX}/latest/E-show-latest-universal.apk"
+          CT=application/vnd.android.package-archive
+          aws s3 cp "$APK" "s3://${R2_BUCKET}/${VKEY}" --endpoint-url "$EP" --content-type "$CT"
+          aws s3 cp "$APK" "s3://${R2_BUCKET}/${LKEY}" --endpoint-url "$EP" --content-type "$CT" --cache-control "no-cache"
+          jq -n --arg v "$VERSION" --arg d "$DATE" --argjson s "$SIZE" --arg h "$SHA" \
+            --arg u "${R2_PUBLIC_BASE}/${LKEY}" --arg vu "${R2_PUBLIC_BASE}/${VKEY}" \
+            '{name:"E视界",version:$v,date:$d,size:$s,sha256:$h,minAndroid:"7.0",url:$u,versionUrl:$vu}' > latest.json
+          aws s3 cp latest.json "s3://${R2_BUCKET}/${R2_PREFIX}/latest/latest.json" --endpoint-url "$EP" \
+            --content-type "application/json; charset=utf-8" --cache-control "no-cache"
+          echo "line=- 🚀 国内下载(Cloudflare R2):${R2_PUBLIC_BASE}/${VKEY}" >> $GITHUB_OUTPUT
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
@@ -277,7 +316,9 @@ jobs:
             | 文件 | 说明 |
             |------|------|
             | `E视界-${{ steps.version.outputs.VERSION }}-universal.apk` | 通用版 (支持所有设备) |
-            
+
+            ${{ steps.r2.outputs.line }}
+
             ### 🖥️ 支持的 CPU 架构
             - ✅ `armeabi-v7a` (ARM 32位 - 旧手机/盒子)
             - ✅ `arm64-v8a` (ARM 64位 - 大多数现代手机/盒子)
@@ -285,9 +326,10 @@ jobs:
             - ✅ `x86_64` (Intel/AMD 64位 - 模拟器/部分平板)
             
             ### 📺 设备兼容性
-            - ✅ 手机 (Android 5.0+)
-            - ✅ 平板
-            - 📺 电视/盒子: 推荐使用电视浏览器访问网页版，兼容性更佳
+            - ✅ 安卓手机 / 平板 (Android 7.0+)
+            - ✅ 安卓电视 / 电视盒子 (Android 7.0+,打开后自动进入电视版,遥控器操作;斐讯 T1 这类老盒子也能用)
+            - 🍎 iPhone / iPad / Apple TV:暂时没有 App,请用浏览器访问网站(iPhone 可以「添加到主屏幕」)
+            - ⚠️ 安装时如果提示「签名不一致 / 与已安装的应用冲突」,先卸载旧版再装
             
             ### 🌐 内置服务器
             - 默认连接: `${{ github.event.inputs.server_url || 'https://ednovas.video' }}`

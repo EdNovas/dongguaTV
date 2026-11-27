@@ -39,6 +39,7 @@
             h += '<div class="chip f" data-a="ad">去广告:' + onOff(ad) + '</div>';
             h += '<div class="chip f" data-a="clear">清空观看记录</div>';
             if (canRunWeb()) h += '<div class="chip f" data-a="web">切换到网页版</div>';
+            if (TV.api.cfg && TV.api.cfg.app_download) h += '<div class="chip f" data-a="app">下载 App(手机 / 盒子)</div>';
             h += '<div class="chip f" data-a="reload">刷新</div>';
             if (TV.api.token()) h += '<div class="chip f" data-a="logout">退出登录' + (user ? '(' + TV.esc(user) + ')' : '') + '</div>';
             btns.innerHTML = h;
@@ -56,8 +57,22 @@
             });
             else if (a === 'web') TV.confirm('切换到网页版?', '以后打开都是网页版;想回来,在网页版底部点「TV 模式」。', '切换', function () { location.href = '/?tv=0'; });
             else if (a === 'reload') location.reload();
+            else if (a === 'app') showAppQr();
             else if (a === 'logout') TV.confirm('退出登录?', '这台设备上的观看记录和追剧会清掉(账号里的不受影响)。', '退出', function () { TV.api.logout(); TV.toast('已退出'); setTimeout(function () { location.reload(); }, 600); });
         });
+        // 下载页的二维码 + 短网址(电视上点不了下载链接,用手机扫;盒子用「下载器」输短网址)
+        function showAppQr() {
+            var url = location.protocol + '//' + location.host + '/app', img = '';
+            try { var q = window.qrcode(0, 'M'); q.addData(url); q.make(); img = '<img alt="" src="' + q.createDataURL(8, 0) + '">'; } catch (e) { }
+            var info = TV.api.cfg.app_download || {};
+            var el = TV.el('<div class="mnu"><div class="mnu-box cfm appq"><div class="mnu-t">下载 E视界 安卓 App</div>' +
+                '<div class="appq-r"><div class="lg-qrbox appq-qr">' + img + '</div><div class="cfm-x">手机扫码打开下载页' + (info.version ? '(' + TV.esc(info.version) + ')' : '') + '。<br>' +
+                '安卓手机、平板、电视盒子通用(Android ' + TV.esc(info.minAndroid || '7.0') + ' 及以上)。<br>盒子上用「下载器」类 App 可以直接输入:<br><b>' + TV.esc(location.host) + '/app.apk</b><br>' +
+                'iPhone / iPad / Apple TV 暂时没有 App,请用浏览器看。</div></div>' +
+                '<div class="cfm-b"><div class="btn f" data-first>知道了</div></div></div></div>');
+            var L = TV.layer(el);
+            TV.on(el, 'tvok', function () { L.close(); });
+        }
         function refocus(a) { var x = TV.$('[data-a="' + a + '"]', btns); if (x) TV.focus(x, { noScroll: true }); }
 
         paintRows(true);

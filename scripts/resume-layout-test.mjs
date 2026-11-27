@@ -86,7 +86,7 @@ console.log('② CSS');
     // 盖住后藏起的首页层:每个都是 #app 真实的直接子节点;覆盖层/弹窗/封禁锁/TV 悬浮钮一个都不能在里面;首页层一个都不能漏
     const cm = /((?:\s*body\.detail-covered #app > [^,{]+,?)+)\s*\{\s*visibility: hidden !important;\s*\}/.exec(HTML);
     const sels = cm ? cm[1].split(',').map(s => s.trim().replace(/^body\.detail-covered #app > /, '')).filter(Boolean) : [];
-    ok(sels.length === 15, '隐藏列表 15 项(含片单页 .pl-page、短剧分类页 .sl-page、杂志风首页的刊头 .mag-mast / 正文 .mag)', sels);
+    ok(sels.length === 16, '隐藏列表 16 项(含片单页 .pl-page、短剧分类页 .sl-page、杂志风首页的刊头 .mag-mast / 正文 .mag、右下角 APP 按钮 .btn-app)', sels);
     const parse5 = dep('parse5');
     const attr = (n, name) => { const a = (n.attrs || []).find(x => x.name === name); return a ? a.value : null; };
     const walk = function* (n) { yield n; for (const c of ((n.nodeName === 'template' ? n.content : n).childNodes || [])) yield* walk(c); };
