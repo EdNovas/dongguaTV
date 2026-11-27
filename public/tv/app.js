@@ -41,6 +41,7 @@
     function startLogin(info) {
         TV.boot('login', {
             qr: !!info.qrLogin,
+            v2b: info.v2board !== false,
             onDone: function () {
                 TV.reset('home');
                 setTimeout(function () {
@@ -70,7 +71,7 @@
     TV.on(window, 'tv:logout', function () {
         TV.toast('登录已失效,请重新登录', 3500);
         TV.api.authCheck().then(function (info) {
-            TV.reset('login', { qr: !!(info && info.qrLogin), onDone: function () { TV.reset('home'); } });
+            TV.reset('login', { qr: !!(info && info.qrLogin), v2b: !(info && info.v2board === false), onDone: function () { TV.reset('home'); } });
         }, function () { TV.reset('login', { qr: true, onDone: function () { TV.reset('home'); } }); });
     });
 

@@ -1,7 +1,7 @@
 /* E视界 电视版 · 登录
  * 电视上敲邮箱密码太难:优先扫码(手机上已登录的 E视界 扫一下就行,同 index.html 的扫码登录);
  * 扫码不可用 / 想自己输 → 右边账号密码(用盒子自带输入法)。
- * params: { qr: 服务器开了扫码登录, onDone: 登录成功回调 }
+ * params: { qr: 服务器开了扫码登录, v2b: 服务器有机场账号登录(false = 只有访问密码,main 分支), onDone: 登录成功回调 }
  */
 (function () {
     'use strict';
@@ -25,7 +25,7 @@
             '<input class="lg-ime" type="text" autocomplete="off" autocorrect="off" spellcheck="false">' +
             '</div>');
         var qrBox = TV.$('.lg-qrbox', el), qrSt = TV.$('.lg-qrst', el), msgEl = TV.$('.lg-msg', el), ime = TV.$('.lg-ime', el);
-        var vals = { email: TV.store.raw('emax_v2board_email') || '', pwd: '' }, editing = null, pwdOnly = false;
+        var vals = { email: TV.store.raw('emax_v2board_email') || '', pwd: '' }, editing = null, pwdOnly = params.v2b === false;
         var qr = null, pollT = 0, renewN = 0, dead = false, busy = false;
 
         function paintVals() {
@@ -36,7 +36,10 @@
             });
             TV.$('[data-k="email"]', el).style.display = pwdOnly ? 'none' : '';
             TV.$('[data-k="pwd"] .lg-lb', el).textContent = pwdOnly ? '访问密码' : '密码';
-            TV.$('[data-act="pwdonly"]', el).textContent = pwdOnly ? '用账号密码登录' : '我只有访问密码';
+            var sw = TV.$('[data-act="pwdonly"]', el);
+            sw.textContent = pwdOnly ? '用账号密码登录' : '我只有访问密码';
+            if (params.v2b === false) sw.parentNode.style.display = 'none';   // 服务器没有账号登录:不给切换
+            TV.$('.lg-form .lg-t', el).textContent = pwdOnly ? '访问密码登录' : '账号密码登录';
         }
         // 用盒子自带输入法输入:真输入框只在这一刻露出来、聚焦(平时不让它拿焦点,老盒子一聚焦就弹输入法)
         function edit(k) {
