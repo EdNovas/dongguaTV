@@ -31,15 +31,23 @@
     <meta name="twitter:image" content="https://ednovas.video/icons/icon-512.png">
 
     <!-- 兼容性检测 + 电视版分流 (必须在所有脚本之前;只写 ES5,老内核也要能跑这一段)
-         电视 / 盒子 → 独立的电视版 /tv/(public/tv,ES5 写的,老盒子也能跑);?tv=0 / ?tv=1 记住选择(force_tv_mode,和 detectTVMode 同一个键)。
+         电视 / 盒子 → 独立的电视版 /tv/(public/tv,ES5 写的,老盒子也能跑);?tv=0 / ?tv=1 记住选择(force_tv_mode,和 detectTVMode 同一个键),
+         ?tv=ask 清掉记住的选择、弹「手机还是电视」再问一次;认不准的设备第一次打开也弹这个(选一次就记住)。
          主站脚本要 Chrome 80+(?. ?? 对象展开 async,Vue 本身还有 /s 正则要 62+):老内核(斐讯 T1 这类 Android 7 盒子自带的 ≈Chrome 52)
          读不懂就整段不跑,页面永远停在「正在初始化...」—— 这里先用 new Function 试一下,读不懂就分流到电视版或者明确告诉用户 -->
     <script>
         (function () {
             var ua = navigator.userAgent || '', q = location.search || '';
-            function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { } return null; }
-            var m = /[?&]tv=([01])(&|$)/.exec(q);
-            if (m) ls('force_tv_mode', m[1]);
+            function ls(k, v) { try { if (v === undefined) return localStorage.getItem(k); if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { } return null; }
+            function byId(id) { return document.getElementById(id); }
+            // ?tv=1 电视版 / ?tv=0 网页版(都会记住)/ ?tv=ask 重新问一次。用过就从地址栏去掉:不然从电视版切回网页版(/?tv=0)以后
+            // 再在设置里开「TV 模式」,一刷新地址栏里的 ?tv=0 又把它关了
+            var m = /[?&]tv=(0|1|ask)(&|$)/.exec(q), askAgain = false;
+            if (m) {
+                if (m[1] === 'ask') { askAgain = true; ls('force_tv_mode', null); } else ls('force_tv_mode', m[1]);
+                q = q.replace(/([?&])tv=(?:0|1|ask)(&|$)/, function (s, a, b) { return b ? a : ''; });
+                try { history.replaceState(history.state, '', location.pathname + q + location.hash); } catch (e) { }
+            }
             var forced = ls('force_tv_mode');
             var modern = true;
             try { new Function('var o={a:1},p={...o};return o?.a??p.a'); new Function('return async function(){await 0}'); new RegExp('a', 's'); } catch (e) { modern = false; }
@@ -48,9 +56,76 @@
             var phone = /iphone|ipod|android.*mobile|windows phone/i.test(ua);
             var tvUA = /android tv|googletv|aftt|aftm|aftb|firetv|chromecast|sabrina|boreal|roku|smarttv|smart-tv|tizen|webos|web0s|leanback|hbbtv|netcast|viera|bravia|aquos|mitv|mibox|hisense|skyworth|letv/i.test(ua);
             var bigAndroid = /android/i.test(ua) && !phone;          // 平板 / 盒子(安卓 WebView 只有手机才带 Mobile)
+            var touch = (navigator.maxTouchPoints || 0) > 0;          // 有触屏:平板 / 手机;电视盒子多数是 0(也有报自己有触屏的)
             var phoneSide = /[?&]tvlogin=/.test(q);                    // 手机扫电视上的登录码打开的页面,不是电视
-            var wantTV = !phoneSide && (forced === '1' || (forced !== '0' && (tvUA || (isNative && !phone) || (!modern && bigAndroid))));
-            if (wantTV) {
+            var dev = ls('dg_device');                                 // 弹窗里选过的:tv / web
+            // 怎么分:
+            //   手动选过(?tv= / 设置里的「TV 模式」/ 电视版里的「关闭 TV 模式」/ 下面的弹窗,都记在 force_tv_mode)→ 照选的来;
+            //   一看就是电视(电视浏览器 UA、老内核的大屏安卓、App 装在没有触屏的设备上)→ 电视版;
+            //   认不准(App 装在有触屏的非手机上 = 平板,还是报了触屏的盒子?浏览器里没有触屏的大屏安卓)→ 弹窗问一次;
+            //   其它(手机、电脑、iPad、有触屏的安卓平板)→ 网页版
+            var mode;
+            if (phoneSide) mode = 'web';
+            else if (forced === '1' || forced === '0') mode = forced === '1' ? 'tv' : 'web';
+            else if (tvUA || (!modern && bigAndroid) || (isNative && !phone && !touch)) mode = 'tv';
+            else if (askAgain || (isNative && !phone) || (bigAndroid && !touch)) mode = modern ? 'ask' : 'tv';
+            else mode = 'web';
+            if (mode === 'ask') {
+                // 「这台设备是手机还是电视」:整屏两个大按钮,触屏点、遥控器方向键 + OK 都能选(默认停在电视上:遥控器不好点,触屏随便点)。
+                // 选完记住再按选的打开;剩下的页面用 plaintext 吞掉不解析(同下面跳电视版)
+                var picked = false;
+                var pick = function (v) {
+                    if (picked) return;
+                    picked = true;
+                    ls('force_tv_mode', v);
+                    ls('dg_device', v === '1' ? 'tv' : 'web');
+                    location.replace(v === '1' ? '/tv/' + q + location.hash : location.pathname + q + location.hash);
+                };
+                document.addEventListener('click', function (e) {
+                    for (var t = e.target; t && t !== document; t = t.parentNode) {
+                        if (t.id === 'dg-pick-web') return pick('0');
+                        if (t.id === 'dg-pick-tv') return pick('1');
+                    }
+                }, true);
+                // 高亮用 class 不只靠 :focus —— 页面刚打开时窗口可能还没拿到焦点(:focus 画不出来),遥控器第一下按 OK 也照样选高亮的那个
+                var pickOn = function (el) {
+                    var web = byId('dg-pick-web'), tv = byId('dg-pick-tv');
+                    if (!web || !tv) return;
+                    web.className = 'dgp' + (el === web ? ' on' : '');
+                    tv.className = 'dgp' + (el === tv ? ' on' : '');
+                    try { el.focus(); } catch (e) { }
+                };
+                document.addEventListener('keydown', function (e) {
+                    var k = e.keyCode, web = byId('dg-pick-web'), tv = byId('dg-pick-tv');
+                    if (!web || !tv) return;
+                    if (k === 37 || k === 38 || k === 21 || k === 19) pickOn(web);          // 左 / 上(安卓遥控器 DPAD 21 / 19)
+                    else if (k === 39 || k === 40 || k === 22 || k === 20) pickOn(tv);     // 右 / 下
+                    else if (k === 13 || k === 23) pick(/ on$/.test(web.className) ? '0' : '1');
+                    else return;
+                    e.preventDefault();
+                }, true);
+                var pickCard = function (id, icon, name, desc) {
+                    return '<button type="button" id="' + id + '" class="dgp"><span class="dgp-i">' + icon + '</span><b>' + name + '</b><span class="dgp-d">' + desc + '</span></button>';
+                };
+                document.write(
+                    '<style>html,body{margin:0;background:#0e0e11}' +
+                    '.dgp-w{position:fixed;left:0;top:0;width:100%;height:100%;z-index:2147483647;background:#0e0e11;color:#f2f2f4;overflow:auto;padding:28px 16px;box-sizing:border-box;text-align:center;' +
+                    'font-family:"PingFang SC","Noto Sans CJK SC","Microsoft YaHei","Droid Sans Fallback",sans-serif;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-justify-content:center;justify-content:center}' +
+                    '.dgp-t{font-size:26px;font-weight:700;margin:0 0 10px}.dgp-s{font-size:14px;line-height:1.7;color:#9a9aa3;margin:0 auto 26px;max-width:560px}' +
+                    '.dgp{display:inline-block;vertical-align:top;width:240px;max-width:86%;margin:8px 10px;padding:22px 16px 20px;border-radius:18px;border:3px solid rgba(255,255,255,.14);background:#1c1c22;color:#f2f2f4;font:inherit;cursor:pointer;outline:none;' +
+                    '-webkit-transition:-webkit-transform .12s,background .12s;transition:transform .12s,background .12s}' +
+                    '.dgp b{display:block;font-size:21px;margin:8px 0 6px}.dgp-i{display:block;font-size:40px;line-height:1.1}.dgp-d{display:block;font-size:13px;line-height:1.5;color:#9a9aa3}' +
+                    '.dgp.on{background:#fff;color:#111;border-color:#fff;-webkit-transform:scale(1.05);transform:scale(1.05)}.dgp.on .dgp-d{color:#555}</style>' +
+                    '<div class="dgp-w"><p class="dgp-t">这台设备是?</p>' +
+                    '<p class="dgp-s">选一次就记住。以后想换:网页版右下角 ⚙️ 设置 →「TV 模式」;电视版「我的」→「关闭 TV 模式」</p><div>' +
+                    pickCard('dg-pick-web', '📱', '手机 / 平板 / 电脑', '触屏或鼠标操作的网页版') +
+                    pickCard('dg-pick-tv', '📺', '电视 / 盒子', '遥控器操作的电视版,字大') +
+                    '</div></div><plaintext style="display:none">'
+                );
+                (function focusTv(n) { var b = byId('dg-pick-tv'); if (b) pickOn(b); else if (n < 200) setTimeout(function () { focusTv(n + 1); }, 15); })(0);
+                return;
+            }
+            if (mode === 'tv') {
                 location.replace('/tv/' + q + location.hash);
                 // 剩下的页面别再解析了(1.2MB 的主脚本在老盒子上光解析就要好几秒);window.stop() 会把上面的跳转也停掉,所以用 plaintext 吞掉
                 document.write('<style>body{background:#0e0e11}</style><plaintext style="display:none">');
@@ -74,6 +149,54 @@
                 window.addEventListener('resize', lightIconsSoon);
                 document.addEventListener('visibilitychange', function () { if (!document.hidden) lightIconsSoon(); });
                 try { var mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', lightIconsSoon); else if (mq.addListener) mq.addListener(lightIconsSoon); } catch (e) { }
+            }
+            // 电视上在用网页版(自己从电视版切过来的):网页版靠触屏 / 鼠标,遥控器不好使。第一次按方向键就在底部问一句「换成电视版?」,
+            // 默认停在「换成电视版」上,按 OK 就换;选「留在网页版」这次打开就不再问
+            var tvLike = dev === 'tv' || (dev !== 'web' && (tvUA || (isNative && !phone) || (bigAndroid && !touch)));
+            if (mode === 'web' && modern && !phoneSide && tvLike) {
+                var nudgeOff = false, nudgeEl = null;
+                try { nudgeOff = sessionStorage.getItem('dg_tv_nudge') === 'off'; } catch (e) { }
+                var nudgeClose = function () {
+                    if (nudgeEl && nudgeEl.parentNode) nudgeEl.parentNode.removeChild(nudgeEl);
+                    nudgeEl = null; nudgeOff = true;
+                    try { sessionStorage.setItem('dg_tv_nudge', 'off'); } catch (e) { }
+                };
+                var nudgeGo = function () { ls('force_tv_mode', '1'); location.href = '/tv/'; };
+                var nudgeOpen = function () {
+                    nudgeEl = document.createElement('div');
+                    nudgeEl.id = 'dg-nudge';
+                    nudgeEl.innerHTML = '<style>#dg-nudge{position:fixed;left:0;right:0;bottom:40px;z-index:2147483646;text-align:center;pointer-events:none}' +
+                        '#dg-nudge .dgn{display:inline-block;pointer-events:auto;max-width:92%;box-sizing:border-box;background:rgba(20,20,24,.97);color:#fff;border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:18px 22px;box-shadow:0 12px 40px rgba(0,0,0,.6);font-family:sans-serif}' +
+                        '#dg-nudge b{display:block;font-size:19px;margin-bottom:6px}#dg-nudge p{margin:0 0 14px;font-size:14px;color:#aaa;line-height:1.6}' +
+                        '#dg-nudge button{margin:0 6px;padding:10px 22px;border-radius:22px;border:2px solid rgba(255,255,255,.25);background:#2a2a31;color:#fff;font-size:16px;outline:none;cursor:pointer}' +
+                        '#dg-nudge button:focus{background:#fff;color:#111;border-color:#fff}</style>' +
+                        '<div class="dgn"><b>在用遥控器?</b><p>电视版字更大、全程方向键操作;网页版要触屏或鼠标</p>' +
+                        '<button type="button" id="dg-nudge-tv">📺 换成电视版</button><button type="button" id="dg-nudge-no">留在网页版</button></div>';
+                    document.body.appendChild(nudgeEl);
+                    try { byId('dg-nudge-tv').focus(); } catch (e) { }
+                };
+                window.addEventListener('keydown', function (e) {
+                    if (nudgeOff) return;
+                    var k = e.keyCode, t = e.target, tag = ((t && t.tagName) || '').toLowerCase();
+                    if (!nudgeEl) {
+                        // 打开只认方向键 / OK(19 / 20 在键盘上是 Pause / CapsLock,不算)
+                        if (!((k >= 37 && k <= 40) || k === 21 || k === 22 || k === 23) || tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable) || !document.body) return;
+                        nudgeOpen();
+                    } else if (k === 37 || k === 38 || k === 21 || k === 19) byId('dg-nudge-tv').focus();
+                    else if (k === 39 || k === 40 || k === 22 || k === 20) byId('dg-nudge-no').focus();
+                    else if (k === 13 || k === 23) { if (document.activeElement && document.activeElement.id === 'dg-nudge-no') nudgeClose(); else nudgeGo(); }
+                    else if (k === 27 || k === 8 || k === 4 || k === 461 || k === 10009 || e.key === 'Escape' || e.key === 'GoBack' || e.key === 'BrowserBack') nudgeClose();
+                    else return;
+                    e.preventDefault(); e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                }, true);
+                document.addEventListener('click', function (e) {
+                    if (!nudgeEl) return;
+                    for (var t = e.target; t && t !== document; t = t.parentNode) {
+                        if (t.id === 'dg-nudge-tv') return nudgeGo();
+                        if (t.id === 'dg-nudge-no') return nudgeClose();
+                    }
+                }, true);
             }
             if (!modern && !phoneSide) {
                 if (window.stop) window.stop();
@@ -9492,7 +9615,7 @@
                     <div class="set-row">
                         <div>
                             <div class="set-title"><i class="fas fa-tv"></i>TV 模式</div>
-                            <div class="set-desc">电视 / 遥控器用：方向键导航，焦点放大</div>
+                            <div class="set-desc">换成电视版：大字、遥控器 / 方向键操作。手机上也能开，电视版「我的」里随时关掉</div>
                         </div>
                         <label class="settings-switch">
                             <input type="checkbox" :checked="isTVMode" @change="showSettingsModal = false; toggleTVMode()">
@@ -19196,9 +19319,10 @@
                     toast.textContent = message;  // textContent 防 XSS
                     document.body.appendChild(toast);
 
-                    // 延迟刷新以便用户看到提示
+                    // 延迟刷新以便用户看到提示。开:直接去电视版(启动分流也会去,省一次加载主脚本)
                     setTimeout(() => {
-                        window.location.reload();
+                        if (newMode) window.location.href = '/tv/';
+                        else window.location.reload();
                     }, 800);
                 },
 

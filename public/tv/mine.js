@@ -35,7 +35,7 @@
             h += '<div class="chip f" data-a="skip">自动跳过片头:' + onOff(skip) + '</div>';
             h += '<div class="chip f" data-a="ad">去广告:' + onOff(ad) + '</div>';
             h += '<div class="chip f" data-a="clear">清空观看记录</div>';
-            if (canRunWeb()) h += '<div class="chip f" data-a="web">切换到网页版</div>';
+            if (canRunWeb()) h += '<div class="chip f" data-a="web">关闭 TV 模式(换网页版)</div>';
             if (TV.api.cfg && TV.api.cfg.app_download) h += '<div class="chip f" data-a="app">下载 App(手机 / 盒子)</div>';
             h += '<div class="chip f" data-a="reload">刷新</div>';
             if (TV.api.token()) h += '<div class="chip f" data-a="logout">退出登录' + (user ? '(' + TV.esc(user) + ')' : '') + '</div>';
@@ -52,7 +52,7 @@
                 TV.api.flushHistory();
                 paintRows(true); TV.toast('已清空');
             });
-            else if (a === 'web') TV.confirm('切换到网页版?', '以后打开都是网页版;想回来,在网页版底部点「TV 模式」。', '切换', function () { location.href = '/?tv=0'; });
+            else if (a === 'web') TV.leaveTV();
             else if (a === 'reload') location.reload();
             else if (a === 'app') showAppQr();
             else if (a === 'logout') TV.confirm('退出登录?', '这台设备上的观看记录和追剧会清掉(账号里的不受影响)。', '退出', function () { TV.api.logout(); TV.toast('已退出'); setTimeout(function () { location.reload(); }, 600); });

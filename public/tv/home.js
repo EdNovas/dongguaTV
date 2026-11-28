@@ -52,9 +52,7 @@
             clearTimeout(switchT);
             if (k && k !== 'search') switchT = setTimeout(function () { show(k); }, 160);
         });
-        if (toWeb) TV.on(TV.$('.hm-web', el), 'tvok', function () {
-            TV.confirm('回到手机版?', '以后在这台设备上打开都是手机版网页;想再用电视版,在网页版底部点「TV 模式」。', '回手机版', function () { location.href = '/?tv=0'; });
-        });
+        if (toWeb) TV.on(TV.$('.hm-web', el), 'tvok', function () { TV.leaveTV(); });
         TV.on(tabsEl, 'tvok', function (e) {
             var k = e.target.getAttribute('data-tab');
             if (k === 'search') { TV.go('search'); return; }
