@@ -7,10 +7,7 @@
     var TV = window.TV;
 
     function chromeVer() { var m = /Chrome\/(\d+)/.exec(navigator.userAgent || ''); return m ? +m[1] : 0; }
-    // 这台设备能不能跑网页版(同 index.html 启动检测的试法)
-    function canRunWeb() {
-        try { new Function('var o={a:1},p={...o};return o?.a??p.a'); new Function('return async function(){await 0}'); new RegExp('a', 's'); return true; } catch (e) { return false; }
-    }
+    function canRunWeb() { return TV.canRunWeb(); }
 
     TV.minePage = function () {
         var pg = TV.el('<div class="pg sy"><div class="mn-rows"></div><div class="mn-set"><div class="row-t">设置</div><div class="chips mn-btns" data-fg="set"></div><div class="mn-about dim"></div></div></div>');
