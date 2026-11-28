@@ -32,7 +32,18 @@ img { border: 0; }
 .tab.on:after { content: ''; position: absolute; left: 50%; bottom: -.2rem; width: 1.6rem; height: .3rem; margin-left: -.8rem; border-radius: .2rem; background: #ff3b3f; }
 .tab.fo { background: #fff; color: #111; -webkit-transform: scale(1.08); transform: scale(1.08); }
 .tab.fo:after { display: none; }
-.top-r { margin-left: auto; font-size: 1.3rem; color: #8d8d96; }
+.top-r { margin-left: auto; font-size: 1.3rem; color: #8d8d96; white-space: nowrap; -webkit-flex-shrink: 0; flex-shrink: 0; }
+.logo { -webkit-flex-shrink: 0; flex-shrink: 0; white-space: nowrap; }
+/* 标签放不下时横着划(手机竖屏);左右留一点地方给放大的焦点标签,别被裁掉 */
+.tabs.sx { -webkit-flex: 1 1 auto; flex: 1 1 auto; min-width: 0; padding: 0 .6rem; margin-left: -.6rem; -webkit-overflow-scrolling: touch; }
+.hm-web { display: inline-block; font-size: 1.6rem; padding: .45rem 1.3rem; border-radius: 2rem; background: rgba(255,255,255,.14); color: #f2f2f4; }
+.hm-web.fo { background: #fff; color: #111; }
+.hm-ph .hm-clock, .hm-ph .hm-user { display: none; }
+@media (orientation: portrait) {
+    .top { padding: 0 1.6rem; }
+    .logo { margin-right: 1rem; }
+    .top-r span.hm-web { margin-left: .8rem; }
+}
 
 /* ---------- 页面主体 ---------- */
 .body { position: absolute; left: 0; top: 6rem; right: 0; bottom: 0; }

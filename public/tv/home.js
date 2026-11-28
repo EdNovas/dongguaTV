@@ -18,11 +18,13 @@
     ];
 
     TV.screen('home', function (params) {
-        var h = '<div class="hm"><div class="top"><div class="logo"><img src="/icon.png" alt=""><b>E</b>视界</div><div class="tabs" data-fg="tabs">';
+        // 顶栏标签可以横着划(手机竖屏放不下 8 个标签,以前「我的」被挤出屏幕、手机上开了电视版就关不掉)
+        var toWeb = TV.isPhone && TV.canRunWeb();
+        var h = '<div class="hm' + (TV.isPhone ? ' hm-ph' : '') + '"><div class="top"><div class="logo"><img src="/icon.png" alt=""><b>E</b>视界</div><div class="tabs sx" data-fg="tabs">';
         TV.each(TABS, function (t) {
             h += '<div class="tab f' + (t.k === 'home' ? ' on' : '') + '" data-tab="' + t.k + '">' + (t.ic ? '<span class="ic">' + t.ic + '</span>' : '') + t.t + '</div>';
         });
-        h += '</div><div class="top-r"><span class="hm-user"></span><span class="hm-clock"></span></div></div><div class="body"></div></div>';
+        h += '</div><div class="top-r"><span class="hm-user"></span><span class="hm-clock"></span>' + (toWeb ? '<span class="hm-web f">手机版</span>' : '') + '</div></div><div class="body"></div></div>';
         var el = TV.el(h);
         var body = TV.$('.body', el), tabsEl = TV.$('.tabs', el), clockEl = TV.$('.hm-clock', el);
         var pages = {}, curTab = '', switchT = 0, clockT = 0;
@@ -49,6 +51,9 @@
             var k = e.target.getAttribute('data-tab');
             clearTimeout(switchT);
             if (k && k !== 'search') switchT = setTimeout(function () { show(k); }, 160);
+        });
+        if (toWeb) TV.on(TV.$('.hm-web', el), 'tvok', function () {
+            TV.confirm('回到手机版?', '以后在这台设备上打开都是手机版网页;想再用电视版,在网页版底部点「TV 模式」。', '回手机版', function () { location.href = '/?tv=0'; });
         });
         TV.on(tabsEl, 'tvok', function (e) {
             var k = e.target.getAttribute('data-tab');
