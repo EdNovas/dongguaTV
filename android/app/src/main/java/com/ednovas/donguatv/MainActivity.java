@@ -1,11 +1,13 @@
 package com.ednovas.donguatv;
 
 import android.content.pm.ActivityInfo;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.WindowInsetsController;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebView;
 import com.getcapacitor.BridgeActivity;
@@ -27,10 +29,7 @@ public class MainActivity extends BridgeActivity {
         window.setStatusBarColor(0xFF141414);
         
         // 设置状态栏图标为浅色
-        View decorView = window.getDecorView();
-        int flags = decorView.getSystemUiVisibility();
-        flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        decorView.setSystemUiVisibility(flags);
+        lightSystemBarIcons();
         
         // 📱 检测是否是 Android 15+ (API 35+)
         // Android 15+ 强制 Edge-to-Edge，需要手动处理 padding
@@ -70,6 +69,37 @@ public class MainActivity extends BridgeActivity {
         }
     }
     
+    // 状态栏底色是深色(#141414),图标必须一直是浅色。Capacitor 8 自带的 SystemBars 按手机亮 / 暗主题定图标颜色
+    // (手机用亮色主题 → 深色图标 → 时间、电量看不见),而且转屏 / 换主题时(Manifest 里 configChanges 自己处理)会再设一次 → 每次之后都改回来
+    private void lightSystemBarIcons() {
+        Window window = getWindow();
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController c = window.getInsetsController();
+            if (c != null) {
+                c.setSystemBarsAppearance(0, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+            }
+        } else {
+            View decorView = window.getDecorView();
+            int flags = decorView.getSystemUiVisibility();
+            flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+            if (Build.VERSION.SDK_INT >= 26) flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            decorView.setSystemUiVisibility(flags);
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // SystemBars 在 onCreate 里排队设的样式比这里先跑,排在它后面再改回浅色
+        getWindow().getDecorView().post(this::lightSystemBarIcons);
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        lightSystemBarIcons();
+    }
+
     // 获取状态栏高度（像素）
     private int getStatusBarHeight() {
         int result = 0;

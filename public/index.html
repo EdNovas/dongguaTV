@@ -56,6 +56,25 @@
                 document.write('<style>body{background:#0e0e11}</style><plaintext style="display:none">');
                 return;
             }
+            // 自家安卓 App(手机 / 平板):
+            //  ① 状态栏那一行 App 自己让开了(Android 15+ 给 WebView 外面加了一圈 padding,老系统本来就不画进去),
+            //    页面再按 env(safe-area-inset-top) 往下让就多出一大块空白(有的 WebView 在 App 让开之前先拿到了状态栏高度)→ 顶部安全区按 0 算
+            //  ② 状态栏底色是深色,图标要浅色。Capacitor 8 自带的 SystemBars 按手机亮 / 暗主题定图标颜色,
+            //    手机用亮色主题时图标变深色 → 时间、电量全看不见;转屏、换主题它还会再设一次 → 每次都改回来(新版 App 原生里也改了,这里管已经装好的)
+            if (isNative && /android/i.test(ua)) {
+                document.documentElement.style.setProperty('--dg-sat', '0px');
+                var sbT = 0;
+                var lightIcons = function () {
+                    try { var C = window.Capacitor; if (C && C.nativePromise) C.nativePromise('SystemBars', 'setStyle', { style: 'DARK' }).then(null, function () { }); } catch (e) { }
+                };
+                var lightIconsSoon = function () { clearTimeout(sbT); sbT = setTimeout(lightIcons, 250); };
+                lightIcons();
+                document.addEventListener('DOMContentLoaded', lightIcons);
+                window.addEventListener('load', function () { lightIcons(); setTimeout(lightIcons, 1500); });
+                window.addEventListener('resize', lightIconsSoon);
+                document.addEventListener('visibilitychange', function () { if (!document.hidden) lightIconsSoon(); });
+                try { var mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', lightIconsSoon); else if (mq.addListener) mq.addListener(lightIconsSoon); } catch (e) { }
+            }
             if (!modern && !phoneSide) {
                 if (window.stop) window.stop();
                 var v = /Chrome\/(\d+)/.exec(ua);
@@ -1964,8 +1983,8 @@
            点按被 iOS 拿去「回到顶部」。照 .close-btn 的写法往下让开 safe-area / --dg-sb-guard;两个都是 0 时 max() 取回原值。
            包在 @supports 里:不认 max() 的老 TV WebView 遇到带 var() 的声明会算成 auto */
         @supports (top: max(1px, 2px)) {
-            .navbar-custom { padding-top: max(15px, calc(env(safe-area-inset-top, 0px) + 6px), calc(var(--dg-sb-guard, 0px) + 6px)); }
-            html:not([data-style="magazine"]) .search-box-wrapper.compact { top: max(5px, calc(env(safe-area-inset-top, 0px) - 4px), calc(var(--dg-sb-guard, 0px) - 4px)); }
+            .navbar-custom { padding-top: max(15px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) + 6px), calc(var(--dg-sb-guard, 0px) + 6px)); }
+            html:not([data-style="magazine"]) .search-box-wrapper.compact { top: max(5px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) - 4px), calc(var(--dg-sb-guard, 0px) - 4px)); }
         }
 
         .brand {
@@ -2740,7 +2759,7 @@
             align-items: center;
             gap: 12px;
             padding: 10px 5%;
-            padding-top: calc(10px + env(safe-area-inset-top, 0px));
+            padding-top: calc(10px + var(--dg-sat, env(safe-area-inset-top, 0px)));
             background: rgba(var(--bg-rgb), 0.96);
             border-bottom: 1px solid rgba(var(--fg-rgb), 0.08);
             box-shadow: 0 6px 20px rgba(var(--shadow-rgb), 0.5);
@@ -3660,7 +3679,7 @@
         .sl-page { position: fixed; inset: 0; z-index: 9000; background: var(--bg); color: var(--text-1); overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; outline: none; }
         .sl-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 4% 60px; }
         @supports (top: max(1px, 2px)) {
-            .sl-wrap { padding-top: max(24px, calc(env(safe-area-inset-top, 0px) + 12px), calc(var(--dg-sb-guard, 0px) + 12px)); }
+            .sl-wrap { padding-top: max(24px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) + 12px), calc(var(--dg-sb-guard, 0px) + 12px)); }
         }
         .sl-top { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
         .sl-back { color: var(--text-1); border-color: rgba(var(--fg-rgb), .3); }
@@ -3712,7 +3731,7 @@
         .pl-wrap { max-width: 1400px; margin: 0 auto; padding: 24px 4% 60px; }
         /* 📱 返回按钮让开 iOS 状态栏(同 .close-btn:不认 max() 的老 TV WebView 遇到带 var() 的声明会算成无效,所以包在 @supports 里) */
         @supports (top: max(1px, 2px)) {
-            .pl-wrap { padding-top: max(24px, calc(env(safe-area-inset-top, 0px) + 12px), calc(var(--dg-sb-guard, 0px) + 12px)); }
+            .pl-wrap { padding-top: max(24px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) + 12px), calc(var(--dg-sb-guard, 0px) + 12px)); }
         }
         .pl-top { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
         .pl-back { color: var(--text-1); border-color: rgba(var(--fg-rgb), .3); }
@@ -3919,7 +3938,7 @@
            而是算成 top:auto,按钮会跑位 */
         @supports (top: max(1px, 2px)) {
             .close-btn {
-                top: max(25px, calc(env(safe-area-inset-top, 0px) + 12px), calc(var(--dg-sb-guard, 0px) + 12px));
+                top: max(25px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) + 12px), calc(var(--dg-sb-guard, 0px) + 12px));
                 right: max(30px, calc(env(safe-area-inset-right, 0px) + 12px));
             }
         }
@@ -3935,7 +3954,7 @@
            env() 和兜底都是 0 时 max() 取回 90px。必须写在上面那条 padding 简写之后 */
         @supports (top: max(1px, 2px)) {
             .player-layout {
-                padding-top: max(90px, calc(env(safe-area-inset-top, 0px) + 66px), calc(var(--dg-sb-guard, 0px) + 66px));
+                padding-top: max(90px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) + 66px), calc(var(--dg-sb-guard, 0px) + 66px));
             }
         }
 
@@ -5511,7 +5530,7 @@
         .sh-top { position: absolute; top: 0; left: 0; right: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; padding: 10px 12px 24px; pointer-events: none; }
         .sh-top .sh-ibtn { opacity: .75; }
         @supports (top: max(1px, 2px)) {
-            .sh-top { padding-top: max(10px, calc(env(safe-area-inset-top, 0px) + 6px), calc(var(--dg-sb-guard, 0px) + 6px)); }
+            .sh-top { padding-top: max(10px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) + 6px), calc(var(--dg-sb-guard, 0px) + 6px)); }
         }
         .sh-top > * { pointer-events: auto; }
         .sh-top-t { font-family: var(--font-display); font-size: 16px; font-weight: 700; letter-spacing: 2px; text-shadow: 0 1px 3px rgba(0, 0, 0, .6); }
@@ -5553,16 +5572,16 @@
         .sh-info.dim { opacity: 0; pointer-events: none; }
         /* 长按出来的播放器页(.sh-pm):手机上视频缩到上面 40vh 的播放框,下面是设置;宽屏电脑上视频在左,设置面板在右 420px。永远深色 */
         .sh-vl { transition: top .25s ease, bottom .25s ease, height .25s ease, right .25s ease; }
-        .shorts-page.sh-pm-on .sh-vl { top: calc(52px + env(safe-area-inset-top, 0px)); bottom: auto; height: 40vh; transform: none; }
+        .shorts-page.sh-pm-on .sh-vl { top: calc(52px + var(--dg-sat, env(safe-area-inset-top, 0px))); bottom: auto; height: 40vh; transform: none; }
         .shorts-page.sh-pm-on .sh-bg, .shorts-page.sh-pm-on .sh-fg, .shorts-page.sh-pm-on .sh-top, .shorts-page.sh-pm-on > .sh-prog, .shorts-page.sh-pm-on .sh-speed, .shorts-page.sh-pm-on > .sh-center { display: none; }
         .sh-pm { position: absolute; inset: 0; z-index: 5; pointer-events: none; color: #fff; }
         .sh-pm > * { pointer-events: auto; }
-        .sh-pm-head { position: absolute; left: 0; right: 0; top: 0; height: calc(52px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 8px 0; display: flex; align-items: center; gap: 8px; background: #000; }
+        .sh-pm-head { position: absolute; left: 0; right: 0; top: 0; height: calc(52px + var(--dg-sat, env(safe-area-inset-top, 0px))); padding: var(--dg-sat, env(safe-area-inset-top, 0px)) 8px 0; display: flex; align-items: center; gap: 8px; background: #000; }
         .sh-pm-t { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
         .sh-pm-t b { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-family: var(--font-display); font-size: 15px; }
         .sh-pm-t span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: rgba(255, 255, 255, .6); }
-        .sh-pm-video { position: absolute; left: 0; right: 0; top: calc(52px + env(safe-area-inset-top, 0px)); height: 40vh; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-        .sh-pmp { position: absolute; left: 0; right: 0; top: calc(52px + env(safe-area-inset-top, 0px) + 40vh); bottom: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
+        .sh-pm-video { position: absolute; left: 0; right: 0; top: calc(52px + var(--dg-sat, env(safe-area-inset-top, 0px))); height: 40vh; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+        .sh-pmp { position: absolute; left: 0; right: 0; top: calc(52px + var(--dg-sat, env(safe-area-inset-top, 0px)) + 40vh); bottom: 0; overflow-y: auto; overscroll-behavior: contain; touch-action: pan-y;
             padding: 12px 14px calc(18px + env(safe-area-inset-bottom, 0px)); background: #111; animation: shUp .22s ease-out; }
         .sh-pm-tr { display: flex; align-items: center; gap: 12px; }
         .sh-pm-play { flex: none; width: 44px; height: 44px; border: 0; border-radius: 50%; background: rgba(var(--sh-acc-rgb), .9); color: var(--sh-on-acc); font-size: 17px; cursor: pointer; }
@@ -5586,7 +5605,7 @@
             .shorts-page.sh-pm-on .sh-vl { top: 0; bottom: 0; height: auto; right: 420px; }
             .sh-pm-video { top: 0; bottom: 0; height: auto; right: 420px; }
             .sh-pm-head { left: auto; width: 420px; background: #111; border-bottom: 1px solid rgba(255, 255, 255, .06); }
-            .sh-pmp { left: auto; width: 420px; top: calc(52px + env(safe-area-inset-top, 0px)); }
+            .sh-pmp { left: auto; width: 420px; top: calc(52px + var(--dg-sat, env(safe-area-inset-top, 0px))); }
         }
         .sh-drawer-mask { position: absolute; inset: 0; z-index: 6; background: rgba(0, 0, 0, .35); touch-action: pan-y; }
         .sh-drawer {
@@ -6865,7 +6884,7 @@
         @supports (top: max(1px, 2px)) {
             @media (min-width: 761px) {
                 html[data-style="mono"] .controls-area > div > .panel-title, html[data-style="mono"] .controls-area > .ucm > .ucm-head {
-                    top: max(24px, calc(env(safe-area-inset-top, 0px) + 12px), calc(var(--dg-sb-guard, 0px) + 12px));
+                    top: max(24px, calc(var(--dg-sat, env(safe-area-inset-top, 0px)) + 12px), calc(var(--dg-sb-guard, 0px) + 12px));
                 }
             }
         }
@@ -10338,7 +10357,7 @@
         }
 
         // 📺 电视 / 遥控器设备(播放页的 TV 模式、登录框默认出二维码共用):?tv=1 / ?tv=0 手动指定(会记住)> 本机记住的开关
-        //    > 原生 App 默认开 > 电视浏览器 UA
+        //    > 原生 App 在盒子 / 平板上(手机上的 App 不是电视,以前一律开 → 手机装了 App 一打开就是 TV 模式、底下挂着「关闭 TV」) > 电视浏览器 UA
         function detectTVMode() {
             const isNative = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
             const urlParams = new URLSearchParams(window.location.search);
@@ -10355,10 +10374,7 @@
                 if (saved === '1') return true;
                 if (saved === '0') return false;
             } catch (e) { }
-            if (isNative) {
-                console.log('[TV 检测] ✅ 原生 App，默认开启 TV 模式');
-                return true;
-            }
+            if (isNative) return !isPhoneUA();
             const ua = navigator.userAgent.toLowerCase();
             const tvKeywords = [
                 'android tv', 'googletv',           // Android TV / Google TV
